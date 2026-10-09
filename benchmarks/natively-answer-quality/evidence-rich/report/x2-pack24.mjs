@@ -5,7 +5,9 @@
 //          `derived_from`; reported, no line.
 // Definitions fixed before any run (ITERATIONS-ER.md, X2):
 //   right            every required string, no forbidden string, and the calculation result where there is one (obj-3)
-//   pass over budget settled answer at least 3,500 ms after the last streamed token (the pass's budget)
+//   late settle      settled answer at least 3,500 ms after the last streamed token. NOT the pass's own time (the spoken
+//                    repair runs first): for the pass read the app log's [ClaimVerifier] lines. Line 6 was first read
+//                    from this figure and corrected on 2026-10-09 (ITERATIONS-ER.md).
 //   lost by the pass right as drafted (raw answer), not right as shown
 import fs from 'node:fs';
 import path from 'node:path';
@@ -60,7 +62,7 @@ const summary = (name, x) => {
   console.log(`right ${x.filter((r) => r.shown.right).length}/${x.length} (${pct(x.filter((r) => r.shown.right).length, x.length)} %); every required string ${req.filter((r) => r.shown.reqOk).length}/${req.length} (${pct(req.filter((r) => r.shown.reqOk).length, req.length)} %); forbidden-string rows ${x.filter((r) => r.shown.forbHit).length}; calculation right ${calc.filter((r) => r.shown.calcOk).length}/${calc.length} (${pct(calc.filter((r) => r.shown.calcOk).length, calc.length)} %)`);
   console.log(`required document facts whose string is in the request ${fp}/${fw} (${pct(fp, fw)} %); files in the request, median ${q(x.map((r) => r.filesInPrompt), 0.5)}; request characters median ${q(x.map((r) => r.promptChars), 0.5)}; prompt tokens median ${q(x.map((r) => r.inTok), 0.5)} (cached median ${q(x.map((r) => r.cached), 0.5)})`);
   console.log(`first word: spoken median ${q(sp.map((r) => r.ttft), 0.5)} / p90 ${q(sp.map((r) => r.ttft), 0.9)} ms (${sp.length}); typed median ${q(ty.map((r) => r.ttft), 0.5)} / p90 ${q(ty.map((r) => r.ttft), 0.9)} ms (${ty.length}); settled answer median ${q(x.map((r) => r.settled), 0.5)} / p90 ${q(x.map((r) => r.settled), 0.9)} ms`);
-  console.log(`fix-up pass: ran on ${passes.length}; changed the text on ${passes.filter((r) => r.passChanged).length}; material over ${CAP} characters on ${passes.filter((r) => r.passCut).length}; over budget ${passes.filter((r) => r.passOver).length} (${pct(passes.filter((r) => r.passOver).length, passes.length)} %); right as drafted and not as shown ${x.filter((r) => r.draft.right && !r.shown.right).length}; not right as drafted and right as shown ${x.filter((r) => !r.draft.right && r.shown.right).length}`);
+  console.log(`fix-up pass: ran on ${passes.length}; changed the text on ${passes.filter((r) => r.passChanged).length}; material over ${CAP} characters on ${passes.filter((r) => r.passCut).length}; settled 3.5 s or more after the last token ${passes.filter((r) => r.passOver).length} (${pct(passes.filter((r) => r.passOver).length, passes.length)} %); right as drafted and not as shown ${x.filter((r) => r.draft.right && !r.shown.right).length}; not right as drafted and right as shown ${x.filter((r) => !r.draft.right && r.shown.right).length}`);
 };
 summary('arm A (12,000: main)', a); summary('arm B (24,000)', b);
 for (const [name, f] of [['derived rows', (r) => r.kind === 'derived'], ['new rows', (r) => r.kind === 'new']]) {
@@ -94,7 +96,7 @@ L(2, forbB <= forbA + 2, `rows with a forbidden string ${forbA} -> ${forbB}`);
 L(3, calcIds.length ? (100 * cB / calcIds.length) >= (100 * cA / calcIds.length) - 2 : true, `calculation results right ${cA}/${calcIds.length} -> ${cB}/${calcIds.length}`);
 L(4, wB >= wA, `whole-pack rows right ${wA}/${whole.length} -> ${wB}/${whole.length}`);
 L(5, dSpMed <= 400 && dSp90 <= 700 && over5 === 0 && dTyMed <= 400, `first word: spoken median ${dSpMed >= 0 ? '+' : ''}${dSpMed} ms, p90 ${dSp90 >= 0 ? '+' : ''}${dSp90} ms, spoken turns over 5 s ${over5}; typed median ${dTyMed >= 0 ? '+' : ''}${dTyMed} ms`);
-L(6, lostB <= lostA + 2 && rB <= rA + 2, `right as drafted and not as shown ${lostA} -> ${lostB}; passes over budget ${rA.toFixed(1)} % -> ${rB.toFixed(1)} %`);
+L(6, lostB <= lostA + 2 && rB <= rA + 2, `right as drafted and not as shown ${lostA} -> ${lostB}; settled 3.5 s or more after the last token ${rA.toFixed(1)} % -> ${rB.toFixed(1)} % (the pass's own budget: read the app log)`);
 L(7, errB === 0, `rows of arm B with an error, a timeout or no answer: ${errB}`);
 
 if (small.length) {

@@ -2955,3 +2955,23 @@ recorded runs of the same rows (`er6-*`, `er7-*`, `er8-*`; main before E23, rule
 4. First word, spoken: median at most 150 ms above main on the same rows; no turn over 5 s.
 5. Every row answered, no provider failure; the time of a profile upload is reported.
 If 1, 2 and 5 hold and 3 or 4 does not, it is reported with its cost and not landed without Evin seeing it.
+
+### X2 — correction to line 6: the pass was NOT out of its budget on a quarter of its turns (2026-10-09 21:27 UTC)
+The X2 reader counted a pass as over budget when the answer settled 3.5 s or more after the last streamed token.
+That interval holds every step after the stream (the spoken repair and the pass, one after the other), not the
+pass. The app logs the pass itself (`[ClaimVerifier] … <outcome> <ms>`). From those lines:
+| | A: 12,000 | B: 24,000 |
+|---|---|---|
+| passes logged | 272 | 270 |
+| pass time, spoken: median / p90 / max | 1,237 / 1,567 / 2,704 ms | 1,723 / 2,079 / 2,642 ms |
+| pass time, typed: median / p90 / max | 1,148 / 1,453 / 2,302 ms | 1,612 / 2,126 / 5,790 ms |
+| not finished inside the 3.5 s budget | 0 | 1 (0.4 %) |
+| outcomes | 191 unchanged, 74 edited, 7 edits refused by the rails | 238 unchanged, 31 edited, 1 timeout |
+So the pass is about 0.5 s slower on the whole pack and ran out of budget once in 270. **Line 6 holds** as it was
+written (answers the pass broke 3 → 2; passes over budget 0 % → 0.4 %, 2 points allowed). What the wrong proxy did
+measure is real and stays in the table above as the settled-answer time: everything after the stream takes longer
+when it reads 92,000 characters (settled, spoken p90 7.6 → 8.2 s; typed p90 2.97 → 4.13 s). X2 therefore fails one
+line only, by 30 ms: the typed first word (+430 ms, 400 allowed). The pass's budget does not need raising; its
+material cap does (2 requests were over 96,000 characters). The sentence "the pass out of budget on a quarter of
+its turns" in the X2 entry above, in the handoff head and in what Evin was told at 20:20 UTC is wrong and is
+corrected here; the reader's label is fixed in `report/x2-pack24.mjs`.
