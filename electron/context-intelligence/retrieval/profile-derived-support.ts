@@ -144,6 +144,138 @@ export function stripUnsupportedDerivedResumeFields<T>(structured: T, rawText: s
   }
 }
 
+// ── experience pairings (2026-10-09) ────────────────────────────────────────
+//
+// THE PROBLEM
+// The rule above tests the WORDS of a derived field. An experience entry can be
+// built entirely from the résumé's own words and still state something the
+// résumé does not: a job title paired with the wrong employer. Measured on the
+// evidence-rich benchmark, where the extraction ran in its rule-based fallback
+// (a DeepSeek-only user has no model for structured extraction): a résumé with
+// two titles at one employer rendered "Senior Frontend Engineer at Ondaverde
+// Health (2022-06 to 2023-12)" — the title belongs to the employer above, the
+// name to the one below — and "Frontend Engineer at Patient portal and
+// appointment tools for private clinics." (the employer's description line). A
+// PDF with wrapped lines rendered "Software Engineer II at ships.", "Software
+// Engineer at [Page 2]" and two bullet lines as jobs. These went into the
+// prompt as RESUME evidence beside the résumé itself, and the answers repeated
+// them: a project placed at the wrong employer, time at the employer counted
+// from the promotion (three of the 71 capped answers of the 7 October baseline).
+//
+// THE RULE
+// An entry is rejected only on evidence:
+//   shape    the company is a page marker, has more than 10 words, or ends in
+//            a sentence period that is not a corporate abbreviation; or the
+//            title has more than 12 words;
+//   position title and company both occur verbatim in the résumé text, and for
+//            every line that starts with the title the company first appears
+//            more than 2 text lines below it, or another entry's company
+//            stands alone on a line between the two.
+// A title or company that cannot be found verbatim (an extractor that
+// normalised "Sr." to "Senior") is kept: nothing shows it is wrong. With no
+// résumé text nothing is checked, because nothing could replace the entries.
+//
+// WHAT A CALLER DOES WITH IT
+// The V3 profile port renders none of a résumé's derived experience statements
+// when any entry is rejected (a partial list reads as the whole history); the
+// résumé's own text, whole and in heading-aware pieces, is then the only
+// statement of who worked where and when. Replayed on 52 development prompts,
+// four samples each: answers right by the fixed checks 90.4 % → 96.6 %, none
+// worse; "how long have I been at …" 0 of 4 → 4 of 4.
+
+const PAGE_MARK_RE = /^(?:\[\s*page\s*\d+\s*\]|-{2,}\s*\d+\s*of\s*\d+\s*-{2,}|page\s*\d+(?:\s*of\s*\d+)?)$/i;
+const CORPORATE_ABBREVIATION_RE = /\b(?:inc|ltd|llc|llp|co|corp|plc|gmbh|pvt|pte|bv|ag|oy|ab|sa|srl|kk|s\.a|s\.l|s\.r\.l)\.$/i;
+
+export const EXPERIENCE_MAX_COMPANY_WORDS = 10;
+export const EXPERIENCE_MAX_TITLE_WORDS = 12;
+/** A company named at most this many text lines BELOW the title line still belongs to it ("Title\nCompany | dates"). */
+export const EXPERIENCE_COMPANY_BELOW_TITLE_MAX_LINES = 2;
+/** Another entry's company "stands alone" on a line when it makes up at least this share of the line. */
+export const EXPERIENCE_STANDALONE_SHARE = 0.6;
+
+export type ExperiencePairingProblem =
+  | 'company_is_page_marker' | 'company_too_long' | 'company_ends_a_sentence' | 'title_too_long' | 'pairing_not_in_the_text';
+
+export interface ExperienceEntryLike { role?: unknown; company?: unknown }
+
+const wordCount = (s: string): number => s.trim().split(/\s+/).filter(Boolean).length;
+const normLine = (s: string): string => s.toLowerCase()
+  .replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, '-')
+  .replace(/ /g, ' ').replace(/\s+/g, ' ').trim();
+const stripListMarker = (line: string): string => line.replace(/^(?:[•·▪◦*\-–—]|\d+[.)])\s+/, '');
+const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+
+/** The résumé's text as the lines the position rule counts: empty lines and page markers are not lines. */
+export function resumeTextLines(rawText: string | null | undefined): string[] | null {
+  if (typeof rawText !== 'string' || !rawText.trim()) return null;
+  return rawText.split('\n').map(normLine).filter((l) => l && !PAGE_MARK_RE.test(l));
+}
+
+/** A reason this entry cannot be what the résumé says, or null. `lines` null ⇒ shape only. */
+export function experiencePairingProblem(
+  entry: ExperienceEntryLike,
+  others: ReadonlyArray<ExperienceEntryLike>,
+  lines: ReadonlyArray<string> | null,
+): ExperiencePairingProblem | null {
+  const title = text(entry.role);
+  const company = text(entry.company);
+  if (company) {
+    if (PAGE_MARK_RE.test(company)) return 'company_is_page_marker';
+    if (wordCount(company) > EXPERIENCE_MAX_COMPANY_WORDS) return 'company_too_long';
+    if (/\.$/.test(company) && !CORPORATE_ABBREVIATION_RE.test(company)) return 'company_ends_a_sentence';
+  }
+  if (title && wordCount(title) > EXPERIENCE_MAX_TITLE_WORDS) return 'title_too_long';
+  if (!title || !company || !lines) return null;
+  const t = normLine(title);
+  const c = normLine(company);
+  const titleLines: number[] = [];
+  const companyLines: number[] = [];
+  lines.forEach((l, i) => {
+    if (stripListMarker(l).startsWith(t)) titleLines.push(i);
+    if (l.includes(c)) companyLines.push(i);
+  });
+  if (!titleLines.length || !companyLines.length) return null;
+  const otherNames = [...new Set(others.map((o) => normLine(text(o.company))).filter((n) => n && n !== c))];
+  const standsAlone = (i: number): boolean =>
+    otherNames.some((n) => lines[i].includes(n) && n.length >= EXPERIENCE_STANDALONE_SHARE * lines[i].length);
+  for (const r of titleLines) {
+    for (const k of companyLines) {
+      if (k > r + EXPERIENCE_COMPANY_BELOW_TITLE_MAX_LINES) continue;
+      let crossed = false;
+      for (let j = k + 1; j < r; j++) if (standsAlone(j)) { crossed = true; break; }
+      if (!crossed) return null;
+    }
+  }
+  return 'pairing_not_in_the_text';
+}
+
+/**
+ * The experience entries of a structured résumé that its own text shows to be
+ * wrong (see the rule above), with their position in `experience`. Empty when
+ * there is no résumé text, no experience list, or nothing is rejected. Never throws.
+ */
+export function unsupportedExperienceEntries(
+  structured: unknown,
+  rawText: string | null | undefined,
+): Array<{ index: number; problem: ExperiencePairingProblem }> {
+  try {
+    const lines = resumeTextLines(rawText);
+    if (!lines || !structured || typeof structured !== 'object') return [];
+    const list = (structured as Record<string, unknown>).experience;
+    if (!Array.isArray(list)) return [];
+    const entries = list.map((e) => (e && typeof e === 'object' ? e as ExperienceEntryLike : {}));
+    const wellShaped = entries.filter((e) => !experiencePairingProblem(e, [], null));
+    const out: Array<{ index: number; problem: ExperiencePairingProblem }> = [];
+    entries.forEach((e, index) => {
+      const problem = experiencePairingProblem(e, wellShaped.filter((o) => o !== e), lines);
+      if (problem) out.push({ index, problem });
+    });
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Is this OKF card LLM-composed rather than rendered from the documents?
  * AOT artifact cards (intro, gap-analysis pivot scripts, mock-interview

@@ -40,7 +40,7 @@ import { Bm25Index, DEFAULT_BM25 } from './bm25';
 // Pure tokenizer/statistics module — no Electron, no DB — so the rule above holds.
 import { buildLexicalStats, anchoringChunkIndexes, anchorTerms, anchorCoverage, questionContentWords, PROBE_MIN_COVERAGE, PROBE_MIN_ANCHORS } from '../../services/modes/lexicalTokens';
 import { semanticChunks } from '../../services/modes/semanticChunker';
-import { stripUnsupportedDerivedResumeFields, isGeneratedArtifactCard, isExtractorPlaceholder, buildSupportIndex, assessDerivedSupport } from './profile-derived-support';
+import { stripUnsupportedDerivedResumeFields, isGeneratedArtifactCard, isExtractorPlaceholder, buildSupportIndex, assessDerivedSupport, unsupportedExperienceEntries } from './profile-derived-support';
 
 /**
  * 'fact' (2026-08-02) carries DERIVED profile facts — things the app computed
@@ -614,9 +614,19 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
     // résumé's structured extraction may hold a project description the
     // extractor WROTE and placeholder identity values. Only what the raw
     // résumé text supports is rendered as RESUME evidence.
-    const structured = doc.kind === 'resume'
+    const supported = doc.kind === 'resume'
       ? stripUnsupportedDerivedResumeFields(doc.structured, doc.rawText)
       : doc.structured;
+    // EXPERIENCE PAIRINGS (2026-10-09, see profile-derived-support.ts): when the
+    // résumé's own text shows one entry to pair a title with the wrong employer
+    // (or to be a line fragment), none of this résumé's derived experience
+    // statements is rendered — the per-entry sections, the complete-history
+    // line and, below, the per-role cards. The résumé text itself (the raw
+    // pieces and the whole document) is then what says who worked where.
+    const experienceUnsupported = doc.kind === 'resume' && unsupportedExperienceEntries(doc.structured, doc.rawText).length > 0;
+    const structured = experienceUnsupported && supported && typeof supported === 'object'
+      ? { ...(supported as Record<string, unknown>), experience: [] }
+      : supported;
     const supportIndex = doc.kind === 'resume' ? buildSupportIndex(doc.rawText) : null;
     for (const s of renderProfileSections(doc.kind, structured)) {
       push(s.section, s.text, s.boostKey, s.completeInventory, s.inventoryCategory);
@@ -627,6 +637,7 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
       // mapping, negotiation strategy) are model output about the candidate,
       // not the document: never evidence.
       if (isGeneratedArtifactCard(c)) continue;
+      if (experienceUnsupported && c.type === 'candidate_experience') continue;
       const body = str(c.body);
       if (!body) continue;
       // A project card's body leads with the project description (card
