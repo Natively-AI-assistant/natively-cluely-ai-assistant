@@ -2387,3 +2387,24 @@ back, nothing else on the DeepSeek key. Read with `rule-e21.mjs read4`; the vali
 4. Forbidden-string samples, both sets pooled: at most base + 2.
 **Reading.** All hold → the gain is not an artefact of the rows it was designed on; E21 stays a keep candidate and
 waits for Astra and for Evin. Line 1 or 2 fails → the candidate is not proposed; the branch stays as a record.
+
+### E21 — the build, and its app confirmation (lines written 2026-10-09 12:23 UTC, before the candidate has been run in the app)
+**Build.** Branch `cand/e21` (worktree `er-e21`) = main `73b18d97` + one change in
+`electron/context-intelligence/generation/prompt-composer.ts`: `calculationNoticeForTurn` returns main's notice when
+the word list fires (unchanged, word for word) and otherwise the lighter notice `CALCULATION_NOTICE_EVIDENCE` (the
+replayed n3 text, checked identical by string) when the turn's evidence block is not empty, the question is not a
+code question and at least two figures are in play. The stream filter that hides the block is the existing one, on
+every provider's stream. Shared TypeScript, no platform branch.
+**App confirmation**: runs `er8-dev-e21` + `er8-dev2-e21` (630 questions, fresh profile, direct DeepSeek, one app)
+against `er6-*` (main, this morning). One run per build, so this confirms the wiring and trips on gross harm; the
+size of the effect is what the replays measured.
+1. Wiring: of the recorded prompts with an evidence block and a non-code question, every one carries exactly one
+   "# Calculation" section; the text is main's wherever the word list fires and n3 elsewhere. No prompt without an
+   evidence block gains a notice.
+2. No answer, shown or as drafted, contains "[[CALC" or "[[/CALC".
+3. On the 59 rows of stage one, "calculation result stated" (obj-3) at least er6's count + 3.
+4. First word: (median change on rows that newly carry a notice) minus (median change on the 160 rows that carry
+   main's notice in both runs) at most +150 ms. The subtraction removes the provider's drift between the two hours.
+5. 630 answered, no provider failure; rows over 5 s to the first word at most er6's + 2.
+6. Rows with every required string: not more than 12 below er6 (two runs of main differed by 12 this week).
+A line that fails stops the candidate until it is understood.
