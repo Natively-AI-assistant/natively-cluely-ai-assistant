@@ -298,7 +298,11 @@ function appRssMb(root) {
 }
 async function refThreshold() {
   const c = await connect(); const mode = opt('mode', 'general'); const surface = opt('surface', 'typed'); const modeId = await modeIdOf(c, mode);
-  const threshold = Number(opt('threshold', 12000)); const name = `threshold-${mode}-${surface}`;
+  // --kinds list[,sum,current,named] runs a subset, each non-named turn in a FRESH session, into its own file. Added
+  // 2026-10-09 after the first arm: asked after the seven named-fact turns, the list question was answered from the
+  // conversation (7 of 7 codes with 2 of 7 in the request), so the list is measured in a separate pass.
+  const kinds = new Set(String(opt('kinds', 'named,list,sum,current')).split(',')); const subset = !!opt('kinds');
+  const threshold = Number(opt('threshold', 12000)); const name = subset ? `threshold-fresh-${mode}-${surface}` : `threshold-${mode}-${surface}`;
   for (const tokens of nums('sizes', '11900,12100,16000,23900,24100,32000,47900,48100')) {
     await clearMode(c, modeId); await app.resetSession(c);
     const tag = `T${tokens}`; let doc = thresholdDoc(tokens, tag, tokens + 11);
@@ -308,21 +312,24 @@ async function refThreshold() {
     const baseRec = { experiment: 'ref-threshold', threshold, mode, surface, file_tokens_est: Math.ceil(doc.text.length / 4), file_tokens_nominal: tokens, file_chars: doc.text.length, extracted_chars: up.content.length, B_index_status: up.status, chunks: up.chunks };
     const timing = (t) => ({ ttft_ms: t.a.firstTokenMs, total_ms: t.a.totalMs, cache_hit_tokens: t.usage?.prompt_cache_hit_tokens ?? null, draft_differs: String(t.a.raw ?? '').trim() !== String(t.a.final ?? t.a.raw ?? '').trim(), app_rss_mb: appRssMb(root), err: t.a.err ?? null, timed_out: !!t.a.timedOut });
     let named = 0;
-    for (let i = 0; i < doc.facts.length; i++) {
+    for (let i = 0; kinds.has('named') && i < doc.facts.length; i++) {
       const f = doc.facts[i]; const t = await turn(c, surface, f.question); const ans = String(t.a.final ?? t.a.raw ?? '');
       const ok = has(ans, f.marker.split('-').slice(1).join('-')) || has(ans, f.marker); if (ok) named++;
       write(name, { ...baseRec, kind: 'named', position: POSITIONS[i], E_in_request: has(t.user, f.sentence), in_answer: ok, in_draft: has(String(t.a.raw ?? ''), f.marker.split('-').slice(1).join('-')), V_in_verifier: t.verifier ? has(t.verifier, f.sentence) : null, ...timing(t), ...summarise(t) });
     }
-    {
+    if (kinds.has('list')) {
+      if (subset) await app.resetSession(c);
       const t = await turn(c, surface, 'List the gate release code for every depot mentioned in the operations reference.'); const ans = String(t.a.final ?? t.a.raw ?? '');
       const code = (f) => f.marker.split('-').slice(1).join('-');
       write(name, { ...baseRec, kind: 'list', facts_in_request: doc.facts.filter((f) => has(t.user, f.sentence)).length, facts_in_answer: doc.facts.filter((f) => has(ans, code(f))).length, facts_in_draft: doc.facts.filter((f) => has(String(t.a.raw ?? ''), code(f))).length, ...timing(t), ...summarise(t) });
     }
-    {
+    if (kinds.has('sum')) {
+      if (subset) await app.resetSession(c);
       const t = await turn(c, surface, 'How many spare pallets do the Wexcombe store room and the Yarlow annex hold between them?'); const ans = String(t.a.final ?? t.a.raw ?? '');
       write(name, { ...baseRec, kind: 'sum', inputs_in_request: [doc.extras.sumA, doc.extras.sumB].filter((x) => has(t.user, x)).length, correct: /3[,.  ]?615/.test(ans), correct_in_draft: /3[,.  ]?615/.test(String(t.a.raw ?? '')), ...timing(t), ...summarise(t) });
     }
-    {
+    if (kinds.has('current')) {
+      if (subset) await app.resetSession(c);
       const t = await turn(c, surface, 'What is the night-shift allowance at the Dunmarrow site now?'); const ans = String(t.a.final ?? t.a.raw ?? '');
       const cur = /\b57\b|fifty[- ]seven/i.test(ans); const old = /\b41\b|forty[- ]one/i.test(ans);
       write(name, { ...baseRec, kind: 'current', new_in_request: has(t.user, doc.extras.new), old_in_request: has(t.user, doc.extras.old), gives_current: cur, gives_old: old, stale_only: old && !cur, ...timing(t), ...summarise(t) });

@@ -2313,3 +2313,14 @@ after a clean probe by hand in a later window. This is the second block in three
 five calls); the window of 2026-10-09 02:02 UTC had none.
 To finish in the next window (about 02:00 UTC): `node <scratchpad>/window-er6.mjs` with `ER_SKIP_RUN_WAIT=1` (copy in
 `~/natively-er-backup/scripts/`), then `window-e21.mjs`; both judge only what is still missing.
+
+### X1 — a flaw in the probe, found on the 12,000 arm and corrected before any other arm is read (2026-10-09 11:43 UTC)
+The 12,000 arm ran 11:07–11:21 UTC (160 turns, no error). Above the threshold its list question shows 2 or 3 of the 7
+fact sentences in the request and 7 of 7 codes in the answer on 15 of 16 sizes. The list was asked after the seven
+named-fact turns of the same session, so the answer came from the conversation, not from the file. Those list rows
+measure nothing about the file and are **not used in any arm**. The named-fact, sum and current-value rows are not
+affected (each asks about something no earlier turn stated).
+Correction, the same for all three arms: a separate pass (`ref-threshold --kinds list`, file
+`threshold-fresh-…jsonl`) asks the list question in a fresh session straight after the upload, spoken and typed, at
+every size. Line 1 of the X1 plan is read from that pass only. The main pass keeps its procedure for the two arms
+still to run, so the three arms stay alike.
