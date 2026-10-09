@@ -2470,3 +2470,26 @@ two counts given instead (LFW-001), an invented referee (LFW-011), a verificatio
 (CC-001, CC-004), and version conflicts answered with one side (REC-009, LFW-008, LFW-009, TI-009, LEC-010).
 `code1`: two failures of 36 on main with code verification switched off.
 These are the baselines the candidates are read against on unseen questions.
+
+### E21 stage four — result and verdict (2026-10-09 13:01 UTC; replayed 12:53–13:00 UTC on the recorded prompts of `er7-chal-main` + `er7-chalval-main`, 108 rows × 4 samples per arm, 0 failed calls)
+| Set | Calculation rows: right samples | Paired change (95 %) | Rose / fell | Other rows: every required string | Forbidden-string samples |
+|---|---|---|---|---|---|
+| `challenge` (77 rows, 37 with a calculation) | 109 / 148 (73.6 %) → 109 / 148 (73.6 %) | 0.0 (−10.8 to +10.1) | 2 / 3 | 85.7 % → 84.8 % of 112 | 20 → 34 |
+| `challenge-val` (31 rows, 14 with a calculation; aggregates only) | 41 / 56 (73.2 %) → 47 / 56 (83.9 %) | +10.7 (0.0 to +23.2) | 1 / 0 | 100 % → 100 % of 40 | 13 → 14 |
+Line 1 (`challenge` calculation rows up by at least 5 points, at most 2 rows falling): **fails** (0.0 points, 3 fell).
+Line 2 (`challenge-val` not lower): holds. Line 3 (other rows): holds. Line 4 (forbidden-string samples at most
+base + 2, pooled): **fails** (33 → 48).
+**Verdict: E21 is not proposed.** The gain measured twice on the 59 development rows (+11 points) did not appear on
+37 harder calculation questions written blind (0), and appeared on 14 others (+10.7); pooled over the 51 unseen
+calculation rows it is 73.5 % → 76.5 %, an interval that includes zero. And the notice did harm that the
+development rows had not shown. Read on the readable set only: on SALES-013 the hidden working set the sum up
+wrongly (the monthly fee divided by twelve) and the answer followed it to $16 for $188; on absent-fact questions
+(LEC-001, LFW-010, LEC-006) answers that had declined now supplied the missing thing in 3 or 4 of 4 samples.
+Branch `cand/e21` (`298b2b5b`, local) stays as a record and is not a landing candidate. The app confirmation
+(`er8`) had just started and was stopped; its partial folder is deleted; no Astra call is owed for E21.
+**What was learned, in order of how sure it is.** (1) A notice in the answer prompt is never free: main's wording
+on turns that need no calculation costs completeness (stage two), and even the lighter one changes what the model
+does with an absent fact (stage four). (2) A hidden working step helps a calculation the model would otherwise
+attempt in its head, and hurts when the step itself picks the wrong figure: with near-miss figures in the pack it
+writes the wrong set-up down and then trusts it. (3) A result on rows that have been read, however clean (two
+replays, intervals above zero), did not carry to unseen rows. The challenge sets exist for this and did their job.
