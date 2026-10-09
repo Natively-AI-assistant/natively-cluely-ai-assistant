@@ -1,0 +1,161 @@
+{
+ "dataset_name": "evidence-rich-v1-supp-counterfactual",
+ "dataset_sha256": "f7000f9664929deefb4a36103d9ea7f4c2f12d014f34abe707e202e888858839",
+ "schema_version": 1,
+ "partition": "supp-counterfactual",
+ "manifest_sha256": "548084654d19369596c9937b308aea0756cc350f9b0612ef339ff4454efff4a9",
+ "modes": [
+  {
+   "key": "general",
+   "name": "General"
+  },
+  {
+   "key": "sales",
+   "name": "Sales"
+  },
+  {
+   "key": "recruiting",
+   "name": "Recruiting"
+  },
+  {
+   "key": "team-meet",
+   "name": "Team Meet"
+  },
+  {
+   "key": "looking-for-work",
+   "name": "Looking for work"
+  },
+  {
+   "key": "lecture",
+   "name": "Lecture"
+  },
+  {
+   "key": "technical-interview",
+   "name": "Technical Interview"
+  },
+  {
+   "key": "seminar",
+   "name": "Seminar"
+  },
+  {
+   "key": "call-center",
+   "name": "Call Center"
+  }
+ ],
+ "configs": [
+  {
+   "id": "sales-p24",
+   "mode": "sales",
+   "base": true,
+   "files": [
+    "SALES-REF-PRICING-2026",
+    "SALES-REF-INTEGRATIONS-2026",
+    "SALES-REF-SECURITY-2026",
+    "SALES-REF-SUPPORT-SLA-2026",
+    "SALES-REF-IMPLEMENTATION-2026",
+    "SALES-REF-CASESTUDY-HOLLOWMERE",
+    "SALES-REF-PRICING-2025",
+    "SALES-REF-PRICING-2027-DRAFT",
+    "SALES-REF-PARTNER-PROGRAM-2026",
+    "SALES-REF-PARTNER-OVERVIEW-2025",
+    "SALES-REF-HARDWARE-INSTALL-2026",
+    "SALES-REF-RELEASE-NOTES-2026",
+    "SALES-REF-VEHICLE-COMPAT-2026"
+   ]
+  },
+  {
+   "id": "lecture-p24",
+   "mode": "lecture",
+   "base": true,
+   "files": [
+    "LEC-REF-CNW-SLIDES-L07",
+    "LEC-REF-CNW-NOTES-W3-4",
+    "LEC-REF-CNW-SYLLABUS-2026",
+    "LEC-REF-CNW-SYLLABUS-2025",
+    "LEC-REF-ECN-SLIDES-L05",
+    "LEC-REF-ECN-NOTES-L3-5",
+    "LEC-REF-ECN-FORMULAS-2026",
+    "LEC-REF-ECN-FORMULAS-2025",
+    "LEC-REF-BIO-NOTES-L8-9",
+    "LEC-REF-BIO-PRACTICAL-HANDBOOK",
+    "LEC-REF-BIO-P2-CLASS-RESULTS",
+    "LEC-REF-CNW-LAB4-HANDOUT-V1",
+    "LEC-REF-CNW-LAB4-HANDOUT-V2",
+    "LEC-REF-CNW-NOTES-W5",
+    "LEC-REF-ECN-TUTORIAL-PACK-2"
+   ]
+  },
+  {
+   "id": "seminar-p24",
+   "mode": "seminar",
+   "base": true,
+   "files": [
+    "SEM-REF-PAPER-FINAL",
+    "SEM-REF-SLIDES",
+    "SEM-REF-APPENDIX",
+    "SEM-REF-RESULTS-TABLE",
+    "SEM-REF-RESULTS-EXPORT-MARCH",
+    "SEM-REF-ABSTRACT-DRAFT",
+    "SEM-REF-RELATED-NOTES",
+    "SEM-REF-CO2-CHAPTER",
+    "SEM-REF-GRANT-REPORT-Y2",
+    "SEM-REF-DATA-DICTIONARY",
+    "SEM-REF-SBSA-DECISION",
+    "SEM-REF-CO2-LOGGER-REGISTER"
+   ]
+  },
+  {
+   "id": "call-center-p24",
+   "mode": "call-center",
+   "base": true,
+   "files": [
+    "CC-REF-VERIFICATION-2026",
+    "CC-REF-REFUND-2026",
+    "CC-REF-SHIPPING-2026",
+    "CC-REF-RECOVERY-2026",
+    "CC-REF-PRIVACY-2026",
+    "CC-REF-ESCALATION-2026",
+    "CC-REF-BILLING-TRAVEL-2026",
+    "CC-REF-TROUBLESHOOTING-2026",
+    "CC-REF-HANDBOOK-V2",
+    "CC-REF-REPAIR-2026",
+    "CC-REF-FIT-2026",
+    "CC-REF-FIT-PILOT-2025",
+    "CC-REF-QUALITY-2026",
+    "CC-REF-FIT-AREAS-2026",
+    "CC-REF-SERVICE-REPORT-2026-09"
+   ]
+  },
+  {
+   "id": "general-none",
+   "mode": "general",
+   "base": true,
+   "files": []
+  },
+  {
+   "id": "recruiting-none",
+   "mode": "recruiting",
+   "base": true,
+   "files": []
+  },
+  {
+   "id": "team-meet-none",
+   "mode": "team-meet",
+   "base": true,
+   "files": []
+  },
+  {
+   "id": "looking-for-work-none",
+   "mode": "looking-for-work",
+   "base": true,
+   "files": []
+  },
+  {
+   "id": "technical-interview-none",
+   "mode": "technical-interview",
+   "base": true,
+   "files": []
+  }
+ ],
+ "items": []
+}

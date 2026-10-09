@@ -1,0 +1,21 @@
+[
+ {
+  "id": "seminar-p24",
+  "mode": "seminar",
+  "base": true,
+  "files": [
+   "SEM-REF-PAPER-FINAL",
+   "SEM-REF-SLIDES",
+   "SEM-REF-APPENDIX",
+   "SEM-REF-RESULTS-TABLE",
+   "SEM-REF-RESULTS-EXPORT-MARCH",
+   "SEM-REF-ABSTRACT-DRAFT",
+   "SEM-REF-RELATED-NOTES",
+   "SEM-REF-CO2-CHAPTER",
+   "SEM-REF-GRANT-REPORT-Y2",
+   "SEM-REF-DATA-DICTIONARY",
+   "SEM-REF-SBSA-DECISION",
+   "SEM-REF-CO2-LOGGER-REGISTER"
+  ]
+ }
+]

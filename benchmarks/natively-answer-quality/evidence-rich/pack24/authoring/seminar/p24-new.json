@@ -1,0 +1,1139 @@
+{
+ "mode": "seminar",
+ "items": [
+  {
+   "id": "ER-P24-SEM-N-001",
+   "mode": "seminar",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "And your co-author, Raskinen. What was his hand in the detector itself, what's his own thesis work on, and is he paid off this same grant? Until when?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "seminar-p24",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "people",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Three documents, one of them frozen. The March draft abstract's note to co-authors shows that Juho Raskinen made the change to the calibration window in the detector's pipeline. His own work is the classroom carbon dioxide study, Chapter 5 of his doctoral thesis (36 classrooms in six primary and infant schools, spring term 2026). The year-2 report to the Northmarch Energy Trust says his studentship is paid from the award and runs to the end of September 2027. The presenter gives all three. The report does not state when the award itself ends, so no end date for the grant may be supplied, and the classroom study is a separate piece of work, not part of the TERN evaluation.",
+    "required_facts": [
+     {
+      "fact": "SEM-REF-ABSTRACT-DRAFT#F5",
+      "text": "Raskinen made the change to the calibration window in the detector's pipeline.",
+      "answer_needles": [
+       "calibration"
+      ]
+     },
+     {
+      "fact": "SEM-REF-CO2-CHAPTER#F1",
+      "text": "His own thesis work is the classroom carbon dioxide study (Chapter 5 of his doctoral thesis).",
+      "answer_needles": [
+       "CO2",
+       "CO₂",
+       "carbon dioxide",
+       "air quality",
+       "air-quality"
+      ]
+     },
+     {
+      "fact": "SEM-REF-GRANT-REPORT-Y2#F9",
+      "text": "His studentship is paid from the Northmarch award and runs to the end of September 2027.",
+      "answer_needles": [
+       "September 2027",
+       "Sept 2027",
+       "Sep 2027",
+       "Sept. 2027",
+       "Sep. 2027"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SEM-REF-CO2-CHAPTER#F32",
+      "text": "Chapter 4 of his thesis describes his part in the laboratory's fault detector."
+     },
+     {
+      "fact": "SEM-REF-CO2-CHAPTER#F2",
+      "text": "The classroom study logged 36 classrooms in six primary and infant schools."
+     },
+     {
+      "fact": "SEM-REF-SBSA-DECISION#F13",
+      "text": "He is redrawing Figure 3 for the final version of the paper."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives an end date for the grant itself, or moves the end of his funding to the end of an award year (July or August 2027).",
+      "kind": "fabrication",
+      "answer_needles": [
+       "July 2027",
+       "August 2027",
+       "Aug 2027"
+      ]
+     },
+     {
+      "text": "Credits him with the thermal-balance model, the isolation stage or the whole method; the documents record only the calibration-window change.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Presents the classroom carbon dioxide study as part of the TERN paper, or says TERN was evaluated on classroom readings.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says the documents do not show what he did or how he is funded.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SEM-REF-ABSTRACT-DRAFT",
+     "SEM-REF-CO2-CHAPTER",
+     "SEM-REF-GRANT-REPORT-Y2"
+    ],
+    "source_priority": [
+     "SEM-REF-GRANT-REPORT-Y2",
+     "SEM-REF-CO2-CHAPTER",
+     "SEM-REF-ABSTRACT-DRAFT"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Adding that he is a co-author of the TERN paper.",
+     "Saying \"about a year from now\" for the end of the studentship."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-SEM-N-002",
+   "mode": "seminar",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "The school where the classroom air came out worst in that study. Which school is that, by name? And how did the fault detector do in that same building?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "seminar-p24",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "cross_reference",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "A chain through four documents. The thesis chapter names no school: its worst school is School C (above 1,500 ppm for 33% of teaching hours). The logger register gives School C the building code BF-09. The data dictionary says BF-09 is Tessel Lane Primary. Tessel Lane Primary is one of the five held-out buildings of the TERN evaluation, where TERN's F1 was 0.89 (median delay 39 minutes, 24 of 28 episodes detected). The presenter names Tessel Lane and gives 0.89. Nothing in the pack relates the classroom readings to air-handling faults, so no causal link may be drawn.",
+    "required_facts": [
+     {
+      "fact": "SEM-REF-DATA-DICTIONARY#F2",
+      "text": "Building BF-09, the worst school of the classroom study (School C), is Tessel Lane Primary.",
+      "answer_needles": [
+       "Tessel Lane"
+      ]
+     },
+     {
+      "fact": "SEM-REF-RESULTS-TABLE#F23",
+      "text": "TERN's F1 at Tessel Lane Primary was 0.89.",
+      "answer_needles": [
+       "0.89",
+       ".89"
+      ]
+     },
+     {
+      "fact": "SEM-REF-CO2-CHAPTER#F17",
+      "text": "School C is the worst of the six schools in the classroom study.",
+      "answer_needles": []
+     },
+     {
+      "fact": "SEM-REF-CO2-LOGGER-REGISTER#F1",
+      "text": "School C carries the building code BF-09 in the logger register.",
+      "answer_needles": []
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SEM-REF-CO2-CHAPTER#F17",
+      "text": "School C was above 1,500 ppm for 33% of teaching hours."
+     },
+     {
+      "fact": "SEM-REF-RESULTS-TABLE#F23",
+      "text": "Median delay 39 minutes; 24 of 28 episodes detected."
+     },
+     {
+      "fact": "SEM-REF-CO2-CHAPTER#F20",
+      "text": "Four of its six logged rooms are window-only."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Names another school as the worst one (Aldergate, Marrowby, Dunnock Lea, Pennystone Road or Larchfold).",
+      "kind": "fabrication",
+      "answer_needles": [
+       "Aldergate",
+       "Marrowby",
+       "Dunnock",
+       "Pennystone",
+       "Larchfold"
+      ]
+     },
+     {
+      "text": "Gives another building's TERN figure for it, or the overall figure, as that school's score.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says or implies that the poor air in that school was caused by air-handling faults, or that the detector found the cause.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says the school cannot be identified because the chapter uses letters.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SEM-REF-CO2-CHAPTER",
+     "SEM-REF-CO2-LOGGER-REGISTER",
+     "SEM-REF-DATA-DICTIONARY",
+     "SEM-REF-RESULTS-TABLE"
+    ],
+    "source_priority": [
+     "SEM-REF-CO2-CHAPTER",
+     "SEM-REF-CO2-LOGGER-REGISTER",
+     "SEM-REF-DATA-DICTIONARY",
+     "SEM-REF-RESULTS-TABLE",
+     "SEM-REF-APPENDIX"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Noting that four of the six rooms logged there have no mechanical supply, which the chapter gives as the main reason."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-SEM-N-003",
+   "mode": "seminar",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "counting today's seminar, how many times am i presenting TERN between now and the end of the year, and on which dates? list them all",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "seminar-p24",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "schedule",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Three presentations, one in each of three documents. The slide deck: the Built Environment Research Seminar, Thursday 8 October 2026. The SBSA decision email: the paper is in Session 5B on Thursday 19 November 2026. The year-2 report to the Trust: the Northmarch Energy Trust grantee day on Wednesday 2 December 2026, a short talk and poster on TERN. The report also lists two past events (the 7 May colloquium, which was Raskinen's talk on the classroom study, and the 16 June estates forum), which are in the past. The length of the symposium talk is not fixed and no start time is given for the seminar, so neither may be supplied.",
+    "required_facts": [
+     {
+      "fact": "SEM-REF-SLIDES#F1",
+      "text": "The seminar on Thursday 8 October 2026.",
+      "answer_needles": [
+       "8 October",
+       "October 8",
+       "8 Oct",
+       "Oct 8",
+       "8th of October",
+       "8th October",
+       "today"
+      ]
+     },
+     {
+      "fact": "SEM-REF-SBSA-DECISION#F10",
+      "text": "The SBSA 2026 talk, Session 5B, Thursday 19 November 2026.",
+      "answer_needles": [
+       "19 November",
+       "November 19",
+       "19 Nov",
+       "Nov 19",
+       "19th of November",
+       "19th November"
+      ]
+     },
+     {
+      "fact": "SEM-REF-GRANT-REPORT-Y2#F13",
+      "text": "The Northmarch Energy Trust grantee day, Wednesday 2 December 2026.",
+      "answer_needles": [
+       "2 December",
+       "December 2,",
+       "December 2 ",
+       "December 2nd",
+       "2 Dec",
+       "Dec 2 ",
+       "Dec 2,",
+       "2nd of December",
+       "2nd December"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SEM-REF-GRANT-REPORT-Y2#F13",
+      "text": "Attendance at the grantee day is a condition of the award."
+     },
+     {
+      "fact": "SEM-REF-SBSA-DECISION#F11",
+      "text": "The length of the symposium talk has not been fixed."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Lists a past event (the 16 June estates forum or the 7 May colloquium) as one of the coming TERN presentations.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "16 June",
+       "June 16",
+       "7 May",
+       "May 7"
+      ]
+     },
+     {
+      "text": "Gives a length or a start time for the symposium talk or the grantee-day talk.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Leaves one of the three out, or adds Raskinen's colloquium talk on the classroom study as a TERN presentation.",
+      "kind": "fabrication",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "assistant answering the presenter privately; the presenter typed the request",
+    "expected_action": "answer_directly",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "SEM-REF-SLIDES",
+     "SEM-REF-SBSA-DECISION",
+     "SEM-REF-GRANT-REPORT-Y2"
+    ],
+    "source_priority": [
+     "SEM-REF-SBSA-DECISION",
+     "SEM-REF-GRANT-REPORT-Y2",
+     "SEM-REF-SLIDES"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Noting that the symposium runs from 17 to 19 November and the talk is on the last day."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-SEM-N-004",
+   "mode": "seminar",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "how long did SBSA sit on the full paper? count from the day full papers were due to the day the decision email landed",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "seminar-p24",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "calculation",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two documents. The March draft abstract: the full paper was due on 29 May 2026. The decision email is dated Friday 17 July 2026. From 29 May to 17 July is 2 + 30 + 17 = 49 days, exactly seven weeks. Near-misses in the pack: the abstract was due on 10 April (98 days, 14 weeks, before the decision), the reviews were completed on 3 July (35 days) and the committee met on 8 July (40 days).",
+    "required_facts": [
+     {
+      "fact": "SEM-REF-ABSTRACT-DRAFT#F9",
+      "text": "The full paper was due on 29 May 2026.",
+      "answer_needles": [
+       "29 May",
+       "May 29",
+       "29th of May",
+       "29th May",
+       "49 days",
+       "7 weeks",
+       "seven weeks"
+      ]
+     },
+     {
+      "fact": "SEM-REF-SBSA-DECISION#F1",
+      "text": "The decision email came on 17 July 2026, 49 days (seven weeks) later.",
+      "answer_needles": [
+       "49 days",
+       "49-day",
+       "forty-nine days",
+       "7 weeks",
+       "seven weeks",
+       "7-week",
+       "seven-week"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SEM-REF-SBSA-DECISION#F2",
+      "text": "Reviews were completed on 3 July and the committee met on 8 July."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Counts from the abstract deadline of 10 April instead of the full-paper deadline (98 days, 14 weeks).",
+      "kind": "fabrication",
+      "answer_needles": [
+       "98 days",
+       "14 weeks",
+       "fourteen weeks"
+      ]
+     },
+     {
+      "text": "Stops at the day the reviews were completed (3 July, 35 days) or the day the committee met (8 July, 40 days).",
+      "kind": "fabrication",
+      "answer_needles": [
+       "35 days",
+       "40 days"
+      ]
+     }
+    ],
+    "expected_role": "assistant answering the presenter privately; the presenter typed the request",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "SEM-REF-ABSTRACT-DRAFT",
+     "SEM-REF-SBSA-DECISION"
+    ],
+    "source_priority": [
+     "SEM-REF-SBSA-DECISION",
+     "SEM-REF-ABSTRACT-DRAFT"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying \"about seven weeks\"."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "date(2026-07-17) - date(2026-05-29)",
+     "result": 49,
+     "unit": "days (exactly seven weeks)",
+     "accepted_forms": [
+      "49 days",
+      "49-day",
+      "forty-nine days",
+      "7 weeks",
+      "seven weeks",
+      "7-week",
+      "seven-week"
+     ],
+     "inputs": {
+      "full_paper_due": "SEM-REF-ABSTRACT-DRAFT#F9",
+      "decision_date": "SEM-REF-SBSA-DECISION#F1"
+     },
+     "wrong_results_common": [
+      "98 days",
+      "14 weeks",
+      "fourteen weeks",
+      "35 days",
+      "40 days"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-SEM-N-005",
+   "mode": "seminar",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Your funder set you a hard bar on speed, didn't they? What does that bar come to in minutes, and how much room did you clear it by?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "seminar-p24",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "calculation",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two documents. The year-2 report to the Trust gives milestone M3: on buildings not used for development, the median time to detection must be no more than half that of the rule set in service in the estate. The paper gives both figures on the held-out buildings: the rule set RB-28 has a median delay of 126 minutes and TERN 34 minutes. Half of 126 is 63 minutes, so TERN is 29 minutes inside the bar. The report says the criterion is assessed on the final published paper and that no draft or interim figure counts, so the March draft's 48 minutes is the wrong input (it would give 15 minutes of room). At the date of the report the Trust had not yet assessed the milestone; the presenter may say the paper's figures meet it but not that the Trust has signed it off.",
+    "required_facts": [
+     {
+      "fact": "SEM-REF-GRANT-REPORT-Y2#F3",
+      "text": "The Trust's criterion: a median time to detection no more than half that of the rule set in service.",
+      "answer_needles": [
+       "half"
+      ]
+     },
+     {
+      "fact": "SEM-REF-PAPER-FINAL#F6",
+      "text": "The rule set's median delay is 126 minutes, so the bar is 63 minutes.",
+      "answer_needles": [
+       "63",
+       "sixty-three"
+      ]
+     },
+     {
+      "fact": "SEM-REF-PAPER-FINAL#F3",
+      "text": "TERN's median delay is 34 minutes, 29 minutes inside the bar.",
+      "answer_needles": [
+       "29 min",
+       "29-min",
+       "twenty-nine",
+       "by 29",
+       "29 to spare"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SEM-REF-GRANT-REPORT-Y2#F4",
+      "text": "The Trust assesses M3 once, on the final published paper; at 24 July 2026 it had not yet been assessed."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Uses the March draft's 48 minutes as TERN's delay, giving 15 minutes of room.",
+      "kind": "draft",
+      "fact": "SEM-REF-ABSTRACT-DRAFT#F3",
+      "answer_needles": [
+       "15 min",
+       "fifteen min",
+       "48 min"
+      ]
+     },
+     {
+      "text": "Subtracts TERN's delay from the rule set's whole delay and calls the 92 minutes the margin over the bar.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "92 min",
+       "ninety-two"
+      ]
+     },
+     {
+      "text": "Takes half of another system's delay as the bar (half of the autoencoder's 52 minutes), or measures the margin against the autoencoder.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says the Trust has already assessed the milestone or signed it off.",
+      "kind": "fabrication",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SEM-REF-GRANT-REPORT-Y2",
+     "SEM-REF-PAPER-FINAL"
+    ],
+    "source_priority": [
+     "SEM-REF-PAPER-FINAL",
+     "SEM-REF-GRANT-REPORT-Y2",
+     "SEM-REF-ABSTRACT-DRAFT"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying TERN took a little over half of the allowed time."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "126 / 2 - 34",
+     "result": 29,
+     "unit": "minutes inside the bar of 63 minutes",
+     "accepted_forms": [
+      "29 min",
+      "29-min",
+      "twenty-nine",
+      "by 29",
+      "29 to spare"
+     ],
+     "inputs": {
+      "criterion": "SEM-REF-GRANT-REPORT-Y2#F3",
+      "rule_set_median_delay": "SEM-REF-PAPER-FINAL#F6",
+      "tern_median_delay": "SEM-REF-PAPER-FINAL#F3"
+     },
+     "wrong_results_common": [
+      "15 min",
+      "fifteen min",
+      "92 min",
+      "ninety-two"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-SEM-N-006",
+   "mode": "seminar",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Those little traffic-light gadgets on the teachers' desks. Did they change anything? What did the time over the limit come down to in the rooms that got one?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "seminar-p24",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "companion_study",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Section 5.7 of the thesis chapter, in its last third. In the six window-only classrooms of Schools C and D that were given an indicator light from 9 March, the concentration was above 1,500 ppm for 45% of teaching hours in the seven weeks before and for 27% of teaching hours in the three weeks with the lights. The chapter calls this a before-and-after observation with no comparison group, in a milder month, so the presenter gives 27% and does not claim the lights caused the fall. The near-miss figures are the all-classroom 17% in the chapter's opening summary, the window-only 35% and the interim 26% in the report to the Trust.",
+    "required_facts": [
+     {
+      "fact": "SEM-REF-CO2-CHAPTER#F26",
+      "text": "With the indicator lights the share of teaching hours above 1,500 ppm in those six rooms was 27% (45% before).",
+      "answer_needles": [
+       "27%",
+       "27 per cent",
+       "27 percent",
+       "twenty-seven"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SEM-REF-CO2-CHAPTER#F26",
+      "text": "It had been 45% in the seven weeks before the lights."
+     },
+     {
+      "fact": "SEM-REF-CO2-CHAPTER#F27",
+      "text": "It is a before-and-after observation, not a controlled comparison, and March was milder."
+     },
+     {
+      "fact": "SEM-REF-CO2-CHAPTER#F25",
+      "text": "Six window-only classrooms in Schools C and D, from 9 March."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives the all-classroom figure of 17% as the figure for the rooms with lights.",
+      "kind": "fabrication",
+      "fact": "SEM-REF-CO2-CHAPTER#F3",
+      "answer_needles": [
+       "17%",
+       "17 per cent",
+       "17 percent"
+      ]
+     },
+     {
+      "text": "Gives the 26% interim figure from the report to the Trust.",
+      "kind": "stale",
+      "fact": "SEM-REF-GRANT-REPORT-Y2#F8",
+      "answer_needles": [
+       "26%",
+       "26 per cent",
+       "26 percent"
+      ]
+     },
+     {
+      "text": "States as an established result that the lights caused the fall.",
+      "kind": "fabrication",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SEM-REF-CO2-CHAPTER"
+    ],
+    "source_priority": [
+     "SEM-REF-CO2-CHAPTER"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Describing the fall as from a bit under half of the time to a bit over a quarter."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-SEM-N-007",
+   "mode": "seminar",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "When you tested the loggers again at the end of term, how far out was the worst of the ones you still trusted?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "seminar-p24",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "companion_study",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Appendix 5.A, at the very end of the thesis chapter. At retrieval a logger passed if it read within 75 ppm of the 1,000 ppm reference gas; all but two passed, and among those the largest deviation was 49 ppm (median 23 ppm). The two that failed read 96 and 88 ppm high and their later days were removed, so they are not loggers that were still trusted. The near-miss in the first third of the chapter is the check before deployment, when every logger read within 20 ppm of the reference; the maker's stated accuracy of 50 ppm is a specification, not a result of the check.",
+    "required_facts": [
+     {
+      "fact": "SEM-REF-CO2-CHAPTER#F29",
+      "text": "Among the loggers that passed the check at retrieval, the largest deviation from the reference gas was 49 ppm.",
+      "answer_needles": [
+       "49 ppm",
+       "49 parts",
+       "forty-nine"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SEM-REF-CO2-CHAPTER#F29",
+      "text": "The median deviation was 23 ppm and the pass limit 75 ppm."
+     },
+     {
+      "fact": "SEM-REF-CO2-CHAPTER#F30",
+      "text": "Two loggers failed (96 and 88 ppm high) and their later days were removed."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives the figure from the check before deployment (within 20 ppm) as the end-of-term result.",
+      "kind": "fabrication",
+      "fact": "SEM-REF-CO2-CHAPTER#F7",
+      "answer_needles": [
+       "20 ppm",
+       "twenty ppm"
+      ]
+     },
+     {
+      "text": "Gives a failed logger's reading (96 or 88 ppm) as the worst of the loggers that were kept.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Gives the maker's stated accuracy as what the check found.",
+      "kind": "fabrication",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SEM-REF-CO2-CHAPTER"
+    ],
+    "source_priority": [
+     "SEM-REF-CO2-CHAPTER"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Adding that two loggers were worse than that and had their later data cut."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-SEM-N-008",
+   "mode": "seminar",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "So taking the whole term, what share of lesson time were those classrooms above the fifteen hundred mark?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "seminar-p24",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "companion_study",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two new documents give different figures. The thesis chapter (version 3, approved 18 September 2026) gives the whole-term result: above 1,500 ppm for 17% of valid teaching hours across the 36 classrooms. The year-2 report to the Trust (24 July 2026) gives 26%, and says in the same paragraph that it is an interim figure for the first half of the term, before the logger checks and the cleaning, and that it will change. The whole-term answer is 17%; 26% given as the answer is wrong.",
+    "required_facts": [
+     {
+      "fact": "SEM-REF-CO2-CHAPTER#F3",
+      "text": "Over the whole term the concentration was above 1,500 ppm for 17% of valid teaching hours.",
+      "answer_needles": [
+       "17%",
+       "17 per cent",
+       "17 percent",
+       "seventeen per"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SEM-REF-CO2-CHAPTER#F19",
+      "text": "10% in rooms with a mechanical supply and 35% in window-only rooms."
+     },
+     {
+      "fact": "SEM-REF-GRANT-REPORT-Y2#F8",
+      "text": "The 26% in the report to the Trust was an interim figure for the first half of the term."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives 26%, the interim first-half-of-term figure in the July report to the Trust, as the result.",
+      "kind": "stale",
+      "fact": "SEM-REF-GRANT-REPORT-Y2#F8",
+      "answer_needles": [
+       "26%",
+       "26 per cent",
+       "26 percent",
+       "twenty-six"
+      ]
+     },
+     {
+      "text": "Gives a sub-group's figure (window-only rooms, School C, rooms with a mechanical supply) as the figure for all classrooms.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says the two documents disagree and leaves it there without giving the whole-term figure.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+    "expected_action": "prefer_current_source",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SEM-REF-CO2-CHAPTER"
+    ],
+    "source_priority": [
+     "SEM-REF-CO2-CHAPTER",
+     "SEM-REF-GRANT-REPORT-Y2"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "Share of teaching hours above 1,500 ppm in the classroom study",
+      "sources": [
+       "SEM-REF-CO2-CHAPTER",
+       "SEM-REF-GRANT-REPORT-Y2"
+      ],
+      "resolution": "final_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Saying \"about a sixth of the time\"."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-SEM-N-009",
+   "mode": "seminar",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "how often did the classroom loggers take a reading? need the interval for a methods question",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "seminar-p24",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "companion_study",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two current documents disagree and nothing in the pack settles it. The thesis chapter (approved 18 September 2026) says the loggers recorded at 2-minute intervals. The data dictionary (revision 4, released 16 September 2026) says the classroom logger files hold one reading every 5 minutes. Neither document mentions the other figure or any resampling, and the logger register does not state an interval. The right answer gives both values, says which document each comes from, and says it needs checking against the files. Picking one silently, or inventing a reason for the difference, is wrong; the one-minute interval of the BMS trend logs is a different dataset.",
+    "required_facts": [
+     {
+      "fact": "SEM-REF-CO2-CHAPTER#F12",
+      "text": "The thesis chapter says 2-minute intervals.",
+      "answer_needles": [
+       "2-minute",
+       "2 minute",
+       "2 min",
+       "two-minute",
+       "two minute",
+       "two min",
+       "every 2",
+       "every two"
+      ]
+     },
+     {
+      "fact": "SEM-REF-DATA-DICTIONARY#F19",
+      "text": "The data dictionary says one reading every 5 minutes.",
+      "answer_needles": [
+       "5 minutes",
+       "5-minute",
+       "5 min",
+       "five minutes",
+       "five-minute",
+       "five min",
+       "every 5",
+       "every five"
+      ]
+     }
+    ],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "States one interval as the fact without saying that the other document gives a different one.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Presents an explanation for the difference that neither document gives (for example that the files were averaged down) as a fact.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Gives the one-minute interval of the BMS trend logs as the interval of the classroom loggers.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "one-minute",
+       "1-minute",
+       "every minute",
+       "once a minute"
+      ]
+     }
+    ],
+    "expected_role": "assistant answering the presenter privately; the presenter typed the request",
+    "expected_action": "surface_conflict",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "SEM-REF-CO2-CHAPTER",
+     "SEM-REF-DATA-DICTIONARY"
+    ],
+    "source_priority": [
+     "SEM-REF-CO2-CHAPTER",
+     "SEM-REF-DATA-DICTIONARY"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "Recording interval of the classroom carbon dioxide loggers",
+      "sources": [
+       "SEM-REF-CO2-CHAPTER",
+       "SEM-REF-DATA-DICTIONARY"
+      ],
+      "resolution": "unresolved"
+     }
+    ],
+    "acceptable_inference": [
+     "Suggesting a look at the timestamps in one logger file to settle it."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-SEM-N-010",
+   "mode": "seminar",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "What sort of response rate did you get on the teacher survey?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "seminar-p24",
+   "pi_state": "none",
+   "condition": "missing_evidence",
+   "category": "unsupported",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "No document gives a response rate or the number of questionnaires handed out. The thesis chapter says the questionnaire went to every member of staff who had taught in a logged room during the term, including job-share partners and long-term cover teachers, and that it was returned by 33 teachers. The presenter gives the 33 and says the number handed out is not recorded, so there is no rate. Dividing 33 by the 36 classrooms (92%) is an invention: the chapter says more than one teacher could be asked per room. The 8 teachers of the November pilot are not the denominator either.",
+    "required_facts": [],
+    "optional_facts": [
+     {
+      "fact": "SEM-REF-CO2-CHAPTER#F23",
+      "text": "The questionnaire was returned by 33 teachers; it went to everyone who taught in a logged room, job-share and cover teachers included."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives a response rate by dividing the 33 returns by the 36 classrooms.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "92%",
+       "92 per cent",
+       "92 percent",
+       "91.7",
+       "33 of 36",
+       "33 out of 36",
+       "33 of the 36"
+      ]
+     },
+     {
+      "text": "Gives any other response rate, or a number of questionnaires handed out.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says no questionnaire was run or that nobody answered.",
+      "kind": "false_denial",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+    "expected_action": "decline_to_invent_stay_useful",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying that with 36 rooms and some shared between teachers, 33 returns is likely a good but unknown share."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-SEM-N-011",
+   "mode": "seminar",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "what's the council's day rate for the technician? need a per-day figure for a costing",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "seminar-p24",
+   "pi_state": "none",
+   "condition": "missing_evidence",
+   "category": "unsupported",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "No document states a day rate. The year-2 report to the Trust gives one figure, a council recharge of £6,820 for the lead technician's time in the year, and says the invoice covers 5 working days on site for the classroom logger visits and an unstated number of hours on queries about maintenance records, in one total that does not separate the two. So a per-day figure cannot be worked out. Natively says so and gives the £6,820 and what it covers. Dividing £6,820 by the 5 days (£1,364 a day) is an invention.",
+    "required_facts": [],
+    "optional_facts": [
+     {
+      "fact": "SEM-REF-GRANT-REPORT-Y2#F17",
+      "text": "The recharge for the technician's time in year 2 was £6,820, one total covering 5 days on site and other hours."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Divides the £6,820 by the 5 days on site and gives £1,364 a day.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "1,364",
+       "1364",
+       "1.36k"
+      ]
+     },
+     {
+      "text": "Gives any other day rate or hourly rate for the technician.",
+      "kind": "fabrication",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "assistant answering the presenter privately; the presenter typed the request",
+    "expected_action": "decline_to_invent_stay_useful",
+    "expected_response_type": "private_explanation",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Suggesting the figure be asked of the council, since its invoice uses an internal rate."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-SEM-N-012",
+   "mode": "seminar",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "what accuracy does our data dictionary give for the mixed-air temp sensor, and is that something we measured ourselves?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "seminar-p24",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "data",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The data dictionary's point table gives an installer's stated accuracy for each sensor. For the mixed-air temperature (t_ma, an averaging element across the mixing box) it is ±0.4 °C. It is not the laboratory's measurement: the dictionary says the accuracies are the figures on the installer's commissioning sheets and that the laboratory has not checked any of these sensors against a reference instrument. The other rows are the near-misses: supply air ±0.2 °C, return air ±0.3 °C, outdoor air ±0.5 °C, heating water ±1.0 °C. The supplement's fit errors (0.6 °C for the mixed-air balance) are model errors, a different thing.",
+    "required_facts": [
+     {
+      "fact": "SEM-REF-DATA-DICTIONARY#F10",
+      "text": "The installer's stated accuracy for the mixed-air temperature sensor is ±0.4 °C.",
+      "answer_needles": [
+       "0.4"
+      ]
+     },
+     {
+      "fact": "SEM-REF-DATA-DICTIONARY#F16",
+      "text": "It is the installer's commissioning figure; the laboratory has not checked the sensors against a reference.",
+      "answer_needles": [
+       "installer",
+       "commissioning"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SEM-REF-DATA-DICTIONARY#F10",
+      "text": "The sensor is an averaging element across the mixing box."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives another sensor's accuracy for the mixed-air sensor (supply air 0.2, return air 0.3, outdoor air 0.5, heating water 1.0).",
+      "kind": "fabrication",
+      "answer_needles": [
+       "±0.2",
+       "±0.3",
+       "±0.5",
+       "±1.0",
+       "0.2 °C",
+       "0.3 °C",
+       "0.5 °C",
+       "1.0 °C",
+       "0.2°C",
+       "0.3°C",
+       "0.5°C",
+       "1.0°C"
+      ]
+     },
+     {
+      "text": "Gives the supplement's fit error of the mixed-air balance as the sensor's accuracy.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "0.6 °C",
+       "0.6°C",
+       "0.6 degree"
+      ]
+     },
+     {
+      "text": "Says the laboratory measured or verified the accuracy.",
+      "kind": "fabrication",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "assistant answering the presenter privately; the presenter typed the request",
+    "expected_action": "answer_directly",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "SEM-REF-DATA-DICTIONARY"
+    ],
+    "source_priority": [
+     "SEM-REF-DATA-DICTIONARY"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  }
+ ]
+}

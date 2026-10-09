@@ -1,0 +1,24 @@
+[
+ {
+  "id": "call-center-p24",
+  "mode": "call-center",
+  "base": true,
+  "files": [
+   "CC-REF-VERIFICATION-2026",
+   "CC-REF-REFUND-2026",
+   "CC-REF-SHIPPING-2026",
+   "CC-REF-RECOVERY-2026",
+   "CC-REF-PRIVACY-2026",
+   "CC-REF-ESCALATION-2026",
+   "CC-REF-BILLING-TRAVEL-2026",
+   "CC-REF-TROUBLESHOOTING-2026",
+   "CC-REF-HANDBOOK-V2",
+   "CC-REF-REPAIR-2026",
+   "CC-REF-FIT-2026",
+   "CC-REF-FIT-PILOT-2025",
+   "CC-REF-QUALITY-2026",
+   "CC-REF-FIT-AREAS-2026",
+   "CC-REF-SERVICE-REPORT-2026-09"
+  ]
+ }
+]
