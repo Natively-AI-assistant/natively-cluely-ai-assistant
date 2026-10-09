@@ -2839,3 +2839,62 @@ taken today: the same sheet for Seminar turns only. The unseen sets hold 19 Semi
 Also seen while building the sheet: D2-CC-030, counted among the invented company facts, is supported by the
 material in its own prompt ("Every charge produces an invoice … listed in the app under Settings > Billing"); that
 judgment is a judge error, so the class is at most 14 rows, not 15.
+
+### X2 — result: on packs of about 20,700 tokens main is right on 54 % of the questions; read whole, 87 % (2026-10-09 20:17 UTC; arm A 19:00–19:37 UTC, arm B 19:37–20:14 UTC; experiment build `237bba1a`, direct DeepSeek; 361 turns per arm, all answered; judge-free, checks obj-3; `report/x2-pack24.mjs`)
+**The set as frozen** (`pack24` `d3dea0a7c58d`, before any run): sales 13 files / 20,606 tokens as the app counts,
+lecture 15 / 20,619, seminar 12 / 20,888, call-center 15 / 20,770; the frozen documents unchanged (byte check,
+`pack24/verify-scaffold.mjs`), 22 documents added by four authors blind to the product (44,900 to 46,900
+characters per mode; no frozen needle with a digit occurs in an added document); 313 derived items, 48 new ones.
+All 55 files built and parsed with no lost needle.
+**Arms.** A: threshold 12,000, main's behaviour (the pack does not fit, pieces are retrieved). B: 24,000 (the pack is
+read whole). One event in arm A: at 19:23:45 the app was quit from outside (a clean "user-quit" in its log, not a
+crash); the supervisor restarted it on fresh user data and re-ran the interrupted turns.
+
+| | A: 12,000 (main) | B: 24,000 |
+|---|---|---|
+| right (every required string, no forbidden string, calculation) | 196 / 361 (54.3 %) | 314 / 361 (87.0 %) |
+| every required string (302 rows) | 47.7 % | 86.8 % (paired +39.1, 95 % 33.4 to 45.4) |
+| rows with a forbidden string | 21 | 8 |
+| calculation results right (105 rows) | 39 (37 %) | 84 (80 %) |
+| required document facts whose string is in the request | 310 / 643 (48 %) | 643 / 643 |
+| files in the request, median | 5 | all (12 to 15) |
+| prompt tokens, median (cached) | 8,183 (4,992) | 29,759 (5,248) |
+| first word, spoken: median / p90 / p95 / max | 3,413 / 3,748 / 3,941 / 7,939 ms | 2,657 / 3,059 / 3,209 / 4,193 ms |
+| first word, typed: median / p90 / max | 899 / 1,188 / 1,861 ms | 1,329 / 1,728 / 5,475 ms |
+| settled answer, spoken: median / p90 | 5,240 / 7,648 ms | 5,215 / 8,244 ms |
+| settled answer, typed: median / p90 | 2,341 / 2,974 ms | 3,145 / 4,131 ms |
+| fix-up pass: ran / changed the text | 268 / 75 | 268 / 33 |
+| settled 3.5 s or more after the last token (the pass's budget) | 44 (16.4 %) | 71 (26.5 %) |
+| pass material over its 96,000-character cap | 0 | 2 |
+| right as drafted, not right as shown | 3 | 2 |
+
+By mode (right, A → B): sales 43.8 → 84.3 %, lecture 70.0 → 92.2 %, seminar 54.9 → 87.9 %, call-center 48.4 →
+83.5 %. By condition: one document 58.3 → 92.1 %, several documents 27.2 → 78.3 %, version conflict 45.2 → 80.6 %,
+follow-up 58.3 → 83.3 %, absent 96.4 → 96.4 %, irrelevant source 100 → 100 %. The 48 new rows: 17 → 39 right (needs
+the whole pack 0 → 6 of 9; calculation across an old and a new document 0 → 8 of 11; a fact deep in the long
+document or which value 6 → 11 of 12; version conflict 3 → 6 of 8; absent 8 → 8 of 8).
+By surface in arm A: spoken 48.9 % right with 42 % of the needed facts in the request; typed 63.8 % with 60 %.
+**The same 313 questions on the small frozen pack** (main, read whole; `er6-*`, `er7-chal-main`): 85.9 % right, 3
+forbidden-string rows. On the enlarged pack: main 57.2 % and 15, read whole 87.9 % and 8. So the added documents
+cost nothing when the pack is read whole, and main loses 29 points when it is not.
+
+**Lines (B against A).** 1 holds (+39.1 points). 2 holds (21 → 8). 3 holds (39 → 84 of 105). 4 holds (0 → 6 of 9).
+**5 fails on one part:** spoken first word is 756 ms FASTER at the median and 689 ms faster at p90 (retrieval and
+the awaited rerank, 1.2 s on a spoken turn, are not run); typed first word is 430 ms later (400 allowed; 1,329 ms
+against 899). **6 fails on one part:** answers the pass broke 3 → 2, but turns that settle 3.5 s or more after the
+last token rise from 16.4 % to 26.5 % (2 points allowed): the pass reads the whole request, about 92,000
+characters, and 2 requests were over its cap. 7 holds. **So X2 is not "worth proposing as it stands" under its own
+lines; it is an accuracy gain of 33 points with two measured costs** (typed first word +0.43 s; the pass out of
+budget on a quarter of its turns, which delays the settled answer, typed p90 2.97 → 4.13 s), and a request 3.6
+times the size.
+**What arm A is.** The benchmark app has no embedding key, so it runs the bundled local embedding model. With that
+provider a spoken turn in a meeting uses the keyword search and the awaited bundled rerank
+(`shouldUseLexicalForLocalManualQuery`, Evin's decisions of 3 and 4 October); a typed turn queries the vectors.
+All 231 spoken turns of arm A carry `degraded: local_lexical`. That is the default configuration, and it is what
+a user without a cloud embedding provider gets. **Not measured:** a cloud embedding provider or the managed
+reranker, where retrieval on a pack this size may deliver more than 48 % of the needed facts.
+**Not yet judged.** A fixed sample (the 48 new rows and 30 derived rows per mode, `pack24/x2-astra-sample.json`,
+committed before either arm was read) goes to Astra after the 587 baseline judgments if calls remain.
+Nothing lands from X2. The candidate that the data points to is "24,000, with the pass's cap and budget looked at
+together, and the pack placed where the provider can cache it" (5,248 of 29,759 prompt tokens are cache hits: the
+question comes before the documents in the request, so the pack is never a cached prefix).
