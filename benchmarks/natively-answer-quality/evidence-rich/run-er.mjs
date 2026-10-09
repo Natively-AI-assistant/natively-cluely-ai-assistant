@@ -146,6 +146,22 @@ const profile = await app.setupProfile(c, { deepseekKey: dsKey });
 if (/agentrouter/i.test(JSON.stringify(profile?.config ?? {})) && process.env.ER_ALLOW_AGENTROUTER !== '1') {
   console.error('the app is routing through AgentRouter, not direct DeepSeek — start it from an empty profile (supervise-er.mjs --fresh-userdata)'); process.exit(4);
 }
+// ER_EMBEDDING=voyage (X2 arm C, 2026-10-09): give the app a cloud embedding provider before any file is uploaded, so
+// that retrieval on a pack above the whole-pack threshold is the hybrid search and not the bundled local model's
+// keyword fallback on spoken turns. Saving the key is what activates it (CredentialsManager.activateHostedRetrieval).
+// The key is read in-process and never printed; the status the app reports afterwards goes into the run header.
+let embeddingStatus = null;
+if (process.env.ER_EMBEDDING === 'voyage') {
+  const vKey = envKey('VOYAGE_API_KEY');
+  if (!vKey) { console.error('ER_EMBEDDING=voyage but VOYAGE_API_KEY is not in the env file.'); process.exit(2); }
+  const r = await c.launcher.evaluate(`(async () => { const api = window.electronAPI; const set = await api.setEmbeddingVoyageKey(${JSON.stringify(vKey)}); const st = await api.getEmbeddingStatus(); return { set, st }; })()`);
+  if (!r?.set?.success) { console.error('could not save the Voyage key: ' + JSON.stringify(r?.set?.error ?? r?.set?.message ?? null)); process.exit(2); }
+  embeddingStatus = r.st ?? null;
+} else {
+  embeddingStatus = await c.launcher.evaluate('window.electronAPI.getEmbeddingStatus()').catch(() => null);
+}
+const embBrief = embeddingStatus ? JSON.stringify(embeddingStatus).replace(/"[^"]*(?:key|secret|token)[^"]*":"[^"]*"/gi, '"redacted":"…"').slice(0, 600) : 'unknown';
+console.log('embedding status:', embBrief);
 const modeIds = {};
 for (const k of MODE_KEYS) modeIds[k] = await app.builtinModeId(c, k);
 console.log('llm config:', JSON.stringify(profile.config));
@@ -182,6 +198,7 @@ const header = fs.existsSync(F.header) ? readJson(F.header) : {
   git_commit: git(APP_ROOT, 'rev-parse', 'HEAD'), git_branch: git(APP_ROOT, 'rev-parse', '--abbrev-ref', 'HEAD'), git_dirty: dirty.length > 0, git_dirty_paths: dirty ? dirty.split('\n').length : 0,
   app_version: appPkg.version, app_root: APP_ROOT, started_at: new Date().toISOString(), finished_at: null,
   provider_model_config: profile.config, default_config_before_keys: profile.before, pro_enabled_via_e2e_hook: profile.pro,
+  embedding: { requested: process.env.ER_EMBEDDING ?? 'default', status: embBrief },
   // §81–§84: the AgentRouter → DeepSeek generator route was requested first. The build under test (e000db4a) has no
   // AgentRouter provider (no setAgentRouterApiKey in its preload), a deterministic failure, so generation is on the
   // direct DeepSeek key — the fallback the spec names — and every row says so.

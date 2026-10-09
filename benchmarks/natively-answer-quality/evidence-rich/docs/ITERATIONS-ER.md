@@ -2975,3 +2975,35 @@ line only, by 30 ms: the typed first word (+430 ms, 400 allowed). The pass's bud
 material cap does (2 requests were over 96,000 characters). The sentence "the pass out of budget on a quarter of
 its turns" in the X2 entry above, in the handoff head and in what Evin was told at 20:20 UTC is wrong and is
 corrected here; the reader's label is fixed in `report/x2-pack24.mjs`.
+
+### 4. `bench/evidence-rich` pushed (2026-10-09 21:26 UTC, on Evin's yes)
+Plain fast-forward, `df815379..7b8050fb`, 52 commits, 296 files, all under `benchmarks/natively-answer-quality/`.
+The added lines were scanned for key-like strings first (none). Draft PR #638 now shows it; it stays a draft and is
+not merged. Done out of order because items 2 and 3 were waiting for another session's app to stop; later commits
+of this session are pushed to the same branch at the end.
+
+### 3. E27 — the 24,000 threshold as a candidate, and arm C with a cloud embedding provider (lines written 2026-10-09 21:34 UTC, before either run)
+**Candidate** `cand/e27` (worktree `er-main`, from main `4675ff0e`): `WHOLE_PACK_MAX_TOKENS` 12,000 → 24,000 and
+`CLAIM_VERIFIER_MATERIAL_MAX_CHARS` 96,000 → 136,000 (a full pack, the whole profile of 6,000 tokens and 16,000
+characters for the rest of the request; an existing test holds the three figures to that relation). The pass's
+3.5 s budget is NOT changed: by the app's own log it was missed once in 270 on the whole pack (correction above).
+Four tests that built a "too large" pack of 13,500 to 22,000 tokens now build one above 24,000; one new test file
+(6 tests). Type check clean; intelligence + context-intelligence 0 failures, llm 0 failures on the candidate
+(services is run after the app runs).
+**Runs, both on `pack24` (361 questions), direct DeepSeek, fresh user data, one app at a time:**
+* **Arm C** (context, no line): the experiment build at main's 12,000 with a cloud embedding provider (Voyage,
+  activated by saving its key through the app's own setting before any file is uploaded; `ER_EMBEDDING=voyage`,
+  new in `run-er.mjs`). What a user with cloud embeddings gets from main on these packs. Arm A of X2 is the same
+  build with the bundled model.
+* **The candidate build**, default configuration (bundled embedding model), against X2's arms A and B.
+**Lines for the candidate:**
+1. right rows at least 84.0 % (arm B minus 3 points) and at least 25 points above arm A;
+2. rows with a forbidden string at most arm B + 3 (11);
+3. no pass request over the new cap, and passes not finished inside the budget (app log) at most 2 %;
+4. first word within 300 ms of arm B at the median, spoken and typed (another hour of the provider);
+5. every row answered, no error or timeout.
+Packs of 12,000 tokens or less are not re-run: for them neither figure changes anything (whole below both
+thresholds, requests under the old cap), which the unit tests hold.
+**Landing.** His word was to pursue it. The request on such a turn is 3.6 times the size, which is a cost on the
+Natively API and on users' own keys, so the candidate is taken to a measured, tested state and landed only on a
+further explicit word, with arm C's result beside it.
