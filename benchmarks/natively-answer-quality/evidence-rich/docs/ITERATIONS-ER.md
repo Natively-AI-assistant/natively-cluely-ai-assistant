@@ -2356,3 +2356,16 @@ already hard fails as drafts.
 **What this says about priorities.** The classes with an objective handle are small: arithmetic and calendar 7 rows,
 code 2. The largest class, invented facts (22 rows with the personal ones), has no check that separates it from
 honest inference at this model setting; that was tested twice and is why the per-statement check was dropped.
+
+### E21 stage three — result and verdict (2026-10-09 12:21 UTC; replayed 12:04–12:20 UTC after X1's three arms, 0 failed calls)
+| Part | Arm | Reading | Lines |
+|---|---|---|---|
+| c, the cost (387 rows that need no calculation, 2 samples) | `e21d-base` → `e21d-n3` | every required string 95.2 % → 94.2 % of 566 (paired −1.1 points, 95 % −3.4 to +1.1); forbidden-string samples 6 → 3; first visible character median 899 → 888 ms, p90 1,113 → 1,095 ms; a block on 28 of 774 samples (3.6 %); median length 382 → 389 | 1 to 5 all hold |
+| d, the gain (the 59 calculation rows, 4 samples) | `e21d-cbase` → `e21d-cn3` | right samples 170 / 236 (72.0 %) → 196 / 236 (83.1 %), paired +11.0 points (95 % 3.8 to 19.1); rose 7 (REC-005, REC-008, REC-019, TEAM-012, SEM-014, D2-SALES-011, D2-REC-016), fell 1 (D2-SEM-002); first visible character median 861 → 1,043 ms (+182), p90 1,091 → 1,387 ms (+296); forbidden 1 → 1 | 1 to 4 all hold |
+**Verdict: both parts hold. E21 is a build candidate**: a turn that carries document evidence and that the word list
+does not reach gets the lighter notice (n3); a turn the word list reaches keeps main's notice word for word. The
+lighter notice costs nothing measurable where no calculation is needed (the n2 wording cost 3.7 points there) and
+keeps the gain where one is.
+What it still owes before anyone is asked to land it, each with lines written first: the build with tests; an app
+run to confirm the wiring and the first-word cost; a check on questions that were not used to design it (the
+challenge sets, below); Astra's reading, which cannot happen before the provider's block lifts.
