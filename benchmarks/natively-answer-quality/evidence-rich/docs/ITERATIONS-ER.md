@@ -3073,3 +3073,27 @@ session's commit and fails the same way on main `bbba4a58` built in the same wor
 GitHub main** as part of that push, and the uncommitted edit to `LLMHelper.ts` in the main checkout is gone.
 `cand/e26` rebased onto `bbba4a58`: `67fb1b24`, fast-forwarded. **Local main = `67fb1b24`**, one commit ahead
 of `origin/main` `bbba4a58`; not pushed.
+
+### 3. Arm C — main at 12,000 with a cloud embedding provider: 63.4 % right (2026-10-09 23:23 UTC; run `x2-c12v` 22:51–23:23 UTC on main `67fb1b24`, Voyage `voyage-4`, 1,024 dimensions; 361 questions, all answered; judge-free)
+A first start at 22:47 UTC was stopped after 8 turns and set aside (`x2-c12v-void-local`): saving the key had
+left the pipeline on the bundled model. The runner now also selects the provider and refuses to start unless the
+app reports it active (`provider: voyage, location: cloud`). In the run that counts no spoken turn is marked
+`local_lexical`.
+| | A: main, bundled model | C: main, Voyage embeddings | B: pack read whole (24,000) |
+|---|---|---|---|
+| right | 54.3 % | **63.4 %** | 87.0 % |
+| every required string (302 rows) | 47.7 % | 59.9 % | 86.8 % |
+| rows with a forbidden string | 21 | 23 | 8 |
+| calculation results right (105) | 39 | 54 | 84 |
+| needed document facts in the request | 48 % | 61 % | 100 % |
+| the 48 new rows | 17 | 20 | 39 |
+| spoken turns: right / facts in the request | 48.9 % / 42 % | 58.9 % / 55 % | 87.4 % / 100 % |
+| typed turns: right / facts in the request | 63.8 % / 60 % | 71.5 % / 72 % | 86.2 % / 100 % |
+| first word, spoken: median / p90 / p95 / max | 3,413 / 3,748 / 3,941 / 7,939 ms | 3,183 / 3,929 / 5,077 / 6,239 ms | 2,657 / 3,059 / 3,209 / 4,193 ms |
+| first word, typed: median / p90 | 899 / 1,188 ms | 1,874 / 2,403 ms | 1,329 / 1,728 ms |
+| turns over 5 s to the first word | 1 | 12 (all spoken) | 1 |
+By mode (right): sales 43.8 → 51.7 %, lecture 70.0 → 74.4 %, seminar 54.9 → 65.9 %, call-center 48.4 → 61.5 %.
+**Reading.** A cloud embedding provider gives main 9 points on these packs and still leaves it 24 points under
+reading the pack whole; retrieval, with either model, puts between half and three fifths of the needed facts in
+the request. It is also the slowest arm to the first word on a typed turn (the embedding round trip, about 1.06 s)
+and has twelve spoken turns over 5 s. So the gap that X2 measured is not an artefact of the bundled model.
