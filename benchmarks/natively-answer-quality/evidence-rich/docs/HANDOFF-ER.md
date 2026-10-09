@@ -1,6 +1,6 @@
 # Handoff: Natively answer-quality work on the evidence-rich benchmark
 
-Written 2026-10-09 (updated the same day at 13:30 UTC, after a second session) for whoever continues this work, human or agent. It covers 2026-10-03 to 2026-10-09.
+Written 2026-10-09 (updated the same day at 13:30 UTC after a second session and at 20:20 UTC after a third) for whoever continues this work, human or agent. It covers 2026-10-03 to 2026-10-09.
 
 This one file holds everything: the current state, what Evin asked and decided, how the benchmark works, every iteration with its rule and verdict (kept and rejected), the scores per mode per round, every code and prompt change with its reason and its full diff, the complete experiment log, the investigation documents, and all 630 development questions with the answers that still exist.
 
@@ -46,7 +46,7 @@ This file is generated: `node evidence-rich/report/build-handoff.mjs` (from `ben
 | App `main` (local = GitHub) | `73b18d97` since 2026-10-09. Holds every kept change of this work, including E16b and E19. |
 | Last change landed | **E19** (`73b18d97`): landed on local main 2026-10-09 05:08 UTC on Evin's "do 1", pushed 09:05 UTC on his "push main to github". |
 | Benchmark | Branch `bench/evidence-rich`, draft PR #638, worktree `.claude/worktrees/aq-fix`. Folder `benchmarks/natively-answer-quality/evidence-rich/`. |
-| Benchmark branch on GitHub | **Behind.** GitHub has `df815379`; the local branch is ahead from `99001d3b` on, including everything of the second session of 2026-10-09. Pushing it was denied on 2026-10-08 and needs Evin's explicit yes. |
+| Benchmark branch on GitHub | **Behind.** GitHub has `df815379`; the local branch is ahead from `99001d3b` on, including everything of the second and third sessions of 2026-10-09. Pushing it was denied on 2026-10-08 and needs Evin's explicit yes. |
 | Backup of run data | `~/natively-er-backup/` (run folders, judgments, calibrations, scripts, this file, the log). |
 | Judge | gpt-6-astra only (through AgentRouter). Evin, 2026-10-05: do not judge with Claude Code (quota). |
 | Score of main before E19, development set, Astra | 630 questions: **8.92**, 71 hard fails (11.3 %), 414 at 9.5 or above (main `f4cd986d`). |
@@ -54,12 +54,12 @@ This file is generated: `node evidence-rich/report/build-handoff.mjs` (from `ben
 | E19 on top of that | Development, the 88 rows it changes: 8.29 → 8.68, hard fails 12 → 7. Blind holdout, 52 pooled pairs: 8.158 → 8.384, hard fails 9 → 8. |
 | Main with E19, full run | **Run, not judged.** `er6-dev-main` + `er6-dev2-main` (630 answers, 2026-10-09 10:06–10:58 UTC, clean). The Astra window of 11:02 UTC was closed by a provider access block (HTTP 403) after 43 judgments. There is no score of main with E19. |
 | Deterministic checks | Version **obj-3** (2026-10-09). obj-2: a string the mode's own loaded files state is not a profile leak (one development row was capped at 2 wrongly). obj-3: a needle that starts or ends with a digit matches only as a whole number. Under them the baseline of `f4cd986d` is **8.935, 70 hard fails** (8.923 / 71 as stored); no holdout score changes. |
-| Unseen question sets | `challenge` (117, readable), `challenge-val` (54, never read, aggregates only), `code1` (36 coding items with executed tests), authored blind and frozen 2026-10-09. Main on them, judge-free: 94 / 117, 45 / 54, 34 / 36. |
+| Unseen question sets | `challenge` (117, readable), `challenge-val` (54, never read, aggregates only), `code1` (36 coding items with executed tests), authored blind and frozen 2026-10-09. Main on them, judge-free: 94 / 117, 45 / 54, 34 / 36. Added in the third session: `prov1` (24, readable) and `prov1-val` (24, never read) on which employer, title or date a résumé fact belongs to; main 23 / 24 and 21 / 24. And `pack24`, a separate corpus of four packs of about 20,700 tokens (313 re-issued items, 48 new), for X2. |
 | Where it started, blind holdout, Astra | 7.73, 42 hard fails (run `er-holdout-base`, the build before this work). |
 | Targets set at the start | 9.2 mean, under 1 % hard fails. **Not met.** |
-| Running or scheduled | Nothing runs. See section 4 for what the next Astra window owes. |
-| Declared experiments | None open. E21 (the calculation step on document turns) was not proposed; E22 confirmed main's calculation notice; X1 (whole-pack threshold) is measured and nothing lands from it. |
-| Candidate branches kept as records | `cand/e21` `298b2b5b` (not proposed), `exp/x1-whole-pack-threshold` `237bba1a` (experiment build only). Local, never pushed. |
+| Running or scheduled | Nothing of this work runs. A one-shot check-in inside the Claude session (02:06 UTC on 10 October; it dies with the session) probes Astra once and, only on a clean probe, judges the 587 missing baseline answers and then the fixed X2 sample. See section 4. |
+| Declared experiments | None open. Third session: **X2** measured (realistic packs of 20,700 tokens: main 54.3 % right, read whole at a 24,000 threshold 87.0 %; nothing lands, section 11). **E23** (a derived résumé statement must be supported by the résumé text) not proposed under its rule: +6.8 points on 22 unseen rows, interval through 0. **E24 / E24b** (a notice when the job posting is the only document) closed: the posting is still told as the candidate's history. **E25** (the fix-up pass is shown the passages nearest each sentence) failed on unseen drafts. Earlier: E21 not proposed, E22 confirmed main's calculation notice, X1 measured. |
+| Candidate branches kept as records | `cand/e23` `9bfff943` (the experience-pairing rule; not proposed, Evin may still want it as a correctness fix), `cand/e21` `298b2b5b` (not proposed), `exp/x1-whole-pack-threshold` `237bba1a` (experiment build only, used for X1 and X2). Local, never pushed. |
 
 What is not verified: nothing in this work was executed on Windows, and no packaged build was made. Every change is shared TypeScript with no platform branch, run on macOS in the dev build through the benchmark.
 
@@ -70,6 +70,8 @@ The last three days, in order:
 - **2026-10-09, 02:02 UTC window.** Calibration 38/38, no block, no failed call. E19's blind-holdout check finished and both rules hold (section 7.6). Three ideas were tried without the judge and dropped; E20 failed its own rule before any judge call. Later that day E19 landed and was pushed.
 
 - **2026-10-09, second session (10:00–13:30 UTC).** Started from this file on Evin's brief for a final optimisation round. Fresh run of main with E19 (630 answers). Astra opened at 11:02 UTC, calibration 38/38, then an HTTP 403 access block two minutes into judging: no score. The rest was judge-free: two defects of the deterministic checks fixed and versioned; a failure-cause map of the last judged baseline; E21 measured in four stages and not proposed; E22; the 12,000 / 24,000 / 48,000 threshold experiment (X1); three new question sets written blind.
+
+- **2026-10-09, third session (18:05–20:20 UTC).** Evin's instructions: finish the 587 judgments when access legitimately returns, establish the baseline before any proposal, investigate a narrow source-aware provenance mechanism validated on unseen questions before any Astra call, evaluate realistic 24k packs; no E21, no broader calculation notice, no rewrite of the conflict instructions; everything off main. No Astra call was made (the window is at about 02:00 UTC). Found in the recorded prompts: the app's own derived résumé sections state wrong employers and dates (the benchmark runs the rule-based profile parser, because a DeepSeek-only user has no model for structured extraction), and three hard fails repeat them. E23 removes such statements; it holds on development rows and on rows it is not about, and its gain on 22 unseen rows is +6.8 points with an interval through 0, so it is not proposed. E24 and E25 failed. X2: four realistic packs of about 20,700 tokens; main answers 54.3 % of 361 questions right and delivers 48 % of the needed facts, the same build reading the pack whole 87.0 % and all of them, with a faster spoken first word, a slower typed one and the fix-up pass out of its budget on a quarter of its turns.
 
 Evin's standing instructions that bind the next session:
 
@@ -595,17 +597,19 @@ Section 13 prints the pass's instruction block as it is on main and the full tex
 3. **Delete the old-history branches on GitHub** (`fix/aq-astra`, `cand/e16b`, `cand/e15`)? They keep files purged on 2026-10-06 reachable.
 4. **A judged score of main with E19.** The run exists (`er6-dev-main`, `er6-dev2-main`); Astra's window of 2026-10-09 11:02 UTC was closed by an access block after 43 of 630 judgments. The next window finishes it (section 4). A holdout run of `73b18d97` has not been made.
 5. **Windows and a packaged build.** Nothing in this work has been executed on Windows or in a packaged app.
-6. **The whole-pack threshold.** X1 measured it: 24,000 held every line on synthetic files, 48,000 did not (the fix-up pass's 96,000-character cap). Whether to pursue "24,000 with the pass's cap raised" is his call; it would first need realistic packs above 12,000 tokens, which the benchmark does not have, and it roughly triples the prompt on such turns (about 24,700 tokens against 7,500).
+6. **The whole-pack threshold.** X1 (synthetic files) and now **X2 (realistic packs of about 20,700 tokens, 361 questions)**: main, which retrieves pieces above 12,000 tokens, is right on 54.3 % and puts 48 % of the needed facts in the request; reading the pack whole (24,000) is right on 87.0 %, with the spoken first word 0.76 s faster (no retrieval, no awaited rerank), the typed first word 0.43 s later, a request 3.6 times the size, and the fix-up pass settling late on 26.5 % of its turns instead of 16.4 %. Two of X2's seven lines fail on those costs, so it is reported as a gain with its price, not proposed. Arm A is the default configuration (bundled local embedding model: keyword search on spoken turns); a cloud embedding provider was not measured. His call whether to pursue "24,000 with the pass's cap and budget raised with it". A fixed sample of both arms is queued for Astra after the baseline.
 7. **The provider's access block.** Two in three days (2026-10-08 02:07 UTC, five calls; 2026-10-09 11:12 UTC, three calls two minutes into judging, after a clean calibration). Nothing was retried. If it keeps happening the judge budget is the limit on this work, not ideas.
 8. **Code verification is switched off app-wide** (`electron/llm/codeVerification/verificationEnabled.ts`, since 2026-07-18, no reason recorded in the commit). Main passes 34 of 36 coding questions of `code1` without it. Its correction is posted as a new message, which the benchmark harness does not capture, so it was not measured.
+9. **E23 as a correctness fix.** `cand/e23` `9bfff943` stops a résumé's derived experience statements from being served as evidence when the résumé's own text shows one of them to be wrong (a title paired with the next employer on the page, a description line or a page marker as the employer). It did not meet its gain line on unseen questions (+6.8 points, interval through 0), so it is not proposed as a score change. The statements it removes are wrong on their face on both benchmark résumés. Land it or leave it is his call.
+10. **A DeepSeek-only user's profile is extracted by rules, not by a model.** `generateContentStructured` answers "No reasoning model available" when DeepSeek is the only key, and the résumé falls to the rule-based parser, which is where the wrong pairings come from. Every profile row of this benchmark has run that way. Letting DeepSeek serve the structured extraction is a provider-routing decision.
 
 **Next candidates, in the order the data suggests**
 
 1. **Check any candidate on unseen questions first.** `challenge` (readable) and `challenge-val` (aggregates only) exist for that and cost a few minutes of replay and no judge call. E21 would have reached an app run and an Astra window without them.
-2. The largest class has no handle yet: invented company, policy, research or personal facts (22 of the 71 hard fails). Two ways of making the pass stricter were measured and removed correct inference (the per-statement check) or would hit 30 answers of which 4 are real inventions (enforcing the pass's own list). A third attempt needs a signal that separates an invention from an honest inference; none is known at this model setting.
+2. The largest class has no handle yet: invented company, policy, research or personal facts (22 of the 71 hard fails). Two ways of making the pass stricter were measured and removed correct inference (the per-statement check) or would hit 30 answers of which 4 are real inventions (enforcing the pass's own list). A third attempt needs a signal that separates an invention from an honest inference; none is known at this model setting. Third session (2026-10-09): three source-aware mechanisms were measured for it. E23 (résumé statements the résumé text does not support) is real but small. E24 (a notice when the posting is the only document) does not stop the posting being told as the candidate's history; what is left there is not handing the posting over as evidence on a turn that asks only for the user's own record, which needs a classifier that separates "what do you do now" from "what is this team responsible for". E25 (the pass is shown the passages nearest each sentence) nearly doubles what the pass names on drafts Astra capped (12 → 23 of 60 samples, most clearly research claims) and on unseen drafts changes more answers that were right (13.2 → 17.8 %); the same sheet for Seminar turns only is the untested lead.
 3. Version conflicts are the weakest kind on the readable challenge set (4 of 9 right on main). Every rewording of the pass's conflict line and a rail on it failed (E6, E17, E18, E20); the open idea is still the source identity of each value (`source_id` / `version_id`), which the pass's conflict line does not carry.
 4. A hidden working step sets a sum up wrongly when a near-miss figure sits in the pack, and then trusts it (E21 stage four, `ER-C1-SALES-013`). A check of the working's INPUTS against the documents (not of its arithmetic, which is right) is untested and would have to run before the first visible word.
-5. A realistic larger-pack condition (packs of 13,000 to 24,000 tokens with whole-document questions) would let the 24,000 threshold be judged on quality instead of planted facts.
+5. The larger-pack condition now exists (`pack24`, X2). What is not measured on it: a cloud embedding provider and the managed reranker (arm A ran the bundled local model), the pass with its cap and budget raised, and the pack placed where the provider can cache it (the question comes before the documents in the request, so 5,248 of 29,759 prompt tokens are cache hits).
 6. Follow-up turns: the pass lowered 4 of them (8.11 → 6.41). Too few to act on; worth a look when more are judged.
 7. One spoken turn still takes the fast route with no profile (`ER-D2-LFW-030`); `ER-D-REC-016` is a possible delivery gap too.
 
@@ -4840,6 +4844,21 @@ Entry headings with their line numbers in `docs/ITERATIONS-ER.md`, and every lin
   - L2482: **Verdict: E21 is not proposed.** The gain measured twice on the 59 development rows (+11 points) did not appear on
 - L2497: E22 — does the calculation step on main earn its place? (a measurement of an existing mechanism; lines written 2026-10-09 13:02 UTC, before any replay of it)
 - L2517: E22 — result (2026-10-09 13:13 UTC; replayed 13:02–13:12 UTC, 222 rows × 3 samples per arm, 0 failed calls)
+- L2532: Session of 2026-10-09, 18:05 UTC onward (same session, new instructions from Evin)
+- L2543: X2 — realistic packs of about 21,000 tokens, 12,000 against 24,000 (set declared and lines written 2026-10-09 18:15 UTC, before any of its documents exists)
+- L2587: Source provenance of invented and misattributed facts: what the recorded prompts show (2026-10-09 18:22 UTC; judge-free, no model call; development rows only)
+- L2621: E23 — a derived experience statement is evidence only when the résumé's own text supports the pairing it states (rule written 2026-10-09 18:22 UTC, before any replay of it)
+- L2655: E24 — with the job posting as the only document, the story notice says whose record it is (rule written 2026-10-09 18:22 UTC, before any replay of it)
+- L2671: E23 and E24 — stage 1 on development rows (2026-10-09 18:29 UTC; replayed 18:24–18:28 UTC, `er6-dev-main` + `er6-dev2-main` prompts, k = 4, 0 failed calls; `report/rule-e23.mjs`)
+- L2701: E24b — result: closed (2026-10-09 18:30 UTC; replayed 18:31 UTC, the same 11 rows, k = 4)
+- L2712: E23 — the candidate, and the unseen challenge rows at k = 4 (2026-10-09 18:35 UTC; replayed 18:33–18:35 UTC on the prompts of `er7-chal-main` and `er7-chalval-main`; challenge-val as aggregates only)
+- L2737: E23 — the unseen challenge rows, twelve samples (2026-10-09 18:39 UTC; the eight further samples per row replayed 18:36–18:38 UTC, 0 failed calls)
+- L2751: Sets `prov1` and `prov1-val` frozen (2026-10-09 18:39 UTC; nothing had been run on them)
+- L2761: E23 — stage 2, line 4: not met; E23 is not proposed under its rule (2026-10-09 18:47 UTC; main run on the new sets 18:39–18:45 UTC, 48 of 48 answered on direct DeepSeek; replayed 18:45–18:47 UTC, k = 4, 0 failed calls; `prov1-val`
+  - L2777: **Verdict.** The pairing rule removes statements that are wrong on their face (both benchmark résumés), costs
+- L2787: E25 — the fix-up pass is shown where each sentence of the draft is closest to the material (rule written 2026-10-09 18:50 UTC, before any replay of it)
+- L2818: E25 — result: stage 1 holds, stage 2 fails; not proposed (2026-10-09 18:58 UTC; replayed 18:50–18:58 UTC; main's pass, cap 96,000, k = 2; every rebuilt request equals the recorded one; `report/rule-e25.mjs`)
+- L2843: X2 — result: on packs of about 20,700 tokens main is right on 54 % of the questions; read whole, 87 % (2026-10-09 20:17 UTC; arm A 19:00–19:37 UTC, arm B 19:37–20:14 UTC; experiment build `237bba1a`, direct DeepSeek; 361 turns per
 
 ### B.1 The log
 
@@ -7373,6 +7392,376 @@ about ten points of right answers, on questions written after it as well, for ab
 the first visible word and no measurable loss on the other rows it fires on. Set beside E21 this draws the line:
 the step helps when the question says it wants a figure, and did not carry to unseen questions when it was added
 because documents were present. Nothing changes.
+
+#### Session of 2026-10-09, 18:05 UTC onward (same session, new instructions from Evin)
+Evin, 2026-10-09: finish the 587 outstanding Astra judgments of the E19 build when access legitimately returns and
+keep the HTTP 403 restriction as it stands; establish the actual baseline before proposing another production
+change; then investigate a narrow source-aware claim provenance mechanism for invented company, personal and
+research facts and wrong source attribution, with an acceptance rule written first and validated on unseen
+challenge questions before any Astra call; independently evaluate realistic 24k reference packs. Not to be done:
+E21 again, a broader calculation notice, a rewrite of the verifier's conflict instructions. All work stays off main.
+State at 18:05 UTC: main = origin/main = `73b18d97`; this branch local `c403010f`, not pushed; the access-block flag
+`/tmp/er-access-block-20261008-1630.json` is in place and no judge call has been made since 11:12 UTC; next Astra
+window about 02:00 UTC on 10 October.
+
+#### X2 — realistic packs of about 21,000 tokens, 12,000 against 24,000 (set declared and lines written 2026-10-09 18:15 UTC, before any of its documents exists)
+X1 showed the cliff on synthetic filler. X2 asks the same of realistic packs, and what a user with such a pack gets
+from main today.
+
+**Set `pack24`** (new, versioned, separate corpus: `pack24/authoring`, `pack24/evidence`, `pack24/datasets`; built with
+`ER_AUTH_DIR` / `ER_EVID_DIR` / `ER_BENCH_DIR`, so no frozen dataset or manifest hash moves). Four modes whose frozen
+packs are the largest (sales, call-center, lecture, seminar: 9,400 to 9,900 tokens). Each keeps its frozen documents
+unchanged and gains 4 to 6 documents of the same fictional world on adjacent subject matter, to a pack of 82,000 to
+90,000 source characters (about 20,500 to 22,500 tokens as the app counts them), written by authors blind to the
+product (`AUTHORING-ER-PACK24.md`). The added documents may not restate or change a frozen fact, must stay silent
+where the frozen pack is silent on purpose, and are checked mechanically for needle collisions
+(`pack24/check-noninterference.mjs`). Items:
+* 313 **derived** items: every frozen dev, dev2 and challenge item of these modes that uses the mode's base config,
+  re-issued with a new id (`ER-P24-<PFX>-D|D2|C1-nnn`), same question, same oracle, the enlarged config. The same
+  questions on the small pack are in `er6-*` and `er7-chal-main` (main, whole pack).
+* 48 **new** items (`ER-P24-<PFX>-N-nnn`, 12 per mode) that need an added document: 3 that need the whole pack, 2
+  calculations across an old and a new document, 2 facts deep in a long document, 2 version conflicts, 2 absent
+  facts, 1 which-value. All checkable without a judge.
+No holdout part: this is a measurement of a condition, not a set a fix will be designed on.
+
+**Build and arms.** `exp/x1-whole-pack-threshold` `237bba1a` (main `73b18d97` + the threshold read from the
+environment; never for main). Arm A 12,000 (main's behaviour: the pack does not fit, pieces are retrieved), arm B
+24,000 (the pack is read whole). Direct DeepSeek, one app at a time, fresh user data per arm, arms back to back.
+**Recorded, judge-free, checks obj-3:** rows with every required string; rows with a forbidden string; calculation
+results; the new rows by kind; required facts whose document string is in the request; first word and settled
+answer by surface; prompt tokens; the fix-up pass (ran, changed the text, over its budget, material over its
+96,000-character cap); rows right as drafted and wrong as shown.
+
+**Lines for "24,000 is worth proposing for packs of this size"** (arm B against arm A, same rows):
+1. Rows with every required string (all rows that have one): B at least 3 points above A, paired 95 % interval
+   above 0.
+2. Rows with a forbidden string: B at most A + 2.
+3. Calculation results right: B not more than 2 points below A.
+4. The 12 whole-pack rows: B right on at least as many as A.
+5. Spoken turns: median first word at most 400 ms above A, p90 at most 700 ms above, no turn over 5 s. Typed turns:
+   median at most 400 ms above.
+6. The fix-up pass: rows right as drafted and wrong as shown, B at most A + 2; passes over budget, B at most A + 2
+   points.
+7. No error, timeout or provider refusal in the arm.
+Also reported, no line: both arms against the same questions on the small pack (what the added volume costs).
+Astra: only if the lines are read, the 587 baseline judgments are done and calls remain; then both arms on the 48
+new rows and a seeded sample of 120 derived rows. Whatever the outcome nothing lands from X2 without Evin's word,
+and X1's note stands: a 24,000 threshold would raise the pass's cap with it.
+
+##### Source provenance of invented and misattributed facts: what the recorded prompts show (2026-10-09 18:22 UTC; judge-free, no model call; development rows only)
+Read on the prompts of `er4-*` (the last judged baseline) and `er6-*`, for the three target classes of the failure map
+(invented company, policy, research or meeting fact 15 rows; invented personal fact 7; right value, wrong thing 6).
+1. **The app's own derived résumé sections state wrong employers and dates.** Besides the whole résumé, the prompt
+   carries sections rendered from the structured extraction ("Experience: <title> at <company> — (dates) — …",
+   "Complete employment history", one card per role). On profile B they pair the second job title held at one
+   employer with the NEXT employer on the page ("Senior Frontend Engineer at Ondaverde Health (2022-06 to 2023-12)";
+   the résumé has that title at Lumenquay) and take a company's description line as its name ("Frontend Engineer at
+   Patient portal and appointment tools for private clinics."). On profile A (a PDF, lines wrapped) the list reads
+   "Software Engineer II at ships. (2023-03 to 2024-03); Software Engineer at [Page 2] (2020-07 to 2023-02); Tech lead
+   for Dispatch Core, a team of five: … at weekly design review …". Three of the 71 hard fails repeat exactly these
+   sections: D2-TI-026 (the TypeScript migration placed at Ondaverde), D-LFW-020 and D2-TI-009 (time at the employer
+   and at senior level counted from April 2024). They were filed as generator mistakes; the wrong statement was in
+   the prompt, marked `direct_fact`.
+2. **Why the benchmark sees this path.** Every profile row of every run has `pi_extraction_mode: heuristic`. The app
+   log says why: "LLM structured extraction failed (No reasoning model available. Please configure an API key
+   (OpenAI, Claude, Gemini, Groq, Natively) or a custom provider.); falling back to deterministic heuristic
+   extractor." A user whose only key is DeepSeek gets the rule-based parser for the profile, as the benchmark does.
+   Not changed here (it is a provider-routing decision, Evin's).
+3. **An existing rule covers written fields, not pairings.** `profile-derived-support.ts` (2026-09-30) already drops a
+   derived résumé field the résumé text does not support (numbers, 75 % of content words). Every word of "Senior
+   Frontend Engineer at Ondaverde Health" is in the résumé; the pairing is what is wrong, and nothing checks it.
+4. **The story notice treats any evidence as the user's record.** `evidenceStoryGuard` fires on a question about the
+   user's own past whenever the prompt has evidence: "Tell it only with what the evidence states … mention a real
+   project only for what the evidence says about it." When the only document is the job posting (11 development
+   turns with a personal intent, mean 8.36, 3 hard fails: D-LFW-023, D-TI-022, D2-TI-032) the evidence is the
+   employer's description of the role, and the answers tell it as the candidate's history. The evidence tag already
+   says what each source may establish (`authority="JOB_RESPONSIBILITY,…"`, no `USER_*`); the notice does not read it.
+5. **Invented company, policy and research facts (15 rows) have no such handle.** All their sources are reference
+   files with the same type and authority, the invented sentence reuses the documents' own words ("native connectors
+   are priced as add-ons", "they'll restore it to you"), and the app's answerability signal does not separate them
+   (rows flagged for an unsupported claim: 18 of 306 "FULL", 17 of 303 "PARTIAL", 4 of 21 "NONE"). Nothing is
+   declared for that class today.
+
+#### E23 — a derived experience statement is evidence only when the résumé's own text supports the pairing it states (rule written 2026-10-09 18:22 UTC, before any replay of it)
+**Mechanism (deterministic, no model call, nothing before the first word).** An extension of
+`stripUnsupportedDerivedResumeFields`. A structured experience entry (title, company) is rejected on evidence only:
+* shape: the company is a page marker, has more than 10 words, or ends in a sentence period that is not a corporate
+  abbreviation; or the title has more than 12 words;
+* position: title and company both occur verbatim in the résumé text, and on every line that starts with the title
+  the company first appears more than 2 text lines below it, or another entry's company stands alone on a line
+  between the company and the title.
+An entry whose title or company cannot be found verbatim is kept (nothing shows it is wrong). **If any entry of a
+résumé is rejected, none of that résumé's derived experience statements is rendered** (the per-entry sections, the
+"complete employment history" line, the per-role cards): a partial list reads as the whole history. The résumé's own
+text (whole, and in heading-aware pieces) stays, and is then the only statement of who worked where and when.
+**Replay arm `e23`:** the recorded answer prompt with those blocks removed when the rule, applied to the résumé text
+in the same prompt, rejects an entry; base arm = the recorded prompt. Direct DeepSeek, the app's parameters, k = 4.
+**Stage 1, development rows** (`er6-dev-main` + `er6-dev2-main`, every row whose prompt changes):
+1. samples with every required string: not more than 1.5 points below base, paired 95 % interval above −4;
+2. samples with a forbidden string: at most base + 2;
+3. rows that fall (right in at least 3 of 4 base samples, at most 1 of 4 with the arm): at most 1.
+D-LFW-020, D2-TI-026 and D2-TI-009 are reported; they were read to design this, so they decide nothing.
+**Stage 2, unseen rows.** Two new sets, written by authors blind to the product and to this finding
+(`AUTHORING-ER-PROV1.md`): `prov1` (24 items, readable) and `prov1-val` (24 items, never read; aggregates only), for
+Looking for work and Technical Interview: which employer or title a résumé fact belongs to (8 + 8), a length of time
+from résumé dates (6 + 6), the candidate's own history with only the posting loaded (6 + 6), a fact of the posting
+with only the posting loaded (4 + 4). Main `73b18d97` is run on both in the app to record the prompts; both arms are
+then replayed on them, k = 4. Also replayed: the Looking-for-work and Technical-Interview rows of `challenge` and
+`challenge-val` whose prompt changes.
+4. "which employer or title" and "length of time" rows of `prov1` + `prov1-val` (28 rows): right samples (every
+   required string, no forbidden string, the calculation result where there is one) at least 8 points above base,
+   paired interval above 0;
+5. every other unseen row whose prompt changes: lines 1 and 2;
+6. rows that fall: at most 2.
+Only if 4 to 6 hold is a candidate built from main, run in the app on the changed rows, and judged by Astra (the
+rows whose shown answer differs, both sides). If stage 1 fails, stage 2 is not run for E23.
+
+#### E24 — with the job posting as the only document, the story notice says whose record it is (rule written 2026-10-09 18:22 UTC, before any replay of it)
+**Mechanism (deterministic).** `evidenceStoryGuard` reads the packed evidence's own `authority`: when the question is
+about the user's own past, a job posting is in the evidence and NO evidence item may establish a fact about the user
+(no `USER_*` authority), the notice "# A story from the evidence" is replaced by one that says the posting describes
+the role, records nothing the user has done, is not to be told as their work, and that the answer is an opening they
+complete with their real history. Every other turn keeps today's notice.
+**Replay arm `e24`:** the recorded prompt with that notice swapped on exactly those turns; base = the recorded prompt.
+**Judge-free lines** (development rows first; then `prov1`, `prov1-val` and the challenge rows in that state):
+1. rows in that state that have required strings (the answer IS in the posting): samples with every required
+   string not more than 2 points below base, and no row falls;
+2. samples with a forbidden string: at most base + 1.
+What the notice is for (an invented history) no fixed string can see on most rows; the oracle entries have no
+needles. So its gain is read by Astra only, on the own-history rows (3 development, 12 unseen), both arms, and only
+if lines 1 and 2 hold on the unseen rows. The three development rows' replays are read by eye before that and
+reported as that, not as a verdict.
+
+##### E23 and E24 — stage 1 on development rows (2026-10-09 18:29 UTC; replayed 18:24–18:28 UTC, `er6-dev-main` + `er6-dev2-main` prompts, k = 4, 0 failed calls; `report/rule-e23.mjs`)
+The pairing rule on the recorded prompts (123 rows carry résumé evidence; 68 change, about 2,260 characters
+removed): profile A keeps "Senior Software Engineer and Tech Lead, Dispatch Core at Quillhaven Freight Systems" and
+rejects five entries (a company of "ships.", "[Page 2]", three bullet lines read as jobs); profile B keeps the
+Lumenquay lead role and the Plumewright role and rejects "Senior Frontend Engineer at Ondaverde Health" (pairing not
+in the text) and the company that is a description line. So on both résumés the derived experience blocks go.
+**E23, 52 development rows whose prompt changes, 208 samples per arm:**
+| | base | arm |
+|---|---|---|
+| samples with every required string (41 rows) | 90.9 % | 95.7 % (paired +4.9, 95 % 0.6 to 11.6) |
+| samples with a forbidden string | 0 | 1 |
+| right samples (required, no forbidden, calculation) | 90.4 % | 96.6 % (paired +6.3, 95 % 2.4 to 12.0) |
+| rows that rose / fell | | 3 / 0 |
+| first visible character, median | 873 ms | 842 ms |
+Lines 1 to 3 hold. Design rows, reported only: D-LFW-020 0 of 4 → 4 of 4 ("joined in March 2023 … three years and
+seven months"; the base says "joined in April 2024 … two years and six months" in 4 of 4); D2-TI-009 3 → 4 of 4;
+D2-TI-026 has every required string in both arms and its base sample names the right employer (the recorded answer
+of 7 October did not). Stage 2 runs.
+**E24, the 11 development rows in its state, 44 samples per arm:** every required string 90.6 % → 100 % (8 rows),
+forbidden 0 → 0, no row falls: lines 1 and 2 hold. **Read by eye, the notice does not do what it is for:** on the
+three own-history rows the arm still tells the posting as the candidate's work in 12 of 12 samples ("I'm a backend
+engineer … money-movement … I also carry the pager"; "the ledger write path I owned end to end"; "I've worked with
+CRDTs … Yjs over WebSockets"), as the base does (5 of 6 read). No Astra call is spent on this wording.
+**E24b, one further wording, declared here before it is replayed:** the same gate; the notice is the app's existing
+no-source personal guard (the sentence that already works where no evidence is found: "This question asks for a
+fact about the USER themselves … No source establishes it, so do NOT state one …") with one sentence before it that
+the document above is the posting and describes the employer's job, not the user. Read by eye on the same three
+rows, k = 4: if more than 3 of the 12 samples still tell the posting as the candidate's history, E24 is closed as a
+prompt notice and nothing further is tried on it today. Lines 1 and 2 apply as before.
+
+##### E24b — result: closed (2026-10-09 18:30 UTC; replayed 18:31 UTC, the same 11 rows, k = 4)
+Lines 1 and 2 hold again (every required string 90.6 % → 93.8 %, forbidden 0 → 0, no row falls). By eye on the
+three own-history rows, 9 of 12 samples still tell the posting as the candidate's history (D-LFW-023 4 of 4, "I'm a
+backend engineer … services that move and record money … I also carry the pager"; D2-TI-032 4 of 4, "I've worked
+with CRDTs on the client side, mostly Yjs over WebSockets"; D-TI-022 1 of 4, the other three give a frame, ask which
+part matters, or say plainly that no system is on record). More than 3 of 12: **E24 is closed as a prompt notice.**
+The guard that works when no evidence is found does not hold once the posting is in the prompt as evidence. What is
+left for this class is not a notice: either the posting is not handed over as evidence on a turn that asks only for
+the user's own record (a retrieval-plan change, not tried), or the fix-up pass is told the posting is not the
+candidate's record (it would then empty these answers rather than repair them). Neither is declared.
+
+##### E23 — the candidate, and the unseen challenge rows at k = 4 (2026-10-09 18:35 UTC; replayed 18:33–18:35 UTC on the prompts of `er7-chal-main` and `er7-chalval-main`; challenge-val as aggregates only)
+**Candidate (written while the unseen sets were being authored; NOT proposed).** Branch `cand/e23` `9bfff943` from
+main `73b18d97`, local only: `unsupportedExperienceEntries` in `profile-derived-support.ts` (the rule of the
+replay arm, same constants) and three lines in `profile-retrieval-port.ts` (no experience sections, no
+complete-history line and no per-role card for a résumé with a rejected entry). The other five callers of the
+shared strip function are unchanged on purpose: they have no résumé text to fall back on. Type check clean; new
+test file 18 of 18; intelligence + context-intelligence suites 2,935 tests, 0 failures.
+**Stage 2, line 5, first part: the Looking-for-work and Technical-Interview rows of the challenge sets whose prompt
+changes** (16 readable + 7 unread rows; none of them asks which employer or how long):
+| | challenge (16 rows, 64 samples) | challenge-val (7 rows, 28 samples) | pooled |
+|---|---|---|---|
+| samples with every required string | 77.1 % → 75.0 % (paired −2.1, 95 % −8.3 to 4.2; 12 rows) | 100 % → 100 % (5 rows) | 83.8 % → 82.4 % (−1.5) |
+| samples with a forbidden string | 4 → 5 | 6 → 8 | 10 → 13 |
+| rows that rose / fell | 0 / 0 | 0 / 0 | 0 / 0 |
+Read as written: the forbidden-string line (at most base + 2) is missed by one sample on the pooled rows, and the
+interval of the required-string line reaches below −4 (17 rows of 4 samples cannot give a narrower one). On the
+readable rows the differences are in date and number wording on questions that never touch the removed blocks
+("around the start of November" for "around the 3rd"; "about 26 hours" for "26 and a half"; a salary answer that
+says ninety instead of eighty-eight in 3 of 4 instead of 2 of 4). **At k = 4 line 5 does not hold.**
+**A second, larger sample of the same rows, declared here before it is generated** (as for E19 on 9 October): eight
+more samples per row and arm on the same 23 rows (k 4 to 11), the lines read on all twelve. Required strings: not
+more than 1.5 points below base, paired interval above −4. Forbidden strings: at most base + 6 (the same rate as
++2 on 92 samples). Rows that fall: at most 2. Both readings are reported whatever the second says; if the pooled
+reading fails, E23 is not proposed and no Astra call is spent on it.
+
+##### E23 — the unseen challenge rows, twelve samples (2026-10-09 18:39 UTC; the eight further samples per row replayed 18:36–18:38 UTC, 0 failed calls)
+| 23 rows, 276 samples per arm | base | arm |
+|---|---|---|
+| samples with every required string (17 rows) | 82.8 % | 82.8 % (paired 0.0, 95 % −1.5 to 1.5) |
+| samples with a forbidden string | 31 | 35 |
+| right samples | 76.1 % | 74.6 % (paired −1.4, 95 % −6.2 to 2.5) |
+| rows that rose / fell | | 1 / 1 |
+By part: challenge 75.7 % → 75.7 % required, forbidden 12 → 13; challenge-val 100 % → 100 %, forbidden 19 → 22.
+The declared lines of the second reading hold (required not lower; forbidden base + 4, allowed + 6; one row falls,
+allowed two). Both readings stand in this log: at four samples the forbidden line was missed by one sample, at
+twelve it holds. What these rows say is that E23 does nothing for questions that are not about employers or dates
+of employment, and costs them nothing measurable. Its case rests on line 4, the unseen which-employer and
+length-of-time rows.
+
+##### Sets `prov1` and `prov1-val` frozen (2026-10-09 18:39 UTC; nothing had been run on them)
+Two authors blind to the product and to E23, one per mode. `prov1` 24 items (`007fffa2d439`), `prov1-val` 24
+items (`46f83196dd68`, never read; aggregates only). Per file and mode: 4 which-employer-or-title, 3 length of
+time, 3 own history with only the posting, 2 posting facts; profiles A and B half each. Lint 0 errors. Every
+earlier dataset hash and the manifest hash are byte-identical after the freeze (dev `aca272a802a3`, holdout
+`6f56606b3ce9`, dev2 `0886c10b084e`, challenge `bb2bad267b68`, challenge-val `c62fc30c2094`, code1
+`da9562e2ed45`). `build.mjs verify` lists the X1 probe files under `evidence/limits-probe` as stray, as it has
+since X1; no frozen file fails its hash. Main `73b18d97` is being run on both sets in the app
+(`er8-prov1-main`, `er8-prov1val-main`) to record the prompts.
+
+##### E23 — stage 2, line 4: not met; E23 is not proposed under its rule (2026-10-09 18:47 UTC; main run on the new sets 18:39–18:45 UTC, 48 of 48 answered on direct DeepSeek; replayed 18:45–18:47 UTC, k = 4, 0 failed calls; `prov1-val` as aggregates only)
+Of the 28 which-employer and length-of-time rows, the prompt changes on 22 (11 + 11); on the other 6 no derived
+experience block was in the prompt, so the arms are the same request.
+| 22 rows, 88 samples per arm | base | arm |
+|---|---|---|
+| right samples (required, no forbidden, calculation) | 86.4 % | 93.2 % (paired +6.8, 95 % −4.5 to 19.3) |
+| samples with every required string | 87.5 % | 97.7 % (paired +10.2, 95 % 0.0 to 21.6) |
+| samples with a forbidden string | 7 | 6 |
+| rows that rose / fell | | 2 / 0 |
+By set: `prov1` 100 % → 95.5 % right, `prov1-val` 72.7 % → 90.9 % (paired +18.2, 95 % 0.0 to 38.6; both rows that
+rose are there). **Line 4 asked for at least 8 points with the interval above 0: not met.** Lines 5 and 6 hold.
+Read on the readable set: all 44 base samples and all 44 arm samples name the right employer and title or give the
+right length of time. The two arm samples counted against it are the check, not the answer: "That was at Lumenquay,
+and my title then was Lead Frontend Engineer … not the Senior Frontend Engineer period" trips the forbidden string
+"Senior Frontend Engineer" (ER-PV1-TI-004; its author had flagged that risk). The item is left as frozen. Counting
+those two as right would give +9.1 points; the interval would still reach 0.
+**Verdict.** The pairing rule removes statements that are wrong on their face (both benchmark résumés), costs
+nothing measurable on rows it is not about (twelve samples, 23 unseen rows), and where base answers were wrong
+because of those statements the arm is right (D-LFW-020 0 → 4 of 4; two unseen rows). But main already answers
+most such questions correctly from the résumé text in the same prompt, so on 22 unseen rows the gain is +6.8
+points with an interval through 0. Under the rule written before the replays, **E23 is not proposed, the
+candidate is not run in the app and no Astra call is spent on it.** `cand/e23` `9bfff943` stays as a local
+record. Whether to land it anyway, as the removal of a known-wrong statement from the prompt rather than as a
+score change, is Evin's decision; so is letting a DeepSeek-only user's profile be extracted by a model at all
+(finding 2 above), which would remove the cause on this benchmark.
+
+#### E25 — the fix-up pass is shown where each sentence of the draft is closest to the material (rule written 2026-10-09 18:50 UTC, before any replay of it)
+For the class with no deterministic handle (finding 5: invented company, policy, research and meeting facts, 15 of
+the 71 hard fails). The pass reads about 45,000 characters and wrote "UNSUPPORTED: none" on 21 of 34 answers capped
+for an invented detail. A check that made it quote the material for every statement was tried and dropped on
+9 October (it removed correct inference). This is a different mechanism and is declared as one experiment:
+**Mechanism.** No extra call and nothing before the first word. A program splits the draft into sentences and the
+material into passages (each with its document name and the heading above it), matches them by the words they share
+weighted by how rare each word is in this material, and puts the two nearest passages of every sentence between the
+material and the draft ("# Closest passages"; "no passage shares its terms" when none reaches the bar). The pass's
+prompt gains one paragraph saying what that section is and when a statement is listed because of it (the passages
+say it of a different product, plan, person, study or date; a narrower rule or a smaller set; or nothing states
+it), and that a worked-out figure and everything in the never-list are still not listed. The existing list, the
+never-list and the conflict line are unchanged, byte for byte. Only Sales, Call Center, Seminar, Team Meet and
+Recruiting turns get it (the modes whose capped answers are of this class).
+**Replay** (`replay-claim-pass.mjs`, main's pass `cv-e19-73b18d97`, cap 96,000, k = 2): arm `e25-ctl` against
+`e25-sheet` on the same drafts.
+**Stage 1, development drafts** (`er6-dev-main` + `er6-dev2-main`, every turn of those modes that ran the pass):
+1. drafts that are right by the fixed checks (every required string, no forbidden string, the calculation result)
+   and are no longer right as shown: arm at most ctl + 1 point of the right drafts;
+2. right drafts whose text the pass changes: arm at most ctl + 3 points;
+3. shown answers with a forbidden string: arm at most ctl; drafts with a forbidden string that the pass repairs:
+   arm at least ctl;
+4. pass time: median at most 150 ms above ctl, p90 at most 300 ms above; passes not finished inside the budget at
+   most ctl + 1 point.
+Reported, deciding nothing: on the drafts of the last judged run (`er4-*`) that Astra capped for an unsupported
+company, policy or research claim or an invented meeting fact, whether each arm's UNSUPPORTED line names the flagged
+detail, read by eye.
+**Stage 2, unseen** (the same modes' rows of `challenge` and `challenge-val`, drafts of `er7-*`): lines 1 to 4.
+Only if both stages hold are Astra calls spent (the rows whose shown answer differs between the arms, both sides).
+If stage 1 fails nothing further is run for E25.
+
+##### E25 — result: stage 1 holds, stage 2 fails; not proposed (2026-10-09 18:58 UTC; replayed 18:50–18:58 UTC; main's pass, cap 96,000, k = 2; every rebuilt request equals the recorded one; `report/rule-e25.mjs`)
+| | development drafts, 346 rows, 692 samples | | unseen drafts (challenge + challenge-val), 95 rows, 190 samples | |
+|---|---|---|---|---|
+| | ctl | sheet | ctl | sheet |
+| right drafts no longer right as shown | 1.9 % | 1.3 % | 5.9 % | 5.9 % |
+| right drafts whose text changes | 12.4 % | 14.0 % | 13.2 % | **17.8 %** |
+| forbidden string as shown (repaired) | 10 (0) | 9 (0) | 4 (4) | **5** (4) |
+| not right as drafted, right as shown | 2 | 4 | 3 | 2 |
+| pass time p50 / p90 | 1,322 / 1,817 ms | 1,345 / 1,877 ms | 1,279 / 1,698 ms | 1,353 / 1,874 ms |
+| not finished in budget | 1.2 % | 0.9 % | 0.5 % | 0.0 % |
+Stage 1: all four lines hold. **Stage 2: line 2 fails (+4.6 points of right drafts changed, 3 allowed) and line 3
+fails (one more shown answer with a forbidden string).** No Astra call is spent; nothing is built.
+Reported, deciding nothing: on the 30 drafts of the last judged run that Astra capped for an unsupported company,
+policy or research claim, an invented meeting fact or an unsafe commitment, the pass's list names something in 12
+of 60 samples as it is and in 23 of 60 with the sheet. With the sheet it newly names the flagged detail on six
+rows, four of them Seminar (D-SEM-017 the invented provenance of the other groups' data; D2-SEM-006 "the one class
+where it beats us"; D2-SEM-040 both invented findings; D-SEM-028), D-REC-022 (the invented precedence) and D-CC-030
+("they'll pick up now"). It also lists two honest "let me confirm" sentences as promises (D-SALES-028) and stops
+listing on one row. So the sheet does make the pass see more of what the judge flags, most clearly research
+claims, and on unseen drafts it pays for that by touching more answers that were right. One lead is left and NOT
+taken today: the same sheet for Seminar turns only. The unseen sets hold 19 Seminar rows, too few to decide it.
+Also seen while building the sheet: D2-CC-030, counted among the invented company facts, is supported by the
+material in its own prompt ("Every charge produces an invoice … listed in the app under Settings > Billing"); that
+judgment is a judge error, so the class is at most 14 rows, not 15.
+
+##### X2 — result: on packs of about 20,700 tokens main is right on 54 % of the questions; read whole, 87 % (2026-10-09 20:17 UTC; arm A 19:00–19:37 UTC, arm B 19:37–20:14 UTC; experiment build `237bba1a`, direct DeepSeek; 361 turns per arm, all answered; judge-free, checks obj-3; `report/x2-pack24.mjs`)
+**The set as frozen** (`pack24` `d3dea0a7c58d`, before any run): sales 13 files / 20,606 tokens as the app counts,
+lecture 15 / 20,619, seminar 12 / 20,888, call-center 15 / 20,770; the frozen documents unchanged (byte check,
+`pack24/verify-scaffold.mjs`), 22 documents added by four authors blind to the product (44,900 to 46,900
+characters per mode; no frozen needle with a digit occurs in an added document); 313 derived items, 48 new ones.
+All 55 files built and parsed with no lost needle.
+**Arms.** A: threshold 12,000, main's behaviour (the pack does not fit, pieces are retrieved). B: 24,000 (the pack is
+read whole). One event in arm A: at 19:23:45 the app was quit from outside (a clean "user-quit" in its log, not a
+crash); the supervisor restarted it on fresh user data and re-ran the interrupted turns.
+
+| | A: 12,000 (main) | B: 24,000 |
+|---|---|---|
+| right (every required string, no forbidden string, calculation) | 196 / 361 (54.3 %) | 314 / 361 (87.0 %) |
+| every required string (302 rows) | 47.7 % | 86.8 % (paired +39.1, 95 % 33.4 to 45.4) |
+| rows with a forbidden string | 21 | 8 |
+| calculation results right (105 rows) | 39 (37 %) | 84 (80 %) |
+| required document facts whose string is in the request | 310 / 643 (48 %) | 643 / 643 |
+| files in the request, median | 5 | all (12 to 15) |
+| prompt tokens, median (cached) | 8,183 (4,992) | 29,759 (5,248) |
+| first word, spoken: median / p90 / p95 / max | 3,413 / 3,748 / 3,941 / 7,939 ms | 2,657 / 3,059 / 3,209 / 4,193 ms |
+| first word, typed: median / p90 / max | 899 / 1,188 / 1,861 ms | 1,329 / 1,728 / 5,475 ms |
+| settled answer, spoken: median / p90 | 5,240 / 7,648 ms | 5,215 / 8,244 ms |
+| settled answer, typed: median / p90 | 2,341 / 2,974 ms | 3,145 / 4,131 ms |
+| fix-up pass: ran / changed the text | 268 / 75 | 268 / 33 |
+| settled 3.5 s or more after the last token (the pass's budget) | 44 (16.4 %) | 71 (26.5 %) |
+| pass material over its 96,000-character cap | 0 | 2 |
+| right as drafted, not right as shown | 3 | 2 |
+
+By mode (right, A → B): sales 43.8 → 84.3 %, lecture 70.0 → 92.2 %, seminar 54.9 → 87.9 %, call-center 48.4 →
+83.5 %. By condition: one document 58.3 → 92.1 %, several documents 27.2 → 78.3 %, version conflict 45.2 → 80.6 %,
+follow-up 58.3 → 83.3 %, absent 96.4 → 96.4 %, irrelevant source 100 → 100 %. The 48 new rows: 17 → 39 right (needs
+the whole pack 0 → 6 of 9; calculation across an old and a new document 0 → 8 of 11; a fact deep in the long
+document or which value 6 → 11 of 12; version conflict 3 → 6 of 8; absent 8 → 8 of 8).
+By surface in arm A: spoken 48.9 % right with 42 % of the needed facts in the request; typed 63.8 % with 60 %.
+**The same 313 questions on the small frozen pack** (main, read whole; `er6-*`, `er7-chal-main`): 85.9 % right, 3
+forbidden-string rows. On the enlarged pack: main 57.2 % and 15, read whole 87.9 % and 8. So the added documents
+cost nothing when the pack is read whole, and main loses 29 points when it is not.
+
+**Lines (B against A).** 1 holds (+39.1 points). 2 holds (21 → 8). 3 holds (39 → 84 of 105). 4 holds (0 → 6 of 9).
+**5 fails on one part:** spoken first word is 756 ms FASTER at the median and 689 ms faster at p90 (retrieval and
+the awaited rerank, 1.2 s on a spoken turn, are not run); typed first word is 430 ms later (400 allowed; 1,329 ms
+against 899). **6 fails on one part:** answers the pass broke 3 → 2, but turns that settle 3.5 s or more after the
+last token rise from 16.4 % to 26.5 % (2 points allowed): the pass reads the whole request, about 92,000
+characters, and 2 requests were over its cap. 7 holds. **So X2 is not "worth proposing as it stands" under its own
+lines; it is an accuracy gain of 33 points with two measured costs** (typed first word +0.43 s; the pass out of
+budget on a quarter of its turns, which delays the settled answer, typed p90 2.97 → 4.13 s), and a request 3.6
+times the size.
+**What arm A is.** The benchmark app has no embedding key, so it runs the bundled local embedding model. With that
+provider a spoken turn in a meeting uses the keyword search and the awaited bundled rerank
+(`shouldUseLexicalForLocalManualQuery`, Evin's decisions of 3 and 4 October); a typed turn queries the vectors.
+All 231 spoken turns of arm A carry `degraded: local_lexical`. That is the default configuration, and it is what
+a user without a cloud embedding provider gets. **Not measured:** a cloud embedding provider or the managed
+reranker, where retrieval on a pack this size may deliver more than 48 % of the needed facts.
+**Not yet judged.** A fixed sample (the 48 new rows and 30 derived rows per mode, `pack24/x2-astra-sample.json`,
+committed before either arm was read) goes to Astra after the 587 baseline judgments if calls remain.
+Nothing lands from X2. The candidate that the data points to is "24,000, with the pass's cap and budget looked at
+together, and the pack placed where the provider can cache it" (5,248 of 29,759 prompt tokens are cache hits: the
+question comes before the documents in the request, so the pack is never a cached prefix).
 
 ---
 
