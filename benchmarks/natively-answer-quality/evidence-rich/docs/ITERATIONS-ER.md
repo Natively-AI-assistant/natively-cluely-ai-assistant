@@ -2223,3 +2223,35 @@ where a pack has no two current documents that disagree, the open conflict sets 
 said in the conversation (Looking for work, Technical Interview) or uses the mode's existing conflict config; in
 `code1` a solution that times out is recorded by the harness as "not executed", not as failed, so timeouts are
 counted separately when it is read.
+
+## E21 stage two — what a trigger would cost (rule written 2026-10-09 11:10 UTC, before any replay of it)
+Stage one showed the step helps where a calculation is needed. A build cannot know that in advance. The trigger on
+main reads the question's wording and misses 59 of 131; a wider word list reached 23 of the 59 in an offline count and
+also fired on 41 questions that need no calculation. **Proposed trigger: every turn that carries document evidence
+gets the notice (code questions excepted, as today); a turn without evidence keeps today's word-list rule.** The
+notice already tells the model to skip the block "for a direct lookup of one stated figure", so the question is what
+it costs on the turns that need no calculation.
+**How it could be worse.** The model writes a block where none is needed and the first word is late for nothing; the
+answer grows; a set-up written for a non-question distracts it from the fact asked.
+**Measurement.** Generator replay on the recorded prompts of `er6-dev-main` + `er6-dev2-main`, 2 samples per row
+and arm, arms of one part in the same half hour, nothing else on the DeepSeek key (X1 is paused between its arms).
+* Part a, 397 rows (`rule-e21.mjs select2a`: no notice in the recorded prompt, no calculation oracle, an evidence
+  section present, not a code question): `e21b-base` (as recorded) against `e21b-n2` (n2 placed after "# Today").
+* Part b, 160 rows that carry main's notice (`select2b`): `e21c-n1` (as recorded) against `e21c-n2` (the notice
+  text swapped for n2), to learn whether one wording can serve every turn.
+**Lines, part a (the cost):**
+1. Samples that contain every required string: not lower than the base by more than 1.5 points, and the lower end of
+   the 95 % interval of the paired change (bootstrap over rows) above −4.
+2. Forbidden-string samples: at most base + 3.
+3. First visible character: median at most 150 ms later, p90 at most 400 ms later.
+4. A block is written on at most 20 % of samples.
+5. Median shown length within 10 % of the base.
+**Lines, part b (the wording):**
+6. Calculation rows: right samples not lower than with main's wording by more than 2 points.
+7. Samples with every required string: not lower by more than 1.5 points.
+8. First visible character: median at most 100 ms later.
+**Reading.** Part a holds → the evidence-based trigger is a build candidate (app run, Astra on a sample of rows and on
+the calculation rows, blind holdout in aggregates, each with lines written first). Part a fails → the evidence-based
+trigger is rejected and only a word-list widening remains, under its own rule. Part b holds → one wording (n2) for
+every turn; fails → today's wording stays where today's trigger fires and n2 is used only on newly reached turns.
+Nothing lands from this stage.
