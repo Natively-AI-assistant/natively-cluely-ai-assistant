@@ -1,0 +1,1546 @@
+{
+ "mode": "general",
+ "items": [
+  {
+   "id": "ER-C1-GEN-001",
+   "mode": "general",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "If Dunmore's crew really do turn up at eight every single morning, what could the association fine us by the time the whole job's done?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "general-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "arithmetic",
+   "difficulty": "hard",
+   "cf_pair": "hoa-hours-fine-whole-job",
+   "oracle": {
+    "expected_behavior_note": "Two documents. The association's notice allows contractor work on weekdays from 8:30 am to 5:00 pm and fines the owner $75 for each day on which work takes place outside those hours. The current quote (Revision C) has the crew working Monday to Friday from 8:00 am, on site from Monday 9 November to Tuesday 15 December 2026: an estimated 5 working weeks, with no work on 26 and 27 November. That is 25 working days (5 + 5 + 3 + 5 + 5 + 2), so an 8:00 start every day would cost 25 x $75 = $1,875. A good reply gives the figure and says the simple way out is to have the crew start at 8:30. The $50 a day in the same notice is the fine for a dumpster without a placard and is not the rate here.",
+    "required_facts": [
+     {
+      "fact": "GEN-REF-HOA-NOTICE#F9",
+      "text": "At $75 for each day outside the permitted hours, 25 working days come to $1,875.",
+      "answer_needles": [
+       "1,875",
+       "1875",
+       "eighteen seventy-five",
+       "eighteen hundred and seventy-five",
+       "eighteen hundred seventy-five",
+       "one thousand eight hundred and seventy-five"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F24",
+      "text": "The job is 25 working days: about five working weeks from 9 November to 15 December, with no work on 26 and 27 November."
+     },
+     {
+      "fact": "GEN-REF-HOA-NOTICE#F6",
+      "text": "Weekday work is allowed only from 8:30 am, so an 8:00 start is half an hour early every day."
+     },
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F25",
+      "text": "The quote's own crew hours are 8:00 am to 4:30 pm, Monday to Friday."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Uses $50 a day, which is the fine for a dumpster without a placard.",
+      "kind": "fabrication",
+      "fact": "GEN-REF-HOA-NOTICE#F10",
+      "answer_needles": [
+       "1,250",
+       "1250"
+      ]
+     },
+     {
+      "text": "Counts 26 and 27 November as working days (27 days).",
+      "kind": "fabrication",
+      "answer_needles": [
+       "2,025"
+      ]
+     },
+     {
+      "text": "Counts calendar days from 9 November to 15 December instead of working days.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "2,775",
+       "2,700"
+      ]
+     },
+     {
+      "text": "Takes the job's dates from the June quote (14 September to 16 October).",
+      "kind": "stale",
+      "fact": "GEN-REF-RENO-QUOTE-REVA#F8",
+      "answer_needles": [
+       "14 September",
+       "September 14",
+       "16 October",
+       "October 16"
+      ]
+     },
+     {
+      "text": "Says there would be no fine because 8:00 am is in the contractor's quote, or that the association allows an 8:00 start.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "the user speaking aloud to their partner, Jorrit, first person, as an ordinary person with no specialised role",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "GEN-REF-HOA-NOTICE",
+     "GEN-REF-RENO-QUOTE-REVC"
+    ],
+    "source_priority": [
+     "GEN-REF-HOA-NOTICE",
+     "GEN-REF-RENO-QUOTE-REVC",
+     "GEN-REF-RENO-QUOTE-REVA"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying the fix is to ask Dunmore to have the crew start at 8:30.",
+     "Saying the fine is charged per day, so fewer early days means a smaller total."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "25 * 75",
+     "result": 1875,
+     "unit": "USD",
+     "accepted_forms": [
+      "1,875",
+      "1875",
+      "$1,875",
+      "eighteen seventy-five",
+      "eighteen hundred and seventy-five",
+      "eighteen hundred seventy-five",
+      "one thousand eight hundred and seventy-five"
+     ],
+     "inputs": {
+      "25": [
+       "GEN-REF-RENO-QUOTE-REVC#F22",
+       "GEN-REF-RENO-QUOTE-REVC#F24",
+       "GEN-REF-RENO-QUOTE-REVC#F25"
+      ],
+      "75": "GEN-REF-HOA-NOTICE#F9"
+     },
+     "wrong_results_common": [
+      "2,025",
+      "1,250",
+      "1250",
+      "1,950",
+      "2,775",
+      "2,700",
+      "1,350"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-GEN-002",
+   "mode": "general",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Once the hotel and the car and everything else we still owe for Marrowby has come out, how much is left in the trip pot for eating out?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "general-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "arithmetic",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two documents. The budget's trip fund holds $900. The trip plan lists what is still to pay: the hotel balance $483, the car hire $168 (3 days at $56), the tidepool walk $44 (two at $22) and the second kayak $35, which is $730. 900 - 730 = $170 left for the dinner bill and food. The $497 in the plan is what has ALREADY been paid and has nothing to do with what is left; the $250 on the card at the car desk is a hold that is released; the $80 dinner deposit is already paid and comes off the bill.",
+    "required_facts": [
+     {
+      "fact": "GEN-REF-TRIP-PLAN#F21",
+      "text": "After the $730 still to pay, $170 of the $900 trip fund is left.",
+      "answer_needles": [
+       "170",
+       "one seventy",
+       "hundred and seventy",
+       "one hundred seventy"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "GEN-REF-BUDGET-OCT#F3",
+      "text": "The trip fund holds $900."
+     },
+     {
+      "fact": "GEN-REF-TRIP-PLAN#F21",
+      "text": "Still to pay: hotel $483, car $168, tidepool walk $44, second kayak $35, $730 in all."
+     },
+     {
+      "fact": "GEN-REF-TRIP-PLAN#F19",
+      "text": "The $80 dinner deposit is already paid and comes off the bill."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Subtracts the $497 already paid instead of what is still owed.",
+      "kind": "fabrication",
+      "fact": "GEN-REF-TRIP-PLAN#F20",
+      "answer_needles": [
+       "403"
+      ]
+     },
+     {
+      "text": "Leaves the tidepool walk or the second kayak out of what is still owed.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "214",
+       "205",
+       "249"
+      ]
+     },
+     {
+      "text": "Uses the full $693 hotel price instead of the $483 balance.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "940"
+      ]
+     },
+     {
+      "text": "Treats the $250 card hold as money spent.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Says the fund does not cover what is still owed.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "the user speaking aloud to their partner, Jorrit, first person, as an ordinary person with no specialised role",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "GEN-REF-BUDGET-OCT",
+     "GEN-REF-TRIP-PLAN"
+    ],
+    "source_priority": [
+     "GEN-REF-TRIP-PLAN",
+     "GEN-REF-BUDGET-OCT"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying that $170 will not stretch far once the Saturday dinner is counted."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "900 - (483 + 168 + 44 + 35)",
+     "result": 170,
+     "unit": "USD",
+     "accepted_forms": [
+      "170",
+      "$170",
+      "one seventy",
+      "hundred and seventy",
+      "one hundred seventy"
+     ],
+     "inputs": {
+      "35": "GEN-REF-TRIP-PLAN#F17",
+      "44": "GEN-REF-TRIP-PLAN#F16",
+      "168": "GEN-REF-TRIP-PLAN#F6",
+      "483": "GEN-REF-TRIP-PLAN#F9",
+      "900": "GEN-REF-BUDGET-OCT#F3"
+     },
+     "wrong_results_common": [
+      "403",
+      "214",
+      "205",
+      "249"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-GEN-003",
+   "mode": "general",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "So you know where you stand, are you all right with what that leaves you owing over and above the allowance?",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "I've priced up the appliance list you sent across: the range, the dishwasher, the fridge and the thirty-six inch hood. All in, it comes to seven thousand two hundred and fifty."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "general-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "arithmetic",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "One input is said on the call ($7,250 for the appliances), the other is in the current quote: Revision C gives an appliance allowance of $6,000, and anything spent above it is billed at the contractor's cost with no markup. 7,250 - 6,000 = $1,250 over. The reply names that figure and either accepts it or says where it could come down (the 36-inch hood is $420 more than the standard one). The June quote's allowance was $5,000 and did not cover a refrigerator; it is replaced and must not be used (it would give $2,250). No markup is added to the overspend.",
+    "required_facts": [
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F11",
+      "text": "The allowance in the current quote is $6,000, so the $7,250 list is $1,250 over it.",
+      "answer_needles": [
+       "1,250",
+       "1250",
+       "twelve fifty",
+       "twelve hundred and fifty",
+       "twelve hundred fifty",
+       "one thousand two hundred and fifty",
+       "1.25k"
+      ]
+     },
+     {
+      "fact": "CONVERSATION",
+      "text": "Dunmore said the appliances as chosen come to $7,250.",
+      "answer_needles": []
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F11",
+      "text": "The appliance allowance is $6,000."
+     },
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F11",
+      "text": "Overspend is billed at cost with no markup."
+     },
+     {
+      "fact": "GEN-REF-CONTRACTOR-EMAILS#F10",
+      "text": "The 36-inch hood is $420 more than the standard 30-inch one, so going back to the standard hood would cut the overspend to $830."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Works from the June quote's $5,000 allowance.",
+      "kind": "stale",
+      "fact": "GEN-REF-RENO-QUOTE-REVA#F5",
+      "answer_needles": [
+       "2,250",
+       "2250",
+       "5,000 allowance",
+       "$5,000"
+      ]
+     },
+     {
+      "text": "Adds a markup or the 15% change-order rate to the overspend.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "1,437",
+       "187.50"
+      ]
+     },
+     {
+      "text": "Counts the $420 for the larger hood a second time on top of the total.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "1,670",
+       "7,670"
+      ]
+     },
+     {
+      "text": "Says the allowance does not cover a refrigerator.",
+      "kind": "stale",
+      "fact": "GEN-REF-RENO-QUOTE-REVA#F5"
+     }
+    ],
+    "expected_role": "the user speaking aloud to the contractor, Dunmore, first person, as an ordinary person with no specialised role",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "GEN-REF-RENO-QUOTE-REVC",
+     "CONVERSATION"
+    ],
+    "source_priority": [
+     "GEN-REF-RENO-QUOTE-REVC",
+     "CONVERSATION",
+     "GEN-REF-CONTRACTOR-EMAILS",
+     "GEN-REF-RENO-QUOTE-REVA"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "appliance allowance",
+      "sources": [
+       "GEN-REF-RENO-QUOTE-REVC",
+       "GEN-REF-RENO-QUOTE-REVA"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Either accepting the $1,250 or asking what it would be with the standard hood."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "7250 - 6000",
+     "result": 1250,
+     "unit": "USD",
+     "accepted_forms": [
+      "1,250",
+      "1250",
+      "$1,250",
+      "twelve fifty",
+      "twelve hundred and fifty",
+      "twelve hundred fifty",
+      "one thousand two hundred and fifty",
+      "1.25k"
+     ],
+     "inputs": {
+      "6000": "GEN-REF-RENO-QUOTE-REVC#F11",
+      "7250": "CONVERSATION"
+     },
+     "wrong_results_common": [
+      "2,250",
+      "2250",
+      "1,437.50",
+      "1,670"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-GEN-004",
+   "mode": "general",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "perry's away for a stretch in november, how many days will the crew actually be working in the house while he's gone",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "general-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "date_arithmetic",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two documents and a calendar. The house notes say Perry is away from 20 to 29 November. The current quote has the crew on site from Monday 9 November, working Monday to Friday, with no work on 26 and 27 November. In 2026, 20 November is a Friday; 21 and 22 are the weekend; 23, 24 and 25 are Monday to Wednesday; 26 and 27 are the two days off; 28 and 29 are the weekend. So the crew works four days while he is away: Friday 20, Monday 23, Tuesday 24 and Wednesday 25 November. Six is the answer of someone who forgot the two days off.",
+    "required_facts": [
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F24",
+      "text": "Four working days fall inside his absence: 20, 23, 24 and 25 November (26 and 27 November are no-work days).",
+      "answer_needles": [
+       "four",
+       "4 working",
+       "4 days",
+       "4 weekdays",
+       "4 crew"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "GEN-REF-HOUSE-NOTES#F10",
+      "text": "Perry is away from 20 to 29 November."
+     },
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F25",
+      "text": "The crew works Monday to Friday."
+     },
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F22",
+      "text": "Work starts on Monday 9 November 2026."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Counts 26 and 27 November as working days and says six.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "six working days",
+       "6 working days",
+       "six days"
+      ]
+     },
+     {
+      "text": "Uses the June quote's schedule (14 September to 16 October) and says the crew will already be gone.",
+      "kind": "stale",
+      "fact": "GEN-REF-RENO-QUOTE-REVA#F14",
+      "answer_needles": [
+       "16 October",
+       "October 16"
+      ]
+     },
+     {
+      "text": "Counts every calendar day he is away, weekends included.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Gets the weekday of 20 November wrong.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "GEN-REF-HOUSE-NOTES",
+     "GEN-REF-RENO-QUOTE-REVC"
+    ],
+    "source_priority": [
+     "GEN-REF-RENO-QUOTE-REVC",
+     "GEN-REF-HOUSE-NOTES",
+     "GEN-REF-RENO-QUOTE-REVA"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Listing the four dates.",
+     "Noting that the association also permits quiet Saturday work, which the quote does not plan."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "6 - 2",
+     "result": 4,
+     "unit": "working days",
+     "accepted_forms": [
+      "four",
+      "4 working",
+      "4 days",
+      "4 weekdays",
+      "4 crew"
+     ],
+     "inputs": {
+      "2": "GEN-REF-RENO-QUOTE-REVC#F24",
+      "6": [
+       "GEN-REF-HOUSE-NOTES#F10",
+       "GEN-REF-RENO-QUOTE-REVC#F25"
+      ]
+     },
+     "wrong_results_common": [
+      "six working days",
+      "6 working days",
+      "six days"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-GEN-005",
+   "mode": "general",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "say we let friday's deadline go and take the next slot dunmore has, what's the last day the hoa form could go in for that start",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "general-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "date_arithmetic",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two documents. If the quote is not accepted by Friday 9 October the November slot is released and the next available start is Monday 11 January 2027 (Revision C). The association wants the Renovation Notification Form at least 14 days before work begins, so for that start the last day is Monday 28 December 2026. The 30 days in the notice are the Architectural Committee's answer time for work that needs approval, which this kitchen does not; 26 October is the answer for the November start, not for this one.",
+    "required_facts": [
+     {
+      "fact": "GEN-REF-HOA-NOTICE#F4",
+      "text": "Fourteen days before the 11 January start is Monday 28 December 2026.",
+      "answer_needles": [
+       "28 December",
+       "December 28",
+       "28th of December",
+       "28th December",
+       "December the 28th",
+       "December 28th",
+       "Dec 28",
+       "28 Dec",
+       "Dec. 28",
+       "28th of Dec",
+       "28th Dec",
+       "Dec 28th",
+       "28th"
+      ]
+     },
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F27",
+      "text": "The next available start after the November slot is Monday 11 January 2027.",
+      "answer_needles": [
+       "11 January",
+       "January 11",
+       "11th of January",
+       "11th January",
+       "January the 11th",
+       "January 11th",
+       "Jan 11",
+       "11 Jan",
+       "Jan. 11",
+       "11th of Jan",
+       "11th Jan",
+       "Jan 11th"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "GEN-REF-HOA-NOTICE#F5",
+      "text": "The form goes in with the contractor's licence number, dates and an insurance certificate."
+     },
+     {
+      "fact": "GEN-REF-HOA-NOTICE#F3",
+      "text": "No Committee approval is needed for a kitchen whose fixtures stay where they are."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Counts the Architectural Committee's 30 days instead of the 14-day notice.",
+      "kind": "fabrication",
+      "fact": "GEN-REF-HOA-NOTICE#F2",
+      "answer_needles": [
+       "12 December",
+       "December 12",
+       "12th of December",
+       "12th December",
+       "December the 12th",
+       "December 12th",
+       "Dec 12",
+       "12 Dec",
+       "Dec. 12",
+       "12th of Dec",
+       "12th Dec",
+       "Dec 12th"
+      ]
+     },
+     {
+      "text": "Is a day or a week out.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "27 December",
+       "December 27",
+       "27th of December",
+       "27th December",
+       "December the 27th",
+       "December 27th",
+       "Dec 27",
+       "27 Dec",
+       "Dec. 27",
+       "27th of Dec",
+       "27th Dec",
+       "Dec 27th",
+       "29 December",
+       "December 29",
+       "29th of December",
+       "29th December",
+       "December the 29th",
+       "December 29th",
+       "Dec 29",
+       "29 Dec",
+       "Dec. 29",
+       "29th of Dec",
+       "29th Dec",
+       "Dec 29th",
+       "4 January",
+       "January 4",
+       "4th of January",
+       "4th January",
+       "January the 4th",
+       "January 4th",
+       "Jan 4",
+       "4 Jan",
+       "Jan. 4",
+       "4th of Jan",
+       "4th Jan",
+       "Jan 4th"
+      ]
+     },
+     {
+      "text": "Counts back from the June quote's 14 September start.",
+      "kind": "stale",
+      "fact": "GEN-REF-RENO-QUOTE-REVA#F8",
+      "answer_needles": [
+       "31 August",
+       "August 31",
+       "Aug 31"
+      ]
+     },
+     {
+      "text": "Gives 26 October, the last day for the November start, as the answer for the January start.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Says Committee approval is required for this kitchen.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "GEN-REF-RENO-QUOTE-REVC",
+     "GEN-REF-HOA-NOTICE"
+    ],
+    "source_priority": [
+     "GEN-REF-RENO-QUOTE-REVC",
+     "GEN-REF-HOA-NOTICE",
+     "GEN-REF-RENO-QUOTE-REVA"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Pointing out that the management office is open Monday to Thursday, so it is safer to file before the holidays.",
+     "Mentioning that the prices are only held until 22 October."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "date(2027, 1, 11) - days(14)",
+     "result": "2026-12-28",
+     "unit": "date",
+     "accepted_forms": [
+      "28 December",
+      "December 28",
+      "28th of December",
+      "28th December",
+      "December the 28th",
+      "December 28th",
+      "Dec 28",
+      "28 Dec",
+      "Dec. 28",
+      "28th of Dec",
+      "28th Dec",
+      "Dec 28th",
+      "28th"
+     ],
+     "inputs": {
+      "date(2027, 1, 11)": "GEN-REF-RENO-QUOTE-REVC#F27",
+      "days(14)": "GEN-REF-HOA-NOTICE#F4"
+     },
+     "wrong_results_common": [
+      "12 December",
+      "December 12",
+      "12th of December",
+      "12th December",
+      "December the 12th",
+      "December 12th",
+      "Dec 12",
+      "12 Dec",
+      "Dec. 12",
+      "12th of Dec",
+      "12th Dec",
+      "Dec 12th",
+      "27 December",
+      "December 27",
+      "27th of December",
+      "27th December",
+      "December the 27th",
+      "December 27th",
+      "Dec 27",
+      "27 Dec",
+      "Dec. 27",
+      "27th of Dec",
+      "27th Dec",
+      "Dec 27th",
+      "29 December",
+      "December 29",
+      "29th of December",
+      "29th December",
+      "December the 29th",
+      "December 29th",
+      "Dec 29",
+      "29 Dec",
+      "Dec. 29",
+      "29th of Dec",
+      "29th Dec",
+      "Dec 29th",
+      "4 January",
+      "January 4",
+      "4th of January",
+      "4th January",
+      "January the 4th",
+      "January 4th",
+      "Jan 4",
+      "4 Jan",
+      "Jan. 4",
+      "4th of Jan",
+      "4th Jan",
+      "Jan 4th",
+      "31 August",
+      "August 31"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-GEN-006",
+   "mode": "general",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "we pay brackwater for two different things, which of them costs us more over a full year and by how much",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "general-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "arithmetic",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The budget has two Brackwater Mutual rows with figures on different bases. The home insurance is an ANNUAL premium of $1,284. The car insurance is $118 a MONTH, which is $1,416 a year. So the car insurance costs more over a year, by $132. Setting 1,284 against 118 and calling the home insurance the dearer one is the mistake.",
+    "required_facts": [
+     {
+      "fact": "GEN-REF-BUDGET-OCT#F11",
+      "text": "The car insurance is $118 a month, $1,416 over a year.",
+      "answer_needles": [
+       "1,416",
+       "1416"
+      ]
+     },
+     {
+      "fact": "GEN-REF-BUDGET-OCT#F10",
+      "text": "The home insurance is $1,284 for the year, so the car insurance costs $132 more.",
+      "answer_needles": [
+       "132"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "GEN-REF-BUDGET-OCT#F10",
+      "text": "The home premium is due on 20 October."
+     },
+     {
+      "fact": "GEN-REF-BUDGET-OCT#F11",
+      "text": "The car insurance goes out by autopay on the 8th."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says the home insurance costs more over the year, setting $1,284 against $118.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "1,166",
+       "1166"
+      ]
+     },
+     {
+      "text": "Treats the $1,284 as a monthly amount.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "15,408",
+       "15408"
+      ]
+     }
+    ],
+    "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "GEN-REF-BUDGET-OCT"
+    ],
+    "source_priority": [
+     "GEN-REF-BUDGET-OCT"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "118 * 12 - 1284",
+     "result": 132,
+     "unit": "USD per year",
+     "accepted_forms": [
+      "132",
+      "$132",
+      "one thirty-two",
+      "hundred and thirty-two"
+     ],
+     "inputs": {
+      "12": "months in a year",
+      "118": "GEN-REF-BUDGET-OCT#F11",
+      "1284": "GEN-REF-BUDGET-OCT#F10"
+     },
+     "wrong_results_common": [
+      "1,166",
+      "1166",
+      "15,408",
+      "15408"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-GEN-007",
+   "mode": "general",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "The dumpster needs some sort of placard from your association, doesn't it? Who do my office ring to get that sorted, have you got a number?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "general-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "direct_retrieval",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "The association's notice says a dumpster must display a placard from the management office, and gives the office at the foot of the notice: Ysolde Brackenridge, Property Manager, Calloway-Finch Property Management, phone 555-0119. That is the person and the number to give. The pack holds several other phone numbers (the contractor's own office, the inn, the garage, a family contact); none of them is the one asked for.",
+    "required_facts": [
+     {
+      "fact": "GEN-REF-HOA-NOTICE#F15",
+      "text": "The management office number is 555-0119.",
+      "answer_needles": [
+       "555-0119",
+       "555 0119",
+       "5550119"
+      ]
+     },
+     {
+      "fact": "GEN-REF-HOA-NOTICE#F15",
+      "text": "The contact is Ysolde Brackenridge at Calloway-Finch Property Management.",
+      "answer_needles": [
+       "Ysolde",
+       "Brackenridge",
+       "Calloway"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "GEN-REF-HOA-NOTICE#F10",
+      "text": "A $200 refundable damage deposit is taken when the placard is issued, and the dumpster has to stand on their own driveway for no more than 7 days."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives another number from the material (the contractor's own office, the inn, the garage or the family contact).",
+      "kind": "fabrication",
+      "answer_needles": [
+       "555-0142",
+       "555-0187",
+       "555-0163",
+       "555-0171"
+      ]
+     },
+     {
+      "text": "Names someone else as the person to call.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "Mirella",
+       "Bexley"
+      ]
+     },
+     {
+      "text": "Says the Architectural Committee has to approve the dumpster.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "the user speaking aloud to the contractor, Dunmore, first person, as an ordinary person with no specialised role",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "GEN-REF-HOA-NOTICE"
+    ],
+    "source_priority": [
+     "GEN-REF-HOA-NOTICE"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Adding that the office keeps short hours, Monday to Thursday."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-GEN-008",
+   "mode": "general",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "how big is the island top going to be in square feet, and how many cabinets go under it",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "general-full",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "outdated_vs_current",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two versions of the same quote are loaded and only the revision letter and date tell them apart. Revision C (22 September 2026, current) has an island of 6 ft x 3 ft on two base cabinets: 18 square feet. Revision A (18 June 2026) had 7 ft x 3 ft on three base cabinets, 21 square feet, and is replaced. The 46 sq ft in both quotes is the perimeter countertop run, not the island.",
+    "required_facts": [
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F7",
+      "text": "The island is 6 ft x 3 ft, which is 18 square feet.",
+      "answer_needles": [
+       "18 sq",
+       "18 square",
+       "eighteen square",
+       "18 ft",
+       "18ft",
+       "18 sf"
+      ]
+     },
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F7",
+      "text": "It sits on two base cabinets.",
+      "answer_needles": [
+       "two",
+       "2 base",
+       "2 cabinets"
+      ]
+     }
+    ],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Gives the June quote's island: 7 ft x 3 ft, 21 square feet, three base cabinets.",
+      "kind": "stale",
+      "fact": "GEN-REF-RENO-QUOTE-REVA#F3",
+      "answer_needles": [
+       "21 sq",
+       "21 square",
+       "twenty-one square",
+       "7 ft",
+       "7 feet",
+       "7-foot",
+       "seven feet",
+       "seven foot",
+       "three base",
+       "3 base"
+      ]
+     },
+     {
+      "text": "Gives the 46 sq ft perimeter countertop run as the island top.",
+      "kind": "fabrication",
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F6",
+      "answer_needles": [
+       "46 sq",
+       "46 square"
+      ]
+     }
+    ],
+    "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+    "expected_action": "prefer_current_source",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "GEN-REF-RENO-QUOTE-REVC"
+    ],
+    "source_priority": [
+     "GEN-REF-RENO-QUOTE-REVC",
+     "GEN-REF-RENO-QUOTE-REVA"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "island size and number of cabinets",
+      "sources": [
+       "GEN-REF-RENO-QUOTE-REVC",
+       "GEN-REF-RENO-QUOTE-REVA"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Mentioning that the island line is optional and priced at $4,750."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "6 * 3",
+     "result": 18,
+     "unit": "square feet",
+     "accepted_forms": [
+      "18 sq",
+      "18 square",
+      "eighteen square",
+      "18 ft",
+      "18ft",
+      "18 sf"
+     ],
+     "inputs": {
+      "3": "GEN-REF-RENO-QUOTE-REVC#F7",
+      "6": "GEN-REF-RENO-QUOTE-REVC#F7"
+     },
+     "wrong_results_common": [
+      "21 sq",
+      "21 square",
+      "twenty-one square",
+      "46 sq",
+      "46 square"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-GEN-009",
+   "mode": "general",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "So on install day, are Dunmore's lot turning up with the knobs, or have we got to have our own sitting here ready for them?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "general-cf-hw-conflict",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "informal_vs_written",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "In this configuration two current sources disagree and nothing loaded settles it. The quote on the table, Revision C of 22 September, says decorative hardware is not part of the price: the owners supply their own knobs and pulls, and the crew fits them free if they are on site by the day cabinet installation begins. Dunmore's e-mail of 1 October, written AFTER that quote, says the knobs and pulls are in the price and that the crew will bring the brushed ones on install day. The right reply says both things, names where each comes from, and says to get it written into the quote before they sign (acceptance is due by Friday 9 October). It must not settle on one side as if the other did not exist. The June quote, which included hardware, is replaced and does not decide it.",
+    "required_facts": [
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F5",
+      "text": "The quote as written (Revision C) says they supply their own knobs and pulls, on site by the day cabinet installation begins.",
+      "answer_needles": [
+       "quote",
+       "revision c",
+       "rev c",
+       "rev. c",
+       "paperwork",
+       "on paper",
+       "contract"
+      ]
+     },
+     {
+      "fact": "GEN-REF-CONTRACTOR-EMAILS~hwyes#F11",
+      "text": "Dunmore's e-mail of 1 October says the knobs and pulls are in the price and the crew brings the brushed ones on install day.",
+      "answer_needles": [
+       "mail",
+       "wrote",
+       "message"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F26",
+      "text": "There is still time to have the quote reissued before the Friday 9 October deadline."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says flatly that the crew is bringing the hardware, with no mention that the quote they are about to sign says the owners supply it.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Says flatly that they must buy their own, with no mention of Dunmore's later e-mail saying it is in the price.",
+      "kind": "over_deferral"
+     },
+     {
+      "text": "Says the quote has already been amended or reissued to include hardware.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Settles it with the June quote's hardware allowance as if that version applied.",
+      "kind": "stale",
+      "fact": "GEN-REF-RENO-QUOTE-REVA#F2"
+     }
+    ],
+    "expected_role": "the user speaking aloud to their partner, Jorrit, first person, as an ordinary person with no specialised role",
+    "expected_action": "surface_conflict",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "GEN-REF-RENO-QUOTE-REVC",
+     "GEN-REF-CONTRACTOR-EMAILS~hwyes"
+    ],
+    "source_priority": [
+     "GEN-REF-RENO-QUOTE-REVC",
+     "GEN-REF-CONTRACTOR-EMAILS~hwyes",
+     "GEN-REF-RENO-QUOTE-REVA"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "who supplies the cabinet knobs and pulls",
+      "sources": [
+       "GEN-REF-RENO-QUOTE-REVC",
+       "GEN-REF-CONTRACTOR-EMAILS~hwyes"
+      ],
+      "resolution": "unresolved"
+     },
+     {
+      "topic": "cabinet hardware",
+      "sources": [
+       "GEN-REF-RENO-QUOTE-REVC",
+       "GEN-REF-RENO-QUOTE-REVA"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Saying that until the quote is changed, the written quote is what they would be signing.",
+     "Suggesting they ask Dunmore or Mirella to reissue the quote with the hardware line corrected."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-GEN-010",
+   "mode": "general",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "If Dunmore's crew really do turn up at eight every single morning, what could the association fine us by the time the whole job's done?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "general-cf-noquotes",
+   "pi_state": "none",
+   "condition": "missing_evidence",
+   "category": "missing_fact",
+   "difficulty": "hard",
+   "cf_pair": "hoa-hours-fine-whole-job",
+   "oracle": {
+    "expected_behavior_note": "Neither quote is loaded here, so nothing loaded gives the job's start date, its length, its days off or the crew's hours. What IS known comes from the association's notice: weekday work is allowed from 8:30 am to 5:00 pm and the owner is fined $75 for each day on which work takes place outside those hours. So the right reply gives the $75 a day, says the total depends on how many days the crew works, which it does not have, and stops there (it may say to check the quote for the schedule, or to have the crew start at 8:30). It must not produce a whole-job total, and must not build one from the 'about 3 weeks' without a sink in Dunmore's e-mail, which is not the length of the job.",
+    "required_facts": [
+     {
+      "fact": "GEN-REF-HOA-NOTICE#F9",
+      "text": "The fine is $75 for each day on which work takes place outside the permitted hours.",
+      "answer_needles": [
+       "$75",
+       "75 a day",
+       "75 per day",
+       "75 each day",
+       "75 dollars",
+       "seventy-five"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "GEN-REF-HOA-NOTICE#F6",
+      "text": "Weekday work is allowed only from 8:30 am."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "States a total for the whole job as if the number of working days were known.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "1,875",
+       "1875"
+      ]
+     },
+     {
+      "text": "Builds a total from the 'about 3 weeks' without a sink (15 days).",
+      "kind": "fabrication",
+      "fact": "GEN-REF-CONTRACTOR-EMAILS#F4",
+      "answer_needles": [
+       "1,125",
+       "1125"
+      ]
+     },
+     {
+      "text": "States the job's start date, finish date or length as a fact.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "9 November",
+       "November 9",
+       "15 December",
+       "December 15",
+       "25 working days",
+       "five working weeks",
+       "5 working weeks"
+      ]
+     },
+     {
+      "text": "Says the association allows an 8:00 am start, or that there is no fine.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Says nothing can be said about fines at all, although the notice gives the daily amount.",
+      "kind": "over_deferral"
+     }
+    ],
+    "expected_role": "the user speaking aloud to their partner, Jorrit, first person, as an ordinary person with no specialised role",
+    "expected_action": "decline_to_invent_stay_useful",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "GEN-REF-HOA-NOTICE"
+    ],
+    "source_priority": [
+     "GEN-REF-HOA-NOTICE"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Giving it per week as an illustration ($375 for five early mornings).",
+     "Saying the answer is to ask Dunmore to start at 8:30."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-GEN-011",
+   "mode": "general",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Lovely. Could I just take the registration of the car you've come in, for the parking log?",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "Welcome to the Corrowick. That's the harbor-view king for three nights, and I can see you've a space in the car park as well."
+    },
+    {
+     "speaker": "user",
+     "text": "That's right, thank you."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "general-full",
+   "pi_state": "none",
+   "condition": "missing_evidence",
+   "category": "missing_fact",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The car is a hire car collected that day. The trip plan holds the Brindlecar reservation number, the gate code and the parking space, but no licence plate anywhere, and nothing else loaded has one. The right reply says she does not have it to hand (it is a rental) and offers to read it off the key tag or pop out and look. It must not offer the reservation number, a code or the hotel confirmation as if it were the registration, and must not make up a plate.",
+    "required_facts": [],
+    "optional_facts": [
+     {
+      "fact": "GEN-REF-TRIP-PLAN#F4",
+      "text": "The car is a Brindlecar compact automatic, hired in Jorrit's name."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives the Brindlecar reservation number as the registration.",
+      "kind": "fabrication",
+      "fact": "GEN-REF-TRIP-PLAN#F4",
+      "answer_needles": [
+       "774102",
+       "BRC-"
+      ]
+     },
+     {
+      "text": "Gives a gate code, door code or the hotel confirmation number as the registration.",
+      "kind": "fabrication",
+      "fact": "GEN-REF-TRIP-PLAN#F13",
+      "answer_needles": [
+       "4417",
+       "2290",
+       "58213"
+      ]
+     },
+     {
+      "text": "Makes up a licence plate.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "the user speaking aloud to the front desk clerk at the inn, first person, as an ordinary person with no specialised role",
+    "expected_action": "decline_to_invent_stay_useful",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying it is a hire car and the plate is on the key tag.",
+     "Offering to bring the number to the desk in a minute."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-GEN-012",
+   "mode": "general",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "how much does dunmore reckon we should keep back in case something ugly turns up once they start opening things",
+   "prior_transcript": null,
+   "conversation_id": "ER-C1-GEN-012-C",
+   "turn_index": 1,
+   "evidence_config": "general-full",
+   "pi_state": "none",
+   "condition": "followup",
+   "category": "terms",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "The current quote carries no contingency sum and suggests the owners keep roughly 8% of the contract total in reserve, about $3,100. Anything found is handled by a written change order at cost plus 15%, approved in writing first. The June quote's $85 an hour is replaced.",
+    "required_facts": [
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F30",
+      "text": "The contractor suggests keeping roughly 8% of the contract total in reserve, about $3,100.",
+      "answer_needles": [
+       "3,100",
+       "3100",
+       "3.1k",
+       "thirty-one hundred",
+       "three thousand one hundred"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F29",
+      "text": "The quote itself carries no contingency sum; surprises go through a written change order at cost plus 15%."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives the June quote's $85 an hour as how surprises are covered.",
+      "kind": "stale",
+      "fact": "GEN-REF-RENO-QUOTE-REVA#F10",
+      "answer_needles": [
+       "$85",
+       "85 per hour",
+       "85 an hour"
+      ]
+     },
+     {
+      "text": "Says a contingency is already built into the $38,750.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+    "expected_action": "answer_directly",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "GEN-REF-RENO-QUOTE-REVC"
+    ],
+    "source_priority": [
+     "GEN-REF-RENO-QUOTE-REVC",
+     "GEN-REF-RENO-QUOTE-REVA"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "how unforeseen work is paid for",
+      "sources": [
+       "GEN-REF-RENO-QUOTE-REVC",
+       "GEN-REF-RENO-QUOTE-REVA"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-GEN-013",
+   "mode": "general",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "ok and if we actually put that aside too, how far short are we once the kitchen fund and the loan are both used up",
+   "prior_transcript": null,
+   "conversation_id": "ER-C1-GEN-012-C",
+   "turn_index": 2,
+   "evidence_config": "general-full",
+   "pi_state": "none",
+   "condition": "followup",
+   "category": "arithmetic",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "'That' is the roughly $3,100 reserve from the turn before. The contract total is $38,750, so with the reserve they need $41,850. The budget has $9,300 in the kitchen fund and a $28,000 loan approved, $37,300 together. 41,850 - 37,300 = $4,550 short ($1,450 on the contract itself plus the $3,100 reserve). The trip fund and the checking balance are not kitchen money.",
+    "required_facts": [
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F13",
+      "text": "With the $3,100 reserve on top of the $38,750 total, the kitchen fund and the loan fall $4,550 short.",
+      "answer_needles": [
+       "4,550",
+       "4550",
+       "4.55k",
+       "forty-five fifty",
+       "four thousand five hundred and fifty",
+       "forty-five hundred and fifty"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "GEN-REF-BUDGET-OCT#F2",
+      "text": "The kitchen fund holds $9,300."
+     },
+     {
+      "fact": "GEN-REF-BUDGET-OCT#F4",
+      "text": "The approved loan is $28,000."
+     },
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F30",
+      "text": "The reserve is about $3,100."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Works from the June quote's total of $37,850.",
+      "kind": "stale",
+      "fact": "GEN-REF-RENO-QUOTE-REVA#F6",
+      "answer_needles": [
+       "3,650",
+       "3650"
+      ]
+     },
+     {
+      "text": "Takes the reserve off the shortfall instead of adding it.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "1,650",
+       "1650"
+      ]
+     },
+     {
+      "text": "Answers with the shortfall on the contract alone and leaves the reserve out.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Counts the trip fund or the checking balance toward the kitchen.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "GEN-REF-RENO-QUOTE-REVC",
+     "GEN-REF-BUDGET-OCT"
+    ],
+    "source_priority": [
+     "GEN-REF-RENO-QUOTE-REVC",
+     "GEN-REF-BUDGET-OCT",
+     "GEN-REF-RENO-QUOTE-REVA"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Breaking it into $1,450 on the contract and $3,100 of reserve.",
+     "Pointing out that dropping the optional island would more than close the gap."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "38750 + 3100 - (9300 + 28000)",
+     "result": 4550,
+     "unit": "USD",
+     "accepted_forms": [
+      "4,550",
+      "4550",
+      "$4,550",
+      "4.55k",
+      "forty-five fifty",
+      "four thousand five hundred and fifty"
+     ],
+     "inputs": {
+      "3100": "GEN-REF-RENO-QUOTE-REVC#F30",
+      "9300": "GEN-REF-BUDGET-OCT#F2",
+      "28000": "GEN-REF-BUDGET-OCT#F4",
+      "38750": "GEN-REF-RENO-QUOTE-REVC#F13"
+     },
+     "wrong_results_common": [
+      "3,650",
+      "3650",
+      "1,650",
+      "1650"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  }
+ ]
+}

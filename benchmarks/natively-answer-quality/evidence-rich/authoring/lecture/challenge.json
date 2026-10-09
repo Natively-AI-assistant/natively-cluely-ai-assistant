@@ -1,0 +1,1678 @@
+{
+  "mode": "lecture",
+  "items": [
+    {
+      "id": "ER-C1-LEC-001",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "So where does our rule put the policy rate for that year? Get the inflation figure first, then the rate.",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Let's push the student basket on one more year. Say that in twenty twenty-seven the very same basket costs one thousand four hundred and nineteen crowns sixty."
+        },
+        {
+          "speaker": "other",
+          "text": "And assume the output gap hasn't moved. Still minus two percent."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "calculation",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Two steps. Inflation is measured from the previous year's basket, which cost 1,365 crowns in 2026: (1,419.60 - 1,365) / 1,365 = 4.0%. Then this year's classroom rule (neutral real rate 1%, target 2%, weights 0.5 and 0.25): 1 + 4 + 0.5 x (4 - 2) + 0.25 x (-2) = 5.5%. Last year's formula sheet (neutral real rate 2%, weight 0.5 on the output gap) would give 6.0% and is out of date. Measuring from the base-year basket of 1,250 crowns (13.6%) is wrong, and so is keeping this year's 5.0% inflation (which gives the slide's 7.0%).",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-ECN-SLIDES-L05#F7",
+            "text": "The basket cost 1,365 crowns in 2026, so inflation in 2027 is 4.0%.",
+            "answer_needles": [
+              "4.0%",
+              "4%",
+              "4 percent",
+              "4 per cent",
+              "4.0 percent",
+              "4.0 per cent",
+              "four percent",
+              "four per cent"
+            ]
+          },
+          {
+            "fact": "LEC-REF-ECN-FORMULAS-2026#F12",
+            "text": "The classroom rule gives a policy rate of 5.5%.",
+            "answer_needles": [
+              "5.5"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-ECN-FORMULAS-2026#F13",
+            "text": "The rule uses a neutral real rate of 1% and a target of 2%."
+          },
+          {
+            "fact": "LEC-REF-ECN-SLIDES-L05#F10",
+            "text": "Inflation is measured from the previous year's index, not from the base year."
+          },
+          {
+            "fact": "LEC-REF-ECN-FORMULAS-2026#F9",
+            "text": "Inflation rate = (CPI this year - CPI last year) / CPI last year, x 100."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses last year's formula sheet (neutral real rate 2%, weight 0.5 on the output gap) and gives 6.0% as the answer.",
+            "kind": "stale",
+            "fact": "LEC-REF-ECN-FORMULAS-2025#F6",
+            "answer_needles": []
+          },
+          {
+            "text": "Measures the rise from the base-year basket of 1,250 crowns and reports inflation of about 13.6%.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "13.6",
+              "13.57"
+            ]
+          },
+          {
+            "text": "Keeps this year's 5.0% inflation and repeats the 7.0% of the slide as the answer.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-ECN-SLIDES-L05",
+          "LEC-REF-ECN-FORMULAS-2026",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "LEC-REF-ECN-FORMULAS-2026",
+          "LEC-REF-ECN-SLIDES-L05",
+          "LEC-REF-ECN-FORMULAS-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Classroom rule: neutral real rate and weight on the output gap",
+            "sources": [
+              "LEC-REF-ECN-FORMULAS-2026",
+              "LEC-REF-ECN-FORMULAS-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "1 + 4 + 0.5 * (4 - 2) + 0.25 * (-2)",
+          "result": 5.5,
+          "unit": "% (policy rate)",
+          "accepted_forms": [
+            "5.5%",
+            "5.5 %",
+            "5.5 percent",
+            "5.5 per cent",
+            "5.50%",
+            "five and a half",
+            "5.5"
+          ],
+          "inputs": {
+            "basket_2026": "LEC-REF-ECN-SLIDES-L05#F7",
+            "basket_2027": "CONVERSATION (1,419.60 crowns)",
+            "output_gap": "CONVERSATION (-2%)",
+            "inflation_formula": "LEC-REF-ECN-FORMULAS-2026#F9",
+            "rule": "LEC-REF-ECN-FORMULAS-2026#F12",
+            "neutral_rate_and_target": "LEC-REF-ECN-FORMULAS-2026#F13"
+          },
+          "wrong_results_common": [
+            "6.0%",
+            "6.5%",
+            "7.0%",
+            "19.9",
+            "19.85",
+            "4.5%"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LEC-002",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "lab 3 prep: if i carry her trace on for the ten extra rounds and nothing more gets lost, how big is the window in the very last round? segments and bytes pls. and is that +1 per ack or per round",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "worked_example",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The slide trace ends at round 15 with cwnd = 7 segments, in congestion avoidance. The lecturer's notes say the \"+1\" is one segment per round (per RTT), not per ACK. Ten more rounds without loss are rounds 16 to 25, so the window in round 25 is 7 + 10 = 17 segments. With the course's 1,200-byte MSS that is 20,400 bytes. Per-ACK growth, the 1,232-byte DNS limit and the real-world 1,460-byte MSS are all wrong here.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4#F30",
+            "text": "The +1 is one segment per round (per RTT), not per ACK.",
+            "answer_needles": [
+              "per RTT",
+              "each round",
+              "every round",
+              "each RTT",
+              "every RTT",
+              "once per round",
+              "one per round",
+              "segment per round",
+              "segment a round",
+              "per round, not",
+              "per round rather",
+              "per round (",
+              "not per ACK",
+              "rather than per ACK",
+              "not once per ACK",
+              "per round."
+            ]
+          },
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F23",
+            "text": "From cwnd = 7 in round 15, ten more rounds give 17 segments in round 25.",
+            "answer_needles": [
+              "17 segments",
+              "17 seg",
+              "cwnd = 17",
+              "cwnd=17",
+              "cwnd of 17",
+              "cwnd is 17",
+              "17-segment",
+              "seventeen",
+              "to 17",
+              "at 17",
+              "is 17",
+              "be 17",
+              "reaches 17",
+              "= 17"
+            ]
+          },
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F3",
+            "text": "At 1,200 bytes per segment that is 20,400 bytes.",
+            "answer_needles": [
+              "20,400",
+              "20400",
+              "20 400",
+              "20.4 k"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F24",
+            "text": "Lab 3 starts from the lecture 7 trace and asks for ten more rounds."
+          },
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F2",
+            "text": "cwnd is counted in segments in this course."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the window grows by one segment for every ACK (so it keeps doubling).",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Uses the real-world 1,460-byte MSS (24,820 bytes).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "24,820",
+              "24820"
+            ]
+          },
+          {
+            "text": "Uses the 1,232-byte DNS reply limit as the segment size (20,944 bytes).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "20,944",
+              "20944"
+            ]
+          },
+          {
+            "text": "Is one round out: 16 segments (19,200 bytes) or 18 segments (21,600 bytes).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "19,200",
+              "19200",
+              "21,600",
+              "21600"
+            ]
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-SLIDES-L07",
+          "LEC-REF-CNW-NOTES-W3-4"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-NOTES-W3-4",
+          "LEC-REF-CNW-SLIDES-L07"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "(7 + 10) * 1200",
+          "result": 20400,
+          "unit": "bytes (17 segments) in round 25",
+          "accepted_forms": [
+            "20,400",
+            "20400",
+            "20 400",
+            "20.4 kB",
+            "20.4 kilobytes",
+            "20.4k"
+          ],
+          "inputs": {
+            "cwnd_round_15": "LEC-REF-CNW-SLIDES-L07#F23",
+            "growth_per_round": "LEC-REF-CNW-NOTES-W3-4#F30",
+            "extra_rounds": "LEC-REF-CNW-SLIDES-L07#F24",
+            "mss_bytes": "LEC-REF-CNW-SLIDES-L07#F3"
+          },
+          "wrong_results_common": [
+            "19,200",
+            "19200",
+            "21,600",
+            "21600",
+            "24,820",
+            "24820",
+            "20,944",
+            "20944"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LEC-003",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "What's the lowest mark in the final exam that still gets that student a pass this term?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Here's a student for you: seventy on the labs, forty on the midterm, sixty on the group project."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "calculation",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "This term's weights are labs 20%, midterm 25%, project 15%, final 40%. Earned so far: 14 + 10 + 9 = 33. Reaching 50 overall needs 17 more points, which is 42.5 on the final. But this term's syllabus also requires at least 45 out of 100 in the final exam, so the lowest passing mark is 45 (51 overall). An answer that stops at 42.5 is wrong. Last year's syllabus (15 / 25 / 10 / 50, no floor on the final) would give 47 and is out of date.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F17",
+            "text": "The final needs at least 45 out of 100, and that floor is what decides here: 45.",
+            "answer_needles": [
+              "45"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F15",
+            "text": "The final exam is worth 40% of the course mark."
+          },
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F11",
+            "text": "Labs are worth 20%."
+          },
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F12",
+            "text": "The midterm is worth 25%."
+          },
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F14",
+            "text": "The group project is worth 15%."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Stops at the arithmetic (42.5 on the final) and gives that as the mark needed, without the floor of 45 on the final.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Uses last year's weights (15 / 25 / 10 / 50) and gives 47.",
+            "kind": "stale",
+            "fact": "LEC-REF-CNW-SYLLABUS-2025#F8",
+            "answer_needles": [
+              "47",
+              "26.5"
+            ]
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-SYLLABUS-2026",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-SYLLABUS-2026",
+          "LEC-REF-CNW-SYLLABUS-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "CNW 2140 assessment weights and pass rule",
+            "sources": [
+              "LEC-REF-CNW-SYLLABUS-2026",
+              "LEC-REF-CNW-SYLLABUS-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "max((50 - (0.20 * 70 + 0.25 * 40 + 0.15 * 60)) / 0.40, 45)",
+          "result": 45,
+          "unit": "marks out of 100 in the final exam",
+          "accepted_forms": [
+            "45"
+          ],
+          "inputs": {
+            "labs_weight": "LEC-REF-CNW-SYLLABUS-2026#F11",
+            "midterm_weight": "LEC-REF-CNW-SYLLABUS-2026#F12",
+            "project_weight": "LEC-REF-CNW-SYLLABUS-2026#F14",
+            "final_weight": "LEC-REF-CNW-SYLLABUS-2026#F15",
+            "pass_rule": "LEC-REF-CNW-SYLLABUS-2026#F17",
+            "marks_so_far": "CONVERSATION (70, 40, 60)"
+          },
+          "wrong_results_common": [
+            "42.5",
+            "47"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LEC-004",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "what's the absolute latest i can hand in networks lab 5 and still get any marks for it? need the day and the time",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "course_policy",
+      "difficulty": "hard",
+      "cf_pair": "lab5-last-hand-in",
+      "oracle": {
+        "expected_behavior_note": "From this term's syllabus: Lab 5 is due Friday 20 November 2026, and lab reports go in by 17:00 on the due date. A late report loses 10 marks out of 100 for each day or part of a day, for up to 3 days; after 3 days it scores zero. So the latest hand-in that still scores is three days after the deadline: Monday 23 November 2026 at 17:00, at a cost of 30 marks. Last year's syllabus (5 marks a day for up to 5 days; Lab 5 due 21 November 2025) is out of date and would give a Wednesday.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F22",
+            "text": "Lab 5 is due Friday 20 November 2026.",
+            "answer_needles": [
+              "20 November",
+              "November 20,",
+              "November 20.",
+              "November 20 at",
+              "November 20 by",
+              "Nov 20,",
+              "Nov 20.",
+              "20 Nov",
+              "20th of November",
+              "20th November",
+              "November 20th",
+              "November the 20th",
+              "20th Nov",
+              "Nov 20th",
+              "the 20th"
+            ]
+          },
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F23",
+            "text": "Late work is accepted for up to 3 days, so the last moment is Monday 23 November 2026.",
+            "answer_needles": [
+              "23 November",
+              "November 23",
+              "Nov 23",
+              "Nov. 23",
+              "23 Nov",
+              "23rd of November",
+              "23rd November",
+              "November 23rd",
+              "November the 23rd",
+              "23rd Nov",
+              "Nov 23rd",
+              "the 23rd"
+            ]
+          },
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F19",
+            "text": "The hand-in time is 17:00.",
+            "answer_needles": [
+              "17:00",
+              "5 pm",
+              "5pm",
+              "5:00",
+              "5 p.m.",
+              "17.00",
+              "1700",
+              "five in the afternoon",
+              "five o'clock"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F23",
+            "text": "Handing in at that point costs 30 marks out of 100."
+          },
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F24",
+            "text": "Extensions are granted only through the School office."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses last year's late policy (up to 5 days) and gives Wednesday 25 November, or last year's dates (Wednesday 26 November).",
+            "kind": "stale",
+            "fact": "LEC-REF-CNW-SYLLABUS-2025#F13",
+            "answer_needles": [
+              "25 November",
+              "November 25",
+              "Nov 25",
+              "Nov. 25",
+              "25 Nov",
+              "25th of November",
+              "25th November",
+              "November 25th",
+              "November the 25th",
+              "25th Nov",
+              "Nov 25th",
+              "26 November",
+              "November 26",
+              "Nov 26",
+              "Nov. 26",
+              "26 Nov",
+              "26th of November",
+              "26th November",
+              "November 26th",
+              "November the 26th",
+              "26th Nov",
+              "Nov 26th"
+            ]
+          },
+          {
+            "text": "Counts the three days wrongly and gives Sunday 22 or Tuesday 24 November as the last moment.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-SYLLABUS-2026"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-SYLLABUS-2026",
+          "LEC-REF-CNW-SYLLABUS-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "CNW 2140 late policy for lab reports and the Lab 5 due date",
+            "sources": [
+              "LEC-REF-CNW-SYLLABUS-2026",
+              "LEC-REF-CNW-SYLLABUS-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "date(2026-11-20 17:00) + 3 days",
+          "result": "2026-11-23",
+          "unit": "date (a Monday), at 17:00",
+          "accepted_forms": [
+            "23 November",
+            "November 23",
+            "Nov 23",
+            "Nov. 23",
+            "23 Nov",
+            "23rd of November",
+            "23rd November",
+            "November 23rd",
+            "November the 23rd",
+            "23rd Nov",
+            "Nov 23rd",
+            "the 23rd"
+          ],
+          "inputs": {
+            "due_date": "LEC-REF-CNW-SYLLABUS-2026#F22",
+            "late_days_allowed": "LEC-REF-CNW-SYLLABUS-2026#F23",
+            "hand_in_time": "LEC-REF-CNW-SYLLABUS-2026#F19"
+          },
+          "wrong_results_common": [
+            "22 November",
+            "November 22",
+            "Nov 22",
+            "Nov. 22",
+            "22 Nov",
+            "22nd of November",
+            "22nd November",
+            "November 22nd",
+            "November the 22nd",
+            "22nd Nov",
+            "Nov 22nd",
+            "24 November",
+            "November 24",
+            "Nov 24",
+            "Nov. 24",
+            "24 Nov",
+            "24th of November",
+            "24th November",
+            "November 24th",
+            "November the 24th",
+            "24th Nov",
+            "Nov 24th",
+            "25 November",
+            "November 25",
+            "Nov 25",
+            "Nov. 25",
+            "25 Nov",
+            "25th of November",
+            "25th November",
+            "November 25th",
+            "November the 25th",
+            "25th Nov",
+            "Nov 25th",
+            "26 November",
+            "November 26",
+            "Nov 26",
+            "Nov. 26",
+            "26 Nov",
+            "26th of November",
+            "26th November",
+            "November 26th",
+            "November the 26th",
+            "26th Nov",
+            "Nov 26th"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LEC-005",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "what's the absolute latest i can hand in networks lab 5 and still get any marks for it? need the day and the time",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-cf-no-syllabus",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "course_policy",
+      "difficulty": "hard",
+      "cf_pair": "lab5-last-hand-in",
+      "oracle": {
+        "expected_behavior_note": "No syllabus is loaded. The remaining networks files mention only Lab 3 (it extends the lecture 7 trace) and Lab 4 (its sandbox resolver); nothing gives a deadline for Lab 5, a hand-in time, or any late rule. The answer must not give a date, a time or a penalty, and must not borrow one from another course (the economics problem set, the biology quiz). It says that the loaded material does not cover this and points the student to the syllabus, the course site or the teaching staff.",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F24",
+            "text": "The only lab the slides describe is Lab 3."
+          },
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4#F16",
+            "text": "The only lab the notes describe is Lab 4."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "States a due date or a last hand-in date for Lab 5.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "20 November",
+              "November 20,",
+              "November 20.",
+              "November 20 at",
+              "November 20 by",
+              "Nov 20,",
+              "Nov 20.",
+              "20 Nov",
+              "20th of November",
+              "20th November",
+              "November 20th",
+              "November the 20th",
+              "20th Nov",
+              "Nov 20th",
+              "23 November",
+              "November 23",
+              "Nov 23",
+              "Nov. 23",
+              "23 Nov",
+              "23rd of November",
+              "23rd November",
+              "November 23rd",
+              "November the 23rd",
+              "23rd Nov",
+              "Nov 23rd",
+              "21 November",
+              "November 21",
+              "Nov 21",
+              "Nov. 21",
+              "21 Nov",
+              "21st of November",
+              "21st November",
+              "November 21st",
+              "November the 21st",
+              "21st Nov",
+              "Nov 21st",
+              "25 November",
+              "November 25",
+              "Nov 25",
+              "Nov. 25",
+              "25 Nov",
+              "25th of November",
+              "25th November",
+              "November 25th",
+              "November the 25th",
+              "25th Nov",
+              "Nov 25th"
+            ]
+          },
+          {
+            "text": "States a hand-in time for lab reports.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "17:00",
+              "5 pm",
+              "5pm",
+              "23:59",
+              "11:59",
+              "midnight"
+            ]
+          },
+          {
+            "text": "States a late penalty as this course's rule (so many marks a day, so many days of grace).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "10 marks",
+              "5 marks",
+              "30 marks",
+              "up to 3 days",
+              "up to three days",
+              "three days late",
+              "3 days late"
+            ]
+          },
+          {
+            "text": "Says Lab 5 has no deadline, or that late work is never accepted.",
+            "kind": "false_denial",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "private_explanation",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LEC-006",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "If you think the marking's off, you know who to take it to and how long you've got. After that the mark stands.",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Lab two marks went up on the course site on Monday, the twelfth of October."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "course_policy",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "This term's syllabus: regrade requests must reach the teaching assistant within 7 days of the mark being released, and the teaching assistant is Juno Feathersmythe, who marks the lab reports. The marks were released on Monday 12 October 2026, so the request has to be in by Monday 19 October 2026. It goes to the teaching assistant, not to the lecturer. Tuesday 20 October (the revision session) is a different date, and last year's teaching assistant, Corwin Ashgrove-Lund, is out of date.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F25",
+            "text": "A regrade request must be in within 7 days of release: by Monday 19 October 2026.",
+            "answer_needles": [
+              "19 October",
+              "October 19",
+              "Oct 19",
+              "Oct. 19",
+              "19 Oct",
+              "19th of October",
+              "19th October",
+              "October 19th",
+              "October the 19th",
+              "19th Oct",
+              "Oct 19th",
+              "the 19th"
+            ]
+          },
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F3",
+            "text": "It goes to the teaching assistant, Juno Feathersmythe.",
+            "answer_needles": [
+              "Juno",
+              "Feathersmythe",
+              "teaching assistant"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F2",
+            "text": "The lecturer's office hours are Wednesday 14:00 to 15:30."
+          },
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F3",
+            "text": "Lab drop-in is Monday 16:00 to 17:00 in room HV 1.22."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Names last year's teaching assistant, Corwin Ashgrove-Lund.",
+            "kind": "stale",
+            "fact": "LEC-REF-CNW-SYLLABUS-2025#F3",
+            "answer_needles": [
+              "Corwin",
+              "Ashgrove"
+            ]
+          },
+          {
+            "text": "Gives another last day: Sunday 18, Tuesday 20 (the revision session) or Wednesday 21 October.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "18 October",
+              "October 18",
+              "Oct 18",
+              "Oct. 18",
+              "18 Oct",
+              "18th of October",
+              "18th October",
+              "October 18th",
+              "October the 18th",
+              "18th Oct",
+              "Oct 18th",
+              "20 October",
+              "October 20,",
+              "October 20.",
+              "October 20 at",
+              "October 20 by",
+              "Oct 20,",
+              "Oct 20.",
+              "20 Oct",
+              "20th of October",
+              "20th October",
+              "October 20th",
+              "October the 20th",
+              "20th Oct",
+              "Oct 20th",
+              "21 October",
+              "October 21",
+              "Oct 21",
+              "Oct. 21",
+              "21 Oct",
+              "21st of October",
+              "21st October",
+              "October 21st",
+              "October the 21st",
+              "21st Oct",
+              "Oct 21st"
+            ]
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-SYLLABUS-2026",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-SYLLABUS-2026",
+          "LEC-REF-CNW-SYLLABUS-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Who the CNW 2140 teaching assistant is",
+            "sources": [
+              "LEC-REF-CNW-SYLLABUS-2026",
+              "LEC-REF-CNW-SYLLABUS-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "date(2026-10-12) + 7 days",
+          "result": "2026-10-19",
+          "unit": "date (a Monday)",
+          "accepted_forms": [
+            "19 October",
+            "October 19",
+            "Oct 19",
+            "Oct. 19",
+            "19 Oct",
+            "19th of October",
+            "19th October",
+            "October 19th",
+            "October the 19th",
+            "19th Oct",
+            "Oct 19th",
+            "the 19th"
+          ],
+          "inputs": {
+            "regrade_window_days": "LEC-REF-CNW-SYLLABUS-2026#F25",
+            "release_date": "CONVERSATION (Monday 12 October 2026)"
+          },
+          "wrong_results_common": [
+            "18 October",
+            "October 18",
+            "Oct 18",
+            "Oct. 18",
+            "18 Oct",
+            "18th of October",
+            "18th October",
+            "October 18th",
+            "October the 18th",
+            "18th Oct",
+            "Oct 18th",
+            "20 October",
+            "October 20,",
+            "October 20.",
+            "October 20 at",
+            "October 20 by",
+            "Oct 20,",
+            "Oct 20.",
+            "20 Oct",
+            "20th of October",
+            "20th October",
+            "October 20th",
+            "October the 20th",
+            "20th Oct",
+            "Oct 20th",
+            "21 October",
+            "October 21",
+            "Oct 21",
+            "Oct. 21",
+            "21 Oct",
+            "21st of October",
+            "21st October",
+            "October 21st",
+            "October the 21st",
+            "21st Oct",
+            "Oct 21st"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LEC-007",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "is the size where a dns reply gets too big for udp the same number as the segment size she uses in the tcp examples? i keep writing one for the other",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "course_convention",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "They are two different numbers. In the lecturer's DNS notes a reply over 1,232 bytes (the limit used in this course) gets the TC flag and the resolver repeats the query over TCP. In the congestion control slides the MSS in every worked example is 1,200 bytes. So: 1,232 for the DNS-over-UDP limit, 1,200 for the TCP segment size, 32 bytes apart. The real-world figures a careless answer would reach for (a 1,460-byte MSS, the classic 512-byte DNS limit) are not this course's numbers.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4#F14",
+            "text": "The DNS reply limit over UDP in this course is 1,232 bytes.",
+            "answer_needles": [
+              "1,232",
+              "1232",
+              "1 232"
+            ]
+          },
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F3",
+            "text": "The MSS in the TCP examples is 1,200 bytes.",
+            "answer_needles": [
+              "1,200",
+              "1200",
+              "1 200"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4#F14",
+            "text": "Over the limit the server sets the TC flag and the resolver repeats the query over TCP."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the two are the same number.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Gives the common real-world MSS of 1,460 bytes as the course's segment size.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "1,460",
+              "1460"
+            ]
+          },
+          {
+            "text": "Gives the classic 512-byte limit as the course's DNS limit.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "512"
+            ]
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-NOTES-W3-4",
+          "LEC-REF-CNW-SLIDES-L07"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-NOTES-W3-4",
+          "LEC-REF-CNW-SLIDES-L07"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LEC-008",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Same carrier, same count. Do the two pairs put the same amount of ATP on our ledger? Give me both numbers, and the reason.",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Glycolysis hands you two NADH. Pyruvate oxidation hands you another two."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "course_convention",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "No. In BIO 1380 the two NADH from pyruvate oxidation are made inside the mitochondrion and are worth 2.5 ATP each, 5 ATP. The two NADH from glycolysis are made in the cytosol and cannot cross the inner membrane; the course assumes the glycerol-phosphate shuttle, so each is worth 1.5 ATP, 3 ATP for the pair. A wrong answer gives 5 for both pairs, or uses the old textbook rate of 3 per NADH.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F9",
+            "text": "The glycolysis pair is worth 1.5 ATP each, 3 ATP.",
+            "answer_needles": [
+              "3 ATP",
+              "1.5 ATP",
+              "1.5 each",
+              "1.5 per",
+              "three ATP",
+              "1.5 apiece",
+              "1.5 x 2",
+              "2 x 1.5",
+              "2 × 1.5",
+              "1.5 × 2",
+              "1.5"
+            ]
+          },
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F8",
+            "text": "The pyruvate oxidation pair is worth 2.5 ATP each, 5 ATP.",
+            "answer_needles": [
+              "5 ATP",
+              "2.5 ATP",
+              "2.5 each",
+              "2.5 per",
+              "five ATP",
+              "2.5 x 2",
+              "2 x 2.5",
+              "2 × 2.5",
+              "2.5 × 2",
+              "2.5"
+            ]
+          },
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F9",
+            "text": "The reason is the shuttle: the glycolysis NADH are made in the cytosol.",
+            "answer_needles": [
+              "shuttle",
+              "glycerol",
+              "cytosol"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F10",
+            "text": "The course total is 30 ATP per glucose."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says both pairs are worth the same (2.5 each, 5 ATP for each pair).",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Uses the old textbook rate of 3 ATP per NADH (6 ATP for a pair).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "6 ATP"
+            ]
+          },
+          {
+            "text": "Says the course assumes the malate-aspartate shuttle.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "explain",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-BIO-NOTES-L8-9"
+        ],
+        "source_priority": [
+          "LEC-REF-BIO-NOTES-L8-9"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LEC-009",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "The final is a long sitting, in a hall most of you won't have been in before. Find out where it is and what time it ends before you book any travel.",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "course_policy",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "From this term's syllabus (Autumn 2026, version 1.1): the final exam is on Tuesday 15 December 2026, 09:00 to 12:00, in Sports Hall B, so it ends at 12:00 (three hours). Last year's syllabus (Thursday 11 December 2025, 14:00 to 16:00, Examination Hall 1) is out of date and must not be given.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F16",
+            "text": "The final is in Sports Hall B.",
+            "answer_needles": [
+              "Sports Hall B"
+            ]
+          },
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F16",
+            "text": "It ends at 12:00.",
+            "answer_needles": [
+              "12:00",
+              "noon",
+              "midday",
+              "12 pm",
+              "12pm",
+              "12 noon",
+              "12.00",
+              "twelve"
+            ]
+          },
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F16",
+            "text": "It is on Tuesday 15 December 2026.",
+            "answer_needles": [
+              "15 December",
+              "December 15",
+              "Dec 15",
+              "Dec. 15",
+              "15 Dec",
+              "15th of December",
+              "15th December",
+              "December 15th",
+              "December the 15th",
+              "15th Dec",
+              "Dec 15th",
+              "the 15th"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F16",
+            "text": "It starts at 09:00 and covers the whole course."
+          },
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F18",
+            "text": "One A4 sheet, handwritten on both sides, may be brought."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives last year's hall, Examination Hall 1.",
+            "kind": "stale",
+            "fact": "LEC-REF-CNW-SYLLABUS-2025#F9",
+            "answer_needles": [
+              "Examination Hall"
+            ]
+          },
+          {
+            "text": "Gives last year's time, 14:00 to 16:00 (ending at 16:00).",
+            "kind": "stale",
+            "fact": "LEC-REF-CNW-SYLLABUS-2025#F9",
+            "answer_needles": [
+              "16:00",
+              "4 pm",
+              "4pm",
+              "4:00 pm",
+              "4 p.m."
+            ]
+          },
+          {
+            "text": "Gives last year's date, Thursday 11 December.",
+            "kind": "stale",
+            "fact": "LEC-REF-CNW-SYLLABUS-2025#F9",
+            "answer_needles": [
+              "11 December",
+              "December 11",
+              "Dec 11",
+              "Dec. 11",
+              "11 Dec",
+              "11th of December",
+              "11th December",
+              "December 11th",
+              "December the 11th",
+              "11th Dec",
+              "Dec 11th"
+            ]
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-SYLLABUS-2026"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-SYLLABUS-2026",
+          "LEC-REF-CNW-SYLLABUS-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Date, time and place of the CNW 2140 final exam",
+            "sources": [
+              "LEC-REF-CNW-SYLLABUS-2026",
+              "LEC-REF-CNW-SYLLABUS-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LEC-010",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "want to book a flight home for wednesday 16 december. is the networks final definitely over by then?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-cf-final-conflict",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "course_policy",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "It cannot be said for certain: two current sources disagree and neither says it replaces the other. The syllabus (version 1.1, 1 September 2026) puts the final on Tuesday 15 December 2026, which would be over by the 16th. The lecturer's notes, edited 30 September 2026, say the final will be held on Friday 18 December 2026, which would not. The right answer names both dates, says they conflict, and tells the student to confirm with the lecturer or the course site before booking; it may add that the notes are the more recent statement. Last year's date (11 December 2025) is not one of the live options.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F16",
+            "text": "The syllabus says Tuesday 15 December 2026.",
+            "answer_needles": [
+              "15 December",
+              "December 15",
+              "Dec 15",
+              "Dec. 15",
+              "15 Dec",
+              "15th of December",
+              "15th December",
+              "December 15th",
+              "December the 15th",
+              "15th Dec",
+              "Dec 15th",
+              "the 15th"
+            ]
+          },
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4~final45#F34",
+            "text": "The lecturer's notes say Friday 18 December 2026.",
+            "answer_needles": [
+              "18 December",
+              "December 18",
+              "Dec 18",
+              "Dec. 18",
+              "18 Dec",
+              "18th of December",
+              "18th December",
+              "December 18th",
+              "December the 18th",
+              "18th Dec",
+              "Dec 18th",
+              "the 18th"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F1",
+            "text": "The syllabus is version 1.1, issued 1 September 2026."
+          },
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4#F1",
+            "text": "The notes were last edited on 30 September 2026."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says flatly that the final is over by the 16th (only the syllabus date), without the lecturer's later announcement.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Says flatly that the final is on the 18th and the flight is too early (only the notes), without saying the syllabus says otherwise.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Gives last year's date, Thursday 11 December.",
+            "kind": "stale",
+            "fact": "LEC-REF-CNW-SYLLABUS-2025#F9",
+            "answer_needles": [
+              "11 December",
+              "December 11",
+              "Dec 11",
+              "Dec. 11",
+              "11 Dec",
+              "11th of December",
+              "11th December",
+              "December 11th",
+              "December the 11th",
+              "11th Dec",
+              "Dec 11th"
+            ]
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "surface_conflict",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-SYLLABUS-2026",
+          "LEC-REF-CNW-NOTES-W3-4~final45"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-SYLLABUS-2026",
+          "LEC-REF-CNW-NOTES-W3-4~final45",
+          "LEC-REF-CNW-SYLLABUS-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Date of the CNW 2140 final exam",
+            "sources": [
+              "LEC-REF-CNW-SYLLABUS-2026",
+              "LEC-REF-CNW-NOTES-W3-4~final45"
+            ],
+            "resolution": "unresolved"
+          },
+          {
+            "topic": "Date of the CNW 2140 final exam (last year's syllabus)",
+            "sources": [
+              "LEC-REF-CNW-SYLLABUS-2026",
+              "LEC-REF-CNW-SYLLABUS-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Saying the lecturer's announcement is the more recent statement and is probably what will apply, while still advising the student to confirm before booking."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LEC-011",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "if our networks group project report goes in two days late and it would have got 72, what mark do we end up with?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "course_policy",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The syllabus does not say. Its late policy is written for lab reports only (10 marks out of 100 for each day or part of a day, for up to 3 days). For the group project it gives the weight (15%), the group size (three) and the due date (Friday 27 November 2026), and no late rule at all. The answer must not give a resulting mark: 52 (the lab rule applied to the project) is an invention, and 62 would be last year's lab rule on top of that. It says what is known, says that the lab rule is not stated to apply to the project, and points the student to the lecturer or the School office (extensions go only through the School office).",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F14",
+            "text": "The group project is worth 15%, in groups of three, with the report due Friday 27 November 2026."
+          },
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F23",
+            "text": "The late policy in the syllabus is stated for lab reports."
+          },
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F24",
+            "text": "Extensions are granted only through the School office."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Applies the lab-report late penalty to the project report and gives 52 as the mark.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "52"
+            ]
+          },
+          {
+            "text": "Applies last year's lab penalty (5 marks a day) and gives 62.",
+            "kind": "stale",
+            "fact": "LEC-REF-CNW-SYLLABUS-2025#F13",
+            "answer_needles": [
+              "62"
+            ]
+          },
+          {
+            "text": "Says there is no penalty for a late project report.",
+            "kind": "false_denial",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "private_explanation",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LEC-012",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "How many of those should come out russet and plain?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Pool every bench this year and we have one thousand two hundred and eighty offspring from the two-gene cross. Both parents heterozygous at both genes, and the genes on different chromosomes."
+        }
+      ],
+      "conversation_id": "ER-C1-LEC-012-C",
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "followup",
+      "category": "worked_example",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "R/r S/s x R/r S/s gives phenotypes 9 : 3 : 3 : 1 with the dominant class first: russet spotted, russet plain, grey spotted, grey plain. Russet plain is a 3-in-16 class, so of 1,280 offspring 240 are expected. (720 are russet spotted, 240 grey spotted, 80 grey plain.)",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F31",
+            "text": "Russet plain is the 3-in-16 class of the 9 : 3 : 3 : 1 ratio.",
+            "answer_needles": [
+              "3/16",
+              "3 in 16",
+              "3 out of 16",
+              "three sixteenths",
+              "three-sixteenths",
+              "9:3:3:1",
+              "9 : 3 : 3 : 1",
+              "3 of 16",
+              "three in sixteen",
+              "three out of sixteen"
+            ]
+          },
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F31",
+            "text": "Of 1,280 offspring that is 240.",
+            "answer_needles": [
+              "240"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F25",
+            "text": "R (russet) is dominant over r (grey); S (spotted) is dominant over s (plain)."
+          },
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F32",
+            "text": "In the notes' brood of 320 the russet plain class is 60."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the russet spotted class (720), the grey plain class (80) or all the russet beetles (960) as the answer.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Repeats the 60 of the notes' own brood of 320.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-BIO-NOTES-L8-9",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "LEC-REF-BIO-NOTES-L8-9"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "1280 * 3 / 16",
+          "result": 240,
+          "unit": "beetles (russet plain)",
+          "accepted_forms": [
+            "240"
+          ],
+          "inputs": {
+            "ratio": "LEC-REF-BIO-NOTES-L8-9#F31",
+            "brood": "CONVERSATION (1,280 offspring)"
+          },
+          "wrong_results_common": [
+            "720",
+            "960",
+            "320"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LEC-013",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "and how many of those would be carrying the grey allele?",
+      "prior_transcript": null,
+      "conversation_id": "ER-C1-LEC-012-C",
+      "turn_index": 2,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "followup",
+      "category": "worked_example",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "\"Those\" are the 240 russet plain beetles of the previous turn. Among russet beetles two-thirds are carriers (R/r), as the notes say for the one-gene cross; the spot gene sorts independently, so the same fraction holds here. Two-thirds of 240 is 160. Half (120) is the fraction of ALL offspring that are R/r and is the wrong denominator; 640 would be the carriers in the whole pool.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F29",
+            "text": "Among the russet beetles two-thirds are carriers.",
+            "answer_needles": [
+              "two-thirds",
+              "two thirds",
+              "2/3",
+              "2 in 3",
+              "2 out of 3",
+              "two in three",
+              "two out of three",
+              "2:1"
+            ]
+          },
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F29",
+            "text": "Two-thirds of the 240 is 160.",
+            "answer_needles": [
+              "160"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F27",
+            "text": "R/r x R/r gives genotypes 1 : 2 : 1."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Takes half of the 240 and gives 120 as the answer.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Loses the thread and counts carriers in the whole pool (640) or in another class.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "640",
+              "853"
+            ]
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "continue_previous_answer",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-BIO-NOTES-L8-9",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "LEC-REF-BIO-NOTES-L8-9"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "240 * 2 / 3",
+          "result": 160,
+          "unit": "beetles (russet plain carriers, R/r s/s)",
+          "accepted_forms": [
+            "160"
+          ],
+          "inputs": {
+            "carriers_among_russet": "LEC-REF-BIO-NOTES-L8-9#F29",
+            "russet_plain": "CONVERSATION (240, the previous turn)"
+          },
+          "wrong_results_common": [
+            "120",
+            "640"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    }
+  ]
+}

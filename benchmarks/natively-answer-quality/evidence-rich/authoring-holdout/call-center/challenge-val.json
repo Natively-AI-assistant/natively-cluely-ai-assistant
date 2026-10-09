@@ -1,0 +1,632 @@
+{
+ "mode": "call-center",
+ "items": [
+  {
+   "id": "ER-CV1-CC-001",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "We're taking both Trek cams over to Ireland for four days next month. Am I better off buying those week passes, or just paying by the day?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "billing",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Ireland is Zone 2 in the billing guide. By the day: $15 per camera per day, two cameras, four days: 2 x 4 x 15 = $120 (each camera's $60 is under the $90 cap). Week passes: $70 per camera, two cameras: $140. Paying by the day is cheaper, by $20. Zone 1 figures ($10 a day, $45 a pass) are for Canada and Mexico. The reply should also say that 'four days' means four CALENDAR days.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F12",
+      "text": "By the day, two cameras for four days in Zone 2 is $120.",
+      "answer_needles": [
+       "$120",
+       "120 dollars",
+       "one hundred and twenty",
+       "a hundred and twenty",
+       "one twenty"
+      ]
+     },
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F14",
+      "text": "Two Zone 2 week passes are $140.",
+      "answer_needles": [
+       "$140",
+       "140 dollars",
+       "one hundred and forty",
+       "a hundred and forty",
+       "one forty"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F17",
+      "text": "Days are calendar days, so a trip that touches a fifth day costs another $15 per camera."
+     },
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F15",
+      "text": "A pass must be activated before the camera first connects abroad."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Uses the Zone 1 rates.",
+      "kind": "fabrication",
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F11",
+      "answer_needles": [
+       "$80",
+       "$45",
+       "$10 per",
+       "$10 a day"
+      ]
+     },
+     {
+      "text": "Prices one camera only.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Says the pass is the cheaper choice for this trip.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-BILLING-TRAVEL-2026"
+    ],
+    "source_priority": [
+     "CC-REF-BILLING-TRAVEL-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Pointing out that with a fifth calendar day the two options come closer ($150 against $140)."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "2 * 70 - 2 * 4 * 15",
+     "result": 20,
+     "unit": "USD saved by paying by the day",
+     "accepted_forms": [
+      "$20",
+      "20 dollars",
+      "twenty dollars",
+      "$120",
+      "120 dollars"
+     ],
+     "inputs": {
+      "zone2_day_rate": "CC-REF-BILLING-TRAVEL-2026#F12",
+      "zone2_pass": "CC-REF-BILLING-TRAVEL-2026#F14",
+      "cameras_and_days": "stated in the question (2 cameras, 4 days)"
+     },
+     "wrong_results_common": [
+      "$80",
+      "$45"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-CV1-CC-002",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "customer wiped all her recordings in the app herself today, wed 7 oct. she wants the date by which nothing is left anywhere on our side, backups included",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "privacy",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The privacy policy gives three stages: deleted clips disappear from the account immediately, are erased from primary storage within 24 hours, and from backups within 30 days. From Wednesday 7 October 2026, thirty days is Friday 6 November 2026. That is the date to give, with 8 October for primary storage. The 4 business days is the Privacy Office's time for a Deletion Request filed by an agent, and the 30 calendar days for erasing a whole account is a different request; a month to the day (7 November) is one day out.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-PRIVACY-2026#F12",
+      "text": "Backups are cleared within 30 days of the deletion: by Friday 6 November 2026.",
+      "answer_needles": [
+       "6 November",
+       "November 6",
+       "6th of November",
+       "6th November",
+       "November the 6th",
+       "November 6th",
+       "Nov 6",
+       "6 Nov",
+       "Nov. 6",
+       "6th of Nov",
+       "6th Nov",
+       "Nov 6th",
+       "Friday the 6th",
+       "Friday 6th"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-PRIVACY-2026#F12",
+      "text": "Primary storage is cleared within 24 hours, and deletion cannot be undone."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says everything is erased everywhere immediately or within 24 hours.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Is a day out.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "7 November",
+       "November 7",
+       "7th of November",
+       "7th November",
+       "November the 7th",
+       "November 7th",
+       "Nov 7",
+       "7 Nov",
+       "Nov. 7",
+       "7th of Nov",
+       "7th Nov",
+       "Nov 7th",
+       "5 November",
+       "November 5",
+       "5th of November",
+       "5th November",
+       "November the 5th",
+       "November 5th",
+       "Nov 5",
+       "5 Nov",
+       "Nov. 5",
+       "5th of Nov",
+       "5th Nov",
+       "Nov 5th"
+      ]
+     },
+     {
+      "text": "Gives the Privacy Office's 4 business days for a Deletion Request.",
+      "kind": "fabrication",
+      "fact": "CC-REF-PRIVACY-2026#F14",
+      "answer_needles": [
+       "13 October",
+       "October 13",
+       "13th of October",
+       "13th October",
+       "October the 13th",
+       "October 13th",
+       "Oct 13",
+       "13 Oct",
+       "Oct. 13",
+       "13th of Oct",
+       "13th Oct",
+       "Oct 13th"
+      ]
+     }
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "private_advice",
+    "source_ids": [
+     "CC-REF-PRIVACY-2026"
+    ],
+    "source_priority": [
+     "CC-REF-PRIVACY-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "date(2026-10-07) + 30 days",
+     "result": "2026-11-06",
+     "unit": "date",
+     "accepted_forms": [
+      "6 November",
+      "November 6",
+      "6th of November",
+      "6th November",
+      "November the 6th",
+      "November 6th",
+      "Nov 6",
+      "6 Nov",
+      "Nov. 6",
+      "6th of Nov",
+      "6th Nov",
+      "Nov 6th",
+      "Friday the 6th",
+      "Friday 6th"
+     ],
+     "inputs": {
+      "backup_erasure_days": "CC-REF-PRIVACY-2026#F12",
+      "deleted_on": "stated in the question (Wednesday 7 October 2026)"
+     },
+     "wrong_results_common": [
+      "7 November",
+      "November 7",
+      "7th of November",
+      "7th November",
+      "November the 7th",
+      "November 7th",
+      "Nov 7",
+      "7 Nov",
+      "Nov. 7",
+      "7th of Nov",
+      "7th Nov",
+      "Nov 7th",
+      "5 November",
+      "November 5",
+      "5th of November",
+      "5th November",
+      "November the 5th",
+      "November 5th",
+      "Nov 5",
+      "5 Nov",
+      "Nov. 5",
+      "5th of Nov",
+      "5th Nov",
+      "Nov 5th",
+      "13 October",
+      "October 13",
+      "13th of October",
+      "13th October",
+      "October the 13th",
+      "October 13th",
+      "Oct 13",
+      "13 Oct",
+      "Oct. 13",
+      "13th of Oct",
+      "13th Oct",
+      "Oct 13th"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-CV1-CC-003",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "I'm up in Toronto and the order comes to a hundred and twenty dollars, so the delivery's free, isn't it? And how long does it take to get here?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "shipping",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "The shipping table has a row for each destination and method. Free delivery on orders of $75 or more belongs to Standard delivery within the United States. Canada has its own row: Standard only, $19.50, 8 to 12 business days, with import duties paid by the customer. So it is not free: $19.50, and 8 to 12 business days as an estimate. The 4 to 7 business days and $6.95 are the US Standard figures.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-SHIPPING-2026#F4",
+      "text": "Delivery to Canada is $19.50.",
+      "answer_needles": [
+       "19.50",
+       "nineteen fifty",
+       "nineteen dollars and fifty"
+      ]
+     },
+     {
+      "fact": "CC-REF-SHIPPING-2026#F4",
+      "text": "It takes an estimated 8 to 12 business days.",
+      "answer_needles": [
+       "8 to 12",
+       "8-12",
+       "eight to twelve",
+       "12 business days",
+       "twelve business days"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-SHIPPING-2026#F4",
+      "text": "Import duties are paid by the customer."
+     },
+     {
+      "fact": "CC-REF-SHIPPING-2026#F6",
+      "text": "The time is an estimate, not a guaranteed date."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says delivery is free because the order is over $75.",
+      "kind": "fabrication",
+      "fact": "CC-REF-SHIPPING-2026#F1"
+     },
+     {
+      "text": "Gives the US Standard or Expedited figures.",
+      "kind": "fabrication",
+      "fact": "CC-REF-SHIPPING-2026#F1",
+      "answer_needles": [
+       "6.95",
+       "4 to 7",
+       "14.95",
+       "2 to 3"
+      ]
+     },
+     {
+      "text": "Offers Expedited or Next Business Day delivery to Canada.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Promises a delivery date.",
+      "kind": "unauthorized_promise"
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-SHIPPING-2026"
+    ],
+    "source_priority": [
+     "CC-REF-SHIPPING-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Mentioning that the charge is in US dollars."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-CV1-CC-004",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "she's given me her name and the login email, both match. that's all she can come up with, no card to hand, doesn't know the zip they used. is that enough to go into the account",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "verification",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two documents on the shelf set the bar differently and only their dates and versions tell which applies. The current Account Verification Standard (version 4.2, 15 June 2026) requires 3 of the 5 identifiers; two are not enough, so the agent does not open the account. She can still pass with one more: the billing postal code, the last four digits of the card, or the serial number of a registered camera. The 2025 handbook asked for 2 of 4 and would have let her through; it is replaced.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F1",
+      "text": "The current standard needs 3 of the 5 identifiers, so two are not enough.",
+      "answer_needles": [
+       "3 of",
+       "three of",
+       "3 out of",
+       "three out of",
+       "three identifiers",
+       "3 identifiers",
+       "a third",
+       "one more"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F2",
+      "text": "The serial number of a registered camera counts as an identifier, which she may be able to read off the camera."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says two matching identifiers are enough, as in the 2025 handbook.",
+      "kind": "stale",
+      "fact": "CC-REF-HANDBOOK-V2#F1",
+      "answer_needles": [
+       "2 of 4",
+       "2 of the 4",
+       "two of four",
+       "two of the four",
+       "2 out of 4"
+      ]
+     },
+     {
+      "text": "Suggests asking for a password, a full card number, an expiry date or a security code.",
+      "kind": "fabrication",
+      "fact": "CC-REF-VERIFICATION-2026#F3"
+     },
+     {
+      "text": "Invents another identifier (date of birth, security question).",
+      "kind": "fabrication",
+      "answer_needles": [
+       "date of birth",
+       "security question",
+       "mother's maiden"
+      ]
+     }
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say",
+    "expected_action": "prefer_current_source",
+    "expected_response_type": "private_advice",
+    "source_ids": [
+     "CC-REF-VERIFICATION-2026"
+    ],
+    "source_priority": [
+     "CC-REF-VERIFICATION-2026",
+     "CC-REF-HANDBOOK-V2"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "How many identifiers a caller must give",
+      "sources": [
+       "CC-REF-VERIFICATION-2026",
+       "CC-REF-HANDBOOK-V2"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Suggesting the camera serial number as the easiest third identifier."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-CV1-CC-005",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Right. And where do I actually send those, is there a web address or an e-mail I should be writing down?",
+   "prior_transcript": [
+    {
+     "speaker": "user",
+     "text": "Because there's no phone number on the account, the way back in is our Identity Review. You'd send a photo ID and either proof of purchase or a photo of the serial label on one of the cameras."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "missing_evidence",
+   "category": "no_policy",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The Verification Standard says the customer uploads a government photo ID and proof of purchase or a photo of a serial label for Identity Review (form IR-7), and that Tier 2 Account Integrity decides. Nothing loaded says WHERE: no web address, no e-mail address, no postal address. The only addresses in the pack are the Legal Response e-mail and the status page, and neither is for this. The right reply does not dictate an address; it says the agent will start the review and send the instructions, or will confirm how the documents are sent before the call ends.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Dictates a web address or an e-mail address for sending the documents.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "http",
+       "www.",
+       "brindlewatch.example",
+       ".com",
+       "legalresponse",
+       "dot com"
+      ]
+     },
+     {
+      "text": "Tells the customer to send the documents to Legal Response or to post them to the warehouse.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "Tolliver Falls"
+      ]
+     },
+     {
+      "text": "Says the customer can read the ID details out over the phone instead.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "decline_to_invent_stay_useful",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying the instructions will be sent once the review is started.",
+     "Checking with the Tier 2 duty channel while the customer holds."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-CV1-CC-006",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "So is it broken, or what do I do with it?",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "My Eave cam on the garage has dropped offline again. The app's telling me the battery is at twelve percent."
+    },
+    {
+     "speaker": "user",
+     "text": "Thanks. I can see on my side that it was last online yesterday evening."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "followup",
+   "category": "troubleshooting",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "The answer hangs on the twelve percent said a moment earlier. The troubleshooting guide says an Eave Cam needs its battery above 15% to reconnect, so at 12% it will stay offline until it is charged; nothing suggests a fault. The reply tells the customer to charge it (indoors if it is freezing, because it will not charge below 0 C) and that it should come back once it is above 15%. No factory reset, no replacement, no escalation at this point.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F11",
+      "text": "An Eave Cam needs its battery above 15% to reconnect, so it has to be charged.",
+      "answer_needles": [
+       "15%",
+       "15 percent",
+       "15 per cent",
+       "fifteen percent",
+       "fifteen per cent"
+      ]
+     },
+     {
+      "fact": "CONVERSATION",
+      "text": "The customer said the battery is at twelve percent.",
+      "answer_needles": []
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F24",
+      "text": "It will not charge below 0 C, so bring it indoors to charge in cold weather."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says the camera is faulty or offers a replacement.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Sends the customer straight to a factory reset.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "factory reset"
+      ]
+     },
+     {
+      "text": "Escalates to Tier 2 before the battery has been charged.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-TROUBLESHOOTING-2026",
+     "CONVERSATION"
+    ],
+    "source_priority": [
+     "CC-REF-TROUBLESHOOTING-2026",
+     "CONVERSATION"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Mentioning that a full charge normally lasts 4 to 6 months."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  }
+ ]
+}

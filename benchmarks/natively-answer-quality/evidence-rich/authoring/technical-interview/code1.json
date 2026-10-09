@@ -1,0 +1,9311 @@
+{
+ "mode": "technical-interview",
+ "items": [
+  {
+   "id": "ER-K1-TI-001",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Quick warm-up, in JavaScript. Write a function, call it splitEvenOdd, that takes an array of integers and gives back an array holding two arrays: first all the even numbers, then all the odd ones, each in the order they came in. Zero counts as even, and there can be negatives in there, so minus three is odd and minus four is even. An empty input gives two empty arrays.",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "easy",
+   "oracle": {
+    "expected_behavior_note": "Topic: basics with traps / odd/even with negatives and zero. Working JavaScript named splitEvenOdd returning [evens, odds], input order kept inside each. Zero is even. Negative odd numbers must land in the odd list: in JavaScript -3 % 2 is -1, so a test for \"=== 1\" loses them. Empty input returns [[], []]. The answer contains one runnable JavaScript code block defining splitEvenOdd; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Tests oddness with \"n % 2 === 1\", so negative odd numbers are dropped or misfiled.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "javascript",
+     "function_hint": "splitEvenOdd",
+     "tests": [
+      {
+       "input": [
+        []
+       ],
+       "expected": [
+        [],
+        []
+       ]
+      },
+      {
+       "input": [
+        [
+         0
+        ]
+       ],
+       "expected": [
+        [
+         0
+        ],
+        []
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3,
+         4
+        ]
+       ],
+       "expected": [
+        [
+         2,
+         4
+        ],
+        [
+         1,
+         3
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         -3,
+         -4
+        ]
+       ],
+       "expected": [
+        [
+         -4
+        ],
+        [
+         -3
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         -1,
+         -1,
+         2,
+         -1
+        ]
+       ],
+       "expected": [
+        [
+         2
+        ],
+        [
+         -1,
+         -1,
+         -1
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         0,
+         -2,
+         7,
+         0
+        ]
+       ],
+       "expected": [
+        [
+         0,
+         -2,
+         0
+        ],
+        [
+         7
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         5
+        ]
+       ],
+       "expected": [
+        [],
+        [
+         5
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         -7,
+         -5,
+         -2,
+         0,
+         3,
+         8,
+         11
+        ]
+       ],
+       "expected": [
+        [
+         -2,
+         0,
+         8
+        ],
+        [
+         -7,
+         -5,
+         3,
+         11
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         2,
+         2,
+         2
+        ]
+       ],
+       "expected": [
+        [
+         2,
+         2,
+         2
+        ],
+        []
+       ]
+      },
+      {
+       "input": [
+        [
+         1000001,
+         -1000001,
+         1000000
+        ]
+       ],
+       "expected": [
+        [
+         1000000
+        ],
+        [
+         1000001,
+         -1000001
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         9,
+         -8,
+         7,
+         -6,
+         5,
+         -4,
+         3,
+         -2,
+         1,
+         0,
+         -1
+        ]
+       ],
+       "expected": [
+        [
+         -8,
+         -6,
+         -4,
+         -2,
+         0
+        ],
+        [
+         9,
+         7,
+         5,
+         3,
+         1,
+         -1
+        ]
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-002",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Let's do a FizzBuzz variant, in Python. Call the function fizz_buzz. It takes n and returns a list of strings for the numbers 1 up to and including n. Multiples of 3 become \"Fizz\", multiples of 7, so 7 and not the usual 5, become \"Buzz\", multiples of both become \"FizzBuzz\" as one word, and anything else is just the number as a string. If n is less than 1, return an empty list.",
+   "prior_transcript": null,
+   "conversation_id": "ER-K1-TI-002-C",
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "easy",
+   "oracle": {
+    "expected_behavior_note": "Topic: basics with traps / FizzBuzz-style with a changed rule (first turn). Working Python named fizz_buzz returning a list of strings for 1..n inclusive: \"Fizz\" for multiples of 3, \"Buzz\" for multiples of 7 (not 5), \"FizzBuzz\" for multiples of 21, otherwise str(i). n below 1 returns []. The usual 3-and-5 version is wrong here. The answer contains one runnable Python code block defining fizz_buzz; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Uses 5 as the Buzz divisor, as in the standard exercise, instead of 7.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Stops at n - 1 or returns numbers instead of strings.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "python",
+     "function_hint": "fizz_buzz",
+     "tests": [
+      {
+       "input": [
+        0
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        -5
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        1
+       ],
+       "expected": [
+        "1"
+       ]
+      },
+      {
+       "input": [
+        2
+       ],
+       "expected": [
+        "1",
+        "2"
+       ]
+      },
+      {
+       "input": [
+        3
+       ],
+       "expected": [
+        "1",
+        "2",
+        "Fizz"
+       ]
+      },
+      {
+       "input": [
+        5
+       ],
+       "expected": [
+        "1",
+        "2",
+        "Fizz",
+        "4",
+        "5"
+       ]
+      },
+      {
+       "input": [
+        7
+       ],
+       "expected": [
+        "1",
+        "2",
+        "Fizz",
+        "4",
+        "5",
+        "Fizz",
+        "Buzz"
+       ]
+      },
+      {
+       "input": [
+        15
+       ],
+       "expected": [
+        "1",
+        "2",
+        "Fizz",
+        "4",
+        "5",
+        "Fizz",
+        "Buzz",
+        "8",
+        "Fizz",
+        "10",
+        "11",
+        "Fizz",
+        "13",
+        "Buzz",
+        "Fizz"
+       ]
+      },
+      {
+       "input": [
+        21
+       ],
+       "expected": [
+        "1",
+        "2",
+        "Fizz",
+        "4",
+        "5",
+        "Fizz",
+        "Buzz",
+        "8",
+        "Fizz",
+        "10",
+        "11",
+        "Fizz",
+        "13",
+        "Buzz",
+        "Fizz",
+        "16",
+        "17",
+        "Fizz",
+        "19",
+        "20",
+        "FizzBuzz"
+       ]
+      },
+      {
+       "input": [
+        42
+       ],
+       "expected": [
+        "1",
+        "2",
+        "Fizz",
+        "4",
+        "5",
+        "Fizz",
+        "Buzz",
+        "8",
+        "Fizz",
+        "10",
+        "11",
+        "Fizz",
+        "13",
+        "Buzz",
+        "Fizz",
+        "16",
+        "17",
+        "Fizz",
+        "19",
+        "20",
+        "FizzBuzz",
+        "22",
+        "23",
+        "Fizz",
+        "25",
+        "26",
+        "Fizz",
+        "Buzz",
+        "29",
+        "Fizz",
+        "31",
+        "32",
+        "Fizz",
+        "34",
+        "Buzz",
+        "Fizz",
+        "37",
+        "38",
+        "Fizz",
+        "40",
+        "41",
+        "FizzBuzz"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-003",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Good. One more rule on top: any number with the digit 3 in it also counts as a Fizz, even when it isn't a multiple of 3. So 13 comes out as \"Fizz\", and 35 is \"FizzBuzz\" because it has a 3 in it and it's a multiple of 7. Everything else stays as it was, same function name.",
+   "prior_transcript": null,
+   "conversation_id": "ER-K1-TI-002-C",
+   "turn_index": 2,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: basics with traps / FizzBuzz-style with a changed rule (follow-up: digit rule). Second turn of the chain. Working Python, still fizz_buzz: a number is a Fizz when it is a multiple of 3 OR its decimal form contains the digit 3; Buzz is still multiples of 7; both gives \"FizzBuzz\"; n below 1 still returns []. So 13, 23, 31 are \"Fizz\" and 35 is \"FizzBuzz\". The answer contains one runnable Python code block defining fizz_buzz; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Keeps the first version, so 13 or 23 still come out as numbers.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Replaces the multiple-of-3 rule with the digit rule instead of adding to it.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "continue_previous_answer",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "python",
+     "function_hint": "fizz_buzz",
+     "tests": [
+      {
+       "input": [
+        -2
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        0
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        1
+       ],
+       "expected": [
+        "1"
+       ]
+      },
+      {
+       "input": [
+        3
+       ],
+       "expected": [
+        "1",
+        "2",
+        "Fizz"
+       ]
+      },
+      {
+       "input": [
+        7
+       ],
+       "expected": [
+        "1",
+        "2",
+        "Fizz",
+        "4",
+        "5",
+        "Fizz",
+        "Buzz"
+       ]
+      },
+      {
+       "input": [
+        12
+       ],
+       "expected": [
+        "1",
+        "2",
+        "Fizz",
+        "4",
+        "5",
+        "Fizz",
+        "Buzz",
+        "8",
+        "Fizz",
+        "10",
+        "11",
+        "Fizz"
+       ]
+      },
+      {
+       "input": [
+        13
+       ],
+       "expected": [
+        "1",
+        "2",
+        "Fizz",
+        "4",
+        "5",
+        "Fizz",
+        "Buzz",
+        "8",
+        "Fizz",
+        "10",
+        "11",
+        "Fizz",
+        "Fizz"
+       ]
+      },
+      {
+       "input": [
+        23
+       ],
+       "expected": [
+        "1",
+        "2",
+        "Fizz",
+        "4",
+        "5",
+        "Fizz",
+        "Buzz",
+        "8",
+        "Fizz",
+        "10",
+        "11",
+        "Fizz",
+        "Fizz",
+        "Buzz",
+        "Fizz",
+        "16",
+        "17",
+        "Fizz",
+        "19",
+        "20",
+        "FizzBuzz",
+        "22",
+        "Fizz"
+       ]
+      },
+      {
+       "input": [
+        35
+       ],
+       "expected": [
+        "1",
+        "2",
+        "Fizz",
+        "4",
+        "5",
+        "Fizz",
+        "Buzz",
+        "8",
+        "Fizz",
+        "10",
+        "11",
+        "Fizz",
+        "Fizz",
+        "Buzz",
+        "Fizz",
+        "16",
+        "17",
+        "Fizz",
+        "19",
+        "20",
+        "FizzBuzz",
+        "22",
+        "Fizz",
+        "Fizz",
+        "25",
+        "26",
+        "Fizz",
+        "Buzz",
+        "29",
+        "Fizz",
+        "Fizz",
+        "Fizz",
+        "Fizz",
+        "Fizz",
+        "FizzBuzz"
+       ]
+      },
+      {
+       "input": [
+        43
+       ],
+       "expected": [
+        "1",
+        "2",
+        "Fizz",
+        "4",
+        "5",
+        "Fizz",
+        "Buzz",
+        "8",
+        "Fizz",
+        "10",
+        "11",
+        "Fizz",
+        "Fizz",
+        "Buzz",
+        "Fizz",
+        "16",
+        "17",
+        "Fizz",
+        "19",
+        "20",
+        "FizzBuzz",
+        "22",
+        "Fizz",
+        "Fizz",
+        "25",
+        "26",
+        "Fizz",
+        "Buzz",
+        "29",
+        "Fizz",
+        "Fizz",
+        "Fizz",
+        "Fizz",
+        "Fizz",
+        "FizzBuzz",
+        "Fizz",
+        "Fizz",
+        "Fizz",
+        "Fizz",
+        "40",
+        "41",
+        "FizzBuzz",
+        "Fizz"
+       ]
+      },
+      {
+       "input": [
+        73
+       ],
+       "expected": [
+        "1",
+        "2",
+        "Fizz",
+        "4",
+        "5",
+        "Fizz",
+        "Buzz",
+        "8",
+        "Fizz",
+        "10",
+        "11",
+        "Fizz",
+        "Fizz",
+        "Buzz",
+        "Fizz",
+        "16",
+        "17",
+        "Fizz",
+        "19",
+        "20",
+        "FizzBuzz",
+        "22",
+        "Fizz",
+        "Fizz",
+        "25",
+        "26",
+        "Fizz",
+        "Buzz",
+        "29",
+        "Fizz",
+        "Fizz",
+        "Fizz",
+        "Fizz",
+        "Fizz",
+        "FizzBuzz",
+        "Fizz",
+        "Fizz",
+        "Fizz",
+        "Fizz",
+        "40",
+        "41",
+        "FizzBuzz",
+        "Fizz",
+        "44",
+        "Fizz",
+        "46",
+        "47",
+        "Fizz",
+        "Buzz",
+        "50",
+        "Fizz",
+        "52",
+        "Fizz",
+        "Fizz",
+        "55",
+        "Buzz",
+        "Fizz",
+        "58",
+        "59",
+        "Fizz",
+        "61",
+        "62",
+        "FizzBuzz",
+        "64",
+        "65",
+        "Fizz",
+        "67",
+        "68",
+        "Fizz",
+        "Buzz",
+        "71",
+        "Fizz",
+        "Fizz"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-004",
+   "mode": "technical-interview",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "python: reverse_words(s) -> the words of s in reverse order, joined by exactly one space. words are separated by one or more spaces (spaces only, no tabs or newlines), s can have leading/trailing spaces and the output has none. characters inside a word stay as they are. empty or all-space string -> empty string",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "easy",
+   "oracle": {
+    "expected_behavior_note": "Topic: basics with traps / reverse words keeping single spaces. Working Python named reverse_words: split on runs of spaces, reverse the word order, join with single spaces, no leading or trailing space; \"\" and all-space input return \"\". Splitting on a single space and joining back leaves the extra spaces in. The answer contains one runnable Python code block defining reverse_words; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Splits on a single space, so runs of spaces or leading/trailing spaces survive in the output.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Reverses the characters instead of the word order.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "python",
+     "function_hint": "reverse_words",
+     "tests": [
+      {
+       "input": [
+        ""
+       ],
+       "expected": ""
+      },
+      {
+       "input": [
+        "   "
+       ],
+       "expected": ""
+      },
+      {
+       "input": [
+        "hello"
+       ],
+       "expected": "hello"
+      },
+      {
+       "input": [
+        "hello world"
+       ],
+       "expected": "world hello"
+      },
+      {
+       "input": [
+        "  the sky   is blue "
+       ],
+       "expected": "blue is sky the"
+      },
+      {
+       "input": [
+        "a b c d"
+       ],
+       "expected": "d c b a"
+      },
+      {
+       "input": [
+        "one  two"
+       ],
+       "expected": "two one"
+      },
+      {
+       "input": [
+        " x"
+       ],
+       "expected": "x"
+      },
+      {
+       "input": [
+        "Hello, World!"
+       ],
+       "expected": "World! Hello,"
+      },
+      {
+       "input": [
+        "ab  cd   ef    gh"
+       ],
+       "expected": "gh ef cd ab"
+      },
+      {
+       "input": [
+        "same same same"
+       ],
+       "expected": "same same same"
+      },
+      {
+       "input": [
+        "to be or not to be that is the question"
+       ],
+       "expected": "question the is that be to not or be to"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-005",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "In JavaScript, write isAnagram. It takes two strings and tells me, true or false, whether one is an anagram of the other. Ignore spaces, and ignore upper versus lower case. Everything else counts as a character, so digits and punctuation have to match up too, and each character has to be used the same number of times on both sides. Assume plain ASCII. Two empty strings count as anagrams.",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "easy",
+   "oracle": {
+    "expected_behavior_note": "Topic: basics with traps / anagram check, ASCII with spaces. Working JavaScript named isAnagram returning a boolean: drop spaces, lower-case, then compare character counts. Digits and punctuation are kept and must match. Counts matter (\"aab\" vs \"abb\" is false). Two empty strings, or strings of only spaces, give true. The answer contains one runnable JavaScript code block defining isAnagram; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Strips punctuation or digits as well as spaces, so \"it's\" and \"its\" come out as anagrams.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Compares sets of characters rather than counts.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "javascript",
+     "function_hint": "isAnagram",
+     "tests": [
+      {
+       "input": [
+        "",
+        ""
+       ],
+       "expected": true
+      },
+      {
+       "input": [
+        "listen",
+        "silent"
+       ],
+       "expected": true
+      },
+      {
+       "input": [
+        "Dormitory",
+        "dirty room"
+       ],
+       "expected": true
+      },
+      {
+       "input": [
+        "aab",
+        "abb"
+       ],
+       "expected": false
+      },
+      {
+       "input": [
+        "abc",
+        "abcd"
+       ],
+       "expected": false
+      },
+      {
+       "input": [
+        "a b c",
+        " cba "
+       ],
+       "expected": true
+      },
+      {
+       "input": [
+        "rail safety",
+        "fairy tales"
+       ],
+       "expected": true
+      },
+      {
+       "input": [
+        "it's",
+        "its"
+       ],
+       "expected": false
+      },
+      {
+       "input": [
+        "a1b2",
+        "2b1a"
+       ],
+       "expected": true
+      },
+      {
+       "input": [
+        "a1b2",
+        "a1b3"
+       ],
+       "expected": false
+      },
+      {
+       "input": [
+        "  ",
+        ""
+       ],
+       "expected": true
+      },
+      {
+       "input": [
+        "Astronomer",
+        "Moon starer"
+       ],
+       "expected": true
+      },
+      {
+       "input": [
+        "a-b",
+        "ab"
+       ],
+       "expected": false
+      },
+      {
+       "input": [
+        "Hello",
+        "hello "
+       ],
+       "expected": true
+      },
+      {
+       "input": [
+        "ab",
+        "a"
+       ],
+       "expected": false
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-006",
+   "mode": "technical-interview",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "python, count_vowels(s): number of vowels in s. a e i o u count, upper or lower case. y / Y counts only when it is the last letter of a word. s has only ASCII letters, with words separated by single spaces (no leading or trailing space). empty string -> 0",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "easy",
+   "oracle": {
+    "expected_behavior_note": "Topic: basics with traps / count vowels with a stated y rule. Working Python named count_vowels: a, e, i, o, u in either case always count; y or Y counts only as the last letter of a word (a one-letter word \"y\" counts). \"rhythm\" is 0, \"yay\" is 2, \"Happy BIRTHDAY\" is 5. Empty string is 0. The answer contains one runnable Python code block defining count_vowels; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Never counts y, or counts every y.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Misses upper-case vowels.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "python",
+     "function_hint": "count_vowels",
+     "tests": [
+      {
+       "input": [
+        ""
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        "sky"
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        "yes"
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        "yay"
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        "y"
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        "Happy BIRTHDAY"
+       ],
+       "expected": 5
+      },
+      {
+       "input": [
+        "rhythm"
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        "yellow yoyo"
+       ],
+       "expected": 4
+      },
+      {
+       "input": [
+        "AEIOU aeiou"
+       ],
+       "expected": 10
+      },
+      {
+       "input": [
+        "my gym"
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        "say yes to my yearly day"
+       ],
+       "expected": 10
+      },
+      {
+       "input": [
+        "bcd fgh"
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        "Y y"
+       ],
+       "expected": 2
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-007",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Okay, a classic with a twist. In Python, write two_sum. It takes a list of integers, nums, and a target, and returns the positions of two different elements that add up to the target, as a list i, j with i less than j. There can be more than one pair that works. I want the one with the smallest i, and if that still leaves a choice, the smallest j. Numbers can be negative and can repeat. If no pair works, return an empty list.",
+   "prior_transcript": null,
+   "conversation_id": "ER-K1-TI-007-C",
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: arrays and hashing / two sum returning the lowest index pair (first turn). Working Python named two_sum returning [i, j], i < j, nums[i] + nums[j] == target, choosing the smallest i and then the smallest j; [] when there is none. An element is not paired with itself. The usual one-pass hash map returns the pair that completes first, which is a different pair on inputs like [1, 4, 2, 3, 5] with target 6 (wanted [0, 4]). The answer contains one runnable Python code block defining two_sum; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Returns the first pair a one-pass hash map completes rather than the pair with the smallest first index.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Uses the same element twice, or returns values instead of positions.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "python",
+     "function_hint": "two_sum",
+     "tests": [
+      {
+       "input": [
+        [],
+        5
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        [
+         5
+        ],
+        5
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        [
+         2,
+         7,
+         11,
+         15
+        ],
+        9
+       ],
+       "expected": [
+        0,
+        1
+       ]
+      },
+      {
+       "input": [
+        [
+         3,
+         3
+        ],
+        6
+       ],
+       "expected": [
+        0,
+        1
+       ]
+      },
+      {
+       "input": [
+        [
+         3,
+         2,
+         4
+        ],
+        6
+       ],
+       "expected": [
+        1,
+        2
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         4,
+         2,
+         3,
+         5
+        ],
+        6
+       ],
+       "expected": [
+        0,
+        4
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         5,
+         5
+        ],
+        6
+       ],
+       "expected": [
+        0,
+        1
+       ]
+      },
+      {
+       "input": [
+        [
+         -3,
+         4,
+         3,
+         90
+        ],
+        0
+       ],
+       "expected": [
+        0,
+        2
+       ]
+      },
+      {
+       "input": [
+        [
+         0,
+         4,
+         0
+        ],
+        0
+       ],
+       "expected": [
+        0,
+        2
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3
+        ],
+        7
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        [
+         4,
+         1,
+         2,
+         3,
+         4,
+         0
+        ],
+        4
+       ],
+       "expected": [
+        0,
+        5
+       ]
+      },
+      {
+       "input": [
+        [
+         2,
+         2,
+         2,
+         2
+        ],
+        4
+       ],
+       "expected": [
+        0,
+        1
+       ]
+      },
+      {
+       "input": [
+        [
+         10,
+         -10,
+         5,
+         -5,
+         0,
+         0
+        ],
+        0
+       ],
+       "expected": [
+        0,
+        1
+       ]
+      },
+      {
+       "input": [
+        [
+         5,
+         9,
+         1,
+         6,
+         8,
+         2,
+         10,
+         7,
+         3,
+         4
+        ],
+        11
+       ],
+       "expected": [
+        0,
+        3
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-008",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Change of rule. Now I want the pair that completes earliest as you read left to right: so the smallest j first, and if several pairs share that j, the smallest i. Still i, j as a list with i before j, still an empty list when nothing works, same function name.",
+   "prior_transcript": null,
+   "conversation_id": "ER-K1-TI-007-C",
+   "turn_index": 2,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: arrays and hashing / two sum (follow-up: tie rule changed to the earliest second index). Second turn of the chain. Working Python, still two_sum: among all valid pairs choose the smallest j, then the smallest i. On [1, 4, 2, 3, 5] with target 6 the answer is now [1, 2], not [0, 4]. A hash map must keep the FIRST index of a repeated value ([1, 1, 3] with target 4 is [0, 2]). [] when there is none. The answer contains one runnable Python code block defining two_sum; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Keeps the first turn's rule (smallest i first).",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Overwrites the stored index of a repeated value, returning a later i than necessary.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "continue_previous_answer",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "python",
+     "function_hint": "two_sum",
+     "tests": [
+      {
+       "input": [
+        [],
+        5
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        [
+         2,
+         7,
+         11,
+         15
+        ],
+        9
+       ],
+       "expected": [
+        0,
+        1
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         4,
+         2,
+         3,
+         5
+        ],
+        6
+       ],
+       "expected": [
+        1,
+        2
+       ]
+      },
+      {
+       "input": [
+        [
+         4,
+         1,
+         2,
+         3,
+         4,
+         0
+        ],
+        4
+       ],
+       "expected": [
+        1,
+        3
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         5,
+         5
+        ],
+        6
+       ],
+       "expected": [
+        0,
+        1
+       ]
+      },
+      {
+       "input": [
+        [
+         3,
+         3,
+         3
+        ],
+        6
+       ],
+       "expected": [
+        0,
+        1
+       ]
+      },
+      {
+       "input": [
+        [
+         5,
+         1,
+         5,
+         5
+        ],
+        10
+       ],
+       "expected": [
+        0,
+        2
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         1,
+         3
+        ],
+        4
+       ],
+       "expected": [
+        0,
+        2
+       ]
+      },
+      {
+       "input": [
+        [
+         7,
+         2,
+         9,
+         4,
+         5
+        ],
+        9
+       ],
+       "expected": [
+        0,
+        1
+       ]
+      },
+      {
+       "input": [
+        [
+         6,
+         1,
+         8,
+         3,
+         5,
+         2
+        ],
+        8
+       ],
+       "expected": [
+        3,
+        4
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3
+        ],
+        7
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        [
+         -2,
+         9,
+         -2,
+         4,
+         6
+        ],
+        4
+       ],
+       "expected": [
+        0,
+        4
+       ]
+      },
+      {
+       "input": [
+        [
+         0
+        ],
+        0
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        [
+         10,
+         20,
+         30,
+         40,
+         50,
+         60,
+         70,
+         5,
+         95,
+         80
+        ],
+        100
+       ],
+       "expected": [
+        3,
+        5
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-009",
+   "mode": "technical-interview",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "js: dedupe(items) -> new array with duplicates removed, keeping the first occurrence of each value, original order kept. items is a mix of numbers and strings, and 1 and \"1\" are different values. empty -> []",
+   "prior_transcript": null,
+   "conversation_id": "ER-K1-TI-009-C",
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "easy",
+   "oracle": {
+    "expected_behavior_note": "Topic: arrays and hashing / remove duplicates keeping the first occurrence (first turn). Working JavaScript named dedupe: keep each value the first time it appears, in the original order. Values are compared strictly, so the number 1 and the string \"1\" are both kept; using a plain object as the seen-map merges them. Empty input returns []. The answer contains one runnable JavaScript code block defining dedupe; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Uses object keys to track seen values, so 1 and \"1\" are treated as the same value.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Sorts the output or keeps the last occurrence.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "javascript",
+     "function_hint": "dedupe",
+     "tests": [
+      {
+       "input": [
+        []
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3
+        ]
+       ],
+       "expected": [
+        1,
+        2,
+        3
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         1,
+         1
+        ]
+       ],
+       "expected": [
+        1
+       ]
+      },
+      {
+       "input": [
+        [
+         3,
+         1,
+         3,
+         2,
+         1
+        ]
+       ],
+       "expected": [
+        3,
+        1,
+        2
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         "1",
+         1,
+         "1"
+        ]
+       ],
+       "expected": [
+        1,
+        "1"
+       ]
+      },
+      {
+       "input": [
+        [
+         "b",
+         "a",
+         "b",
+         "c",
+         "a"
+        ]
+       ],
+       "expected": [
+        "b",
+        "a",
+        "c"
+       ]
+      },
+      {
+       "input": [
+        [
+         0,
+         "0",
+         "",
+         0,
+         ""
+        ]
+       ],
+       "expected": [
+        0,
+        "0",
+        ""
+       ]
+      },
+      {
+       "input": [
+        [
+         -1,
+         -1,
+         2,
+         -1,
+         2
+        ]
+       ],
+       "expected": [
+        -1,
+        2
+       ]
+      },
+      {
+       "input": [
+        [
+         "a",
+         "A",
+         "a"
+        ]
+       ],
+       "expected": [
+        "a",
+        "A"
+       ]
+      },
+      {
+       "input": [
+        [
+         5
+        ]
+       ],
+       "expected": [
+        5
+       ]
+      },
+      {
+       "input": [
+        [
+         2,
+         "2",
+         2,
+         3,
+         "3",
+         "2",
+         3,
+         4
+        ]
+       ],
+       "expected": [
+        2,
+        "2",
+        3,
+        "3",
+        4
+       ]
+      },
+      {
+       "input": [
+        [
+         7,
+         3,
+         7,
+         9,
+         3,
+         1,
+         9,
+         7,
+         5,
+         1,
+         2,
+         5,
+         8,
+         2,
+         8
+        ]
+       ],
+       "expected": [
+        7,
+        3,
+        9,
+        1,
+        5,
+        2,
+        8
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-010",
+   "mode": "technical-interview",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "same but keep the LAST occurrence of each value instead of the first, with the output in the order those last occurrences appear in items. same function name, everything else unchanged",
+   "prior_transcript": null,
+   "conversation_id": "ER-K1-TI-009-C",
+   "turn_index": 2,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: arrays and hashing / remove duplicates (follow-up: keep the last occurrence). Second turn of the chain. Working JavaScript, still dedupe: each value is kept once, at the position of its last occurrence, so [3, 1, 3, 2, 1] gives [3, 2, 1] and [1, 2, 1] gives [2, 1]. 1 and \"1\" are still different values. Empty input returns []. The answer contains one runnable JavaScript code block defining dedupe; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Still keeps the first occurrence.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Returns the kept values in reverse order.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+    "expected_action": "continue_previous_answer",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "javascript",
+     "function_hint": "dedupe",
+     "tests": [
+      {
+       "input": [
+        []
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3
+        ]
+       ],
+       "expected": [
+        1,
+        2,
+        3
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         1,
+         1
+        ]
+       ],
+       "expected": [
+        1
+       ]
+      },
+      {
+       "input": [
+        [
+         3,
+         1,
+         3,
+         2,
+         1
+        ]
+       ],
+       "expected": [
+        3,
+        2,
+        1
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         "1",
+         1,
+         "1"
+        ]
+       ],
+       "expected": [
+        1,
+        "1"
+       ]
+      },
+      {
+       "input": [
+        [
+         "b",
+         "a",
+         "b",
+         "c",
+         "a"
+        ]
+       ],
+       "expected": [
+        "b",
+        "c",
+        "a"
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         1
+        ]
+       ],
+       "expected": [
+        2,
+        1
+       ]
+      },
+      {
+       "input": [
+        [
+         -1,
+         -1,
+         2,
+         -1,
+         2
+        ]
+       ],
+       "expected": [
+        -1,
+        2
+       ]
+      },
+      {
+       "input": [
+        [
+         5
+        ]
+       ],
+       "expected": [
+        5
+       ]
+      },
+      {
+       "input": [
+        [
+         2,
+         "2",
+         2,
+         3,
+         "3",
+         "2",
+         3,
+         4
+        ]
+       ],
+       "expected": [
+        2,
+        "3",
+        "2",
+        3,
+        4
+       ]
+      },
+      {
+       "input": [
+        [
+         "x",
+         "y",
+         "x",
+         "y",
+         "x"
+        ]
+       ],
+       "expected": [
+        "y",
+        "x"
+       ]
+      },
+      {
+       "input": [
+        [
+         7,
+         3,
+         7,
+         9,
+         3,
+         1,
+         9,
+         7,
+         5,
+         1,
+         2,
+         5,
+         8,
+         2,
+         8
+        ]
+       ],
+       "expected": [
+        3,
+        9,
+        7,
+        1,
+        5,
+        2,
+        8
+       ]
+      },
+      {
+       "input": [
+        [
+         0,
+         "0",
+         "",
+         0,
+         ""
+        ]
+       ],
+       "expected": [
+        "0",
+        0,
+        ""
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-011",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Next one, in Python. Write product_except_self: given a list of integers, return a list of the same length where each position holds the product of all the other numbers, so everything except the one sitting at that position. The catch is you may not use division, and the list can contain zeros and negatives. An empty list gives an empty list, and for a list with a single number the answer is a list with just 1 in it. And tell me the time complexity.",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: arrays and hashing / product except self without division. Working Python named product_except_self built from prefix and suffix products, no division, so zeros work: [0, 1, 2, 3] gives [6, 0, 0, 0] and [0, 4, 0] gives [0, 0, 0]. [] gives [], one element gives [1]. The time complexity is stated as O(n). The answer contains one runnable Python code block defining product_except_self; it is executed against the tests.",
+    "required_facts": [
+     {
+      "fact": "CONVERSATION",
+      "text": "Time complexity is linear, O(n).",
+      "answer_needles": [
+       "O(n)",
+       "linear",
+       "Θ(n)",
+       "O(len("
+      ]
+     }
+    ],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Divides the total product by each element, which breaks on zeros.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "States a time complexity other than linear for a prefix/suffix solution.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the space complexity as well."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "python",
+     "function_hint": "product_except_self",
+     "tests": [
+      {
+       "input": [
+        []
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        [
+         5
+        ]
+       ],
+       "expected": [
+        1
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3,
+         4
+        ]
+       ],
+       "expected": [
+        24,
+        12,
+        8,
+        6
+       ]
+      },
+      {
+       "input": [
+        [
+         0,
+         1,
+         2,
+         3
+        ]
+       ],
+       "expected": [
+        6,
+        0,
+        0,
+        0
+       ]
+      },
+      {
+       "input": [
+        [
+         0,
+         4,
+         0
+        ]
+       ],
+       "expected": [
+        0,
+        0,
+        0
+       ]
+      },
+      {
+       "input": [
+        [
+         -1,
+         2,
+         -3
+        ]
+       ],
+       "expected": [
+        -6,
+        3,
+        -2
+       ]
+      },
+      {
+       "input": [
+        [
+         2,
+         3
+        ]
+       ],
+       "expected": [
+        3,
+        2
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         1,
+         1,
+         1
+        ]
+       ],
+       "expected": [
+        1,
+        1,
+        1,
+        1
+       ]
+      },
+      {
+       "input": [
+        [
+         -2,
+         0,
+         5
+        ]
+       ],
+       "expected": [
+        0,
+        -10,
+        0
+       ]
+      },
+      {
+       "input": [
+        [
+         3,
+         3,
+         3
+        ]
+       ],
+       "expected": [
+        9,
+        9,
+        9
+       ]
+      },
+      {
+       "input": [
+        [
+         10,
+         -10
+        ]
+       ],
+       "expected": [
+        -10,
+        10
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8
+        ]
+       ],
+       "expected": [
+        40320,
+        20160,
+        13440,
+        10080,
+        8064,
+        6720,
+        5760,
+        5040
+       ]
+      },
+      {
+       "input": [
+        [
+         0
+        ]
+       ],
+       "expected": [
+        1
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-012",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "JavaScript this time. Write longestConsecutive. It gets an unsorted array of integers and returns the length of the longest run of consecutive whole numbers you can make from its values, something like 4, 5, 6, 7, wherever those sit in the array. A value that appears twice only counts once, negatives are allowed, and an empty array gives 0.",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: arrays and hashing / longest consecutive run. Working JavaScript named longestConsecutive returning a number: the length of the longest sequence x, x+1, x+2, ... whose members all occur in the array. Duplicates count once ([1, 2, 2, 3] is 3), negatives work, [] is 0. If it sorts, the sort must be numeric and must skip equal neighbours. The answer contains one runnable JavaScript code block defining longestConsecutive; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Sorts with the default comparator, which orders numbers as text.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Resets the run on a repeated value, so [1, 2, 2, 3] gives 2.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "javascript",
+     "function_hint": "longestConsecutive",
+     "tests": [
+      {
+       "input": [
+        []
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         7
+        ]
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         100,
+         4,
+         200,
+         1,
+         3,
+         2
+        ]
+       ],
+       "expected": 4
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         2,
+         3
+        ]
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         0,
+         -1,
+         -2,
+         5,
+         6
+        ]
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         5,
+         5,
+         5
+        ]
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         10,
+         30,
+         20
+        ]
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         -1,
+         0,
+         1
+        ]
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         9,
+         1,
+         4,
+         7,
+         3,
+         -1,
+         0,
+         5,
+         8,
+         -1,
+         6
+        ]
+       ],
+       "expected": 7
+      },
+      {
+       "input": [
+        [
+         1,
+         3,
+         5,
+         2,
+         4
+        ]
+       ],
+       "expected": 5
+      },
+      {
+       "input": [
+        [
+         2,
+         10,
+         3,
+         11,
+         12,
+         1
+        ]
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         10,
+         9,
+         8,
+         11,
+         2,
+         1,
+         100,
+         101,
+         102,
+         103,
+         104,
+         105
+        ]
+       ],
+       "expected": 6
+      },
+      {
+       "input": [
+        [
+         1,
+         10,
+         2,
+         9,
+         3
+        ]
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         -3,
+         -2,
+         -2,
+         -1,
+         -1,
+         0
+        ]
+       ],
+       "expected": 4
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-013",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Sliding window question, Python. Write longest_k_distinct, taking a string s and an integer k, and return the length of the longest contiguous stretch of s that has at most k different characters in it. If k is zero or the string is empty, that's 0. Upper and lower case are different characters.",
+   "prior_transcript": null,
+   "conversation_id": "ER-K1-TI-013-C",
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: two pointers / sliding window / longest substring with at most k distinct characters (first turn). Working Python named longest_k_distinct returning an int: the longest substring with at most k distinct characters, case-sensitive. k of 0 or an empty string gives 0; k larger than the number of distinct characters gives the whole length. A window that tracks counts must drop a character from its map when the count reaches zero. The answer contains one runnable Python code block defining longest_k_distinct; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Leaves zero-count characters in the window map, so the distinct count never goes back down.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Returns the substring instead of its length.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "python",
+     "function_hint": "longest_k_distinct",
+     "tests": [
+      {
+       "input": [
+        "",
+        2
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        "abc",
+        0
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        "eceba",
+        2
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        "aa",
+        1
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        "abcadcacacaca",
+        3
+       ],
+       "expected": 11
+      },
+      {
+       "input": [
+        "aabbcc",
+        1
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        "aabbcc",
+        2
+       ],
+       "expected": 4
+      },
+      {
+       "input": [
+        "aabbcc",
+        3
+       ],
+       "expected": 6
+      },
+      {
+       "input": [
+        "abc",
+        5
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        "aAaA",
+        1
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        "abaccc",
+        2
+       ],
+       "expected": 4
+      },
+      {
+       "input": [
+        "a",
+        1
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        "abcabcabc",
+        2
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        "aaabbbcccdddeeefffggg",
+        3
+       ],
+       "expected": 9
+      },
+      {
+       "input": [
+        "abababababcabababab",
+        2
+       ],
+       "expected": 10
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-014",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Okay, now tighten it up: I want exactly k different characters, not at most k. If no stretch of the string has exactly k of them, return 0. Same function name, everything else as before.",
+   "prior_transcript": null,
+   "conversation_id": "ER-K1-TI-013-C",
+   "turn_index": 2,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: two pointers / sliding window / longest substring with k distinct characters (follow-up: exactly k). Second turn of the chain. Working Python, still longest_k_distinct: the longest substring with EXACTLY k distinct characters, or 0 when the string has fewer than k distinct characters (\"aa\" with k = 2 is 0, \"abc\" with k = 5 is 0). k of 0 and the empty string still give 0. The answer contains one runnable Python code block defining longest_k_distinct; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Keeps the at-most-k behaviour, returning the whole length when the string has fewer than k distinct characters.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "continue_previous_answer",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "python",
+     "function_hint": "longest_k_distinct",
+     "tests": [
+      {
+       "input": [
+        "",
+        2
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        "abc",
+        0
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        "eceba",
+        2
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        "aa",
+        1
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        "aa",
+        2
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        "abc",
+        5
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        "aabbcc",
+        3
+       ],
+       "expected": 6
+      },
+      {
+       "input": [
+        "aabbcc",
+        4
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        "a",
+        1
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        "aAaA",
+        2
+       ],
+       "expected": 4
+      },
+      {
+       "input": [
+        "abcabcabc",
+        2
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        "zzzz",
+        3
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        "aaabbbcccdddeeefffggg",
+        3
+       ],
+       "expected": 9
+      },
+      {
+       "input": [
+        "abaccc",
+        2
+       ],
+       "expected": 4
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-015",
+   "mode": "technical-interview",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "js: minWindowLen(nums, target) -> length of the shortest contiguous run of nums whose sum is >= target, or 0 if no run reaches it. nums are positive integers, target is a positive integer. empty array -> 0",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: two pointers / sliding window / minimum window length with sum at least target. Working JavaScript named minWindowLen returning a number: the length of the shortest contiguous subarray with sum greater than OR EQUAL to target; 0 when even the whole array falls short, and 0 for []. Equality counts ([2, 2, 2, 2] with target 4 is 2). The answer contains one runnable JavaScript code block defining minWindowLen; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Requires the sum to be strictly greater than the target.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Returns Infinity or -1 instead of 0 when no window reaches the target.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "javascript",
+     "function_hint": "minWindowLen",
+     "tests": [
+      {
+       "input": [
+        [],
+        7
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         2,
+         3,
+         1,
+         2,
+         4,
+         3
+        ],
+        7
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        [
+         1,
+         4,
+         4
+        ],
+        4
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1
+        ],
+        11
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3,
+         4,
+         5
+        ],
+        15
+       ],
+       "expected": 5
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3,
+         4,
+         5
+        ],
+        11
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         5
+        ],
+        5
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         5
+        ],
+        6
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         1,
+         1,
+         1,
+         1,
+         7
+        ],
+        7
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         2,
+         2,
+         2,
+         2
+        ],
+        4
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        [
+         3,
+         1,
+         1,
+         1,
+         3
+        ],
+        6
+       ],
+       "expected": 4
+      },
+      {
+       "input": [
+        [
+         10,
+         2,
+         3
+        ],
+        6
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         1,
+         1,
+         3,
+         1,
+         1,
+         1,
+         4,
+         2,
+         1,
+         5,
+         1,
+         1,
+         6,
+         2
+        ],
+        12
+       ],
+       "expected": 4
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-016",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "This one's the water container problem, in Python. Write max_water. You get a list of non-negative heights, one vertical line per position. Pick any two lines: the water they hold is the distance between their positions times the shorter of the two heights. Return the largest amount any pair can hold. With fewer than two lines the answer is 0. I'm after something better than trying every pair, and tell me the time complexity of what you write.",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: two pointers / sliding window / container with most water. Working Python named max_water: two pointers from both ends, area = (j - i) * min(h[i], h[j]), always moving the pointer at the shorter line. Fewer than two heights gives 0. The time complexity is stated as O(n). The answer contains one runnable Python code block defining max_water; it is executed against the tests.",
+    "required_facts": [
+     {
+      "fact": "CONVERSATION",
+      "text": "Time complexity is linear, O(n), with two pointers.",
+      "answer_needles": [
+       "O(n)",
+       "linear",
+       "Θ(n)",
+       "O(len("
+      ]
+     }
+    ],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Moves the pointer at the taller line, or always the same side.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Solves the trapped rain water problem instead.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "States a quadratic complexity for a two-pointer solution, or a linear one for a nested loop.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the space complexity as well."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "python",
+     "function_hint": "max_water",
+     "tests": [
+      {
+       "input": [
+        []
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         5
+        ]
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         1,
+         1
+        ]
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         1,
+         8,
+         6,
+         2,
+         5,
+         4,
+         8,
+         3,
+         7
+        ]
+       ],
+       "expected": 49
+      },
+      {
+       "input": [
+        [
+         4,
+         3,
+         2,
+         1,
+         4
+        ]
+       ],
+       "expected": 16
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         1
+        ]
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        [
+         0,
+         0
+        ]
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         0,
+         5,
+         0
+        ]
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         3,
+         3,
+         3,
+         3
+        ]
+       ],
+       "expected": 9
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         4,
+         3
+        ]
+       ],
+       "expected": 4
+      },
+      {
+       "input": [
+        [
+         2,
+         3,
+         4,
+         5,
+         18,
+         17,
+         6
+        ]
+       ],
+       "expected": 17
+      },
+      {
+       "input": [
+        [
+         10,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         10
+        ]
+       ],
+       "expected": 90
+      },
+      {
+       "input": [
+        [
+         1,
+         3,
+         2,
+         5,
+         25,
+         24,
+         5
+        ]
+       ],
+       "expected": 24
+      },
+      {
+       "input": [
+        [
+         5,
+         0,
+         0,
+         0,
+         5
+        ]
+       ],
+       "expected": 20
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-017",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Simple one in JavaScript, but do it properly. Write mergeSorted. It takes two arrays of numbers, each already sorted in ascending order, and returns one new array, sorted ascending, with everything from both. Keep duplicates, so if 3 is in both arrays it shows up twice. Either array can be empty, and the numbers can be negative.",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "easy",
+   "oracle": {
+    "expected_behavior_note": "Topic: two pointers / sliding window / merge two sorted arrays with duplicates kept. Working JavaScript named mergeSorted returning a new ascending array with every element of both inputs, duplicates kept. Either input may be empty. A concat followed by the default sort orders numbers as text and fails on 10 against 9 and on negatives. The answer contains one runnable JavaScript code block defining mergeSorted; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Concatenates and calls sort() with no comparator.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Removes duplicates.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "javascript",
+     "function_hint": "mergeSorted",
+     "tests": [
+      {
+       "input": [
+        [],
+        []
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        [],
+        [
+         1,
+         2
+        ]
+       ],
+       "expected": [
+        1,
+        2
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         2
+        ],
+        []
+       ],
+       "expected": [
+        1,
+        2
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         3,
+         5
+        ],
+        [
+         2,
+         4,
+         6
+        ]
+       ],
+       "expected": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3
+        ],
+        [
+         1,
+         2,
+         3
+        ]
+       ],
+       "expected": [
+        1,
+        1,
+        2,
+        2,
+        3,
+        3
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         1,
+         1
+        ],
+        [
+         1
+        ]
+       ],
+       "expected": [
+        1,
+        1,
+        1,
+        1
+       ]
+      },
+      {
+       "input": [
+        [
+         -5,
+         -1,
+         0
+        ],
+        [
+         -3,
+         -1,
+         2
+        ]
+       ],
+       "expected": [
+        -5,
+        -3,
+        -1,
+        -1,
+        0,
+        2
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3
+        ],
+        [
+         4,
+         5,
+         6,
+         7,
+         8
+        ]
+       ],
+       "expected": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+       ]
+      },
+      {
+       "input": [
+        [
+         10,
+         20
+        ],
+        [
+         1,
+         2,
+         3
+        ]
+       ],
+       "expected": [
+        1,
+        2,
+        3,
+        10,
+        20
+       ]
+      },
+      {
+       "input": [
+        [
+         2,
+         10,
+         100
+        ],
+        [
+         1,
+         9,
+         11
+        ]
+       ],
+       "expected": [
+        1,
+        2,
+        9,
+        10,
+        11,
+        100
+       ]
+      },
+      {
+       "input": [
+        [
+         5
+        ],
+        [
+         5
+        ]
+       ],
+       "expected": [
+        5,
+        5
+       ]
+      },
+      {
+       "input": [
+        [
+         -10,
+         -2,
+         3
+        ],
+        [
+         -7,
+         15
+        ]
+       ],
+       "expected": [
+        -10,
+        -7,
+        -2,
+        3,
+        15
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         4,
+         7,
+         10,
+         13,
+         16,
+         19
+        ],
+        [
+         2,
+         4,
+         6,
+         8,
+         10,
+         12,
+         14,
+         16,
+         18,
+         20
+        ]
+       ],
+       "expected": [
+        1,
+        2,
+        4,
+        4,
+        6,
+        7,
+        8,
+        10,
+        10,
+        12,
+        13,
+        14,
+        16,
+        16,
+        18,
+        19,
+        20
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-018",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Binary search time, in Python. Write first_position. It takes a list of integers sorted in ascending order, which can contain repeats, and a target, and returns the index of the first place the target appears, or minus one if it isn't in the list. The list is sorted, so I want better than a linear scan, and tell me the time complexity when you're done.",
+   "prior_transcript": null,
+   "conversation_id": "ER-K1-TI-018-C",
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: binary search / first position of a target (first turn). Working Python named first_position: a binary search that keeps going left after a hit, returning the lowest index holding target, or -1. With repeats ([1, 2, 2, 2, 3], target 2) the answer is 1, not whichever index the midpoint lands on. Empty list gives -1. The time complexity is stated as O(log n). The answer contains one runnable Python code block defining first_position; it is executed against the tests.",
+    "required_facts": [
+     {
+      "fact": "CONVERSATION",
+      "text": "Time complexity is logarithmic, O(log n).",
+      "answer_needles": [
+       "O(log n)",
+       "O(logn)",
+       "O(log(n))",
+       "O(lg n)",
+       "log n",
+       "logarithmic",
+       "log₂ n",
+       "log2 n"
+      ]
+     }
+    ],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Returns the first midpoint that matches, which is not the first occurrence when the value repeats.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Scans linearly, or states a complexity other than logarithmic for a binary search.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the space complexity as well."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "python",
+     "function_hint": "first_position",
+     "tests": [
+      {
+       "input": [
+        [],
+        3
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         3
+        ],
+        3
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         3
+        ],
+        4
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         2,
+         2,
+         3
+        ],
+        2
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         2,
+         2,
+         2,
+         2
+        ],
+        2
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         1,
+         3,
+         5,
+         7
+        ],
+        4
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         1,
+         3,
+         5,
+         7
+        ],
+        1
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         1,
+         3,
+         5,
+         7
+        ],
+        7
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         1,
+         3,
+         5,
+         7
+        ],
+        0
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         1,
+         3,
+         5,
+         7
+        ],
+        9
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         -5,
+         -5,
+         -3,
+         0,
+         0,
+         0,
+         4
+        ],
+        0
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         -5,
+         -5,
+         -3,
+         0,
+         0,
+         0,
+         4
+        ],
+        -5
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         1,
+         1,
+         2,
+         3,
+         3,
+         3,
+         3,
+         4,
+         5,
+         5,
+         6,
+         7,
+         7,
+         8,
+         9,
+         9,
+         9,
+         10
+        ],
+        3
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         1,
+         1,
+         2,
+         3,
+         3,
+         3,
+         3,
+         4,
+         5,
+         5,
+         6,
+         7,
+         7,
+         8,
+         9,
+         9,
+         9,
+         10
+        ],
+        9
+       ],
+       "expected": 14
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-019",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Fine. Now flip it: give me the last position of the target instead of the first. Call this one last_position. Same inputs, and still minus one when the target isn't there.",
+   "prior_transcript": null,
+   "conversation_id": "ER-K1-TI-018-C",
+   "turn_index": 2,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: binary search / last position of a target (follow-up to first position). Second turn of the chain. Working Python named last_position: binary search returning the HIGHEST index holding target, or -1. [1, 2, 2, 2, 3] with target 2 is 3; [2, 2, 2, 2] with target 2 is 3. Empty list gives -1. The answer contains one runnable Python code block defining last_position; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Returns the first occurrence, or any matching midpoint, instead of the last.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "continue_previous_answer",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "python",
+     "function_hint": "last_position",
+     "tests": [
+      {
+       "input": [
+        [],
+        3
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         3
+        ],
+        3
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         3
+        ],
+        4
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         2,
+         2,
+         3
+        ],
+        2
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         2,
+         2,
+         2,
+         2
+        ],
+        2
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         1,
+         3,
+         5,
+         7
+        ],
+        4
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         1,
+         3,
+         5,
+         7
+        ],
+        1
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         1,
+         3,
+         5,
+         7
+        ],
+        7
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         1,
+         3,
+         5,
+         7
+        ],
+        0
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         1,
+         3,
+         5,
+         7
+        ],
+        9
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         -5,
+         -5,
+         -3,
+         0,
+         0,
+         0,
+         4
+        ],
+        0
+       ],
+       "expected": 5
+      },
+      {
+       "input": [
+        [
+         -5,
+         -5,
+         -3,
+         0,
+         0,
+         0,
+         4
+        ],
+        -5
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         1,
+         1,
+         2,
+         3,
+         3,
+         3,
+         3,
+         4,
+         5,
+         5,
+         6,
+         7,
+         7,
+         8,
+         9,
+         9,
+         9,
+         10
+        ],
+        3
+       ],
+       "expected": 6
+      },
+      {
+       "input": [
+        [
+         1,
+         1,
+         2,
+         3,
+         3,
+         3,
+         3,
+         4,
+         5,
+         5,
+         6,
+         7,
+         7,
+         8,
+         9,
+         9,
+         9,
+         10
+        ],
+        9
+       ],
+       "expected": 16
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-020",
+   "mode": "technical-interview",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "js: insertPosition(nums, target). nums is sorted ascending and can have duplicates. return the index of target if it is in there (the first one when it repeats), otherwise the index where it would have to be inserted to keep nums sorted. empty array -> 0. should be O(log n)",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: binary search / insert position. Working JavaScript named insertPosition: a lower-bound binary search, returning the first index whose value is not less than target. Found values give their first index ([1, 2, 2, 2, 3] with 2 is 1), missing values give the insertion point, including 0 at the front and nums.length at the end. [] gives 0. The answer contains one runnable JavaScript code block defining insertPosition; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Returns the matching midpoint rather than the first occurrence when the target repeats.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Returns -1 for a missing target.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "javascript",
+     "function_hint": "insertPosition",
+     "tests": [
+      {
+       "input": [
+        [],
+        5
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         1,
+         3,
+         5,
+         6
+        ],
+        5
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        [
+         1,
+         3,
+         5,
+         6
+        ],
+        2
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         1,
+         3,
+         5,
+         6
+        ],
+        7
+       ],
+       "expected": 4
+      },
+      {
+       "input": [
+        [
+         1,
+         3,
+         5,
+         6
+        ],
+        0
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         1
+        ],
+        1
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         1
+        ],
+        2
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         1
+        ],
+        0
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         2,
+         2,
+         2
+        ],
+        2
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         2,
+         2,
+         3
+        ],
+        2
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         -4,
+         -1,
+         0,
+         3
+        ],
+        -2
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         -4,
+         -1,
+         0,
+         3
+        ],
+        -5
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         4,
+         4,
+         4,
+         7,
+         9
+        ],
+        5
+       ],
+       "expected": 5
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         4,
+         4,
+         4,
+         7,
+         9
+        ],
+        4
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        [
+         1,
+         3,
+         5,
+         7,
+         9,
+         11,
+         13,
+         15,
+         17,
+         19,
+         21
+        ],
+        20
+       ],
+       "expected": 10
+      },
+      {
+       "input": [
+        [
+         1,
+         3,
+         5,
+         7,
+         9,
+         11,
+         13,
+         15,
+         17,
+         19,
+         21
+        ],
+        22
+       ],
+       "expected": 11
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-021",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Here's the harder search one. Python, call it search_rotated. You get a list of distinct integers that was sorted ascending and then rotated by some number of places, so something like 4, 5, 6, 7, 0, 1, 2, and it might not be rotated at all. Return the index of the target, or minus one if it's not in there. No linear scan please, and tell me the complexity.",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Topic: binary search / search in a rotated sorted array without duplicates. Working Python named search_rotated: a modified binary search that decides which half is sorted (comparing with <= so a two-element window works) and narrows accordingly. Returns the index or -1; handles an empty list, one element, no rotation and a rotation by one. The time complexity is stated as O(log n). The answer contains one runnable Python code block defining search_rotated; it is executed against the tests.",
+    "required_facts": [
+     {
+      "fact": "CONVERSATION",
+      "text": "Time complexity is logarithmic, O(log n).",
+      "answer_needles": [
+       "O(log n)",
+       "O(logn)",
+       "O(log(n))",
+       "O(lg n)",
+       "log n",
+       "logarithmic",
+       "log₂ n",
+       "log2 n"
+      ]
+     }
+    ],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Uses a strict comparison when deciding which half is sorted, which fails on two-element windows such as [3, 1].",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Scans linearly or calls list.index, or states a complexity other than logarithmic for a binary search.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the space complexity as well."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "python",
+     "function_hint": "search_rotated",
+     "tests": [
+      {
+       "input": [
+        [],
+        1
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         1
+        ],
+        1
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         1
+        ],
+        0
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         4,
+         5,
+         6,
+         7,
+         0,
+         1,
+         2
+        ],
+        0
+       ],
+       "expected": 4
+      },
+      {
+       "input": [
+        [
+         4,
+         5,
+         6,
+         7,
+         0,
+         1,
+         2
+        ],
+        3
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         4,
+         5,
+         6,
+         7,
+         0,
+         1,
+         2
+        ],
+        4
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         4,
+         5,
+         6,
+         7,
+         0,
+         1,
+         2
+        ],
+        2
+       ],
+       "expected": 6
+      },
+      {
+       "input": [
+        [
+         4,
+         5,
+         6,
+         7,
+         0,
+         1,
+         2
+        ],
+        7
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         3,
+         1
+        ],
+        1
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         3,
+         1
+        ],
+        3
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         1,
+         3
+        ],
+        3
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         5,
+         1,
+         3
+        ],
+        5
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         5,
+         1,
+         3
+        ],
+        3
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3,
+         4,
+         5
+        ],
+        4
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         6,
+         7,
+         8,
+         -3,
+         -1,
+         0,
+         2,
+         5
+        ],
+        -1
+       ],
+       "expected": 4
+      },
+      {
+       "input": [
+        [
+         2,
+         3,
+         4,
+         5,
+         1
+        ],
+        1
+       ],
+       "expected": 4
+      },
+      {
+       "input": [
+        [
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         1
+        ],
+        1
+       ],
+       "expected": 14
+      },
+      {
+       "input": [
+        [
+         15,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14
+        ],
+        15
+       ],
+       "expected": 0
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-022",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Dynamic programming warm-up, Python. A staircase has n steps and you go up one step or two steps at a time. Write climb_ways, which returns how many different ways there are to get to the top. For n equal to zero the answer is 1, there's one way to do nothing. I'm going to call it with n up to 75, so plain recursion won't finish in time, and tell me the time complexity of what you end up with.",
+   "prior_transcript": null,
+   "conversation_id": "ER-K1-TI-022-C",
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "easy",
+   "oracle": {
+    "expected_behavior_note": "Topic: recursion / backtracking / DP / climbing stairs with steps 1 and 2, large n (first turn). Working Python named climb_ways: ways(n) = ways(n - 1) + ways(n - 2) with ways(0) = 1 and ways(1) = 1, computed iteratively or with memoisation so that n = 75 returns at once (3416454622906707). ways(2) is 2, ways(5) is 8. The time complexity is stated as O(n). The answer contains one runnable Python code block defining climb_ways; it is executed against the tests.",
+    "required_facts": [
+     {
+      "fact": "CONVERSATION",
+      "text": "Time complexity is linear in n, O(n).",
+      "answer_needles": [
+       "O(n)",
+       "linear",
+       "Θ(n)",
+       "O(len("
+      ]
+     }
+    ],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Uses plain exponential recursion with no memoisation.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Returns 0 for n = 0, or is shifted by one (returns ways(n - 1)).",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "States a time complexity other than linear for an iterative or memoised solution.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the space complexity as well."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "python",
+     "function_hint": "climb_ways",
+     "tests": [
+      {
+       "input": [
+        0
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        1
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        2
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        3
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        4
+       ],
+       "expected": 5
+      },
+      {
+       "input": [
+        5
+       ],
+       "expected": 8
+      },
+      {
+       "input": [
+        10
+       ],
+       "expected": 89
+      },
+      {
+       "input": [
+        20
+       ],
+       "expected": 10946
+      },
+      {
+       "input": [
+        30
+       ],
+       "expected": 1346269
+      },
+      {
+       "input": [
+        45
+       ],
+       "expected": 1836311903
+      },
+      {
+       "input": [
+        60
+       ],
+       "expected": 2504730781961
+      },
+      {
+       "input": [
+        75
+       ],
+       "expected": 3416454622906707
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-023",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Now say you can also take three steps at a time, so one, two or three. Same function name, and zero steps is still one way.",
+   "prior_transcript": null,
+   "conversation_id": "ER-K1-TI-022-C",
+   "turn_index": 2,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: recursion / backtracking / DP / climbing stairs (follow-up: steps of 1, 2 or 3). Second turn of the chain. Working Python, still climb_ways: ways(n) = ways(n - 1) + ways(n - 2) + ways(n - 3), with ways(0) = 1, ways(1) = 1, ways(2) = 2, so ways(3) = 4, ways(4) = 7, ways(10) = 274. Still fast for n up to 50. The answer contains one runnable Python code block defining climb_ways; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Keeps the two-step recurrence.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Gets a base case wrong (for example ways(3) = 3).",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "continue_previous_answer",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "python",
+     "function_hint": "climb_ways",
+     "tests": [
+      {
+       "input": [
+        0
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        1
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        2
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        3
+       ],
+       "expected": 4
+      },
+      {
+       "input": [
+        4
+       ],
+       "expected": 7
+      },
+      {
+       "input": [
+        5
+       ],
+       "expected": 13
+      },
+      {
+       "input": [
+        6
+       ],
+       "expected": 24
+      },
+      {
+       "input": [
+        7
+       ],
+       "expected": 44
+      },
+      {
+       "input": [
+        10
+       ],
+       "expected": 274
+      },
+      {
+       "input": [
+        20
+       ],
+       "expected": 121415
+      },
+      {
+       "input": [
+        30
+       ],
+       "expected": 53798080
+      },
+      {
+       "input": [
+        50
+       ],
+       "expected": 10562230626642
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-024",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Coin change, in JavaScript. Write minCoins. It takes an array of coin values, all positive integers, and an amount, and returns the smallest number of coins that add up to exactly that amount. You can use each coin value as many times as you like. If the amount is zero the answer is 0, and if the amount can't be made, return minus one. And careful, these aren't necessarily coin values where grabbing the biggest one first works.",
+   "prior_transcript": null,
+   "conversation_id": "ER-K1-TI-024-C",
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: recursion / backtracking / DP / coin change, minimum coins or -1 (first turn). Working JavaScript named minCoins: bottom-up DP over amounts (or BFS), unlimited use of each value, returning the fewest coins or -1. Amount 0 gives 0 even with no coins. A greedy largest-first pass is wrong: [1, 3, 4] for 6 is 2, and [9, 6, 5, 1] for 11 is 2. The answer contains one runnable JavaScript code block defining minCoins; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Takes the largest coin first (greedy), which is not optimal for these values.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Returns Infinity, null or 0 instead of -1 when the amount cannot be made.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "javascript",
+     "function_hint": "minCoins",
+     "tests": [
+      {
+       "input": [
+        [
+         1,
+         2,
+         5
+        ],
+        11
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         2
+        ],
+        3
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         1
+        ],
+        0
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [],
+        0
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [],
+        7
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         1,
+         3,
+         4
+        ],
+        6
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        [
+         1,
+         5,
+         10,
+         25
+        ],
+        30
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        [
+         2,
+         5,
+         10,
+         1
+        ],
+        27
+       ],
+       "expected": 4
+      },
+      {
+       "input": [
+        [
+         186,
+         419,
+         83,
+         408
+        ],
+        6249
+       ],
+       "expected": 20
+      },
+      {
+       "input": [
+        [
+         5,
+         10
+        ],
+        3
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         1,
+         7,
+         10
+        ],
+        14
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        [
+         3,
+         7
+        ],
+        11
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         4,
+         5
+        ],
+        8
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        [
+         9,
+         6,
+         5,
+         1
+        ],
+        11
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        [
+         2,
+         4,
+         6
+        ],
+        7
+       ],
+       "expected": -1
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-025",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Follow-up on that. Suppose each entry in the array is one physical coin, so you can use each entry at most once, and the same value can be in the array more than once. Same function name, still the fewest coins, still minus one if you can't hit the amount exactly, and zero is still 0.",
+   "prior_transcript": null,
+   "conversation_id": "ER-K1-TI-024-C",
+   "turn_index": 2,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Topic: recursion / backtracking / DP / coin change (follow-up: each coin usable at most once). Second turn of the chain. Working JavaScript, still minCoins: now a 0/1 choice per array entry (iterate amounts downwards per coin, or search subsets), returning the fewest entries that sum exactly to the amount or -1. [1, 2, 5] for 11 is now -1; [5, 5, 10] for 20 is 3; [1, 3, 4] for 6 is -1. The answer contains one runnable JavaScript code block defining minCoins; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Still reuses a coin value an unlimited number of times.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "continue_previous_answer",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "javascript",
+     "function_hint": "minCoins",
+     "tests": [
+      {
+       "input": [
+        [
+         1,
+         2,
+         5
+        ],
+        11
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         5
+        ],
+        8
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         5
+        ],
+        7
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        [
+         2
+        ],
+        3
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         1
+        ],
+        0
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [],
+        0
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [],
+        7
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         1,
+         1,
+         1,
+         1
+        ],
+        3
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         1,
+         3,
+         4
+        ],
+        6
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         5,
+         5,
+         10
+        ],
+        10
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         5,
+         5,
+         10
+        ],
+        20
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         5,
+         5,
+         10
+        ],
+        15
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        [
+         2,
+         3,
+         7,
+         8,
+         10
+        ],
+        11
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10
+        ],
+        55
+       ],
+       "expected": 10
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10
+        ],
+        54
+       ],
+       "expected": 9
+      },
+      {
+       "input": [
+        [
+         3,
+         34,
+         4,
+         12,
+         5,
+         2
+        ],
+        9
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        [
+         3,
+         34,
+         4,
+         12,
+         5,
+         2
+        ],
+        30
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         7,
+         7,
+         7
+        ],
+        14
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        [
+         2,
+         2,
+         2
+        ],
+        5
+       ],
+       "expected": -1
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-026",
+   "mode": "technical-interview",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "python: subsets(nums) -> every subset of nums as a list of lists. nums has distinct ints in any order. each subset must be sorted ascending, and the outer list is ordered by subset size first (the empty one first), then among same-size subsets in normal list comparison order, so [1,2] before [1,3] before [2,3]. subsets([]) is [[]]",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: recursion / backtracking / DP / subsets in a stated order. Working Python named subsets returning all 2^n subsets, each sorted ascending, ordered by length and then lexicographically by element (for [1, 2, 3]: [], [1], [2], [3], [1, 2], [1, 3], [2, 3], [1, 2, 3]). The input may be unsorted or negative, so it has to be sorted first. subsets([]) returns [[]]. The answer contains one runnable Python code block defining subsets; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Returns the subsets in backtracking or bitmask order rather than by size and then element order.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Does not sort an unsorted input, so the inner lists are not ascending.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "python",
+     "function_hint": "subsets",
+     "tests": [
+      {
+       "input": [
+        []
+       ],
+       "expected": [
+        []
+       ]
+      },
+      {
+       "input": [
+        [
+         1
+        ]
+       ],
+       "expected": [
+        [],
+        [
+         1
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         2
+        ]
+       ],
+       "expected": [
+        [],
+        [
+         1
+        ],
+        [
+         2
+        ],
+        [
+         1,
+         2
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         2,
+         1
+        ]
+       ],
+       "expected": [
+        [],
+        [
+         1
+        ],
+        [
+         2
+        ],
+        [
+         1,
+         2
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3
+        ]
+       ],
+       "expected": [
+        [],
+        [
+         1
+        ],
+        [
+         2
+        ],
+        [
+         3
+        ],
+        [
+         1,
+         2
+        ],
+        [
+         1,
+         3
+        ],
+        [
+         2,
+         3
+        ],
+        [
+         1,
+         2,
+         3
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         3,
+         1,
+         2
+        ]
+       ],
+       "expected": [
+        [],
+        [
+         1
+        ],
+        [
+         2
+        ],
+        [
+         3
+        ],
+        [
+         1,
+         2
+        ],
+        [
+         1,
+         3
+        ],
+        [
+         2,
+         3
+        ],
+        [
+         1,
+         2,
+         3
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         -1,
+         0
+        ]
+       ],
+       "expected": [
+        [],
+        [
+         -1
+        ],
+        [
+         0
+        ],
+        [
+         -1,
+         0
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         5,
+         -5
+        ]
+       ],
+       "expected": [
+        [],
+        [
+         -5
+        ],
+        [
+         5
+        ],
+        [
+         -5,
+         5
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         10,
+         2
+        ]
+       ],
+       "expected": [
+        [],
+        [
+         2
+        ],
+        [
+         10
+        ],
+        [
+         2,
+         10
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         4,
+         1,
+         3,
+         2
+        ]
+       ],
+       "expected": [
+        [],
+        [
+         1
+        ],
+        [
+         2
+        ],
+        [
+         3
+        ],
+        [
+         4
+        ],
+        [
+         1,
+         2
+        ],
+        [
+         1,
+         3
+        ],
+        [
+         1,
+         4
+        ],
+        [
+         2,
+         3
+        ],
+        [
+         2,
+         4
+        ],
+        [
+         3,
+         4
+        ],
+        [
+         1,
+         2,
+         3
+        ],
+        [
+         1,
+         2,
+         4
+        ],
+        [
+         1,
+         3,
+         4
+        ],
+        [
+         2,
+         3,
+         4
+        ],
+        [
+         1,
+         2,
+         3,
+         4
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         0
+        ]
+       ],
+       "expected": [
+        [],
+        [
+         0
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         -3,
+         -1,
+         -2
+        ]
+       ],
+       "expected": [
+        [],
+        [
+         -3
+        ],
+        [
+         -2
+        ],
+        [
+         -1
+        ],
+        [
+         -3,
+         -2
+        ],
+        [
+         -3,
+         -1
+        ],
+        [
+         -2,
+         -1
+        ],
+        [
+         -3,
+         -2,
+         -1
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         5,
+         3,
+         1,
+         2,
+         4
+        ]
+       ],
+       "expected": [
+        [],
+        [
+         1
+        ],
+        [
+         2
+        ],
+        [
+         3
+        ],
+        [
+         4
+        ],
+        [
+         5
+        ],
+        [
+         1,
+         2
+        ],
+        [
+         1,
+         3
+        ],
+        [
+         1,
+         4
+        ],
+        [
+         1,
+         5
+        ],
+        [
+         2,
+         3
+        ],
+        [
+         2,
+         4
+        ],
+        [
+         2,
+         5
+        ],
+        [
+         3,
+         4
+        ],
+        [
+         3,
+         5
+        ],
+        [
+         4,
+         5
+        ],
+        [
+         1,
+         2,
+         3
+        ],
+        [
+         1,
+         2,
+         4
+        ],
+        [
+         1,
+         2,
+         5
+        ],
+        [
+         1,
+         3,
+         4
+        ],
+        [
+         1,
+         3,
+         5
+        ],
+        [
+         1,
+         4,
+         5
+        ],
+        [
+         2,
+         3,
+         4
+        ],
+        [
+         2,
+         3,
+         5
+        ],
+        [
+         2,
+         4,
+         5
+        ],
+        [
+         3,
+         4,
+         5
+        ],
+        [
+         1,
+         2,
+         3,
+         4
+        ],
+        [
+         1,
+         2,
+         3,
+         5
+        ],
+        [
+         1,
+         2,
+         4,
+         5
+        ],
+        [
+         1,
+         3,
+         4,
+         5
+        ],
+        [
+         2,
+         3,
+         4,
+         5
+        ],
+        [
+         1,
+         2,
+         3,
+         4,
+         5
+        ]
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-027",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Last DP one, Python. Write edit_distance for two strings, a and b. I want the minimum number of single-character edits to turn a into b, where one edit is inserting a character, deleting a character, or replacing one character with another. Swapping two neighbours is not its own edit, it costs two. Case matters, so capital A and small a are different. If one of the strings is empty the answer is the length of the other.",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Topic: recursion / backtracking / DP / edit distance. Working Python named edit_distance: the Levenshtein distance with insert, delete and substitute each costing 1 (no transposition), case-sensitive. \"kitten\" to \"sitting\" is 3, \"ab\" to \"ba\" is 2, \"\" to \"abc\" is 3, equal strings give 0. The answer contains one runnable Python code block defining edit_distance; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Counts mismatched positions plus the length difference instead of running the DP.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Counts a swap of neighbours as one edit, or ignores case.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "python",
+     "function_hint": "edit_distance",
+     "tests": [
+      {
+       "input": [
+        "",
+        ""
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        "",
+        "abc"
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        "abc",
+        ""
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        "kitten",
+        "sitting"
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        "horse",
+        "ros"
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        "intention",
+        "execution"
+       ],
+       "expected": 5
+      },
+      {
+       "input": [
+        "abc",
+        "abc"
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        "a",
+        "A"
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        "flaw",
+        "lawn"
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        "sunday",
+        "saturday"
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        "ab",
+        "ba"
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        "abcdef",
+        "azced"
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        "aaaa",
+        "aa"
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        "the quick brown fox",
+        "the quack browns fix"
+       ],
+       "expected": 3
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-028",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Grid question, Python. Write shortest_path. The grid is a list of rows, each row a list of zeros and ones, where 1 is a wall. You start in the top-left cell and want to reach the bottom-right cell, moving up, down, left or right, never diagonally and never through a wall. Return the number of moves on the shortest route. If the start or the end cell is a wall, or there's no route at all, return minus one. A one-by-one grid with an open cell is zero moves, and an empty grid, no rows, is minus one.",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: graphs / trees on plain data / BFS shortest path length in a grid with walls. Working Python named shortest_path: breadth-first search from (0, 0) to the bottom-right cell over open cells in four directions, returning the number of moves (cells minus one), or -1 when start or end is a wall, when there is no route, or when the grid is empty. Routes may need to go left or up, so a right/down-only DP is wrong. The answer contains one runnable Python code block defining shortest_path; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Only moves right and down, so routes that have to turn back are reported as missing.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Returns the number of cells on the route instead of the number of moves.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "python",
+     "function_hint": "shortest_path",
+     "tests": [
+      {
+       "input": [
+        []
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         [
+          0
+         ]
+        ]
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         [
+          1
+         ]
+        ]
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         [
+          0,
+          0
+         ],
+         [
+          0,
+          0
+         ]
+        ]
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        [
+         [
+          0,
+          1
+         ],
+         [
+          1,
+          0
+         ]
+        ]
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         [
+          0,
+          0,
+          0
+         ],
+         [
+          1,
+          1,
+          0
+         ],
+         [
+          0,
+          0,
+          0
+         ]
+        ]
+       ],
+       "expected": 4
+      },
+      {
+       "input": [
+        [
+         [
+          0,
+          1,
+          0
+         ],
+         [
+          0,
+          1,
+          0
+         ],
+         [
+          0,
+          0,
+          0
+         ]
+        ]
+       ],
+       "expected": 4
+      },
+      {
+       "input": [
+        [
+         [
+          0,
+          0,
+          0
+         ],
+         [
+          0,
+          1,
+          1
+         ],
+         [
+          0,
+          1,
+          0
+         ]
+        ]
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         [
+          0,
+          0
+         ],
+         [
+          0,
+          1
+         ]
+        ]
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         [
+          1,
+          0
+         ],
+         [
+          0,
+          0
+         ]
+        ]
+       ],
+       "expected": -1
+      },
+      {
+       "input": [
+        [
+         [
+          0,
+          0,
+          0,
+          0
+         ]
+        ]
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         [
+          0
+         ],
+         [
+          0
+         ],
+         [
+          0
+         ]
+        ]
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        [
+         [
+          0,
+          0,
+          0,
+          0,
+          0
+         ],
+         [
+          1,
+          1,
+          1,
+          1,
+          0
+         ],
+         [
+          0,
+          0,
+          0,
+          0,
+          0
+         ],
+         [
+          0,
+          1,
+          1,
+          1,
+          1
+         ],
+         [
+          0,
+          0,
+          0,
+          0,
+          0
+         ]
+        ]
+       ],
+       "expected": 16
+      },
+      {
+       "input": [
+        [
+         [
+          0,
+          1,
+          0,
+          0,
+          0
+         ],
+         [
+          0,
+          1,
+          0,
+          1,
+          0
+         ],
+         [
+          0,
+          0,
+          0,
+          1,
+          0
+         ]
+        ]
+       ],
+       "expected": 10
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-029",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Now a grid in JavaScript. Write countIslands. The grid is an array of rows, each row an array of zeros and ones, and 1 is land. An island is a group of land cells connected up, down, left or right. Diagonal neighbours do not connect. Return how many islands there are. An empty grid has zero.",
+   "prior_transcript": null,
+   "conversation_id": "ER-K1-TI-029-C",
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: graphs / trees on plain data / number of islands, four directions (first turn). Working JavaScript named countIslands returning a number: connected groups of 1s with four-direction adjacency only, so [[1, 0], [0, 1]] is 2 islands. [] gives 0. The answer contains one runnable JavaScript code block defining countIslands; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Treats diagonal neighbours as connected.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Counts land cells instead of groups.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "javascript",
+     "function_hint": "countIslands",
+     "tests": [
+      {
+       "input": [
+        []
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         [
+          0
+         ]
+        ]
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         [
+          1
+         ]
+        ]
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         [
+          1,
+          1
+         ],
+         [
+          1,
+          1
+         ]
+        ]
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         [
+          1,
+          0
+         ],
+         [
+          0,
+          1
+         ]
+        ]
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        [
+         [
+          1,
+          0,
+          1
+         ],
+         [
+          0,
+          1,
+          0
+         ],
+         [
+          1,
+          0,
+          1
+         ]
+        ]
+       ],
+       "expected": 5
+      },
+      {
+       "input": [
+        [
+         [
+          1,
+          1,
+          0,
+          0,
+          0
+         ],
+         [
+          1,
+          1,
+          0,
+          0,
+          0
+         ],
+         [
+          0,
+          0,
+          1,
+          0,
+          0
+         ],
+         [
+          0,
+          0,
+          0,
+          1,
+          1
+         ]
+        ]
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         [
+          1,
+          1,
+          1,
+          1,
+          0
+         ],
+         [
+          1,
+          1,
+          0,
+          1,
+          0
+         ],
+         [
+          1,
+          1,
+          0,
+          0,
+          0
+         ],
+         [
+          0,
+          0,
+          0,
+          0,
+          0
+         ]
+        ]
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         [
+          0,
+          0
+         ],
+         [
+          0,
+          0
+         ]
+        ]
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         [
+          1,
+          0,
+          1,
+          0,
+          1
+         ]
+        ]
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         [
+          1
+         ],
+         [
+          0
+         ],
+         [
+          1
+         ],
+         [
+          1
+         ]
+        ]
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        [
+         [
+          1,
+          1,
+          1
+         ],
+         [
+          0,
+          0,
+          1
+         ],
+         [
+          1,
+          1,
+          1
+         ],
+         [
+          1,
+          0,
+          0
+         ],
+         [
+          1,
+          1,
+          1
+         ]
+        ]
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         [
+          1,
+          0,
+          0,
+          1
+         ],
+         [
+          0,
+          1,
+          1,
+          0
+         ],
+         [
+          0,
+          1,
+          1,
+          0
+         ],
+         [
+          1,
+          0,
+          0,
+          1
+         ]
+        ]
+       ],
+       "expected": 5
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-030",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Change one thing: diagonal neighbours now count as connected too, so a land cell touches all eight cells around it. Same function name, everything else the same.",
+   "prior_transcript": null,
+   "conversation_id": "ER-K1-TI-029-C",
+   "turn_index": 2,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: graphs / trees on plain data / number of islands (follow-up: diagonals connect). Second turn of the chain. Working JavaScript, still countIslands: connected groups of 1s with eight-direction adjacency, so [[1, 0], [0, 1]] is now 1 island and the plus-shaped [[0, 1, 0], [1, 0, 1], [0, 1, 0]] is 1. [] still gives 0. The answer contains one runnable JavaScript code block defining countIslands; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Keeps four-direction adjacency.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "continue_previous_answer",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "javascript",
+     "function_hint": "countIslands",
+     "tests": [
+      {
+       "input": [
+        []
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         [
+          0
+         ]
+        ]
+       ],
+       "expected": 0
+      },
+      {
+       "input": [
+        [
+         [
+          1
+         ]
+        ]
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         [
+          1,
+          0
+         ],
+         [
+          0,
+          1
+         ]
+        ]
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         [
+          1,
+          0,
+          1
+         ],
+         [
+          0,
+          1,
+          0
+         ],
+         [
+          1,
+          0,
+          1
+         ]
+        ]
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         [
+          1,
+          1,
+          0,
+          0,
+          0
+         ],
+         [
+          1,
+          1,
+          0,
+          0,
+          0
+         ],
+         [
+          0,
+          0,
+          1,
+          0,
+          0
+         ],
+         [
+          0,
+          0,
+          0,
+          1,
+          1
+         ]
+        ]
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         [
+          1,
+          0,
+          1,
+          0,
+          1
+         ]
+        ]
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         [
+          1,
+          0,
+          0,
+          1
+         ],
+         [
+          0,
+          1,
+          1,
+          0
+         ],
+         [
+          0,
+          1,
+          1,
+          0
+         ],
+         [
+          1,
+          0,
+          0,
+          1
+         ]
+        ]
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         [
+          1,
+          0,
+          0
+         ],
+         [
+          0,
+          0,
+          0
+         ],
+         [
+          0,
+          0,
+          1
+         ]
+        ]
+       ],
+       "expected": 2
+      },
+      {
+       "input": [
+        [
+         [
+          1,
+          0,
+          0,
+          0
+         ],
+         [
+          0,
+          0,
+          1,
+          0
+         ],
+         [
+          0,
+          0,
+          0,
+          0
+         ],
+         [
+          0,
+          1,
+          0,
+          0
+         ]
+        ]
+       ],
+       "expected": 3
+      },
+      {
+       "input": [
+        [
+         [
+          0,
+          1,
+          0
+         ],
+         [
+          1,
+          0,
+          1
+         ],
+         [
+          0,
+          1,
+          0
+         ]
+        ]
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         [
+          1,
+          1
+         ],
+         [
+          1,
+          1
+         ]
+        ]
+       ],
+       "expected": 1
+      },
+      {
+       "input": [
+        [
+         [
+          1,
+          0,
+          0,
+          0,
+          1
+         ],
+         [
+          0,
+          0,
+          0,
+          0,
+          0
+         ],
+         [
+          0,
+          0,
+          1,
+          0,
+          0
+         ],
+         [
+          0,
+          0,
+          0,
+          0,
+          0
+         ],
+         [
+          1,
+          0,
+          0,
+          0,
+          1
+         ]
+        ]
+       ],
+       "expected": 5
+      },
+      {
+       "input": [
+        [
+         [
+          1,
+          0,
+          1
+         ],
+         [
+          0,
+          0,
+          0
+         ],
+         [
+          0,
+          1,
+          0
+         ],
+         [
+          0,
+          0,
+          0
+         ]
+        ]
+       ],
+       "expected": 3
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-031",
+   "mode": "technical-interview",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "python: topo_order(n, edges). nodes are 0..n-1, edges is a list of [a, b] pairs meaning a has to come before b. return a list with all n nodes in an order that respects every edge; at each step, out of the nodes that are ready (all their prerequisites already placed), take the smallest number. if there is a cycle (a self-loop counts) return []. n = 0 -> []. the same edge can appear more than once",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Topic: graphs / trees on plain data / topological order with a smallest-first tie rule, [] on a cycle. Working Python named topo_order: Kahn's algorithm with a min-heap (or repeated smallest-ready selection), so the result is the lexicographically smallest valid order. Any cycle, including a self-loop or one that leaves other nodes untouched, returns []. Duplicate edges do not break it. n = 0 returns []. The answer contains one runnable Python code block defining topo_order; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Uses a plain FIFO queue or DFS order, so ties are not resolved to the smallest ready node.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Returns a partial order instead of [] when there is a cycle.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "python",
+     "function_hint": "topo_order",
+     "tests": [
+      {
+       "input": [
+        0,
+        []
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        1,
+        []
+       ],
+       "expected": [
+        0
+       ]
+      },
+      {
+       "input": [
+        3,
+        []
+       ],
+       "expected": [
+        0,
+        1,
+        2
+       ]
+      },
+      {
+       "input": [
+        2,
+        [
+         [
+          1,
+          0
+         ]
+        ]
+       ],
+       "expected": [
+        1,
+        0
+       ]
+      },
+      {
+       "input": [
+        4,
+        [
+         [
+          3,
+          1
+         ],
+         [
+          3,
+          2
+         ],
+         [
+          1,
+          0
+         ],
+         [
+          2,
+          0
+         ]
+        ]
+       ],
+       "expected": [
+        3,
+        1,
+        2,
+        0
+       ]
+      },
+      {
+       "input": [
+        3,
+        [
+         [
+          0,
+          1
+         ],
+         [
+          1,
+          2
+         ],
+         [
+          2,
+          0
+         ]
+        ]
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        4,
+        [
+         [
+          0,
+          1
+         ],
+         [
+          1,
+          2
+         ],
+         [
+          2,
+          1
+         ]
+        ]
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        5,
+        [
+         [
+          4,
+          0
+         ],
+         [
+          4,
+          1
+         ],
+         [
+          3,
+          1
+         ],
+         [
+          2,
+          3
+         ]
+        ]
+       ],
+       "expected": [
+        2,
+        3,
+        4,
+        0,
+        1
+       ]
+      },
+      {
+       "input": [
+        3,
+        [
+         [
+          0,
+          1
+         ],
+         [
+          0,
+          1
+         ],
+         [
+          1,
+          2
+         ]
+        ]
+       ],
+       "expected": [
+        0,
+        1,
+        2
+       ]
+      },
+      {
+       "input": [
+        2,
+        [
+         [
+          0,
+          0
+         ]
+        ]
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        6,
+        [
+         [
+          5,
+          2
+         ],
+         [
+          5,
+          0
+         ],
+         [
+          4,
+          0
+         ],
+         [
+          4,
+          1
+         ],
+         [
+          2,
+          3
+         ],
+         [
+          3,
+          1
+         ]
+        ]
+       ],
+       "expected": [
+        4,
+        5,
+        0,
+        2,
+        3,
+        1
+       ]
+      },
+      {
+       "input": [
+        4,
+        [
+         [
+          1,
+          3
+         ],
+         [
+          2,
+          3
+         ]
+        ]
+       ],
+       "expected": [
+        0,
+        1,
+        2,
+        3
+       ]
+      },
+      {
+       "input": [
+        4,
+        [
+         [
+          3,
+          0
+         ],
+         [
+          2,
+          1
+         ]
+        ]
+       ],
+       "expected": [
+        2,
+        1,
+        3,
+        0
+       ]
+      },
+      {
+       "input": [
+        8,
+        [
+         [
+          7,
+          6
+         ],
+         [
+          6,
+          5
+         ],
+         [
+          5,
+          4
+         ],
+         [
+          0,
+          7
+         ],
+         [
+          1,
+          7
+         ],
+         [
+          3,
+          2
+         ]
+        ]
+       ],
+       "expected": [
+        0,
+        1,
+        3,
+        2,
+        7,
+        6,
+        5,
+        4
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-032",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Trees now, JavaScript. A node is a plain object with three fields: val, which is a number, and left and right, each of which is either another node or null. Write levelOrder. It takes the root, which can itself be null, and returns an array of arrays, one per level from the top down, with the values of that level from left to right. A null root gives an empty array. And what's the time complexity in terms of the number of nodes?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: graphs / trees on plain data / binary tree level order from a nested-object encoding. Working JavaScript named levelOrder: breadth-first traversal of nodes shaped { val, left, right } with null for a missing child, returning one array of values per depth, left to right. A null root returns []. A val of 0 is an ordinary value. The time complexity is stated as O(n) in the number of nodes. The answer contains one runnable JavaScript code block defining levelOrder; it is executed against the tests.",
+    "required_facts": [
+     {
+      "fact": "CONVERSATION",
+      "text": "Time complexity is linear in the number of nodes, O(n).",
+      "answer_needles": [
+       "O(n)",
+       "linear",
+       "Θ(n)",
+       "O(len("
+      ]
+     }
+    ],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Visits the right child before the left, or returns one flat array.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Skips nodes whose val is 0 because of a truthiness check.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "States a time complexity other than linear in the number of nodes.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the space complexity as well."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "javascript",
+     "function_hint": "levelOrder",
+     "tests": [
+      {
+       "input": [
+        null
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        {
+         "val": 1,
+         "left": null,
+         "right": null
+        }
+       ],
+       "expected": [
+        [
+         1
+        ]
+       ]
+      },
+      {
+       "input": [
+        {
+         "val": 3,
+         "left": {
+          "val": 9,
+          "left": null,
+          "right": null
+         },
+         "right": {
+          "val": 20,
+          "left": {
+           "val": 15,
+           "left": null,
+           "right": null
+          },
+          "right": {
+           "val": 7,
+           "left": null,
+           "right": null
+          }
+         }
+        }
+       ],
+       "expected": [
+        [
+         3
+        ],
+        [
+         9,
+         20
+        ],
+        [
+         15,
+         7
+        ]
+       ]
+      },
+      {
+       "input": [
+        {
+         "val": 1,
+         "left": {
+          "val": 2,
+          "left": {
+           "val": 3,
+           "left": null,
+           "right": null
+          },
+          "right": null
+         },
+         "right": null
+        }
+       ],
+       "expected": [
+        [
+         1
+        ],
+        [
+         2
+        ],
+        [
+         3
+        ]
+       ]
+      },
+      {
+       "input": [
+        {
+         "val": 1,
+         "left": null,
+         "right": {
+          "val": 2,
+          "left": null,
+          "right": {
+           "val": 3,
+           "left": null,
+           "right": null
+          }
+         }
+        }
+       ],
+       "expected": [
+        [
+         1
+        ],
+        [
+         2
+        ],
+        [
+         3
+        ]
+       ]
+      },
+      {
+       "input": [
+        {
+         "val": 1,
+         "left": null,
+         "right": {
+          "val": 2,
+          "left": null,
+          "right": null
+         }
+        }
+       ],
+       "expected": [
+        [
+         1
+        ],
+        [
+         2
+        ]
+       ]
+      },
+      {
+       "input": [
+        {
+         "val": 1,
+         "left": {
+          "val": 2,
+          "left": {
+           "val": 4,
+           "left": null,
+           "right": null
+          },
+          "right": {
+           "val": 5,
+           "left": null,
+           "right": null
+          }
+         },
+         "right": {
+          "val": 3,
+          "left": {
+           "val": 6,
+           "left": null,
+           "right": null
+          },
+          "right": {
+           "val": 7,
+           "left": null,
+           "right": null
+          }
+         }
+        }
+       ],
+       "expected": [
+        [
+         1
+        ],
+        [
+         2,
+         3
+        ],
+        [
+         4,
+         5,
+         6,
+         7
+        ]
+       ]
+      },
+      {
+       "input": [
+        {
+         "val": 0,
+         "left": {
+          "val": -1,
+          "left": {
+           "val": -1,
+           "left": null,
+           "right": null
+          },
+          "right": null
+         },
+         "right": {
+          "val": 0,
+          "left": null,
+          "right": {
+           "val": 5,
+           "left": null,
+           "right": null
+          }
+         }
+        }
+       ],
+       "expected": [
+        [
+         0
+        ],
+        [
+         -1,
+         0
+        ],
+        [
+         -1,
+         5
+        ]
+       ]
+      },
+      {
+       "input": [
+        {
+         "val": 1,
+         "left": {
+          "val": 2,
+          "left": null,
+          "right": {
+           "val": 4,
+           "left": null,
+           "right": null
+          }
+         },
+         "right": {
+          "val": 3,
+          "left": {
+           "val": 5,
+           "left": null,
+           "right": null
+          },
+          "right": null
+         }
+        }
+       ],
+       "expected": [
+        [
+         1
+        ],
+        [
+         2,
+         3
+        ],
+        [
+         4,
+         5
+        ]
+       ]
+      },
+      {
+       "input": [
+        {
+         "val": 1,
+         "left": {
+          "val": 2,
+          "left": {
+           "val": 4,
+           "left": {
+            "val": 8,
+            "left": null,
+            "right": null
+           },
+           "right": null
+          },
+          "right": null
+         },
+         "right": {
+          "val": 3,
+          "left": null,
+          "right": {
+           "val": 7,
+           "left": null,
+           "right": {
+            "val": 15,
+            "left": null,
+            "right": null
+           }
+          }
+         }
+        }
+       ],
+       "expected": [
+        [
+         1
+        ],
+        [
+         2,
+         3
+        ],
+        [
+         4,
+         7
+        ],
+        [
+         8,
+         15
+        ]
+       ]
+      },
+      {
+       "input": [
+        {
+         "val": 0,
+         "left": {
+          "val": 0,
+          "left": null,
+          "right": null
+         },
+         "right": null
+        }
+       ],
+       "expected": [
+        [
+         0
+        ],
+        [
+         0
+        ]
+       ]
+      },
+      {
+       "input": [
+        {
+         "val": 10,
+         "left": {
+          "val": 5,
+          "left": {
+           "val": 3,
+           "left": {
+            "val": 1,
+            "left": null,
+            "right": null
+           },
+           "right": {
+            "val": 4,
+            "left": null,
+            "right": null
+           }
+          },
+          "right": {
+           "val": 7,
+           "left": null,
+           "right": {
+            "val": 8,
+            "left": null,
+            "right": null
+           }
+          }
+         },
+         "right": {
+          "val": 20,
+          "left": {
+           "val": 15,
+           "left": {
+            "val": 12,
+            "left": null,
+            "right": null
+           },
+           "right": null
+          },
+          "right": {
+           "val": 30,
+           "left": {
+            "val": 25,
+            "left": null,
+            "right": null
+           },
+           "right": {
+            "val": 40,
+            "left": null,
+            "right": null
+           }
+          }
+         }
+        }
+       ],
+       "expected": [
+        [
+         10
+        ],
+        [
+         5,
+         20
+        ],
+        [
+         3,
+         7,
+         15,
+         30
+        ],
+        [
+         1,
+         4,
+         8,
+         12,
+         25,
+         40
+        ]
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-033",
+   "mode": "technical-interview",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "this is supposed to return the list without its negative numbers (zero stays, order kept) but it misses some of them. python. fix it, keep the name drop_negatives, and have it return a new list and leave the input alone:\n\n```python\ndef drop_negatives(nums):\n    for x in nums:\n        if x < 0:\n            nums.remove(x)\n    return nums\n```",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: debugging / list mutated while iterating over it. A fixed drop_negatives in Python under the same name. The bug: removing from the list while iterating over it skips the element after each removal, so consecutive negatives survive. The fix builds and returns a new list of the values that are >= 0, in order; zero is kept; [] returns []. The answer contains one runnable Python code block defining drop_negatives; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Returns the function unchanged, or under another name.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Drops zero along with the negatives.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "python",
+     "function_hint": "drop_negatives",
+     "tests": [
+      {
+       "input": [
+        []
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3
+        ]
+       ],
+       "expected": [
+        1,
+        2,
+        3
+       ]
+      },
+      {
+       "input": [
+        [
+         -1
+        ]
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        [
+         -1,
+         -2
+        ]
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        [
+         1,
+         -1,
+         -2,
+         3
+        ]
+       ],
+       "expected": [
+        1,
+        3
+       ]
+      },
+      {
+       "input": [
+        [
+         0,
+         -5,
+         0
+        ]
+       ],
+       "expected": [
+        0,
+        0
+       ]
+      },
+      {
+       "input": [
+        [
+         -3,
+         -3,
+         -3
+        ]
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        [
+         5,
+         -1,
+         4,
+         -2,
+         3
+        ]
+       ],
+       "expected": [
+        5,
+        4,
+        3
+       ]
+      },
+      {
+       "input": [
+        [
+         -1,
+         -2,
+         -3,
+         -4
+        ]
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        [
+         2,
+         -2,
+         2,
+         -2
+        ]
+       ],
+       "expected": [
+        2,
+        2
+       ]
+      },
+      {
+       "input": [
+        [
+         -1,
+         0,
+         -1,
+         0,
+         -1,
+         -1,
+         7
+        ]
+       ],
+       "expected": [
+        0,
+        0,
+        7
+       ]
+      },
+      {
+       "input": [
+        [
+         10,
+         20
+        ]
+       ],
+       "expected": [
+        10,
+        20
+       ]
+      },
+      {
+       "input": [
+        [
+         3,
+         -1,
+         -4,
+         1,
+         -5,
+         -9,
+         2,
+         6,
+         -5,
+         -3,
+         5
+        ]
+       ],
+       "expected": [
+        3,
+        1,
+        2,
+        6,
+        5
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-034",
+   "mode": "technical-interview",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "python. chunks(items, size) should cut a list into consecutive pieces of length size, with the last piece shorter if the list doesn't divide evenly; an empty list gives []. size is always 1 or more. this version loses things at the end. fix it, same name:\n\n```python\ndef chunks(items, size):\n    out = []\n    for i in range(0, len(items) - size, size):\n        out.append(items[i:i + size])\n    return out\n```",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: debugging / off-by-one in a range bound (last chunk dropped). A fixed chunks in Python under the same name. The bug: the range stops at len(items) - size, so the last full piece and any shorter remainder are dropped. The fix iterates range(0, len(items), size). [1, 2, 3, 4, 5] by 2 is [[1, 2], [3, 4], [5]]; a size larger than the list gives one piece; [] gives []. The answer contains one runnable Python code block defining chunks; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Returns the function unchanged, or under another name.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Fixes only the evenly divisible case and still drops a shorter last piece.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "python",
+     "function_hint": "chunks",
+     "tests": [
+      {
+       "input": [
+        [],
+        3
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        [
+         1
+        ],
+        1
+       ],
+       "expected": [
+        [
+         1
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3,
+         4
+        ],
+        2
+       ],
+       "expected": [
+        [
+         1,
+         2
+        ],
+        [
+         3,
+         4
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3,
+         4,
+         5
+        ],
+        2
+       ],
+       "expected": [
+        [
+         1,
+         2
+        ],
+        [
+         3,
+         4
+        ],
+        [
+         5
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3
+        ],
+        5
+       ],
+       "expected": [
+        [
+         1,
+         2,
+         3
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3
+        ],
+        3
+       ],
+       "expected": [
+        [
+         1,
+         2,
+         3
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3
+        ],
+        1
+       ],
+       "expected": [
+        [
+         1
+        ],
+        [
+         2
+        ],
+        [
+         3
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         "a",
+         "b",
+         "c",
+         "d",
+         "e",
+         "f",
+         "g"
+        ],
+        3
+       ],
+       "expected": [
+        [
+         "a",
+         "b",
+         "c"
+        ],
+        [
+         "d",
+         "e",
+         "f"
+        ],
+        [
+         "g"
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         0,
+         0,
+         0,
+         0
+        ],
+        4
+       ],
+       "expected": [
+        [
+         0,
+         0,
+         0,
+         0
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6
+        ],
+        4
+       ],
+       "expected": [
+        [
+         1,
+         2,
+         3,
+         4
+        ],
+        [
+         5,
+         6
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         -1,
+         -2,
+         -3
+        ],
+        2
+       ],
+       "expected": [
+        [
+         -1,
+         -2
+        ],
+        [
+         -3
+        ]
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10
+        ],
+        3
+       ],
+       "expected": [
+        [
+         1,
+         2,
+         3
+        ],
+        [
+         4,
+         5,
+         6
+        ],
+        [
+         7,
+         8,
+         9
+        ],
+        [
+         10
+        ]
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-035",
+   "mode": "technical-interview",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "python. seat_counts(rows, cols, bookings) should build a rows x cols grid of zeros (a list of rows) and add 1 at [r][c] for every [r, c] pair in bookings; the same seat can be booked more than once. rows and cols are at least 1. with this version a booking shows up in every row. fix it, keep the name:\n\n```python\ndef seat_counts(rows, cols, bookings):\n    grid = [[0] * cols] * rows\n    for r, c in bookings:\n        grid[r][c] += 1\n    return grid\n```",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Topic: debugging / aliased rows from list multiplication. A fixed seat_counts in Python under the same name. The bug: [[0] * cols] * rows repeats ONE row object, so every row changes together. The fix builds an independent row per index (a comprehension over range(rows)). Repeated bookings add up; no bookings gives all zeros; rows and cols are not swapped. The answer contains one runnable Python code block defining seat_counts; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Returns the function unchanged, or under another name.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Swaps rows and columns when rebuilding the grid.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "python",
+     "function_hint": "seat_counts",
+     "tests": [
+      {
+       "input": [
+        1,
+        1,
+        []
+       ],
+       "expected": [
+        [
+         0
+        ]
+       ]
+      },
+      {
+       "input": [
+        2,
+        2,
+        []
+       ],
+       "expected": [
+        [
+         0,
+         0
+        ],
+        [
+         0,
+         0
+        ]
+       ]
+      },
+      {
+       "input": [
+        2,
+        2,
+        [
+         [
+          0,
+          0
+         ]
+        ]
+       ],
+       "expected": [
+        [
+         1,
+         0
+        ],
+        [
+         0,
+         0
+        ]
+       ]
+      },
+      {
+       "input": [
+        2,
+        3,
+        [
+         [
+          1,
+          2
+         ],
+         [
+          1,
+          2
+         ]
+        ]
+       ],
+       "expected": [
+        [
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         2
+        ]
+       ]
+      },
+      {
+       "input": [
+        3,
+        1,
+        [
+         [
+          0,
+          0
+         ],
+         [
+          1,
+          0
+         ],
+         [
+          2,
+          0
+         ]
+        ]
+       ],
+       "expected": [
+        [
+         1
+        ],
+        [
+         1
+        ],
+        [
+         1
+        ]
+       ]
+      },
+      {
+       "input": [
+        1,
+        4,
+        [
+         [
+          0,
+          1
+         ],
+         [
+          0,
+          3
+         ]
+        ]
+       ],
+       "expected": [
+        [
+         0,
+         1,
+         0,
+         1
+        ]
+       ]
+      },
+      {
+       "input": [
+        3,
+        3,
+        [
+         [
+          0,
+          0
+         ],
+         [
+          1,
+          1
+         ],
+         [
+          2,
+          2
+         ]
+        ]
+       ],
+       "expected": [
+        [
+         1,
+         0,
+         0
+        ],
+        [
+         0,
+         1,
+         0
+        ],
+        [
+         0,
+         0,
+         1
+        ]
+       ]
+      },
+      {
+       "input": [
+        2,
+        2,
+        [
+         [
+          0,
+          1
+         ],
+         [
+          1,
+          0
+         ],
+         [
+          0,
+          1
+         ]
+        ]
+       ],
+       "expected": [
+        [
+         0,
+         2
+        ],
+        [
+         1,
+         0
+        ]
+       ]
+      },
+      {
+       "input": [
+        3,
+        2,
+        [
+         [
+          2,
+          1
+         ]
+        ]
+       ],
+       "expected": [
+        [
+         0,
+         0
+        ],
+        [
+         0,
+         0
+        ],
+        [
+         0,
+         1
+        ]
+       ]
+      },
+      {
+       "input": [
+        4,
+        4,
+        [
+         [
+          0,
+          0
+         ],
+         [
+          3,
+          3
+         ],
+         [
+          0,
+          3
+         ],
+         [
+          3,
+          0
+         ],
+         [
+          1,
+          2
+         ],
+         [
+          1,
+          2
+         ],
+         [
+          2,
+          1
+         ]
+        ]
+       ],
+       "expected": [
+        [
+         1,
+         0,
+         0,
+         1
+        ],
+        [
+         0,
+         0,
+         2,
+         0
+        ],
+        [
+         0,
+         1,
+         0,
+         0
+        ],
+        [
+         1,
+         0,
+         0,
+         1
+        ]
+       ]
+      },
+      {
+       "input": [
+        2,
+        1,
+        [
+         [
+          1,
+          0
+         ]
+        ]
+       ],
+       "expected": [
+        [
+         0
+        ],
+        [
+         1
+        ]
+       ]
+      },
+      {
+       "input": [
+        3,
+        3,
+        []
+       ],
+       "expected": [
+        [
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0
+        ],
+        [
+         0,
+         0,
+         0
+        ]
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "ER-K1-TI-036",
+   "mode": "technical-interview",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "js. topThree(scores) should return the three highest numbers, highest first. fewer than three scores -> all of them, highest first; repeated scores each count; empty -> []. it should also leave the scores array as it was. it gives wrong answers as soon as a score is above 9 or below zero. fix it, same name:\n\n```js\nfunction topThree(scores) {\n  return scores.sort().reverse().slice(0, 3);\n}\n```",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "pi_condition": "no_pi",
+   "category": "coding",
+   "difficulty": "easy",
+   "oracle": {
+    "expected_behavior_note": "Topic: debugging / default sort compares numbers as text. A fixed topThree in JavaScript under the same name. The bug: sort() with no comparator orders numbers as text, so 10 sorts before 9 and negatives are out of order; it also sorts the caller's array in place. The fix copies the array and sorts numerically, descending, then takes the first three. Repeats are kept; fewer than three gives them all; [] gives []. The answer contains one runnable JavaScript code block defining topThree; it is executed against the tests.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Returns the function unchanged, or under another name.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Copies the array but still sorts without a numeric comparator.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says it needs a problem sheet, the profile or more context before it can write the code.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+    "expected_action": "write_code",
+    "expected_response_type": "code",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Stating the time or space complexity.",
+     "A sentence or two on the approach."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": true,
+    "code_oracle": {
+     "language": "javascript",
+     "function_hint": "topThree",
+     "tests": [
+      {
+       "input": [
+        []
+       ],
+       "expected": []
+      },
+      {
+       "input": [
+        [
+         5
+        ]
+       ],
+       "expected": [
+        5
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         2
+        ]
+       ],
+       "expected": [
+        2,
+        1
+       ]
+      },
+      {
+       "input": [
+        [
+         3,
+         1,
+         2
+        ]
+       ],
+       "expected": [
+        3,
+        2,
+        1
+       ]
+      },
+      {
+       "input": [
+        [
+         10,
+         9,
+         8,
+         7
+        ]
+       ],
+       "expected": [
+        10,
+        9,
+        8
+       ]
+      },
+      {
+       "input": [
+        [
+         100,
+         20,
+         3
+        ]
+       ],
+       "expected": [
+        100,
+        20,
+        3
+       ]
+      },
+      {
+       "input": [
+        [
+         -1,
+         -2,
+         -3,
+         -4
+        ]
+       ],
+       "expected": [
+        -1,
+        -2,
+        -3
+       ]
+      },
+      {
+       "input": [
+        [
+         5,
+         5,
+         5,
+         5
+        ]
+       ],
+       "expected": [
+        5,
+        5,
+        5
+       ]
+      },
+      {
+       "input": [
+        [
+         7,
+         7,
+         10
+        ]
+       ],
+       "expected": [
+        10,
+        7,
+        7
+       ]
+      },
+      {
+       "input": [
+        [
+         0,
+         -5,
+         12,
+         3
+        ]
+       ],
+       "expected": [
+        12,
+        3,
+        0
+       ]
+      },
+      {
+       "input": [
+        [
+         1,
+         11,
+         2,
+         22,
+         3,
+         33
+        ]
+       ],
+       "expected": [
+        33,
+        22,
+        11
+       ]
+      },
+      {
+       "input": [
+        [
+         9,
+         80,
+         700,
+         6000,
+         50000
+        ]
+       ],
+       "expected": [
+        50000,
+        6000,
+        700
+       ]
+      },
+      {
+       "input": [
+        [
+         -10,
+         5
+        ]
+       ],
+       "expected": [
+        5,
+        -10
+       ]
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

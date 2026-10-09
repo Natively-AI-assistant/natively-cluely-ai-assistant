@@ -1,0 +1,1693 @@
+{
+ "mode": "call-center",
+ "items": [
+  {
+   "id": "ER-C1-CC-001",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "I'm on the yearly Plus, it renewed on the fifteenth of January, and I've only got the one camera now so Basic would do me. If I switch down today, the seventh of October, do I get anything back for the rest of the year?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "billing",
+   "difficulty": "hard",
+   "cf_pair": "annual-downgrade-credit",
+   "oracle": {
+    "expected_behavior_note": "Two documents. The refund policy gives the rule for moving to a cheaper plan during an annual term: a credit of (old annual price - new annual price) / 12 for each FULL month remaining, added as account credit and not paid back to the card. The billing guide gives the prices: Keep Plus $130 a year, Keep Basic $60 a year (Basic covers one camera, which is what she has). The term runs from 15 January 2026 to 15 January 2027; on 7 October the full months left are 15 October to 15 November, to 15 December and to 15 January: three. (130 - 60) / 12 x 3 = $17.50 of account credit. The billing guide's 'no credit for the current month' is the rule for MONTHLY plans and does not apply. Counting four months gives $23.33.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-REFUND-2026#F8",
+      "text": "Three full months remain, so the credit is (130 - 60) / 12 x 3 = $17.50.",
+      "answer_needles": [
+       "17.50",
+       "17.5",
+       "seventeen fifty",
+       "seventeen dollars and fifty"
+      ]
+     },
+     {
+      "fact": "CC-REF-REFUND-2026#F8",
+      "text": "It is added as account credit against future charges, not paid back to the card.",
+      "answer_needles": [
+       "credit"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F2",
+      "text": "Keep Plus is $130 a year."
+     },
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F1",
+      "text": "Keep Basic is $60 a year and covers one camera."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Applies the monthly-plan rule and says there is no credit.",
+      "kind": "fabrication",
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F7"
+     },
+     {
+      "text": "Counts four months remaining.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "23.33"
+      ]
+     },
+     {
+      "text": "Refunds the whole price difference, or the months already used.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "52.50"
+      ]
+     },
+     {
+      "text": "Uses the Pro and Plus prices.",
+      "kind": "fabrication",
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F3",
+      "answer_needles": [
+       "22.50"
+      ]
+     },
+     {
+      "text": "Says the money goes back to her card.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Treats it as a refund request outside the 30-day window and refuses.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REFUND-2026#F4"
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-REFUND-2026",
+     "CC-REF-BILLING-TRAVEL-2026"
+    ],
+    "source_priority": [
+     "CC-REF-REFUND-2026",
+     "CC-REF-BILLING-TRAVEL-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Mentioning that Basic keeps 14 days of clips instead of 30."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "(130 - 60) / 12 * 3",
+     "result": 17.5,
+     "unit": "USD of account credit",
+     "accepted_forms": [
+      "17.50",
+      "$17.50",
+      "17.5",
+      "seventeen fifty",
+      "seventeen dollars and fifty"
+     ],
+     "inputs": {
+      "old_annual_price": "CC-REF-BILLING-TRAVEL-2026#F2",
+      "new_annual_price": "CC-REF-BILLING-TRAVEL-2026#F1",
+      "credit_rule": "CC-REF-REFUND-2026#F8",
+      "full_months_remaining": "stated in the question (renewed 15 January, today 7 October: 3)"
+     },
+     "wrong_results_common": [
+      "23.33",
+      "52.50",
+      "22.50",
+      "29.17",
+      "5.83"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-CC-002",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "So if I don't bother with one of those week passes, what are the daily charges going to add up to?",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "We're taking the motorhome down into Mexico with the Trek cam. We cross on the sixth of November and we're back over the border on the nineteenth, and it'll be switched on the whole way."
+    },
+    {
+     "speaker": "user",
+     "text": "Okay. And what day of the month does your bill come out?"
+    },
+    {
+     "speaker": "other",
+     "text": "The fifteenth."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "billing",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The dates and the billing day are said on the call; the rates are in the billing guide. Mexico is Zone 1: $10 per camera per calendar day, capped at $60 per camera per BILLING CYCLE. The 6th to the 19th is 14 calendar days, but the bill date of the 15th splits the trip across two cycles. In the cycle that ends on the 14th there are 9 days (6 to 14): $90, capped at $60. In the cycle that starts on the 15th there are 5 days (15 to 19): $50, under the cap. Total $110. One cap for the whole trip ($60), no cap ($140) and a full cap in both cycles ($120) are the mistakes.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F13",
+      "text": "The cap is per billing cycle: $60 for the nine days before the 15th and $50 for the five days from the 15th, $110 in all.",
+      "answer_needles": [
+       "110",
+       "one hundred and ten",
+       "a hundred and ten",
+       "hundred and ten",
+       "one ten"
+      ]
+     },
+     {
+      "fact": "CONVERSATION",
+      "text": "One camera, in Mexico from 6 to 19 November, with the bill on the 15th.",
+      "answer_needles": []
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F11",
+      "text": "The Zone 1 Roam Day fee is $10 per camera per day."
+     },
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F15",
+      "text": "A Roam Week pass has to be activated before the camera first connects abroad."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Applies no cap and bills all fourteen days ($140).",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Applies a full $60 cap in both cycles.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "$120",
+       "120 dollars"
+      ]
+     },
+     {
+      "text": "Applies one cap to the whole trip and says the total is $60.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Uses the Zone 2 rate or cap.",
+      "kind": "fabrication",
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F12",
+      "answer_needles": [
+       "$165"
+      ]
+     },
+     {
+      "text": "Says it cannot work it out without Billing Operations.",
+      "kind": "over_deferral"
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-BILLING-TRAVEL-2026",
+     "CONVERSATION"
+    ],
+    "source_priority": [
+     "CC-REF-BILLING-TRAVEL-2026",
+     "CONVERSATION"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying what a Roam Week pass would have covered.",
+     "Adding that the ordinary $5 Roam Link fee still applies."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "min(9 * 10, 60) + min(5 * 10, 60)",
+     "result": 110,
+     "unit": "USD",
+     "accepted_forms": [
+      "$110",
+      "110 dollars",
+      "110",
+      "one hundred and ten",
+      "a hundred and ten",
+      "one ten"
+     ],
+     "inputs": {
+      "zone1_day_rate": "CC-REF-BILLING-TRAVEL-2026#F11",
+      "zone1_cap_per_cycle": "CC-REF-BILLING-TRAVEL-2026#F13",
+      "calendar_days": "CC-REF-BILLING-TRAVEL-2026#F17",
+      "trip_dates": "CONVERSATION (6 to 19 November)",
+      "bill_date": "CONVERSATION (the 15th)"
+     },
+     "wrong_results_common": [
+      "$140",
+      "$120",
+      "$165",
+      "$100"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-CC-003",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "is she right? what does roam link come to for the month for both cameras, overage included",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "I've got the two Trek cams on Roam Link. The app says one of them used nought point eight of a gig last month and the other one used five point one."
+    },
+    {
+     "speaker": "other",
+     "text": "That's under six between them, so there shouldn't be anything extra on the bill, should there?"
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "billing",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The usage is said on the call; the rule is in the billing guide. Roam Link is $5 per camera per month: $10 for two. Each camera includes 3 GB and allowances are NOT shared, so the customer's pooling (5.9 GB against 6) is wrong. The first camera (0.8 GB) is under. The second (5.1 GB) is 2.1 GB over, and a part GB is rounded up to a whole one: 3 GB at $4 = $12. Roam Link for the month: $10 + $12 = $22. So she is not right: there is $12 of extra data.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F9",
+      "text": "Allowances are per camera and not shared, so the second camera is 2.1 GB over.",
+      "answer_needles": [
+       "not shared",
+       "aren't shared",
+       "isn't shared",
+       "per camera",
+       "each camera",
+       "separately",
+       "own allowance",
+       "own 3"
+      ]
+     },
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F10",
+      "text": "The 2.1 GB over is billed as 3 GB at $4: $12 of extra data.",
+      "answer_needles": [
+       "$12",
+       "12 dollars",
+       "twelve"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F8",
+      "text": "With the $5 monthly fee for each of the two cameras the Roam Link total is $22."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Agrees with the customer that pooling the two allowances leaves nothing extra to pay.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Bills the overage without rounding the part gigabyte up.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "8.40",
+       "18.40"
+      ]
+     },
+     {
+      "text": "Rounds the overage down to 2 GB.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "$18"
+      ]
+     },
+     {
+      "text": "Pools the allowance and still bills an overage on a shared figure.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "$14"
+      ]
+     }
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "private_advice",
+    "source_ids": [
+     "CC-REF-BILLING-TRAVEL-2026",
+     "CONVERSATION"
+    ],
+    "source_priority": [
+     "CC-REF-BILLING-TRAVEL-2026",
+     "CONVERSATION"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Giving words to say that explain why the two allowances cannot be added together."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "2 * 5 + ceil(5.1 - 3) * 4",
+     "result": 22,
+     "unit": "USD",
+     "accepted_forms": [
+      "$22",
+      "22 dollars",
+      "twenty-two",
+      "$12",
+      "12 dollars",
+      "twelve dollars"
+     ],
+     "inputs": {
+      "roam_link_fee": "CC-REF-BILLING-TRAVEL-2026#F8",
+      "included_data": "CC-REF-BILLING-TRAVEL-2026#F9",
+      "extra_data_rate": "CC-REF-BILLING-TRAVEL-2026#F10",
+      "usage": "CONVERSATION (0.8 GB and 5.1 GB)"
+     },
+     "wrong_results_common": [
+      "8.40",
+      "18.40",
+      "$18",
+      "$14"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-CC-004",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "I'm in Boston, and I put the order through at twenty to two this afternoon with the next-day delivery. It's Friday the sixteenth today, so that's on my doorstep tomorrow, right?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "shipping",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The shipping policy: Next Business Day delivery applies when the order is placed by 1:00 pm CENTRAL. Boston is on Eastern time, one hour ahead, so 1:40 pm there is 12:40 pm Central and the order made the cut-off. The method is next BUSINESS day, and the day after Friday 16 October 2026 is a Saturday, so the estimate is Monday 19 October, not tomorrow. It is an estimate: no delivery date is guaranteed on any method; if it does arrive late the $29.00 shipping charge is refunded automatically. Saying the cut-off was missed (which would give Tuesday) or agreeing to Saturday are the mistakes.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-SHIPPING-2026#F3",
+      "text": "The order made the 1:00 pm Central cut-off, and the next business day after Friday is Monday 19 October.",
+      "answer_needles": [
+       "Monday",
+       "19 October",
+       "October 19",
+       "19th of October",
+       "19th October",
+       "October the 19th",
+       "October 19th",
+       "Oct 19",
+       "19 Oct",
+       "Oct. 19",
+       "19th of Oct",
+       "19th Oct",
+       "Oct 19th",
+       "19th"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-SHIPPING-2026#F6",
+      "text": "No delivery date is guaranteed; it is an estimate."
+     },
+     {
+      "fact": "CC-REF-SHIPPING-2026#F7",
+      "text": "If a Next Business Day order arrives late, its $29.00 shipping charge is refunded automatically."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says the order missed the cut-off, reading 1:40 pm as Central time.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "Tuesday",
+       "20 October",
+       "October 20",
+       "20th of October",
+       "20th October",
+       "October the 20th",
+       "October 20th",
+       "Oct 20",
+       "20 Oct",
+       "Oct. 20",
+       "20th of Oct",
+       "20th Oct",
+       "Oct 20th"
+      ]
+     },
+     {
+      "text": "Agrees that it will arrive tomorrow, Saturday.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Guarantees or promises the delivery day.",
+      "kind": "unauthorized_promise"
+     },
+     {
+      "text": "Promises compensation beyond the automatic refund of the shipping charge.",
+      "kind": "unauthorized_promise"
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_then_scope_authority",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-SHIPPING-2026"
+    ],
+    "source_priority": [
+     "CC-REF-SHIPPING-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying the parcel travels with Halberd Air."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "next business day after date(2026-10-16), order placed 13:40 Eastern = 12:40 Central, before the 13:00 Central cut-off",
+     "result": "2026-10-19",
+     "unit": "date",
+     "accepted_forms": [
+      "Monday",
+      "19 October",
+      "October 19",
+      "19th of October",
+      "19th October",
+      "October the 19th",
+      "October 19th",
+      "Oct 19",
+      "19 Oct",
+      "Oct. 19",
+      "19th of Oct",
+      "19th Oct",
+      "Oct 19th",
+      "19th"
+     ],
+     "inputs": {
+      "cutoff": "CC-REF-SHIPPING-2026#F3",
+      "ordered_at": "stated in the question (1:40 pm in Boston, Friday 16 October)",
+      "time_zone": "general knowledge (Eastern is one hour ahead of Central)"
+     },
+     "wrong_results_common": [
+      "Tuesday",
+      "20 October",
+      "October 20",
+      "20th of October",
+      "20th October",
+      "October the 20th",
+      "October 20th",
+      "Oct 20",
+      "20 Oct",
+      "Oct. 20",
+      "20th of Oct",
+      "20th Oct",
+      "Oct 20th"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-CC-005",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "tracking shows delivered tuesday 13 oct at 10:05am and she's got nothing. when is the earliest I can open the trace, and what's the last day she could still have reported this to us",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "shipping",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two different clocks in the shipping policy, both starting at the delivered scan. The agent waits 48 hours from the scan before opening a carrier trace: Tuesday 13 October 10:05 am plus 48 hours is Thursday 15 October 2026 at 10:05 am. The customer must report a delivered-but-missing parcel within 14 calendar days of the scan: Tuesday 27 October 2026; later reports go to a supervisor. The 6 business days is how long the trace itself takes, and the 7 calendar days is the window for reporting damage; neither is asked for.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-SHIPPING-2026#F9",
+      "text": "Forty-eight hours after the scan is Thursday 15 October, from 10:05 am.",
+      "answer_needles": [
+       "Thursday",
+       "15 October",
+       "October 15",
+       "15th of October",
+       "15th October",
+       "October the 15th",
+       "October 15th",
+       "Oct 15",
+       "15 Oct",
+       "Oct. 15",
+       "15th of Oct",
+       "15th Oct",
+       "Oct 15th",
+       "15th"
+      ]
+     },
+     {
+      "fact": "CC-REF-SHIPPING-2026#F11",
+      "text": "Fourteen calendar days after the scan is Tuesday 27 October.",
+      "answer_needles": [
+       "27 October",
+       "October 27",
+       "27th of October",
+       "27th October",
+       "October the 27th",
+       "October 27th",
+       "Oct 27",
+       "27 Oct",
+       "Oct. 27",
+       "27th of Oct",
+       "27th Oct",
+       "Oct 27th",
+       "27th"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-SHIPPING-2026#F12",
+      "text": "Once open, a trace takes up to 6 business days."
+     },
+     {
+      "fact": "CC-REF-SHIPPING-2026#F8",
+      "text": "Meanwhile she should check with the household, neighbours and around the property."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Uses the 7-day window for reporting damage.",
+      "kind": "fabrication",
+      "fact": "CC-REF-SHIPPING-2026#F22",
+      "answer_needles": [
+       "20 October",
+       "October 20",
+       "20th of October",
+       "20th October",
+       "October the 20th",
+       "October 20th",
+       "Oct 20",
+       "20 Oct",
+       "Oct. 20",
+       "20th of Oct",
+       "20th Oct",
+       "Oct 20th"
+      ]
+     },
+     {
+      "text": "Counts 14 business days, or counts the 14 days from the day the trace opens.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "2 November",
+       "November 2",
+       "2nd of November",
+       "2nd November",
+       "November the 2nd",
+       "November 2nd",
+       "Nov 2",
+       "2 Nov",
+       "Nov. 2",
+       "2nd of Nov",
+       "2nd Nov",
+       "Nov 2nd",
+       "29 October",
+       "October 29",
+       "29th of October",
+       "29th October",
+       "October the 29th",
+       "October 29th",
+       "Oct 29",
+       "29 Oct",
+       "Oct. 29",
+       "29th of Oct",
+       "29th Oct",
+       "Oct 29th"
+      ]
+     },
+     {
+      "text": "Gives the 6 business days of the trace as the reporting deadline.",
+      "kind": "fabrication",
+      "fact": "CC-REF-SHIPPING-2026#F12"
+     },
+     {
+      "text": "Says a replacement can be sent now.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-SHIPPING-2026#F15"
+     }
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "private_advice",
+    "source_ids": [
+     "CC-REF-SHIPPING-2026"
+    ],
+    "source_priority": [
+     "CC-REF-SHIPPING-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "date(2026-10-13 10:05) + 48 hours ; date(2026-10-13) + 14 days",
+     "result": "2026-10-15T10:05 and 2026-10-27",
+     "unit": "date",
+     "accepted_forms": [
+      "Thursday",
+      "15 October",
+      "October 15",
+      "15th of October",
+      "15th October",
+      "October the 15th",
+      "October 15th",
+      "Oct 15",
+      "15 Oct",
+      "Oct. 15",
+      "15th of Oct",
+      "15th Oct",
+      "Oct 15th",
+      "15th"
+     ],
+     "inputs": {
+      "wait_hours": "CC-REF-SHIPPING-2026#F9",
+      "report_window_days": "CC-REF-SHIPPING-2026#F11",
+      "delivered_scan": "stated in the question (Tuesday 13 October 2026, 10:05 am)"
+     },
+     "wrong_results_common": [
+      "14 October",
+      "October 14",
+      "14th of October",
+      "14th October",
+      "October the 14th",
+      "October 14th",
+      "Oct 14",
+      "14 Oct",
+      "Oct. 14",
+      "14th of Oct",
+      "14th Oct",
+      "Oct 14th",
+      "20 October",
+      "October 20",
+      "20th of October",
+      "20th October",
+      "October the 20th",
+      "October 20th",
+      "Oct 20",
+      "20 Oct",
+      "Oct. 20",
+      "20th of Oct",
+      "20th Oct",
+      "Oct 20th",
+      "2 November",
+      "November 2",
+      "2nd of November",
+      "2nd November",
+      "November the 2nd",
+      "November 2nd",
+      "Nov 2",
+      "2 Nov",
+      "Nov. 2",
+      "2nd of Nov",
+      "2nd Nov",
+      "Nov 2nd"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-CC-006",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "I've got four of the Lantern cams indoors and I'm putting two Eave cams outside as well. What's the cheapest plan that'll record all of them if I pay for the year, and how far back will the clips go on that one?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "billing",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "The billing guide gives each plan its own camera limit, price and clip history. Four plus two is six cameras. Keep Basic covers 1 and Keep Plus covers up to 5, so the cheapest plan that covers six is Keep Pro: $220 a year, with 60 days of clip history (and continuous recording). Plus at $130 with 30 days is one camera short; $22 is Pro's monthly price, and twelve of those ($264) is not the yearly price.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F3",
+      "text": "Six cameras need Keep Pro, which is $220 a year.",
+      "answer_needles": [
+       "220",
+       "two hundred and twenty",
+       "two twenty"
+      ]
+     },
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F3",
+      "text": "Keep Pro keeps 60 days of clips.",
+      "answer_needles": [
+       "60 days",
+       "60-day",
+       "sixty days",
+       "sixty-day",
+       "two months"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F2",
+      "text": "Keep Plus covers only up to 5 cameras."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Recommends Keep Plus for six cameras.",
+      "kind": "fabrication",
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F2"
+     },
+     {
+      "text": "Gives twelve times the monthly price as the yearly price.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "264"
+      ]
+     },
+     {
+      "text": "Gives Plus's or Basic's clip history for Pro.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Invents a per-camera add-on to stretch Plus to six cameras.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-BILLING-TRAVEL-2026"
+    ],
+    "source_priority": [
+     "CC-REF-BILLING-TRAVEL-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Mentioning continuous recording on Pro.",
+     "Pointing out that Plus would do if one camera were left off the plan."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-CC-007",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "I've only just found your reset e-mail, it had gone into my junk folder. It says it was sent at ten to three, and it's twenty-five past three now. Can I still use that link?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "recovery",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The recovery procedure has several clocks and only one of them is the link's. A reset link expires 30 minutes after it is sent: sent at 2:50, it stopped working at 3:20, five minutes ago. So no; the agent sends a fresh one (up to 5 can be sent in 24 hours) and asks the customer to use it straight away. The 10 minutes is the life of a step-up code, the 15 minutes is the lock after failed sign-ins, the 5 minutes is how long the e-mail can take to arrive, and the 7 days and 72 hours belong to a changed login e-mail.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-RECOVERY-2026#F3",
+      "text": "A reset link expires 30 minutes after it is sent, so this one ran out at 3:20.",
+      "answer_needles": [
+       "30 minutes",
+       "30-minute",
+       "thirty minutes",
+       "half an hour",
+       "half-hour"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-RECOVERY-2026#F5",
+      "text": "A new reset e-mail can be sent; no more than 5 go to one account in 24 hours."
+     },
+     {
+      "fact": "CC-REF-RECOVERY-2026#F4",
+      "text": "The e-mail can take up to 5 minutes to arrive and may land in junk."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says the link is still good.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Gives another clock's length as the link's life.",
+      "kind": "fabrication",
+      "fact": "CC-REF-VERIFICATION-2026#F5",
+      "answer_needles": [
+       "10 minutes",
+       "ten minutes",
+       "15 minutes",
+       "fifteen minutes",
+       "7 days",
+       "seven days",
+       "72 hours",
+       "24 hours to use"
+      ]
+     },
+     {
+      "text": "Offers to set or read out a password instead.",
+      "kind": "fabrication",
+      "fact": "CC-REF-RECOVERY-2026#F1"
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-RECOVERY-2026"
+    ],
+    "source_priority": [
+     "CC-REF-RECOVERY-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Offering to send a new link now and stay on the line while it arrives."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "time(14, 50) + minutes(30)",
+     "result": "15:20",
+     "unit": "time of day",
+     "accepted_forms": [
+      "3:20",
+      "twenty past three",
+      "three twenty",
+      "15:20",
+      "five minutes ago",
+      "5 minutes ago",
+      "30 minutes",
+      "thirty minutes",
+      "half an hour"
+     ],
+     "inputs": {
+      "link_lifetime": "CC-REF-RECOVERY-2026#F3",
+      "sent_at": "stated in the question (2:50)",
+      "now": "stated in the question (3:25)"
+     },
+     "wrong_results_common": [
+      "10 minutes",
+      "ten minutes",
+      "7 days",
+      "72 hours"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-CC-008",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "her refund was approved this morning, wednesday the 14th, and it's going back to the wallet on her phone. what's the latest date I should tell her to expect it",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "refund",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two documents give refund times and only their dates tell which is in force. The current Refund and Cancellation Policy (version 3.1, 1 July 2026) has a time per payment method: a digital wallet takes up to 3 business days after approval. Approved on Wednesday 14 October 2026, that is Thursday 15, Friday 16 and Monday 19 October: by Monday 19 October. The 2025 handbook's 10 to 14 business days is outdated. In the current table 5 to 7 business days is for cards and up to 10 for direct bank debit; neither is hers. Three calendar days (Saturday 17 October) is also wrong.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-REFUND-2026#F16",
+      "text": "A digital-wallet refund takes up to 3 business days, so by Monday 19 October.",
+      "answer_needles": [
+       "19 October",
+       "October 19",
+       "19th of October",
+       "19th October",
+       "October the 19th",
+       "October 19th",
+       "Oct 19",
+       "19 Oct",
+       "Oct. 19",
+       "19th of Oct",
+       "19th Oct",
+       "Oct 19th",
+       "19th"
+      ]
+     },
+     {
+      "fact": "CC-REF-REFUND-2026#F16",
+      "text": "The time for a digital wallet is up to 3 business days.",
+      "answer_needles": [
+       "3 business days",
+       "three business days",
+       "3 working days",
+       "three working days"
+      ]
+     }
+    ],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Gives the 2025 handbook's 10 to 14 business days.",
+      "kind": "stale",
+      "fact": "CC-REF-HANDBOOK-V2#F7",
+      "answer_needles": [
+       "10 to 14",
+       "10-14",
+       "ten to fourteen",
+       "3 November",
+       "November 3",
+       "3rd of November",
+       "3rd November",
+       "November the 3rd",
+       "November 3rd",
+       "Nov 3",
+       "3 Nov",
+       "Nov. 3",
+       "3rd of Nov",
+       "3rd Nov",
+       "Nov 3rd"
+      ]
+     },
+     {
+      "text": "Gives the card time of 5 to 7 business days.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REFUND-2026#F15",
+      "answer_needles": [
+       "5 to 7",
+       "5-7",
+       "five to seven",
+       "23 October",
+       "October 23",
+       "23rd of October",
+       "23rd October",
+       "October the 23rd",
+       "October 23rd",
+       "Oct 23",
+       "23 Oct",
+       "Oct. 23",
+       "23rd of Oct",
+       "23rd Oct",
+       "Oct 23rd"
+      ]
+     },
+     {
+      "text": "Gives the direct-debit time of up to 10 business days.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REFUND-2026#F16",
+      "answer_needles": [
+       "28 October",
+       "October 28",
+       "28th of October",
+       "28th October",
+       "October the 28th",
+       "October 28th",
+       "Oct 28",
+       "28 Oct",
+       "Oct. 28",
+       "28th of Oct",
+       "28th Oct",
+       "Oct 28th"
+      ]
+     },
+     {
+      "text": "Counts three calendar days.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "17 October",
+       "October 17",
+       "17th of October",
+       "17th October",
+       "October the 17th",
+       "October 17th",
+       "Oct 17",
+       "17 Oct",
+       "Oct. 17",
+       "17th of Oct",
+       "17th Oct",
+       "Oct 17th"
+      ]
+     }
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say",
+    "expected_action": "prefer_current_source",
+    "expected_response_type": "private_advice",
+    "source_ids": [
+     "CC-REF-REFUND-2026"
+    ],
+    "source_priority": [
+     "CC-REF-REFUND-2026",
+     "CC-REF-HANDBOOK-V2"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "How long a refund takes to arrive",
+      "sources": [
+       "CC-REF-REFUND-2026",
+       "CC-REF-HANDBOOK-V2"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Saying it is \"up to\", so it may arrive sooner."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "date(2026-10-14) + 3 business days",
+     "result": "2026-10-19",
+     "unit": "date",
+     "accepted_forms": [
+      "19 October",
+      "October 19",
+      "19th of October",
+      "19th October",
+      "October the 19th",
+      "October 19th",
+      "Oct 19",
+      "19 Oct",
+      "Oct. 19",
+      "19th of Oct",
+      "19th Oct",
+      "Oct 19th",
+      "19th"
+     ],
+     "inputs": {
+      "wallet_refund_time": "CC-REF-REFUND-2026#F16",
+      "approved_on": "stated in the question (Wednesday 14 October 2026)"
+     },
+     "wrong_results_common": [
+      "17 October",
+      "October 17",
+      "17th of October",
+      "17th October",
+      "October the 17th",
+      "October 17th",
+      "Oct 17",
+      "17 Oct",
+      "Oct. 17",
+      "17th of Oct",
+      "17th Oct",
+      "Oct 17th",
+      "23 October",
+      "October 23",
+      "23rd of October",
+      "23rd October",
+      "October the 23rd",
+      "October 23rd",
+      "Oct 23",
+      "23 Oct",
+      "Oct. 23",
+      "23rd of Oct",
+      "23rd Oct",
+      "Oct 23rd",
+      "28 October",
+      "October 28",
+      "28th of October",
+      "28th October",
+      "October the 28th",
+      "October 28th",
+      "Oct 28",
+      "28 Oct",
+      "Oct. 28",
+      "28th of Oct",
+      "28th Oct",
+      "Oct 28th",
+      "3 November",
+      "November 3",
+      "3rd of November",
+      "3rd November",
+      "November the 3rd",
+      "November 3rd",
+      "Nov 3",
+      "3 Nov",
+      "Nov. 3",
+      "3rd of Nov",
+      "3rd Nov",
+      "Nov 3rd"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-CC-009",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "he got the IR-7 and his ID in on monday the 19th. what date do I tell him he will have an answer by",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "recovery",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two current documents disagree and neither says it replaces the other on this point. The Password and Account Recovery Procedure (version 2.3, April 2026) says to allow up to 3 business days for Identity Review: from Monday 19 October 2026 that is Thursday 22 October. The Account Verification Standard (version 4.2, June 2026) says up to 5 business days: Monday 26 October. The right private advice names both, gives the customer the safe one (by Monday 26 October) or says to confirm with Tier 2 Account Integrity, and does not promise the 22nd.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F16",
+      "text": "By the Verification Standard, up to 5 business days: Monday 26 October.",
+      "answer_needles": [
+       "26 October",
+       "October 26",
+       "26th of October",
+       "26th October",
+       "October the 26th",
+       "October 26th",
+       "Oct 26",
+       "26 Oct",
+       "Oct. 26",
+       "26th of Oct",
+       "26th Oct",
+       "Oct 26th",
+       "26th"
+      ]
+     },
+     {
+      "fact": "CC-REF-RECOVERY-2026#F6",
+      "text": "By the Recovery Procedure, up to 3 business days: Thursday 22 October.",
+      "answer_needles": [
+       "22 October",
+       "October 22",
+       "22nd of October",
+       "22nd October",
+       "October the 22nd",
+       "October 22nd",
+       "Oct 22",
+       "22 Oct",
+       "Oct. 22",
+       "22nd of Oct",
+       "22nd Oct",
+       "Oct 22nd",
+       "22nd",
+       "3 business days",
+       "three business days"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F15",
+      "text": "Identity Review is decided by Tier 2 Account Integrity."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Tells the agent to promise an answer by Thursday 22 October with no mention that the other document allows until the 26th.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-RECOVERY-2026#F6"
+     },
+     {
+      "text": "Counts calendar days instead of business days.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "24 October",
+       "October 24",
+       "24th of October",
+       "24th October",
+       "October the 24th",
+       "October 24th",
+       "Oct 24",
+       "24 Oct",
+       "Oct. 24",
+       "24th of Oct",
+       "24th Oct",
+       "Oct 24th"
+      ]
+     },
+     {
+      "text": "Gives a duration found in neither document.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Invents a rule for which of the two documents wins.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say",
+    "expected_action": "surface_conflict",
+    "expected_response_type": "private_advice",
+    "source_ids": [
+     "CC-REF-VERIFICATION-2026",
+     "CC-REF-RECOVERY-2026"
+    ],
+    "source_priority": [
+     "CC-REF-VERIFICATION-2026",
+     "CC-REF-RECOVERY-2026"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "How long Identity Review takes",
+      "sources": [
+       "CC-REF-VERIFICATION-2026",
+       "CC-REF-RECOVERY-2026"
+      ],
+      "resolution": "unresolved"
+     }
+    ],
+    "acceptable_inference": [
+     "Advising to quote the later date so the customer is not let down."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "date(2026-10-19) + 3 business days ; date(2026-10-19) + 5 business days",
+     "result": "2026-10-22 and 2026-10-26",
+     "unit": "date",
+     "accepted_forms": [
+      "26 October",
+      "October 26",
+      "26th of October",
+      "26th October",
+      "October the 26th",
+      "October 26th",
+      "Oct 26",
+      "26 Oct",
+      "Oct. 26",
+      "26th of Oct",
+      "26th Oct",
+      "Oct 26th",
+      "26th"
+     ],
+     "inputs": {
+      "recovery_procedure_days": "CC-REF-RECOVERY-2026#F6",
+      "verification_standard_days": "CC-REF-VERIFICATION-2026#F16",
+      "submitted_on": "stated in the question (Monday 19 October 2026)"
+     },
+     "wrong_results_common": [
+      "24 October",
+      "October 24",
+      "24th of October",
+      "24th October",
+      "October the 24th",
+      "October 24th",
+      "Oct 24",
+      "24 Oct",
+      "Oct. 24",
+      "24th of Oct",
+      "24th Oct",
+      "Oct 24th"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-CC-010",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "I'm on the yearly Plus, it renewed on the fifteenth of January, and I've only got the one camera now so Basic would do me. If I switch down today, the seventh of October, do I get anything back for the rest of the year?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-cf-no-refund-policy",
+   "pi_state": "none",
+   "condition": "missing_evidence",
+   "category": "no_policy",
+   "difficulty": "hard",
+   "cf_pair": "annual-downgrade-credit",
+   "oracle": {
+    "expected_behavior_note": "The Refund and Cancellation Policy, the only document with the rule for moving to a cheaper plan during an ANNUAL term, is not on the shelf in this case (nor is the old handbook). What is loaded: the billing guide's prices (Plus $130 a year, Basic $60 a year, Basic covers one camera) and its rule for MONTHLY plans (moving down takes effect on the next billing date with no credit for the current month). Neither tells the agent whether an annual customer gets anything back. The right reply says the switch to Basic is possible, gives the prices if useful, and says the agent will check what applies to the rest of the annual term before telling her. It must not state a credit amount, must not say there is no credit, and must not say money goes back to the card.",
+    "required_facts": [],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F1",
+      "text": "Keep Basic is $60 a year and covers one camera."
+     },
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F2",
+      "text": "Keep Plus is $130 a year."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "States a credit or refund amount for the remaining months.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "17.50",
+       "17.5",
+       "23.33",
+       "5.83",
+       "52.50"
+      ]
+     },
+     {
+      "text": "Applies the monthly-plan rule to an annual plan and says there is no credit.",
+      "kind": "false_denial",
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F7"
+     },
+     {
+      "text": "Says the difference will be refunded to her card.",
+      "kind": "unauthorized_promise"
+     },
+     {
+      "text": "Recites a refund window or a refund rule that is not in the loaded material.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "45 days",
+       "within 30 days",
+       "30-day window",
+       "30 day window"
+      ]
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "decline_to_invent_stay_useful",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Offering to check with the Team Lead or Billing Operations and come back on the same call.",
+     "Confirming that Basic covers her one camera."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-CC-011",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "This is Anselm Corwick-Hale at Durrant and Pike, I act for one of the parties in a boundary dispute. I'm not doing this by e-mail. What's the direct telephone line for your legal department?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "missing_evidence",
+   "category": "privacy",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The privacy policy says every request from a lawyer is handled only by the Legal Response team, and gives one way to reach it: legalresponse@brindlewatch.example. No telephone number for Legal Response is in anything loaded; 'can be reached around the clock' is said about emergencies with imminent danger and still comes with no number. The right reply does not confirm whether anyone has an account, says the agent has no telephone number to give, gives the e-mail address, and logs the call. It must not make up a number, transfer the caller to another desk, or discuss the matter.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-PRIVACY-2026#F17",
+      "text": "Requests from lawyers go only to Legal Response at legalresponse@brindlewatch.example.",
+      "answer_needles": [
+       "legalresponse",
+       "legal response at brindlewatch"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-PRIVACY-2026#F18",
+      "text": "The agent does not confirm whether the person named has an account, shares nothing, and logs the call."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives a telephone number or extension for the legal team.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "555",
+       "1-800",
+       "800-",
+       "extension"
+      ]
+     },
+     {
+      "text": "Offers to transfer the caller to Legal Response, the Privacy Office or a supervisor to deal with the request by phone.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Confirms or denies that a person has an account, or discusses recordings.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-PRIVACY-2026#F18"
+     },
+     {
+      "text": "Says Legal Response cannot be contacted at all.",
+      "kind": "false_denial"
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "decline_to_invent_stay_useful",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-PRIVACY-2026"
+    ],
+    "source_priority": [
+     "CC-REF-PRIVACY-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Spelling the address out for the caller."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-CC-012",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "I'm on the Plus plan, paying month by month, and I've got my two Trek cams on Roam Link as well. What does that all come to each month?",
+   "prior_transcript": null,
+   "conversation_id": "ER-C1-CC-012-C",
+   "turn_index": 1,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "followup",
+   "category": "billing",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "From the billing guide: Keep Plus is $13 a month, and Roam Link is $5 per camera per month, so two cameras are $10. $23 a month before tax, with any extra data or days abroad on top. Roam Link is charged per camera; the plan is charged once.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F2",
+      "text": "Keep Plus at $13 plus two cameras on Roam Link at $5 each is $23 a month.",
+      "answer_needles": [
+       "$23",
+       "23 dollars",
+       "23 a month",
+       "23 per month",
+       "twenty-three"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F8",
+      "text": "Roam Link is $5 per camera per month."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Counts Roam Link once instead of per camera.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "$18",
+       "18 dollars",
+       "18 a month"
+      ]
+     },
+     {
+      "text": "Charges the plan per camera.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "$36",
+       "$31"
+      ]
+     },
+     {
+      "text": "Uses the Pro or Basic price.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "$32",
+       "$16"
+      ]
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-BILLING-TRAVEL-2026"
+    ],
+    "source_priority": [
+     "CC-REF-BILLING-TRAVEL-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "13 + 2 * 5",
+     "result": 23,
+     "unit": "USD per month",
+     "accepted_forms": [
+      "$23",
+      "23 dollars",
+      "23 a month",
+      "23 per month",
+      "twenty-three"
+     ],
+     "inputs": {
+      "plus_monthly": "CC-REF-BILLING-TRAVEL-2026#F2",
+      "roam_link_per_camera": "CC-REF-BILLING-TRAVEL-2026#F8",
+      "cameras": "stated in the question (2)"
+     },
+     "wrong_results_common": [
+      "$18",
+      "$36",
+      "$31",
+      "$32"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-CC-013",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "And if I switched the whole lot over to paying by the year instead, what would that save me over twelve months?",
+   "prior_transcript": null,
+   "conversation_id": "ER-C1-CC-012-C",
+   "turn_index": 2,
+   "evidence_config": "call-center-full",
+   "pi_state": "none",
+   "condition": "followup",
+   "category": "billing",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "'The whole lot' is the Keep Plus plan and the two Roam Link cameras from the turn before. Only the plan has a yearly price: Keep Plus is $130 a year against 12 x $13 = $156 month by month, a saving of $26. Roam Link is priced per camera per month only, $5; the guide gives no yearly price for it, so that part stays at $120 a year. The saving over twelve months is $26. Inventing a yearly Roam Link price is the mistake.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F2",
+      "text": "Keep Plus is $130 a year against $156 paid monthly, a saving of $26.",
+      "answer_needles": [
+       "$26",
+       "26 dollars",
+       "twenty-six"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F8",
+      "text": "Roam Link is $5 per camera per month and has no yearly price, so it stays the same."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Invents a yearly price or a yearly discount for Roam Link.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "$46",
+       "$36",
+       "$100 a year",
+       "$50 a year"
+      ]
+     },
+     {
+      "text": "Uses another plan's yearly price.",
+      "kind": "fabrication",
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F3",
+      "answer_needles": [
+       "$44",
+       "$12 a year"
+      ]
+     },
+     {
+      "text": "Promises a refund of the current month on switching.",
+      "kind": "unauthorized_promise"
+     },
+     {
+      "text": "Loses the thread and prices a different plan or number of cameras.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "CC-REF-BILLING-TRAVEL-2026"
+    ],
+    "source_priority": [
+     "CC-REF-BILLING-TRAVEL-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Giving the yearly totals as well ($250 against $276)."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "13 * 12 - 130",
+     "result": 26,
+     "unit": "USD per year",
+     "accepted_forms": [
+      "$26",
+      "26 dollars",
+      "twenty-six"
+     ],
+     "inputs": {
+      "plus_monthly": "CC-REF-BILLING-TRAVEL-2026#F2",
+      "plus_annual": "CC-REF-BILLING-TRAVEL-2026#F2",
+      "roam_link": "CC-REF-BILLING-TRAVEL-2026#F8",
+      "setup": "previous turn (Keep Plus monthly, two cameras on Roam Link)"
+     },
+     "wrong_results_common": [
+      "$46",
+      "$36",
+      "$44"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  }
+ ]
+}

@@ -1,6 +1,6 @@
 {
  "name": "evidence-rich-v1",
- "frozen_at": "2026-10-04T17:31:51.939Z",
+ "frozen_at": "2026-10-09T11:06:49.201Z",
  "manifest_sha256": "8aa245098a930f64fc181bb8e30d6c851ef2fa93d89c3404f530b9277cf0cbf3",
  "datasets": {
   "dev": {
@@ -22,6 +22,18 @@
   "dev2": {
    "items": 360,
    "sha256": "0886c10b084eeef1ac4171be93a63b079af14bb7d9d8841f275f4d835e8275c9"
+  },
+  "challenge": {
+   "items": 117,
+   "sha256": "bb2bad267b683ad9b24f0af7c54776bcc9f5de91a10423fa030fd00f115a2307"
+  },
+  "challenge-val": {
+   "items": 54,
+   "sha256": "c62fc30c209420dde276902309829c0aab748e7279ade6b0cb27cab787c4b0dc"
+  },
+  "code1": {
+   "items": 36,
+   "sha256": "da9562e2ed45dc68f423b259a99b17694ee33f08173f4edc8bf43ed029d4f8ef"
   }
  },
  "evidence_files": 104

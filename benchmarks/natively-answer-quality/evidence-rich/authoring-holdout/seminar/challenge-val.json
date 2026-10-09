@@ -1,0 +1,519 @@
+{
+  "mode": "seminar",
+  "items": [
+    {
+      "id": "ER-CV1-SEM-001",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Dampers are your best class. Of everything that got past you in the held-back schools, how much of it was dampers?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "calculation",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The results table: 46 stuck-damper episodes, 43 detected, so 3 missed. The paper: 157 of 187 held-out episodes detected, so 30 missed in all. Dampers are 3 of the 30 misses, 10%. The 7% (3 of 46) is the share of damper episodes that were missed, a different question.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F5",
+            "text": "3 stuck-damper episodes were missed (43 of 46 detected).",
+            "answer_needles": [
+              "3 ",
+              "three"
+            ]
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F4",
+            "text": "That is 3 of the 30 misses, 10%.",
+            "answer_needles": [
+              "3 of the 30",
+              "3 of 30",
+              "3 out of 30",
+              "three of the thirty",
+              "three of thirty",
+              "three out of thirty",
+              "10%",
+              "10 percent",
+              "10 per cent",
+              "ten percent",
+              "ten per cent",
+              "a tenth",
+              "one in ten",
+              "one tenth",
+              "one-tenth"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Gives the share of damper episodes that were missed (3 of 46, about 7%) as the share of all misses.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Uses the March export's damper counts (45 of 49).",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-RESULTS-TABLE",
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "source_priority": [
+          "SEM-REF-RESULTS-TABLE",
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "(46 - 43) / (187 - 157) * 100",
+          "result": 10,
+          "unit": "% of all missed held-out episodes that were stuck dampers (3 of 30)",
+          "accepted_forms": [
+            "3 of the 30",
+            "3 of 30",
+            "3 out of 30",
+            "three of the thirty",
+            "three of thirty",
+            "three out of thirty",
+            "10%",
+            "10 percent",
+            "10 per cent",
+            "ten percent",
+            "ten per cent",
+            "a tenth",
+            "one in ten",
+            "one tenth",
+            "one-tenth"
+          ],
+          "inputs": {
+            "damper_counts": "SEM-REF-RESULTS-TABLE#F5",
+            "held_out_totals": "SEM-REF-PAPER-FINAL#F4"
+          },
+          "wrong_results_common": [
+            "6.5%",
+            "7%",
+            "6.52"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-SEM-002",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Your live trial wrapped up in January. How much of your data comes from after it finished?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "dataset",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The paper: the pilot ran from 3 November 2025 to 9 January 2026, and the trend logs run to 30 January 2026. From 9 January to 30 January is 21 days, three weeks (both are Fridays). The presenter gives the two dates and the gap.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F25",
+            "text": "The data run to 30 January 2026.",
+            "answer_needles": [
+              "30 January",
+              "January 30",
+              "Jan 30",
+              "Jan. 30",
+              "30 Jan",
+              "30th of January",
+              "30th January",
+              "January 30th",
+              "January the 30th",
+              "30th Jan",
+              "Jan 30th"
+            ]
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F20",
+            "text": "The pilot ended on 9 January 2026, so that is 21 days, three weeks.",
+            "answer_needles": [
+              "21 days",
+              "three weeks",
+              "3 weeks",
+              "twenty-one days"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Gives a gap that is a day or a week out, or counts from the start of the pilot.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "22 days",
+              "20 days",
+              "four weeks",
+              "4 weeks",
+              "two weeks",
+              "2 weeks"
+            ]
+          },
+          {
+            "text": "Says no data were collected after the pilot.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "source_priority": [
+          "SEM-REF-PAPER-FINAL"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "date(2026-01-30) - date(2026-01-09)",
+          "result": 21,
+          "unit": "days (three weeks)",
+          "accepted_forms": [
+            "21 days",
+            "three weeks",
+            "3 weeks",
+            "twenty-one days"
+          ],
+          "inputs": {
+            "pilot_end": "SEM-REF-PAPER-FINAL#F20",
+            "data_end": "SEM-REF-PAPER-FINAL#F25"
+          },
+          "wrong_results_common": [
+            "22 days",
+            "20 days",
+            "four weeks",
+            "4 weeks",
+            "two weeks",
+            "2 weeks"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-SEM-003",
+      "mode": "seminar",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "which of the three baselines threw the fewest false alarms on the held-out buildings, and how many? i keep mixing up the columns",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "comparison_baseline",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The rule set, RB-28, with 34 false alarms (6.8 per 100 unit-months). The LSTM autoencoder raised 49 and PCA-T2 77. TERN's 16 is not a baseline. The 126 beside RB-28 is its median delay in minutes, not a count of alarms.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F9",
+            "text": "RB-28 raised 34 false alarms, the fewest of the three baselines.",
+            "answer_needles": [
+              "34"
+            ]
+          },
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F9",
+            "text": "The system is the rule set, RB-28.",
+            "answer_needles": [
+              "RB-28",
+              "rule set",
+              "rule-based",
+              "rules"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F8",
+            "text": "LSTM-AE raised 49."
+          },
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F10",
+            "text": "PCA-T2 raised 77."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Names the LSTM autoencoder (49) or PCA-T2 (77) as the baseline with the fewest.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Gives TERN's 16 as a baseline's count.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "assistant answering the presenter privately; the presenter typed the request",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "SEM-REF-RESULTS-TABLE"
+        ],
+        "source_priority": [
+          "SEM-REF-RESULTS-TABLE",
+          "SEM-REF-PAPER-FINAL",
+          "SEM-REF-SLIDES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-SEM-004",
+      "mode": "seminar",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "aldergate primary: which f1 and median delay do i quote? the two csvs on my laptop don't agree",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "version_conflict",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Quote 0.93 and 28 minutes: the current results table (pipeline v1.2, run 21 August 2026) has Aldergate Primary at 27 episodes, 25 detected, F1 0.93, median delay 28 minutes, and the supplement agrees on the F1. The other file is the March export (v0.6, 9 March 2026): 0.88 and 40 minutes, superseded. Only the version and run-date columns tell the two files apart.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F20",
+            "text": "Aldergate Primary: F1 0.93.",
+            "answer_needles": [
+              "0.93"
+            ]
+          },
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F20",
+            "text": "Median delay 28 minutes.",
+            "answer_needles": [
+              "28"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-RESULTS-TABLE#F1",
+            "text": "The current table is pipeline v1.2, run on 21 August 2026."
+          },
+          {
+            "fact": "SEM-REF-RESULTS-EXPORT-MARCH#F1",
+            "text": "The export is pipeline v0.6, run on 9 March 2026."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Quotes the March export's 0.88 or 40 minutes as the figure to use.",
+            "kind": "stale",
+            "fact": "SEM-REF-RESULTS-EXPORT-MARCH#F8",
+            "answer_needles": [
+              "40 min",
+              "40-minute"
+            ]
+          },
+          {
+            "text": "Says the two files cannot be told apart, or leaves the choice open.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "assistant answering the presenter privately; the presenter typed the request",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "SEM-REF-RESULTS-TABLE"
+        ],
+        "source_priority": [
+          "SEM-REF-RESULTS-TABLE",
+          "SEM-REF-APPENDIX",
+          "SEM-REF-RESULTS-EXPORT-MARCH"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "F1 and median delay at Aldergate Primary",
+            "sources": [
+              "SEM-REF-RESULTS-TABLE",
+              "SEM-REF-RESULTS-EXPORT-MARCH"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-SEM-005",
+      "mode": "seminar",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "what's the lead technician's name? i want to thank him properly on the last slide",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "unsupported",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "No document names him. The paper and the supplement speak only of \"the estate's lead technician\", and the acknowledgements and the last slide thank the Brackenfirth facilities team as a whole. The answer says so and does not supply a name; the names that do appear in the pack belong to the co-authors (Juho Raskinen, Odalys Brennecke) and to other research groups, and none of them is the technician.",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F19",
+            "text": "The lead technician re-inspected all 16 false alarms."
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F27",
+            "text": "Each natural episode was confirmed by the estate's lead technician."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives a name for the technician, for example a co-author's or another researcher's.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "Raskinen",
+              "Brennecke",
+              "Ostrander",
+              "Sable",
+              "Ilvesmaa",
+              "Quillfeather"
+            ]
+          },
+          {
+            "text": "Says there was no lead technician, or that nobody checked the labels.",
+            "kind": "false_denial",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "assistant answering the presenter privately; the presenter typed the request",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "private_explanation",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-SEM-006",
+      "mode": "seminar",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "So does that interval clear the autoencoder? And is your margin over it distinguishable from nothing?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "What's the uncertainty on that headline F1?"
+        },
+        {
+          "speaker": "user",
+          "text": "The 95% interval is 0.83 to 0.90, from resampling units two thousand times."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "seminar-full",
+      "pi_state": "none",
+      "condition": "followup",
+      "category": "defence",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Continues the presenter's own answer. The autoencoder's F1 is 0.79, which lies below the lower end of TERN's interval (0.83). The gain over it is 0.08 with an interval of 0.03 to 0.13, which does not include zero, so yes on both counts. The 0.16 (0.10 to 0.22) is the gain over the rule set, not over the autoencoder.",
+        "required_facts": [
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F7",
+            "text": "The LSTM autoencoder's F1 is 0.79, below the interval's lower end.",
+            "answer_needles": [
+              "0.79"
+            ]
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F17",
+            "text": "The gain over it is 0.08.",
+            "answer_needles": [
+              "0.08"
+            ]
+          },
+          {
+            "fact": "SEM-REF-PAPER-FINAL#F17",
+            "text": "Its interval is 0.03 to 0.13, which excludes zero.",
+            "answer_needles": [
+              "0.03"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Gives the gain over the rule set (0.16, interval 0.10 to 0.22) as the gain over the autoencoder.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Says the difference is not distinguishable from zero.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "presenter defending their own paper, speaking to the examiner or audience member in the first person",
+        "expected_action": "continue_previous_answer",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SEM-REF-PAPER-FINAL",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "SEM-REF-PAPER-FINAL",
+          "CONVERSATION"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    }
+  ]
+}

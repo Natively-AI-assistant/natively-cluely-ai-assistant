@@ -1,0 +1,611 @@
+{
+ "mode": "sales",
+ "items": [
+  {
+   "id": "ER-CV1-SALES-001",
+   "mode": "sales",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "prospect wants the same kit on their trucks that hollowmere has, truck for truck, same number of trucks. what's the hardware bill at today's list? they'd fit it themselves",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "quantity_arithmetic",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two documents. The customer story: Hollowmere has 212 trucks, each with one TrakNode and two TempSense sensors, 424 sensors in all, and no cameras. The current price list: TrakNode T4 $89 per unit, TempSense S2 $64 per sensor; self-installation carries no charge and shipping is free on an order of this size. 212 x 89 = $18,868 and 424 x 64 = $27,136, together $46,004. Hardware is never discounted. The 2025 list's $99 (the price when Hollowmere bought) gives $48,124 and the draft's $79 gives $43,884; counting one sensor per truck gives $32,436.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-PRICING-2026#F29",
+      "text": "212 TrakNode units at $89 and 424 sensors at $64 come to $46,004.",
+      "answer_needles": [
+       "46,004",
+       "46004",
+       "46.0k"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-CASESTUDY-HOLLOWMERE#F4",
+      "text": "Each Hollowmere truck carries one TrakNode and two TempSense sensors, 424 sensors in all."
+     },
+     {
+      "fact": "SALES-REF-PRICING-2026#F33",
+      "text": "Self-installation carries no charge."
+     },
+     {
+      "fact": "SALES-REF-PRICING-2026#F36",
+      "text": "Hardware is never discounted."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Uses the 2025 list's $99 for the telematics unit.",
+      "kind": "stale",
+      "fact": "SALES-REF-PRICING-2025#F10",
+      "answer_needles": [
+       "48,124",
+       "20,988"
+      ]
+     },
+     {
+      "text": "Uses the draft 2027 list's $79.",
+      "kind": "draft",
+      "fact": "SALES-REF-PRICING-2027-DRAFT#F8",
+      "answer_needles": [
+       "43,884",
+       "16,748"
+      ]
+     },
+     {
+      "text": "Counts one sensor per truck.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "32,436",
+       "13,568"
+      ]
+     },
+     {
+      "text": "Adds cameras, which Hollowmere did not take.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-CASESTUDY-HOLLOWMERE#F5",
+      "answer_needles": [
+       "94,552",
+       "48,548"
+      ]
+     },
+     {
+      "text": "Applies a volume discount to hardware.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "43,703",
+       "43,704"
+      ]
+     }
+    ],
+    "expected_role": "assistant advising the seller privately; an explanation for the seller, not a line addressed to the prospect",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "SALES-REF-CASESTUDY-HOLLOWMERE",
+     "SALES-REF-PRICING-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-PRICING-2026",
+     "SALES-REF-CASESTUDY-HOLLOWMERE",
+     "SALES-REF-PRICING-2025",
+     "SALES-REF-PRICING-2027-DRAFT"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "telematics unit price",
+      "sources": [
+       "SALES-REF-PRICING-2026",
+       "SALES-REF-PRICING-2025",
+       "SALES-REF-PRICING-2027-DRAFT"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Adding what professional installation would cost if they changed their mind (212 x $45)."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "212 * 89 + 424 * 64",
+     "result": 46004,
+     "unit": "USD",
+     "accepted_forms": [
+      "46,004",
+      "46004",
+      "$46,004"
+     ],
+     "inputs": {
+      "trucks": "SALES-REF-CASESTUDY-HOLLOWMERE#F2",
+      "sensors": "SALES-REF-CASESTUDY-HOLLOWMERE#F4",
+      "unit_price": "SALES-REF-PRICING-2026#F29",
+      "sensor_price": "SALES-REF-PRICING-2026#F30"
+     },
+     "wrong_results_common": [
+      "48,124",
+      "43,884",
+      "32,436",
+      "94,552",
+      "43,703",
+      "43,704"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-CV1-SALES-002",
+   "mode": "sales",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "If it's still not fixed, at what time does this get pushed up the chain on your side, and when does somebody senior get told?",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "We're on Enterprise. Our whole dispatch board went dark at nine forty this morning and your support team logged it as a Priority 1."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "sla",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The time the ticket was opened is said on the call; the escalation rule is in the support guide. A Priority 1 ticket not resolved within 2 hours is escalated to the Duty Incident Manager: 9:40 plus 2 hours is 11:40. At 4 hours the VP Customer Operations is notified: 13:40, twenty to two. Enterprise customers get an update every hour meanwhile. These are escalation steps, not a promise of a fix by then.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F23",
+      "text": "At two hours, 11:40, it is escalated to the Duty Incident Manager.",
+      "answer_needles": [
+       "11:40",
+       "twenty to twelve",
+       "eleven forty",
+       "eleven-forty"
+      ]
+     },
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F23",
+      "text": "At four hours, 13:40, the VP Customer Operations is notified.",
+      "answer_needles": [
+       "13:40",
+       "1:40 pm",
+       "1:40pm",
+       "1:40 p.m",
+       "1:40 in the afternoon",
+       "twenty to two",
+       "one forty",
+       "one-forty"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F24",
+      "text": "Enterprise customers get an update every hour during a Priority 1 incident."
+     },
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F25",
+      "text": "They can also ask for an escalation at any time, or call the escalation line."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives the hourly update or the 30-minute response target as the escalation time.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "10:40",
+       "10:10"
+      ]
+     },
+     {
+      "text": "Uses the Operations update interval of 4 hours for an Enterprise customer's updates.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F24"
+     },
+     {
+      "text": "Promises the fault will be fixed by a given time.",
+      "kind": "unauthorized_promise"
+     }
+    ],
+    "expected_role": "seller (account executive) speaking to the prospect, first person",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SALES-REF-SUPPORT-SLA-2026",
+     "CONVERSATION"
+    ],
+    "source_priority": [
+     "SALES-REF-SUPPORT-SLA-2026",
+     "CONVERSATION"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Offering to chase the incident internally straight away."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "time(9, 40) + hours(4)",
+     "result": "13:40",
+     "unit": "time of day",
+     "accepted_forms": [
+      "13:40",
+      "1:40 pm",
+      "1:40pm",
+      "1:40 p.m",
+      "1:40 in the afternoon",
+      "twenty to two",
+      "one forty",
+      "one-forty"
+     ],
+     "inputs": {
+      "opened_at": "CONVERSATION (9:40)",
+      "escalation_hours": "SALES-REF-SUPPORT-SLA-2026#F23"
+     },
+     "wrong_results_common": [
+      "12:40",
+      "14:40",
+      "10:40",
+      "10:10"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-CV1-SALES-003",
+   "mode": "sales",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Our books are all on QuickBooks. Does your system push the invoices into that for us?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "connector_capability",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The integration matrix treats the two QuickBooks products differently. QuickBooks Online is supported as a one-way invoice export on all plans. QuickBooks Desktop has no native connector and none is planned for 2026; it can only be reached through the REST API, which is on Operations and Enterprise. The prospect did not say which one they use, so the right reply separates the two and asks. A flat yes or a flat no is wrong for half of the cases.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-INTEGRATIONS-2026#F14",
+      "text": "QuickBooks Online is supported as a one-way invoice export on all plans.",
+      "answer_needles": [
+       "Online"
+      ]
+     },
+     {
+      "fact": "SALES-REF-INTEGRATIONS-2026#F20",
+      "text": "QuickBooks Desktop has no native connector; it can be reached through the REST API.",
+      "answer_needles": [
+       "Desktop"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-INTEGRATIONS-2026#F16",
+      "text": "The REST API is on Operations and Enterprise, not on Launch."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says yes without separating QuickBooks Online from QuickBooks Desktop.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Says the QuickBooks link is two-way or brings data back into Kestravane.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Gives a date for a QuickBooks Desktop connector.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "seller (account executive) speaking to the prospect, first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SALES-REF-INTEGRATIONS-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-INTEGRATIONS-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Asking which QuickBooks product they run."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-CV1-SALES-004",
+   "mode": "sales",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Which tracker is it that goes in the trucks these days, and what are they apiece?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-full",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "current_vs_old_price",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "Three price lists are loaded. The current one (version 4.2, 1 July 2026) sells the TrakNode T4 at $89 per unit, one per vehicle. The 2025 list had the TrakNode T3 at $99, and the unapproved 2027 draft proposes $79 for the T4. Only the current model and price may be quoted.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-PRICING-2026#F29",
+      "text": "The current unit is the TrakNode T4.",
+      "answer_needles": [
+       "T4"
+      ]
+     },
+     {
+      "fact": "SALES-REF-PRICING-2026#F29",
+      "text": "It costs $89 per unit.",
+      "answer_needles": [
+       "$89",
+       "89 dollars",
+       "89 per",
+       "89 a unit",
+       "89 each",
+       "89 apiece",
+       "eighty-nine"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-PRICING-2026#F35",
+      "text": "It carries a 3-year warranty with advance replacement."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Names the TrakNode T3 or its $99 price.",
+      "kind": "stale",
+      "fact": "SALES-REF-PRICING-2025#F10",
+      "answer_needles": [
+       "T3",
+       "$99",
+       "ninety-nine"
+      ]
+     },
+     {
+      "text": "Quotes the draft's $79.",
+      "kind": "draft",
+      "fact": "SALES-REF-PRICING-2027-DRAFT#F8",
+      "answer_needles": [
+       "$79",
+       "seventy-nine"
+      ]
+     }
+    ],
+    "expected_role": "seller (account executive) speaking to the prospect, first person",
+    "expected_action": "prefer_current_source",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SALES-REF-PRICING-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-PRICING-2026",
+     "SALES-REF-PRICING-2025",
+     "SALES-REF-PRICING-2027-DRAFT"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "telematics unit model and price",
+      "sources": [
+       "SALES-REF-PRICING-2026",
+       "SALES-REF-PRICING-2025",
+       "SALES-REF-PRICING-2027-DRAFT"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-CV1-SALES-005",
+   "mode": "sales",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Fine. Who is that, so I can put a name on our internal form?",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "Okay, a pilot on five of the vans sounds right for us."
+    },
+    {
+     "speaker": "user",
+     "text": "Good. That needs a sign-off from our Regional Sales Director, and I'll get that moving today."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-full",
+   "pi_state": "none",
+   "condition": "missing_evidence",
+   "category": "missing_company_fact",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The price list names the ROLE that signs off a pilot, the Regional Sales Director, and no person holds that title anywhere in the loaded material. Several people ARE named in the documents with other titles (the VP who approved the price list, the VP Customer Operations, the Director of Professional Services, the Head of Security, a customer's spokesperson). Borrowing one of them is the tempting invention. The right reply does not produce a name; it says the seller will send the director's name and contact details straight after the call.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Gives a person named in the documents with another title as the Regional Sales Director.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "Odalys",
+       "Brennecke",
+       "Marisol",
+       "Achterberg",
+       "Bartholomew",
+       "Nkemelu",
+       "Ingrid",
+       "Solheimsvik",
+       "Wendeline",
+       "Aukes"
+      ]
+     },
+     {
+      "text": "Makes up a name.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "seller (account executive) speaking to the prospect, first person",
+    "expected_action": "decline_to_invent_stay_useful",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Offering to e-mail the name and contact details after the call."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-CV1-SALES-006",
+   "mode": "sales",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "And for the whole year, with two of the on-site training days thrown in?",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "What does the sandbox run on Operations?"
+    },
+    {
+     "speaker": "user",
+     "text": "It's a hundred and fifty dollars a month on Operations."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-full",
+   "pi_state": "none",
+   "condition": "followup",
+   "category": "quantity_arithmetic",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Continues the sandbox on Operations from the turn before. The sandbox is $150 a month, $1,800 for the year. An on-site training day is $1,400 per day plus travel, so two days are $2,800 plus travel. Together $4,600, plus travel for the trainer. Neither is discountable. Adding one month of sandbox instead of twelve, or one day instead of two, is the mistake.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-PRICING-2026#F23",
+      "text": "A year of sandbox ($1,800) and two on-site days ($2,800) come to $4,600, plus travel.",
+      "answer_needles": [
+       "4,600",
+       "4600",
+       "forty-six hundred",
+       "4.6k"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-PRICING-2026#F23",
+      "text": "Travel for the on-site days is charged on top."
+     },
+     {
+      "fact": "SALES-REF-IMPLEMENTATION-2026#F26",
+      "text": "Two remote training sessions are already included with onboarding."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Counts one month of sandbox instead of twelve.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "2,950"
+      ]
+     },
+     {
+      "text": "Counts one training day instead of two.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "3,200"
+      ]
+     },
+     {
+      "text": "States an amount for travel.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Offers a discount on either item.",
+      "kind": "unauthorized_promise",
+      "fact": "SALES-REF-PRICING-2026#F36"
+     }
+    ],
+    "expected_role": "seller (account executive) speaking to the prospect, first person",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SALES-REF-PRICING-2026",
+     "CONVERSATION"
+    ],
+    "source_priority": [
+     "SALES-REF-PRICING-2026",
+     "CONVERSATION"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Mentioning the two remote sessions that come with onboarding at no charge."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "150 * 12 + 2 * 1400",
+     "result": 4600,
+     "unit": "USD",
+     "accepted_forms": [
+      "4,600",
+      "4600",
+      "$4,600",
+      "forty-six hundred",
+      "4.6k"
+     ],
+     "inputs": {
+      "sandbox_monthly": "SALES-REF-PRICING-2026#F24",
+      "training_day": "SALES-REF-PRICING-2026#F23",
+      "days": "stated in the question (2)"
+     },
+     "wrong_results_common": [
+      "2,950",
+      "3,200",
+      "1,550"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  }
+ ]
+}

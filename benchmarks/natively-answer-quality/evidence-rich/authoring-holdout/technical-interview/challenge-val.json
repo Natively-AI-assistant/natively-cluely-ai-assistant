@@ -1,0 +1,800 @@
+{
+  "mode": "technical-interview",
+  "items": [
+    {
+      "id": "ER-CV1-TI-001",
+      "mode": "technical-interview",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "roughly how many booking sessions a week was that at launch? weekends were a lot quieter, so don't just times it by seven",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "ti-b-full",
+      "pi_state": "B",
+      "condition": "grounded_single",
+      "pi_condition": "profile_b",
+      "category": "numerical",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "From her notes: about 52,000 booking sessions started on a typical weekday, and weekend volume roughly 40% of a weekday, so about 20,800 on a weekend day. A week is 5 x 52,000 + 2 x 20,800 = 301,600, about 300,000 sessions (launch-quarter figures). Multiplying the weekday by seven (364,000) is wrong, and the experiment's session counts (853,400 and 852,100) are six-week totals per arm, not a week.",
+        "required_facts": [
+          {
+            "fact": "TI-REF-B-PROJECT-DEEPDIVE#F2",
+            "text": "About 52,000 sessions on a typical weekday.",
+            "answer_needles": [
+              "52,000",
+              "52000",
+              "52k",
+              "52 thousand"
+            ]
+          },
+          {
+            "fact": "TI-REF-B-PROJECT-DEEPDIVE#F4",
+            "text": "Weekend volume is roughly 40% of a weekday.",
+            "answer_needles": [
+              "40%",
+              "40 percent",
+              "40 per cent",
+              "20,800",
+              "20800",
+              "20.8k"
+            ]
+          },
+          {
+            "fact": "TI-REF-B-PROJECT-DEEPDIVE#F2",
+            "text": "That is about 301,600 a week, roughly 300,000.",
+            "answer_needles": [
+              "301,600",
+              "301600",
+              "301.6",
+              "300,000",
+              "300k",
+              "300 thousand",
+              "300K"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Multiplies the weekday figure by seven (364,000).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "364,000",
+              "364000",
+              "364k"
+            ]
+          },
+          {
+            "text": "Gives the experiment's session totals as a weekly figure.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "853,400",
+              "852,100"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (the backend profile: his employer, projects or numbers).",
+            "kind": "other_profile",
+            "fact": "PI-A-RESUME#F12",
+            "answer_needles": [
+              "Quillhaven",
+              "Skeinrouter",
+              "Marrowgate",
+              "Tessarine",
+              "Farecrest",
+              "Thorambath",
+              "Ostrakel"
+            ]
+          }
+        ],
+        "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "TI-REF-B-PROJECT-DEEPDIVE"
+        ],
+        "source_priority": [
+          "TI-REF-B-PROJECT-DEEPDIVE"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "5 * 52000 + 2 * 0.4 * 52000",
+          "result": 301600,
+          "unit": "booking sessions per week (launch quarter)",
+          "accepted_forms": [
+            "301,600",
+            "301600",
+            "301.6k",
+            "301.6 thousand",
+            "300,000",
+            "300k",
+            "300 thousand",
+            "300K"
+          ],
+          "inputs": {
+            "weekday_sessions": "TI-REF-B-PROJECT-DEEPDIVE#F2",
+            "weekend_share": "TI-REF-B-PROJECT-DEEPDIVE#F4"
+          },
+          "wrong_results_common": [
+            "364,000",
+            "364000",
+            "364k",
+            "260,000",
+            "260k"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-TI-002",
+      "mode": "technical-interview",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "how many days was it between the last carrier moving over and us finally switching the old cron module off? and what day of the week was the switch-off",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "ti-a-full",
+      "pi_state": "A",
+      "condition": "grounded_single",
+      "pi_condition": "resume_jd_relevant_ref",
+      "category": "project_followup",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "From his notes: the per-carrier flags were rolled out from 28 October to 29 December 2024, and the cron module was switched off on 3 February 2025. From 29 December 2024 to 3 February 2025 is 36 days (2 left in December, 31 in January, 3 in February), five weeks and a day. 3 February 2025 was a Monday. Counting from the start of the flag rollout (28 October, 98 days) answers a different question.",
+        "required_facts": [
+          {
+            "fact": "TI-REF-A-PROJECT-DEEPDIVE#F39",
+            "text": "It was 36 days.",
+            "answer_needles": [
+              "36 days",
+              "36-day",
+              "thirty-six days",
+              "five weeks and one day",
+              "5 weeks and 1 day",
+              "five weeks and a day",
+              "36"
+            ]
+          },
+          {
+            "fact": "TI-REF-A-PROJECT-DEEPDIVE#F39",
+            "text": "The switch-off, 3 February 2025, was a Monday.",
+            "answer_needles": [
+              "Monday"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TI-REF-A-PROJECT-DEEPDIVE#F39",
+            "text": "No carrier was moved back."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Counts from the start of the flag rollout (98 days) or is a day out (35 or 37).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "98 days",
+              "35 days",
+              "37 days"
+            ]
+          },
+          {
+            "text": "Gives another weekday for 3 February 2025.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Answers with the other candidate's facts (the frontend profile: her employer, projects or numbers).",
+            "kind": "other_profile",
+            "fact": "PI-B-RESUME#F18",
+            "answer_needles": [
+              "Lumenquay",
+              "Fernlatch",
+              "Pebblekit",
+              "Dialbench",
+              "Velmonte",
+              "Ondaverde",
+              "Farolim"
+            ]
+          }
+        ],
+        "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "TI-REF-A-PROJECT-DEEPDIVE"
+        ],
+        "source_priority": [
+          "TI-REF-A-PROJECT-DEEPDIVE"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "date(2025-02-03) - date(2024-12-29)",
+          "result": 36,
+          "unit": "days (the switch-off was on a Monday)",
+          "accepted_forms": [
+            "36 days",
+            "36-day",
+            "thirty-six days",
+            "five weeks and one day",
+            "5 weeks and 1 day",
+            "five weeks and a day",
+            "36"
+          ],
+          "inputs": {
+            "rollout_end_and_switch_off": "TI-REF-A-PROJECT-DEEPDIVE#F39"
+          },
+          "wrong_results_common": [
+            "35 days",
+            "37 days",
+            "98 days",
+            "34 days"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-TI-003",
+      "mode": "technical-interview",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Python again. Write max_distinct_window_sum, taking nums and w. Look at every run of exactly w consecutive numbers; a run only counts if all w values in it are different. Return the biggest sum among the runs that count, and minus one if no run counts, which covers w being longer than the list and the empty list. The numbers are all zero or positive, so a real sum of zero is a valid answer and is not the same thing as minus one.",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "ti-a-noproject",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "pi_condition": "no_pi",
+      "category": "coding",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Working Python named max_distinct_window_sum(nums, w), executed against the tests. Rule as spoken: only windows of exactly w consecutive values that are all different count; the result is the largest sum among them; -1 when there is none (w longer than the list, an empty list, or every window holding a repeat); a valid window whose sum is 0 returns 0, not -1. The widely known version of this problem returns 0 when no window qualifies, which is wrong here.",
+        "required_facts": [
+          {
+            "fact": "CONVERSATION",
+            "text": "The function is max_distinct_window_sum and returns -1 when no window qualifies.",
+            "answer_needles": [
+              "max_distinct_window_sum"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Returns 0 when no window qualifies.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Treats a valid sum of 0 as \"no window\" and returns -1 for it.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Answers with one of the sheet's four problems instead of the task that was asked.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "is_palindrome",
+              "merge_intervals",
+              "top_k_words",
+              "allowed_requests"
+            ]
+          },
+          {
+            "text": "Says it needs the problem sheet or more context before it can write the code.",
+            "kind": "over_deferral",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "the candidate answering the interviewer aloud, in the first person",
+        "expected_action": "write_code",
+        "expected_response_type": "code",
+        "source_ids": [
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "CONVERSATION"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Stating the complexity: one pass with a count of the values in the window.",
+          "A sentence or two on the approach."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": true,
+        "code_oracle": {
+          "language": "python",
+          "function_hint": "max_distinct_window_sum",
+          "tests": [
+            {
+              "input": [
+                [],
+                1
+              ],
+              "expected": -1
+            },
+            {
+              "input": [
+                [
+                  4
+                ],
+                1
+              ],
+              "expected": 4
+            },
+            {
+              "input": [
+                [
+                  1,
+                  2,
+                  3
+                ],
+                3
+              ],
+              "expected": 6
+            },
+            {
+              "input": [
+                [
+                  1,
+                  2,
+                  1
+                ],
+                3
+              ],
+              "expected": -1
+            },
+            {
+              "input": [
+                [
+                  5,
+                  5,
+                  5
+                ],
+                2
+              ],
+              "expected": -1
+            },
+            {
+              "input": [
+                [
+                  0,
+                  0
+                ],
+                1
+              ],
+              "expected": 0
+            },
+            {
+              "input": [
+                [
+                  1,
+                  5,
+                  4,
+                  2,
+                  9,
+                  9,
+                  9
+                ],
+                3
+              ],
+              "expected": 15
+            },
+            {
+              "input": [
+                [
+                  4,
+                  4,
+                  4,
+                  1,
+                  2,
+                  3
+                ],
+                3
+              ],
+              "expected": 7
+            },
+            {
+              "input": [
+                [
+                  1,
+                  2
+                ],
+                3
+              ],
+              "expected": -1
+            },
+            {
+              "input": [
+                [
+                  9,
+                  1,
+                  9,
+                  1,
+                  9
+                ],
+                2
+              ],
+              "expected": 10
+            },
+            {
+              "input": [
+                [
+                  3,
+                  1,
+                  3,
+                  7,
+                  3,
+                  1
+                ],
+                3
+              ],
+              "expected": 11
+            },
+            {
+              "input": [
+                [
+                  0,
+                  1,
+                  0,
+                  2
+                ],
+                2
+              ],
+              "expected": 2
+            },
+            {
+              "input": [
+                [
+                  7,
+                  7,
+                  1,
+                  7
+                ],
+                2
+              ],
+              "expected": 8
+            },
+            {
+              "input": [
+                [
+                  0
+                ],
+                1
+              ],
+              "expected": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ER-CV1-TI-004",
+      "mode": "technical-interview",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Is that still how they go out? And how many times do you try a delivery before you give up on it?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "In the design document you sent, the processor calls the customers' webhooks itself, straight after it updates the state."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "ti-a-conflict",
+      "pi_state": "A",
+      "condition": "conflict_stale",
+      "pi_condition": "profile_conflicting_ref",
+      "category": "project_followup",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "No. As built, from his notes of September 2026: shipment-projector writes an outbox row in the same PostgreSQL transaction as the state change; outbox-relay reads the outbox every 200 ms and publishes to webhook.outbound; webhook-dispatcher delivers the webhooks with 5 attempts and exponential backoff, then sends the message to the dead-letter topic. The May 2024 proposal (version 0.3, in review) had the processor call webhooks directly with no separate relay; that is not what was built. The \"fails 3 times\" in the notes is about a record in the consumer, not about webhook deliveries. First person as Advik.",
+        "required_facts": [
+          {
+            "fact": "TI-REF-A-PROJECT-DEEPDIVE#F6",
+            "text": "Webhooks go out through an outbox and a relay, not straight from the processor.",
+            "answer_needles": [
+              "outbox"
+            ]
+          },
+          {
+            "fact": "TI-REF-A-PROJECT-DEEPDIVE#F7",
+            "text": "A webhook is tried 5 times, with exponential backoff, before the dead-letter topic.",
+            "answer_needles": [
+              "5 attempts",
+              "five attempts",
+              "5 tries",
+              "five tries",
+              "five times",
+              "5 times",
+              "5 delivery attempts",
+              "five delivery attempts",
+              "fifth attempt",
+              "fifth try"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TI-REF-A-PROJECT-DEEPDIVE#F5",
+            "text": "The outbox row is written in the same transaction as the state change."
+          },
+          {
+            "fact": "TI-REF-A-PROJECT-DEEPDIVE#F6",
+            "text": "The relay reads the outbox every 200 ms."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Confirms that the processor still calls the webhooks directly.",
+            "kind": "stale",
+            "fact": "TI-REF-A-OLD-DESIGN-DOC#F8",
+            "answer_needles": []
+          },
+          {
+            "text": "Gives 3 as the number of delivery attempts (that figure is the record retries before the dead-letter topic).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "3 attempts",
+              "three attempts",
+              "3 delivery attempts",
+              "three delivery attempts",
+              "3 tries",
+              "three tries"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (the frontend profile: her employer, projects or numbers).",
+            "kind": "other_profile",
+            "fact": "PI-B-RESUME#F18",
+            "answer_needles": [
+              "Lumenquay",
+              "Fernlatch",
+              "Pebblekit",
+              "Dialbench",
+              "Velmonte",
+              "Ondaverde",
+              "Farolim"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "TI-REF-A-PROJECT-DEEPDIVE"
+        ],
+        "source_priority": [
+          "TI-REF-A-PROJECT-DEEPDIVE",
+          "TI-REF-A-OLD-DESIGN-DOC"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "how status webhooks are sent in Skeinrouter",
+            "sources": [
+              "TI-REF-A-PROJECT-DEEPDIVE",
+              "TI-REF-A-OLD-DESIGN-DOC"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-TI-005",
+      "mode": "technical-interview",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "One formality before we go on: are you already cleared to work anywhere in the EU as things stand, or would we have to sort out a visa for you?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "technical-interview-none",
+      "pi_state": "B",
+      "condition": "missing_evidence",
+      "pi_condition": "resume_jd",
+      "category": "personal_missing",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Her CV says she lives in Porto, Portugal, and lists Portuguese as her native language; it does not state her nationality, citizenship, visa status or right to work. The posting requires the right to work in the European Union and cannot sponsor visas. Where she lives and what she speaks do not settle it. The answer must not state as fact that she is a citizen or has the right to work, and must not say she needs sponsorship; it gives her a line to complete with her own status, and may mention that she is based in Porto.",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "PI-B-RESUME#F2",
+            "text": "She lives in Porto, Portugal."
+          },
+          {
+            "fact": "PI-B-JD#F12",
+            "text": "The posting requires the right to work in the EU and offers no visa sponsorship."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "States as fact that she is a Portuguese or EU citizen, or that she has the right to work in the EU.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "I'm a Portuguese citizen",
+              "I am a Portuguese citizen",
+              "I'm an EU citizen",
+              "I am an EU citizen",
+              "as a Portuguese citizen",
+              "as an EU citizen",
+              "Portuguese national",
+              "Portuguese passport",
+              "EU passport",
+              "I hold Portuguese citizenship",
+              "I have Portuguese citizenship"
+            ]
+          },
+          {
+            "text": "Says she would need a visa or sponsorship.",
+            "kind": "false_denial",
+            "answer_needles": [
+              "I would need sponsorship",
+              "I'd need sponsorship",
+              "I will need a visa",
+              "I'd need a visa",
+              "I would need a visa"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (the backend profile: his employer, projects or numbers).",
+            "kind": "other_profile",
+            "fact": "PI-A-RESUME#F12",
+            "answer_needles": [
+              "Quillhaven",
+              "Skeinrouter",
+              "Marrowgate",
+              "Tessarine",
+              "Farecrest",
+              "Thorambath",
+              "Ostrakel"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Catarina) answering the interviewer aloud, in the first person",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-TI-006",
+      "mode": "technical-interview",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Was that even across devices, or did one of them carry it? Give me the split.",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "What did the rebuild do to booking completion?"
+        },
+        {
+          "speaker": "user",
+          "text": "It went from 61.2 to 66.8 percent in the six-week experiment against the old flow."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "ti-b-full",
+      "pi_state": "B",
+      "condition": "followup",
+      "pi_condition": "profile_b",
+      "category": "project_followup",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Continues her own answer. From her notes: on phones booking completion went from 58.0% to 65.0%, on desktop from 72.5% to 73.2%, so almost all of the gain came from phones (which were 78% of sessions). First person as Catarina. The overall 61.2% to 66.8% is not the phone figure.",
+        "required_facts": [
+          {
+            "fact": "TI-REF-B-PROJECT-DEEPDIVE#F24",
+            "text": "Phones: 58.0% to 65.0%.",
+            "answer_needles": [
+              "58"
+            ]
+          },
+          {
+            "fact": "TI-REF-B-PROJECT-DEEPDIVE#F24",
+            "text": "Phones ended at 65.0%.",
+            "answer_needles": [
+              "65"
+            ]
+          },
+          {
+            "fact": "TI-REF-B-PROJECT-DEEPDIVE#F24",
+            "text": "Desktop: 72.5% to 73.2%.",
+            "answer_needles": [
+              "72.5"
+            ]
+          },
+          {
+            "fact": "TI-REF-B-PROJECT-DEEPDIVE#F24",
+            "text": "Desktop ended at 73.2%.",
+            "answer_needles": [
+              "73.2"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TI-REF-B-PROJECT-DEEPDIVE#F4",
+            "text": "78% of sessions were on a phone."
+          },
+          {
+            "fact": "TI-REF-B-PROJECT-DEEPDIVE#F23",
+            "text": "Overall the rise was 5.6 percentage points."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the gain was even across devices, or that desktop carried it.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Gives the overall figures again as the phone figures.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Answers with the other candidate's facts (the backend profile: his employer, projects or numbers).",
+            "kind": "other_profile",
+            "fact": "PI-A-RESUME#F12",
+            "answer_needles": [
+              "Quillhaven",
+              "Skeinrouter",
+              "Marrowgate",
+              "Tessarine",
+              "Farecrest",
+              "Thorambath",
+              "Ostrakel"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Catarina) answering the interviewer aloud, in the first person",
+        "expected_action": "continue_previous_answer",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "TI-REF-B-PROJECT-DEEPDIVE",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "TI-REF-B-PROJECT-DEEPDIVE",
+          "CONVERSATION"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    }
+  ]
+}

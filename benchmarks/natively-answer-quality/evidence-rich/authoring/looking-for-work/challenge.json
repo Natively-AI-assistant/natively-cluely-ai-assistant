@@ -1,0 +1,2412 @@
+{
+  "mode": "looking-for-work",
+  "items": [
+    {
+      "id": "ER-C1-LFW-001",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Partway meaning what? Roughly what share of your carriers were already on the new pipeline when it hit?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "The November incident on your CV. What was going on around it at the time?"
+        },
+        {
+          "speaker": "user",
+          "text": "We were partway through moving carriers onto the new pipeline when a rebalance storm on the tracking consumers delayed updates for three hours forty."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-a-full",
+      "pi_state": "A",
+      "pi_condition": "resume_jd_relevant_ref",
+      "condition": "multi_source",
+      "category": "rollout_share_at_incident",
+      "difficulty": "hard",
+      "cf_pair": "rollout-share-at-incident",
+      "oracle": {
+        "expected_behavior_note": "Two sources, one figure from each. His private notes say the incident came in week six of the per-carrier rollout, with about 1,100 carriers already on the new pipeline. His résumé says Quillhaven's platform is used by about 1,900 carriers. 1,100 of 1,900 is 57.9%, so a little under 60%. The near-miss is the rollout calendar: week six of the nine weeks of per-carrier flags is two-thirds of the time, not two-thirds of the carriers. Spoken naturally in the first person, never 'according to my notes'.",
+        "required_facts": [
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F29",
+            "text": "About 1,100 carriers were already on the new pipeline, in week six of the per-carrier rollout.",
+            "answer_needles": [
+              "1,100",
+              "1100",
+              "eleven hundred",
+              "1.1k",
+              "1.1 thousand",
+              "58%",
+              "58 percent",
+              "58 per cent",
+              "57.9",
+              "fifty-eight",
+              "fifty eight",
+              "just under 60",
+              "nearly 60",
+              "almost 60",
+              "close to 60",
+              "about 60",
+              "around 60",
+              "roughly 60",
+              "just under sixty",
+              "nearly sixty",
+              "almost sixty",
+              "close to sixty",
+              "about sixty",
+              "around sixty",
+              "roughly sixty"
+            ]
+          },
+          {
+            "fact": "PI-A-RESUME#F6",
+            "text": "The platform has about 1,900 carriers, so that was about 58% of them.",
+            "answer_needles": [
+              "58%",
+              "58 percent",
+              "58 per cent",
+              "57.9",
+              "fifty-eight",
+              "fifty eight",
+              "just under 60",
+              "nearly 60",
+              "almost 60",
+              "close to 60",
+              "about 60",
+              "around 60",
+              "roughly 60",
+              "just under sixty",
+              "nearly sixty",
+              "almost sixty",
+              "close to sixty",
+              "about sixty",
+              "around sixty",
+              "roughly sixty"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-A-RESUME#F18",
+            "text": "The per-carrier rollout ran over 9 weeks after 6 weeks of shadow traffic."
+          },
+          {
+            "fact": "PI-A-RESUME#F21",
+            "text": "The incident delayed tracking updates for 3 hours 40 minutes."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Turns week six of nine into two-thirds of the carriers.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "67%",
+              "66.7",
+              "66%",
+              "67 percent",
+              "two-thirds",
+              "two thirds"
+            ]
+          },
+          {
+            "text": "Says all carriers, or only a third or a handful, were on it.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "all 1,900",
+              "every carrier",
+              "a third",
+              "one third",
+              "33%",
+              "a handful"
+            ]
+          },
+          {
+            "text": "Says he does not know how far the rollout had got.",
+            "kind": "over_deferral"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "LFW-REF-A-INTERVIEW-NOTES",
+          "PI-A-RESUME",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "LFW-REF-A-INTERVIEW-NOTES",
+          "PI-A-RESUME"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Adding that it was week six of the nine-week per-carrier rollout."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "1100 / 1900 * 100",
+          "result": 57.89,
+          "unit": "% of carriers already on the new pipeline at the time of the incident",
+          "accepted_forms": [
+            "58%",
+            "58 percent",
+            "58 per cent",
+            "57.9",
+            "fifty-eight",
+            "fifty eight",
+            "just under 60",
+            "nearly 60",
+            "almost 60",
+            "close to 60",
+            "about 60",
+            "around 60",
+            "roughly 60",
+            "just under sixty",
+            "nearly sixty",
+            "almost sixty",
+            "close to sixty",
+            "about sixty",
+            "around sixty",
+            "roughly sixty"
+          ],
+          "inputs": {
+            "carriers_switched": "LFW-REF-A-INTERVIEW-NOTES#F29",
+            "carriers_total": "PI-A-RESUME#F6"
+          },
+          "wrong_results_common": [
+            "67%",
+            "66.7",
+            "66%",
+            "67 percent",
+            "two-thirds",
+            "two thirds",
+            "a third",
+            "one third",
+            "33%"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LFW-002",
+      "mode": "looking-for-work",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "their break rate: by what multiple has it come down since the 2024 figure i found? and how much further is the target, in the same terms",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-a-full",
+      "pi_state": "A",
+      "pi_condition": "resume_jd_relevant_ref",
+      "condition": "multi_source",
+      "category": "break_rate_trend",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Two documents. His research notes have the 2024 figure from Ostrakel's reconciliation blog post: an unexplained break rate of 0.31% before matching was rebuilt. The posting has today's figure, 0.05% of transactions, and the goal for this financial year, below 0.02%. So the rate has come down by 0.31 / 0.05 = 6.2 times (about 84% lower), and the target is another 0.05 / 0.02 = 2.5 times from today (15.5 times from 2024). Dividing the wrong way round gives 0.16; taking the target as today's rate gives 15.5 as the progress so far.",
+        "required_facts": [
+          {
+            "fact": "LFW-REF-A-COMPANY-RESEARCH#F12",
+            "text": "The break rate was 0.31% in 2024; against 0.05% today that is 6.2 times lower.",
+            "answer_needles": [
+              "6.2",
+              "about six",
+              "roughly six",
+              "around six",
+              "six times",
+              "sixfold",
+              "six-fold",
+              "6x",
+              "6 times",
+              "84%",
+              "83.9"
+            ]
+          },
+          {
+            "fact": "PI-A-JD#F18",
+            "text": "Today it is 0.05% with a goal of below 0.02%, which is another 2.5 times.",
+            "answer_needles": [
+              "2.5",
+              "two and a half",
+              "two-and-a-half",
+              "15.5",
+              "60%",
+              "60 percent"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-A-JD#F12",
+            "text": "Ostrakel processes 2.6 million transactions on an ordinary day."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Divides the wrong way round (0.16).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "0.16",
+              "16%",
+              "16 percent"
+            ]
+          },
+          {
+            "text": "Gives 0.31% as the rate today.",
+            "kind": "stale",
+            "fact": "LFW-REF-A-COMPANY-RESEARCH#F12"
+          },
+          {
+            "text": "Presents the 0.02% goal as already reached.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "Natively answering the candidate's private typed question; any wording offered to say aloud is first person as the candidate",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LFW-REF-A-COMPANY-RESEARCH",
+          "PI-A-JD"
+        ],
+        "source_priority": [
+          "PI-A-JD",
+          "LFW-REF-A-COMPANY-RESEARCH"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Unexplained break rate (2024 figure versus today)",
+            "sources": [
+              "PI-A-JD",
+              "LFW-REF-A-COMPANY-RESEARCH"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Turning the rates into breaks per day at 2.6 million transactions a day."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "0.31 / 0.05",
+          "result": 6.2,
+          "unit": "times lower than in 2024 (target: 0.05 / 0.02 = 2.5 times lower again)",
+          "accepted_forms": [
+            "6.2",
+            "about six",
+            "roughly six",
+            "around six",
+            "six times",
+            "sixfold",
+            "six-fold",
+            "6x",
+            "6 times",
+            "84%",
+            "83.9"
+          ],
+          "inputs": {
+            "rate_2024": "LFW-REF-A-COMPANY-RESEARCH#F12",
+            "rate_today": "PI-A-JD#F18",
+            "target": "PI-A-JD#F18"
+          },
+          "wrong_results_common": [
+            "0.16",
+            "16%",
+            "16 percent"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LFW-003",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "How does that compare with the pace you're used to?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "On this team we ship behind flags and run around ten experiments a quarter."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "looking-for-work-none",
+      "pi_state": "B-RESUME",
+      "pi_condition": "resume_only",
+      "condition": "multi_source",
+      "category": "experiment_cadence",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "One figure was just said (around ten experiments a quarter) and one is in her CV: 38 experiments ran on Dialbench in its first year, each with a written hypothesis, a primary metric and guardrail metrics agreed before launch. 38 a year is 38 / 4 = 9.5 a quarter, so the pace is about the same, just under ten. The slip is to set a yearly figure against a quarterly one and say she runs nearly four times as many.",
+        "required_facts": [
+          {
+            "fact": "PI-B-RESUME#F26",
+            "text": "38 experiments ran on Dialbench in its first year.",
+            "answer_needles": [
+              "38",
+              "thirty-eight",
+              "thirty eight"
+            ]
+          },
+          {
+            "fact": "CONVERSATION",
+            "text": "Against around ten a quarter, 38 a year is about 9.5 a quarter: much the same pace.",
+            "answer_needles": [
+              "9.5",
+              "nine and a half",
+              "nine or ten",
+              "9 or 10",
+              "nine to ten",
+              "9 to 10",
+              "just under ten",
+              "just under 10",
+              "almost ten",
+              "almost 10",
+              "nearly ten",
+              "nearly 10",
+              "close to ten",
+              "close to 10",
+              "about ten",
+              "about 10",
+              "roughly ten",
+              "roughly 10",
+              "around ten",
+              "around 10",
+              "same pace",
+              "about the same",
+              "similar pace",
+              "much the same",
+              "roughly the same",
+              "very similar",
+              "in line with",
+              "right in line",
+              "comparable"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-B-RESUME#F24",
+            "text": "Dialbench is the experimentation toolkit she wrote in 2024."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Treats the 38 as a quarterly figure, or says her pace is about four times theirs.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "38 a quarter",
+              "38 per quarter",
+              "38 each quarter",
+              "thirty-eight a quarter",
+              "thirty-eight per quarter",
+              "four times",
+              "3.8 times",
+              "3.8x",
+              "152"
+            ]
+          },
+          {
+            "text": "Brings in facts from her private notes or the posting; only the CV is loaded.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "stopping rule",
+              "Rodrigo",
+              "8.1"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (Advik Thorambath, Quillhaven, Ostrakel Payments).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Quillhaven",
+              "Skeinrouter",
+              "Marrowgate",
+              "Farecrest",
+              "Tessarine",
+              "Ostrakel",
+              "Thorambath",
+              "Ledger Core"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Catarina) answering the interviewer aloud, in the first person",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "PI-B-RESUME",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "PI-B-RESUME",
+          "CONVERSATION"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Adding that each experiment had a written hypothesis and guardrails agreed before launch."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "38 / 4",
+          "result": 9.5,
+          "unit": "experiments per quarter in the first year of Dialbench (against around ten a quarter said by the interviewer)",
+          "accepted_forms": [
+            "9.5",
+            "nine and a half",
+            "nine or ten",
+            "9 or 10",
+            "nine to ten",
+            "9 to 10",
+            "just under ten",
+            "just under 10",
+            "almost ten",
+            "almost 10",
+            "nearly ten",
+            "nearly 10",
+            "close to ten",
+            "close to 10",
+            "about ten",
+            "about 10",
+            "roughly ten",
+            "roughly 10",
+            "around ten",
+            "around 10",
+            "same pace",
+            "about the same",
+            "similar pace",
+            "much the same",
+            "roughly the same",
+            "very similar",
+            "in line with",
+            "right in line",
+            "comparable"
+          ],
+          "inputs": {
+            "experiments_first_year": "PI-B-RESUME#F26",
+            "their_pace_per_quarter": "CONVERSATION (around ten a quarter)"
+          },
+          "wrong_results_common": [
+            "38 a quarter",
+            "38 per quarter",
+            "38 each quarter",
+            "thirty-eight a quarter",
+            "thirty-eight per quarter",
+            "four times",
+            "3.8 times",
+            "3.8x",
+            "152"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LFW-004",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Ideally we'd have you in the seat on the first of February. Working back from your notice, when would you need to have resigned by?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-a-full",
+      "pi_state": "A",
+      "pi_condition": "resume_jd_relevant_ref",
+      "condition": "grounded_single",
+      "category": "notice_resign_by_date",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "His notes carry two notice figures: a 30 Aug line (60 days, from the offer letter) and the dated 27 Sep update after he checked with People Ops (90 days on the senior grade, no buyout, running from the day he resigns). The later one is current. Ninety days back from Monday 1 February 2027 is Tuesday 3 November 2026 (27 days left in November, 31 in December, 31 in January, 1 in February), so he would have to resign by the first days of November. With the old 60-day figure the answer would be 3 December, which is wrong. He does not promise a buyout or an earlier release. Spoken in the first person, never 'according to my notes'.",
+        "required_facts": [
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F39",
+            "text": "His notice period is 90 days, running from the day he resigns.",
+            "answer_needles": [
+              "90 days",
+              "90-day",
+              "ninety days",
+              "ninety-day",
+              "ninety days'",
+              "three months",
+              "3 months"
+            ]
+          },
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F39",
+            "text": "For a start on 1 February 2027 he has to resign by about 3 November 2026.",
+            "answer_needles": [
+              "November 3 ",
+              "November 3,",
+              "November 3.",
+              "November 3;",
+              "November 3)",
+              "3 November",
+              "Nov 3 ",
+              "Nov 3,",
+              "Nov 3.",
+              "Nov 3;",
+              "Nov 3)",
+              "3 Nov",
+              "Nov. 3 ",
+              "Nov. 3,",
+              "Nov. 3.",
+              "Nov. 3;",
+              "Nov. 3)",
+              "November 3rd",
+              "3rd of November",
+              "3rd November",
+              "third of November",
+              "November third",
+              "November the 3rd",
+              "November the third",
+              "November 2 ",
+              "November 2,",
+              "November 2.",
+              "November 2;",
+              "November 2)",
+              "2 November",
+              "Nov 2 ",
+              "Nov 2,",
+              "Nov 2.",
+              "Nov 2;",
+              "Nov 2)",
+              "2 Nov",
+              "Nov. 2 ",
+              "Nov. 2,",
+              "Nov. 2.",
+              "Nov. 2;",
+              "Nov. 2)",
+              "November 2nd",
+              "2nd of November",
+              "2nd November",
+              "second of November",
+              "November second",
+              "November the 2nd",
+              "November the second",
+              "November 1 ",
+              "November 1,",
+              "November 1.",
+              "November 1;",
+              "November 1)",
+              "1 November",
+              "Nov 1 ",
+              "Nov 1,",
+              "Nov 1.",
+              "Nov 1;",
+              "Nov 1)",
+              "1 Nov",
+              "Nov. 1 ",
+              "Nov. 1,",
+              "Nov. 1.",
+              "Nov. 1;",
+              "Nov. 1)",
+              "November 1st",
+              "1st of November",
+              "1st November",
+              "first of November",
+              "November first",
+              "November the 1st",
+              "November the first",
+              "early November",
+              "start of November",
+              "beginning of November",
+              "first week of November",
+              "first days of November",
+              "very start of November"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F39",
+            "text": "There is no buyout."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses the superseded 60-day notice, which gives a resignation date around 3 December.",
+            "kind": "stale",
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F12",
+            "answer_needles": [
+              "December 3 ",
+              "December 3,",
+              "December 3.",
+              "December 3;",
+              "December 3)",
+              "3 December",
+              "Dec 3 ",
+              "Dec 3,",
+              "Dec 3.",
+              "Dec 3;",
+              "Dec 3)",
+              "3 Dec",
+              "Dec. 3 ",
+              "Dec. 3,",
+              "Dec. 3.",
+              "Dec. 3;",
+              "Dec. 3)",
+              "December 3rd",
+              "3rd of December",
+              "3rd December",
+              "third of December",
+              "December third",
+              "December the 3rd",
+              "December the third",
+              "December 2 ",
+              "December 2,",
+              "December 2.",
+              "December 2;",
+              "December 2)",
+              "2 December",
+              "Dec 2 ",
+              "Dec 2,",
+              "Dec 2.",
+              "Dec 2;",
+              "Dec 2)",
+              "2 Dec",
+              "Dec. 2 ",
+              "Dec. 2,",
+              "Dec. 2.",
+              "Dec. 2;",
+              "Dec. 2)",
+              "December 2nd",
+              "2nd of December",
+              "2nd December",
+              "second of December",
+              "December second",
+              "December the 2nd",
+              "December the second",
+              "December 1 ",
+              "December 1,",
+              "December 1.",
+              "December 1;",
+              "December 1)",
+              "1 December",
+              "Dec 1 ",
+              "Dec 1,",
+              "Dec 1.",
+              "Dec 1;",
+              "Dec 1)",
+              "1 Dec",
+              "Dec. 1 ",
+              "Dec. 1,",
+              "Dec. 1.",
+              "Dec. 1;",
+              "Dec. 1)",
+              "December 1st",
+              "1st of December",
+              "1st December",
+              "first of December",
+              "December first",
+              "December the 1st",
+              "December the first",
+              "December 4",
+              "4 December",
+              "Dec 4",
+              "4 Dec",
+              "Dec. 4",
+              "December 4th",
+              "4th of December",
+              "4th December",
+              "fourth of December",
+              "December fourth",
+              "December the 4th",
+              "December the fourth",
+              "early December",
+              "start of December",
+              "beginning of December",
+              "first week of December",
+              "60 days",
+              "60-day",
+              "sixty days",
+              "sixty-day",
+              "two months"
+            ]
+          },
+          {
+            "text": "Gives a date that is too late for a 90-day notice (mid or late November).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "mid-November",
+              "mid November",
+              "middle of November",
+              "end of November",
+              "late November",
+              "November 15",
+              "15 November",
+              "Nov 15",
+              "15 Nov",
+              "Nov. 15",
+              "November 15th",
+              "15th of November",
+              "15th November",
+              "fifteenth of November",
+              "November fifteenth",
+              "November the 15th",
+              "November the fifteenth",
+              "November 30",
+              "30 November",
+              "Nov 30",
+              "30 Nov",
+              "Nov. 30",
+              "November 30th",
+              "30th of November",
+              "30th November",
+              "thirtieth of November",
+              "November thirtieth",
+              "November the 30th",
+              "November the thirtieth",
+              "November 11",
+              "11 November",
+              "Nov 11",
+              "11 Nov",
+              "Nov. 11",
+              "November 11th",
+              "11th of November",
+              "11th November",
+              "eleventh of November",
+              "November eleventh",
+              "November the 11th",
+              "November the eleventh",
+              "November 12",
+              "12 November",
+              "Nov 12",
+              "12 Nov",
+              "Nov. 12",
+              "November 12th",
+              "12th of November",
+              "12th November",
+              "twelfth of November",
+              "November twelfth",
+              "November the 12th",
+              "November the twelfth",
+              "November 13",
+              "13 November",
+              "Nov 13",
+              "13 Nov",
+              "Nov. 13",
+              "November 13th",
+              "13th of November",
+              "13th November",
+              "thirteenth of November",
+              "November thirteenth",
+              "November the 13th",
+              "November the thirteenth",
+              "November 21",
+              "21 November",
+              "Nov 21",
+              "21 Nov",
+              "Nov. 21",
+              "November 21st",
+              "21st of November",
+              "21st November",
+              "twenty-first of November",
+              "November twenty-first",
+              "November the 21st",
+              "November the twenty-first",
+              "November 22",
+              "22 November",
+              "Nov 22",
+              "22 Nov",
+              "Nov. 22",
+              "November 22nd",
+              "22nd of November",
+              "22nd November",
+              "twenty-second of November",
+              "November twenty-second",
+              "November the 22nd",
+              "November the twenty-second",
+              "November 23",
+              "23 November",
+              "Nov 23",
+              "23 Nov",
+              "Nov. 23",
+              "November 23rd",
+              "23rd of November",
+              "23rd November",
+              "twenty-third of November",
+              "November twenty-third",
+              "November the 23rd",
+              "November the twenty-third"
+            ]
+          },
+          {
+            "text": "Promises a buyout or an earlier release that his notes say is not available.",
+            "kind": "unauthorized_promise"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "LFW-REF-A-INTERVIEW-NOTES",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "LFW-REF-A-INTERVIEW-NOTES"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Notice period",
+            "sources": [
+              "LFW-REF-A-INTERVIEW-NOTES"
+            ],
+            "resolution": "current_wins",
+            "note": "Inside one document: the 30 Aug line says 60 days, the dated 27 Sep update says 90 days."
+          }
+        ],
+        "acceptable_inference": [
+          "Saying that is only a few weeks away, so the timing is tight.",
+          "Saying there is no buyout."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "2027-02-01 (Mon) minus 90 days = 2026-11-03 (Tue)",
+          "result": "2026-11-03",
+          "unit": "date (latest day to resign for a start on 1 February 2027)",
+          "accepted_forms": [
+            "November 3 ",
+            "November 3,",
+            "November 3.",
+            "November 3;",
+            "November 3)",
+            "3 November",
+            "Nov 3 ",
+            "Nov 3,",
+            "Nov 3.",
+            "Nov 3;",
+            "Nov 3)",
+            "3 Nov",
+            "Nov. 3 ",
+            "Nov. 3,",
+            "Nov. 3.",
+            "Nov. 3;",
+            "Nov. 3)",
+            "November 3rd",
+            "3rd of November",
+            "3rd November",
+            "third of November",
+            "November third",
+            "November the 3rd",
+            "November the third",
+            "November 2 ",
+            "November 2,",
+            "November 2.",
+            "November 2;",
+            "November 2)",
+            "2 November",
+            "Nov 2 ",
+            "Nov 2,",
+            "Nov 2.",
+            "Nov 2;",
+            "Nov 2)",
+            "2 Nov",
+            "Nov. 2 ",
+            "Nov. 2,",
+            "Nov. 2.",
+            "Nov. 2;",
+            "Nov. 2)",
+            "November 2nd",
+            "2nd of November",
+            "2nd November",
+            "second of November",
+            "November second",
+            "November the 2nd",
+            "November the second",
+            "November 1 ",
+            "November 1,",
+            "November 1.",
+            "November 1;",
+            "November 1)",
+            "1 November",
+            "Nov 1 ",
+            "Nov 1,",
+            "Nov 1.",
+            "Nov 1;",
+            "Nov 1)",
+            "1 Nov",
+            "Nov. 1 ",
+            "Nov. 1,",
+            "Nov. 1.",
+            "Nov. 1;",
+            "Nov. 1)",
+            "November 1st",
+            "1st of November",
+            "1st November",
+            "first of November",
+            "November first",
+            "November the 1st",
+            "November the first",
+            "early November",
+            "start of November",
+            "beginning of November",
+            "first week of November",
+            "first days of November",
+            "very start of November"
+          ],
+          "inputs": {
+            "start_date": "CONVERSATION (1 February 2027)",
+            "notice_days": "LFW-REF-A-INTERVIEW-NOTES#F39"
+          },
+          "wrong_results_common": [
+            "December 3 ",
+            "December 3,",
+            "December 3.",
+            "December 3;",
+            "December 3)",
+            "3 December",
+            "Dec 3 ",
+            "Dec 3,",
+            "Dec 3.",
+            "Dec 3;",
+            "Dec 3)",
+            "3 Dec",
+            "Dec. 3 ",
+            "Dec. 3,",
+            "Dec. 3.",
+            "Dec. 3;",
+            "Dec. 3)",
+            "December 3rd",
+            "3rd of December",
+            "3rd December",
+            "third of December",
+            "December third",
+            "December the 3rd",
+            "December the third",
+            "December 2 ",
+            "December 2,",
+            "December 2.",
+            "December 2;",
+            "December 2)",
+            "2 December",
+            "Dec 2 ",
+            "Dec 2,",
+            "Dec 2.",
+            "Dec 2;",
+            "Dec 2)",
+            "2 Dec",
+            "Dec. 2 ",
+            "Dec. 2,",
+            "Dec. 2.",
+            "Dec. 2;",
+            "Dec. 2)",
+            "December 2nd",
+            "2nd of December",
+            "2nd December",
+            "second of December",
+            "December second",
+            "December the 2nd",
+            "December the second",
+            "December 1 ",
+            "December 1,",
+            "December 1.",
+            "December 1;",
+            "December 1)",
+            "1 December",
+            "Dec 1 ",
+            "Dec 1,",
+            "Dec 1.",
+            "Dec 1;",
+            "Dec 1)",
+            "1 Dec",
+            "Dec. 1 ",
+            "Dec. 1,",
+            "Dec. 1.",
+            "Dec. 1;",
+            "Dec. 1)",
+            "December 1st",
+            "1st of December",
+            "1st December",
+            "first of December",
+            "December first",
+            "December the 1st",
+            "December the first",
+            "December 4",
+            "4 December",
+            "Dec 4",
+            "4 Dec",
+            "Dec. 4",
+            "December 4th",
+            "4th of December",
+            "4th December",
+            "fourth of December",
+            "December fourth",
+            "December the 4th",
+            "December the fourth",
+            "early December",
+            "start of December",
+            "beginning of December",
+            "first week of December",
+            "mid-November",
+            "mid November",
+            "middle of November",
+            "end of November",
+            "late November",
+            "November 4",
+            "4 November",
+            "Nov 4",
+            "4 Nov",
+            "Nov. 4",
+            "November 4th",
+            "4th of November",
+            "4th November",
+            "fourth of November",
+            "November fourth",
+            "November the 4th",
+            "November the fourth",
+            "November 5",
+            "5 November",
+            "Nov 5",
+            "5 Nov",
+            "Nov. 5",
+            "November 5th",
+            "5th of November",
+            "5th November",
+            "fifth of November",
+            "November fifth",
+            "November the 5th",
+            "November the fifth",
+            "November 11",
+            "11 November",
+            "Nov 11",
+            "11 Nov",
+            "Nov. 11",
+            "November 11th",
+            "11th of November",
+            "11th November",
+            "eleventh of November",
+            "November eleventh",
+            "November the 11th",
+            "November the eleventh",
+            "November 12",
+            "12 November",
+            "Nov 12",
+            "12 Nov",
+            "Nov. 12",
+            "November 12th",
+            "12th of November",
+            "12th November",
+            "twelfth of November",
+            "November twelfth",
+            "November the 12th",
+            "November the twelfth",
+            "November 13",
+            "13 November",
+            "Nov 13",
+            "13 Nov",
+            "Nov. 13",
+            "November 13th",
+            "13th of November",
+            "13th November",
+            "thirteenth of November",
+            "November thirteenth",
+            "November the 13th",
+            "November the thirteenth",
+            "November 21",
+            "21 November",
+            "Nov 21",
+            "21 Nov",
+            "Nov. 21",
+            "November 21st",
+            "21st of November",
+            "21st November",
+            "twenty-first of November",
+            "November twenty-first",
+            "November the 21st",
+            "November the twenty-first",
+            "November 22",
+            "22 November",
+            "Nov 22",
+            "22 Nov",
+            "Nov. 22",
+            "November 22nd",
+            "22nd of November",
+            "22nd November",
+            "twenty-second of November",
+            "November twenty-second",
+            "November the 22nd",
+            "November the twenty-second",
+            "November 23",
+            "23 November",
+            "Nov 23",
+            "23 Nov",
+            "Nov. 23",
+            "November 23rd",
+            "23rd of November",
+            "23rd November",
+            "twenty-third of November",
+            "November twenty-third",
+            "November the 23rd",
+            "November the twenty-third"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LFW-005",
+      "mode": "looking-for-work",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "timeline check for the rebalance story: what was the date of the friday i signed off the autoscaling change, and how many days was that before it all went wrong?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-a-full",
+      "pi_state": "none",
+      "pi_condition": "no_pi",
+      "condition": "grounded_single",
+      "category": "incident_timeline_date",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "His notes date the incident to Tuesday 19 November 2024 and say he approved the autoscaling change on the Friday before. The Friday before Tuesday the 19th is Friday 15 November 2024, four days earlier. Friday 8 November (a week too early) and Saturday 16 November are the usual slips. No profile is loaded; the notes alone answer this.",
+        "required_facts": [
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F28",
+            "text": "He approved the autoscaling change on Friday 15 November 2024.",
+            "answer_needles": [
+              "November 15",
+              "15 November",
+              "Nov 15",
+              "15 Nov",
+              "Nov. 15",
+              "November 15th",
+              "15th of November",
+              "15th November",
+              "fifteenth of November",
+              "November fifteenth",
+              "November the 15th",
+              "November the fifteenth",
+              "the 15th",
+              "the fifteenth"
+            ]
+          },
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F29",
+            "text": "The incident was on Tuesday 19 November 2024, four days later.",
+            "answer_needles": [
+              "four days",
+              "4 days",
+              "four-day",
+              "4-day"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F30",
+            "text": "He named his own approval as the gap in the postmortem."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives Friday 8 November 2024, a week too early.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "November 8",
+              "8 November",
+              "Nov 8",
+              "8 Nov",
+              "Nov. 8",
+              "November 8th",
+              "8th of November",
+              "8th November",
+              "eighth of November",
+              "November eighth",
+              "November the 8th",
+              "November the eighth",
+              "the 8th",
+              "the eighth",
+              "eleven days",
+              "11 days"
+            ]
+          },
+          {
+            "text": "Gives 14 or 16 November, or the Tuesday of the week before.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "November 14",
+              "14 November",
+              "Nov 14",
+              "14 Nov",
+              "Nov. 14",
+              "November 14th",
+              "14th of November",
+              "14th November",
+              "fourteenth of November",
+              "November fourteenth",
+              "November the 14th",
+              "November the fourteenth",
+              "the 14th",
+              "the fourteenth",
+              "November 16",
+              "16 November",
+              "Nov 16",
+              "16 Nov",
+              "Nov. 16",
+              "November 16th",
+              "16th of November",
+              "16th November",
+              "sixteenth of November",
+              "November sixteenth",
+              "November the 16th",
+              "November the sixteenth",
+              "the 16th",
+              "the sixteenth",
+              "November 12",
+              "12 November",
+              "Nov 12",
+              "12 Nov",
+              "Nov. 12",
+              "November 12th",
+              "12th of November",
+              "12th November",
+              "twelfth of November",
+              "November twelfth",
+              "November the 12th",
+              "November the twelfth",
+              "the 12th",
+              "the twelfth",
+              "five days",
+              "5 days",
+              "three days",
+              "3 days",
+              "a week before"
+            ]
+          },
+          {
+            "text": "Says the date cannot be worked out.",
+            "kind": "over_deferral"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "Natively answering the candidate's private typed question; any wording offered to say aloud is first person as the candidate",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LFW-REF-A-INTERVIEW-NOTES"
+        ],
+        "source_priority": [
+          "LFW-REF-A-INTERVIEW-NOTES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Adding that the change went in ahead of the next batch of carriers switching."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "2024-11-19 (Tue, the incident) minus 4 days = 2024-11-15 (Fri)",
+          "result": "2024-11-15",
+          "unit": "date he approved the autoscaling change (4 days before the incident)",
+          "accepted_forms": [
+            "November 15",
+            "15 November",
+            "Nov 15",
+            "15 Nov",
+            "Nov. 15",
+            "November 15th",
+            "15th of November",
+            "15th November",
+            "fifteenth of November",
+            "November fifteenth",
+            "November the 15th",
+            "November the fifteenth",
+            "the 15th",
+            "the fifteenth"
+          ],
+          "inputs": {
+            "incident_date": "LFW-REF-A-INTERVIEW-NOTES#F29",
+            "approval_day": "LFW-REF-A-INTERVIEW-NOTES#F28"
+          },
+          "wrong_results_common": [
+            "November 8",
+            "8 November",
+            "Nov 8",
+            "8 Nov",
+            "Nov. 8",
+            "November 8th",
+            "8th of November",
+            "8th November",
+            "eighth of November",
+            "November eighth",
+            "November the 8th",
+            "November the eighth",
+            "the 8th",
+            "the eighth",
+            "November 14",
+            "14 November",
+            "Nov 14",
+            "14 Nov",
+            "Nov. 14",
+            "November 14th",
+            "14th of November",
+            "14th November",
+            "fourteenth of November",
+            "November fourteenth",
+            "November the 14th",
+            "November the fourteenth",
+            "the 14th",
+            "the fourteenth",
+            "November 16",
+            "16 November",
+            "Nov 16",
+            "16 Nov",
+            "Nov. 16",
+            "November 16th",
+            "16th of November",
+            "16th November",
+            "sixteenth of November",
+            "November sixteenth",
+            "November the 16th",
+            "November the sixteenth",
+            "the 16th",
+            "the sixteenth",
+            "November 12",
+            "12 November",
+            "Nov 12",
+            "12 Nov",
+            "Nov. 12",
+            "November 12th",
+            "12th of November",
+            "12th November",
+            "twelfth of November",
+            "November twelfth",
+            "November the 12th",
+            "November the twelfth",
+            "the 12th",
+            "the twelfth",
+            "five days",
+            "5 days",
+            "three days",
+            "3 days",
+            "eleven days",
+            "11 days"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LFW-006",
+      "mode": "looking-for-work",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "which of the three latency wins on my cv is the biggest cut in proportion? want to lead with that one. before, after and the percent please",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "looking-for-work-none",
+      "pi_state": "A-RESUME",
+      "pi_condition": "resume_only",
+      "condition": "grounded_single",
+      "category": "resume_latency_comparison",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The CV has three before-and-after latency pairs for three different systems. Skeinrouter: p99 end-to-end from 870 ms to 140 ms, 83.9% lower (about 6.2 times). Farecrest: p95 from 480 ms to 95 ms, 80.2% lower. The load-search API: p95 from 310 ms to 85 ms, 72.6% lower. So Skeinrouter is the biggest cut in proportion (and in milliseconds). The answer has to keep each pair with its own system and its own percentile.",
+        "required_facts": [
+          {
+            "fact": "PI-A-RESUME#F15",
+            "text": "Skeinrouter cut p99 end-to-end latency from 870 ms.",
+            "answer_needles": [
+              "870"
+            ]
+          },
+          {
+            "fact": "PI-A-RESUME#F15",
+            "text": "Skeinrouter brought it down to 140 ms.",
+            "answer_needles": [
+              "140"
+            ]
+          },
+          {
+            "fact": "PI-A-RESUME#F15",
+            "text": "That is about 84% lower, the largest of the three.",
+            "answer_needles": [
+              "84%",
+              "84 percent",
+              "84 per cent",
+              "84 %",
+              "83.9",
+              "6.2",
+              "six times",
+              "6 times",
+              "6x",
+              "sixfold",
+              "six-fold"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-A-RESUME#F33",
+            "text": "Farecrest p95 went from 480 ms to 95 ms (about 80% lower)."
+          },
+          {
+            "fact": "PI-A-RESUME#F24",
+            "text": "The load-search API p95 went from 310 ms to 85 ms (about 73% lower)."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Names Farecrest or the load-search API as the biggest proportional cut.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Pairs a before value with the after value of another system (for example 870 to 85, or 480 to 140).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "870 to 85",
+              "870 ms to 85",
+              "870 to 95",
+              "870 ms to 95",
+              "480 to 140",
+              "480 ms to 140",
+              "310 to 140",
+              "310 ms to 140",
+              "480 to 85",
+              "310 to 95"
+            ]
+          },
+          {
+            "text": "Gives the share that is left (16%) as the cut, or the percentage of the after value (521%).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "16%",
+              "16 percent",
+              "521"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "Natively answering the candidate's private typed question; any wording offered to say aloud is first person as the candidate",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "PI-A-RESUME"
+        ],
+        "source_priority": [
+          "PI-A-RESUME"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Listing the other two with their percentages for comparison.",
+          "Noting that Skeinrouter is a p99 figure and the other two are p95."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "(870 - 140) / 870 * 100",
+          "result": 83.9,
+          "unit": "% lower p99 for Skeinrouter (Farecrest: 80.2%, load-search: 72.6%)",
+          "accepted_forms": [
+            "84%",
+            "84 percent",
+            "84 per cent",
+            "84 %",
+            "83.9",
+            "6.2",
+            "six times",
+            "6 times",
+            "6x",
+            "sixfold",
+            "six-fold"
+          ],
+          "inputs": {
+            "skeinrouter_before_after": "PI-A-RESUME#F15",
+            "farecrest_before_after": "PI-A-RESUME#F33",
+            "load_search_before_after": "PI-A-RESUME#F24"
+          },
+          "wrong_results_common": [
+            "16%",
+            "16 percent",
+            "521",
+            "870 to 85",
+            "870 to 95",
+            "480 to 140",
+            "310 to 140"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LFW-007",
+      "mode": "looking-for-work",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "of the experiments that actually ran on dialbench, which one has numbers i can quote? before and after",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-b-full",
+      "pi_state": "B",
+      "pi_condition": "profile_b",
+      "condition": "grounded_single",
+      "category": "experiment_result_attribution",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Her CV gives one Dialbench experiment with numbers: the reminder opt-in redesign, which raised opt-in from 27% to 33%. The other experiment figures in her material belong to Fernlatch (booking completion from 61.2% to 66.8%, and the 8.1-point lead at week two in her notes), which ran from September 2022 to April 2023, before she wrote Dialbench in 2024; it is not a Dialbench experiment. The answer is the opt-in result.",
+        "required_facts": [
+          {
+            "fact": "PI-B-RESUME#F27",
+            "text": "The reminder opt-in redesign raised opt-in from 27%.",
+            "answer_needles": [
+              "27%",
+              "27 percent",
+              "27 per cent",
+              "27 %",
+              "27 to 33",
+              "twenty-seven"
+            ]
+          },
+          {
+            "fact": "PI-B-RESUME#F27",
+            "text": "It raised opt-in to 33%.",
+            "answer_needles": [
+              "33%",
+              "33 percent",
+              "33 per cent",
+              "33 %",
+              "27 to 33",
+              "thirty-three"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-B-RESUME#F26",
+            "text": "38 experiments ran on Dialbench in its first year."
+          },
+          {
+            "fact": "PI-B-RESUME#F24",
+            "text": "Dialbench was written in 2024."
+          },
+          {
+            "fact": "PI-B-RESUME#F23",
+            "text": "The Fernlatch A/B experiment (61.2% to 66.8%) ran before Dialbench existed."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the Fernlatch booking-completion result (61.2% to 66.8%) as a Dialbench experiment.",
+            "kind": "fabrication",
+            "fact": "PI-B-RESUME#F23"
+          },
+          {
+            "text": "Quotes the week-two reading of the Fernlatch run (8.1 points) as a result.",
+            "kind": "fabrication",
+            "fact": "LFW-REF-B-INTERVIEW-NOTES#F18",
+            "answer_needles": [
+              "8.1"
+            ]
+          },
+          {
+            "text": "Invents figures for another of the 38 experiments.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Advik Thorambath, Quillhaven, Ostrakel Payments).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Quillhaven",
+              "Skeinrouter",
+              "Marrowgate",
+              "Farecrest",
+              "Tessarine",
+              "Ostrakel",
+              "Thorambath",
+              "Ledger Core"
+            ]
+          }
+        ],
+        "expected_role": "Natively answering the candidate's private typed question; any wording offered to say aloud is first person as the candidate",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "PI-B-RESUME"
+        ],
+        "source_priority": [
+          "PI-B-RESUME",
+          "LFW-REF-B-INTERVIEW-NOTES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying it is a gain of 6 points.",
+          "Pointing out that Fernlatch predates Dialbench, so it should not be quoted as a Dialbench experiment."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LFW-008",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Where would you need to land in that?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "I can tell you the band now. For this role it's eighty to ninety-two thousand euros base, depending on level."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-b-full",
+      "pi_state": "B",
+      "pi_condition": "profile_b",
+      "condition": "conflict_stale",
+      "category": "salary_band_reaction",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Her notes hold two asks: an 18 Aug first thought (EUR 78,000 to 82,000) and the dated 26 Sep addition that replaces it (EUR 88,000 to 95,000 base), with the instruction not to bring up the earlier figure. The current ask overlaps the band they have just given only at its upper end, 88 to 92. So she says she is looking at 88 to 95 and that the top part of their band would work. Answering from the August figure would put her comfortably at the bottom of the band and is wrong. She does not volunteer her current pay.",
+        "required_facts": [
+          {
+            "fact": "LFW-REF-B-INTERVIEW-NOTES#F29",
+            "text": "Her current ask starts at EUR 88,000 base, so only the upper end of an 80 to 92 band works.",
+            "answer_needles": [
+              "88",
+              "eighty-eight",
+              "eighty eight"
+            ]
+          },
+          {
+            "fact": "CONVERSATION",
+            "text": "The band just given is 80 to 92 thousand; the overlap with her ask is 88 to 92.",
+            "answer_needles": [
+              "88",
+              "eighty-eight",
+              "eighty eight",
+              "top of",
+              "upper",
+              "top end",
+              "high end"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LFW-REF-B-INTERVIEW-NOTES#F29",
+            "text": "Her ask runs up to EUR 95,000."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses the superseded August ask of EUR 78,000 to 82,000.",
+            "kind": "stale",
+            "fact": "LFW-REF-B-INTERVIEW-NOTES#F11",
+            "answer_needles": [
+              "78",
+              "seventy-eight",
+              "seventy eight",
+              "82",
+              "eighty-two",
+              "eighty two"
+            ]
+          },
+          {
+            "text": "Says anywhere in the band, or the bottom of it, would be fine.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "anywhere in",
+              "bottom of the band",
+              "lower end would",
+              "eighty would",
+              "80 would",
+              "80,000 would"
+            ]
+          },
+          {
+            "text": "Answers in the other candidate's currency or figures.",
+            "kind": "other_profile",
+            "answer_needles": [
+              "lakh",
+              "rupee",
+              "₹"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (Advik Thorambath, Quillhaven, Ostrakel Payments).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Quillhaven",
+              "Skeinrouter",
+              "Marrowgate",
+              "Farecrest",
+              "Tessarine",
+              "Ostrakel",
+              "Thorambath",
+              "Ledger Core"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Catarina) answering the interviewer aloud, in the first person",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "LFW-REF-B-INTERVIEW-NOTES",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "LFW-REF-B-INTERVIEW-NOTES",
+          "CONVERSATION"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Salary ask",
+            "sources": [
+              "LFW-REF-B-INTERVIEW-NOTES"
+            ],
+            "resolution": "current_wins",
+            "note": "Inside one document: the 18 Aug first thought (78,000 to 82,000) is superseded by the dated 26 Sep addition (88,000 to 95,000)."
+          }
+        ],
+        "acceptable_inference": [
+          "Saying her range runs to 95 and asking how levels map onto the band."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LFW-009",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Is that going to be workable for you?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "One thing I flag early with everyone: primary on-call for Ledger Core comes round one week in four, around the clock."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-a-full",
+      "pi_state": "A",
+      "pi_condition": "resume_jd_relevant_ref",
+      "condition": "conflict_stale",
+      "category": "oncall_posting_versus_interviewer",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Two current sources disagree and nothing settles it: the posting says on-call is one week in six as primary, with a compensatory day off after each on-call week, and the interviewer has just said one week in four. The pager itself is not the problem (his CV has him as primary one week in five today, and incident commander nine times since April 2024). The right reply says on-call is fine for him, names both figures, and asks which one is right now. Accepting one in four without a word about the posting is wrong, and so is telling the interviewer the posting must be right.",
+        "required_facts": [
+          {
+            "fact": "PI-A-JD#F19",
+            "text": "The posting says one week in six as primary.",
+            "answer_needles": [
+              "one in six",
+              "one week in six",
+              "1 in 6",
+              "every six",
+              "every sixth",
+              "in six",
+              "one-in-six"
+            ]
+          },
+          {
+            "fact": "CONVERSATION",
+            "text": "The interviewer has just said one week in four.",
+            "answer_needles": [
+              "one in four",
+              "one week in four",
+              "1 in 4",
+              "every four",
+              "every fourth",
+              "in four",
+              "one-in-four"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-A-RESUME#F20",
+            "text": "He is primary on-call one week in five today."
+          },
+          {
+            "fact": "PI-A-JD#F19",
+            "text": "The posting adds a compensatory day off after each on-call week."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Accepts one week in four as the rota without mentioning that the posting says one in six.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "States as fact that the posting is right and the interviewer is wrong, or the reverse.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Uses the other posting's support rota.",
+            "kind": "other_profile",
+            "answer_needles": [
+              "support captain",
+              "every 7 weeks",
+              "every seven weeks"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "surface_conflict",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "PI-A-JD",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "PI-A-JD",
+          "CONVERSATION",
+          "PI-A-RESUME"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "How often the primary on-call for Ledger Core comes round (one week in six in the posting, one week in four as said in the interview)",
+            "sources": [
+              "PI-A-JD",
+              "CONVERSATION"
+            ],
+            "resolution": "unresolved"
+          }
+        ],
+        "acceptable_inference": [
+          "Saying he is primary one week in five today, so either is workable.",
+          "Asking whether the compensatory day off still applies."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LFW-010",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Partway meaning what? Roughly what share of your carriers were already on the new pipeline when it hit?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "The November incident on your CV. What was going on around it at the time?"
+        },
+        {
+          "speaker": "user",
+          "text": "We were partway through moving carriers onto the new pipeline when a rebalance storm on the tracking consumers delayed updates for three hours forty."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "looking-for-work-none",
+      "pi_state": "A",
+      "pi_condition": "resume_jd",
+      "condition": "missing_evidence",
+      "category": "rollout_share_at_incident",
+      "difficulty": "hard",
+      "cf_pair": "rollout-share-at-incident",
+      "oracle": {
+        "expected_behavior_note": "His private notes are not loaded here; only the résumé and the posting are. The résumé gives the size of the platform (about 1,900 carriers), the shape of the rollout (6 weeks of shadow traffic, then per-carrier flags over 9 weeks) and the incident itself, but not how many carriers had switched when it happened or which week it was. So no share and no count can be given: the reply says the switch was done carrier by carrier over nine weeks and that the incident came partway through, and that he would want to check the exact figure. Any percentage or count is an invention here.",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "PI-A-RESUME#F18",
+            "text": "The rollout was 6 weeks of shadow traffic and then per-carrier flags over 9 weeks."
+          },
+          {
+            "fact": "PI-A-RESUME#F6",
+            "text": "The platform is used by about 1,900 carriers."
+          },
+          {
+            "fact": "PI-A-RESUME#F21",
+            "text": "The incident delayed tracking updates for 3 hours 40 minutes."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "States a share or a count of carriers already on the new pipeline.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "1,100",
+              "1100",
+              "eleven hundred",
+              "58%",
+              "57.9",
+              "two-thirds",
+              "two thirds",
+              "67%",
+              "about half",
+              "around half",
+              "roughly half",
+              "half of",
+              "half the",
+              "50%",
+              "60%",
+              "40%",
+              "70%",
+              "30%",
+              "a third",
+              "a quarter",
+              "sixty percent",
+              "fifty percent",
+              "seventy percent",
+              "forty percent",
+              "most of them",
+              "the majority"
+            ]
+          },
+          {
+            "text": "States which week of the rollout it was.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "week six",
+              "week 6",
+              "sixth week",
+              "week five",
+              "week four",
+              "week seven"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [
+          "PI-A-RESUME"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying the per-carrier switch ran over nine weeks.",
+          "Offering to come back with the exact number."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LFW-011",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "If we get to an offer we'll want two references, one of them from your current company. Who would you give us?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-b-full",
+      "pi_state": "B",
+      "pi_condition": "profile_b",
+      "condition": "missing_evidence",
+      "category": "absent_references",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Nothing loaded names a referee, and nothing says anyone at Lumenquay knows she is looking. Her notes do name colleagues in other contexts (Joaquim, the CTO, who has been fair to her; Rodrigo Azinhal, the product manager in her experiment story; Leonor Abrunhal, whom she mentored), which makes them tempting to offer. None of them has been asked. The reply does not name anyone: it says she will provide references at that stage once she has spoken to the people concerned. Spoken naturally in the first person.",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "LFW-REF-B-INTERVIEW-NOTES#F3",
+            "text": "She is not unhappy with anyone at Lumenquay and intends to leave things in good hands."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Names a colleague from her notes as a reference.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "Joaquim",
+              "Rodrigo",
+              "Azinhal",
+              "Leonor",
+              "Abrunhal"
+            ]
+          },
+          {
+            "text": "Names a manager or former colleague who is not in her material.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "my manager at Ondaverde",
+              "my old manager",
+              "my former manager"
+            ]
+          },
+          {
+            "text": "Says her current employer already knows she is looking, or that it does not.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Advik Thorambath, Quillhaven, Ostrakel Payments).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Quillhaven",
+              "Skeinrouter",
+              "Marrowgate",
+              "Farecrest",
+              "Tessarine",
+              "Ostrakel",
+              "Thorambath",
+              "Ledger Core"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Catarina) answering the interviewer aloud, in the first person",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [
+          "LFW-REF-B-INTERVIEW-NOTES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying she would rather give the current-company reference once an offer is agreed.",
+          "Saying she can share names after checking with them."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LFW-012",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Tell me about a deadline that genuinely could not move. What made it fixed?",
+      "prior_transcript": null,
+      "conversation_id": "ER-C1-LFW-012-C",
+      "turn_index": 1,
+      "evidence_config": "lfw-a-full",
+      "pi_state": "A",
+      "pi_condition": "resume_jd_relevant_ref",
+      "condition": "followup",
+      "category": "behavioural_deadline",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Turn 1 of a two-turn chain. His notes hold the story: on the Marrowgate migration the hosting contract for the old MySQL cluster ended on 29 February 2024 and the vendor only renewed in twelve-month terms, so slipping meant a year's rent on a cluster they were leaving. Three weeks before the planned cutover the nightly checksums still failed on 2 tables. This turn asks what the deadline was and why it was fixed. Told in the first person.",
+        "required_facts": [
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F31",
+            "text": "The hosting contract for the old MySQL cluster ended on 29 February 2024.",
+            "answer_needles": [
+              "29 February",
+              "February 29",
+              "29th of February",
+              "Feb 29",
+              "29 Feb",
+              "end of February",
+              "hosting contract",
+              "contract"
+            ]
+          },
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F31",
+            "text": "The vendor only renewed in twelve-month terms.",
+            "answer_needles": [
+              "twelve-month",
+              "12-month",
+              "twelve months",
+              "12 months",
+              "a year",
+              "one-year",
+              "year's",
+              "full year",
+              "whole year",
+              "another year"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F32",
+            "text": "Three weeks before the planned cutover the nightly checksums still failed on 2 tables."
+          },
+          {
+            "fact": "PI-A-RESUME#F25",
+            "text": "Marrowgate moved the dispatch datastore from sharded MySQL 5.7 to PostgreSQL 15."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Tells the other candidate's deadline story (an accessibility audit fixed by a hospital contract).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "14 March",
+              "March 14",
+              "audit",
+              "hospital",
+              "Farolim",
+              "screen reader",
+              "screen-reader"
+            ]
+          },
+          {
+            "text": "Invents a different deadline or a different reason.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "LFW-REF-A-INTERVIEW-NOTES"
+        ],
+        "source_priority": [
+          "LFW-REF-A-INTERVIEW-NOTES",
+          "PI-A-RESUME"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying what was at risk three weeks out."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-LFW-013",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "And what did you actually do to get it over the line?",
+      "prior_transcript": null,
+      "conversation_id": "ER-C1-LFW-012-C",
+      "turn_index": 2,
+      "evidence_config": "lfw-a-full",
+      "pi_state": "A",
+      "pi_condition": "resume_jd_relevant_ref",
+      "condition": "followup",
+      "category": "behavioural_deadline",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Turn 2 of the chain; 'it' is the Marrowgate cutover against the hosting-contract deadline from turn 1. His notes: he got product to agree to a schema freeze for three weeks and split the checksum job per shard, which took a run from 9 hours to 3, so the team could fix and verify every night; the DBA, Bhargav, found the conversion bug on the fourth night; they cut over on Sunday 11 February 2024. He does not claim to have found the bug himself.",
+        "required_facts": [
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F33",
+            "text": "He got product to agree to a schema freeze for three weeks.",
+            "answer_needles": [
+              "freeze",
+              "froze",
+              "frozen"
+            ]
+          },
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F33",
+            "text": "He split the checksum job per shard, taking a run from 9 hours to 3.",
+            "answer_needles": [
+              "per shard",
+              "by shard",
+              "each shard",
+              "shard",
+              "9 hours",
+              "nine hours",
+              "3 hours",
+              "three hours",
+              "nine to three",
+              "9 to 3"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F33",
+            "text": "The DBA, Bhargav, found the conversion bug on the fourth night."
+          },
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F34",
+            "text": "The cutover happened on Sunday 11 February 2024."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Claims he found the conversion bug himself.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "I found the bug",
+              "I found the conversion",
+              "I tracked down the bug",
+              "I tracked down the conversion",
+              "I spotted the bug",
+              "I caught the bug"
+            ]
+          },
+          {
+            "text": "Uses the other candidate's story (a four-week feature freeze and paired screen-reader sessions).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "four-week",
+              "four weeks",
+              "4 weeks",
+              "4-week",
+              "paired",
+              "screen reader",
+              "screen-reader",
+              "audit"
+            ]
+          },
+          {
+            "text": "Does not recognise that the question continues the deadline story of the previous turn.",
+            "kind": "over_deferral"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "continue_previous_answer",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "LFW-REF-A-INTERVIEW-NOTES",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "LFW-REF-A-INTERVIEW-NOTES",
+          "CONVERSATION"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying they made the date with time to spare."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    }
+  ]
+}

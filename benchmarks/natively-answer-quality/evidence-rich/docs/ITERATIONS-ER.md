@@ -2205,3 +2205,21 @@ window if the ration lasts. Pairs = row × sample (118).
 3. Samples flagged `arithmetic_error` or `pricing_error` in n2 at most those in base.
 If the ration closes early, a complete k0 (59 pairs) is read as a partial reading and said to be one. A line that
 fails closes E21 whatever the string counts show.
+
+### Challenge sets frozen (2026-10-09 11:07 UTC; nothing has been run on them)
+Authored by four agents that saw no product answer, no judgment and no analysis; lint 0 errors.
+| Dataset | Items | Hash | Read by the engineer |
+|---|---|---|---|
+| `challenge` | 117 (13 per mode: 11 single items and a two-turn chain) | `bb2bad267b68` | yes |
+| `challenge-val` | 54 (6 per mode) | `c62fc30c2094` | **no**: aggregates only, like the holdout |
+| `code1` | 36 Technical Interview coding items, 485 executed tests, 8 two-turn chains, 6 with a complexity string | `da9562e2ed45` | yes |
+dev, holdout, dev2 and the two supplementary sets keep their hashes; every existing dataset and oracle file is
+byte-identical before and after the freeze, and `build.mjs verify` passes (104 files, 8 datasets).
+Kinds per mode in `challenge`: 3 calculations from two or more sources, 2 dates or times counted from document rules,
+2 "which value belongs to which thing" (two coding items with tests in Technical Interview), 2 version conflicts (one
+settled, one open), 2 absent facts, one follow-up chain, and one counterfactual pair (the same question under two
+configs with different right answers). Authors' notes worth keeping: Lecture items state the date they count from;
+where a pack has no two current documents that disagree, the open conflict sets a document against what was just
+said in the conversation (Looking for work, Technical Interview) or uses the mode's existing conflict config; in
+`code1` a solution that times out is recorded by the harness as "not executed", not as failed, so timeouts are
+counted separately when it is read.
