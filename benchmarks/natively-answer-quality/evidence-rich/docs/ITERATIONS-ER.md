@@ -2299,3 +2299,17 @@ sentence may make the model skip a block it needs.
 reach gets n3; a turn the word list reaches keeps main's notice word for word (so nothing changes where the notice
 fires today). One part fails → E21 is closed without a build; the finding that stays is stage one's (the step helps
 where it is needed) and stage two's (it costs where it is not).
+
+### Astra window of 2026-10-09, 11:02 UTC — closed by a provider access block after 43 judgments (recorded 11:41 UTC)
+Probe: no answer at 10:58, exact gpt-6-astra at 11:02. Calibration 11:02–11:10 UTC: **38/38**, every returned model
+exact gpt-6-astra (`calibration-astra-1791544238581.json`). Judging of the baseline of main `73b18d97`
+(`er6-dev-main`, three streams of three calls) began 11:10:48. At 11:12:58 three calls in flight returned **HTTP 403**
+(the provider's access block, not the 402 ration); the guard stopped every further call at once. Nothing was retried,
+and no key, route or content was changed. 43 new judgments exist, plus 6 answers identical to the 7 October run that
+came from the judge cache: 49 of 630 (general 13, technical-interview 18, team-meet 16, recruiting 2).
+**There is no score for main with E19 from this window.** 49 rows are not a reading and are not quoted as one. The
+E21a drafts were not sent. The flag `/tmp/er-access-block-20261008-1630.json` is left in place; it is removed only
+after a clean probe by hand in a later window. This is the second block in three days (2026-10-08 02:07 UTC window,
+five calls); the window of 2026-10-09 02:02 UTC had none.
+To finish in the next window (about 02:00 UTC): `node <scratchpad>/window-er6.mjs` with `ER_SKIP_RUN_WAIT=1` (copy in
+`~/natively-er-backup/scripts/`), then `window-e21.mjs`; both judge only what is still missing.
