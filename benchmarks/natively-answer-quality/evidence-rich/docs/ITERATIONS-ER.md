@@ -2493,3 +2493,23 @@ does with an absent fact (stage four). (2) A hidden working step helps a calcula
 attempt in its head, and hurts when the step itself picks the wrong figure: with near-miss figures in the pack it
 writes the wrong set-up down and then trusts it. (3) A result on rows that have been read, however clean (two
 replays, intervals above zero), did not carry to unseen rows. The challenge sets exist for this and did their job.
+
+## E22 — does the calculation step on main earn its place? (a measurement of an existing mechanism; lines written 2026-10-09 13:02 UTC, before any replay of it)
+E21 showed that a calculation notice costs something on turns that need no calculation and can mislead on hard
+ones. Main's own notice (since 2026-09-30) was justified on nine development turns. On these sets its word-list
+trigger fires on 160 development questions, 72 with a calculation oracle and 88 without, and on part of the
+challenge sets, which did not exist then.
+**Measurement.** Generator replay on recorded prompts that carry main's notice: `er6-dev-main` + `er6-dev2-main`
+(160 rows) and `er7-chal-main` + `er7-chalval-main` (the rows `select2b` finds; ids to a file). Arms, 3 samples
+each, back to back, nothing else on the DeepSeek key: `e22-with` (as recorded) and `e22-without` (the notice
+section removed, nothing else changed). Read with `rule-e21.mjs read4 --base e22-without --arm e22-with` per set;
+the validation part with `--blind`.
+**Lines for "it earns its place".**
+1. Calculation rows, development and challenge sets pooled: right samples with the notice at least 5 points above
+   without.
+2. Calculation rows of the two challenge sets alone: with the notice not below without.
+3. The other rows that have required strings, pooled: every-required-string samples with the notice not more than
+   2 points below without.
+**Reading.** All hold → main is confirmed as it is and nothing changes. A line fails → it is reported to Evin with the
+numbers; nothing is built from this measurement. Any change to the notice or its trigger would be a new candidate with
+its own lines, an unseen-question check and Astra.
