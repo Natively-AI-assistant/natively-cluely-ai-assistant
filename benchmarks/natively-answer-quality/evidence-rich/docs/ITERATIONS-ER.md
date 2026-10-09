@@ -2026,3 +2026,22 @@ where it is also missing from the answer (mean 6.04, 6 hard) are mostly Sales pr
 **Where this leaves the work:** missing_evidence is the weakest condition and is what E19 addresses. After E19 no
 single cause covers more than about 1 % of rows; the rest is the generator's own mistakes with the facts in front of
 it, at a setting (no thinking, fast model) Evin has chosen to keep. No further experiment is declared.
+
+### E19 — landed on local main (2026-10-09 05:08 UTC)
+
+Evin's word in chat: "do 1", answering "Land E19 on main?". Local `main` fast-forwarded `bce8e47a` → `73b18d97`
+(one commit: `electron/llm/claimVerifier.ts`, a new test, one updated assertion). Files other sessions had changed in
+the main checkout were not touched. **Not pushed**: GitHub `main` stays at `bce8e47a` until Evin says so.
+
+Checked on a fresh build of `73b18d97` in worktree `er-main` (macOS, plain `node --test`, no app run):
+- `typecheck:electron`: clean.
+- The three claim-verifier test files and the two engine tests that read it: 111 pass, 0 fail.
+- `electron/llm` and `electron/llm/codeVerification`: 6064 tests, 6036 pass, 0 fail, 28 skipped.
+- `electron/intelligence` and `electron/context-intelligence`: 2917 tests, 0 fail.
+- `electron/services`: 5730 tests, 5557 pass, 122 fail. The same suite on `bce8e47a` gives the same counts and the
+  same 298 failing lines, none only on one side. They come from this way of running it (native modules built for
+  Electron loaded by Node 25, and two files this worktree lacks), not from E19.
+
+The change is one sentence of prompt text in shared code with no platform branch, so macOS and Windows get the same
+text. Nothing was executed on Windows. No app run and no judging followed the landing; the evidence for E19 is the
+replay, the app confirmation of 2026-10-07 and the two blind-holdout readings above.

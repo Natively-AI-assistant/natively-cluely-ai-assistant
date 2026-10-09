@@ -9,6 +9,11 @@ The full experiment record, with each rule as written before measuring, is `benc
 
 ## 1. State in one screen
 
+**2026-10-09, 05:08 UTC: E19 is on local main.** Evin's word in chat ("do 1", answering "Land E19 on main?").
+Local `main` was fast-forwarded `bce8e47a` → `73b18d97`, one commit, three files. **Not pushed:** GitHub `main`
+is still `bce8e47a`; publishing is Evin's separate word. Checked on a fresh build of that commit: see the log entry
+"E19 — landed on local main". The score table below still describes main before E19 (`f4cd986d` baseline).
+
 **2026-10-09, 02:16 UTC: the E19 blind-holdout check is done and both readings hold.** Calibration 38/38 with exact
 gpt-6-astra, no access block, no failed call.
 - Rule of 2026-10-07, on the 25 rows where the arms differ (repetition 0): 8.105 → 8.135 (+0.031, ±0.499), hard
@@ -16,7 +21,7 @@ gpt-6-astra, no access block, no failed call.
 - Rule of 2026-10-09, two repetitions pooled, 52 pairs: 8.158 → 8.384 (+0.226, ±0.376), hard fails 9 → 8, invention
   rows 7 → 6, pass p90 +88 ms. Holds. Repetition 1 alone, 27 pairs: 8.208 → 8.615 (+0.407, ±0.558), hard 4 → 3.
 - Read plainly: no harm on the blind holdout, a gain that points the same way as development but is not outside its
-  interval. E19 is a keep candidate on every rule written for it. **It is not on main; landing is Evin's decision.**
+  interval. E19 held on every rule written for it and was landed on local main later that day (above).
 - The 2026-10-08 partial (20 of 25 pairs, 403 block on five calls) is superseded; the block did not recur.
 - Tried without the judge and dropped on 2026-10-09 (do not re-propose): a per-statement check line in the claim
   pass, a "decide, then say it" generator notice, E20 (a rail on the pass's conflict line). Details in the log.
@@ -28,7 +33,7 @@ Do not run `astra-next5.sh` blindly: its auto-commit lacks current attribution a
 | Thing | State |
 |---|---|
 | App `main` (local = GitHub) | `bce8e47a` when this was written. Holds every kept change of this work, including E16b. |
-| Keep candidate not yet landed | **E19**, branch `cand/e19` (`73b18d97`, local only, in worktree `.claude/worktrees/er-main`). The blind-holdout check is done and holds (above). Waits for Evin's word. |
+| Landed on local main 2026-10-09 | **E19** (`73b18d97`, also branch `cand/e19`, worktree `.claude/worktrees/er-main`). Not on GitHub `main` yet. |
 | Benchmark | Branch `bench/evidence-rich`, draft PR #638, worktree `.claude/worktrees/aq-fix`. Folder `benchmarks/natively-answer-quality/evidence-rich/`. |
 | Judge | gpt-6-astra only (through AgentRouter). Evin, 2026-10-05: do not judge with Claude Code (quota). |
 | Score of main today, development set, Astra | 630 questions: **8.92**, 71 hard fails (11.3 %), 414 at 9.5 or above. |
@@ -238,7 +243,7 @@ Most kept changes are about *what reaches* the prompt, not its wording. The word
 
 | Change | Text | Status |
 |---|---|---|
-| E19 | The "Never list these" sentence gains: a statement that the material does NOT contain, state or settle something; and declining to give a figure they cannot verify | Keep candidate, branch `cand/e19` |
+| E19 | The "Never list these" sentence gains: a statement that the material does NOT contain, state or settle something; and declining to give a figure they cannot verify | Landed on local main 2026-10-09 (`73b18d97`) |
 | E17 | CONFLICT line fires only when the material does not settle it; rule 3 forbids adding a second value | Not kept |
 | E18 | CONFLICT line ends "settled: X" or "open"; settled → give the current value | Not kept |
 | E6 v1, v2 | Earlier wordings of the same idea | Not kept |
@@ -268,7 +273,7 @@ Section 11 prints the pass's instruction block as it is on main, the E19 version
 
 **Open with Evin**
 
-1. **Land E19?** Recommended: after its blind-holdout replay is judged. That replay is done (25 holdout answers differ) and needs 50 Astra judgments: `evidence-rich/results/astra-next5.sh`. Its rule: mean change ≥ 0, hard fails ≤ control arm, rows flagged for an unsupported or fabricated claim ≤ control arm + 1. If a line fails, E19 is not landed.
+1. **Push local main (E19, `73b18d97`) to GitHub?** Landed locally 2026-10-09 on Evin's word; the push is not done. Earlier text of this item: Land E19? Recommended: after its blind-holdout replay is judged. That replay is done (25 holdout answers differ) and needs 50 Astra judgments: `evidence-rich/results/astra-next5.sh`. Its rule: mean change ≥ 0, hard fails ≤ control arm, rows flagged for an unsupported or fabricated claim ≤ control arm + 1. If a line fails, E19 is not landed.
    To land: on a fresh build of `cand/e19` run the four suites (`electron/context-intelligence`, `intelligence`, `llm`, `services`; two failures in `services` are already on main: `RetrievalScaleLexical:173`, a to-do, and `TrialCampaignIpc:97`), rebase onto current main if it has moved, fast-forward, push.
 2. **Delete the old-history branches on GitHub** (`fix/aq-astra`, `cand/e16b`, `cand/e15`)?
 3. **Merge or close draft PR #638.** Merging puts the blind holdout's questions on public main.
@@ -374,7 +379,7 @@ Hashes are post-rewrite (2026-10-06). Listed oldest first. Files are the ones ea
   - `electron/context-intelligence/__tests__/WholeProfileKeptByClaimGate2026_10_05.test.mjs`
   - `electron/context-intelligence/retrieval/legacy-retrieval-port.ts`
 
-Not on main: `cand/e19` (`73b18d97`), one commit: `electron/llm/claimVerifier.ts`, a new test `electron/llm/__tests__/ClaimVerifierAbsenceIsNotAClaim2026_10_07.test.mjs`, and an updated assertion in `ClaimVerifier2026_09_30.test.mjs`.
+On local main since 2026-10-09 (not on GitHub `main`): `cand/e19` (`73b18d97`), one commit: `electron/llm/claimVerifier.ts`, a new test `electron/llm/__tests__/ClaimVerifierAbsenceIsNotAClaim2026_10_07.test.mjs`, and an updated assertion in `ClaimVerifier2026_09_30.test.mjs`.
 
 ## 11. The fix-up pass: its instructions, the E19 change, and every wording that was tried
 
@@ -400,7 +405,7 @@ The reply is spoken by them: it never says "the material", "the record" or where
 If nothing was listed and there is no conflict, the revised reply is the draft unchanged.
 ```
 
-### 11.2 The E19 change (branch `cand/e19`, not on main)
+### 11.2 The E19 change (`73b18d97`, on local main since 2026-10-09)
 
 The sentence that ended:
 
