@@ -1,4 +1,4 @@
-// Phase 6 — the proactive surfaces (assist / clarify / brainstorm) on V3.
+// Phase 6 — the proactive surface (assist) on V3. Clarify and Brainstorm left: see below.
 //
 // Contract: when the engine resolved a transcript question and the bridge
 // composed a prompt, each LLM sends EXACTLY those strings; with no override the
@@ -42,24 +42,32 @@ test('AssistLLM: override drives the provider; absence keeps legacy', async () =
   assert.notEqual(calls[1][3], 'V3_SYS');
 });
 
-test('ClarifyLLM: both paths honour the override', async () => {
+// Clarify left this contract on 2026-10-09. V3 composes an ANSWER prompt (it
+// says never to ask the user to clarify), and Clarify sent with it answered the
+// question instead of asking one, 15 runs of 15 on three models. The full case
+// is QuickActionTurnRequest2026_10_09.test.mjs.
+// There is no override parameter left to pass (the engine's source is pinned in
+// that file), so this states what Clarify does send.
+test('ClarifyLLM: sends its own prompt and the transcript context', async () => {
   const { ClarifyLLM } = require(dist('ClarifyLLM'));
   const calls = [];
-  const llm = new ClarifyLLM(makeLLMHelper(calls));
-  for await (const _ of llm.generateStream('CTX', V3)) { /* drain */ }
-  for await (const _ of llm.generateStream('CTX')) { /* drain */ }
-  assert.equal(calls[0][0], 'V3_USER');
-  assert.equal(calls[0][3], 'V3_SYS');
-  assert.equal(calls[1][0], 'CTX');
+  for await (const _ of new ClarifyLLM(makeLLMHelper(calls)).generateStream('CTX')) { /* drain */ }
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0][0].includes('CTX'), 'the transcript context is what Clarify sends');
+  assert.equal(calls[0][9], undefined, 'not a V3-owned turn');
 });
 
-test('BrainstormLLM: override drives the provider', async () => {
+// Brainstorm left this contract on 2026-10-09 too, for the same reason: sent
+// with V3's answer prompt it was a second Answer button (23 replies of 90
+// weighed two or more approaches; with its own prompt and the request in the
+// turn, 90 of 90). The full case is BrainstormOwnPrompt2026_10_09.test.mjs.
+test('BrainstormLLM: sends its own prompt and the transcript context', async () => {
   const { BrainstormLLM } = require(dist('BrainstormLLM'));
   const calls = [];
-  const llm = new BrainstormLLM(makeLLMHelper(calls));
-  for await (const _ of llm.generateStream('CTX', undefined, V3)) { /* drain */ }
-  assert.equal(calls[0][0], 'V3_USER');
-  assert.equal(calls[0][3], 'V3_SYS');
+  for await (const _ of new BrainstormLLM(makeLLMHelper(calls)).generateStream('CTX')) { /* drain */ }
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0][0].includes('CTX'), 'the transcript context is what Brainstorm sends');
+  assert.equal(calls[0][9], undefined, 'not a V3-owned turn');
 });
 
 test('question-resolver gates the proactive adoption: no stable question, no takeover', async () => {

@@ -9777,8 +9777,14 @@ let isMultimodal = !!(imagePaths?.length);
     // pinned instructions and mode context retrieval still apply unchanged.
     // Flag OFF → callerPassedV2Prompt stays false and nothing here runs.
     let callerPassedV2Prompt = false;
+    // A v2 prompt a caller appended a rule to (Recap's and FollowUp's source
+    // contract, a diagram rule) is no longer the registered string, so
+    // callerPassedV2Prompt is false for it, yet it still carries the v2 core
+    // and the active mode's contract. Only the template append below reads
+    // this; the mode-injection skip decision is unchanged.
+    let callerPromptCarriesV2Core = false;
     try {
-      const { isPromptSystemV2Enabled, resolveV2SystemPrompt, isV2ComposedPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
+      const { isPromptSystemV2Enabled, resolveV2SystemPrompt, isV2ComposedPrompt, carriesV2Core, v2TierForPromptTier } = require('./llm/promptSystemV2');
       if (isPromptSystemV2Enabled()) {
         if (!systemPromptOverride) {
           systemPromptOverride = resolveV2SystemPrompt({
@@ -9823,6 +9829,7 @@ let isMultimodal = !!(imagePaths?.length);
           }) ?? systemPromptOverride;
         }
         callerPassedV2Prompt = isV2ComposedPrompt(systemPromptOverride);
+        callerPromptCarriesV2Core = carriesV2Core(systemPromptOverride);
       }
     } catch { /* non-fatal: legacy prompt selection */ }
 
@@ -10379,7 +10386,14 @@ let isMultimodal = !!(imagePaths?.length);
         // replaces (mandatory bold, dash bullets, canned admissions). Pinned
         // custom instructions below still apply — they are user config, not a
         // competing mode template.
-        if (modePromptSuffix && !callerPassedV2Prompt) {
+        //
+        // callerPromptCarriesV2Core covers the v2 prompt with a rule appended.
+        // Recap is one: its source contract made the exact-match check miss,
+        // and the template landed AFTER the recap action with "the most recent
+        // turn contains a question: generate what the user should say". On
+        // claude-haiku-5-5 Recap then answered the question again 6 times in
+        // 8; without the template, 0 in 8 (2026-10-09).
+        if (modePromptSuffix && !callerPassedV2Prompt && !callerPromptCarriesV2Core) {
           const baseForMode = systemPromptOverride || HARD_SYSTEM_PROMPT;
           systemPromptOverride = `${baseForMode}\n\n## ACTIVE MODE\n${modePromptSuffix}`;
         }

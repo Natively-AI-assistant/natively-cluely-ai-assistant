@@ -255,3 +255,43 @@ test('substantial transcript context wins over recent manual fallback', async ()
   assert.doesNotMatch(receivedContext, /recent_manual_turn/);
   assert.doesNotMatch(receivedContext, /Redis/);
 });
+
+// Found in review, 2026-10-10. Since 2026-10-09 Clarify and Follow-up questions
+// wrap their context in a turn envelope that escapes it. The typed-turn
+// fallback is this engine's own markup, already escaped, so the model received
+// "&amp;lt;user_question&amp;gt;what&amp;#39;s ...". The tests above stub the two classes
+// and could not see it; this one sends through the real ones.
+test('the typed-turn fallback reaches the model escaped once, through the real Clarify and Follow-up classes', async () => {
+  const saved = process.env.NATIVELY_PROMPT_SYSTEM_V2;
+  process.env.NATIVELY_PROMPT_SYSTEM_V2 = '1';
+  try {
+    const { engine, session } = await makeEngine();
+    const llmDir = path.resolve(__dirname, '../../../dist-electron/electron/llm');
+    const { ClarifyLLM } = require(path.join(llmDir, 'ClarifyLLM.js'));
+    const { FollowUpQuestionsLLM } = require(path.join(llmDir, 'FollowUpQuestionsLLM.js'));
+    const sent = [];
+    const helper = {
+      getPromptTier: () => 'full',
+      fitContextForCurrentModel: (t) => t,
+      async *streamChat(...args) { sent.push(args[0]); yield 'ok'; },
+    };
+    engine.clarifyLLM = new ClarifyLLM(helper);
+    engine.followUpQuestionsLLM = new FollowUpQuestionsLLM(helper);
+    session.logUsage('chat', "what's the type of Map<String, Int> & why", 'It maps a String key to an Int value.');
+
+    await engine.runClarify();
+    await engine.runFollowUpQuestions();
+
+    assert.equal(sent.length, 2);
+    for (const message of sent) {
+      assert.match(message, /<recent_manual_turn data_only="true">/, 'the markup is markup');
+      assert.match(message, /<user_question>what's the type of Map&lt;String, Int&gt; &amp; why<\/user_question>/, 'the typed question is escaped once');
+      assert.doesNotMatch(message, /&amp;lt;|&amp;#39;|&amp;amp;/);
+      assert.ok(message.trimEnd().endsWith('</task>'), 'the request is last');
+    }
+    assert.match(sent[0], /<task>\nGive me one clarifying question/);
+    assert.match(sent[1], /<task>\nSuggest three follow-up questions/);
+  } finally {
+    if (saved === undefined) delete process.env.NATIVELY_PROMPT_SYSTEM_V2; else process.env.NATIVELY_PROMPT_SYSTEM_V2 = saved;
+  }
+});

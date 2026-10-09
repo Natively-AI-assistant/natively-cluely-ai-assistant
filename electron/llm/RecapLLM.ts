@@ -2,6 +2,7 @@ import { LLMHelper } from "../LLMHelper";
 import { UNIVERSAL_RECAP_PROMPT } from "./prompts";
 import { TINY_RECAP_PROMPT } from "./tinyPrompts";
 import { resolveV2SystemPrompt, v2TierForPromptTier } from "./promptSystemV2";
+import { buildQuickActionTurn, responseLanguageIsPinned } from "./quickActionTurn";
 
 export class RecapLLM {
     private llmHelper: LLMHelper;
@@ -18,12 +19,18 @@ export class RecapLLM {
         try {
             const promptOverride = resolveV2SystemPrompt({ action: 'recap', tier: v2TierForPromptTier(this.llmHelper.getPromptTier()) })
                 ?? (this.llmHelper.getPromptTier() === 'tiny' ? TINY_RECAP_PROMPT : UNIVERSAL_RECAP_PROMPT);
-            const fittedContext = this.llmHelper.fitContextForCurrentModel(context);
+            // Sent as it is, not through buildQuickActionTurn. The one caller is
+            // SessionTracker's transcript compaction, whose message opens with
+            // its own request ("Summarize this conversation segment into 3-5
+            // concise bullet points ..."); wrapped, that request became a line
+            // of the transcript under "Recap the conversation so far". The
+            // Recap button is generateStream below.
+            const message = this.llmHelper.fitContextForCurrentModel(context);
             // ignoreKnowledgeMode=true — see ClarifyLLM.generate() for the full
             // rationale: `context` is a conversation-context blob, not a real
             // question, and letting it through the knowledge-mode intent classifier
             // risks misclassifying the whole recap call as an intro request.
-            const stream = this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true);
+            const stream = this.llmHelper.streamChat(message, undefined, undefined, promptOverride, true);
             let fullResponse = "";
             for await (const chunk of stream) fullResponse += chunk;
             return this.clampRecapResponse(fullResponse);
@@ -49,8 +56,10 @@ export class RecapLLM {
                 promptOverride = `${promptOverride}\n\n${options.contractRule}`;
             }
             const fittedContext = this.llmHelper.fitContextForCurrentModel(context);
+            // The request is the turn; the transcript is its background (quickActionTurn.ts).
+            const message = buildQuickActionTurn('recap', promptOverride, fittedContext, { languagePinned: responseLanguageIsPinned(this.llmHelper) });
             // See generate() above — ignoreKnowledgeMode=true.
-            yield* this.llmHelper.streamChat(fittedContext, undefined, undefined, promptOverride, true);
+            yield* this.llmHelper.streamChat(message, undefined, undefined, promptOverride, true);
         } catch (error) {
             console.error("[RecapLLM] Streaming generation failed:", error);
         }

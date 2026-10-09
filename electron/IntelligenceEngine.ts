@@ -771,20 +771,26 @@ export class IntelligenceEngine extends EventEmitter {
         ].join('\n');
     }
 
-    private buildActionContextWithManualFallback(lastSeconds: number): string | null {
+    /**
+     * `rendered` says which of the two this is: false for a raw transcript,
+     * true for the typed-turn fallback, which is this file's own markup with
+     * its contents already escaped. Clarify and Follow-up questions pass it on
+     * so the turn builder does not escape that markup a second time.
+     */
+    private buildActionContextWithManualFallback(lastSeconds: number): { text: string; rendered: boolean } | null {
         const transcriptContext = this.buildPreparedTranscriptContext(lastSeconds);
-        if (transcriptContext && transcriptContext.trim().length >= IntelligenceEngine.TRANSCRIPT_CONTEXT_SUBSTANTIAL_CHARS) return transcriptContext;
+        if (transcriptContext && transcriptContext.trim().length >= IntelligenceEngine.TRANSCRIPT_CONTEXT_SUBSTANTIAL_CHARS) return { text: transcriptContext, rendered: false };
 
         const manualContext = this.buildRecentManualContext();
         if (manualContext) {
             if (transcriptContext?.trim()) {
                 const supplementalTranscript = IntelligenceEngine.escapeXmlText(transcriptContext.trim());
-                return `${manualContext}\n\n<recent_transcript type="supplemental" quality="thin">${supplementalTranscript}</recent_transcript>`;
+                return { text: `${manualContext}\n\n<recent_transcript type="supplemental" quality="thin">${supplementalTranscript}</recent_transcript>`, rendered: true };
             }
-            return manualContext;
+            return { text: manualContext, rendered: true };
         }
 
-        return transcriptContext || null;
+        return transcriptContext ? { text: transcriptContext, rendered: false } : null;
     }
 
     /**
@@ -7397,7 +7403,9 @@ export class IntelligenceEngine extends EventEmitter {
     }
 
     /**
-     * V3 prompt for a TRANSCRIPT-DRIVEN surface (assist / clarify / brainstorm).
+     * V3 prompt for a TRANSCRIPT-DRIVEN surface (assist / code hint). Clarify
+     * and Brainstorm left it on 2026-10-09: they are not answers, and V3
+     * composes an answer prompt.
      *
      * These surfaces receive no question — they receive a rolling speech window.
      * §12's answer is the question RESOLVER, not the classifier: extract the
@@ -7408,7 +7416,7 @@ export class IntelligenceEngine extends EventEmitter {
      * into no-evidence disclosures would be adoption theatre.
      */
     private async buildV3ForTranscriptSurface(
-        tag: 'assist' | 'clarify' | 'brainstorm' | 'code-hint' = 'assist',
+        tag: 'assist' | 'code-hint' = 'assist',
         /**
          * A question the caller already has, which beats resolving one out of
          * speech. Code hint is the case: the problem statement comes off a
@@ -7457,8 +7465,8 @@ export class IntelligenceEngine extends EventEmitter {
                 // See the what-to-answer call site: the rollback must reach
                 // every surface, not just typed chat.
                 multiTurnHistory: isIntelligenceFlagEnabled('chatHistoryMultiTurn'),
-                // AnswerSurface has no clarify/brainstorm members; the tag keeps
-                // their traces separable from real assist turns.
+                // AnswerSurface has no code-hint member; the tag keeps its
+                // traces separable from real assist turns.
                 pathTag: tag,
                 question: resolved.resolvedQuestion,
                 modeTemplateType: ctx.raw,
@@ -7784,14 +7792,16 @@ export class IntelligenceEngine extends EventEmitter {
                 return null;
             }
 
-            const rawContext = this.buildActionContextWithManualFallback(180);
+            const actionContext = this.buildActionContextWithManualFallback(180);
             // If no transcript/manual turn yet, use a generic prompt — the LLM will ask a scoping question
-            const context = rawContext || '[No transcript or recent manual answer available yet. Generate an opening clarifying question to understand the scope and constraints of the upcoming problem.]';
+            const context = actionContext?.text || '[No transcript or recent manual answer available yet. Generate an opening clarifying question to understand the scope and constraints of the upcoming problem.]';
 
             const generationId = ++this.currentGenerationId;
             let fullClarification = "";
-            const clarifyV3 = await this.buildV3ForTranscriptSurface('clarify');
-            const stream = this.clarifyLLM.generateStream(context, clarifyV3 ?? undefined);
+            // No V3 composition here. V3 composes an ANSWER prompt, and Clarify
+            // sent with it answered the question instead of asking one (15 of
+            // 15, measured 2026-10-09). See ClarifyLLM.resolvePrompt.
+            const stream = this.clarifyLLM.generateStream(context, { contextIsRendered: actionContext?.rendered === true });
             let streamAborted = false;
 
             for await (const token of stream) {
@@ -7851,7 +7861,8 @@ export class IntelligenceEngine extends EventEmitter {
                 return null;
             }
 
-            const context = this.buildActionContextWithManualFallback(120);
+            const actionContext = this.buildActionContextWithManualFallback(120);
+            const context = actionContext?.text;
             if (!context) {
                 console.warn('[IntelligenceEngine] No transcript or recent manual answer available for follow-up questions');
                 this.setMode('idle');
@@ -7865,7 +7876,7 @@ export class IntelligenceEngine extends EventEmitter {
 
             const generationId = ++this.currentGenerationId;
             let fullQuestions = "";
-            const stream = this.followUpQuestionsLLM.generateStream(context);
+            const stream = this.followUpQuestionsLLM.generateStream(context, { contextIsRendered: actionContext?.rendered === true });
             let streamAborted = false;
 
             for await (const token of stream) {
@@ -8228,8 +8239,8 @@ export class IntelligenceEngine extends EventEmitter {
                 return "Please configure your API Keys in Settings to use this feature.";
             }
 
-            let context = this.session.getFormattedContext(180);
-            // Prepend the problem statement so the LLM knows exactly what to brainstorm
+            const context = this.session.getFormattedContext(180);
+            // The problem statement goes with it so the LLM knows exactly what to brainstorm
             const resolvedProblem = problemStatement?.trim() ||
                 this.session.getDetectedCodingQuestion().question?.trim();
 
@@ -8241,12 +8252,13 @@ export class IntelligenceEngine extends EventEmitter {
                 return msg;
             }
 
-            if (resolvedProblem) {
-                context = `<problem_statement>\n${resolvedProblem}\n</problem_statement>\n\n${context}`;
-            }
             const generationId = ++this.currentGenerationId;
             let fullResult = "";
-            const brainstormV3 = await this.buildV3ForTranscriptSurface('brainstorm');
+            // No V3 composition here. V3 composes an ANSWER prompt with no
+            // brainstorm action in it, and Brainstorm sent with it was a second
+            // Answer button (23 replies of 90 weighed two or more approaches,
+            // measured 2026-10-09). See BrainstormLLM.generateStream, which also
+            // places the problem statement in the turn.
             // When the active task is a system design, "brainstorm" means
             // alternative designs — with the one worth picking drawn. No design
             // on the table ⇒ null ⇒ brainstorm exactly as before.
@@ -8260,7 +8272,7 @@ export class IntelligenceEngine extends EventEmitter {
                     );
                 } catch { return null; }
             })();
-            const stream = this.brainstormLLM.generateStream(context, imagePaths, brainstormV3 ?? undefined, brainstormDiagramTurn);
+            const stream = this.brainstormLLM.generateStream(context, imagePaths, brainstormDiagramTurn, resolvedProblem ?? null);
             let streamAborted = false;
 
             for await (const token of stream) {
