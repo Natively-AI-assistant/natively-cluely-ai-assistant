@@ -154,8 +154,11 @@ let embeddingStatus = null;
 if (process.env.ER_EMBEDDING === 'voyage') {
   const vKey = envKey('VOYAGE_API_KEY');
   if (!vKey) { console.error('ER_EMBEDDING=voyage but VOYAGE_API_KEY is not in the env file.'); process.exit(2); }
-  const r = await c.launcher.evaluate(`(async () => { const api = window.electronAPI; const set = await api.setEmbeddingVoyageKey(${JSON.stringify(vKey)}); const st = await api.getEmbeddingStatus(); return { set, st }; })()`);
+  // Saving the key alone left the pipeline on the bundled model (2026-10-09: the first arm C run was voided for it), so
+  // the provider is also chosen explicitly, and the run refuses to start unless the app reports it active.
+  const r = await c.launcher.evaluate(`(async () => { const api = window.electronAPI; const set = await api.setEmbeddingVoyageKey(${JSON.stringify(vKey)}); const cfg = await api.setEmbeddingConfig({ mode: 'manual', provider: 'voyage', model: ${JSON.stringify(process.env.ER_EMBEDDING_MODEL || 'voyage-4')} }); await new Promise((res) => setTimeout(res, 3000)); const st = await api.getEmbeddingStatus(); return { set, cfg: { success: cfg?.success, error: cfg?.error, message: cfg?.message, reindexRequired: cfg?.reindexRequired }, st }; })()`);
   if (!r?.set?.success) { console.error('could not save the Voyage key: ' + JSON.stringify(r?.set?.error ?? r?.set?.message ?? null)); process.exit(2); }
+  if (!r?.cfg?.success || r?.st?.active?.provider !== 'voyage') { console.error('the app did not switch to the Voyage embedding provider: ' + JSON.stringify({ cfg: r?.cfg, active: r?.st?.active })); process.exit(2); }
   embeddingStatus = r.st ?? null;
 } else {
   embeddingStatus = await c.launcher.evaluate('window.electronAPI.getEmbeddingStatus()').catch(() => null);

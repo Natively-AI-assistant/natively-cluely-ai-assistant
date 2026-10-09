@@ -3034,3 +3034,42 @@ section moved to the top of the user message, before the question and the conver
 If all three hold it is a lead for a composer change (which would need its own app runs and a judged reading on
 every mode, since it moves the question on every turn that carries documents); nothing is built from the replay
 alone. It is run after the app runs of E26 and E27, never beside one.
+
+### 2. E26 — result: all five lines hold; landed on local main (2026-10-09 22:51 UTC; app run 21:32–22:33 UTC, `er9-*`, 226 rows of the two profile modes, direct DeepSeek, all answered; `report/e26-read.mjs`)
+| | main (rule-based parser; `er6`, `er7`, `er8`) | candidate |
+|---|---|---|
+| profile rows extracted by the model | 0 of 163 | 163 of 163 |
+| structured calls answered by DeepSeek / failures / rule-based fallbacks (app log) | n/a | 424 / 0 / 0 |
+| derived experience entries in the recorded prompts that the pairing rule rejects | 259 | 0 |
+| rows right by the fixed checks, all 226 | 201 (88.9 %) | 204 (90.3 %) |
+| development (140) | 126 | 124 |
+| challenge + challenge-val (38) | 31 | 33 |
+| prov1 + prov1-val (48) | 44 | 47 |
+| which employer / length of time (28) | 25 | 27 |
+| own history with only the posting (12) | 11 | 12 |
+| rows with a forbidden string | 4 | 2 |
+| first word, spoken: median / p90 | 1,070 / 1,731 ms | 1,058 / 1,801 ms |
+| first word, typed: median | 989 ms | 955 ms |
+| **profile upload, résumé + posting: median / max** | 3.3 / 4.0 s | **73 / 82 s** |
+| profile upload, one document: median / max | 1.3 / 2.2 s | 25 / 29 s |
+Lines 1 to 5 hold. The sections that reach the prompt are now the résumé's own ("Achievements", "Leadership",
+"Responsibilities", one card per real job); the garbled ones are gone ("on-call engineer starts from. at Owned the
+desig…", "disk; about 260 GitHub stars."). No model-written profile artifact is in any recorded prompt. Rows that
+changed side, development: 5 right → wrong, 4 wrong → right (among them D-LFW-020, the tenure, now right in the app
+as well), the size of ordinary run-to-run change.
+**The cost, which no line covered and Evin should see:** a profile upload is slow on DeepSeek. With a model
+available the whole profile pipeline runs, as it does on every other provider (extraction, the stories, the
+prepared material: about ten structured calls for a résumé and a posting), and on deepseek-flash those take about
+6 s each, one after the other: 73 s at the median for a résumé with a posting, against 3 s with the rule-based
+parser. The answers do not wait for it; the upload does.
+**Suites.** A first llm run failed one source-pinning test (`FastModelPreferFast`: a 3,000-character window of
+the function that one added line pushed its target out of); the line was redundant and is removed. Then, on the
+candidate rebased onto the main of that moment: intelligence + context-intelligence 2,935 / 0 fail; llm 6,153 /
+1 fail; services 5,794 / 121 fail / 12 cancelled with the same names as main's baseline. The one llm failure
+(`QuickActionTurnRequest2026_10_09`: "a legacy prompt still gets the mode template") arrived with another
+session's commit and fails the same way on main `bbba4a58` built in the same worktree: not this change.
+**Main moved again meanwhile.** Another session committed three changes on top of E23 and pushed
+(`ac9e3ab0`, `71f718d8`, `bbba4a58`: quick actions, follow-up questions, shortcuts), so **E23 `4675ff0e` is on
+GitHub main** as part of that push, and the uncommitted edit to `LLMHelper.ts` in the main checkout is gone.
+`cand/e26` rebased onto `bbba4a58`: `67fb1b24`, fast-forwarded. **Local main = `67fb1b24`**, one commit ahead
+of `origin/main` `bbba4a58`; not pushed.
