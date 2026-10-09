@@ -2925,3 +2925,33 @@ The candidate's two failures are timing tests that ran while another job of mine
 must drain within its window in `HindsightMemory.test.mjs`; a C++ compile in `CppRunner.test.mjs`): both files
 re-run alone three times, 41 of 41 each time. Neither touches the changed code. Fast-forwarded:
 **local main = `4675ff0e`**, one commit ahead of `origin/main` `4eb4b851`. Not pushed (the word was to land).
+
+### 2. E26 — a DeepSeek-only user's profile is extracted by the model (measured and declared 2026-10-09 21:25 UTC, before any app run of it)
+**The gap.** `LLMHelper.generateContentStructured` builds its ladder from OpenAI, Claude, Gemini, Codex CLI, Ollama,
+a custom provider and the Natively API. There is no DeepSeek rung, so with DeepSeek as the only key the ladder is
+empty ("No reasoning model available") and the résumé goes to the rule-based parser.
+**Measured before any code** (the app's own extraction prompt and parser, `premium/…/StructuredExtractor.ts`,
+bundled; the request `generateWithDeepseek` sends: deepseek-flash, thinking off; the app's raw text of each
+document; two runs at the provider default and two at temperature 0.4):
+| document | result, 4 of 4 runs | time per call |
+|---|---|---|
+| résumé A (PDF, wrapped lines) | 3 entries: both titles at Quillhaven with their own dates, Tessarine; 4 projects | 6.1 to 6.3 s |
+| résumé B (two titles at one employer) | 4 entries, the second title at Lumenquay, Ondaverde and Plumewright right | 5.1 to 5.8 s |
+| posting A / posting B | title, company, level, location, minimum years right | 2.5 to 3.3 s |
+The pairing rule of E23 rejects none of those entries. Nothing differed between the two temperatures.
+**The change** (branch `cand/e26` from main `4675ff0e`): a DeepSeek rung, LAST in the ladder (after the Natively
+API), at 0.4 like the Gemini rungs; `generateWithDeepseek` takes an optional temperature and sends none for its
+chat callers. Last so that nobody who has a working rung today is moved to another model. Skipped when the
+provider is switched off, when the key failed permanently this session, and in local-only mode. New test file 14 of
+14; type check clean.
+**App run** (one build of `cand/e26`, direct DeepSeek, fresh user data): the Looking-for-work and
+Technical-Interview rows of dev, dev2, challenge, challenge-val, prov1 and prov1-val (224 rows), against main's
+recorded runs of the same rows (`er6-*`, `er7-*`, `er8-*`; main before E23, rule-based parser).
+**Lines.**
+1. Every profile upload reports model extraction; the app log has no "falling back to deterministic heuristic".
+2. No derived experience entry in any recorded prompt is rejected by the pairing rule.
+3. Rows right by the fixed checks: not more than 2 points below main on all 224; on the 28 which-employer and
+   length-of-time rows not below main.
+4. First word, spoken: median at most 150 ms above main on the same rows; no turn over 5 s.
+5. Every row answered, no provider failure; the time of a profile upload is reported.
+If 1, 2 and 5 hold and 3 or 4 does not, it is reported with its cost and not landed without Evin seeing it.
