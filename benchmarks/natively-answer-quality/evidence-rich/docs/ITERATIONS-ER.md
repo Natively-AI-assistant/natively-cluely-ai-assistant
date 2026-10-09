@@ -2814,3 +2814,28 @@ detail, read by eye.
 **Stage 2, unseen** (the same modes' rows of `challenge` and `challenge-val`, drafts of `er7-*`): lines 1 to 4.
 Only if both stages hold are Astra calls spent (the rows whose shown answer differs between the arms, both sides).
 If stage 1 fails nothing further is run for E25.
+
+### E25 — result: stage 1 holds, stage 2 fails; not proposed (2026-10-09 18:58 UTC; replayed 18:50–18:58 UTC; main's pass, cap 96,000, k = 2; every rebuilt request equals the recorded one; `report/rule-e25.mjs`)
+| | development drafts, 346 rows, 692 samples | | unseen drafts (challenge + challenge-val), 95 rows, 190 samples | |
+|---|---|---|---|---|
+| | ctl | sheet | ctl | sheet |
+| right drafts no longer right as shown | 1.9 % | 1.3 % | 5.9 % | 5.9 % |
+| right drafts whose text changes | 12.4 % | 14.0 % | 13.2 % | **17.8 %** |
+| forbidden string as shown (repaired) | 10 (0) | 9 (0) | 4 (4) | **5** (4) |
+| not right as drafted, right as shown | 2 | 4 | 3 | 2 |
+| pass time p50 / p90 | 1,322 / 1,817 ms | 1,345 / 1,877 ms | 1,279 / 1,698 ms | 1,353 / 1,874 ms |
+| not finished in budget | 1.2 % | 0.9 % | 0.5 % | 0.0 % |
+Stage 1: all four lines hold. **Stage 2: line 2 fails (+4.6 points of right drafts changed, 3 allowed) and line 3
+fails (one more shown answer with a forbidden string).** No Astra call is spent; nothing is built.
+Reported, deciding nothing: on the 30 drafts of the last judged run that Astra capped for an unsupported company,
+policy or research claim, an invented meeting fact or an unsafe commitment, the pass's list names something in 12
+of 60 samples as it is and in 23 of 60 with the sheet. With the sheet it newly names the flagged detail on six
+rows, four of them Seminar (D-SEM-017 the invented provenance of the other groups' data; D2-SEM-006 "the one class
+where it beats us"; D2-SEM-040 both invented findings; D-SEM-028), D-REC-022 (the invented precedence) and D-CC-030
+("they'll pick up now"). It also lists two honest "let me confirm" sentences as promises (D-SALES-028) and stops
+listing on one row. So the sheet does make the pass see more of what the judge flags, most clearly research
+claims, and on unseen drafts it pays for that by touching more answers that were right. One lead is left and NOT
+taken today: the same sheet for Seminar turns only. The unseen sets hold 19 Seminar rows, too few to decide it.
+Also seen while building the sheet: D2-CC-030, counted among the invented company facts, is supported by the
+material in its own prompt ("Every charge produces an invoice … listed in the app under Settings > Billing"); that
+judgment is a judge error, so the class is at most 14 rows, not 15.
