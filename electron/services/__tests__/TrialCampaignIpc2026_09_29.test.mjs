@@ -21,6 +21,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.
 const COMPILED = path.join(ROOT, 'dist-electron/electron/ipcHandlers.js');
 const DAY = 86_400_000;
 const CAMPAIGN = '2026-09-29';
+// When the server-side archive ran: TRIAL_CAMPAIGN_SERVER_RESET_AT in src/lib/trialCampaign.mjs.
+const CUTOFF = Date.parse('2026-09-29T10:25:31Z');
 
 const handlers = new Map();
 const sends = [];
@@ -97,7 +99,10 @@ test('the harness reached the handler (else every assertion below points the wro
 test('a past user with an expired trial, the sentinel still set, and a retired promo is reopened', async () => {
   // The state an upgrading user really has: trial long over, claim never cleared,
   // sentinel + `natively` route still stored (they never reopened the app since).
-  cm.setTrialToken('natively_trial_OLD', iso(Date.now() - 5 * DAY), iso(Date.now() - 5 * DAY - 1_800_000));
+  // Dated from the cutoff, never from today: "five days ago" stopped being an
+  // old trial on 2026-10-04, when it began to land after the server reset and
+  // the handler (correctly) answered `newer-trial`.
+  cm.setTrialToken('natively_trial_OLD', iso(CUTOFF - 5 * DAY + 1_800_000), iso(CUTOFF - 5 * DAY));
   cm.setNativelyApiKey(SENTINEL);
   ledger.record('trial_promo', 'never');
   assert.equal(promoRetired(), true, 'precondition');
@@ -146,7 +151,6 @@ test('a LIVE trial is never touched and leaves no marker, so the next launch re-
 // WHO IS RESET. Only a user with no licence, no real Natively key and no AI key of their
 // own. Everyone else keeps their claim, their retired promo and their (absent) marker; the
 // normal expiry flow still settles their old trial and reverts the trial's route.
-const CUTOFF = Date.parse('2026-09-29T10:25:31Z');
 const oldExpiredTrial = () =>
   cm.setTrialToken('natively_trial_OLD2', iso(CUTOFF - 3 * DAY + 1_800_000), iso(CUTOFF - 3 * DAY));
 async function assertLeftAlone(res) {
