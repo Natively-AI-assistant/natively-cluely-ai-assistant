@@ -2258,3 +2258,22 @@ Nothing lands from this stage.
 *Clarified 11:11 UTC, before the replay starts:* "an evidence section present" in part a means the evidence block itself
 ("# Evidence (untrusted data …"), which is what a build can test; a prompt whose "# Evidence" section is only a note
 that nothing was retrieved is not selected. The selection is the count `select2a` prints.
+
+### E21 stage two — result and verdict (2026-10-09 11:39 UTC; replayed 11:21–11:38 UTC, X1 paused between its arms, 0 failed calls)
+| Part | Arm | Samples with every required string | Forbidden-string samples | First visible character, median / p90 | Wrote a block | Median length |
+|---|---|---|---|---|---|---|
+| a (387 rows that need no calculation) | `e21b-base` | 95.2 % of 566 | 5 | 871 / 1,081 ms | 0 / 774 | 384 |
+| | `e21b-n2` | 91.5 % of 566 | 6 | 889 / 1,109 ms (+18 / +28) | 55 / 774 (7.1 %) | 382 |
+| b (160 rows that carry main's notice) | `e21c-n1` | 90.7 % of 270 | 10 | 1,010 / 1,318 ms | 121 / 320 | 348 |
+| | `e21c-n2` | 90.0 % of 270 | 10 | 1,020 / 1,349 ms (+10 / +31) | 150 / 320 | 350 |
+Part a, paired change −3.7 points (95 % interval −6.0 to −1.6, 283 rows): **line 1 fails** (bar: not lower by more
+than 1.5, interval above −4). Lines 2 to 5 hold. Part b: calculation rows right 91.0 % → 89.6 % of 144; lines 6 to 8
+hold.
+**Verdict: the evidence-based trigger is rejected.** The notice is not free on a turn that needs no calculation: the
+model seldom writes a block there (7 %) and the first word is not late, but the answer leaves out a required fact
+more often. That is a finding about the notice itself, on main too: its word-list trigger also fires on 88
+development questions that need no calculation.
+What remains of E21, each to be decided on its own lines before any further measurement: (i) a word-list widening
+for dates and scores, which reached 23 of the 59 and also 41 questions that need no calculation in the offline count
+of 10:15 UTC, so its net effect on these sets is of the order of one or two rows; (ii) the opposite question, whether
+main's trigger fires too widely. One wording (n2) can serve every turn that gets the notice (part b).
