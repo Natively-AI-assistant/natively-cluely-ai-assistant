@@ -72,7 +72,7 @@ function loadMode(key) {
   if (!exists(path.join(dir, 'manifest.json'))) return null;
   const manifest = readJson(path.join(dir, 'manifest.json'));
   const opt = (f, d) => (exists(path.join(dir, f)) ? readJson(path.join(dir, f)) : d);
-  return { key, dir, manifest, variants: opt('variants.json', []), configs: opt('configs.json', []), dev: opt('dev.json', null), dev2: opt('dev2.json', null), cf: opt('cf.json', null) };
+  return { key, dir, manifest, variants: opt('variants.json', []), configs: opt('configs.json', []), dev: opt('dev.json', null), dev2: opt('dev2.json', null), challenge: opt('challenge.json', null), cf: opt('cf.json', null) };
 }
 function loadAll() {
   const packs = {};
@@ -139,7 +139,7 @@ function lintItems({ items: rawItems, mode, set, docs, configs, corpusText, ques
   const items = rawItems.map((it) => bindToLoaded(it, configs, docs));
   const E = [], W = [];
   const m = MODES.find((x) => x.key === mode);
-  const idRe = set === 'iso' ? /^ER-ISO-\d{3}$/ : new RegExp(`^ER-${set === 'dev' ? 'D' : set === 'dev2' ? 'D2' : set === 'holdout' ? 'H' : 'CF'}-${m.pfx}-`);
+  const idRe = set === 'iso' ? /^ER-ISO-\d{3}$/ : new RegExp(`^ER-${set === 'dev' ? 'D' : set === 'dev2' ? 'D2' : set === 'challenge' ? 'C1' : set === 'challenge-val' ? 'CV1' : set === 'holdout' ? 'H' : 'CF'}-${m.pfx}-`);
   const counts = Object.fromEntries(CONDITIONS.map((c) => [c, 0]));
   const ids = new Set();
   for (const it of items) {
@@ -273,6 +273,23 @@ function lint({ quiet = false } = {}) {
       const r = lintItems({ items: p.dev2.items ?? [], mode: p.key, set: 'dev2', docs, configs, corpusText, questionsSeen: seen });
       out.errors.push(...r.E); out.warnings.push(...r.W); s.dev2 = (p.dev2.items ?? []).length; s.dev2_conditions = r.counts;
       for (const [c, n] of Object.entries(WANT.dev2)) if (r.counts[c] !== n) out.warnings.push(`${p.key} dev2: ${r.counts[c]} ${c} items, brief asks ${n}`);
+    }
+    // challenge (2026-10-09): a supplementary set for the failure classes that remain (calculation from several
+    // documents, dates, entity/value association, version conflicts, absent policy, follow-ups, code), on the SAME
+    // frozen documents. authoring/<mode>/challenge.json (ids ER-C1-<PFX>-NNN) may be read by the engineer;
+    // authoring-holdout/<mode>/challenge-val.json (ids ER-CV1-<PFX>-NNN) is its untouched validation part and is
+    // handled like the holdout: counts only here, detail in a file for the author.
+    if (p.challenge) {
+      const r = lintItems({ items: p.challenge.items ?? [], mode: p.key, set: 'challenge', docs, configs, corpusText, questionsSeen: seen });
+      out.errors.push(...r.E); out.warnings.push(...r.W); s.challenge = (p.challenge.items ?? []).length; s.challenge_conditions = r.counts;
+    }
+    const cvf = path.join(AUTH_H, p.key, 'challenge-val.json');
+    if (exists(cvf)) {
+      const h = readJson(cvf);
+      const r = lintItems({ items: h.items ?? [], mode: p.key, set: 'challenge-val', docs, configs, corpusText, questionsSeen: seen });
+      fs.writeFileSync(path.join(AUTH_H, p.key, 'lint-challenge-val.txt'), [`errors (${r.E.length})`, ...r.E, '', `warnings (${r.W.length})`, ...r.W, ''].join('\n'));
+      s.challenge_val = (h.items ?? []).length; s.challenge_val_errors = r.E.length; s.challenge_val_warnings = r.W.length; s.challenge_val_conditions = r.counts;
+      out.holdoutErrors = (out.holdoutErrors ?? 0) + r.E.length;
     }
     if (p.cf) {
       const items = expandCf(p.cf, p.key);
@@ -452,12 +469,14 @@ function freeze(partial = false) {
   const cfgList = [...configs.values()].map((c) => ({ id: c.id, mode: c.mode, base: !!c.base, files: c.files ?? [] }));
   if (partial) for (const m of MODES) if (!cfgList.some((c) => c.mode === m.key && c.base)) cfgList.push({ id: `${m.key}-none`, mode: m.key, base: true, files: [] });
   const modes = MODES.map(({ key, name }) => ({ key, name }));
-  const sets = { dev: [], holdout: [], 'supp-counterfactual': [], 'supp-isolation': [], dev2: [] };
+  const sets = { dev: [], holdout: [], 'supp-counterfactual': [], 'supp-isolation': [], dev2: [], challenge: [], 'challenge-val': [] };
   for (const m of MODES) {
     const p = packs[m.key];
     if (!p) continue;
     sets.dev.push(...(p.dev?.items ?? []));
     sets.dev2.push(...(p.dev2?.items ?? []));
+    sets.challenge.push(...(p.challenge?.items ?? []));
+    if (exists(path.join(AUTH_H, m.key, 'challenge-val.json'))) sets['challenge-val'].push(...readJson(path.join(AUTH_H, m.key, 'challenge-val.json')).items);
     sets['supp-counterfactual'].push(...expandCf(p.cf ?? {}, m.key));
     if (exists(path.join(AUTH_H, m.key, 'holdout.json'))) sets.holdout.push(...readJson(path.join(AUTH_H, m.key, 'holdout.json')).items);
   }
@@ -465,7 +484,7 @@ function freeze(partial = false) {
   if (exists(iso)) sets['supp-isolation'].push(...resolveIso(readJson(iso).items, configs));
   const frozen = { name: 'evidence-rich-v1', frozen_at: new Date().toISOString(), manifest_sha256: manifestSha, datasets: {} };
   for (const [name, items] of Object.entries(sets)) {
-    if (name === 'dev2' && !items.length) continue;   // not authored yet: nothing to freeze
+    if (['dev2', 'challenge', 'challenge-val'].includes(name) && !items.length) continue;   // not authored yet: nothing to freeze
     const body = { schema_version: 1, partition: name, manifest_sha256: manifestSha, modes, configs: cfgList, items: items.map((it) => ({ partition: name, ...bindToLoaded(it, configs, docs) })) };
     const h = sha256(JSON.stringify(body));
     fs.writeFileSync(path.join(DATASETS, `${name}.json`), JSON.stringify({ dataset_name: `evidence-rich-v1-${name}`, dataset_sha256: h, ...body }, null, 1));

@@ -2151,3 +2151,16 @@ are in no benchmark document). All three arms in the same hour; nothing else on 
 4. Samples containing a forbidden string (an outdated or other entity's value): at most base + 2.
 If both arms hold, n1 is preferred (no new wording). If neither holds, the trigger is not widened and this is closed.
 Nothing lands from this stage.
+
+### A challenge set for the classes that remain (declared 2026-10-09 10:18 UTC; nothing measured on it yet)
+The development sets have been read for a week and each remaining failure kind has too few rows in them to measure a
+fix. A supplementary set is being authored on the same frozen documents (`AUTHORING-ER-CHALLENGE.md`): per mode 12
+items the engineer may read (`authoring/<mode>/challenge.json`, ids `ER-C1-…`, dataset `challenge`) and 6 that
+stay unread as its validation part (`authoring-holdout/<mode>/challenge-val.json`, ids `ER-CV1-…`, dataset
+`challenge-val`, aggregates only). Kinds: calculation from two or more documents, dates and times counted from
+document rules, which value belongs to which thing, version conflicts (one settled, one open), absent policy /
+company / personal facts, follow-up chains, and in Technical Interview code with executed tests. Every item must be
+checkable by fixed strings or executed tests, so a class can be measured with repetitions and without the judge.
+Authors are three agents that have not seen any product answer or analysis, three modes each. `build.mjs` lints and
+freezes the two new datasets beside the existing ones; the existing datasets' hashes must not change (to be checked
+at the freeze). dev, dev2 and holdout are untouched.
