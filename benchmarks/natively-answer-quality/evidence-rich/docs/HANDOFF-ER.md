@@ -1,6 +1,6 @@
 # Handoff: Natively answer-quality work on the evidence-rich benchmark
 
-Written 2026-10-09 for whoever continues this work, human or agent. It covers 2026-10-03 to 2026-10-09.
+Written 2026-10-09 (updated the same day at 13:30 UTC, after a second session) for whoever continues this work, human or agent. It covers 2026-10-03 to 2026-10-09.
 
 This one file holds everything: the current state, what Evin asked and decided, how the benchmark works, every iteration with its rule and verdict (kept and rejected), the scores per mode per round, every code and prompt change with its reason and its full diff, the complete experiment log, the investigation documents, and all 630 development questions with the answers that still exist.
 
@@ -46,16 +46,20 @@ This file is generated: `node evidence-rich/report/build-handoff.mjs` (from `ben
 | App `main` (local = GitHub) | `73b18d97` since 2026-10-09. Holds every kept change of this work, including E16b and E19. |
 | Last change landed | **E19** (`73b18d97`): landed on local main 2026-10-09 05:08 UTC on Evin's "do 1", pushed 09:05 UTC on his "push main to github". |
 | Benchmark | Branch `bench/evidence-rich`, draft PR #638, worktree `.claude/worktrees/aq-fix`. Folder `benchmarks/natively-answer-quality/evidence-rich/`. |
-| Benchmark branch on GitHub | **Behind.** GitHub has `df815379`; the local branch is ahead from `99001d3b` on. Pushing it was denied on 2026-10-08 and needs Evin's explicit yes. |
+| Benchmark branch on GitHub | **Behind.** GitHub has `df815379`; the local branch is ahead from `99001d3b` on, including everything of the second session of 2026-10-09. Pushing it was denied on 2026-10-08 and needs Evin's explicit yes. |
 | Backup of run data | `~/natively-er-backup/` (run folders, judgments, calibrations, scripts, this file, the log). |
 | Judge | gpt-6-astra only (through AgentRouter). Evin, 2026-10-05: do not judge with Claude Code (quota). |
 | Score of main before E19, development set, Astra | 630 questions: **8.92**, 71 hard fails (11.3 %), 414 at 9.5 or above (main `f4cd986d`). |
 | Score of main before E19, blind holdout, Astra | 180 questions: **8.84**, 23 hard fails (run `er-holdout-e16b3`). |
-| E19 on top of that | Development, the 88 rows it changes: 8.29 → 8.68, hard fails 12 → 7. Blind holdout, 52 pooled pairs: 8.158 → 8.384, hard fails 9 → 8. No full run of main with E19 has been judged. |
+| E19 on top of that | Development, the 88 rows it changes: 8.29 → 8.68, hard fails 12 → 7. Blind holdout, 52 pooled pairs: 8.158 → 8.384, hard fails 9 → 8. |
+| Main with E19, full run | **Run, not judged.** `er6-dev-main` + `er6-dev2-main` (630 answers, 2026-10-09 10:06–10:58 UTC, clean). The Astra window of 11:02 UTC was closed by a provider access block (HTTP 403) after 43 judgments. There is no score of main with E19. |
+| Deterministic checks | Version **obj-3** (2026-10-09). obj-2: a string the mode's own loaded files state is not a profile leak (one development row was capped at 2 wrongly). obj-3: a needle that starts or ends with a digit matches only as a whole number. Under them the baseline of `f4cd986d` is **8.935, 70 hard fails** (8.923 / 71 as stored); no holdout score changes. |
+| Unseen question sets | `challenge` (117, readable), `challenge-val` (54, never read, aggregates only), `code1` (36 coding items with executed tests), authored blind and frozen 2026-10-09. Main on them, judge-free: 94 / 117, 45 / 54, 34 / 36. |
 | Where it started, blind holdout, Astra | 7.73, 42 hard fails (run `er-holdout-base`, the build before this work). |
 | Targets set at the start | 9.2 mean, under 1 % hard fails. **Not met.** |
-| Running or scheduled | Nothing. No cron, no background job, no watcher. |
-| Declared experiments | None. |
+| Running or scheduled | Nothing runs. See section 4 for what the next Astra window owes. |
+| Declared experiments | None open. E21 (the calculation step on document turns) was not proposed; E22 confirmed main's calculation notice; X1 (whole-pack threshold) is measured and nothing lands from it. |
+| Candidate branches kept as records | `cand/e21` `298b2b5b` (not proposed), `exp/x1-whole-pack-threshold` `237bba1a` (experiment build only). Local, never pushed. |
 
 What is not verified: nothing in this work was executed on Windows, and no packaged build was made. Every change is shared TypeScript with no platform branch, run on macOS in the dev build through the benchmark.
 
@@ -64,6 +68,8 @@ The last three days, in order:
 - **2026-10-07.** Baseline of main under Astra (630 rows). E19 written, replayed, judged and confirmed in the app. Its blind-holdout replay was run but the Astra pool closed before it could be judged.
 - **2026-10-08.** Window of 02:07 UTC: calibration 38/38; 20 of 25 holdout pairs judged; five calls returned HTTP 403 (the provider's temporary content-policy block). Nothing was retried and no key or route was changed to get round it. The partial reading (8.335 → 8.276) was recorded as incomplete, not as a verdict.
 - **2026-10-09, 02:02 UTC window.** Calibration 38/38, no block, no failed call. E19's blind-holdout check finished and both rules hold (section 7.6). Three ideas were tried without the judge and dropped; E20 failed its own rule before any judge call. Later that day E19 landed and was pushed.
+
+- **2026-10-09, second session (10:00–13:30 UTC).** Started from this file on Evin's brief for a final optimisation round. Fresh run of main with E19 (630 answers). Astra opened at 11:02 UTC, calibration 38/38, then an HTTP 403 access block two minutes into judging: no score. The rest was judge-free: two defects of the deterministic checks fixed and versioned; a failure-cause map of the last judged baseline; E21 measured in four stages and not proposed; E22; the 12,000 / 24,000 / 48,000 threshold experiment (X1); three new question sets written blind.
 
 Evin's standing instructions that bind the next session:
 
@@ -108,6 +114,7 @@ In order, dates in UTC. Quotes are his words, as typed. Plain "continue" message
 | 2026-10-09 | "do 1" (answering "Land E19 on main?") | E19 fast-forwarded onto local main (`73b18d97`). Not pushed at that point. |
 | 2026-10-09 | "push main to github" | GitHub `main` moved `bce8e47a` → `73b18d97`. Only `main` was pushed. |
 | 2026-10-09 | "write a handoff file with all the questions , resonses , chanegs you have made , observations , rejected changed , benchmark , why this change , code changes , prompt changes etc in to a single.md file , everything" | This file. |
+| 2026-10-09 | A long written brief for a new session ("final answer-quality optimization"): measure main with E19 first; map the remaining failures by first cause; arithmetic, facts from several documents, inventions the pass misses, correct inference, Technical Interview code, follow-ups; run the 12k / 24k / 48k threshold test; build a new high-difficulty set with an untouched validation part; Astra only; deterministic checks outrank the judge; nothing merged or pushed without his word. | The second session of 2026-10-09 (sections 1, 6 and 11, and the log from "Session of 2026-10-09, 10:00 UTC onward"). |
 
 Decisions he made that are easy to forget:
 
@@ -148,6 +155,10 @@ file on disk -> upload hook -> extract text (PDF / DOCX / text) -> mode referenc
 | `dev2` | 360 (40 per mode) | Development: read freely |
 | `holdout` | 180 (20 per mode) | **Blind.** Aggregates only; never read to design a change |
 | `supp-counterfactual` (63), `supp-isolation` (46), `supp-oracle-sources` (223) | supplementary; listed in Appendix E | The same question under different evidence; leaks between modes and profiles; which source backs each oracle fact |
+
+| `challenge` | 117 (13 per mode) | Readable. Harder questions on the same frozen documents, written blind on 2026-10-09: calculations from several sources, dates counted from rules, which value belongs to which thing, version conflicts, absent facts, follow-up chains. Every item is checkable by fixed strings or executed tests, so it is read without the judge. |
+| `challenge-val` | 54 (6 per mode) | **Never read.** The validation part of `challenge`: aggregates only, like the holdout (`--blind`). |
+| `code1` | 36 | Technical Interview coding questions with 485 executed tests. Readable. |
 
 Nine modes: General, Sales, Recruiting, Team Meet, Looking for work, Lecture, Technical Interview, Seminar, Call Center.
 
@@ -241,6 +252,16 @@ node ~/natively-er-backup/scripts/er-window-chain-20261009.mjs   # a whole windo
 - HTTP 402 means the ration is closed: wait for the next window. HTTP 403 means the provider has blocked access for a while: stop, record it, do not retry the denied calls and do not change key, route or content.
 - Do not run `astra-next5.sh` or the older `astra-next*.sh` blindly: their automatic commit lacks the current attribution line and their failure check covers 402 but not 403.
 
+**What the next Astra window owes** (the flag `/tmp/er-access-block-20261008-1630.json` from the block of 2026-10-09 11:12 UTC is in place; remove it only after a clean probe by hand):
+
+```
+node astra/probe.mjs                                   # exact gpt-6-astra, HTTP 200, no 403
+ER_SKIP_RUN_WAIT=1 node ~/natively-er-backup/scripts/window-er6.mjs   # calibration, then the 587 missing judgments of er6-dev-main + er6-dev2-main, then drafts
+node evidence-rich/report/rescore-objective.mjs er6-dev-main,er6-dev2-main   # the score under the current checks
+```
+
+That gives the first judged score of main with E19, to set beside 8.935 / 70 hard fails for `f4cd986d` (obj-3). `window-e21.mjs` is no longer needed (E21 was not proposed).
+
 **An app run.**
 
 ```
@@ -276,6 +297,11 @@ node evidence-rich/supervise-er.mjs --root <app worktree> --runs dev:<run-id>,de
 11. **The fix-up pass is not deterministic.** The same draft gets a different edit on a second call, so one replay shows one draw of which rows differ. For a holdout reading use two repetitions and pool them (E19 is the model).
 12. **A 403 is not a 402.** On 2026-10-08 five judge calls returned HTTP 403 (a temporary content-policy block at the provider). The window was closed with a partial reading marked incomplete; the block did not recur the next day.
 13. **Builds leave about 1.3 GB of `dist-electron` per worktree.** Delete your own build output after use, and check free disk before an app run.
+14a. **Stop only your own app.** Another session may start a `dev:agent` app in the main checkout at any time. Check `ps` for `scripts/dev-agent.mjs` before starting one, and stop by the launcher whose working directory is your worktree (`lsof -a -p <pid> -d cwd`), never by name.
+14b. **The limits probe needs `NATIVELY_ROOT`** set to the app worktree, or it looks for `agent-browser.json` in the current folder.
+14c. **A question asked late in a session can be answered from the conversation.** In the threshold probe the list question came after seven turns that had each stated one of its facts; it scored 7 of 7 with 2 of 7 in the request. Ask it in a fresh session.
+14d. **A clean result on rows you have read may not carry.** E21 held on the development rows twice (+11 points, interval above zero) and showed nothing on 37 unseen calculation questions. Check a candidate on `challenge` and `challenge-val` before any app run or judge call.
+14e. **Needles are substrings.** "October 20" used to match "October 2026" (fixed in obj-3 for digits). Write date needles with their day spelled so that a longer number cannot contain them.
 14. **The shared git stash.** Never use bare `git stash` or `git stash pop`: other sessions use the same stash.
 15. **Other sessions' files.** The main checkout usually holds uncommitted work from other sessions. Never sweep it into a commit; stage by path.
 
@@ -317,6 +343,10 @@ node evidence-rich/supervise-er.mjs --root <app worktree> --runs dev:<run-id>,de
 | — | A generator notice against multi-source omissions | counted on 126 rows | 20 rows miss a fact, each by a different mistake; at most +0.08 on the mean if every one were fixed; not measurable without the judge | Not pursued |
 | — | A rail on edits that remove a fact the draft had | counted on 99 edited rows | 5 rows | Too few; not pursued |
 | — | Inline component arithmetic (an idea of 2026-10-08) | — | Never declared, built or measured | Idea only |
+| obj-2, obj-3 | Deterministic checks: a string the mode's own loaded files state is not a profile leak; a needle that starts or ends with a digit matches only as a whole number | Re-applied to every stored judgment without a judge call | One development row 2 → 10 (baseline 8.923 / 71 → 8.935 / 70); no holdout score changes | **In the benchmark** (2026-10-09) |
+| E21 | The hidden calculation step on turns the word list does not reach. Stage 1: the notice hand-placed on the 59 calculation rows without it. Stage 2: main's wording on every document turn. Stage 3: a lighter wording (n3). Stage 4: the same on the unseen challenge sets | Generator replay, deterministic checks, 2 to 4 samples per row and arm | Stage 1: 73.3 → 84.7 % right. Stage 2: required strings 95.2 → 91.5 % on 387 turns that need no calculation (rejected). Stage 3: n3 costs nothing there (94.2 %) and keeps the gain (72.0 → 83.1 %). Stage 4: `challenge` 73.6 → 73.6 % on 37 calculation rows, forbidden-string samples 33 → 48 | **Not proposed** (stage 4, lines 1 and 4). Branch `cand/e21` kept as a record |
+| E22 | Does main's own calculation notice earn its place on the rows its word list reaches? | Generator replay with and without it, 222 rows × 3, development and challenge sets | Calculation rows 79.2 → 89.2 % right (+8.1 on the unseen sets alone); other rows 91.7 → 91.2 % | **Main confirmed**, nothing changes |
+| X1 | Whole-pack threshold 12,000 against 24,000 and 48,000 (Evin's pick #6) | Limits probe on an experiment build, synthetic files of 11,900 to 48,100 tokens, spoken and typed, 528 turns | 12,000: a whole-document question gets 2 or 3 of 7 facts just above it. 24,000: every line holds, no spoken first-word cost. 48,000: the fix-up pass (96,000-character cap) rewrote three right drafts wrong; typed first word +0.6 s | **Measured; nothing lands.** A proposal would be 24,000 with the pass's cap raised, after a quality run on realistic larger packs |
 
 Lessons that hold across them:
 
@@ -329,6 +359,8 @@ Lessons that hold across them:
 - Of 792 required facts with fixed strings, 73 have no string in the prompt (70 rows); in 53 of those rows the answer has the value anyway because it is a computed figure. The 17 rows where it is also missing from the answer (mean 6.04, 6 hard fails) are mostly Sales pricing sums and deferrals.
 - Of 71 hard fails on the development set, 57 are answers the pass never edited: the answer model misreading, miscalculating or mis-combining facts that are in the prompt (factual error 21, missed available evidence 20, reasoning 10, arithmetic 8, unsupported claims 26). That is the next lever, and it is hard to move without reasoning.
 - The gist chip repeats the body's error; it is the lone error on 3 rows. Not a lever.
+- A notice in the answer prompt is never free. Main's calculation notice on turns that need no calculation costs completeness; a lighter one changed what the model does with an absent fact on unseen questions. Where the question's wording asks for a quantity, the same notice is worth about ten points of right answers (E22), on unseen questions too.
+- By first cause, the 71 hard fails of the last judged baseline are: invented company, policy, research or personal facts 22; unsupported inference 9; arithmetic or calendar count 7; right value on the wrong thing 6; document conflict 6; self-contradiction 6; a fact left out 5; inputs combined wrongly 2; wrong code 2; role 2; gist chip 2; one defective check. None lacked the evidence in the prompt.
 
 ---
 
@@ -549,6 +581,7 @@ Section 13 prints the pass's instruction block as it is on main and the full tex
 | Replay variants (every wording tried) | `evidence-rich/replay-variants/` |
 | Rule checks | `evidence-rich/report/rule-e16.mjs`, `rule-e16c.mjs`, `rule-e17.mjs`, `rule-e19.mjs`, `rule-holdout-e16b.mjs`, `pair-aggregate.mjs` |
 | Window scripts | `~/natively-er-backup/scripts/` (`er-window-chain-20261009.mjs`, `er-window-probe-20261008.mjs`, `er-access-guard-20261008.mjs`, `er-e19h-k1-20261009.mjs`) |
+| Second session of 2026-10-09 | Runs `er6-dev-main`, `er6-dev2-main` (main with E19, unjudged bar 49 rows), `er7-chal-main`, `er7-code1-main`, `er7-chalval-main` (main on the new sets); replay arms `gen-e21-*`, `gen-e21b-*`, `gen-e21c-*`, `gen-e21d-*`, `gen-e21e-*`, `gen-e22-*`; threshold probe rows `results/x1/t12000|t24000|t48000/`; readers `report/rule-e21.mjs`, `report/x1-threshold.mjs`, `report/challenge-read.mjs`, `report/rescore-objective.mjs`; scripts in `~/natively-er-backup/scripts/` |
 | This file's generator | `evidence-rich/report/build-handoff.mjs` with `report/handoff-head.md` |
 
 ---
@@ -560,17 +593,21 @@ Section 13 prints the pass's instruction block as it is on main and the full tex
 1. **Push the benchmark branch `bench/evidence-rich`?** GitHub has `df815379`; the local branch is ahead from `99001d3b` on. The push was denied on 2026-10-08 and must not be retried by any route without his explicit yes. Until then the commits exist only on this machine and in `~/natively-er-backup/`.
 2. **Merge or close draft PR #638.** Merging puts the blind holdout's questions on public main.
 3. **Delete the old-history branches on GitHub** (`fix/aq-astra`, `cand/e16b`, `cand/e15`)? They keep files purged on 2026-10-06 reachable.
-4. **A judged run of main with E19.** No full app run of `73b18d97` has been made or judged; the evidence for E19 is the replay, the in-app check of the 88 rows it changes, and the blind-holdout replays. A fresh development run plus a holdout run would give main's current score. It needs one app run each and an Astra window.
+4. **A judged score of main with E19.** The run exists (`er6-dev-main`, `er6-dev2-main`); Astra's window of 2026-10-09 11:02 UTC was closed by an access block after 43 of 630 judgments. The next window finishes it (section 4). A holdout run of `73b18d97` has not been made.
 5. **Windows and a packaged build.** Nothing in this work has been executed on Windows or in a packaged app.
+6. **The whole-pack threshold.** X1 measured it: 24,000 held every line on synthetic files, 48,000 did not (the fix-up pass's 96,000-character cap). Whether to pursue "24,000 with the pass's cap raised" is his call; it would first need realistic packs above 12,000 tokens, which the benchmark does not have, and it roughly triples the prompt on such turns (about 24,700 tokens against 7,500).
+7. **The provider's access block.** Two in three days (2026-10-08 02:07 UTC, five calls; 2026-10-09 11:12 UTC, three calls two minutes into judging, after a clean calibration). Nothing was retried. If it keeps happening the judge budget is the limit on this work, not ideas.
+8. **Code verification is switched off app-wide** (`electron/llm/codeVerification/verificationEnabled.ts`, since 2026-07-18, no reason recorded in the commit). Main passes 34 of 36 coding questions of `code1` without it. Its correction is posted as a new message, which the benchmark harness does not capture, so it was not measured.
 
 **Next candidates, in the order the data suggests**
 
-1. The answer model's own errors on facts that are in the prompt: 57 of the 71 hard fails on main were answers the pass never edited (factual error 21, missed available evidence 20, reasoning 10, arithmetic 8, unsupported claims 26). After E19 no single cause covers more than about 1 % of rows. Ideas not yet tried: a narrow arithmetic check extended beyond the existing calculation scratch; a second look only on turns with numbers from two documents. Anything that delays the first word is out.
-2. Listed-but-kept inventions: on several profile-mode answers the pass correctly *lists* an invented personal claim and then keeps it reworded. The code deliberately does not enforce the list (a fifth of listed phrases are listing mistakes the pass then corrects). A targeted rail for `[self]` phrases is untested.
-3. Follow-up turns: the pass lowered 4 of them (8.11 → 6.41). Too few to act on; worth a look when more are judged.
-4. Telling a true two-document conflict from two versions of one document needs the identity of the source each value came from (`source_id` / `version_id`), which the pass's conflict line does not carry (E20). The prize is about +0.02 on the development mean.
-5. One spoken turn still takes the fast route with no profile (`ER-D2-LFW-030`); `ER-D-REC-016` is a possible delivery gap too.
-6. The whole-file threshold (12,000 tokens against 24,000 or 48,000), which Evin asked to test (pick #6), has not been started: the benchmark's packs all fit under 12,000, so it needs a new condition.
+1. **Check any candidate on unseen questions first.** `challenge` (readable) and `challenge-val` (aggregates only) exist for that and cost a few minutes of replay and no judge call. E21 would have reached an app run and an Astra window without them.
+2. The largest class has no handle yet: invented company, policy, research or personal facts (22 of the 71 hard fails). Two ways of making the pass stricter were measured and removed correct inference (the per-statement check) or would hit 30 answers of which 4 are real inventions (enforcing the pass's own list). A third attempt needs a signal that separates an invention from an honest inference; none is known at this model setting.
+3. Version conflicts are the weakest kind on the readable challenge set (4 of 9 right on main). Every rewording of the pass's conflict line and a rail on it failed (E6, E17, E18, E20); the open idea is still the source identity of each value (`source_id` / `version_id`), which the pass's conflict line does not carry.
+4. A hidden working step sets a sum up wrongly when a near-miss figure sits in the pack, and then trusts it (E21 stage four, `ER-C1-SALES-013`). A check of the working's INPUTS against the documents (not of its arithmetic, which is right) is untested and would have to run before the first visible word.
+5. A realistic larger-pack condition (packs of 13,000 to 24,000 tokens with whole-document questions) would let the 24,000 threshold be judged on quality instead of planted facts.
+6. Follow-up turns: the pass lowered 4 of them (8.11 → 6.41). Too few to act on; worth a look when more are judged.
+7. One spoken turn still takes the fast route with no profile (`ER-D2-LFW-030`); `ER-D-REC-016` is a possible delivery gap too.
 
 **To land a future candidate:** on a fresh build of its branch run the four suites (`electron/context-intelligence`, `electron/intelligence`, `electron/llm`, `electron/services`) *and the same suites on current main as a baseline*, before the fast-forward; rebase if main has moved; fast-forward; push only on Evin's word. The project `CLAUDE.md` rules apply to any code change (cross-platform contract, graph tools first, the validation labels).
 
@@ -4775,6 +4812,34 @@ Entry headings with their line numbers in `docs/ITERATIONS-ER.md`, and every lin
 - L1989: E19 — second repetition judged, pooled rule read (2026-10-09 02:16 UTC)
 - L2010: Judge-free look for the next candidate, inside the window of 2026-10-09 (02:20–02:40 UTC; development rows only; no Astra call, no generator call)
 - L2030: E19 — landed on local main (2026-10-09 05:08 UTC)
+- L2054: Session of 2026-10-09, 10:00 UTC onward (new session, started from HANDOFF-ER.md)
+- L2056: Baseline of main `73b18d97` (E19 included) — declared 2026-10-09 10:06 UTC, a measurement, no keep rule
+- L2064: Failure-cause look at the last judged baseline (`er4-*`, main before E19; judge-free, before 10:11 UTC)
+- L2080: X1 — whole-pack threshold, 12,000 against 24,000 and 48,000 (plan and lines written 2026-10-09 10:11 UTC, before any run)
+- L2110: Deterministic checks, version obj-2 (2026-10-09 10:12 UTC): a string the mode's own files state is not a profile leak
+- L2123: E21a — the calculation step on calculation questions that do not get it (rule written 2026-10-09 10:16 UTC, before any replay of it)
+- L2155: A challenge set for the classes that remain (declared 2026-10-09 10:18 UTC; nothing measured on it yet)
+- L2168: Deterministic checks, version obj-3 (2026-10-09 10:57 UTC, before any E21a replay output is read): a number matches as a whole number
+- L2179: E21a — replay done, judge-free lines read (2026-10-09 11:06 UTC; no judgment of it exists)
+- L2198: E21a — Astra's reading of the same replay (lines written 2026-10-09 11:06 UTC, before any judgment of it)
+- L2209: Challenge sets frozen (2026-10-09 11:07 UTC; nothing has been run on them)
+- L2227: E21 stage two — what a trigger would cost (rule written 2026-10-09 11:10 UTC, before any replay of it)
+- L2262: E21 stage two — result and verdict (2026-10-09 11:39 UTC; replayed 11:21–11:38 UTC, X1 paused between its arms, 0 failed calls)
+  - L2272: **Verdict: the evidence-based trigger is rejected.** The notice is not free on a turn that needs no calculation: the
+- L2281: E21 stage three — a lighter notice for turns the word list does not reach (rule written 2026-10-09 11:40 UTC, before any replay of it)
+- L2303: Astra window of 2026-10-09, 11:02 UTC — closed by a provider access block after 43 judgments (recorded 11:41 UTC)
+- L2317: X1 — a flaw in the probe, found on the 12,000 arm and corrected before any other arm is read (2026-10-09 11:43 UTC)
+- L2328: Failure-cause map of the last fully judged baseline (main `f4cd986d`, before E19; written 2026-10-09 11:44 UTC)
+- L2360: E21 stage three — result and verdict (2026-10-09 12:21 UTC; replayed 12:04–12:20 UTC after X1's three arms, 0 failed calls)
+  - L2365: **Verdict: both parts hold. E21 is a build candidate**: a turn that carries document evidence and that the word list
+- L2373: E21 stage four — does it hold on questions that were not used to design it? (rule written 2026-10-09 12:23 UTC, before the challenge sets have been run or replayed)
+- L2391: E21 — the build, and its app confirmation (lines written 2026-10-09 12:23 UTC, before the candidate has been run in the app)
+- L2412: X1 — result (2026-10-09 12:35 UTC; three arms on one experiment build, main pass 11:07–12:03 UTC, fresh-session list pass 12:20–12:33 UTC; 528 turns, no error or timeout; General mode, direct DeepSeek)
+- L2453: Main `73b18d97` on the challenge sets (runs `er7-chal-main`, `er7-code1-main`, `er7-chalval-main`, 12:34–12:53 UTC; read 12:54 UTC; judge-free, checks obj-3)
+- L2474: E21 stage four — result and verdict (2026-10-09 13:01 UTC; replayed 12:53–13:00 UTC on the recorded prompts of `er7-chal-main` + `er7-chalval-main`, 108 rows × 4 samples per arm, 0 failed calls)
+  - L2482: **Verdict: E21 is not proposed.** The gain measured twice on the 59 development rows (+11 points) did not appear on
+- L2497: E22 — does the calculation step on main earn its place? (a measurement of an existing mechanism; lines written 2026-10-09 13:02 UTC, before any replay of it)
+- L2517: E22 — result (2026-10-09 13:13 UTC; replayed 13:02–13:12 UTC, 222 rows × 3 samples per arm, 0 failed calls)
 
 ### B.1 The log
 
@@ -6830,6 +6895,484 @@ replay, the app confirmation of 2026-10-07 and the two blind-holdout readings ab
 so the push was a plain fast-forward of the one commit: `bce8e47a..73b18d97`. Read back from GitHub: `73b18d97`.
 Only `main` was pushed. `bench/evidence-rich` was not (GitHub `df815379`, local ahead from `99001d3b` on); that
 push is still Evin's separate yes.
+
+#### Session of 2026-10-09, 10:00 UTC onward (new session, started from HANDOFF-ER.md)
+
+##### Baseline of main `73b18d97` (E19 included) — declared 2026-10-09 10:06 UTC, a measurement, no keep rule
+No full run of main with E19 had been made or judged. Runs `er6-dev-main` (270) and `er6-dev2-main` (360): worktree
+`er-main` clean at `73b18d97`, fresh profile, direct DeepSeek, started 10:06 UTC after another session's app had
+exited (one app at a time). To be judged by gpt-6-astra in the next window (calibration first), shown answers then the
+drafts of edited rows. It is compared with `er4-dev-main` + `er4-dev2-main` (main `f4cd986d`, 8.923, 71 hard fails) as
+two single runs of two builds: run-to-run variation is about ±0.16 on 180 rows, so a difference of that order between
+them says nothing about E19; E19's evidence stays the paired replay and holdout readings above.
+
+##### Failure-cause look at the last judged baseline (`er4-*`, main before E19; judge-free, before 10:11 UTC)
+- The 71 hard fails hold 64 % of all lost points (435 of 679). The mean moves mostly by removing hard fails.
+- Questions with a calculation oracle (131): 8.78, 16 hard (12 %); without (499): 8.96, 55 hard (11 %). Arithmetic is
+  not a disproportionate class on these sets. The calculation notice reached 72 of the 131 (8.83, 9 hard) and not the
+  other 59 (8.72, 7 hard): its trigger is a regular expression on the question's wording ("how much", "total", …) and
+  misses dates ("when would I hear", "last day"), scores ("does that clear the bar") and follow-ups.
+- Date and calendar arithmetic (21 rows whose oracle expression has a date): 7.84, 4 hard, 8 under 7. Read row by row,
+  the first cause is the calendar on four (REC-005 business days, D2-SALES-011 thirty September plus 45 days given as
+  15 November, D2-CC-014 a weekday "snag" that does not exist, D2-TEAM-040 not computed), a wrong start date taken
+  from the résumé on two (LFW-020, D2-TI-009), and a document conflict on two. Four rows of 630.
+- Both answers capped for wrong code (TI-015, D2-TI-033) are the same task, top-k words with a heap and a tie rule.
+  The app's own code verification (`electron/llm/codeVerification`, extract → run → one correction) is switched off
+  app-wide since 2026-07-18 (`verificationEnabled.ts`, "temporarily disabled"); it was not designed or measured here.
+- `ER-D2-LFW-036` is capped at 2 by the deterministic profile-leak check while the judge reads the answer as right:
+  to be checked as a possible defect of the check, not of the answer.
+
+#### X1 — whole-pack threshold, 12,000 against 24,000 and 48,000 (plan and lines written 2026-10-09 10:11 UTC, before any run)
+Evin's pick #6 of 2026-10-04 ("Test 24k and 48k first"), never started. The frozen sets cannot show it: every pack is
+under 12,000 estimated tokens. This is a separate controlled condition on synthetic probe files outside the frozen
+corpus (`limits/probe.mjs ref-threshold`, added today; `ref-count` for several files).
+
+**Build.** An experiment branch from main `73b18d97` whose only change is that `WHOLE_PACK_MAX_TOKENS` is read from an
+environment variable (default 12,000). It exists to run three arms on one build; it is not a landing candidate.
+**Arms.** 12,000 (main), 24,000, 48,000. General mode, spoken (hotkey) and typed, direct DeepSeek, one app at a time.
+**Files.** One file whose size, as the app estimates it, is 11,900 / 12,100 / 16,000 / 23,900 / 24,100 / 32,000 /
+47,900 / 48,100. Seven uniquely named facts at 0, 10, 25, 50, 75, 90 and 99.5 %; two figures to add at 20 % and 85 %;
+a value stated in March at 30 % and replaced in September at 80 %. Ten turns per size: seven named facts, one list of
+all seven, the sum, the current value. Several files: 6 files of 2,100, 4,000 and 7,900 (one named fact each).
+**Recorded per turn, judge-free:** fact sentence in the request; answer correct by exact string; draft correct;
+whether the fix-up pass changed the text; request size and provider prompt tokens with cache hits; time to the first
+word and to the end; resident memory of the app's processes (macOS `ps`).
+
+**Lines for calling a higher threshold T worth proposing**, read on the sizes above 12,000 and at most T, against the
+12,000 arm on the same sizes:
+1. The list question gives at least 6 of the 7 facts on every such size.
+2. The sum is right and the current value is given (never the March value alone) on every such size.
+3. Named facts: on no size fewer right answers than the 12,000 arm.
+4. Spoken turns: median time to the first word over those sizes at most 400 ms above the 12,000 arm, and no turn over
+   5 s to the first word.
+5. The fix-up pass (its material is capped at 96,000 characters): no more final answers that lost a correct fact their
+   draft had than in the 12,000 arm.
+6. No error, timeout or provider refusal in the arm.
+If 1 to 3 hold and 4 or 5 does not, it is reported as an accuracy gain with its cost, not as a proposal. Whatever the
+outcome nothing lands from X1: a change of the default would need a quality run on realistic packs above 12,000,
+which do not exist yet, and Evin's word.
+
+##### Deterministic checks, version obj-2 (2026-10-09 10:12 UTC): a string the mode's own files state is not a profile leak
+`objective.mjs` flagged any identity string of a profile that is not the loaded one as `pi_leak` or
+`wrong_profile_used`. In Looking for work with no profile loaded, the candidate's own prep notes are still loaded and
+name his employers. `ER-D2-LFW-036` ("the job before your current one, why did you leave that?") has an oracle that
+requires the Tessarine answer from those notes; the answer gave it, Astra scored it 10 with the remark that the string
+check contradicts the answer, and the check capped it at 2. The oracle and the question are unchanged. The check now
+skips a string that the files of the row's own evidence configuration state; `OBJECTIVE_VERSION = 'obj-2'` is written
+into every new check result (results without a version are obj-1).
+Re-applied to stored judgments without a judge call (`report/rescore-objective.mjs`): baseline of main `f4cd986d`,
+630 rows: 8.923 / 71 hard as stored, **8.935 / 70 hard under obj-2** (one row changes, 2 → 10). The E19 app rows
+(88) and the blind holdout of main (180, aggregates only): no row changes. From here on a comparison with that
+baseline quotes the obj-2 figure, and says so.
+
+#### E21a — the calculation step on calculation questions that do not get it (rule written 2026-10-09 10:16 UTC, before any replay of it)
+**Seen.** On the last judged baseline 59 of the 131 questions whose oracle needs a calculation carried no calculation
+notice: its trigger is a list of quantity words in the question ("how much", "total", "per month" …), so a date
+counted from another date, a length of service, a weighted score and most follow-ups never get the hidden working
+step. Three of the hard fails on those rows are a miscount with the right figures in the prompt (REC-005 business
+days, REC-008 weighted score 2.95 for 3.15, D2-SALES-011 fifteenth for fourteenth of November).
+**Hypothesis.** Giving those turns the existing step makes more of them right, because the same step took quantity
+questions from 23 to 43 right samples of 54 when it was introduced (2026-09-30). It is not a new model call and not
+reasoning: the working is written first in the same stream and removed before display.
+**How it could make things worse.** The first visible word waits for the working (on main, turns with the notice
+show their first word about 200 ms later at the median); the model may write a block for a plain lookup; a block may
+set the sum up wrongly and the answer follow it.
+**This stage is an upper bound, not a build.** The notice is placed by hand on the recorded prompts of exactly the
+rows that need it. If it does not help there, no trigger is worth writing. If it does, the trigger is a second stage
+with its own rule (which questions it fires on, what it costs on those that need no calculation).
+**Measurement.** Generator replay (`replay-generator.mjs`, direct DeepSeek, deepseek-flash, temperature 0.2, seed 7,
+thinking off, the app's request) on the recorded prompts of the fresh baseline of main `73b18d97`
+(`er6-dev-main`, `er6-dev2-main`): every row with a calculation oracle whose recorded prompt has no
+"# Calculation" section (`report/rule-e21.mjs select`). Arms, 4 samples each: `e21-base` (prompt as recorded),
+`e21-n1` (main's notice text, unchanged, placed after "# Today" where the composer puts it), `e21-n2` (the same
+with dates, lengths of time and weighted scores named and one sentence on counting them; examples use figures that
+are in no benchmark document). All three arms in the same hour; nothing else on the DeepSeek key.
+**A sample is right** when the deterministic calculation check finds the oracle's result in the shown text. No judge.
+**Lines, each arm against the base** (`report/rule-e21.mjs read`):
+1. Right samples rise by at least 8 percentage points, and the 95 % interval of the paired change (bootstrap over
+   rows) is above zero.
+2. At most 2 rows fall from at least 3 of 4 right to at most 1 of 4.
+3. First visible character: median at most 500 ms later, slow end (p90) at most 900 ms later.
+4. Samples containing a forbidden string (an outdated or other entity's value): at most base + 2.
+If both arms hold, n1 is preferred (no new wording). If neither holds, the trigger is not widened and this is closed.
+Nothing lands from this stage.
+
+##### A challenge set for the classes that remain (declared 2026-10-09 10:18 UTC; nothing measured on it yet)
+The development sets have been read for a week and each remaining failure kind has too few rows in them to measure a
+fix. A supplementary set is being authored on the same frozen documents (`AUTHORING-ER-CHALLENGE.md`): per mode 12
+items the engineer may read (`authoring/<mode>/challenge.json`, ids `ER-C1-…`, dataset `challenge`) and 6 that
+stay unread as its validation part (`authoring-holdout/<mode>/challenge-val.json`, ids `ER-CV1-…`, dataset
+`challenge-val`, aggregates only). Kinds: calculation from two or more documents, dates and times counted from
+document rules, which value belongs to which thing, version conflicts (one settled, one open), absent policy /
+company / personal facts, follow-up chains, and in Technical Interview code with executed tests. Every item must be
+checkable by fixed strings or executed tests, so a class can be measured with repetitions and without the judge.
+Authors are three agents that have not seen any product answer or analysis, three modes each. `build.mjs` lints and
+freezes the two new datasets beside the existing ones; the existing datasets' hashes must not change (to be checked
+at the freeze). dev, dev2 and holdout are untouched.
+
+##### Deterministic checks, version obj-3 (2026-10-09 10:57 UTC, before any E21a replay output is read): a number matches as a whole number
+Needles were matched as plain substrings, so "October 20" was found inside "October 2026", "4 days" inside "24 days"
+and "600" inside "1,600". An author of the challenge set reported the trap. Now a needle that starts or ends with a
+digit is skipped where a digit touches it, or where a separator joins it to more digits on its left. A separator on
+its right is left alone on purpose: authors write "198" for "$198,000" and "199.1" for "199.1k". (A first, stricter
+form that also refused "198" before ",000" was tried on stored rows, found to reject intended matches on two items,
+and narrowed before use.) Re-applied to 1,336 stored rows of six runs: one check result changes (`ER-D-REC-019` on
+the old baseline: "calculation result stated" was a false pass through "4 days" inside "24 days"), and **no official
+score or hard-fail flag changes** in any judged run, development or holdout. The baseline of `f4cd986d` stays
+8.935 / 70 hard under obj-3. E21a's "a sample is right" is read with obj-3.
+
+##### E21a — replay done, judge-free lines read (2026-10-09 11:06 UTC; no judgment of it exists)
+Three arms on the recorded prompts of `er6-dev-main` + `er6-dev2-main`, 59 rows × 4 samples, replayed 10:59–11:05
+UTC with nothing else on the DeepSeek key, 0 failed calls. Checks obj-3.
+
+| Arm | Right samples | Paired change (95 % interval) | Rose / fell | First visible character, median / p90 | Wrote a block | Forbidden-string samples | Lines |
+|---|---|---|---|---|---|---|---|
+| `e21-base` (as recorded) | 173 / 236 (73.3 %) | | | 794 / 1,017 ms | 0 | 2 | |
+| `e21-n1` (main's notice) | 196 / 236 (83.1 %) | +9.7 points (4.2 to 16.1) | 4 / 0 | 989 / 1,292 ms (+195 / +275) | 127 / 236 | 5 | line 4 fails (5 > 2 + 2) |
+| `e21-n2` (dates, time, scores named) | 200 / 236 (84.7 %) | +11.4 points (5.1 to 18.6) | 5 / 0 | 1,071 / 1,381 ms (+277 / +364) | 151 / 236 | 4 | **all four hold** |
+
+Rows that rose under n2: REC-008 (weighted score), SEM-014, CC-013, D2-SALES-011 (the 45-day claim date), D2-TEAM-019.
+No row fell in either arm. The forbidden-string samples are D2-LEC-025 in every arm (3 of the 4 under n2, 2 in the
+base) and one sample of SALES-013; n1 adds one of D2-SALES-026.
+**Reading.** The hidden working step makes calculation questions that do not get it today right more often, at
+about a quarter of a second to the first visible word on those turns. n2 is the arm that holds every line. This was
+an upper bound with the notice placed by hand: nothing is built and nothing lands. Two things follow, each with its
+own lines written before it is measured: Astra's reading of the same drafts (below), and stage two, a trigger that a
+build could use, with its cost on turns that need no calculation.
+
+##### E21a — Astra's reading of the same replay (lines written 2026-10-09 11:06 UTC, before any judgment of it)
+The replayed texts are drafts in both arms (no later pass), so they are compared like with like. Samples k0 and k1 of
+`e21-base` and `e21-n2` on the 59 rows are judged one answer at a time, arm unknown to the judge
+(`replay-generator-judge.mjs prep`, derived runs `rg-e21-…`), after the baseline's 630 shown answers and in the same
+window if the ration lasts. Pairs = row × sample (118).
+1. Mean change n2 − base at least +0.15.
+2. Hard fails in n2 at most those in base.
+3. Samples flagged `arithmetic_error` or `pricing_error` in n2 at most those in base.
+If the ration closes early, a complete k0 (59 pairs) is read as a partial reading and said to be one. A line that
+fails closes E21 whatever the string counts show.
+
+##### Challenge sets frozen (2026-10-09 11:07 UTC; nothing has been run on them)
+Authored by four agents that saw no product answer, no judgment and no analysis; lint 0 errors.
+| Dataset | Items | Hash | Read by the engineer |
+|---|---|---|---|
+| `challenge` | 117 (13 per mode: 11 single items and a two-turn chain) | `bb2bad267b68` | yes |
+| `challenge-val` | 54 (6 per mode) | `c62fc30c2094` | **no**: aggregates only, like the holdout |
+| `code1` | 36 Technical Interview coding items, 485 executed tests, 8 two-turn chains, 6 with a complexity string | `da9562e2ed45` | yes |
+dev, holdout, dev2 and the two supplementary sets keep their hashes; every existing dataset and oracle file is
+byte-identical before and after the freeze, and `build.mjs verify` passes (104 files, 8 datasets).
+Kinds per mode in `challenge`: 3 calculations from two or more sources, 2 dates or times counted from document rules,
+2 "which value belongs to which thing" (two coding items with tests in Technical Interview), 2 version conflicts (one
+settled, one open), 2 absent facts, one follow-up chain, and one counterfactual pair (the same question under two
+configs with different right answers). Authors' notes worth keeping: Lecture items state the date they count from;
+where a pack has no two current documents that disagree, the open conflict sets a document against what was just
+said in the conversation (Looking for work, Technical Interview) or uses the mode's existing conflict config; in
+`code1` a solution that times out is recorded by the harness as "not executed", not as failed, so timeouts are
+counted separately when it is read.
+
+#### E21 stage two — what a trigger would cost (rule written 2026-10-09 11:10 UTC, before any replay of it)
+Stage one showed the step helps where a calculation is needed. A build cannot know that in advance. The trigger on
+main reads the question's wording and misses 59 of 131; a wider word list reached 23 of the 59 in an offline count and
+also fired on 41 questions that need no calculation. **Proposed trigger: every turn that carries document evidence
+gets the notice (code questions excepted, as today); a turn without evidence keeps today's word-list rule.** The
+notice already tells the model to skip the block "for a direct lookup of one stated figure", so the question is what
+it costs on the turns that need no calculation.
+**How it could be worse.** The model writes a block where none is needed and the first word is late for nothing; the
+answer grows; a set-up written for a non-question distracts it from the fact asked.
+**Measurement.** Generator replay on the recorded prompts of `er6-dev-main` + `er6-dev2-main`, 2 samples per row
+and arm, arms of one part in the same half hour, nothing else on the DeepSeek key (X1 is paused between its arms).
+* Part a, 397 rows (`rule-e21.mjs select2a`: no notice in the recorded prompt, no calculation oracle, an evidence
+  section present, not a code question): `e21b-base` (as recorded) against `e21b-n2` (n2 placed after "# Today").
+* Part b, 160 rows that carry main's notice (`select2b`): `e21c-n1` (as recorded) against `e21c-n2` (the notice
+  text swapped for n2), to learn whether one wording can serve every turn.
+**Lines, part a (the cost):**
+1. Samples that contain every required string: not lower than the base by more than 1.5 points, and the lower end of
+   the 95 % interval of the paired change (bootstrap over rows) above −4.
+2. Forbidden-string samples: at most base + 3.
+3. First visible character: median at most 150 ms later, p90 at most 400 ms later.
+4. A block is written on at most 20 % of samples.
+5. Median shown length within 10 % of the base.
+**Lines, part b (the wording):**
+6. Calculation rows: right samples not lower than with main's wording by more than 2 points.
+7. Samples with every required string: not lower by more than 1.5 points.
+8. First visible character: median at most 100 ms later.
+**Reading.** Part a holds → the evidence-based trigger is a build candidate (app run, Astra on a sample of rows and on
+the calculation rows, blind holdout in aggregates, each with lines written first). Part a fails → the evidence-based
+trigger is rejected and only a word-list widening remains, under its own rule. Part b holds → one wording (n2) for
+every turn; fails → today's wording stays where today's trigger fires and n2 is used only on newly reached turns.
+Nothing lands from this stage.
+*Clarified 11:11 UTC, before the replay starts:* "an evidence section present" in part a means the evidence block itself
+("# Evidence (untrusted data …"), which is what a build can test; a prompt whose "# Evidence" section is only a note
+that nothing was retrieved is not selected. The selection is the count `select2a` prints.
+
+##### E21 stage two — result and verdict (2026-10-09 11:39 UTC; replayed 11:21–11:38 UTC, X1 paused between its arms, 0 failed calls)
+| Part | Arm | Samples with every required string | Forbidden-string samples | First visible character, median / p90 | Wrote a block | Median length |
+|---|---|---|---|---|---|---|
+| a (387 rows that need no calculation) | `e21b-base` | 95.2 % of 566 | 5 | 871 / 1,081 ms | 0 / 774 | 384 |
+| | `e21b-n2` | 91.5 % of 566 | 6 | 889 / 1,109 ms (+18 / +28) | 55 / 774 (7.1 %) | 382 |
+| b (160 rows that carry main's notice) | `e21c-n1` | 90.7 % of 270 | 10 | 1,010 / 1,318 ms | 121 / 320 | 348 |
+| | `e21c-n2` | 90.0 % of 270 | 10 | 1,020 / 1,349 ms (+10 / +31) | 150 / 320 | 350 |
+Part a, paired change −3.7 points (95 % interval −6.0 to −1.6, 283 rows): **line 1 fails** (bar: not lower by more
+than 1.5, interval above −4). Lines 2 to 5 hold. Part b: calculation rows right 91.0 % → 89.6 % of 144; lines 6 to 8
+hold.
+**Verdict: the evidence-based trigger is rejected.** The notice is not free on a turn that needs no calculation: the
+model seldom writes a block there (7 %) and the first word is not late, but the answer leaves out a required fact
+more often. That is a finding about the notice itself, on main too: its word-list trigger also fires on 88
+development questions that need no calculation.
+What remains of E21, each to be decided on its own lines before any further measurement: (i) a word-list widening
+for dates and scores, which reached 23 of the 59 and also 41 questions that need no calculation in the offline count
+of 10:15 UTC, so its net effect on these sets is of the order of one or two rows; (ii) the opposite question, whether
+main's trigger fires too widely. One wording (n2) can serve every turn that gets the notice (part b).
+
+#### E21 stage three — a lighter notice for turns the word list does not reach (rule written 2026-10-09 11:40 UTC, before any replay of it)
+**Seen in stage two.** On the 387 turns that need no calculation the n2 notice wrote a block on only 7 % of samples and
+did not delay the first word, yet six rows lost a required fact in both samples and none gained one. Read: an uptime
+commitment that the base states became "I'll confirm the exact uptime commitment"; a retention period and an exam
+rule switched to the other document's value. No block was written on any of the six. The notice carries three
+sentences written for disputed amounts ("use only numbers stated above", "work out what the stated facts allow and
+compare the two", "if the numbers do not reconcile, say so plainly") and the answers move toward doubt.
+**Hypothesis.** A notice without those sentences, ending "if the answer is a fact stated above, there is nothing to
+work out: answer as you otherwise would, with everything the question needs", keeps the gain on calculation turns and
+does not cost on the others. `replay-variants/e21-notice-v3.mjs` (n3).
+**How it could be worse.** Without the comparison sentence the gain on disputed-amount turns may shrink; the last
+sentence may make the model skip a block it needs.
+**Measurement.** As stage two, after X1 has finished, nothing else on the DeepSeek key, arms of a part back to back.
+* Part c, the cost: the 387 rows of part a, 2 samples: `e21d-base` (as recorded, run again) against `e21d-n3`.
+  Lines 1 to 5 of stage two, unchanged.
+* Part d, the gain: the 59 rows of stage one, 4 samples: `e21d-cbase` (as recorded, run again) against `e21d-cn3`.
+  Lines 1 to 4 of stage one, unchanged.
+**Reading.** Both parts hold → build candidate: a turn that carries document evidence and that the word list does not
+reach gets n3; a turn the word list reaches keeps main's notice word for word (so nothing changes where the notice
+fires today). One part fails → E21 is closed without a build; the finding that stays is stage one's (the step helps
+where it is needed) and stage two's (it costs where it is not).
+
+##### Astra window of 2026-10-09, 11:02 UTC — closed by a provider access block after 43 judgments (recorded 11:41 UTC)
+Probe: no answer at 10:58, exact gpt-6-astra at 11:02. Calibration 11:02–11:10 UTC: **38/38**, every returned model
+exact gpt-6-astra (`calibration-astra-1791544238581.json`). Judging of the baseline of main `73b18d97`
+(`er6-dev-main`, three streams of three calls) began 11:10:48. At 11:12:58 three calls in flight returned **HTTP 403**
+(the provider's access block, not the 402 ration); the guard stopped every further call at once. Nothing was retried,
+and no key, route or content was changed. 43 new judgments exist, plus 6 answers identical to the 7 October run that
+came from the judge cache: 49 of 630 (general 13, technical-interview 18, team-meet 16, recruiting 2).
+**There is no score for main with E19 from this window.** 49 rows are not a reading and are not quoted as one. The
+E21a drafts were not sent. The flag `/tmp/er-access-block-20261008-1630.json` is left in place; it is removed only
+after a clean probe by hand in a later window. This is the second block in three days (2026-10-08 02:07 UTC window,
+five calls); the window of 2026-10-09 02:02 UTC had none.
+To finish in the next window (about 02:00 UTC): `node <scratchpad>/window-er6.mjs` with `ER_SKIP_RUN_WAIT=1` (copy in
+`~/natively-er-backup/scripts/`), then `window-e21.mjs`; both judge only what is still missing.
+
+##### X1 — a flaw in the probe, found on the 12,000 arm and corrected before any other arm is read (2026-10-09 11:43 UTC)
+The 12,000 arm ran 11:07–11:21 UTC (160 turns, no error). Above the threshold its list question shows 2 or 3 of the 7
+fact sentences in the request and 7 of 7 codes in the answer on 15 of 16 sizes. The list was asked after the seven
+named-fact turns of the same session, so the answer came from the conversation, not from the file. Those list rows
+measure nothing about the file and are **not used in any arm**. The named-fact, sum and current-value rows are not
+affected (each asks about something no earlier turn stated).
+Correction, the same for all three arms: a separate pass (`ref-threshold --kinds list`, file
+`threshold-fresh-…jsonl`) asks the list question in a fresh session straight after the upload, spoken and typed, at
+every size. Line 1 of the X1 plan is read from that pass only. The main pass keeps its procedure for the two arms
+still to run, so the three arms stay alike.
+
+##### Failure-cause map of the last fully judged baseline (main `f4cd986d`, before E19; written 2026-10-09 11:44 UTC)
+The fresh run of main with E19 could not be judged today (the access block above), so the map is of `er4-*`, the
+last run with all 630 answers judged by Astra. Each of the 71 hard-failed answers is put under its FIRST cause, read
+from the judge's stated problem, the answer, the oracle and, for edited answers, the judged draft. One cause per row;
+the engineer's reading, not a judge output. E19 has since changed the reply on 12 of these rows.
+
+| First cause | Rows | Modes | Examples | In the prompt? | Mitigation today | Candidate | Cost / risk |
+|---|---|---|---|---|---|---|---|
+| Invented company, policy, research or meeting fact (the brief's H, I) | 15 | call-center 4, sales 4, seminar 4, team-meet 2, recruiting 1 | CC-029 "they'll restore it to you"; D2-SALES-035 denies a driver app the material is silent on; D2-SEM-040 invents two findings | the true facts are; the invented one is absent | the fix-up pass (wrote "UNSUPPORTED: none" on most of them) | none that holds: a per-statement check removed correct inference (dropped 2026-10-09); enforcing the pass's own list would hit 30 answers of which 4 are real inventions | a second look costs latency and correct answers |
+| Unsupported inference or over-generalisation (F) | 9 | lecture 2, sales 1, call-center 1, general 1, recruiting 1, seminar 1, LFW 1, TI 1 | D2-CC-020 "any additional item qualifies"; D2-SALES-016 "all water damage excluded"; LEC-030 extends one loss response to every loss | yes | none | none found: each is a different step too far | — |
+| Invented personal fact (G) | 7 | LFW 4, TI 3 | LFW-023 the target job's duties as his own; D2-TI-032 two projects from the job description | the profile is, or deliberately is not | the personal-claim notices and the pass (listed and kept on 3) | E19 covers the absent-fact form; the rest untested | — |
+| Arithmetic or calendar count with the right inputs (E) | 7 | recruiting 2, sales 1, call-center 1, team-meet 2, TI 1 | REC-005 business days; REC-008 weighted score; D2-SALES-011 fifteenth for fourteenth | yes | the hidden calculation step, which reached 4 of the 7 | E21: the step where it is missing (stage one +11 points on such rows; a usable trigger is the open part) | about 280 ms to the first word on turns that get it; costs completeness on turns that do not need it |
+| Right value, wrong thing (C) | 6 | TI 2, LFW 1, lecture 1, seminar 1, team-meet 1 | LFW-020 promotion date taken as start date; D2-TI-026 project placed at the wrong employer | yes | none | none | — |
+| Document conflict or outdated source mishandled (the brief's source-precedence class) | 6 | lecture 4, sales 1, recruiting 1 | D2-LEC-026 the superseded exam rule; SALES-020 one of two current thresholds stated as settled | yes, both | the pass's conflict line | closed: four rewordings and a rail all failed (E6, E17, E18, E20) | — |
+| Answer contradicts itself: verdict first, working says otherwise | 6 | general 2, lecture 1, sales 1, seminar 1, TI 1 | LEC-015 "served from cache" then the right count; GEN-010 "no phone debt found" then the $46 | yes | none | a "deciding fact first" notice was tried and dropped (fixed 2, broke 1) | a hidden working step would be reasoning, which is out |
+| Available fact not used or a required part left out (B, N) | 5 | general 1, recruiting 1, sales 1, seminar 1, TI 1 | D2-GEN-002 ignores the noon car return; SALES-012 never totals | yes | none | none: each omission differs | — |
+| Inputs combined or a rule applied wrongly (D) | 2 | general 1, sales 1 | SALES-022 a volume discount below its threshold | yes | the calculation step (present on both) | none | — |
+| Wrong code (tie rule) | 2 | TI 2 | TI-015, D2-TI-033: top-k words with a heap | n/a | none (the app's code verification is switched off) | measure on `code1` first | — |
+| Role or speaker (L) | 2 | general 1, team-meet 1 | GEN-030 "we place that order"; TEAM-018 the user in the third person | n/a | role notes | none | — |
+| The gist chip alone is wrong | 2 | seminar 1, team-meet 1 | D2-SEM-008 chip reverses the F1 finding | n/a | none | none (too few) | — |
+| Damaged after generation (J, K): draft fine, shown answer not | 3 of the rows above | sales, team-meet, seminar | SALES-028 7.8 → 4.0; TEAM-027 7.6 → 4.0; SEM-028 9.6 → 3.0 | — | E19 (all three are absent-fact questions) | — | — |
+| A check that was wrong, not the answer | 1 | LFW | D2-LFW-036 | — | fixed as obj-2 | — | — |
+
+Not in the prompt at all (A): none of the 71. Provider stall (P): none. Leak between profiles or modes (M): none
+(the one flag was the defective check).
+**The fix-up pass on that run, by Astra** (99 edited answers, draft and shown both judged): 8.23 → 8.47. It raised 13
+answers by more than 1.5 and lowered 11, three of them into a hard fail. Of the 11 hard-failed edited answers, 7 were
+already hard fails as drafts.
+**What this says about priorities.** The classes with an objective handle are small: arithmetic and calendar 7 rows,
+code 2. The largest class, invented facts (22 rows with the personal ones), has no check that separates it from
+honest inference at this model setting; that was tested twice and is why the per-statement check was dropped.
+
+##### E21 stage three — result and verdict (2026-10-09 12:21 UTC; replayed 12:04–12:20 UTC after X1's three arms, 0 failed calls)
+| Part | Arm | Reading | Lines |
+|---|---|---|---|
+| c, the cost (387 rows that need no calculation, 2 samples) | `e21d-base` → `e21d-n3` | every required string 95.2 % → 94.2 % of 566 (paired −1.1 points, 95 % −3.4 to +1.1); forbidden-string samples 6 → 3; first visible character median 899 → 888 ms, p90 1,113 → 1,095 ms; a block on 28 of 774 samples (3.6 %); median length 382 → 389 | 1 to 5 all hold |
+| d, the gain (the 59 calculation rows, 4 samples) | `e21d-cbase` → `e21d-cn3` | right samples 170 / 236 (72.0 %) → 196 / 236 (83.1 %), paired +11.0 points (95 % 3.8 to 19.1); rose 7 (REC-005, REC-008, REC-019, TEAM-012, SEM-014, D2-SALES-011, D2-REC-016), fell 1 (D2-SEM-002); first visible character median 861 → 1,043 ms (+182), p90 1,091 → 1,387 ms (+296); forbidden 1 → 1 | 1 to 4 all hold |
+**Verdict: both parts hold. E21 is a build candidate**: a turn that carries document evidence and that the word list
+does not reach gets the lighter notice (n3); a turn the word list reaches keeps main's notice word for word. The
+lighter notice costs nothing measurable where no calculation is needed (the n2 wording cost 3.7 points there) and
+keeps the gain where one is.
+What it still owes before anyone is asked to land it, each with lines written first: the build with tests; an app
+run to confirm the wiring and the first-word cost; a check on questions that were not used to design it (the
+challenge sets, below); Astra's reading, which cannot happen before the provider's block lifts.
+
+#### E21 stage four — does it hold on questions that were not used to design it? (rule written 2026-10-09 12:23 UTC, before the challenge sets have been run or replayed)
+Stages one to three all read the same 59 + 387 development rows, and the n3 wording was written after reading six of
+their failures. The challenge sets were authored blind, frozen at 11:07 UTC, and no answer to them exists yet.
+**Measurement.** After `er7-chal-main` and `er7-chalval-main` (main `73b18d97`) exist: generator replay on their
+recorded prompts, every row whose prompt carries the evidence block, has no calculation notice and is not a code
+question (`rule-e21.mjs select4`, ids to a file), arms `e21e-base` (as recorded) and `e21e-n3`, 4 samples, back to
+back, nothing else on the DeepSeek key. Read with `rule-e21.mjs read4`; the validation part with `--blind`
+(aggregates only, no id, no text).
+**Lines.**
+1. `challenge`, rows with a calculation oracle: right samples rise by at least 5 points (paired mean), and at most 2
+   rows fall from at least 3 of 4 right to at most 1.
+2. `challenge-val`, rows with a calculation oracle: right samples not lower than the base (paired mean at least 0).
+3. Both sets, the other rows that have required strings: samples with every required string not lower by more than
+   2 points in either set.
+4. Forbidden-string samples, both sets pooled: at most base + 2.
+**Reading.** All hold → the gain is not an artefact of the rows it was designed on; E21 stays a keep candidate and
+waits for Astra and for Evin. Line 1 or 2 fails → the candidate is not proposed; the branch stays as a record.
+
+##### E21 — the build, and its app confirmation (lines written 2026-10-09 12:23 UTC, before the candidate has been run in the app)
+**Build.** Branch `cand/e21` (worktree `er-e21`) = main `73b18d97` + one change in
+`electron/context-intelligence/generation/prompt-composer.ts`: `calculationNoticeForTurn` returns main's notice when
+the word list fires (unchanged, word for word) and otherwise the lighter notice `CALCULATION_NOTICE_EVIDENCE` (the
+replayed n3 text, checked identical by string) when the turn's evidence block is not empty, the question is not a
+code question and at least two figures are in play. The stream filter that hides the block is the existing one, on
+every provider's stream. Shared TypeScript, no platform branch.
+**App confirmation**: runs `er8-dev-e21` + `er8-dev2-e21` (630 questions, fresh profile, direct DeepSeek, one app)
+against `er6-*` (main, this morning). One run per build, so this confirms the wiring and trips on gross harm; the
+size of the effect is what the replays measured.
+1. Wiring: of the recorded prompts with an evidence block and a non-code question, every one carries exactly one
+   "# Calculation" section; the text is main's wherever the word list fires and n3 elsewhere. No prompt without an
+   evidence block gains a notice.
+2. No answer, shown or as drafted, contains "[[CALC" or "[[/CALC".
+3. On the 59 rows of stage one, "calculation result stated" (obj-3) at least er6's count + 3.
+4. First word: (median change on rows that newly carry a notice) minus (median change on the 160 rows that carry
+   main's notice in both runs) at most +150 ms. The subtraction removes the provider's drift between the two hours.
+5. 630 answered, no provider failure; rows over 5 s to the first word at most er6's + 2.
+6. Rows with every required string: not more than 12 below er6 (two runs of main differed by 12 this week).
+A line that fails stops the candidate until it is understood.
+
+##### X1 — result (2026-10-09 12:35 UTC; three arms on one experiment build, main pass 11:07–12:03 UTC, fresh-session list pass 12:20–12:33 UTC; 528 turns, no error or timeout; General mode, direct DeepSeek)
+Experiment build `exp/x1-whole-pack-threshold` `237bba1a` (main `73b18d97` + the threshold read from the
+environment). One synthetic file per size, sizes as the app estimates them. "List" is the question that needs all
+seven facts, asked in a fresh session.
+
+| File size | 12,000 arm (main): what reaches the request · list right | 24,000 arm | 48,000 arm |
+|---|---|---|---|
+| 11,900 | whole file, 15,800 prompt tokens · 7/7 | same | same |
+| 12,100 | 3–5 retrieved pieces, 7,400 tokens · **2/7 spoken, 3/7 typed** | whole, 15,800 · 7/7 | whole · 7/7 |
+| 16,000 | pieces, 7,700 · 3/7 | whole, 18,700 · 7/7 | whole · 7/7 |
+| 23,900 | pieces, 7,500 · 2/7 spoken, 3/7 typed | whole, 24,700 · 7/7 | whole · 7/7 |
+| 24,100 | pieces · 3/7 | pieces, 7,700 · 3/7 | whole, 25,000 · 7/7 |
+| 32,000 | pieces · 3/7 | pieces · 3/7 | whole, 30,800 · 7/7 |
+| 47,900 | pieces · 2/7 | pieces · 2/7 | whole, 43,100 · 7/7 |
+| 48,100 | pieces · 2/7 spoken, 3/7 typed | pieces · 2/7, 3/7 | pieces, 7,600 · 2/7, 3/7 |
+
+Named facts: 7 of 7 right at every size, position and arm, spoken and typed (a uniquely named fact is retrieved
+wherever it sits, including the last half per cent of a 48,100-token file). The two-figure sum and the current
+value: right in every arm and size **except the 48,000 arm, spoken, at 32,000 (sum 1,340 for 3,615; the outdated
+41 for 57) and at 47,900 (41 for 57)**. In all three the draft was right and the fix-up pass replaced it: the pass
+reads at most 96,000 characters (`CLAIM_VERIFIER_MATERIAL_MAX_CHARS`), a 32,000-token file is 128,000, so the
+second figure (at 85 %) and the September update (at 80 %) were outside what it saw and it "corrected" toward the
+part it could see. Typed turns, where the pass did not run, were right at every size.
+Several files, six of each size, spoken: the named fact was right in every arm; a pack of 12,600 is read whole from
+the 24,000 arm up (6 of 6 files in the request against 4 of 6), 24,000 and 47,400 only in the 48,000 arm.
+First word (median over the sizes above 12,000 and at most the arm's threshold, against the 12,000 arm on the same
+sizes): 24,000 arm spoken −42 ms, typed +101 ms; 48,000 arm spoken +46 ms, typed **+612 ms** (47,900 typed: 1,744 ms
+against 815). App memory showed no trend with file size.
+
+**Lines.** 24,000: all six hold, spoken and typed. 48,000: lines 2 and 5 fail on spoken turns (the pass's cap);
+typed turns hold with the first word 0.6 s later.
+**Reading.** The 12,000 switch is a cliff for any question over the whole document: 700 tokens more and it gets 2 or
+3 facts of 7. Raising it to 24,000 removed the cliff up to that size in this probe with no spoken first-word cost; the
+price is the request (about 24,700 prompt tokens against 7,500 on such a turn). 48,000 is not safe as the code
+stands: the fix-up pass and the spoken repair would have to read as much as the answer did, exactly the E5 and E10
+finding one size up. A file near the top of a 24,000 threshold already fills the pass's 96,000 characters, so a
+change to 24,000 should raise that cap with it.
+**What this is not.** Synthetic filler with planted facts, one mode, one file or six. It says nothing about answer
+quality on realistic packs above 12,000 tokens, which the benchmark does not have. Nothing lands from X1; a proposal
+to Evin would be "24,000 with the pass cap raised", measured first on a realistic larger-pack condition.
+
+##### Main `73b18d97` on the challenge sets (runs `er7-chal-main`, `er7-code1-main`, `er7-chalval-main`, 12:34–12:53 UTC; read 12:54 UTC; judge-free, checks obj-3)
+All 207 answered on direct DeepSeek. "Right" is the row's own deterministic check: the calculation result stated
+(and no forbidden string), the code's tests all passing, or every required string present and no forbidden string.
+It is a strict lower bound: an answer that gives the right result in a form the oracle's list does not hold counts as
+wrong (seen on two rows of `challenge`, e.g. "come to 14" where the forms are longer phrases).
+
+| Set | Rows | Right | Calculation result stated | Dates and times | Version conflict | Absent fact | Code tests pass |
+|---|---|---|---|---|---|---|---|
+| `challenge` | 117 | 94 (80 %) | 22 / 26 | 34 / 42 | 4 / 9 | 15 / 18 | 2 / 2 |
+| `challenge-val` (aggregates only) | 54 | 45 (83 %) | 8 / 11 | 13 / 17 | 6 / 6 | 9 / 9 | 1 / 1 |
+| `code1` | 36 | 34 (94 %) | | | | | 34 / 36 |
+
+By mode on `challenge` (13 rows each): recruiting 12, technical-interview 12, general 11, team-meet 11, sales 10,
+lecture 10, seminar 10, call-center 10, looking-for-work 8. Spoken 79 %, typed 83 %.
+Read on `challenge` (the readable set): the wrong rows are a wrong band or stage applied (SALES-008 an 8 % discount
+for the 18 % one; TEAM-001 the wrong rollout stage), a cap or count misapplied (CC-002), a share asked for and the
+two counts given instead (LFW-001), an invented referee (LFW-011), a verification step asked for before answering
+(CC-001, CC-004), and version conflicts answered with one side (REC-009, LFW-008, LFW-009, TI-009, LEC-010).
+`code1`: two failures of 36 on main with code verification switched off.
+These are the baselines the candidates are read against on unseen questions.
+
+##### E21 stage four — result and verdict (2026-10-09 13:01 UTC; replayed 12:53–13:00 UTC on the recorded prompts of `er7-chal-main` + `er7-chalval-main`, 108 rows × 4 samples per arm, 0 failed calls)
+| Set | Calculation rows: right samples | Paired change (95 %) | Rose / fell | Other rows: every required string | Forbidden-string samples |
+|---|---|---|---|---|---|
+| `challenge` (77 rows, 37 with a calculation) | 109 / 148 (73.6 %) → 109 / 148 (73.6 %) | 0.0 (−10.8 to +10.1) | 2 / 3 | 85.7 % → 84.8 % of 112 | 20 → 34 |
+| `challenge-val` (31 rows, 14 with a calculation; aggregates only) | 41 / 56 (73.2 %) → 47 / 56 (83.9 %) | +10.7 (0.0 to +23.2) | 1 / 0 | 100 % → 100 % of 40 | 13 → 14 |
+Line 1 (`challenge` calculation rows up by at least 5 points, at most 2 rows falling): **fails** (0.0 points, 3 fell).
+Line 2 (`challenge-val` not lower): holds. Line 3 (other rows): holds. Line 4 (forbidden-string samples at most
+base + 2, pooled): **fails** (33 → 48).
+**Verdict: E21 is not proposed.** The gain measured twice on the 59 development rows (+11 points) did not appear on
+37 harder calculation questions written blind (0), and appeared on 14 others (+10.7); pooled over the 51 unseen
+calculation rows it is 73.5 % → 76.5 %, an interval that includes zero. And the notice did harm that the
+development rows had not shown. Read on the readable set only: on SALES-013 the hidden working set the sum up
+wrongly (the monthly fee divided by twelve) and the answer followed it to $16 for $188; on absent-fact questions
+(LEC-001, LFW-010, LEC-006) answers that had declined now supplied the missing thing in 3 or 4 of 4 samples.
+Branch `cand/e21` (`298b2b5b`, local) stays as a record and is not a landing candidate. The app confirmation
+(`er8`) had just started and was stopped; its partial folder is deleted; no Astra call is owed for E21.
+**What was learned, in order of how sure it is.** (1) A notice in the answer prompt is never free: main's wording
+on turns that need no calculation costs completeness (stage two), and even the lighter one changes what the model
+does with an absent fact (stage four). (2) A hidden working step helps a calculation the model would otherwise
+attempt in its head, and hurts when the step itself picks the wrong figure: with near-miss figures in the pack it
+writes the wrong set-up down and then trusts it. (3) A result on rows that have been read, however clean (two
+replays, intervals above zero), did not carry to unseen rows. The challenge sets exist for this and did their job.
+
+#### E22 — does the calculation step on main earn its place? (a measurement of an existing mechanism; lines written 2026-10-09 13:02 UTC, before any replay of it)
+E21 showed that a calculation notice costs something on turns that need no calculation and can mislead on hard
+ones. Main's own notice (since 2026-09-30) was justified on nine development turns. On these sets its word-list
+trigger fires on 160 development questions, 72 with a calculation oracle and 88 without, and on part of the
+challenge sets, which did not exist then.
+**Measurement.** Generator replay on recorded prompts that carry main's notice: `er6-dev-main` + `er6-dev2-main`
+(160 rows) and `er7-chal-main` + `er7-chalval-main` (the rows `select2b` finds; ids to a file). Arms, 3 samples
+each, back to back, nothing else on the DeepSeek key: `e22-with` (as recorded) and `e22-without` (the notice
+section removed, nothing else changed). Read with `rule-e21.mjs read4 --base e22-without --arm e22-with` per set;
+the validation part with `--blind`.
+**Lines for "it earns its place".**
+1. Calculation rows, development and challenge sets pooled: right samples with the notice at least 5 points above
+   without.
+2. Calculation rows of the two challenge sets alone: with the notice not below without.
+3. The other rows that have required strings, pooled: every-required-string samples with the notice not more than
+   2 points below without.
+**Reading.** All hold → main is confirmed as it is and nothing changes. A line fails → it is reported to Evin with the
+numbers; nothing is built from this measurement. Any change to the notice or its trigger would be a new candidate with
+its own lines, an unseen-question check and Astra.
+
+##### E22 — result (2026-10-09 13:13 UTC; replayed 13:02–13:12 UTC, 222 rows × 3 samples per arm, 0 failed calls)
+| Set | Calculation rows: right samples without → with the notice | Paired change (95 %) | Rose / fell | Other rows: every required string | Forbidden-string samples | First visible character, median |
+|---|---|---|---|---|---|---|
+| development (160 rows, 72 with a calculation) | 175 / 216 (81.0 %) → 199 / 216 (92.1 %) | +11.1 (4.2 to 19.0) | 6 / 1 | 93.2 % → 91.7 % of 192 | 13 → 12 | 939 → 998 ms |
+| `challenge` (39 rows, 31 with a calculation) | 73 / 93 (78.5 %) → 81 / 93 (87.1 %) | +8.6 (0.0 to 19.4) | 3 / 0 | 80.0 % → 93.3 % of 15 | 7 → 4 | 938 → 1,062 ms |
+| `challenge-val` (23 rows, 14 with a calculation; aggregates only) | 30 / 42 (71.4 %) → 33 / 42 (78.6 %) | +7.1 (−4.8 to 21.4) | 2 / 0 | 85.7 % → 85.7 % of 21 | 6 → 6 | 932 → 1,031 ms |
+Pooled calculation rows: 278 / 351 (79.2 %) → 313 / 351 (89.2 %), +10.0 points: line 1 holds. The two challenge sets
+alone: 103 / 135 (76.3 %) → 114 / 135 (84.4 %): line 2 holds. Other rows pooled: 209 / 228 (91.7 %) → 208 / 228
+(91.2 %): line 3 holds.
+**Main is confirmed as it is.** Where the question's own wording asks for a quantity, the hidden working step is worth
+about ten points of right answers, on questions written after it as well, for about 60 to 120 ms at the median to
+the first visible word and no measurable loss on the other rows it fires on. Set beside E21 this draws the line:
+the step helps when the question says it wants a figure, and did not carry to unseen questions when it was added
+because documents were present. Nothing changes.
 
 ---
 

@@ -1,6 +1,6 @@
 # Handoff: Natively answer-quality work on the evidence-rich benchmark
 
-Written 2026-10-09 for whoever continues this work, human or agent. It covers 2026-10-03 to 2026-10-09.
+Written 2026-10-09 (updated the same day at 13:30 UTC, after a second session) for whoever continues this work, human or agent. It covers 2026-10-03 to 2026-10-09.
 
 This one file holds everything: the current state, what Evin asked and decided, how the benchmark works, every iteration with its rule and verdict (kept and rejected), the scores per mode per round, every code and prompt change with its reason and its full diff, the complete experiment log, the investigation documents, and all 630 development questions with the answers that still exist.
 
@@ -46,16 +46,20 @@ This file is generated: `node evidence-rich/report/build-handoff.mjs` (from `ben
 | App `main` (local = GitHub) | `73b18d97` since 2026-10-09. Holds every kept change of this work, including E16b and E19. |
 | Last change landed | **E19** (`73b18d97`): landed on local main 2026-10-09 05:08 UTC on Evin's "do 1", pushed 09:05 UTC on his "push main to github". |
 | Benchmark | Branch `bench/evidence-rich`, draft PR #638, worktree `.claude/worktrees/aq-fix`. Folder `benchmarks/natively-answer-quality/evidence-rich/`. |
-| Benchmark branch on GitHub | **Behind.** GitHub has `df815379`; the local branch is ahead from `99001d3b` on. Pushing it was denied on 2026-10-08 and needs Evin's explicit yes. |
+| Benchmark branch on GitHub | **Behind.** GitHub has `df815379`; the local branch is ahead from `99001d3b` on, including everything of the second session of 2026-10-09. Pushing it was denied on 2026-10-08 and needs Evin's explicit yes. |
 | Backup of run data | `~/natively-er-backup/` (run folders, judgments, calibrations, scripts, this file, the log). |
 | Judge | gpt-6-astra only (through AgentRouter). Evin, 2026-10-05: do not judge with Claude Code (quota). |
 | Score of main before E19, development set, Astra | 630 questions: **8.92**, 71 hard fails (11.3 %), 414 at 9.5 or above (main `f4cd986d`). |
 | Score of main before E19, blind holdout, Astra | 180 questions: **8.84**, 23 hard fails (run `er-holdout-e16b3`). |
-| E19 on top of that | Development, the 88 rows it changes: 8.29 → 8.68, hard fails 12 → 7. Blind holdout, 52 pooled pairs: 8.158 → 8.384, hard fails 9 → 8. No full run of main with E19 has been judged. |
+| E19 on top of that | Development, the 88 rows it changes: 8.29 → 8.68, hard fails 12 → 7. Blind holdout, 52 pooled pairs: 8.158 → 8.384, hard fails 9 → 8. |
+| Main with E19, full run | **Run, not judged.** `er6-dev-main` + `er6-dev2-main` (630 answers, 2026-10-09 10:06–10:58 UTC, clean). The Astra window of 11:02 UTC was closed by a provider access block (HTTP 403) after 43 judgments. There is no score of main with E19. |
+| Deterministic checks | Version **obj-3** (2026-10-09). obj-2: a string the mode's own loaded files state is not a profile leak (one development row was capped at 2 wrongly). obj-3: a needle that starts or ends with a digit matches only as a whole number. Under them the baseline of `f4cd986d` is **8.935, 70 hard fails** (8.923 / 71 as stored); no holdout score changes. |
+| Unseen question sets | `challenge` (117, readable), `challenge-val` (54, never read, aggregates only), `code1` (36 coding items with executed tests), authored blind and frozen 2026-10-09. Main on them, judge-free: 94 / 117, 45 / 54, 34 / 36. |
 | Where it started, blind holdout, Astra | 7.73, 42 hard fails (run `er-holdout-base`, the build before this work). |
 | Targets set at the start | 9.2 mean, under 1 % hard fails. **Not met.** |
-| Running or scheduled | Nothing. No cron, no background job, no watcher. |
-| Declared experiments | None. |
+| Running or scheduled | Nothing runs. See section 4 for what the next Astra window owes. |
+| Declared experiments | None open. E21 (the calculation step on document turns) was not proposed; E22 confirmed main's calculation notice; X1 (whole-pack threshold) is measured and nothing lands from it. |
+| Candidate branches kept as records | `cand/e21` `298b2b5b` (not proposed), `exp/x1-whole-pack-threshold` `237bba1a` (experiment build only). Local, never pushed. |
 
 What is not verified: nothing in this work was executed on Windows, and no packaged build was made. Every change is shared TypeScript with no platform branch, run on macOS in the dev build through the benchmark.
 
@@ -64,6 +68,8 @@ The last three days, in order:
 - **2026-10-07.** Baseline of main under Astra (630 rows). E19 written, replayed, judged and confirmed in the app. Its blind-holdout replay was run but the Astra pool closed before it could be judged.
 - **2026-10-08.** Window of 02:07 UTC: calibration 38/38; 20 of 25 holdout pairs judged; five calls returned HTTP 403 (the provider's temporary content-policy block). Nothing was retried and no key or route was changed to get round it. The partial reading (8.335 → 8.276) was recorded as incomplete, not as a verdict.
 - **2026-10-09, 02:02 UTC window.** Calibration 38/38, no block, no failed call. E19's blind-holdout check finished and both rules hold (section 7.6). Three ideas were tried without the judge and dropped; E20 failed its own rule before any judge call. Later that day E19 landed and was pushed.
+
+- **2026-10-09, second session (10:00–13:30 UTC).** Started from this file on Evin's brief for a final optimisation round. Fresh run of main with E19 (630 answers). Astra opened at 11:02 UTC, calibration 38/38, then an HTTP 403 access block two minutes into judging: no score. The rest was judge-free: two defects of the deterministic checks fixed and versioned; a failure-cause map of the last judged baseline; E21 measured in four stages and not proposed; E22; the 12,000 / 24,000 / 48,000 threshold experiment (X1); three new question sets written blind.
 
 Evin's standing instructions that bind the next session:
 
@@ -108,6 +114,7 @@ In order, dates in UTC. Quotes are his words, as typed. Plain "continue" message
 | 2026-10-09 | "do 1" (answering "Land E19 on main?") | E19 fast-forwarded onto local main (`73b18d97`). Not pushed at that point. |
 | 2026-10-09 | "push main to github" | GitHub `main` moved `bce8e47a` → `73b18d97`. Only `main` was pushed. |
 | 2026-10-09 | "write a handoff file with all the questions , resonses , chanegs you have made , observations , rejected changed , benchmark , why this change , code changes , prompt changes etc in to a single.md file , everything" | This file. |
+| 2026-10-09 | A long written brief for a new session ("final answer-quality optimization"): measure main with E19 first; map the remaining failures by first cause; arithmetic, facts from several documents, inventions the pass misses, correct inference, Technical Interview code, follow-ups; run the 12k / 24k / 48k threshold test; build a new high-difficulty set with an untouched validation part; Astra only; deterministic checks outrank the judge; nothing merged or pushed without his word. | The second session of 2026-10-09 (sections 1, 6 and 11, and the log from "Session of 2026-10-09, 10:00 UTC onward"). |
 
 Decisions he made that are easy to forget:
 
@@ -148,6 +155,10 @@ file on disk -> upload hook -> extract text (PDF / DOCX / text) -> mode referenc
 | `dev2` | 360 (40 per mode) | Development: read freely |
 | `holdout` | 180 (20 per mode) | **Blind.** Aggregates only; never read to design a change |
 | `supp-counterfactual` (63), `supp-isolation` (46), `supp-oracle-sources` (223) | supplementary; listed in Appendix E | The same question under different evidence; leaks between modes and profiles; which source backs each oracle fact |
+
+| `challenge` | 117 (13 per mode) | Readable. Harder questions on the same frozen documents, written blind on 2026-10-09: calculations from several sources, dates counted from rules, which value belongs to which thing, version conflicts, absent facts, follow-up chains. Every item is checkable by fixed strings or executed tests, so it is read without the judge. |
+| `challenge-val` | 54 (6 per mode) | **Never read.** The validation part of `challenge`: aggregates only, like the holdout (`--blind`). |
+| `code1` | 36 | Technical Interview coding questions with 485 executed tests. Readable. |
 
 Nine modes: General, Sales, Recruiting, Team Meet, Looking for work, Lecture, Technical Interview, Seminar, Call Center.
 
@@ -241,6 +252,16 @@ node ~/natively-er-backup/scripts/er-window-chain-20261009.mjs   # a whole windo
 - HTTP 402 means the ration is closed: wait for the next window. HTTP 403 means the provider has blocked access for a while: stop, record it, do not retry the denied calls and do not change key, route or content.
 - Do not run `astra-next5.sh` or the older `astra-next*.sh` blindly: their automatic commit lacks the current attribution line and their failure check covers 402 but not 403.
 
+**What the next Astra window owes** (the flag `/tmp/er-access-block-20261008-1630.json` from the block of 2026-10-09 11:12 UTC is in place; remove it only after a clean probe by hand):
+
+```
+node astra/probe.mjs                                   # exact gpt-6-astra, HTTP 200, no 403
+ER_SKIP_RUN_WAIT=1 node ~/natively-er-backup/scripts/window-er6.mjs   # calibration, then the 587 missing judgments of er6-dev-main + er6-dev2-main, then drafts
+node evidence-rich/report/rescore-objective.mjs er6-dev-main,er6-dev2-main   # the score under the current checks
+```
+
+That gives the first judged score of main with E19, to set beside 8.935 / 70 hard fails for `f4cd986d` (obj-3). `window-e21.mjs` is no longer needed (E21 was not proposed).
+
 **An app run.**
 
 ```
@@ -276,6 +297,11 @@ node evidence-rich/supervise-er.mjs --root <app worktree> --runs dev:<run-id>,de
 11. **The fix-up pass is not deterministic.** The same draft gets a different edit on a second call, so one replay shows one draw of which rows differ. For a holdout reading use two repetitions and pool them (E19 is the model).
 12. **A 403 is not a 402.** On 2026-10-08 five judge calls returned HTTP 403 (a temporary content-policy block at the provider). The window was closed with a partial reading marked incomplete; the block did not recur the next day.
 13. **Builds leave about 1.3 GB of `dist-electron` per worktree.** Delete your own build output after use, and check free disk before an app run.
+14a. **Stop only your own app.** Another session may start a `dev:agent` app in the main checkout at any time. Check `ps` for `scripts/dev-agent.mjs` before starting one, and stop by the launcher whose working directory is your worktree (`lsof -a -p <pid> -d cwd`), never by name.
+14b. **The limits probe needs `NATIVELY_ROOT`** set to the app worktree, or it looks for `agent-browser.json` in the current folder.
+14c. **A question asked late in a session can be answered from the conversation.** In the threshold probe the list question came after seven turns that had each stated one of its facts; it scored 7 of 7 with 2 of 7 in the request. Ask it in a fresh session.
+14d. **A clean result on rows you have read may not carry.** E21 held on the development rows twice (+11 points, interval above zero) and showed nothing on 37 unseen calculation questions. Check a candidate on `challenge` and `challenge-val` before any app run or judge call.
+14e. **Needles are substrings.** "October 20" used to match "October 2026" (fixed in obj-3 for digits). Write date needles with their day spelled so that a longer number cannot contain them.
 14. **The shared git stash.** Never use bare `git stash` or `git stash pop`: other sessions use the same stash.
 15. **Other sessions' files.** The main checkout usually holds uncommitted work from other sessions. Never sweep it into a commit; stage by path.
 
@@ -317,6 +343,10 @@ node evidence-rich/supervise-er.mjs --root <app worktree> --runs dev:<run-id>,de
 | — | A generator notice against multi-source omissions | counted on 126 rows | 20 rows miss a fact, each by a different mistake; at most +0.08 on the mean if every one were fixed; not measurable without the judge | Not pursued |
 | — | A rail on edits that remove a fact the draft had | counted on 99 edited rows | 5 rows | Too few; not pursued |
 | — | Inline component arithmetic (an idea of 2026-10-08) | — | Never declared, built or measured | Idea only |
+| obj-2, obj-3 | Deterministic checks: a string the mode's own loaded files state is not a profile leak; a needle that starts or ends with a digit matches only as a whole number | Re-applied to every stored judgment without a judge call | One development row 2 → 10 (baseline 8.923 / 71 → 8.935 / 70); no holdout score changes | **In the benchmark** (2026-10-09) |
+| E21 | The hidden calculation step on turns the word list does not reach. Stage 1: the notice hand-placed on the 59 calculation rows without it. Stage 2: main's wording on every document turn. Stage 3: a lighter wording (n3). Stage 4: the same on the unseen challenge sets | Generator replay, deterministic checks, 2 to 4 samples per row and arm | Stage 1: 73.3 → 84.7 % right. Stage 2: required strings 95.2 → 91.5 % on 387 turns that need no calculation (rejected). Stage 3: n3 costs nothing there (94.2 %) and keeps the gain (72.0 → 83.1 %). Stage 4: `challenge` 73.6 → 73.6 % on 37 calculation rows, forbidden-string samples 33 → 48 | **Not proposed** (stage 4, lines 1 and 4). Branch `cand/e21` kept as a record |
+| E22 | Does main's own calculation notice earn its place on the rows its word list reaches? | Generator replay with and without it, 222 rows × 3, development and challenge sets | Calculation rows 79.2 → 89.2 % right (+8.1 on the unseen sets alone); other rows 91.7 → 91.2 % | **Main confirmed**, nothing changes |
+| X1 | Whole-pack threshold 12,000 against 24,000 and 48,000 (Evin's pick #6) | Limits probe on an experiment build, synthetic files of 11,900 to 48,100 tokens, spoken and typed, 528 turns | 12,000: a whole-document question gets 2 or 3 of 7 facts just above it. 24,000: every line holds, no spoken first-word cost. 48,000: the fix-up pass (96,000-character cap) rewrote three right drafts wrong; typed first word +0.6 s | **Measured; nothing lands.** A proposal would be 24,000 with the pass's cap raised, after a quality run on realistic larger packs |
 
 Lessons that hold across them:
 
@@ -329,6 +359,8 @@ Lessons that hold across them:
 - Of 792 required facts with fixed strings, 73 have no string in the prompt (70 rows); in 53 of those rows the answer has the value anyway because it is a computed figure. The 17 rows where it is also missing from the answer (mean 6.04, 6 hard fails) are mostly Sales pricing sums and deferrals.
 - Of 71 hard fails on the development set, 57 are answers the pass never edited: the answer model misreading, miscalculating or mis-combining facts that are in the prompt (factual error 21, missed available evidence 20, reasoning 10, arithmetic 8, unsupported claims 26). That is the next lever, and it is hard to move without reasoning.
 - The gist chip repeats the body's error; it is the lone error on 3 rows. Not a lever.
+- A notice in the answer prompt is never free. Main's calculation notice on turns that need no calculation costs completeness; a lighter one changed what the model does with an absent fact on unseen questions. Where the question's wording asks for a quantity, the same notice is worth about ten points of right answers (E22), on unseen questions too.
+- By first cause, the 71 hard fails of the last judged baseline are: invented company, policy, research or personal facts 22; unsupported inference 9; arithmetic or calendar count 7; right value on the wrong thing 6; document conflict 6; self-contradiction 6; a fact left out 5; inputs combined wrongly 2; wrong code 2; role 2; gist chip 2; one defective check. None lacked the evidence in the prompt.
 
 ---
 
@@ -549,6 +581,7 @@ Section 13 prints the pass's instruction block as it is on main and the full tex
 | Replay variants (every wording tried) | `evidence-rich/replay-variants/` |
 | Rule checks | `evidence-rich/report/rule-e16.mjs`, `rule-e16c.mjs`, `rule-e17.mjs`, `rule-e19.mjs`, `rule-holdout-e16b.mjs`, `pair-aggregate.mjs` |
 | Window scripts | `~/natively-er-backup/scripts/` (`er-window-chain-20261009.mjs`, `er-window-probe-20261008.mjs`, `er-access-guard-20261008.mjs`, `er-e19h-k1-20261009.mjs`) |
+| Second session of 2026-10-09 | Runs `er6-dev-main`, `er6-dev2-main` (main with E19, unjudged bar 49 rows), `er7-chal-main`, `er7-code1-main`, `er7-chalval-main` (main on the new sets); replay arms `gen-e21-*`, `gen-e21b-*`, `gen-e21c-*`, `gen-e21d-*`, `gen-e21e-*`, `gen-e22-*`; threshold probe rows `results/x1/t12000|t24000|t48000/`; readers `report/rule-e21.mjs`, `report/x1-threshold.mjs`, `report/challenge-read.mjs`, `report/rescore-objective.mjs`; scripts in `~/natively-er-backup/scripts/` |
 | This file's generator | `evidence-rich/report/build-handoff.mjs` with `report/handoff-head.md` |
 
 ---
@@ -560,17 +593,21 @@ Section 13 prints the pass's instruction block as it is on main and the full tex
 1. **Push the benchmark branch `bench/evidence-rich`?** GitHub has `df815379`; the local branch is ahead from `99001d3b` on. The push was denied on 2026-10-08 and must not be retried by any route without his explicit yes. Until then the commits exist only on this machine and in `~/natively-er-backup/`.
 2. **Merge or close draft PR #638.** Merging puts the blind holdout's questions on public main.
 3. **Delete the old-history branches on GitHub** (`fix/aq-astra`, `cand/e16b`, `cand/e15`)? They keep files purged on 2026-10-06 reachable.
-4. **A judged run of main with E19.** No full app run of `73b18d97` has been made or judged; the evidence for E19 is the replay, the in-app check of the 88 rows it changes, and the blind-holdout replays. A fresh development run plus a holdout run would give main's current score. It needs one app run each and an Astra window.
+4. **A judged score of main with E19.** The run exists (`er6-dev-main`, `er6-dev2-main`); Astra's window of 2026-10-09 11:02 UTC was closed by an access block after 43 of 630 judgments. The next window finishes it (section 4). A holdout run of `73b18d97` has not been made.
 5. **Windows and a packaged build.** Nothing in this work has been executed on Windows or in a packaged app.
+6. **The whole-pack threshold.** X1 measured it: 24,000 held every line on synthetic files, 48,000 did not (the fix-up pass's 96,000-character cap). Whether to pursue "24,000 with the pass's cap raised" is his call; it would first need realistic packs above 12,000 tokens, which the benchmark does not have, and it roughly triples the prompt on such turns (about 24,700 tokens against 7,500).
+7. **The provider's access block.** Two in three days (2026-10-08 02:07 UTC, five calls; 2026-10-09 11:12 UTC, three calls two minutes into judging, after a clean calibration). Nothing was retried. If it keeps happening the judge budget is the limit on this work, not ideas.
+8. **Code verification is switched off app-wide** (`electron/llm/codeVerification/verificationEnabled.ts`, since 2026-07-18, no reason recorded in the commit). Main passes 34 of 36 coding questions of `code1` without it. Its correction is posted as a new message, which the benchmark harness does not capture, so it was not measured.
 
 **Next candidates, in the order the data suggests**
 
-1. The answer model's own errors on facts that are in the prompt: 57 of the 71 hard fails on main were answers the pass never edited (factual error 21, missed available evidence 20, reasoning 10, arithmetic 8, unsupported claims 26). After E19 no single cause covers more than about 1 % of rows. Ideas not yet tried: a narrow arithmetic check extended beyond the existing calculation scratch; a second look only on turns with numbers from two documents. Anything that delays the first word is out.
-2. Listed-but-kept inventions: on several profile-mode answers the pass correctly *lists* an invented personal claim and then keeps it reworded. The code deliberately does not enforce the list (a fifth of listed phrases are listing mistakes the pass then corrects). A targeted rail for `[self]` phrases is untested.
-3. Follow-up turns: the pass lowered 4 of them (8.11 → 6.41). Too few to act on; worth a look when more are judged.
-4. Telling a true two-document conflict from two versions of one document needs the identity of the source each value came from (`source_id` / `version_id`), which the pass's conflict line does not carry (E20). The prize is about +0.02 on the development mean.
-5. One spoken turn still takes the fast route with no profile (`ER-D2-LFW-030`); `ER-D-REC-016` is a possible delivery gap too.
-6. The whole-file threshold (12,000 tokens against 24,000 or 48,000), which Evin asked to test (pick #6), has not been started: the benchmark's packs all fit under 12,000, so it needs a new condition.
+1. **Check any candidate on unseen questions first.** `challenge` (readable) and `challenge-val` (aggregates only) exist for that and cost a few minutes of replay and no judge call. E21 would have reached an app run and an Astra window without them.
+2. The largest class has no handle yet: invented company, policy, research or personal facts (22 of the 71 hard fails). Two ways of making the pass stricter were measured and removed correct inference (the per-statement check) or would hit 30 answers of which 4 are real inventions (enforcing the pass's own list). A third attempt needs a signal that separates an invention from an honest inference; none is known at this model setting.
+3. Version conflicts are the weakest kind on the readable challenge set (4 of 9 right on main). Every rewording of the pass's conflict line and a rail on it failed (E6, E17, E18, E20); the open idea is still the source identity of each value (`source_id` / `version_id`), which the pass's conflict line does not carry.
+4. A hidden working step sets a sum up wrongly when a near-miss figure sits in the pack, and then trusts it (E21 stage four, `ER-C1-SALES-013`). A check of the working's INPUTS against the documents (not of its arithmetic, which is right) is untested and would have to run before the first visible word.
+5. A realistic larger-pack condition (packs of 13,000 to 24,000 tokens with whole-document questions) would let the 24,000 threshold be judged on quality instead of planted facts.
+6. Follow-up turns: the pass lowered 4 of them (8.11 → 6.41). Too few to act on; worth a look when more are judged.
+7. One spoken turn still takes the fast route with no profile (`ER-D2-LFW-030`); `ER-D-REC-016` is a possible delivery gap too.
 
 **To land a future candidate:** on a fresh build of its branch run the four suites (`electron/context-intelligence`, `electron/intelligence`, `electron/llm`, `electron/services`) *and the same suites on current main as a baseline*, before the fast-forward; rebase if main has moved; fast-forward; push only on Evin's word. The project `CLAUDE.md` rules apply to any code change (cross-platform contract, graph tools first, the validation labels).
 
