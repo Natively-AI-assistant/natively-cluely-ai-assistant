@@ -2045,3 +2045,8 @@ Checked on a fresh build of `73b18d97` in worktree `er-main` (macOS, plain `node
 The change is one sentence of prompt text in shared code with no platform branch, so macOS and Windows get the same
 text. Nothing was executed on Windows. No app run and no judging followed the landing; the evidence for E19 is the
 replay, the app confirmation of 2026-10-07 and the two blind-holdout readings above.
+
+**Pushed 2026-10-09 09:05 UTC.** Evin's word in chat: "push main to github". GitHub `main` had not moved (`bce8e47a`),
+so the push was a plain fast-forward of the one commit: `bce8e47a..73b18d97`. Read back from GitHub: `73b18d97`.
+Only `main` was pushed. `bench/evidence-rich` was not (GitHub `df815379`, local ahead from `99001d3b` on); that
+push is still Evin's separate yes.

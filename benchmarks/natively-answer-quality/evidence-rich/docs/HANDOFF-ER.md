@@ -9,9 +9,9 @@ The full experiment record, with each rule as written before measuring, is `benc
 
 ## 1. State in one screen
 
-**2026-10-09, 05:08 UTC: E19 is on local main.** Evin's word in chat ("do 1", answering "Land E19 on main?").
-Local `main` was fast-forwarded `bce8e47a` → `73b18d97`, one commit, three files. **Not pushed:** GitHub `main`
-is still `bce8e47a`; publishing is Evin's separate word. Checked on a fresh build of that commit: see the log entry
+**2026-10-09: E19 is on main, local and GitHub.** Landed 05:08 UTC on Evin's word in chat ("do 1", answering
+"Land E19 on main?"): local `main` fast-forwarded `bce8e47a` → `73b18d97`, one commit, three files. Pushed 09:05 UTC
+on his word ("push main to github"): GitHub `main` is `73b18d97`. The benchmark branch is still not pushed. Checked on a fresh build of that commit: see the log entry
 "E19 — landed on local main". The score table below still describes main before E19 (`f4cd986d` baseline).
 
 **2026-10-09, 02:16 UTC: the E19 blind-holdout check is done and both readings hold.** Calibration 38/38 with exact
@@ -32,8 +32,8 @@ Do not run `astra-next5.sh` blindly: its auto-commit lacks current attribution a
 
 | Thing | State |
 |---|---|
-| App `main` (local = GitHub) | `bce8e47a` when this was written. Holds every kept change of this work, including E16b. |
-| Landed on local main 2026-10-09 | **E19** (`73b18d97`, also branch `cand/e19`, worktree `.claude/worktrees/er-main`). Not on GitHub `main` yet. |
+| App `main` (local = GitHub) | `73b18d97` since 2026-10-09 (was `bce8e47a`). Holds every kept change of this work, including E16b and E19. |
+| Landed on main 2026-10-09 | **E19** (`73b18d97`, also branch `cand/e19`, worktree `.claude/worktrees/er-main`). Pushed to GitHub `main` the same day. |
 | Benchmark | Branch `bench/evidence-rich`, draft PR #638, worktree `.claude/worktrees/aq-fix`. Folder `benchmarks/natively-answer-quality/evidence-rich/`. |
 | Judge | gpt-6-astra only (through AgentRouter). Evin, 2026-10-05: do not judge with Claude Code (quota). |
 | Score of main today, development set, Astra | 630 questions: **8.92**, 71 hard fails (11.3 %), 414 at 9.5 or above. |
@@ -273,7 +273,7 @@ Section 11 prints the pass's instruction block as it is on main, the E19 version
 
 **Open with Evin**
 
-1. **Push local main (E19, `73b18d97`) to GitHub?** Landed locally 2026-10-09 on Evin's word; the push is not done. Earlier text of this item: Land E19? Recommended: after its blind-holdout replay is judged. That replay is done (25 holdout answers differ) and needs 50 Astra judgments: `evidence-rich/results/astra-next5.sh`. Its rule: mean change ≥ 0, hard fails ≤ control arm, rows flagged for an unsupported or fabricated claim ≤ control arm + 1. If a line fails, E19 is not landed.
+1. **Done 2026-10-09: E19 (`73b18d97`) landed and pushed to GitHub `main`, both on Evin's word.** Still open here: pushing the benchmark branch `bench/evidence-rich` (local commits from `99001d3b` on; GitHub has `df815379`), which needs his explicit yes. Earlier text of this item: Land E19? Recommended: after its blind-holdout replay is judged. That replay is done (25 holdout answers differ) and needs 50 Astra judgments: `evidence-rich/results/astra-next5.sh`. Its rule: mean change ≥ 0, hard fails ≤ control arm, rows flagged for an unsupported or fabricated claim ≤ control arm + 1. If a line fails, E19 is not landed.
    To land: on a fresh build of `cand/e19` run the four suites (`electron/context-intelligence`, `intelligence`, `llm`, `services`; two failures in `services` are already on main: `RetrievalScaleLexical:173`, a to-do, and `TrialCampaignIpc:97`), rebase onto current main if it has moved, fast-forward, push.
 2. **Delete the old-history branches on GitHub** (`fix/aq-astra`, `cand/e16b`, `cand/e15`)?
 3. **Merge or close draft PR #638.** Merging puts the blind holdout's questions on public main.
@@ -379,7 +379,7 @@ Hashes are post-rewrite (2026-10-06). Listed oldest first. Files are the ones ea
   - `electron/context-intelligence/__tests__/WholeProfileKeptByClaimGate2026_10_05.test.mjs`
   - `electron/context-intelligence/retrieval/legacy-retrieval-port.ts`
 
-On local main since 2026-10-09 (not on GitHub `main`): `cand/e19` (`73b18d97`), one commit: `electron/llm/claimVerifier.ts`, a new test `electron/llm/__tests__/ClaimVerifierAbsenceIsNotAClaim2026_10_07.test.mjs`, and an updated assertion in `ClaimVerifier2026_09_30.test.mjs`.
+On main, local and GitHub, since 2026-10-09: `cand/e19` (`73b18d97`), one commit: `electron/llm/claimVerifier.ts`, a new test `electron/llm/__tests__/ClaimVerifierAbsenceIsNotAClaim2026_10_07.test.mjs`, and an updated assertion in `ClaimVerifier2026_09_30.test.mjs`.
 
 ## 11. The fix-up pass: its instructions, the E19 change, and every wording that was tried
 
