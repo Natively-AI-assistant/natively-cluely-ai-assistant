@@ -24,6 +24,9 @@ export const GIST_RE = /\[\[GIST\]\]([\s\S]*)$/;
 export const answerOf = (row) => row?.rendered_answer ?? row?.raw_answer ?? '';
 export function splitGist(text) { const t = String(text ?? ''); const m = t.match(GIST_RE); return { body: (m ? t.slice(0, m.index) : t).trim(), gist: m ? m[1].trim() : null }; }
 
+/** Version of the deterministic checks. obj-1: as first written. obj-2 (2026-10-09): an identity string the mode's own
+ *  loaded reference files state is not a profile leak. Judgments made before obj-2 carry no version (= obj-1). */
+export const OBJECTIVE_VERSION = 'obj-2';
 let BENCH = null;
 export function bench() {
   if (BENCH) return BENCH;
@@ -33,7 +36,10 @@ export function bench() {
   const files = new Map(manifest.files.map((f) => [f.id, f]));
   const byName = new Map();
   for (const f of manifest.files) (byName.get(f.filename) ?? byName.set(f.filename, []).get(f.filename)).push(f);
-  BENCH = { manifest, texts, files, byName, identities: fs.existsSync(idf) ? readJson(idf) : {} };
+  // Files of every evidence configuration, read from the datasets' `configs` only (no question is read here).
+  const configFiles = new Map();
+  for (const n of fs.readdirSync(path.join(HERE, 'datasets')).filter((x) => x.endsWith('.json'))) { try { for (const c of readJson(path.join(HERE, 'datasets', n)).configs ?? []) if (!configFiles.has(c.id)) configFiles.set(c.id, c.files ?? []); } catch { /* not a dataset */ } }
+  BENCH = { manifest, texts, files, byName, configFiles, identities: fs.existsSync(idf) ? readJson(idf) : {} };
   return BENCH;
 }
 export function loadDataset(partition) {
@@ -241,15 +247,20 @@ export function objective(item, row) {
     else if (c.kind === 'other_mode') { applicable++; checks.push({ label: 'other mode string in answer', ok: false, detail: `"${hit}"` }); flags.add('cross_mode_reference_leak'); }
     else notes.push(`the answer contains "${hit}" (${c.kind}: ${c.text}); decide whether it is presented as the truth`);
   }
-  // Identity strings of a profile that is not the loaded one (employers, project names): never legitimate.
+  // Identity strings of a profile that is not the loaded one (employers, project names): never legitimate,
+  // UNLESS the mode's own loaded reference files state them (obj-2, 2026-10-09). Looking for work with no profile
+  // loaded still has the candidate's own prep notes loaded, and they name his employers: ER-D2-LFW-036 asks why he
+  // left "the job before", the oracle requires the Tessarine answer from those notes, and obj-1 capped the right
+  // answer at 2 as a profile leak. A string the loaded pack states cannot show that a profile leaked.
   const prof = String(row.pi_state ?? 'none').split('-')[0];
+  const ownPack = (B.configFiles.get(row.evidence_config ?? item.evidence_config) ?? []).map((id) => B.texts[id] ?? '').join('\n');
   for (const [k, v] of Object.entries(B.identities)) {
     if (k === prof) continue;
-    const hit = [...(v.resume_needles ?? []), ...(v.jd_needles ?? [])].find((n) => has(text, n) && !has(item.question, n) && !(item.prior_transcript ?? []).some((l) => has(l.text, n)));
+    const hit = [...(v.resume_needles ?? []), ...(v.jd_needles ?? [])].find((n) => has(text, n) && !has(item.question, n) && !has(ownPack, n) && !(item.prior_transcript ?? []).some((l) => has(l.text, n)));
     if (hit) { applicable++; checks.push({ label: `profile ${k} identity string in answer`, ok: false, detail: `"${hit}"` }); flags.add(PI_MODES.has(item.mode) && prof !== 'none' ? 'wrong_profile_used' : 'pi_leak'); }
   }
   if (!PI_MODES.has(item.mode) && prof !== 'none' && B.identities[prof]) {
-    const hit = (B.identities[prof].resume_needles ?? []).find((n) => has(text, n) && !has(item.question, n) && !(item.prior_transcript ?? []).some((l) => has(l.text, n)));
+    const hit = (B.identities[prof].resume_needles ?? []).find((n) => has(text, n) && !has(item.question, n) && !has(ownPack, n) && !(item.prior_transcript ?? []).some((l) => has(l.text, n)));
     if (hit) { applicable++; checks.push({ label: 'profile string in a mode without Profile Intelligence', ok: false, detail: `"${hit}"` }); flags.add('pi_leak'); }
   }
 
@@ -273,5 +284,5 @@ export function objective(item, row) {
     else { applicable++; const ok = r.passed === r.total; checks.push({ label: 'code tests', ok, detail: `${r.passed}/${r.total} passed (${r.lang}, function ${r.fn})` }); if (!ok) flags.add('code_incorrect'); }
   }
   const failed = checks.filter((c) => !c.ok);
-  return { verdict: failed.length ? 'fail' : applicable ? 'pass' : 'n/a', checks, notes, flags: [...flags], required_strings: { total: req.length, found: req.filter((r) => r.hit).length } };
+  return { verdict: failed.length ? 'fail' : applicable ? 'pass' : 'n/a', checks, notes, flags: [...flags], version: OBJECTIVE_VERSION, required_strings: { total: req.length, found: req.filter((r) => r.hit).length } };
 }

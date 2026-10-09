@@ -2106,3 +2106,16 @@ word and to the end; resident memory of the app's processes (macOS `ps`).
 If 1 to 3 hold and 4 or 5 does not, it is reported as an accuracy gain with its cost, not as a proposal. Whatever the
 outcome nothing lands from X1: a change of the default would need a quality run on realistic packs above 12,000,
 which do not exist yet, and Evin's word.
+
+### Deterministic checks, version obj-2 (2026-10-09 10:12 UTC): a string the mode's own files state is not a profile leak
+`objective.mjs` flagged any identity string of a profile that is not the loaded one as `pi_leak` or
+`wrong_profile_used`. In Looking for work with no profile loaded, the candidate's own prep notes are still loaded and
+name his employers. `ER-D2-LFW-036` ("the job before your current one, why did you leave that?") has an oracle that
+requires the Tessarine answer from those notes; the answer gave it, Astra scored it 10 with the remark that the string
+check contradicts the answer, and the check capped it at 2. The oracle and the question are unchanged. The check now
+skips a string that the files of the row's own evidence configuration state; `OBJECTIVE_VERSION = 'obj-2'` is written
+into every new check result (results without a version are obj-1).
+Re-applied to stored judgments without a judge call (`report/rescore-objective.mjs`): baseline of main `f4cd986d`,
+630 rows: 8.923 / 71 hard as stored, **8.935 / 70 hard under obj-2** (one row changes, 2 → 10). The E19 app rows
+(88) and the blind holdout of main (180, aggregates only): no row changes. From here on a comparison with that
+baseline quotes the obj-2 figure, and says so.
