@@ -2277,3 +2277,25 @@ What remains of E21, each to be decided on its own lines before any further meas
 for dates and scores, which reached 23 of the 59 and also 41 questions that need no calculation in the offline count
 of 10:15 UTC, so its net effect on these sets is of the order of one or two rows; (ii) the opposite question, whether
 main's trigger fires too widely. One wording (n2) can serve every turn that gets the notice (part b).
+
+## E21 stage three — a lighter notice for turns the word list does not reach (rule written 2026-10-09 11:40 UTC, before any replay of it)
+**Seen in stage two.** On the 387 turns that need no calculation the n2 notice wrote a block on only 7 % of samples and
+did not delay the first word, yet six rows lost a required fact in both samples and none gained one. Read: an uptime
+commitment that the base states became "I'll confirm the exact uptime commitment"; a retention period and an exam
+rule switched to the other document's value. No block was written on any of the six. The notice carries three
+sentences written for disputed amounts ("use only numbers stated above", "work out what the stated facts allow and
+compare the two", "if the numbers do not reconcile, say so plainly") and the answers move toward doubt.
+**Hypothesis.** A notice without those sentences, ending "if the answer is a fact stated above, there is nothing to
+work out: answer as you otherwise would, with everything the question needs", keeps the gain on calculation turns and
+does not cost on the others. `replay-variants/e21-notice-v3.mjs` (n3).
+**How it could be worse.** Without the comparison sentence the gain on disputed-amount turns may shrink; the last
+sentence may make the model skip a block it needs.
+**Measurement.** As stage two, after X1 has finished, nothing else on the DeepSeek key, arms of a part back to back.
+* Part c, the cost: the 387 rows of part a, 2 samples: `e21d-base` (as recorded, run again) against `e21d-n3`.
+  Lines 1 to 5 of stage two, unchanged.
+* Part d, the gain: the 59 rows of stage one, 4 samples: `e21d-cbase` (as recorded, run again) against `e21d-cn3`.
+  Lines 1 to 4 of stage one, unchanged.
+**Reading.** Both parts hold → build candidate: a turn that carries document evidence and that the word list does not
+reach gets n3; a turn the word list reaches keeps main's notice word for word (so nothing changes where the notice
+fires today). One part fails → E21 is closed without a build; the finding that stays is stage one's (the step helps
+where it is needed) and stage two's (it costs where it is not).

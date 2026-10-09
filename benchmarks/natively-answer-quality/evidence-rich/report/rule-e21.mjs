@@ -49,6 +49,7 @@ if (cmd === 'select2a' || cmd === 'select2b') {
       console.log(`  line 6 (right not lower by 2): ${L6 ? 'holds' : 'FAILS'} | line 7 (required strings not lower by 1.5): ${L7 ? 'holds' : 'FAILS'} | line 8 (visible median +100 ms): ${L8 ? 'holds' : 'FAILS'}  => ${L6 && L7 && L8 ? 'PART B HOLDS' : 'PART B FAILS'}`);
     }
   };
+  if (args.includes('--stage3')) { part('3c, turns with documents that need no calculation (n3)', 'e21d-base', 'e21d-n3', false); process.exit(0); }
   part('2a, turns with documents that need no calculation', 'e21b-base', 'e21b-n2', false);
   part('2b, turns that already carry the notice (wording swap)', 'e21c-n1', 'e21c-n2', true);
 } else if (cmd === 'select') {
