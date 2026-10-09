@@ -137,13 +137,15 @@ export class KeybindManager {
         if (actionId === 'general:toggle-visibility') return true;
         if (actionId === 'general:toggle-mouse-passthrough') return true;
 
-        // Screenshot & screen-analyze shortcuts must work globally in BOTH modes.
-        // Without these, Cmd+H / Cmd+Shift+H / Cmd+Shift+Enter do nothing in
-        // launcher mode because globalShortcut.register() is never called for them.
-        // Also fixes the silent rebind failure: re-registration after setKeybind()
-        // hit the same gate and dropped the newly bound accelerator too.
-        if (actionId === 'general:take-screenshot') return true;
-        if (actionId === 'general:selective-screenshot') return true;
+        // Take Screenshot and Selective Screenshot are NOT global here
+        // (2026-10-10). Main hands both to the meeting overlay's renderer, the
+        // only listener, and outside a meeting the press went to the launcher
+        // and did nothing: no screenshot, no cropper. All the registration did
+        // was take Cmd+H (Hide) on macOS and Ctrl+H on Windows away from every
+        // other app. The first-launch tour still gets its Take Screenshot press,
+        // as a keydown in its own window (ShortcutTour.tsx).
+
+        // Screen-analyze stays global in both modes.
         if (actionId === 'general:capture-and-process') return true;
         // Browser/page capture must work globally in both modes (same rationale
         // as the screenshot shortcuts — it's a global capture trigger).
@@ -411,6 +413,11 @@ export class KeybindManager {
                 const kb = this.keybinds.get(id);
                 if (!kb) return true; // unknown id: nothing to preserve it for
                 if (!kb.isGlobal || !kb.accelerator || kb.accelerator.trim() === '') return true;
+                // A verdict about an accelerator the id no longer has says
+                // nothing about its new one. Without this, a shortcut rebound
+                // from Settings (launcher mode, where most ids are not
+                // attempted) kept its old "in use" badge until the next meeting.
+                if (this.registrationFailures[id] !== kb.accelerator.trim()) return true;
                 return this.shouldRegister(id);
             },
         );

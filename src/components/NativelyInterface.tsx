@@ -2314,6 +2314,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   // Dynamic Action Button Mode (Recap vs Brainstorm)
   const [actionButtonMode, setActionButtonMode] = useState<'recap' | 'brainstorm'>('recap');
+  // The shortcut listeners further down subscribe once and read the slot
+  // through this ref, as they read their handlers through handlersRef. Read
+  // from the closure it was always the first render's 'recap', so Cmd/Ctrl+3
+  // ran Recap with the button showing Brainstorm (2026-10-10).
+  const actionButtonModeRef = useRef(actionButtonMode);
+  actionButtonModeRef.current = actionButtonMode;
 
   useEffect(() => {
     // Load persisted mode
@@ -10319,7 +10325,7 @@ Provide only the answer, nothing else.`;
         handleFollowUpQuestions();
       } else if (isShortcutPressed(e, 'dynamicAction4')) {
         e.preventDefault();
-        if (actionButtonMode === 'brainstorm') {
+        if (actionButtonModeRef.current === 'brainstorm') {
           handleBrainstorm();
         } else {
           handleRecap();
@@ -10695,7 +10701,7 @@ Provide only the answer, nothing else.`;
       else if (action === 'followUp') handlers.handleFollowUpQuestions();
       else if (action === 'recap') handlers.handleRecap();
       else if (action === 'dynamicAction4') {
-        if (actionButtonMode === 'brainstorm') handlers.handleBrainstorm();
+        if (actionButtonModeRef.current === 'brainstorm') handlers.handleBrainstorm();
         else handlers.handleRecap();
       } else if (action === 'answer') handlers.handleAnswerNow();
       else if (action === 'clarify') handlers.handleClarify();

@@ -13,13 +13,13 @@
 // The keys are the user's actual bindings (keybinds:get-all), drawn for this
 // platform: ⌘ on macOS, Ctrl on Windows (src/lib/onboarding/shortcutKeys.mjs).
 //
-// Two of them are global shortcuts that main would act on — Toggle Visibility
-// hides the very window this tour is drawn in, and Take Screenshot captures for
-// real. So while the tour is up main routes them here instead
-// (onboarding:set-shortcut-tour → AppState.setShortcutTour); main drops that
-// routing on its own if this renderer reloads or dies. A shortcut main does not
-// register in launcher mode (What to Answer) reaches this window as a plain
-// keydown, which is matched against the same binding.
+// One of them is a global shortcut that main would act on: Toggle Visibility
+// hides the very window this tour is drawn in. So while the tour is up main
+// routes it here instead (onboarding:set-shortcut-tour →
+// AppState.setShortcutTour); main drops that routing on its own if this
+// renderer reloads or dies. The shortcuts main does not register in launcher
+// mode (What to Answer, and since 2026-10-10 Take Screenshot) reach this window
+// as a plain keydown, which is matched against the same binding.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
