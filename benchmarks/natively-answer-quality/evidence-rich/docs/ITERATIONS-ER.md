@@ -2408,3 +2408,44 @@ size of the effect is what the replays measured.
 5. 630 answered, no provider failure; rows over 5 s to the first word at most er6's + 2.
 6. Rows with every required string: not more than 12 below er6 (two runs of main differed by 12 this week).
 A line that fails stops the candidate until it is understood.
+
+### X1 — result (2026-10-09 12:35 UTC; three arms on one experiment build, main pass 11:07–12:03 UTC, fresh-session list pass 12:20–12:33 UTC; 528 turns, no error or timeout; General mode, direct DeepSeek)
+Experiment build `exp/x1-whole-pack-threshold` `237bba1a` (main `73b18d97` + the threshold read from the
+environment). One synthetic file per size, sizes as the app estimates them. "List" is the question that needs all
+seven facts, asked in a fresh session.
+
+| File size | 12,000 arm (main): what reaches the request · list right | 24,000 arm | 48,000 arm |
+|---|---|---|---|
+| 11,900 | whole file, 15,800 prompt tokens · 7/7 | same | same |
+| 12,100 | 3–5 retrieved pieces, 7,400 tokens · **2/7 spoken, 3/7 typed** | whole, 15,800 · 7/7 | whole · 7/7 |
+| 16,000 | pieces, 7,700 · 3/7 | whole, 18,700 · 7/7 | whole · 7/7 |
+| 23,900 | pieces, 7,500 · 2/7 spoken, 3/7 typed | whole, 24,700 · 7/7 | whole · 7/7 |
+| 24,100 | pieces · 3/7 | pieces, 7,700 · 3/7 | whole, 25,000 · 7/7 |
+| 32,000 | pieces · 3/7 | pieces · 3/7 | whole, 30,800 · 7/7 |
+| 47,900 | pieces · 2/7 | pieces · 2/7 | whole, 43,100 · 7/7 |
+| 48,100 | pieces · 2/7 spoken, 3/7 typed | pieces · 2/7, 3/7 | pieces, 7,600 · 2/7, 3/7 |
+
+Named facts: 7 of 7 right at every size, position and arm, spoken and typed (a uniquely named fact is retrieved
+wherever it sits, including the last half per cent of a 48,100-token file). The two-figure sum and the current
+value: right in every arm and size **except the 48,000 arm, spoken, at 32,000 (sum 1,340 for 3,615; the outdated
+41 for 57) and at 47,900 (41 for 57)**. In all three the draft was right and the fix-up pass replaced it: the pass
+reads at most 96,000 characters (`CLAIM_VERIFIER_MATERIAL_MAX_CHARS`), a 32,000-token file is 128,000, so the
+second figure (at 85 %) and the September update (at 80 %) were outside what it saw and it "corrected" toward the
+part it could see. Typed turns, where the pass did not run, were right at every size.
+Several files, six of each size, spoken: the named fact was right in every arm; a pack of 12,600 is read whole from
+the 24,000 arm up (6 of 6 files in the request against 4 of 6), 24,000 and 47,400 only in the 48,000 arm.
+First word (median over the sizes above 12,000 and at most the arm's threshold, against the 12,000 arm on the same
+sizes): 24,000 arm spoken −42 ms, typed +101 ms; 48,000 arm spoken +46 ms, typed **+612 ms** (47,900 typed: 1,744 ms
+against 815). App memory showed no trend with file size.
+
+**Lines.** 24,000: all six hold, spoken and typed. 48,000: lines 2 and 5 fail on spoken turns (the pass's cap);
+typed turns hold with the first word 0.6 s later.
+**Reading.** The 12,000 switch is a cliff for any question over the whole document: 700 tokens more and it gets 2 or
+3 facts of 7. Raising it to 24,000 removed the cliff up to that size in this probe with no spoken first-word cost; the
+price is the request (about 24,700 prompt tokens against 7,500 on such a turn). 48,000 is not safe as the code
+stands: the fix-up pass and the spoken repair would have to read as much as the answer did, exactly the E5 and E10
+finding one size up. A file near the top of a 24,000 threshold already fills the pass's 96,000 characters, so a
+change to 24,000 should raise that cap with it.
+**What this is not.** Synthetic filler with planted facts, one mode, one file or six. It says nothing about answer
+quality on realistic packs above 12,000 tokens, which the benchmark does not have. Nothing lands from X1; a proposal
+to Evin would be "24,000 with the pass cap raised", measured first on a realistic larger-pack condition.
