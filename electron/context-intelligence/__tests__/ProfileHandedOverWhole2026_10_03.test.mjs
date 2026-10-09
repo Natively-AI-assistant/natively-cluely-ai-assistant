@@ -25,6 +25,7 @@ const { createProfileRetrievalPort, profileWholeInfo, PROFILE_WHOLE_MAX_TOKENS, 
 const { MODE_POLICIES } = await import(pathToFileURL(path.join(base, 'policies/mode-policy-registry.js')).href);
 const { decide, WHOLE_PACK_ITEM_OVERHEAD, PROFILE_WHOLE_ITEM_OVERHEAD } = await import(pathToFileURL(path.join(base, 'orchestration/orchestrator.js')).href);
 const { WHOLE_PACK_MAX_TOKENS } = await import(pathToFileURL(path.join(base, 'retrieval/mode-retrieval-port.js')).href);
+const { CLAIM_VERIFIER_MATERIAL_MAX_CHARS } = await import(pathToFileURL(path.join(base, '..', 'llm', 'claimVerifier.js')).href);
 
 const LFW = MODE_POLICIES['looking-for-work'];
 const filler = (topic, n) => Array.from({ length: n }, (_, i) => `- ${topic} item ${i + 1}: maintained the service, wrote the runbook and reviewed the rollout plan.`).join('\n');
@@ -91,8 +92,9 @@ describe('profileWholeInfo: when the profile is handed over whole', () => {
     assert.equal(profileWholeInfo(DOCS, MODE_POLICIES.sales.allowedSourceTypes, MODE_POLICIES.sales.profileSources ?? []), null);
     assert.equal(profileWholeInfo([], LFW.allowedSourceTypes, LFW.profileSources), null);
   });
-  test('the cap leaves room for a full reference pack under the claim pass\'s 96,000 characters', () => {
-    assert.ok((WHOLE_PACK_MAX_TOKENS + PROFILE_WHOLE_MAX_TOKENS) * 4 + 10_000 <= 96_000);
+  test('a full reference pack and the whole profile fit under what the claim pass is shown', () => {
+    assert.ok((WHOLE_PACK_MAX_TOKENS + PROFILE_WHOLE_MAX_TOKENS) * 4 + 10_000 <= CLAIM_VERIFIER_MATERIAL_MAX_CHARS,
+      `${(WHOLE_PACK_MAX_TOKENS + PROFILE_WHOLE_MAX_TOKENS) * 4 + 10_000} > ${CLAIM_VERIFIER_MATERIAL_MAX_CHARS}`);
   });
 });
 

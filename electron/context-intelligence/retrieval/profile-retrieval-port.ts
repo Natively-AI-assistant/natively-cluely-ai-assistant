@@ -170,7 +170,8 @@ const TYPE_FOR_KIND: Record<ProfileDocKind, SourceType> = {
 // 6,000 tokens: about ten pages of the two documents, and small enough that a
 // full reference pack (mode-retrieval-port WHOLE_PACK_MAX_TOKENS) plus the
 // profile stays under what the claim pass is shown
-// (llm/claimVerifier CLAIM_VERIFIER_MATERIAL_MAX_CHARS).
+// (llm/claimVerifier CLAIM_VERIFIER_MATERIAL_MAX_CHARS); a test holds the
+// three figures to that relation.
 /** Whole-profile threshold, in the packer's estimateTokens units (~4 chars/token). */
 export const PROFILE_WHOLE_MAX_TOKENS = 6000;
 /** The `section` of a whole-document item. */

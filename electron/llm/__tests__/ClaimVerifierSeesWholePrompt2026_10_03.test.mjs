@@ -44,7 +44,8 @@ const promptWithFactAt = (chars, at) => `${'a'.repeat(at)}${FACT}${'b'.repeat(ch
 
 describe('the claim pass sees the pack the answer saw', () => {
   test('the cap covers a whole pack and is far above the old cut', () => {
-    assert.equal(cv.CLAIM_VERIFIER_MATERIAL_MAX_CHARS, 96000);
+    // 96,000 until 2026-10-09; raised with the whole-pack threshold (24,000 tokens) so the pass still sees the pack.
+    assert.equal(cv.CLAIM_VERIFIER_MATERIAL_MAX_CHARS, 136000);
   });
 
   test('typed: a fact 36,000 characters into the material reaches the pass', () => {
@@ -55,7 +56,7 @@ describe('the claim pass sees the pack the answer saw', () => {
 
   test('typed: the material is still bounded', () => {
     const msg = cv.claimVerifierStandaloneMessage('x'.repeat(200000), 'draft');
-    assert.ok(msg.length < 96000 + 200);
+    assert.ok(msg.length < cv.CLAIM_VERIFIER_MATERIAL_MAX_CHARS + 200);
   });
 
   test('heard: the replay inherits the whole answer prompt when the claim pass asks for its cap', () => {
@@ -74,7 +75,7 @@ describe('the claim pass sees the pack the answer saw', () => {
     const turn = new AbortController();
     h.rememberAnswerCall(turn.signal, ['x'.repeat(200000), undefined, undefined, undefined, true, true, [], turn.signal]);
     const r = h.replayAnswerCall(turn.signal, 'DRAFT REPLY:\nx', new AbortController().signal, { maxInheritedChars: cv.CLAIM_VERIFIER_MATERIAL_MAX_CHARS });
-    assert.ok(r[0].length < 96000 + 200);
+    assert.ok(r[0].length < cv.CLAIM_VERIFIER_MATERIAL_MAX_CHARS + 200);
     assert.ok(/truncated for the repair pass/.test(r[0]));
     assert.ok(r[0].endsWith('DRAFT REPLY:\nx'));
   });

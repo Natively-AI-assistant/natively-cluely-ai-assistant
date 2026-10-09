@@ -84,7 +84,7 @@ describe('(a) a file of the mode handed over whole is not removed by the claim-a
   });
 
   test('a pack too large to hand over whole keeps the gate exactly as it was', async () => {
-    const big = HIRING_PACK.map((f) => ({ ...f, content: f.content + filler(120) }));
+    const big = HIRING_PACK.map((f) => ({ ...f, content: f.content + filler(300) }));   // above the 24,000-token threshold (12,000 until 2026-10-09)
     assert.equal(isWholePackCorpus(big), false);
     const q = 'Tell me about the billing reconciler migration you led at Corvane.';
     const r = await orchestrate(req('recruiting', q, big), port('recruiting', big));

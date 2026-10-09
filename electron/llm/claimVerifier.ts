@@ -287,8 +287,17 @@ export function claimVerifierDraftMessage(draftBody: string): string {
  * same 251 drafts, same model, budget and rails: effect of the pass −0.21 (±0.13)
  * at 24,000, +0.01 (±0.09) at this cap; hard fails 33 → 32; every pass inside its
  * budget in both arms (median 1.12 s → 1.20 s).
+ *
+ * 136,000 since 2026-10-09 (was 96,000): a reference pack is now read whole up
+ * to 24,000 tokens (mode-retrieval-port WHOLE_PACK_MAX_TOKENS), which with the
+ * whole profile (6,000) is 120,000 characters before the question, the
+ * conversation and the evidence tags. At 96,000 the pass saw a cut pack on 2 of
+ * 268 turns of a 20,700-token pack; one size up (a 32,000-token file under a
+ * 48,000 threshold) that cut made it "correct" right answers toward the part it
+ * could see. Reading 92,000 characters the pass took 1.7 s at the median
+ * against 1.2 s and finished inside its 3.5 s budget on 269 of 270 turns.
  */
-export const CLAIM_VERIFIER_MATERIAL_MAX_CHARS = 96000;
+export const CLAIM_VERIFIER_MATERIAL_MAX_CHARS = 136000;
 
 /** The whole verifier message when the answer call cannot be replayed: the V3 user message is the material. */
 export function claimVerifierStandaloneMessage(material: string, draftBody: string): string {

@@ -334,8 +334,23 @@ export function isSmallReferenceCorpus(files: ReadonlyArray<{ content?: string |
 // from general knowledge reads nothing from a pack this size (only a SMALL
 // corpus is read on a FAST turn, see the orchestrator), and a larger corpus
 // keeps retrieval as it was.
+//
+// 24,000 SINCE 2026-10-09 (was 12,000). The benchmark's packs were all under
+// 12,000, so the old figure had never been tested from above. Four realistic
+// packs of about 20,700 tokens (the same fictional companies and courses with
+// 4 to 6 more documents each, 361 questions, deepseek-flash, the bundled
+// embedding model): with pieces retrieved the answer was right on 54.3 % of
+// the questions and 48 % of the facts it needed were in the request (42 % on
+// a spoken turn, which searches by keyword with that model); read whole, 87.0 %
+// and all of them, the same as the small pack scores (85.9 %). Calculations
+// 39 -> 84 of 105; questions that need three or more documents 0 -> 6 of 9.
+// A spoken turn's first word came 0.76 s EARLIER (no retrieval and no awaited
+// rerank), a typed turn's 0.43 s later, and the request is about 30,000 tokens
+// instead of 8,000. 48,000 was measured too and is not safe: see X1 in the
+// benchmark log. The claim pass's cap (CLAIM_VERIFIER_MATERIAL_MAX_CHARS)
+// moves with this figure, so the pass still sees what the answer saw.
 /** Whole-pack threshold, in the packer's estimateTokens units (~4 chars/token). */
-export const WHOLE_PACK_MAX_TOKENS = 12000;
+export const WHOLE_PACK_MAX_TOKENS = 24000;
 
 /**
  * What the prompt packer charges for one evidence item beyond its text: the

@@ -103,7 +103,7 @@ describe('orchestrate(): every file of the pack reaches the evidence, and the re
   });
   test('a pack past the threshold goes through the retriever as before', async () => {
     const calls = { n: 0 };
-    const files = PACK.map((f) => ({ ...f, content: f.content + filler(60) })); // ~22,000 tokens
+    const files = PACK.map((f) => ({ ...f, content: f.content + filler(120) })); // ~44,000 tokens (the threshold is 24,000 since 2026-10-09)
     assert.equal(isWholePackCorpus(files), false);
     await orchestrate(req('call-center', Q, { attachedCorpusTokens: referenceCorpusTokens(files) }), mk(files, calls));
     assert.ok(calls.n >= 1);

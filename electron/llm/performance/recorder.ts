@@ -91,7 +91,7 @@ export function classifyStreamError(error: unknown): SampleClass | null {
  *
  * These are excluded from the profile entirely, and the reason is not caution:
  *
- *   • `replayAnswerCall` truncates the inherited prompt at 24000 chars (96000 for the claim pass), so a
+ *   • `replayAnswerCall` truncates the inherited prompt at 24000 chars (CLAIM_VERIFIER_MATERIAL_MAX_CHARS for the claim pass), so a
  *     repair on a 32K turn is actually a ~6K request. Filing it under the
  *     answer's workload bucket corrupts `meanInputTokens`, which is the
  *     x-coordinate the whole context fit stands on.

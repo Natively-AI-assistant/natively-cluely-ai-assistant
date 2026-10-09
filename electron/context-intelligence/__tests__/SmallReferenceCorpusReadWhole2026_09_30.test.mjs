@@ -66,11 +66,12 @@ describe('decide(): a FAST turn reads a small corpus in every mode, without a cl
       if (d.retrievalPlan.path === 'FAST') assert.ok(!d.claimRequirements.some((c) => c.claimType === 'DOCUMENT_FACT'), 'no document claim → no absence notice');
     });
   }
-  // 2026-10-04: "large" now means larger than a pack that fits the prompt (WHOLE_PACK_MAX_TOKENS, 12,000). This test
+  // 2026-10-04: "large" now means larger than a pack that fits the prompt (WHOLE_PACK_MAX_TOKENS). This test
   // used 9,000, which is such a pack and is now read on a fast turn too (LoadedPackReachesEveryTurn2026_10_04).
+  // 2026-10-09: the threshold went from 12,000 to 24,000, so 19,000 is such a pack as well; 29,000 is not.
   test('a corpus too large to hand over whole keeps the classifier\'s fast path (non-primary modes)', () => {
     for (const modeId of ['general', 'sales', 'team-meet', 'call-center']) {
-      const d = decide(req(modeId, 'What is a mutex?', { attachedCorpusTokens: 19000 }));
+      const d = decide(req(modeId, 'What is a mutex?', { attachedCorpusTokens: 29000 }));
       assert.equal(d.retrievalPlan.shouldRetrieve, false, modeId);
     }
   });
@@ -117,7 +118,7 @@ describe('the port hands a small corpus over whole and skips the retriever', () 
   test('a large corpus still goes through the retriever', async () => {
     const calls = { n: 0 };
     // Larger than a pack that fits the prompt (WHOLE_PACK_MAX_TOKENS): retrieval as before.
-    const files = [{ id: 'f1', fileName: 'handbook.txt', content: 'lorem ipsum dolor sit amet '.repeat(2000) }]; // ~13,500 tokens
+    const files = [{ id: 'f1', fileName: 'handbook.txt', content: 'lorem ipsum dolor sit amet '.repeat(4000) }]; // ~27,000 tokens
     await orchestrate(req('team-meet', 'What does the handbook say about the release checklist?', { attachedCorpusTokens: referenceCorpusTokens(files) }), mk(files, calls));
     assert.equal(calls.n >= 1, true);
   });
