@@ -30,7 +30,7 @@ if (cmd === 'select') {
 } else if (cmd === 'read') {
   const load = (n) => fs.readFileSync(path.join(HERE, 'results', 'replay', `gen-${n}.jsonl`), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
   const prefix = opt('prefix', 'ER-'); /* --kinds: category prefixes */ const blind = args.includes('--blind'); const kinds = opt('kinds') ? new Set(opt('kinds').split(',')) : null;
-  const ds = {}; for (const f of fs.readdirSync(path.join(HERE, 'datasets'))) for (const it of JSON.parse(fs.readFileSync(path.join(HERE, 'datasets', f), 'utf8')).items) ds[it.id] = it;
+  const ds = {}; for (const root of [HERE, process.env.ER_BENCH_DIR].filter(Boolean)) for (const f of fs.readdirSync(path.join(root, 'datasets'))) for (const it of JSON.parse(fs.readFileSync(path.join(root, 'datasets', f), 'utf8')).items) ds[it.id] = it;
   const squash = (t) => String(t ?? '').replace(/[\s,*_`]/g, '').toLowerCase();
   // a sample is RIGHT when it has every required string, no forbidden string, and the calculation result where there is one
   const right = (s, it) => {
@@ -61,4 +61,6 @@ if (cmd === 'select') {
   console.log(`  right samples (required, no forbidden, calculation): ${pct(rA)} % -> ${pct(rB)} %; paired change ${pct(dRight.reduce((x, y) => x + y, 0) / Math.max(1, dRight.length))} points (95 % ${pct(ciRight[0])} to ${pct(ciRight[1])})`);
   console.log(`  rows that rose (<=1 right -> >=3 right): ${rose.length}${blind ? '' : ' ' + rose.join(' ')}; rows that fell (>=3 -> <=1): ${fell.length}${blind ? '' : ' ' + fell.join(' ')}`);
   console.log(`  first visible character: median ${med(A.map((s) => s.ms_visible))} -> ${med(B.map((s) => s.ms_visible))} ms; shown length median ${med(A.map((s) => s.text.length))} -> ${med(B.map((s) => s.text.length))} chars`);
+  if (A.some((s) => s.prompt_tokens != null)) { const share = (x) => med(x.filter((s) => s.prompt_tokens).map((s) => Math.round(1000 * (s.cached_tokens ?? 0) / s.prompt_tokens) / 10)); const p90 = (xs) => { const v = xs.filter((x) => x != null).sort((x, y) => x - y); return v[Math.floor(v.length * 0.9)] ?? null; };
+    console.log(`  first token: median ${med(A.map((s) => s.ms_first))} -> ${med(B.map((s) => s.ms_first))} ms, p90 ${p90(A.map((s) => s.ms_first))} -> ${p90(B.map((s) => s.ms_first))} ms; prompt tokens median ${med(A.map((s) => s.prompt_tokens))} -> ${med(B.map((s) => s.prompt_tokens))}; cached share of the prompt, median ${share(A)} % -> ${share(B)} %; uncached prompt tokens, total ${A.reduce((n, s) => n + ((s.prompt_tokens ?? 0) - (s.cached_tokens ?? 0)), 0)} -> ${B.reduce((n, s) => n + ((s.prompt_tokens ?? 0) - (s.cached_tokens ?? 0)), 0)}`); }
 } else { console.error('usage: rule-e23.mjs select e23|e24 <runs> | show <runs> | read --base A --arm B [--prefix P] [--kinds k,k] [--blind]'); process.exit(2); }

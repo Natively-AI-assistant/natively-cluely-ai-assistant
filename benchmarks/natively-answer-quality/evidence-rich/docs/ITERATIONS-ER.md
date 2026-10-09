@@ -3097,3 +3097,28 @@ By mode (right): sales 43.8 → 51.7 %, lecture 70.0 → 74.4 %, seminar 54.9 �
 reading the pack whole; retrieval, with either model, puts between half and three fifths of the needed facts in
 the request. It is also the slowest arm to the first word on a typed turn (the embedding round trip, about 1.06 s)
 and has twelve spoken turns over 5 s. So the gap that X2 measured is not an artefact of the bundled model.
+
+### 3. E27 — the 24,000 candidate, confirmation run: all five lines hold; NOT landed (2026-10-09 23:58 UTC; run `x2-e27` 23:23–23:57 UTC on `cand/e27` rebased onto main `67fb1b24`, default configuration; 361 questions, all answered)
+| | A: main | C: main, cloud embeddings | B: experiment build at 24,000 | **candidate `cand/e27`** |
+|---|---|---|---|---|
+| right | 54.3 % | 63.4 % | 87.0 % | **86.1 %** (311 of 361) |
+| every required string (302 rows) | 47.7 % | 59.9 % | 86.8 % | 86.1 % |
+| rows with a forbidden string | 21 | 23 | 8 | 8 |
+| calculation results right (105) | 39 | 54 | 84 | 82 |
+| the 48 new rows / of them the 9 that need the whole pack | 17 / 0 | 20 | 39 / 6 | 39 / 7 |
+| needed document facts in the request | 48 % | 61 % | 100 % | 100 % |
+| first word, spoken: median / p90 / max | 3,413 / 3,748 / 7,939 ms | 3,183 / 3,929 / 6,239 ms | 2,657 / 3,059 / 4,193 ms | 2,639 / 2,999 / 3,537 ms |
+| first word, typed: median / p90 | 899 / 1,188 ms | 1,874 / 2,403 ms | 1,329 / 1,728 ms | 1,384 / 1,741 ms |
+| settled answer, spoken: median / p90 | 5,240 / 7,648 ms | 4,927 / 6,511 ms | 5,215 / 8,244 ms | 4,972 / 8,014 ms |
+| settled answer, typed: median / p90 | 2,341 / 2,974 ms | 3,063 / 4,003 ms | 3,145 / 4,131 ms | 3,225 / 3,935 ms |
+| fix-up pass: median / p90 / not finished in budget (app log) | 1.2 / 1.6 s / 0 | n/a | 1.7 / 2.1 s / 1 | 1.65 / 1.97 s / 0 of 270 |
+| pass requests over the cap | 0 | 0 | 2 (cap 96,000) | 0 (cap 136,000; largest request 95,771) |
+| prompt tokens, median | 8,183 | 8,262 | 29,759 | 29,757 |
+Lines: 1 holds (86.1 %, 31.8 points above arm A); 2 holds; 3 holds; 4 holds (spoken −18 ms, typed +55 ms against
+arm B); 5 holds. Suites on the candidate (rebased): the new and changed test files 30 of 30; intelligence +
+context-intelligence and llm had 0 failures before the rebase, services the same names as main's baseline.
+**Not landed.** `cand/e27` `0256eed4` (worktree `er-main`, one commit on main `67fb1b24`) is ready to fast-forward on Evin's word. What
+he is deciding: +32 points of right answers on packs between 12,000 and 24,000 tokens and a spoken first word
+0.77 s earlier, for a request 3.6 times the size on those turns and a typed first word 0.49 s later. Not measured:
+any model other than deepseek-flash (a model with a small context window would now be sent up to about 32,000
+tokens where it was sent about 16,000), Windows, a packaged build.
