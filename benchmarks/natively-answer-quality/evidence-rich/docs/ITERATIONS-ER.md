@@ -2324,3 +2324,35 @@ Correction, the same for all three arms: a separate pass (`ref-threshold --kinds
 `threshold-fresh-…jsonl`) asks the list question in a fresh session straight after the upload, spoken and typed, at
 every size. Line 1 of the X1 plan is read from that pass only. The main pass keeps its procedure for the two arms
 still to run, so the three arms stay alike.
+
+### Failure-cause map of the last fully judged baseline (main `f4cd986d`, before E19; written 2026-10-09 11:44 UTC)
+The fresh run of main with E19 could not be judged today (the access block above), so the map is of `er4-*`, the
+last run with all 630 answers judged by Astra. Each of the 71 hard-failed answers is put under its FIRST cause, read
+from the judge's stated problem, the answer, the oracle and, for edited answers, the judged draft. One cause per row;
+the engineer's reading, not a judge output. E19 has since changed the reply on 12 of these rows.
+
+| First cause | Rows | Modes | Examples | In the prompt? | Mitigation today | Candidate | Cost / risk |
+|---|---|---|---|---|---|---|---|
+| Invented company, policy, research or meeting fact (the brief's H, I) | 15 | call-center 4, sales 4, seminar 4, team-meet 2, recruiting 1 | CC-029 "they'll restore it to you"; D2-SALES-035 denies a driver app the material is silent on; D2-SEM-040 invents two findings | the true facts are; the invented one is absent | the fix-up pass (wrote "UNSUPPORTED: none" on most of them) | none that holds: a per-statement check removed correct inference (dropped 2026-10-09); enforcing the pass's own list would hit 30 answers of which 4 are real inventions | a second look costs latency and correct answers |
+| Unsupported inference or over-generalisation (F) | 9 | lecture 2, sales 1, call-center 1, general 1, recruiting 1, seminar 1, LFW 1, TI 1 | D2-CC-020 "any additional item qualifies"; D2-SALES-016 "all water damage excluded"; LEC-030 extends one loss response to every loss | yes | none | none found: each is a different step too far | — |
+| Invented personal fact (G) | 7 | LFW 4, TI 3 | LFW-023 the target job's duties as his own; D2-TI-032 two projects from the job description | the profile is, or deliberately is not | the personal-claim notices and the pass (listed and kept on 3) | E19 covers the absent-fact form; the rest untested | — |
+| Arithmetic or calendar count with the right inputs (E) | 7 | recruiting 2, sales 1, call-center 1, team-meet 2, TI 1 | REC-005 business days; REC-008 weighted score; D2-SALES-011 fifteenth for fourteenth | yes | the hidden calculation step, which reached 4 of the 7 | E21: the step where it is missing (stage one +11 points on such rows; a usable trigger is the open part) | about 280 ms to the first word on turns that get it; costs completeness on turns that do not need it |
+| Right value, wrong thing (C) | 6 | TI 2, LFW 1, lecture 1, seminar 1, team-meet 1 | LFW-020 promotion date taken as start date; D2-TI-026 project placed at the wrong employer | yes | none | none | — |
+| Document conflict or outdated source mishandled (the brief's source-precedence class) | 6 | lecture 4, sales 1, recruiting 1 | D2-LEC-026 the superseded exam rule; SALES-020 one of two current thresholds stated as settled | yes, both | the pass's conflict line | closed: four rewordings and a rail all failed (E6, E17, E18, E20) | — |
+| Answer contradicts itself: verdict first, working says otherwise | 6 | general 2, lecture 1, sales 1, seminar 1, TI 1 | LEC-015 "served from cache" then the right count; GEN-010 "no phone debt found" then the $46 | yes | none | a "deciding fact first" notice was tried and dropped (fixed 2, broke 1) | a hidden working step would be reasoning, which is out |
+| Available fact not used or a required part left out (B, N) | 5 | general 1, recruiting 1, sales 1, seminar 1, TI 1 | D2-GEN-002 ignores the noon car return; SALES-012 never totals | yes | none | none: each omission differs | — |
+| Inputs combined or a rule applied wrongly (D) | 2 | general 1, sales 1 | SALES-022 a volume discount below its threshold | yes | the calculation step (present on both) | none | — |
+| Wrong code (tie rule) | 2 | TI 2 | TI-015, D2-TI-033: top-k words with a heap | n/a | none (the app's code verification is switched off) | measure on `code1` first | — |
+| Role or speaker (L) | 2 | general 1, team-meet 1 | GEN-030 "we place that order"; TEAM-018 the user in the third person | n/a | role notes | none | — |
+| The gist chip alone is wrong | 2 | seminar 1, team-meet 1 | D2-SEM-008 chip reverses the F1 finding | n/a | none | none (too few) | — |
+| Damaged after generation (J, K): draft fine, shown answer not | 3 of the rows above | sales, team-meet, seminar | SALES-028 7.8 → 4.0; TEAM-027 7.6 → 4.0; SEM-028 9.6 → 3.0 | — | E19 (all three are absent-fact questions) | — | — |
+| A check that was wrong, not the answer | 1 | LFW | D2-LFW-036 | — | fixed as obj-2 | — | — |
+
+Not in the prompt at all (A): none of the 71. Provider stall (P): none. Leak between profiles or modes (M): none
+(the one flag was the defective check).
+**The fix-up pass on that run, by Astra** (99 edited answers, draft and shown both judged): 8.23 → 8.47. It raised 13
+answers by more than 1.5 and lowered 11, three of them into a hard fail. Of the 11 hard-failed edited answers, 7 were
+already hard fails as drafts.
+**What this says about priorities.** The classes with an objective handle are small: arithmetic and calendar 7 rows,
+code 2. The largest class, invented facts (22 rows with the personal ones), has no check that separates it from
+honest inference at this model setting; that was tested twice and is why the per-statement check was dropped.
