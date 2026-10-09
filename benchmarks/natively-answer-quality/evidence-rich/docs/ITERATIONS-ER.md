@@ -1970,3 +1970,18 @@ same quarter-hour: holds. Pooled, 52 pairs; 20 judged so far (all from repetitio
 Tools added for this: `plan-pair.mjs` (which judgments a paired comparison still needs; counts only) and
 `report/pair-aggregate.mjs` (aggregates over one plan or several pooled; no ids or text). Run on repetition 0 they
 give the checkpoint of 2026-10-08 to the last digit (20 of 25, 8.3354 → 8.27615, ±0.5957).
+
+### E19 — blind holdout, first rule read on all 25 pairs (2026-10-09 02:13 UTC)
+Window of 02:02 UTC: probe answered as exact gpt-6-astra, calibration 38 of 38 (`calibration-astra-1791511846741.json`),
+the five missing judgments sent (three new wording, two control), none failed, no wrong-model return, no access block.
+Repetition 0, the 25 rows where the arms differ (aggregates only; `/tmp/er-e19h-aggregate.json`, copy in the backup):
+| # | Line (rule of 2026-10-07) | Control | New wording | Holds |
+|---|---|---|---|---|
+| 1 | Mean change ≥ 0 | 8.105 | 8.135 (+0.031, 95 % half-width ±0.499) | yes |
+| 2 | Hard fails ≤ control | 5 | 5 | yes |
+| 3 | Rows flagged unsupported_* or fabricated_* ≤ control + 1 | 4 | 4 | yes |
+**Verdict by the rule as written: holds. E19 stays a keep candidate.** What it does and does not say: on the blind
+holdout the new wording did no measurable harm (the change is +0.03 inside ±0.50, hard fails and invention rows level).
+It does not show the development gain (+0.39 on 88 rows) repeating there. The five late pairs moved the partial
+reading of 2026-10-08 (20 pairs, −0.059, hard 3 → 3) to this one: both arms gained two hard fails among them.
+Landing on main is Evin's decision; nothing is landed.
