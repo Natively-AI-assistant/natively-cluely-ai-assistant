@@ -2697,3 +2697,14 @@ fact about the USER themselves … No source establishes it, so do NOT state one
 the document above is the posting and describes the employer's job, not the user. Read by eye on the same three
 rows, k = 4: if more than 3 of the 12 samples still tell the posting as the candidate's history, E24 is closed as a
 prompt notice and nothing further is tried on it today. Lines 1 and 2 apply as before.
+
+### E24b — result: closed (2026-10-09 18:30 UTC; replayed 18:31 UTC, the same 11 rows, k = 4)
+Lines 1 and 2 hold again (every required string 90.6 % → 93.8 %, forbidden 0 → 0, no row falls). By eye on the
+three own-history rows, 9 of 12 samples still tell the posting as the candidate's history (D-LFW-023 4 of 4, "I'm a
+backend engineer … services that move and record money … I also carry the pager"; D2-TI-032 4 of 4, "I've worked
+with CRDTs on the client side, mostly Yjs over WebSockets"; D-TI-022 1 of 4, the other three give a frame, ask which
+part matters, or say plainly that no system is on record). More than 3 of 12: **E24 is closed as a prompt notice.**
+The guard that works when no evidence is found does not hold once the posting is in the prompt as evidence. What is
+left for this class is not a notice: either the posting is not handed over as evidence on a turn that asks only for
+the user's own record (a retrieval-plan change, not tried), or the fix-up pass is told the posting is not the
+candidate's record (it would then empty these answers rather than repair them). Neither is declared.
