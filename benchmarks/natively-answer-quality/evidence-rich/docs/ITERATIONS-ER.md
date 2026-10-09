@@ -2449,3 +2449,24 @@ change to 24,000 should raise that cap with it.
 **What this is not.** Synthetic filler with planted facts, one mode, one file or six. It says nothing about answer
 quality on realistic packs above 12,000 tokens, which the benchmark does not have. Nothing lands from X1; a proposal
 to Evin would be "24,000 with the pass cap raised", measured first on a realistic larger-pack condition.
+
+### Main `73b18d97` on the challenge sets (runs `er7-chal-main`, `er7-code1-main`, `er7-chalval-main`, 12:34–12:53 UTC; read 12:54 UTC; judge-free, checks obj-3)
+All 207 answered on direct DeepSeek. "Right" is the row's own deterministic check: the calculation result stated
+(and no forbidden string), the code's tests all passing, or every required string present and no forbidden string.
+It is a strict lower bound: an answer that gives the right result in a form the oracle's list does not hold counts as
+wrong (seen on two rows of `challenge`, e.g. "come to 14" where the forms are longer phrases).
+
+| Set | Rows | Right | Calculation result stated | Dates and times | Version conflict | Absent fact | Code tests pass |
+|---|---|---|---|---|---|---|---|
+| `challenge` | 117 | 94 (80 %) | 22 / 26 | 34 / 42 | 4 / 9 | 15 / 18 | 2 / 2 |
+| `challenge-val` (aggregates only) | 54 | 45 (83 %) | 8 / 11 | 13 / 17 | 6 / 6 | 9 / 9 | 1 / 1 |
+| `code1` | 36 | 34 (94 %) | | | | | 34 / 36 |
+
+By mode on `challenge` (13 rows each): recruiting 12, technical-interview 12, general 11, team-meet 11, sales 10,
+lecture 10, seminar 10, call-center 10, looking-for-work 8. Spoken 79 %, typed 83 %.
+Read on `challenge` (the readable set): the wrong rows are a wrong band or stage applied (SALES-008 an 8 % discount
+for the 18 % one; TEAM-001 the wrong rollout stage), a cap or count misapplied (CC-002), a share asked for and the
+two counts given instead (LFW-001), an invented referee (LFW-011), a verification step asked for before answering
+(CC-001, CC-004), and version conflicts answered with one side (REC-009, LFW-008, LFW-009, TI-009, LEC-010).
+`code1`: two failures of 36 on main with code verification switched off.
+These are the baselines the candidates are read against on unseen questions.
