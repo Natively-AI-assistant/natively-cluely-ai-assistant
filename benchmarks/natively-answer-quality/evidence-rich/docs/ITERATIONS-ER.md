@@ -2528,3 +2528,58 @@ about ten points of right answers, on questions written after it as well, for ab
 the first visible word and no measurable loss on the other rows it fires on. Set beside E21 this draws the line:
 the step helps when the question says it wants a figure, and did not carry to unseen questions when it was added
 because documents were present. Nothing changes.
+
+## Session of 2026-10-09, 18:05 UTC onward (same session, new instructions from Evin)
+Evin, 2026-10-09: finish the 587 outstanding Astra judgments of the E19 build when access legitimately returns and
+keep the HTTP 403 restriction as it stands; establish the actual baseline before proposing another production
+change; then investigate a narrow source-aware claim provenance mechanism for invented company, personal and
+research facts and wrong source attribution, with an acceptance rule written first and validated on unseen
+challenge questions before any Astra call; independently evaluate realistic 24k reference packs. Not to be done:
+E21 again, a broader calculation notice, a rewrite of the verifier's conflict instructions. All work stays off main.
+State at 18:05 UTC: main = origin/main = `73b18d97`; this branch local `c403010f`, not pushed; the access-block flag
+`/tmp/er-access-block-20261008-1630.json` is in place and no judge call has been made since 11:12 UTC; next Astra
+window about 02:00 UTC on 10 October.
+
+## X2 — realistic packs of about 21,000 tokens, 12,000 against 24,000 (set declared and lines written 2026-10-09 18:15 UTC, before any of its documents exists)
+X1 showed the cliff on synthetic filler. X2 asks the same of realistic packs, and what a user with such a pack gets
+from main today.
+
+**Set `pack24`** (new, versioned, separate corpus: `pack24/authoring`, `pack24/evidence`, `pack24/datasets`; built with
+`ER_AUTH_DIR` / `ER_EVID_DIR` / `ER_BENCH_DIR`, so no frozen dataset or manifest hash moves). Four modes whose frozen
+packs are the largest (sales, call-center, lecture, seminar: 9,400 to 9,900 tokens). Each keeps its frozen documents
+unchanged and gains 4 to 6 documents of the same fictional world on adjacent subject matter, to a pack of 82,000 to
+90,000 source characters (about 20,500 to 22,500 tokens as the app counts them), written by authors blind to the
+product (`AUTHORING-ER-PACK24.md`). The added documents may not restate or change a frozen fact, must stay silent
+where the frozen pack is silent on purpose, and are checked mechanically for needle collisions
+(`pack24/check-noninterference.mjs`). Items:
+* 313 **derived** items: every frozen dev, dev2 and challenge item of these modes that uses the mode's base config,
+  re-issued with a new id (`ER-P24-<PFX>-D|D2|C1-nnn`), same question, same oracle, the enlarged config. The same
+  questions on the small pack are in `er6-*` and `er7-chal-main` (main, whole pack).
+* 48 **new** items (`ER-P24-<PFX>-N-nnn`, 12 per mode) that need an added document: 3 that need the whole pack, 2
+  calculations across an old and a new document, 2 facts deep in a long document, 2 version conflicts, 2 absent
+  facts, 1 which-value. All checkable without a judge.
+No holdout part: this is a measurement of a condition, not a set a fix will be designed on.
+
+**Build and arms.** `exp/x1-whole-pack-threshold` `237bba1a` (main `73b18d97` + the threshold read from the
+environment; never for main). Arm A 12,000 (main's behaviour: the pack does not fit, pieces are retrieved), arm B
+24,000 (the pack is read whole). Direct DeepSeek, one app at a time, fresh user data per arm, arms back to back.
+**Recorded, judge-free, checks obj-3:** rows with every required string; rows with a forbidden string; calculation
+results; the new rows by kind; required facts whose document string is in the request; first word and settled
+answer by surface; prompt tokens; the fix-up pass (ran, changed the text, over its budget, material over its
+96,000-character cap); rows right as drafted and wrong as shown.
+
+**Lines for "24,000 is worth proposing for packs of this size"** (arm B against arm A, same rows):
+1. Rows with every required string (all rows that have one): B at least 3 points above A, paired 95 % interval
+   above 0.
+2. Rows with a forbidden string: B at most A + 2.
+3. Calculation results right: B not more than 2 points below A.
+4. The 12 whole-pack rows: B right on at least as many as A.
+5. Spoken turns: median first word at most 400 ms above A, p90 at most 700 ms above, no turn over 5 s. Typed turns:
+   median at most 400 ms above.
+6. The fix-up pass: rows right as drafted and wrong as shown, B at most A + 2; passes over budget, B at most A + 2
+   points.
+7. No error, timeout or provider refusal in the arm.
+Also reported, no line: both arms against the same questions on the small pack (what the added volume costs).
+Astra: only if the lines are read, the 587 baseline judgments are done and calls remain; then both arms on the 48
+new rows and a seeded sample of 120 derived rows. Whatever the outcome nothing lands from X2 without Evin's word,
+and X1's note stands: a 24,000 threshold would raise the pass's cap with it.
