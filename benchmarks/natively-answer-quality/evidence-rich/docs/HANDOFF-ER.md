@@ -43,7 +43,7 @@ This file is generated: `node evidence-rich/report/build-handoff.mjs` (from `ben
 
 | Thing | State |
 |---|---|
-| App `main` | **Local and GitHub `95490839` on 2026-10-10 12:00 UTC** (two commits from another session sit on top of `67fb1b24`, neither touches the answer path; E26 is therefore on GitHub). `67fb1b24` = E26 (a DeepSeek key can do structured extraction), landed 2026-10-09 22:45 UTC on his "yes do all 4". Under it: `bbba4a58`, `71f718d8`, `ac9e3ab0` (another session's quick-action commits, pushed by that session), `4675ff0e` = E23 (derived résumé statements the résumé text contradicts are not evidence), landed 21:23 UTC and on GitHub through that push, then `4eb4b851` … `73b18d97` (E19). The benchmark runs of 9 October before 21:00 UTC measured `73b18d97`. |
+| App `main` | **Local `cdaedfad`, GitHub `95490839`** (local is one commit ahead: the 24,000 threshold, landed 2026-10-10 19:50 UTC on Evin's "1) yes"; pushing main needs his word). `cdaedfad` = `cand/e27` rebased: a reference pack is read whole up to 24,000 tokens, the claim pass's material cap is 136,000 characters. Below it: two commits of another session (`95490839`, `ea316087`), then `67fb1b24` = E26 (a DeepSeek key can do structured extraction). The main checkout carries other sessions' uncommitted edits; land a commit there without touching them (compare-and-swap `update-ref`, check out the clean files, `reset` + `apply` for an edited one; log entry of 2026-10-10 19:58 UTC). |
 | Last change landed | **E26** (`67fb1b24`, local main, 2026-10-09 22:45 UTC) and **E23** (`4675ff0e`, 21:23 UTC), both on Evin's "yes do all 4". Before them E19 (`73b18d97`). |
 | Benchmark | Branch `bench/evidence-rich`, draft PR #638, worktree `.claude/worktrees/aq-fix`. Folder `benchmarks/natively-answer-quality/evidence-rich/`. |
 | Benchmark branch on GitHub | **Pushed** on Evin's yes: `df815379..7b8050fb` at 21:26 UTC on 9 October, and the later commits of the session after that. Draft PR #638 stays a draft and unmerged. |
@@ -57,7 +57,7 @@ This file is generated: `node evidence-rich/report/build-handoff.mjs` (from `ben
 | Unseen question sets | `challenge` (117, readable), `challenge-val` (54, never read, aggregates only), `code1` (36 coding items with executed tests), authored blind and frozen 2026-10-09. Main on them, judge-free: 94 / 117, 45 / 54, 34 / 36. Added in the third session: `prov1` (24, readable) and `prov1-val` (24, never read) on which employer, title or date a résumé fact belongs to; main 23 / 24 and 21 / 24. And `pack24`, a separate corpus of four packs of about 20,700 tokens (313 re-issued items, 48 new), for X2. |
 | Where it started, blind holdout, Astra | 7.73, 42 hard fails (run `er-holdout-base`, the build before this work). |
 | Targets set at the start | 9.2 mean, under 1 % hard fails. **Not met.** |
-| Running or scheduled | **Nothing.** The second window of 10 October (11:03–11:56 UTC, on a key Evin replaced) judged 254 rows and ended when both AgentRouter keys answered out of quota. Judged in it: the 36 baseline rows that were missing; **E29 repetition 0** (34 rows where the pass with and without E19 shows different text: 8.11 → 7.95, hard 7 → 8, invention-flag rows 7 → 8; line 1 of its rule fails by one row, lines 2 and 3 hold; repetition 1 is not judged, so the verdict is open); the 40 holdout rows of the two profile modes on main `67fb1b24` (8.63 → 8.61 against main before E19; Looking for work −0.53, Technical Interview +0.48, neither interval excludes zero); the 48 new larger-pack questions of main against `cand/e27` (**6.34 → 8.18, +1.83, 95 % +0.90 to +2.77**, hard 15 → 11). Still unjudged, in this order: E29 repetition 1 (57; read with `report/pair-aggregate.mjs --plan evidence-rich/results/replay/astra-plan-e29-k1.json` and `report/e29-breakdown.mjs --plan … --k 1`; the derived runs `rp-e29-*` are rebuilt by `replay-judge.mjs prep --arm e29-pre|e29-e19[@1]`); the derived pack24 rows of main against `cand/e27` (92 + 120); E26 on the unseen profile sets (96); the other X2 arms (336); the rest of E26 (216); 140 holdout rows; drafts. `window-oct10.mjs` (copy in `~/natively-er-backup/scripts/`) does exactly that and judges only what is missing. |
+| Running or scheduled | **Two detached scripts, both survive a session restart.** (1) `~/natively-er-backup/window-run-oct11-am/window-oct11.mjs`: waits until 02:00:30 UTC on 11 October, then probes, calibrates and judges only what is missing: E30 runs listed in `window-extra-plans*.txt` (re-read before every stage) → E29 repetition 1 (57) → derived pack24 rows of main against the 24,000 build (92 + 120) → E26 (96, then 216) → the other X2 arms (336) → 140 holdout rows → drafts. Status `window-oct10.json` beside it; watch with `watch.mjs` there. (2) `~/natively-er-backup/chains/chain-e30-wait.sh`: **the DeepSeek account ran out of balance on 2026-10-10 at 19:59 UTC** ("402 Insufficient Balance", `is_available: false`), so no app run and no generator replay can be made; the script asks the balance endpoint every 5 minutes for 14 hours and, when it returns, runs E30's app sets (candidate `cand/e28b` `7067ab3c` in `er-main`, main `cdaedfad` in `er-e21`), reads the judge-free lines (`e30-gate.txt`), and lists the candidate's runs for judging only if none fails. Log: `chain-e30-wait.out`. Neither script commits or pushes. Read E30 with `report/e30-read.mjs` and `report/window-read.mjs pair base:er6-dev-main base:er11-dev-e28b --by mode,condition` against the rule in the log ("E30"). |
 | Declared experiments | None open. After "yes do all 4": **E23 landed** (correctness fix). **E26 landed** (DeepSeek rung, last, in the structured ladder; every profile row extracted by the model, wrong title-employer pairings in the prompts 259 → 0, right 88.9 → 90.3 % on 226 profile questions; a profile upload takes 73 s on DeepSeek). **E27**, the 24,000 threshold with the pass's cap at 136,000: confirmation run 86.1 % right against main's 54.3 % on the 20,700-token packs, all five lines hold, **NOT landed** (`cand/e27`, his word needed). **Arm C**: main with cloud embeddings (Voyage) 63.4 %. **E28 / E28b** (documents before the question, for the provider's cache): the plain move costs 2.8 points; with the question repeated last it holds its lines on 1,210 replayed prompts (+2.4 points on development prompts, 65 to 89 % less uncached input); not built. Earlier the same day: E24 and E25 failed, X2 measured, E21 not proposed, E22 confirmed main's calculation notice. |
 | Candidate branches | **`cand/e27` `0256eed4`** (worktree `er-main`): the 24,000 threshold, one commit on main `67fb1b24`, ready to fast-forward on Evin's word. Merged into main: `cand/e23`, `cand/e26`. Records only: `cand/e21` `298b2b5b`, `exp/x1-whole-pack-threshold` `237bba1a`. |
 
@@ -256,7 +256,7 @@ node ~/natively-er-backup/scripts/er-window-chain-20261009.mjs   # a whole windo
 - HTTP 402 means the ration is closed: wait for the next window. HTTP 403 means the provider has blocked access for a while: stop, record it, do not retry the denied calls and do not change key, route or content.
 - Do not run `astra-next5.sh` or the older `astra-next*.sh` blindly: their automatic commit lacks the current attribution line and their failure check covers 402 but not 403.
 
-**The quota reply comes as HTTP 403 too (found 2026-10-10).** When an account's balance is spent the gateway answers HTTP 403 with `{"message":"user quota is not enough","code":"insufficient_user_quota"}`. That is the quota case, not the access block: `astra/client.mjs` has handled that body as quota since 2026-10-01 (next key of the pool, stop when every key is spent). The wrappers of 8 October (`/tmp/er-window-probe-20261008.mjs`, `/tmp/er-access-guard-20261008.mjs`) stop on every 403 and so never reach the second key. `er-window-probe-v2.mjs` and `er-access-guard-v2.mjs` (in `~/natively-er-backup/scripts/`) pass that one body through and stop on every other 403 exactly as before (flag `/tmp/er-access-block-20261008-1630.json`, nothing retried, no key, route, content or encoding changed). This reading was made while Evin was asleep and reported to him; if he wants every 403 to stop the window, use the 8 October wrappers.
+**The quota reply comes as HTTP 403 too (found 2026-10-10).** When an account's balance is spent the gateway answers HTTP 403 with `{"message":"user quota is not enough","code":"insufficient_user_quota"}`. That is the quota case, not the access block: `astra/client.mjs` has handled that body as quota since 2026-10-01 (next key of the pool, stop when every key is spent). The wrappers of 8 October (`/tmp/er-window-probe-20261008.mjs`, `/tmp/er-access-guard-20261008.mjs`) stop on every 403 and so never reach the second key. `er-window-probe-v2.mjs` and `er-access-guard-v2.mjs` (in `~/natively-er-backup/scripts/`) pass that one body through and stop on every other 403 exactly as before (flag `/tmp/er-access-block-20261008-1630.json`, nothing retried, no key, route, content or encoding changed). Evin confirmed this reading on 2026-10-11 IST ("nope try with the other key").
 
 **What the next Astra window owes** (no flag is in place; neither window of 10 October had an access block). Both keys were out of quota at 11:56 UTC on 10 October (the first key's closed reply is HTTP 402 "Budget pool quota has been exhausted", the second's the 403 quota body), so the next window opens only when the budget pool refills or a key is topped up. Run the window script from a folder that outlives the session (it writes its status and logs beside itself; on 10 October a session restart emptied the scratch folder and killed it mid-window): copy the four files to a folder under `~/natively-er-backup/` and start it with `nohup`. If the script has to be restarted inside one window, `ER_CAL_SINCE=<ISO time of the window's start>` reuses the calibration already passed in it:
 
@@ -642,10 +642,10 @@ Section 13 prints the pass's instruction block as it is on main and the full tex
 4. **The judged baseline of main with E19: 8.873, 78 hard fails, all 630 rows** (2026-10-10; 7.7). Not different from main before E19 on the same questions (−0.062, interval −0.22 to +0.09). **The 24,000 candidate `cand/e27` now has a judged reading on the 48 new larger-pack questions: 6.34 → 8.18, +1.83 (+0.90 to +2.77)** (7.8); landing it is his word. The candidate sits on `67fb1b24`; main has moved two commits (`95490839`, another session), so it is rebased before any landing.
 5. **Windows and a packaged build.** Nothing in this work has been executed on Windows or in a packaged app.
 6. **The whole-pack threshold: see 1.** X1 (synthetic), X2 (realistic packs), arm C (cloud embeddings: 63.4 %) and the candidate's confirmation run are in the log. 48,000 is not safe.
-7. **The judge's quota.** Two windows on 2026-10-10: 02:05–02:51 UTC (545 judgments, both accounts then out of quota) and, after Evin replaced a key, 11:03–11:56 UTC (254 judgments, both keys out of quota again). No access block that day; the blocks of 2026-10-08 (five calls) and 2026-10-09 (three calls) were not retried. About 1,050 judgments are queued, and the 630 drafts after them (the "Running or scheduled" row). The judge budget, not ideas, is the limit on this work. **His call too:** whether a 403 that carries the quota reply may go on to the second key, as it did in both windows of 10 October (section 4); he was asked and answered with a new key, not with a yes or no.
+7. **The judge's quota.** Two windows on 2026-10-10: 02:05–02:51 UTC (545 judgments, both accounts then out of quota) and, after Evin replaced a key, 11:03–11:56 UTC (254 judgments, both keys out of quota again). No access block that day; the blocks of 2026-10-08 (five calls) and 2026-10-09 (three calls) were not retried. About 1,050 judgments are queued, and the 630 drafts after them (the "Running or scheduled" row). The judge budget, not ideas, is the limit on this work. **Settled:** a 403 that carries the quota reply goes on to the other key (Evin, 2026-10-11 IST: "nope try with the other key"); every other 403 still stops everything.
 8. **Code verification is switched off app-wide** (`electron/llm/codeVerification/verificationEnabled.ts`, since 2026-07-18, no reason recorded in the commit). Main passes 34 of 36 coding questions of `code1` without it. Its correction is posted as a new message, which the benchmark harness does not capture, so it was not measured.
 9. **A profile upload on DeepSeek takes about 73 s** (a résumé with a posting; 3 s with the rule-based parser it replaces), because the whole profile pipeline now runs on it, about ten calls one after the other. E26 landed with that cost stated. Shortening it (fewer calls, or in parallel) is a separate change.
-10. **Build E28b?** Putting the documents before the question and repeating the question last makes a whole pack a cached prefix: on 1,210 replayed prompts right answers +2.4 points (development), +2.3 (unseen, interval through 0), −1.1 (larger packs, inside the margin), and 65 to 89 % fewer input tokens read new. It touches the order of every request that carries documents; implementation notes are in the log.
+10. **E28b is built as E30, not measured, not landed.** `cand/e28b` `7067ab3c` (worktree `er-main`, one commit on main `cdaedfad`): on a turn with an evidence block the evidence section comes first in the user message and the question is asked again last, before the user's own instructions; a turn with no evidence is unchanged; 9 new tests, suites as main. Evin's word was "do it" (2026-10-11 IST). Its rule (seven judge-free lines, three judged) is in the log. **Blocked on the DeepSeek balance** (see the "Running or scheduled" row). Landing is his word after the reading.
 
 **Next candidates, in the order the data suggests**
 
@@ -4927,6 +4927,9 @@ Entry headings with their line numbers in `docs/ITERATIONS-ER.md`, and every lin
 - L3310: E29 — a clean check of E19 on main's own evidence-missing drafts: plan and rule (written 2026-10-10 02:56 UTC, before the replay)
 - L3325: E29 — judge-free part: the two arms on the same drafts (replayed 02:56–02:57 UTC, recorded 2026-10-10 02:58 UTC)
 - L3343: Astra window of 2026-10-10, 11:03–11:56 UTC — baseline complete on 630 rows, E29 repetition 0, holdout profile modes, the first 48 pairs of main against `cand/e27` (recorded 2026-10-10 11:59 UTC)
+- L3419: Evin's four answers, and the 24,000 threshold landed on local main (recorded 2026-10-10 19:58 UTC)
+- L3437: E30 — the documents-first layout built in the app (E28b), rule written 2026-10-10 19:58 UTC, before any run of it
+- L3478: E30 — the first app run stopped after four rows: the DeepSeek account has no balance (recorded 2026-10-10 20:04 UTC)
 
 ### B.1 The log
 
@@ -8347,6 +8350,85 @@ the candidate none), so nothing is said about them. Nothing lands: the candidate
 
 **Not judged:** E29 repetition 1 (57), the derived X2 rows (92 + 120), E26 on the profile sets (96) and its other
 rows (216), the other X2 arms (336), 140 holdout rows, the drafts. The window script judges only what is missing.
+
+##### Evin's four answers, and the 24,000 threshold landed on local main (recorded 2026-10-10 19:58 UTC)
+To the four open points of the afternoon report he answered "1) yes ,2) nope try with the other key 3) scedhule it
+4) do it": (1) land the 24,000 threshold; (2) a 403 that carries the quota body goes on to the other key (the v2
+guard stands; every other 403 still stops everything); (3) schedule the next window; (4) build the documents-first
+layout.
+**(1)** `cand/e27` rebased onto main `95490839` (two commits from another session, neither on the answer path) =
+`cdaedfad`. On the rebased commit: type check clean; intelligence + context-intelligence 2,930 pass, 0 fail; llm
+5,937 pass, 1 fail, and that one test fails the same way on main `95490839` without this commit
+(`QuickActionTurnRequest2026_10_09`, another session's area); services: the same 167 failing names as main in
+this worktree (native modules not built there). Local main fast-forwarded `95490839` → `cdaedfad` at 19:50 UTC (reflog).
+The main checkout had another session's uncommitted edit in `claimVerifier.ts` (a different hunk): it is intact
+(same added and removed lines before and after), nothing was staged, nothing of theirs was touched. **Not pushed**
+(pushing main is his word). macOS: suites run. Windows: reviewed, not executed (two constants and tests; no
+platform branch). No packaged build.
+**(3)** `window-oct11.mjs` (copy of the 10 October script; `~/natively-er-backup/window-run-oct11-am/`) was started
+detached at 19:41 UTC; it waits until 02:00:30 UTC on 11 October, then probes, calibrates and judges only what is
+missing. A session job at 02:07 UTC reads and records.
+
+#### E30 — the documents-first layout built in the app (E28b), rule written 2026-10-10 19:58 UTC, before any run of it
+**Candidate** `cand/e28b` `7067ab3c` (worktree `er-main`, one commit on main `cdaedfad`): in `composePrompt`, on a
+turn with an evidence block the "# Evidence" section is the first thing in the user message, and the question
+section is repeated word for word under "# The question again (answer this)" after the app's notices and before
+the user's own instructions, which stay last. A turn with no evidence block is byte-for-byte the old layout.
+Nothing downstream reads the section order (searched: the fix-up pass and the spoken repair take the user message
+whole; no code looks for "# Question" or "# Evidence"). One new test file (9 tests); type check clean;
+intelligence + context-intelligence 2,930 pass, 0 fail; llm the same single failure as main.
+**What the replays said (E28b, 1,210 prompts):** right answers +2.4 points on development prompts, +2.3 on unseen
+ones, −1.1 on the larger packs; prompt tokens read new −65 %, −36 %, −89 %. They replayed the answer call only.
+**Runs** (the app, direct DeepSeek deepseek-flash, fresh user data, one app at a time, no judge call beside them):
+the candidate on dev + dev2 (630), challenge + challenge-val (171), prov1 + prov1-val (48), runs `er11-*-e28b`;
+main `cdaedfad` on dev (270) in the same hour, `er11-dev-main`, for the first-word line only. Compared with
+main's recorded runs of the same questions: `er6` (dev, dev2; main with E19), `er7` (challenge sets), `er8`
+(prov1 sets). Between those and the candidate lie E23 and E26 (the two profile modes only) and E27 (packs over
+12,000 tokens only; none here), so the two profile modes are also shown apart. challenge-val and prov1-val are
+read as counts only.
+**Judge-free lines** (`report/e30-read.mjs`, checks obj-3):
+1. Built as replayed: every candidate row whose request has an evidence block has it first in the user message and
+   ends with the repeated question; every row without one has neither. 100 %.
+2. Every row answered: no error, no timeout, no empty answer.
+3. Right by the fixed checks, development 630: not more than 2.0 points below main's run; rows with a forbidden
+   string at most main + 5.
+4. The same on the 219 unseen rows: not more than 2.0 points below main; forbidden-string rows at most main + 3.
+5. The fix-up pass and the repair still work on the new request: rows the pass edited within 5 points of main's
+   share, rows with a second request (repair) at most main's share + 2 points.
+6. First word, candidate dev against main dev of the same hour: median not more than 150 ms later, spoken and
+   typed. (No gain is expected in this rig: it opens a new session for every question.)
+7. The purpose, by replay of the candidate's own recorded dev prompts in recorded order with the session id made
+   constant (`replay-generator.mjs`, nothing else changed): cached share of the prompt tokens at least 60 % at the
+   median.
+**Judged lines** (gpt-6-astra, window of 11 October; the candidate's 270 dev rows, paired by question with the
+judged rows of `er6-dev-main`; two app runs share almost no identical answers, so every row is a pair):
+J1. mean not more than 0.20 below main's on the same questions;
+J2. hard fails at most main's + 8, invention-flag rows at most main's + 5 (run-to-run turnover on 270 rows is
+    about 6 hard-fail rows either way);
+J3. no mode lower by more than 0.70 with an interval that excludes zero.
+If the pool lasts, dev2's 360 rows are judged next and read as the repeat with the same lines (hard fails + 10).
+**Decision.** Every line holding makes it a keep candidate; any line failing means it is not proposed. Landing is
+Evin's word either way; his "do it" was to build it.
+
+##### E30 — the first app run stopped after four rows: the DeepSeek account has no balance (recorded 2026-10-10 20:04 UTC)
+Chain started 19:59:16 UTC (candidate dev, `er11-dev-e28b`). The first request recorded on the wire has the new
+layout (the user message starts with "# Evidence (untrusted data", then "# Question", the notices, and ends with
+"# The question again (answer this)" and the question). But the provider answered **"402 Insufficient Balance"**
+on the first row and the app showed its no-answer text on the next three. Stopped at 20:02 UTC (chain, runner and
+app; nothing else was running). The read-only balance endpoint confirms it: `is_available: false`, total balance
+0.00 USD. This is the generator's own key (direct DeepSeek); no other model or route is substituted, so **no app
+run and no generator replay can be made until Evin tops the account up.** The four rows are kept aside in
+`results/_aborted/er11-dev-e28b-402-insufficient-balance` and are in no reading.
+**What waits for the balance, unattended** (`~/natively-er-backup/chains/chain-e30-wait.sh`, started detached
+20:03 UTC, log `chain-e30-wait.out` beside it): it asks the balance endpoint every 5 minutes for up to 14 hours;
+when the account can serve again and no other dev app is up it runs, one app at a time: candidate dev → main
+`cdaedfad` dev (same hour) → candidate challenge, challenge-val, prov1, prov1-val → reads lines 1 to 6 and the
+unseen sets (`report/e30-read.mjs`, output `e30-gate.txt`) → **only if none fails** lists `er11-dev-e28b` for the
+judge window → candidate dev2 → the same on all 630 → lists `er11-dev2-e28b` → the cache replay of line 7. It
+commits and pushes nothing. The window script re-reads that list before each of its stages, so a run listed
+while a window is open is judged at the next stage boundary; one listed later waits for the next window.
+**Window of 11 October, order now:** listed E30 runs (if any) → E29 repetition 1 (57) → the derived pack24 rows →
+E26 → the other X2 arms → the rest of the holdout → drafts.
 
 ---
 
