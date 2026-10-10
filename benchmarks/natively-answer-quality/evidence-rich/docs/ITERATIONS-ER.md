@@ -3174,3 +3174,20 @@ larger packs). These are rows this work has read many times, so, as E21 taught, 
 before anything else is concluded** (declared now, before that replay): the same two arms on the prompts of
 `er7-chal-main`, `er7-chalval-main`, `er8-prov1-main` and `er8-prov1val-main` (219 prompts; the two unread
 sets as aggregates). Line: right not more than 2 points below base, forbidden-string rows at most base + 3.
+
+### E28b — unseen prompts: the line holds (2026-10-10 00:24 UTC; replayed 00:20–00:24 UTC, 219 prompts, 0 failed calls; the two unread sets as aggregates)
+| 219 unseen prompts | base | documents first, question repeated last |
+|---|---|---|
+| right by the fixed checks | 80.8 % | 83.1 % (paired +2.3, 95 % −1.8 to 7.3) |
+| every required string (183 rows) | 83.6 % | 86.9 % (paired +3.3, 95 % −1.1 to 7.1) |
+| rows with a forbidden string | 17 | 17 |
+| cached share of the prompt tokens, median | 37.4 % | 64.4 % |
+| prompt tokens not served from the cache | 1.80 million | 1.14 million (−36 %) |
+Readable part: challenge 76.9 % → 81.2 % right (117 rows), prov1 95.8 % → 95.8 % (24 rows).
+**Where E28b stands.** Three replays, 1,210 prompts: right answers +2.4 points on development prompts (interval
+above 0), +2.3 on unseen ones (interval through 0), −1.1 on the larger packs (inside its margin); input tokens the
+provider has to read new −65 %, −36 % and −89 %; the first token 0.37 s earlier on the larger packs and unchanged
+on ordinary ones. Every line set for it holds except the first-token line on ordinary packs. It is a lead for a
+composer change (the evidence section first, the question section repeated last). It has NOT been run in the app:
+the layout moves the question on every turn that carries documents, the fix-up pass and the spoken repair inherit
+that request, and none of that is in a replay of the answer call alone.
