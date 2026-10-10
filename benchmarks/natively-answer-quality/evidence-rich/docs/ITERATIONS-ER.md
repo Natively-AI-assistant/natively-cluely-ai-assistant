@@ -3339,3 +3339,79 @@ I have" answers (its purpose) or carry an invented statement is the judged part:
 for repetition 1 (`results/replay/astra-plan-e29.json`, `astra-plan-e29-k1.json`; derived runs `rp-e29-*` are
 prepared). `window-oct10.mjs` now judges repetition 0 right after the 36 missing baseline rows and repetition 1
 after the X2 pair. Read with `report/pair-aggregate.mjs --plan …` against the rule above.
+
+### Astra window of 2026-10-10, 11:03–11:56 UTC — baseline complete on 630 rows, E29 repetition 0, holdout profile modes, the first 48 pairs of main against `cand/e27` (recorded 2026-10-10 11:59 UTC)
+**On whose word.** Evin, after the morning report: "i have updaetd the api key , now try again at 4:30 ist pm". The
+env file changed at 09:30 UTC (both key names present). No key, route, content or encoding was changed by me.
+**Probe and guard.** 10:58:50 UTC by hand: first key **HTTP 402** "Budget pool quota has been exhausted", second key
+HTTP 403 with the quota body (`insufficient_user_quota`); neither is an access block, no flag written. 11:03:02
+by hand: first key HTTP 200, returned model exactly gpt-6-astra. The guard is the v2 one of this morning (the quota
+body goes on to the next key, every other 403 stops everything); Evin was asked whether that reading stands and
+has not answered, his reply was the new key.
+**Calibration.** 11:03:09–11:13:01, 38 of 38 correct, returned model exact on every call
+(`calibration-astra-1791630781258.json`).
+**An interruption, and what I did.** The Claude session restarted at about 11:25 UTC; its scratch folder was emptied
+and the window script died with it (judgments already written were intact; this morning's raw window logs kept
+there are lost, their content is in the entries above). I restored the scripts from `~/natively-er-backup/scripts`
+and restarted at 11:30:16; that run's own probe at 11:30:28 answered not-ok without an access block (the reply was
+not kept); I stopped it seconds later to start the script again detached from a durable folder
+(`~/natively-er-backup/window-run-oct10-pm/`), whose probe at 11:30:35 was clean. So two probes seven seconds
+apart, where the rule says four minutes: my mistake in the hurry, recorded. The restarted script did not repeat the
+calibration: an added switch (`ER_CAL_SINCE`) reuses a calibration passed inside the same window (11:13:01).
+**End.** 11:56:04–11:56:23 UTC: the first key answered out of quota, the client went on to the second key, which
+answered the quota reply; "account quota exhausted — stopping new judge calls". Script finished 11:58:06. No
+access block, no flag, no model mismatch, nothing retried. 254 new judgments: baseline 36, E29 repetition 0 54 (its
+other rows are baseline rows), holdout 40, pack24 124 (arm A 76, candidate 48); three calls of arm A were cut off
+when the pool closed and left no judgment.
+
+**1. The baseline of main with E19 (`73b18d97`), all 630 rows, checks obj-3** (`report/window-read.mjs`)
+
+| | rows | mean | p10 | median | hard fails | ≥ 9.5 | invention-flag rows |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| main with E19 (`er6`) | 630 | 8.873 ±0.15 | 4.0 | 9.8 | 78 (12.4 %) | 412 | 45 |
+| main before E19 (`er4`) | 630 | 8.935 ±0.15 | 4.0 | 9.8 | 70 (11.1 %) | 415 | 39 |
+
+Paired on the 630 questions: −0.062 (95 % −0.22 to +0.09), 122 better, 121 worse. Per mode (mean before → now, hard
+before → now): General 9.18 → 8.98 (6 → 7), Sales 8.63 → 8.21 (11 → 18; −0.43, −0.91 to +0.05), Recruiting
+8.90 → 8.98 (6 → 5), Team Meet 8.88 → 9.04 (7 → 5), Looking for work 9.13 → 9.04 (6 → 7), Lecture 9.10 → 9.15
+(8 → 7), Technical Interview 8.90 → 8.83 (11 → 11), Seminar 8.84 → 8.90 (9 → 8), Call Center 8.85 → 8.73 (6 → 10).
+Per condition: one source 9.20 → 9.23 (20 → 18), several sources 8.84 → 8.53 (16 → 22; −0.31, −0.70 to +0.08),
+conflict or stale 9.02 → 8.98 (9 → 10), evidence missing 8.04 → 7.68 (15 → 20; −0.36, −0.96 to +0.24), irrelevant
+source 9.12 → 9.24 (5 → 4), follow-up 8.63 → 9.02 (5 → 4). No interval excludes zero. The reading of the 594 rows
+stands on all 630: the two runs are not distinguishable in the mean; the lines that moved most are Sales, several
+sources and evidence missing, each inside its interval.
+**This is the baseline any next production change is read against: 8.873, 78 hard fails, 630 rows.**
+
+**2. E29 — repetition 0 against its rule (34 rows where the two passes' shown text differs, all judged on both sides)**
+
+| | pass before E19 | pass as on main (E19) |
+|---|---:|---:|
+| mean | 8.114 | 7.946 (−0.168, 95 % half-width 0.66) |
+| hard fails | 7 | 8 |
+| invention-flag rows | 7 | 8 |
+
+Line 1 (hard fails with E19 ≤ without) **fails by one row**; line 2 (invention-flag rows ≤ without + 1) holds;
+line 3 (mean ≥ without − 0.20) holds. By which pass edited the draft (`report/e29-breakdown.mjs`): only the old
+pass edited, i.e. the drafts E19 now leaves alone, 11 rows 8.33 → 8.00, hard 2 → 3, invention rows 2 → 3; only the
+E19 pass edited, 3 rows 4.30 → 7.64, hard 3 → 1; both edited with different text, 20 rows 8.57 → 7.96, hard
+2 → 4. So most of the difference sits in rows both passes edit, which is replay-to-replay wording, not what E19
+changed. **Repetition 1 (57 judgments) was not judged: NOT VERIFIED.** By the rule a line failing on one repetition
+only is unsettled; with one repetition judged the honest state is: line 1 failed once, by one row, verdict open.
+Nothing is proposed from it.
+
+**3. The blind holdout, the two profile modes, main `67fb1b24` against main before E19 (aggregates only; nothing read)**
+40 pairs: 8.631 → 8.606 (−0.025, 95 % −0.49 to +0.44), hard 7 → 6, invention-flag rows 5 → 4, 7 better, 6 worse.
+Looking for work, 20: 9.075 → 8.544 (−0.53, −1.15 to +0.09), hard 2 → 2, 3 better, 6 worse. Technical Interview,
+20: 8.188 → 8.668 (+0.48, −0.15 to +1.11), hard 5 → 4, 4 better, 0 worse. The two modes move in opposite
+directions by the same amount and neither interval excludes zero; the fixed checks' 19 → 16 in Looking for work is
+neither confirmed nor cleared by 20 rows. The other 140 holdout rows of this run were not judged.
+
+**4. Main against the 24,000 candidate `cand/e27` on the larger packs — the 48 new questions only**
+48 pairs (12 per mode): 6.343 → 8.176, **+1.833 (95 % +0.90 to +2.77)**, hard 15 → 11, invention-flag rows 6 → 4,
+31 better, 9 worse, p10 3.3 → 4.0. Sales +2.26 (+0.69 to +3.83), Seminar +1.99, Call Center +1.80, Lecture +1.29
+(the last three intervals touch zero at n = 12). No line was set for the judged pair; it is the judged side of the
+judge-free 54.3 % → 86.1 %. The 120 derived rows per arm were not reached as pairs (arm A has 28 of them judged,
+the candidate none), so nothing is said about them. Nothing lands: the candidate waits for Evin's word.
+
+**Not judged:** E29 repetition 1 (57), the derived X2 rows (92 + 120), E26 on the profile sets (96) and its other
+rows (216), the other X2 arms (336), 140 holdout rows, the drafts. The window script judges only what is missing.
