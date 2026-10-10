@@ -1,9 +1,17 @@
 # Natively Page Context — companion browser extension
 
 A minimal, privacy-correct Manifest V3 extension that sends the **active tab's
-readable content** to your local Natively desktop app, **once, on demand**. It
-never runs in the background, never auto-captures, and only ever talks to your
-own machine over loopback.
+readable content** to your local Natively desktop app, once per capture, and
+only ever talks to your own machine over loopback.
+
+Capture is either explicit (hotkey or the popup's **Capture this page** button)
+or automatic: when **Auto-detect coding problems** / **Auto-attach coding
+context** are enabled in Natively's **Settings → Sync → Smart Browser
+Context** (on by default), the desktop can request the active tab's content
+before generating an answer on a page it classifies as a coding/interview
+problem, with no click or hotkey press required. See
+[Capture](#capture) below for both paths and how to turn automatic capture
+off.
 
 It is part of the [Natively](../) monorepo and is licensed under the
 **Natively Personal Use Source License v1.0**, same as the desktop app. Source
@@ -47,6 +55,7 @@ it. See [`CONTRACT.md`](./CONTRACT.md) for the `/dom` + `/ws` + `/pair` API.
 | `storage` | Persist the pairing token (`chrome.storage.local`) and track the last-active tab (`chrome.storage.session`). |
 | `alarms` | A 25s heartbeat that keeps the MV3 service worker resident so it can receive the desktop's capture push. |
 | `host_permissions: http://127.0.0.1/*`, `http://localhost/*`, `ws://127.0.0.1/*` | Let the service worker make the cross-origin loopback `fetch`/WebSocket to the desktop. **Loopback only** — the extension cannot reach any public site's network. |
+| `optional_host_permissions` (coding/interview sites, plus broad `https://*/*` and `http://*/*` patterns) | Declared but **never granted at install**. Chrome only lets the extension request a site's access at runtime if it is declared here; a lasting grant is one browser prompt, either **Allow on all sites** in the popup (every site) or the per-site prompt **Capture this page** shows only when `activeTab` is not enough and can be revoked under the extension's Details → Site access. Desktop-initiated capture (automatic, or the desktop hotkey) needs this access for the site; the popup's **Capture this page** works through `activeTab` without it. |
 
 There is **no `<all_urls>`** and **no persistent content script**. Extraction
 code is injected via `chrome.scripting.executeScript` into the active tab only,
@@ -98,6 +107,23 @@ changes. You only re-pair if you click **Reset pairing** in Settings → Sync.
   isn't reachable, the desktop takes a screenshot instead.
 - **From the popup:** click the toolbar icon → **Capture this page** (works while
   Chrome is focused).
+- **Automatic (setting on by default, needs site access):** when the desktop's
+  **Smart Browser Context** settings have **Auto-detect coding problems** and
+  **Auto-attach coding context** enabled
+  (`electron/services/SettingsManager.ts`'s `getBrowserContextSettings()` — both
+  default `true`), the desktop asks the extension for the active tab's content
+  before answering, on a page it classifies as a coding/interview problem — no
+  hotkey, popup click, or other user action required for that request. The
+  extension holds no access to coding sites after install (they are optional
+  host permissions), so a fresh install captures nothing automatically until you
+  grant access: click **Allow on all sites** in the popup and accept the browser prompt
+  (every site, one prompt). **Capture this page** usually works through temporary
+  `activeTab` access and grants nothing lasting; only if that is not enough does it
+  prompt for access to that one site, and accepting that prompt also lets
+  automatic capture work there. If you decline, manual
+  capture keeps working and automatic capture stays off. Turn the feature off in
+  Natively **Settings → Sync → Smart Browser Context**, or use only the manual
+  hotkey/popup capture above.
 
 Each capture pushes **once**. The desktop shows a "Captured: \<title\>" chip and
 consumes it on the next "What to say".
