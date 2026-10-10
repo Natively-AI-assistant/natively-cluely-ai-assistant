@@ -1,6 +1,6 @@
 # Handoff: Natively answer-quality work on the evidence-rich benchmark
 
-Written 2026-10-09 (updated at 13:30 UTC after a second session, at 20:20 UTC after a third, and at 00:30 UTC on 10 October after Evin's "yes do all 4") for whoever continues this work, human or agent. It covers 2026-10-03 to 2026-10-10.
+Written 2026-10-09 (updated at 13:30 UTC after a second session, at 20:20 UTC after a third, and at 00:26 UTC on 10 October after Evin's "yes do all 4") for whoever continues this work, human or agent. It covers 2026-10-03 to 2026-10-10.
 
 This one file holds everything: the current state, what Evin asked and decided, how the benchmark works, every iteration with its rule and verdict (kept and rejected), the scores per mode per round, every code and prompt change with its reason and its full diff, the complete experiment log, the investigation documents, and all 630 development questions with the answers that still exist.
 
@@ -73,7 +73,7 @@ The last three days, in order:
 
 - **2026-10-09, third session (18:05–20:20 UTC).** Evin's instructions: finish the 587 judgments when access legitimately returns, establish the baseline before any proposal, investigate a narrow source-aware provenance mechanism validated on unseen questions before any Astra call, evaluate realistic 24k packs; no E21, no broader calculation notice, no rewrite of the conflict instructions; everything off main. No Astra call was made (the window is at about 02:00 UTC). Found in the recorded prompts: the app's own derived résumé sections state wrong employers and dates (the benchmark runs the rule-based profile parser, because a DeepSeek-only user has no model for structured extraction), and three hard fails repeat them. E23 removes such statements; it holds on development rows and on rows it is not about, and its gain on 22 unseen rows is +6.8 points with an interval through 0, so it is not proposed. E24 and E25 failed. X2: four realistic packs of about 20,700 tokens; main answers 54.3 % of 361 questions right and delivers 48 % of the needed facts, the same build reading the pack whole 87.0 % and all of them, with a faster spoken first word and a slower typed one.
 
-- **2026-10-09 21:05 UTC to 2026-10-10 00:30 UTC, after "yes do all 4 one by one".** (1) E23 rebased, four suites against main's baseline, fast-forwarded. (2) E26 written, measured in the app on 226 profile questions, all lines hold, fast-forwarded; main had moved under it twice by another session's commits, none in the answer path. (3) The 24,000 threshold built as `cand/e27` with the pass's cap raised, confirmed on the larger packs, and main measured with a cloud embedding provider (arm C); not landed. (4) The benchmark branch pushed. A correction on the way: X2's "the pass is out of budget on a quarter of its turns" was a wrong proxy; by the app's own log it was once in 270. Then, on Evin's "maximise the window": one prioritized judging script scheduled for 07:30 IST, and the layout replays E28 / E28b.
+- **2026-10-09 21:05 UTC to 2026-10-10 00:26 UTC, after "yes do all 4 one by one".** (1) E23 rebased, four suites against main's baseline, fast-forwarded. (2) E26 written, measured in the app on 226 profile questions, all lines hold, fast-forwarded; main had moved under it twice by another session's commits, none in the answer path. (3) The 24,000 threshold built as `cand/e27` with the pass's cap raised, confirmed on the larger packs, and main measured with a cloud embedding provider (arm C); not landed. (4) The benchmark branch pushed. A correction on the way: X2's "the pass is out of budget on a quarter of its turns" was a wrong proxy; by the app's own log it was once in 270. Then, on Evin's "maximise the window": one prioritized judging script scheduled for 07:30 IST, and the layout replays E28 / E28b.
 
 Evin's standing instructions that bind the next session:
 
@@ -597,7 +597,7 @@ Section 13 prints the pass's instruction block as it is on main and the full tex
 1. **Land the 24,000 threshold?** `cand/e27` `0256eed4` is one commit on main, tested and confirmed (86.1 % right against 54.3 % on packs of about 20,700 tokens; spoken first word 0.77 s earlier, typed 0.49 s later; request 3.6 times the size on those turns). Not measured: models with a small context window, Windows, a packaged build. `git merge --ff-only cand/e27` in the main checkout, after rebasing if main has moved.
 2. **Merge or close draft PR #638.** Merging puts the blind holdout's questions on public main.
 3. **Delete the old-history branches on GitHub** (`fix/aq-astra`, `cand/e16b`, `cand/e15`)? They keep files purged on 2026-10-06 reachable.
-4. **A judged score of main with E19.** Still owed at 00:30 UTC on 10 October: 581 of 630 judgments missing. The window script of 02:00 UTC does them first. **Also his: pushing main** (local `67fb1b24` is one commit ahead of GitHub).
+4. **A judged score of main with E19.** Still owed at 00:26 UTC on 10 October: 581 of 630 judgments missing. The window script of 02:00 UTC does them first. **Also his: pushing main** (local `67fb1b24` is one commit ahead of GitHub).
 5. **Windows and a packaged build.** Nothing in this work has been executed on Windows or in a packaged app.
 6. **The whole-pack threshold: see 1.** X1 (synthetic), X2 (realistic packs), arm C (cloud embeddings: 63.4 %) and the candidate's confirmation run are in the log. 48,000 is not safe.
 7. **The provider's access block.** Two in three days (2026-10-08 02:07 UTC, five calls; 2026-10-09 11:12 UTC, three calls two minutes into judging, after a clean calibration). Nothing was retried. If it keeps happening the judge budget is the limit on this work, not ideas.
@@ -4879,6 +4879,7 @@ Entry headings with their line numbers in `docs/ITERATIONS-ER.md`, and every lin
 - L3163: E28b — the 630 development prompts: more right answers, a third of the input cost, no first-token gain (2026-10-10 00:20 UTC; replayed 00:10–00:20 UTC, 0 failed calls)
 - L3178: E28b — unseen prompts: the line holds (2026-10-10 00:24 UTC; replayed 00:20–00:24 UTC, 219 prompts, 0 failed calls; the two unread sets as aggregates)
 - L3195: E28b is not built tonight; the blind holdout is run on current main instead (2026-10-10 00:25 UTC)
+- L3210: The blind holdout on main `67fb1b24`, judge-free aggregates (2026-10-10 00:46 UTC; run `er10-holdout-main`, 00:25 UTC on, 180 questions, direct DeepSeek; nothing of it was read)
 
 ### B.1 The log
 
@@ -8090,6 +8091,24 @@ the benchmark runner does not do today.
 Started instead, at 00:25 UTC: the blind holdout (180 questions) on main `67fb1b24` in the app,
 `er10-holdout-main`: no holdout run of a build with E19 exists. Aggregates only. It is judged tonight only if
 the pool outlasts everything queued before it.
+
+##### The blind holdout on main `67fb1b24`, judge-free aggregates (2026-10-10 00:46 UTC; run `er10-holdout-main`, 00:25 UTC on, 180 questions, direct DeepSeek; nothing of it was read)
+| | `er-holdout-e16b3` (main before E19, 6 October) | `er10-holdout-main` (main `67fb1b24`: E19, E23, E26) |
+|---|---|---|
+| questions answered | 180 | 180 |
+| right by the fixed checks | 161 (89.4 %) | 161 (89.4 %) |
+| every required string | 119/134 | 119/134 |
+| rows with a forbidden string | 3 | 3 |
+| calculation results right | 32/38 | 32/38 |
+| first word, spoken: median / p90 (ms) | 1711 / p90 2598 | 1735 / p90 2446 |
+| first word, typed: median (ms) | 1056 | 1034 |
+By mode (right of 20), before: general 18/20, sales 19/20, recruiting 15/20, team-meet 19/20, looking-for-work 19/20, lecture 20/20, technical-interview 17/20, seminar 19/20, call-center 15/20. Now: general 18/20, sales 20/20, recruiting 17/20, team-meet 19/20, looking-for-work 16/20, lecture 20/20, technical-interview 18/20, seminar 19/20, call-center 14/20.
+No line was set and none is read: the fixed checks see only part of an answer, and two runs of one build differ by
+this much. One thing is worth a judged look before anything else on this set: Looking for work is 19 → 16 of 20,
+and it is one of the two modes E23 and E26 change (Technical Interview is 17 → 18). Three rows prove nothing, and
+nothing of the holdout is read to find out; the 40 holdout rows of the two profile modes are therefore judged
+right after the baseline in the window script (the earlier run's 180 are already judged), the other 140 at the
+end of the queue.
 
 ---
 
