@@ -3122,3 +3122,19 @@ he is deciding: +32 points of right answers on packs between 12,000 and 24,000 t
 0.77 s earlier, for a request 3.6 times the size on those turns and a typed first word 0.49 s later. Not measured:
 any model other than deepseek-flash (a model with a small context window would now be sent up to about 32,000
 tokens where it was sent about 16,000), Windows, a packaged build.
+
+### E28 — result: the pack is cached and the answers get worse; lines 1 and 3 fail, not a lead as it stands (2026-10-10 00:06 UTC; replayed 23:58–00:06 UTC on the 361 prompts of X2 arm B, k = 1, 0 failed calls)
+| | base (question first) | documents first |
+|---|---|---|
+| cached share of the prompt tokens, median | 18 % | **97.6 %** |
+| prompt tokens not served from the cache, all 361 requests | 8.77 million | 0.93 million (−89 %) |
+| first token: median / p90 | 1,447 / 1,685 ms | 1,190 / 1,554 ms (−257 / −131 ms) |
+| right by the fixed checks | 89.2 % | 86.4 % (paired −2.8, 95 % −6.6 to 0.3) |
+| every required string (302 rows) | 89.7 % | 85.1 % (paired −4.6, 95 % −7.9 to −1.7) |
+| rows with a forbidden string | 9 | 7 |
+Line 2 holds (the pack really is a cacheable prefix inside a meeting). **Line 1 fails** (2.8 points fewer right
+answers, and the loss in required strings is outside its interval) and **line 3 fails** (257 ms, 300 asked). So
+simply moving the evidence above the question trades about 3 points of right answers for nine tenths of the input
+cost and a quarter of a second. Nothing is built. If the cost of the 24,000 threshold matters more than those
+points, the next thing to try is not this layout but one that keeps the question where the model reads it last
+AND first (the question repeated after the documents), which this replay did not test.
