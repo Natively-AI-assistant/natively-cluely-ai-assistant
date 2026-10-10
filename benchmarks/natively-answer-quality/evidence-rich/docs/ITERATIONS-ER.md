@@ -3138,3 +3138,8 @@ simply moving the evidence above the question trades about 3 points of right ans
 cost and a quarter of a second. Nothing is built. If the cost of the 24,000 threshold matters more than those
 points, the next thing to try is not this layout but one that keeps the question where the model reads it last
 AND first (the question repeated after the documents), which this replay did not test.
+
+### E28b — the same, with the question repeated as the last thing in the request (declared 2026-10-10 00:06 UTC, before its replay; same base arm, same three lines)
+One further arm on the same 361 prompts: the evidence first, the rest unchanged, and the question section repeated
+word for word at the very end under "# The question again (answer this)". Lines 1 to 3 of E28 apply unchanged
+against `e28-base`. If line 1 fails again the layout idea is closed for today.
