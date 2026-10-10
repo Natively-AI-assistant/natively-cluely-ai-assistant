@@ -3206,3 +3206,21 @@ the benchmark runner does not do today.
 Started instead, at 00:25 UTC: the blind holdout (180 questions) on main `67fb1b24` in the app,
 `er10-holdout-main`: no holdout run of a build with E19 exists. Aggregates only. It is judged tonight only if
 the pool outlasts everything queued before it.
+
+### The blind holdout on main `67fb1b24`, judge-free aggregates (2026-10-10 00:46 UTC; run `er10-holdout-main`, 00:25 UTC on, 180 questions, direct DeepSeek; nothing of it was read)
+| | `er-holdout-e16b3` (main before E19, 6 October) | `er10-holdout-main` (main `67fb1b24`: E19, E23, E26) |
+|---|---|---|
+| questions answered | 180 | 180 |
+| right by the fixed checks | 161 (89.4 %) | 161 (89.4 %) |
+| every required string | 119/134 | 119/134 |
+| rows with a forbidden string | 3 | 3 |
+| calculation results right | 32/38 | 32/38 |
+| first word, spoken: median / p90 (ms) | 1711 / p90 2598 | 1735 / p90 2446 |
+| first word, typed: median (ms) | 1056 | 1034 |
+By mode (right of 20), before: general 18/20, sales 19/20, recruiting 15/20, team-meet 19/20, looking-for-work 19/20, lecture 20/20, technical-interview 17/20, seminar 19/20, call-center 15/20. Now: general 18/20, sales 20/20, recruiting 17/20, team-meet 19/20, looking-for-work 16/20, lecture 20/20, technical-interview 18/20, seminar 19/20, call-center 14/20.
+No line was set and none is read: the fixed checks see only part of an answer, and two runs of one build differ by
+this much. One thing is worth a judged look before anything else on this set: Looking for work is 19 → 16 of 20,
+and it is one of the two modes E23 and E26 change (Technical Interview is 17 → 18). Three rows prove nothing, and
+nothing of the holdout is read to find out; the 40 holdout rows of the two profile modes are therefore judged
+right after the baseline in the window script (the earlier run's 180 are already judged), the other 140 at the
+end of the queue.
