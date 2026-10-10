@@ -3191,3 +3191,18 @@ on ordinary ones. Every line set for it holds except the first-token line on ord
 composer change (the evidence section first, the question section repeated last). It has NOT been run in the app:
 the layout moves the question on every turn that carries documents, the fix-up pass and the spoken repair inherit
 that request, and none of that is in a replay of the answer call alone.
+
+### E28b is not built tonight; the blind holdout is run on current main instead (2026-10-10 00:25 UTC)
+The composer keeps the user's own instructions as the last thing in the request on purpose ("nothing the app says
+can follow, and so contradict, what the user asked for"), several tests pin the order of its sections, and the
+fix-up pass and the spoken repair inherit the request. The replayed layout put the repeated question at the very
+end, which is where the user's instructions go when there are any (the benchmark has none). Fitting the two
+together and re-pinning the tests is a change to make with a clear head and its own app runs, not in the hour
+before a judge window. For whoever builds it: the evidence section must be the first thing in the user message
+and byte-identical from turn to turn inside a meeting (the session id in `scope_id` already is; the transcript's
+evidence items must not be interleaved before the files); the question section stays where it is AND is repeated
+after the notices, before the user's instructions; a confirmation needs several questions in ONE session, which
+the benchmark runner does not do today.
+Started instead, at 00:25 UTC: the blind holdout (180 questions) on main `67fb1b24` in the app,
+`er10-holdout-main`: no holdout run of a build with E19 exists. Aggregates only. It is judged tonight only if
+the pool outlasts everything queued before it.
