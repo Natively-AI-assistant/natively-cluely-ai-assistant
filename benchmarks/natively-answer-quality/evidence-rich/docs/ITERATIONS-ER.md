@@ -3159,3 +3159,18 @@ is in every evidence tag); a confirmation needs several questions inside one ses
 (`er6-dev-main` + `er6-dev2-main`, packs of 2,300 to 9,800 tokens, all nine modes), k = 1. Lines: right not
 more than 2 points below base and forbidden-string rows at most base + 5; cached share at least 60 % at the
 median; first token at least 150 ms earlier at the median.
+
+### E28b — the 630 development prompts: more right answers, a third of the input cost, no first-token gain (2026-10-10 00:20 UTC; replayed 00:10–00:20 UTC, 0 failed calls)
+| 630 prompts, nine modes | base (question first) | documents first, question repeated last |
+|---|---|---|
+| right by the fixed checks | 90.2 % | 92.5 % (paired +2.4, 95 % 0.2 to 3.8) |
+| every required string (484 rows) | 89.5 % | 91.5 % (paired +2.1, 95 % −0.6 to 5.0) |
+| rows with a forbidden string | 9 | 3 |
+| cached share of the prompt tokens, median | 34.8 % | 93.9 % |
+| prompt tokens not served from the cache, all 630 requests | 5.81 million | 2.05 million (−65 %) |
+| first token: median / p90 | 850 / 1,222 ms | 859 / 1,132 ms |
+Lines 1 and 2 hold; line 3 does not (no earlier first token at the median on packs this size; the 0.37 s was the
+larger packs). These are rows this work has read many times, so, as E21 taught, **the unseen sets are replayed
+before anything else is concluded** (declared now, before that replay): the same two arms on the prompts of
+`er7-chal-main`, `er7-chalval-main`, `er8-prov1-main` and `er8-prov1val-main` (219 prompts; the two unread
+sets as aggregates). Line: right not more than 2 points below base, forbidden-string rows at most base + 3.
