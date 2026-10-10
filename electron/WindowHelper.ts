@@ -26,6 +26,7 @@ import { clearStaleHover } from './utils/overlayAuxHover';
 import { resizeEnvelopeFor, OVERLAY_PANEL_INSET } from '../src/lib/overlayCustomSize.mjs';
 import { decideLauncherClose } from '../src/lib/launcherCloseDecision.mjs';
 import { DEV_SERVER_URL } from './devServerUrl';
+import { shortcutRestoreBounds, shortcutRestoreDisplay } from './utils/shortcutRestore';
 
 const isEnvDev = process.env.NODE_ENV === 'development';
 const isPackaged = app.isPackaged;
@@ -1133,6 +1134,7 @@ export class WindowHelper {
     this.launcherWindow.on('move', () => {
       if (this.launcherAnimating) return;
       if (this.launcherWindow) {
+        this.refreshLauncherMinimum(screen.getDisplayMatching(this.launcherWindow.getBounds()).workArea);
         const bounds = this.launcherWindow.getBounds();
         this.launcherPosition = { x: bounds.x, y: bounds.y };
         this.appState.settingsWindowHelper.reposition(bounds);
@@ -2486,15 +2488,85 @@ export class WindowHelper {
     }
   }
 
-  public toggleMainWindow(): void {
+  public toggleMainWindow(onCurrentDisplay = false): void {
     if (this.isWindowVisible) {
       this.hideMainWindow();
     } else {
       // Always show without stealing focus — Natively is a ghost overlay.
       // The user is in another app; show the window on top but leave OS focus alone.
       // They can click the window to focus it if they need to type.
+      if (onCurrentDisplay) this.prepareShortcutRestore();
       this.showMainWindow(true);
     }
+  }
+
+  /** Keep the minimum appropriate to the display, including ordinary window drags. */
+  private refreshLauncherMinimum(workArea: Electron.Rectangle): { width: number; height: number } {
+    const minimum = clampSizeToAspectRatio(
+      Math.min(LAUNCHER_MIN_WIDTH, workArea.width),
+      Math.min(LAUNCHER_MIN_HEIGHT, workArea.height),
+    );
+    const win = this.launcherWindow;
+    if (win && !win.isDestroyed()) {
+      const [width, height] = win.getMinimumSize();
+      if (width !== minimum.width || height !== minimum.height) {
+        win.setMinimumSize(minimum.width, minimum.height);
+      }
+    }
+    return minimum;
+  }
+
+  /** Position before show/expand, synchronously on Electron's main process. */
+  public prepareShortcutRestore(): void {
+    const win = this.getMainWindow();
+    if (!win || win.isDestroyed()) return;
+    const bounds = win.getBounds();
+    const display = shortcutRestoreDisplay(screen, BrowserWindow.getFocusedWindow(), bounds);
+    const launcher = this.currentWindowMode === 'launcher';
+    let restoreBounds = bounds;
+    if (launcher) {
+      const minimum = this.refreshLauncherMinimum(display.workArea);
+      // Account for native minimum-size enforcement before computing the center.
+      restoreBounds = {
+        ...bounds,
+        width: Math.max(bounds.width, minimum.width),
+        height: Math.max(bounds.height, minimum.height),
+      };
+    } else {
+      // Use the final dimensions switchToOverlay will apply when showing.
+      restoreBounds = {
+        ...bounds,
+        width: Math.min(bounds.width, Math.floor(display.workArea.width * 0.9)),
+        height: Math.min(
+          bounds.height > WindowHelper.OVERLAY_BIRTH_HEIGHT ? bounds.height : WindowHelper.OVERLAY_MIN_HEIGHT,
+          Math.floor(display.workArea.height * 0.9),
+        ),
+      };
+    }
+    const target = shortcutRestoreBounds(
+      restoreBounds,
+      display.workArea,
+      screen.getDisplayMatching(bounds).id !== display.id,
+      {
+        launcher: launcher && !this.launcherFilled,
+        // Keep the separate pill above the overlay clear of the menu bar too.
+        topInset: launcher ? 0 : Math.max(0, this.pillSize.height + WindowHelper.PILL_GAP - OVERLAY_PANEL_INSET),
+      },
+    );
+    win.setBounds(target, false);
+    const actual = win.getBounds();
+    if (launcher) {
+      this.launcherPosition = { x: actual.x, y: actual.y };
+      this.launcherSize = { width: actual.width, height: actual.height };
+    } else {
+      this.overlayBounds = actual;
+      this.positionOverlayAuxWindows();
+      this.repositionOverlayPopovers();
+    }
+  }
+
+  public isOverlayExpanded(): boolean {
+    return (this.lastOverlayUiState as { expanded?: boolean } | null)?.expanded !== false;
   }
 
   public toggleOverlayWindow(): void {

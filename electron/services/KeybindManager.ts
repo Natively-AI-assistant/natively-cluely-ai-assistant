@@ -613,7 +613,7 @@ export class KeybindManager {
                         click: () => {
                             // Require AppState dynamically to avoid circular dependencies
                             const { AppState } = require('../main');
-                            AppState.getInstance().toggleMainWindow();
+                            AppState.getInstance().toggleMainWindow(true);
                         }
                     },
                     { type: 'separator' },

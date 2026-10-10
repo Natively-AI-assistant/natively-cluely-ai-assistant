@@ -19,7 +19,7 @@ test('the tour intercepts its shortcuts before any real action runs', () => {
   assert.notEqual(i, -1);
   const handler = main.slice(i, i + 900);
   const route = handler.indexOf("tour.send('onboarding:tour-shortcut', actionId)");
-  const firstAction = handler.indexOf('this.toggleMainWindow()');
+  const firstAction = handler.indexOf('this.toggleMainWindow(');
   assert.ok(route !== -1 && firstAction !== -1 && route < firstAction, 'routing must come before toggleMainWindow');
   assert.match(handler.slice(route, route + 120), /return;/, 'a routed press must not also run the real action');
 });

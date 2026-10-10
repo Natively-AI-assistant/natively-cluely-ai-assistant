@@ -1540,7 +1540,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('toggle-window', async () => {
-    appState.toggleMainWindow();
+    appState.toggleMainWindow(true);
   });
 
   safeHandle('show-window', async (event, inactive?: boolean) => {
