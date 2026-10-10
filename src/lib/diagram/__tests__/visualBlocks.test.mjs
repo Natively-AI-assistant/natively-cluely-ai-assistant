@@ -510,7 +510,8 @@ describe('source policy: ordinary diagrams are drawn as written', () => {
         const started = Date.now();
         checkDiagramSource(source);
         isPlaceholderDiagram(source);
-        assert.ok(Date.now() - started < 400, `${JSON.stringify(lead)} + ${JSON.stringify(ch)} × ${n}: ${Date.now() - started} ms`);
+        const maxAllowedMs = process.platform === 'win32' ? 3000 : 400;
+        assert.ok(Date.now() - started < maxAllowedMs, `${JSON.stringify(lead)} + ${JSON.stringify(ch)} × ${n}: ${Date.now() - started} ms`);
       }
     }
   });

@@ -593,6 +593,34 @@ export function initializeIpcHandlers(appState: AppState): void {
     settleExpiredTrial('credentials changed');
   };
 
+  const broadcastLiveCatalogUpdated = (provider?: string, models?: any[]): void => {
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send('models-catalog-updated', { provider, models });
+      }
+    });
+  };
+
+  try {
+    const { LiveModelCatalogService } = require('./services/LiveModelCatalogService');
+    LiveModelCatalogService.getInstance().setOnUpdated((provider: string, models: any[]) => {
+      broadcastLiveCatalogUpdated(provider, models);
+    });
+  } catch (e: any) {
+    console.warn('[IPC] Could not initialize LiveModelCatalogService update listener:', e?.message);
+  }
+
+  const triggerLiveCatalogRefresh = (provider: string, apiKey?: string) => {
+    if (apiKey?.trim()) {
+      try {
+        const { LiveModelCatalogService } = require('./services/LiveModelCatalogService');
+        LiveModelCatalogService.getInstance().refreshProvider(provider, true).catch(() => {});
+      } catch { /* optional */ }
+    }
+  };
+
+
+
   /**
    * Re-sync the runtime after the stored Natively credential changed OUTSIDE the
    * `set-natively-api-key` handler — i.e. from the trial paths, which write the
@@ -709,11 +737,12 @@ export function initializeIpcHandlers(appState: AppState): void {
         // here. Omitting it made providerFamily return 'unknown', so the disabled-provider
         // check below never matched and switching OpenAI off did NOT hide o4 models from
         // routing. Keep this a superset of the fetcher's admitted prefixes.
-        if (modelId.startsWith('gpt-') || modelId.startsWith('o1-') || modelId.startsWith('o3-') || modelId.startsWith('o4-') || modelId.includes('openai')) return 'openai';
+        if (modelId.startsWith('gpt-') || /^o\d+/.test(modelId) || modelId.startsWith('o1-') || modelId.startsWith('o3-') || modelId.startsWith('o4-') || modelId.startsWith('chatgpt-') || modelId.includes('openai')) return 'openai';
         if (modelId.startsWith('claude-')) return 'claude';
         // THE shared predicate (deepseekModels.ts); the `/^deepseek-v/i` that
         // stood here missed `deepseek-flash`, DeepSeek's current id.
         if (isDeepseekModelId(modelId)) return 'deepseek';
+        if (modelId.startsWith('deepseek-')) return 'deepseek';
         // Custom providers use arbitrary ids, so this must be an identity lookup and
         // must come last — anything matching a built-in prefix above is that
         // provider, not a custom one. Without it these classify as 'unknown' and
@@ -11065,6 +11094,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         broadcastCredentialsChanged();
       }
 
+      triggerLiveCatalogRefresh('gemini', apiKey);
+
       return { success: true };
     } catch (error: any) {
       console.error('Error saving Gemini API key:', error);
@@ -11094,6 +11125,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         await refreshRuntimeDefaultIfUnavailable();
         broadcastCredentialsChanged();
       }
+
+      triggerLiveCatalogRefresh('groq', apiKey);
 
       return { success: true };
     } catch (error: any) {
@@ -11140,6 +11173,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         broadcastCredentialsChanged();
       }
 
+      triggerLiveCatalogRefresh('openai', apiKey);
+
       return { success: true };
     } catch (error: any) {
       console.error('Error saving OpenAI API key:', error);
@@ -11170,6 +11205,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         broadcastCredentialsChanged();
       }
 
+      triggerLiveCatalogRefresh('claude', apiKey);
+
       return { success: true };
     } catch (error: any) {
       console.error('Error saving Claude API key:', error);
@@ -11199,6 +11236,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         await refreshRuntimeDefaultIfUnavailable();
         broadcastCredentialsChanged();
       }
+
+      triggerLiveCatalogRefresh('deepseek', apiKey);
 
       return { success: true };
     } catch (error: any) {
@@ -11240,6 +11279,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         await refreshRuntimeDefaultIfUnavailable();
         broadcastCredentialsChanged();
       }
+      triggerLiveCatalogRefresh('nvidia_nim', normalizedKey);
       // Reported back so Settings can say WHY speech switched off, rather than
       // the user discovering it later in a meeting.
       return { success: true, sttProviderCleared: sttWasNvidia };
@@ -11307,6 +11347,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         await refreshRuntimeDefaultIfUnavailable();
         broadcastCredentialsChanged();
       }
+      triggerLiveCatalogRefresh('openrouter', normalizedKey);
       // Reported so Settings can say WHY retrieval changed, instead of the user
       // discovering a degraded corpus later.
       return { success: true, retrievalDeactivated };
@@ -11399,6 +11440,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         await refreshRuntimeDefaultIfUnavailable();
         broadcastCredentialsChanged();
       }
+      triggerLiveCatalogRefresh('fluxion', normalizedKey);
       if (detecting) {
         // Deliberately not awaited. Errors are swallowed: a failed probe leaves
         // the stored value alone, which is the universal protocol.
@@ -11454,9 +11496,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         await refreshRuntimeDefaultIfUnavailable();
         broadcastCredentialsChanged();
       }
+      triggerLiveCatalogRefresh('agentrouter', normalizedKey);
       return { success: true };
     } catch (error: any) { return { success: false, error: error.message }; }
   });
+
 
   safeHandle('set-litellm-config', async (_, config: { apiKey: string; baseURL: string; maxTokens?: number }) => {
     try {
@@ -13144,6 +13188,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         ninerouterPreferredModel: creds.ninerouterPreferredModel || undefined,
         disabledProviders: creds.disabledProviders || [],
         cloudEnabledModels: creds.cloudEnabledModels || {},
+        cloudFetchedModels: CredentialsManager.getInstance().getAllCloudFetchedModels(),
       };
     } catch (error: any) {
       // SECURITY FIX (P0): Error fallback returns masked keys, not raw strings
@@ -13236,7 +13281,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                     models.map((m: any) => ({ id: m.id, label: m.label || m.id })),
                     Date.now(),
                 );
-                broadcastCredentialsChanged();
+                broadcastLiveCatalogUpdated(provider, models);
             } catch (e) {
                 console.warn('[IPC] could not cache fetched models:', e);
             }
@@ -13269,6 +13314,39 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { success: false, error: msg };
       }
     },
+  );
+
+  safeHandle(
+    'refresh-live-catalog',
+    async (_, provider?: string, force?: boolean) => {
+      try {
+        const { LiveModelCatalogService } = require('./services/LiveModelCatalogService');
+        const service = LiveModelCatalogService.getInstance();
+        if (provider) {
+          return await service.refreshProvider(provider, force ?? true);
+        } else {
+          await service.refreshAllConfiguredProviders(force ?? true);
+          return { success: true };
+        }
+      } catch (error: any) {
+        console.warn('[IPC] refresh-live-catalog failed:', error?.message);
+        return { success: false, error: error?.message };
+      }
+    }
+  );
+
+  safeHandle(
+    'get-live-catalog',
+    async (_, provider: string) => {
+      try {
+        const { LiveModelCatalogService } = require('./services/LiveModelCatalogService');
+        const service = LiveModelCatalogService.getInstance();
+        return service.getLiveModels(provider);
+      } catch (error: any) {
+        console.warn('[IPC] get-live-catalog failed:', error?.message);
+        return [];
+      }
+    }
   );
 
   safeHandle(

@@ -109,8 +109,11 @@ const ModelSelectorWindow = () => {
                     setIsLoading(true);
                 }
 
-                // 1. Get Stored Credentials (to know which Cloud providers are active)
-                const creds = await window.electronAPI?.getStoredCredentials?.();
+                // 1. Get Stored Credentials and Live Catalog (to know which Cloud providers are active & latest models)
+                const [creds, liveCatalog] = await Promise.all([
+                    window.electronAPI?.getStoredCredentials?.(),
+                    window.electronAPI?.getCloudFetchedModels?.().catch(() => null),
+                ]);
 
                 // 2. Custom Providers
                 const customProviders = await window.electronAPI?.getCustomProviders?.() || [];
@@ -170,14 +173,21 @@ const ModelSelectorWindow = () => {
                     models.push({ id: 'natively', name: 'Natively API', type: 'cloud', provider: 'natively' });
                 }
 
-                // Cloud Models — standard models + unique preferred models
+                // Cloud Models — live fetched models (with fallback to standard models) + preferred model
                 for (const [prov, cfg] of Object.entries(STANDARD_CLOUD_MODELS)) {
                     if (!cfg.hasKeyCheck(creds)) continue;
-                    cfg.ids.forEach((id, i) => {
-                        models.push({ id, name: cfg.names[i], type: 'cloud', provider: prov });
-                    });
+                    const fetched = liveCatalog?.models?.[prov] || creds?.cloudFetchedModels?.[prov];
+                    if (Array.isArray(fetched) && fetched.length > 0) {
+                        fetched.forEach((m: { id: string; label: string }) => {
+                            models.push({ id: m.id, name: m.label || m.id, type: 'cloud', provider: prov });
+                        });
+                    } else {
+                        cfg.ids.forEach((id, i) => {
+                            models.push({ id, name: cfg.names[i], type: 'cloud', provider: prov });
+                        });
+                    }
                     const pm = creds?.[cfg.pmKey];
-                    if (pm && !cfg.ids.includes(pm)) {
+                    if (pm && !models.some(m => m.id === pm)) {
                         models.push({ id: pm, name: prettifyModelId(pm), type: 'cloud', provider: prov });
                     }
                 }
@@ -303,10 +313,14 @@ const ModelSelectorWindow = () => {
         const unsubCredentials = window.electronAPI?.onCredentialsChanged?.(() => {
             loadModels();
         });
+        const unsubLiveCatalog = window.electronAPI?.onLiveCatalogUpdated?.(() => {
+            loadModels();
+        });
         return () => {
             cancelled = true;
             unsubscribe?.();
             unsubCredentials?.();
+            unsubLiveCatalog?.();
         };
     }, []);
 

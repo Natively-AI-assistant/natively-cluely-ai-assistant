@@ -80,7 +80,7 @@ describe('persistence stores the answer without the marker', () => {
     assert.match(st, /import \{ stripGistTrailer \} from '\.\.\/src\/lib\/displayMarkup';/);
     assert.match(st, /const cleanText = stripGistTrailer\(text\)\.trim\(\);/);
     assert.match(st, /answer: typeof answer === 'string' \? stripGistTrailer\(answer\) : answer,/);
-    assert.match(st, /\{ \.\.\.entry, answer: stripGistTrailer\(entry\.answer\) \}/);
+    assert.match(st, /entry\.answer\s*=\s*stripGistTrailer\(entry\.answer\)/);
   });
   test('phone mirror: content is the text, the gist rides separately; rendered from the raw answer', () => {
     const svc = SRC('electron/services/PhoneMirrorService.ts');
