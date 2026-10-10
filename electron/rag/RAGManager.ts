@@ -15,6 +15,7 @@ import { buildRAGPrompt, NO_CONTEXT_FALLBACK, NO_GLOBAL_CONTEXT_FALLBACK } from 
 import type { ProviderDataScopePolicy } from '../llm/ProviderRouter';
 import { isSpokenSavedLine } from '../intelligence/savedTranscriptOrigin';
 import { buildSummaryTextForSearch } from './summaryTextForSearch';
+import { CHUNK_BACKFILL_KEYS, SUMMARY_BACKFILL_KEYS, finishBackfillWalk, hasBackfillRearm, takeBackfillRearm } from './backfillRearm';
 
 /**
  * A bare `for await` over an LLM stream blocks forever if the provider hangs
@@ -766,16 +767,19 @@ export class RAGManager {
     async backfillMeetingSummaries(maxQueued = 200): Promise<number> {
         if (this.summaryBackfillRan) return 0;
         this.summaryBackfillRan = true;
-        const CURSOR_KEY = 'summary_backfill_cursor_v1';
+        const CURSOR_KEY = SUMMARY_BACKFILL_KEYS.cursorKey;
         let queued = 0;
         let examined = 0;
         try {
+            // Meetings copied in from an old profile folder (rag/backfillRearm).
+            const floor = takeBackfillRearm(this.db, SUMMARY_BACKFILL_KEYS);
             const stored = (this.db.prepare('SELECT value FROM app_state WHERE key = ?').get(CURSOR_KEY) as { value?: string } | undefined)?.value;
             if (stored === 'done') return 0;
             let cursor = stored !== undefined && Number.isFinite(Number(stored)) ? Number(stored) : Number.MAX_SAFE_INTEGER;
             const page = this.db.prepare(`
                 SELECT m.rowid AS rid, m.id FROM meetings m
                 WHERE m.rowid < ?
+                  AND m.rowid >= ?
                   AND NOT EXISTS (SELECT 1 FROM chunk_summaries s WHERE s.meeting_id = m.id)
                 ORDER BY m.rowid DESC
                 LIMIT 50
@@ -783,7 +787,7 @@ export class RAGManager {
             const saveCursor = this.db.prepare('INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)');
             let reachedEnd = false;
             while (queued < maxQueued) {
-                const rows = page.all(cursor) as { rid: number; id: string }[];
+                const rows = page.all(cursor, floor) as { rid: number; id: string }[];
                 if (rows.length === 0) { reachedEnd = true; break; }
                 for (const row of rows) {
                     cursor = row.rid;
@@ -798,7 +802,7 @@ export class RAGManager {
                 }
                 saveCursor.run(CURSOR_KEY, String(cursor));
             }
-            if (reachedEnd) saveCursor.run(CURSOR_KEY, 'done');
+            if (reachedEnd) finishBackfillWalk(this.db, SUMMARY_BACKFILL_KEYS);
             if (examined > 0) console.log(`[RAGManager] Summary backfill: examined ${examined} meetings, queued ${queued}${reachedEnd ? ' — complete' : ' — continues next launch'}`);
         } catch (e: any) {
             console.warn('[RAGManager] Summary backfill failed (non-fatal):', e?.message || e);
@@ -930,7 +934,7 @@ export class RAGManager {
     private static readonly CHUNK_BACKFILL_DEFER_MS = 20_000;
     private static readonly CHUNK_BACKFILL_LIVE_RECHECK_MS = 5 * 60_000;
     private static readonly CHUNK_BACKFILL_MAX_LIVE_WAITS = 6;
-    private static readonly CHUNK_BACKFILL_CURSOR_KEY = 'chunk_backfill_cursor_v1';
+    private static readonly CHUNK_BACKFILL_CURSOR_KEY = CHUNK_BACKFILL_KEYS.cursorKey;
 
     /**
      * Arm the past-meeting transcript re-index a little after the embedding
@@ -993,12 +997,18 @@ export class RAGManager {
             if (!this.isDatabaseUsable()) return stranded;
             await this.requeueUnusableStoredVectors();
             if (!this.isDatabaseUsable()) return stranded;
+            // Meetings were added outside the save path (rag/backfillRearm): go
+            // back to the top and stop at the first of them. Taken here, at the
+            // start of a walk, so a request made while a walk is under way is
+            // still there for the next one.
+            const floor = takeBackfillRearm(this.db, CHUNK_BACKFILL_KEYS);
             const stored = (this.db.prepare('SELECT value FROM app_state WHERE key = ?').get(CURSOR_KEY) as { value?: string } | undefined)?.value;
             if (stored === 'done') return stranded;
             let cursor = stored !== undefined && Number.isFinite(Number(stored)) ? Number(stored) : Number.MAX_SAFE_INTEGER;
             const page = this.db.prepare(`
                 SELECT m.rowid AS rid, m.id FROM meetings m
                 WHERE m.rowid < ?
+                  AND m.rowid >= ?
                   AND m.id != 'live-meeting-current'
                   AND EXISTS (SELECT 1 FROM transcripts t WHERE t.meeting_id = m.id)
                   AND NOT EXISTS (SELECT 1 FROM chunks c WHERE c.meeting_id = m.id AND c.embedding IS NOT NULL)
@@ -1014,7 +1024,7 @@ export class RAGManager {
             let interrupted = false;
             let providerLoaded = false;
             while (indexed < maxMeetings && !interrupted) {
-                const rows = page.all(cursor) as { rid: number; id: string }[];
+                const rows = page.all(cursor, floor) as { rid: number; id: string }[];
                 if (rows.length === 0) { reachedEnd = true; break; }
                 // There is work, so the provider has to be usable — and only
                 // now: the bundled local model loads on demand, and a profile
@@ -1063,7 +1073,13 @@ export class RAGManager {
                     if (indexed >= maxMeetings) break;
                 }
             }
-            if (reachedEnd) saveCursor.run(CURSOR_KEY, 'done');
+            if (reachedEnd) {
+                finishBackfillWalk(this.db, CHUNK_BACKFILL_KEYS);
+                // Meetings arrived while this walk was running, above its
+                // cursor. Not after a walk that stopped at the per-launch cap:
+                // that would spend a second allowance in one launch.
+                if (hasBackfillRearm(this.db, CHUNK_BACKFILL_KEYS)) this.scheduleChunkBackfill();
+            }
             if (examined > 0) {
                 console.log(`[RAGManager] Transcript re-index: examined ${examined} past meeting(s), re-indexed ${indexed}${reachedEnd ? ' — complete' : ' — continues next launch'}`);
             }

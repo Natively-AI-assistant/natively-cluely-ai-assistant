@@ -134,6 +134,186 @@ describe('past meetings get their transcript back in search', () => {
     assert.equal(chunksOf('lost'), before);
   });
 
+  // 2026-10-10: db/legacyMeetingImport copies meetings from an old profile
+  // folder. They arrive with a transcript and no chunks, after the walk ended,
+  // and leave a request in app_state (rag/backfillRearm) with the rows.
+  const { requestBackfillRearm, CHUNK_BACKFILL_KEYS, SUMMARY_BACKFILL_KEYS } = require(dist('rag/backfillRearm.js'));
+  const state = (key) => db.prepare('SELECT value FROM app_state WHERE key = ?').get(key)?.value;
+  const rearm = () => state(CHUNK_BACKFILL_KEYS.rearmKey);
+  // As the import writes them: rows only, lines from before `origin` existed.
+  const copyIn = (id, { ask = true } = {}) => {
+    const rowid = Number(db.prepare(`INSERT INTO meetings (id, title, start_time, duration_ms, summary_json, created_at, is_processed) VALUES (?, 'Copied', ?, 60000, '{}', '2026-09-01T10:00:00.000Z', 1)`).run(id, T0).lastInsertRowid);
+    for (const line of spoken(8)) {
+      db.prepare('INSERT INTO transcripts (meeting_id, speaker, content, timestamp_ms) VALUES (?, ?, ?, ?)').run(id, line.speaker, line.text, line.timestamp);
+    }
+    if (ask) requestBackfillRearm(db, rowid);
+    return rowid;
+  };
+  // Which meetings a walk opened, in order.
+  const watchLoads = () => {
+    const load = rag.loadMeetingForIndexing;
+    const loaded = [];
+    rag.loadMeetingForIndexing = (id) => { loaded.push(id); return load(id); };
+    return loaded;
+  };
+
+  test('meetings copied in after the walk is done are reached because they asked for it', async () => {
+    if (!dbMgr.isAvailable()) return;
+    save('lost', spoken(8));
+    await quiet(() => rag.backfillMeetingChunks());
+    assert.equal(cursor(), 'done');
+    const indexedBefore = chunksOf('lost');
+
+    copyIn('copied');
+    globalThis.__nativelyChunkBackfillInFlightV1__ = false;
+    assert.equal(await quiet(() => rag.backfillMeetingChunks()), 1, 'only the copied meeting is indexed');
+
+    assert.ok(chunksOf('copied') > 0);
+    assert.equal(pendingOf('copied'), chunksOf('copied'));
+    assert.equal(chunksOf('lost'), indexedBefore, 'the meeting indexed earlier is not chunked again');
+    assert.equal(cursor(), 'done');
+    assert.equal(rearm(), undefined, 'the request is used up');
+    assert.equal(state(CHUNK_BACKFILL_KEYS.floorKey), undefined, 'and so is the stopping point');
+  });
+
+  test('without the request a finished walk stays finished', async () => {
+    if (!dbMgr.isAvailable()) return;
+    save('lost', spoken(8));
+    await quiet(() => rag.backfillMeetingChunks());
+    copyIn('copied', { ask: false });
+
+    globalThis.__nativelyChunkBackfillInFlightV1__ = false;
+    assert.equal(await quiet(() => rag.backfillMeetingChunks()), 0);
+    assert.equal(chunksOf('copied'), 0);
+  });
+
+  // The walk used to examine each meeting once. A meeting it can do nothing
+  // for (here: only typed chat) must not be opened again every time meetings
+  // are copied in, and one whose embedding failed must not be embedded again.
+  test('a finished walk goes back for the copied meetings only, not for every meeting it gave up on', async () => {
+    if (!dbMgr.isAvailable()) return;
+    save('chat-only', [
+      { speaker: 'user', text: 'what model are you and what can you do for me in this meeting?', timestamp: T0, origin: 'manual_chat' },
+    ]);
+    await quiet(() => rag.backfillMeetingChunks());
+    assert.equal(cursor(), 'done');
+
+    copyIn('copied-1');
+    copyIn('copied-2');
+    const loaded = watchLoads();
+    globalThis.__nativelyChunkBackfillInFlightV1__ = false;
+    assert.equal(await quiet(() => rag.backfillMeetingChunks()), 2);
+
+    assert.deepEqual(loaded, ['copied-2', 'copied-1'], 'the old meeting below them is not opened again');
+    assert.equal(cursor(), 'done');
+  });
+
+  test('a restarted walk cut short by the per-launch cap finishes on the next launch and still stops at the copied meetings', async () => {
+    if (!dbMgr.isAvailable()) return;
+    save('chat-only', [
+      { speaker: 'user', text: 'what model are you and what can you do for me in this meeting?', timestamp: T0, origin: 'manual_chat' },
+    ]);
+    await quiet(() => rag.backfillMeetingChunks());
+    copyIn('copied-1');
+    copyIn('copied-2');
+    const loaded = watchLoads();
+
+    globalThis.__nativelyChunkBackfillInFlightV1__ = false;
+    assert.equal(await quiet(() => rag.backfillMeetingChunks(1)), 1);
+    assert.notEqual(cursor(), 'done');
+    globalThis.__nativelyChunkBackfillInFlightV1__ = false;
+    assert.equal(await quiet(() => rag.backfillMeetingChunks(1)), 1);
+    globalThis.__nativelyChunkBackfillInFlightV1__ = false;
+    await quiet(() => rag.backfillMeetingChunks(1));
+
+    assert.deepEqual(loaded, ['copied-2', 'copied-1']);
+    assert.equal(cursor(), 'done');
+    assert.equal(state(CHUNK_BACKFILL_KEYS.floorKey), undefined);
+  });
+
+  test('a first walk that has not finished still goes all the way down', async () => {
+    if (!dbMgr.isAvailable()) return;
+    save('oldest', spoken(8));
+    save('middle', spoken(8));
+    assert.equal(await quiet(() => rag.backfillMeetingChunks(1)), 1, 'stopped at the cap after "middle"');
+    assert.equal(chunksOf('oldest'), 0);
+
+    copyIn('copied');
+    globalThis.__nativelyChunkBackfillInFlightV1__ = false;
+    await quiet(() => rag.backfillMeetingChunks());
+
+    assert.ok(chunksOf('copied') > 0);
+    assert.ok(chunksOf('oldest') > 0, 'the meeting the first walk had not reached is not cut off by the copied ones');
+    assert.equal(cursor(), 'done');
+  });
+
+  test('a request made while a walk is under way is kept, and the walk comes back for it', async () => {
+    if (!dbMgr.isAvailable()) return;
+    save('older', spoken(8));
+    save('newer', spoken(8));
+    // The import commits a meeting while the walk is on its first meeting. Its
+    // row is above the walk's cursor, so this walk cannot see it.
+    const load = rag.loadMeetingForIndexing;
+    let copied = false;
+    rag.loadMeetingForIndexing = (id) => {
+      if (!copied) { copied = true; copyIn('copied-mid-walk'); }
+      return load(id);
+    };
+
+    assert.equal(await quiet(() => rag.backfillMeetingChunks()), 2);
+    assert.equal(chunksOf('copied-mid-walk'), 0, 'not reached by the walk that was running');
+    assert.notEqual(rearm(), undefined, 'and its request was not swallowed by that walk');
+    assert.ok(rag._chunkBackfillTimer, 'another walk is scheduled in this launch');
+    rag.cancelPendingReindex();
+
+    globalThis.__nativelyChunkBackfillInFlightV1__ = false;
+    assert.equal(await quiet(() => rag.backfillMeetingChunks()), 1);
+    assert.ok(chunksOf('copied-mid-walk') > 0);
+    assert.equal(rearm(), undefined);
+    assert.equal(cursor(), 'done');
+    assert.equal(rag._chunkBackfillTimer, null, 'nothing left to come back for');
+  });
+
+  test('a walk stopped by the per-launch cap does not schedule itself again for a waiting request', async () => {
+    if (!dbMgr.isAvailable()) return;
+    save('older', spoken(8));
+    save('newer', spoken(8));
+    const load = rag.loadMeetingForIndexing;
+    let copied = false;
+    rag.loadMeetingForIndexing = (id) => {
+      if (!copied) { copied = true; copyIn('copied-mid-walk'); }
+      return load(id);
+    };
+
+    assert.equal(await quiet(() => rag.backfillMeetingChunks(1)), 1);
+
+    assert.notEqual(rearm(), undefined);
+    assert.equal(rag._chunkBackfillTimer, null, 'the allowance for this launch is spent');
+  });
+
+  // Notes with no spoken transcript (a chat session) are searchable through
+  // the summary walk alone; the transcript walk never opens them.
+  test('the summary walk also goes back for copied meetings, and only for them', async () => {
+    if (!dbMgr.isAvailable()) return;
+    save('before', spoken(2));
+    const indexed = [];
+    rag.indexMeetingSummary = async (id) => { indexed.push(id); return false; };
+    rag.summaryBackfillRan = false;
+    await quiet(() => rag.backfillMeetingSummaries());
+    assert.deepEqual(indexed, ['before']);
+    assert.equal(state(SUMMARY_BACKFILL_KEYS.cursorKey), 'done');
+
+    copyIn('copied');
+    indexed.length = 0;
+    rag.summaryBackfillRan = false;
+    await quiet(() => rag.backfillMeetingSummaries());
+
+    assert.deepEqual(indexed, ['copied']);
+    assert.equal(state(SUMMARY_BACKFILL_KEYS.cursorKey), 'done');
+    assert.equal(state(SUMMARY_BACKFILL_KEYS.rearmKey), undefined);
+    assert.equal(rearm() !== undefined, true, 'the transcript walk has its own request and has not taken it yet');
+  });
+
   test('typed chat and the assistant are not indexed as speech; an indexed meeting is left alone', async () => {
     if (!dbMgr.isAvailable()) return;
     save('chat-only', [
@@ -441,7 +621,7 @@ describe('past meetings get their transcript back in search', () => {
 
   test('it is armed wherever the embedding provider is resolved, and cancelled on teardown', () => {
     const src = fs.readFileSync(path.join(root, 'electron/rag/RAGManager.ts'), 'utf8');
-    assert.equal((src.match(/this\.scheduleChunkBackfill\(\);/g) || []).length, 3, 'constructor init, initializeEmbeddings, and its synchronous path');
+    assert.equal((src.match(/this\.scheduleChunkBackfill\(\);/g) || []).length, 4, 'constructor init, initializeEmbeddings, its synchronous path, and after a walk that a request arrived during');
     const cancel = src.slice(src.indexOf('cancelPendingReindex(): void {'));
     assert.match(cancel.slice(0, 500), /_chunkBackfillTimer/);
     // processMeeting, not reprocessMeeting: the latter deletes the summary and

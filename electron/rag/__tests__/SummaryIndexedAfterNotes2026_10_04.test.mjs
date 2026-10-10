@@ -146,11 +146,16 @@ describe('wiring', () => {
   test('the backfill examines each meeting once and yields between meetings', () => {
     const src = read('electron/rag/RAGManager.ts');
     const body = src.slice(src.indexOf('async backfillMeetingSummaries('), src.indexOf('* Ensure demo meeting is processed'));
-    assert.match(body, /summary_backfill_cursor_v1/);
+    // The cursor's name and the 'done' write live in rag/backfillRearm since
+    // 2026-10-10, shared with the request that sends a finished walk back for
+    // meetings copied in from an old profile folder.
+    assert.match(body, /const CURSOR_KEY = SUMMARY_BACKFILL_KEYS\.cursorKey;/);
+    assert.match(read('electron/rag/backfillRearm.ts'), /cursorKey: 'summary_backfill_cursor_v1'/);
     assert.match(body, /if \(stored === 'done'\) return 0;/);
     assert.match(body, /WHERE m\.rowid < \?/);
     assert.match(body, /await new Promise<void>\(resolve => setImmediate\(resolve\)\);/);
-    assert.match(body, /if \(reachedEnd\) saveCursor\.run\(CURSOR_KEY, 'done'\);/);
+    assert.match(body, /if \(reachedEnd\) finishBackfillWalk\(this\.db, SUMMARY_BACKFILL_KEYS\);/);
+    assert.match(read('electron/rag/backfillRearm.ts'), /run\(keys\.cursorKey, 'done'\)/);
   });
 
   test('the launch backfill runs beside the demo-meeting check', () => {

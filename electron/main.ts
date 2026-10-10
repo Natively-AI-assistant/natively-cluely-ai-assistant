@@ -9895,6 +9895,46 @@ if (process.env.THINKING_MATRIX === '1') {
     console.error('[Main] Failed to initialize CalendarManager:', e);
   }
 
+  // Meetings left in the old "Natively" profile folder come across to this one
+  // (db/legacyMeetingImport.ts: 2.9.2 moved the folder and the old app, still
+  // installed, keeps writing to the old name). Packaged only: a dev or agent
+  // instance has its own folder on purpose. Off the boot path: it opens a
+  // second database on the main process.
+  if (app.isPackaged) {
+    const legacyImportTimer = setTimeout(() => {
+      try {
+        const { importLegacyProfiles } = require('./db/legacyMeetingImport');
+        // Batches land a few milliseconds apart; the list re-reads once per burst.
+        let notifyTimer: ReturnType<typeof setTimeout> | null = null;
+        const notifyMeetingsChanged = () => {
+          if (notifyTimer) return;
+          notifyTimer = setTimeout(() => {
+            notifyTimer = null;
+            BrowserWindow.getAllWindows().forEach((w) => { if (!w.isDestroyed()) w.webContents.send('meetings-updated'); });
+          }, 200);
+        };
+        importLegacyProfiles({
+          platform: process.platform,
+          appDataDir: app.getPath('appData'),
+          userDataDir: app.getPath('userData'),
+          dest: DatabaseManager.getInstance().getDb(),
+          onBatch: notifyMeetingsChanged,
+          log: (message: string) => console.log(message),
+        }).then((results: Array<{ imported: number }>) => {
+          // The copied meetings have a transcript and no search index yet. The
+          // import left the request in the database; this only saves waiting
+          // for the next launch.
+          if (results.some((r) => r.imported > 0)) appState.getRAGManager()?.scheduleChunkBackfill();
+        }).catch((e: any) => {
+          console.warn('[Main] Old-profile meeting import skipped:', e?.message || e);
+        });
+      } catch (e: any) {
+        console.warn('[Main] Old-profile meeting import skipped:', e?.message || e);
+      }
+    }, 3000);
+    legacyImportTimer.unref?.();
+  }
+
   // Recover unprocessed meetings (persistence check)
   appState.getIntelligenceManager().recoverUnprocessedMeetings().catch(err => {
     console.error('[Main] Failed to recover unprocessed meetings:', err);
