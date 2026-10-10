@@ -3425,7 +3425,7 @@ layout.
 `cdaedfad`. On the rebased commit: type check clean; intelligence + context-intelligence 2,930 pass, 0 fail; llm
 5,937 pass, 1 fail, and that one test fails the same way on main `95490839` without this commit
 (`QuickActionTurnRequest2026_10_09`, another session's area); services: the same 167 failing names as main in
-this worktree (native modules not built there). Local main fast-forwarded `95490839` → `cdaedfad` at 19:58 UTC.
+this worktree (native modules not built there). Local main fast-forwarded `95490839` → `cdaedfad` at 19:50 UTC (reflog).
 The main checkout had another session's uncommitted edit in `claimVerifier.ts` (a different hunk): it is intact
 (same added and removed lines before and after), nothing was staged, nothing of theirs was touched. **Not pushed**
 (pushing main is his word). macOS: suites run. Windows: reviewed, not executed (two constants and tests; no
@@ -3474,3 +3474,23 @@ J3. no mode lower by more than 0.70 with an interval that excludes zero.
 If the pool lasts, dev2's 360 rows are judged next and read as the repeat with the same lines (hard fails + 10).
 **Decision.** Every line holding makes it a keep candidate; any line failing means it is not proposed. Landing is
 Evin's word either way; his "do it" was to build it.
+
+### E30 — the first app run stopped after four rows: the DeepSeek account has no balance (recorded 2026-10-10 20:04 UTC)
+Chain started 19:59:16 UTC (candidate dev, `er11-dev-e28b`). The first request recorded on the wire has the new
+layout (the user message starts with "# Evidence (untrusted data", then "# Question", the notices, and ends with
+"# The question again (answer this)" and the question). But the provider answered **"402 Insufficient Balance"**
+on the first row and the app showed its no-answer text on the next three. Stopped at 20:02 UTC (chain, runner and
+app; nothing else was running). The read-only balance endpoint confirms it: `is_available: false`, total balance
+0.00 USD. This is the generator's own key (direct DeepSeek); no other model or route is substituted, so **no app
+run and no generator replay can be made until Evin tops the account up.** The four rows are kept aside in
+`results/_aborted/er11-dev-e28b-402-insufficient-balance` and are in no reading.
+**What waits for the balance, unattended** (`~/natively-er-backup/chains/chain-e30-wait.sh`, started detached
+20:03 UTC, log `chain-e30-wait.out` beside it): it asks the balance endpoint every 5 minutes for up to 14 hours;
+when the account can serve again and no other dev app is up it runs, one app at a time: candidate dev → main
+`cdaedfad` dev (same hour) → candidate challenge, challenge-val, prov1, prov1-val → reads lines 1 to 6 and the
+unseen sets (`report/e30-read.mjs`, output `e30-gate.txt`) → **only if none fails** lists `er11-dev-e28b` for the
+judge window → candidate dev2 → the same on all 630 → lists `er11-dev2-e28b` → the cache replay of line 7. It
+commits and pushes nothing. The window script re-reads that list before each of its stages, so a run listed
+while a window is open is judged at the next stage boundary; one listed later waits for the next window.
+**Window of 11 October, order now:** listed E30 runs (if any) → E29 repetition 1 (57) → the derived pack24 rows →
+E26 → the other X2 arms → the rest of the holdout → drafts.
