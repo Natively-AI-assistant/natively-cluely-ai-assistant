@@ -3143,3 +3143,19 @@ AND first (the question repeated after the documents), which this replay did not
 One further arm on the same 361 prompts: the evidence first, the rest unchanged, and the question section repeated
 word for word at the very end under "# The question again (answer this)". Lines 1 to 3 of E28 apply unchanged
 against `e28-base`. If line 1 fails again the layout idea is closed for today.
+
+### E28b — result on the larger packs: all three lines hold (2026-10-10 00:10 UTC; replayed 00:06–00:10 UTC, 361 prompts, 0 failed calls)
+| | base (question first) | documents first, question repeated last |
+|---|---|---|
+| right by the fixed checks | 89.2 % | 88.1 % (paired −1.1, 95 % −5.3 to 0.8) |
+| every required string (302 rows) | 89.7 % | 87.4 % (paired −2.3, 95 % −5.0 to 0.7) |
+| rows with a forbidden string | 9 | 4 |
+| cached share of the prompt tokens, median | 18 % | 99.3 % (the prefix was already warm from the E28 arm) |
+| first token: median / p90 | 1,447 / 1,685 ms | 1,075 / 1,325 ms (−372 / −360 ms) |
+Repeating the question at the end gives back most of what moving the documents cost. It is a lead, not a change:
+the benchmark app opens a new session for every question, so an app run cannot show the caching (the session id
+is in every evidence tag); a confirmation needs several questions inside one session.
+**Second part, declared here before its replay:** the same two arms on the 630 ordinary development prompts
+(`er6-dev-main` + `er6-dev2-main`, packs of 2,300 to 9,800 tokens, all nine modes), k = 1. Lines: right not
+more than 2 points below base and forbidden-string rows at most base + 5; cached share at least 60 % at the
+median; first token at least 150 ms earlier at the median.
