@@ -1,6 +1,6 @@
 # Handoff: Natively answer-quality work on the evidence-rich benchmark
 
-Written 2026-10-09 (updated the same day at 13:30 UTC after a second session and at 20:20 UTC after a third) for whoever continues this work, human or agent. It covers 2026-10-03 to 2026-10-09.
+Written 2026-10-09 (updated at 13:30 UTC after a second session, at 20:20 UTC after a third, and at 00:30 UTC on 10 October after Evin's "yes do all 4") for whoever continues this work, human or agent. It covers 2026-10-03 to 2026-10-10.
 
 This one file holds everything: the current state, what Evin asked and decided, how the benchmark works, every iteration with its rule and verdict (kept and rejected), the scores per mode per round, every code and prompt change with its reason and its full diff, the complete experiment log, the investigation documents, and all 630 development questions with the answers that still exist.
 
@@ -43,10 +43,10 @@ This file is generated: `node evidence-rich/report/build-handoff.mjs` (from `ben
 
 | Thing | State |
 |---|---|
-| App `main` (local = GitHub) | `4eb4b851` since 2026-10-09 about 19:40 UTC: three commits by another session (packaging of local models, a trial test, a model check) on top of `73b18d97`, none in the answer path (the diff over `electron/llm`, `electron/context-intelligence`, the engine, the modes and `premium` is empty). `73b18d97` holds every kept change of this work, including E16b and E19, and is the build every run of 2026-10-09 measured. |
-| Last change landed | **E19** (`73b18d97`): landed on local main 2026-10-09 05:08 UTC on Evin's "do 1", pushed 09:05 UTC on his "push main to github". |
+| App `main` | **Local `67fb1b24`, GitHub `bbba4a58`** (local is one commit ahead; pushing main needs Evin's word). `67fb1b24` = E26 (a DeepSeek key can do structured extraction), landed 2026-10-09 22:45 UTC on his "yes do all 4". Under it: `bbba4a58`, `71f718d8`, `ac9e3ab0` (another session's quick-action commits, pushed by that session), `4675ff0e` = E23 (derived résumé statements the résumé text contradicts are not evidence), landed 21:23 UTC and on GitHub through that push, then `4eb4b851` … `73b18d97` (E19). The benchmark runs of 9 October before 21:00 UTC measured `73b18d97`. |
+| Last change landed | **E26** (`67fb1b24`, local main, 2026-10-09 22:45 UTC) and **E23** (`4675ff0e`, 21:23 UTC), both on Evin's "yes do all 4". Before them E19 (`73b18d97`). |
 | Benchmark | Branch `bench/evidence-rich`, draft PR #638, worktree `.claude/worktrees/aq-fix`. Folder `benchmarks/natively-answer-quality/evidence-rich/`. |
-| Benchmark branch on GitHub | **Behind.** GitHub has `df815379`; the local branch is ahead from `99001d3b` on, including everything of the second and third sessions of 2026-10-09. Pushing it was denied on 2026-10-08 and needs Evin's explicit yes. |
+| Benchmark branch on GitHub | **Pushed** on Evin's yes: `df815379..7b8050fb` at 21:26 UTC on 9 October, and the later commits of the session after that. Draft PR #638 stays a draft and unmerged. |
 | Backup of run data | `~/natively-er-backup/` (run folders, judgments, calibrations, scripts, this file, the log). |
 | Judge | gpt-6-astra only (through AgentRouter). Evin, 2026-10-05: do not judge with Claude Code (quota). |
 | Score of main before E19, development set, Astra | 630 questions: **8.92**, 71 hard fails (11.3 %), 414 at 9.5 or above (main `f4cd986d`). |
@@ -57,9 +57,9 @@ This file is generated: `node evidence-rich/report/build-handoff.mjs` (from `ben
 | Unseen question sets | `challenge` (117, readable), `challenge-val` (54, never read, aggregates only), `code1` (36 coding items with executed tests), authored blind and frozen 2026-10-09. Main on them, judge-free: 94 / 117, 45 / 54, 34 / 36. Added in the third session: `prov1` (24, readable) and `prov1-val` (24, never read) on which employer, title or date a résumé fact belongs to; main 23 / 24 and 21 / 24. And `pack24`, a separate corpus of four packs of about 20,700 tokens (313 re-issued items, 48 new), for X2. |
 | Where it started, blind holdout, Astra | 7.73, 42 hard fails (run `er-holdout-base`, the build before this work). |
 | Targets set at the start | 9.2 mean, under 1 % hard fails. **Not met.** |
-| Running or scheduled | Nothing of this work runs. A one-shot check-in inside the Claude session (02:06 UTC on 10 October; it dies with the session) probes Astra once and, only on a clean probe, judges the 587 missing baseline answers and then the fixed X2 sample. See section 4. |
-| Declared experiments | None open. Third session: **X2** measured (realistic packs of 20,700 tokens: main 54.3 % right, read whole at a 24,000 threshold 87.0 %; nothing lands, section 11). **E23** (a derived résumé statement must be supported by the résumé text) not proposed under its rule: +6.8 points on 22 unseen rows, interval through 0. **E24 / E24b** (a notice when the job posting is the only document) closed: the posting is still told as the candidate's history. **E25** (the fix-up pass is shown the passages nearest each sentence) failed on unseen drafts. Earlier: E21 not proposed, E22 confirmed main's calculation notice, X1 measured. |
-| Candidate branches kept as records | `cand/e23` `9bfff943` (the experience-pairing rule; not proposed, Evin may still want it as a correctness fix), `cand/e21` `298b2b5b` (not proposed), `exp/x1-whole-pack-threshold` `237bba1a` (experiment build only, used for X1 and X2). Local, never pushed. |
+| Running or scheduled | A one-shot inside the Claude session at 07:30 IST on 10 October (02:00 UTC; it dies with the session) starts ONE script, `window-oct10.mjs` (copy in `~/natively-er-backup/scripts/`): probe, calibration, then until the pool closes: the 581 missing baseline judgments; the fixed pack24 sample of main against the 24,000 candidate; E26 on the unseen profile sets; the other two X2 arms; the rest of E26; drafts. A 403 stops everything. The blind holdout was run on main `67fb1b24` at 00:25 UTC (`er10-holdout-main`). |
+| Declared experiments | None open. After "yes do all 4": **E23 landed** (correctness fix). **E26 landed** (DeepSeek rung, last, in the structured ladder; every profile row extracted by the model, wrong title-employer pairings in the prompts 259 → 0, right 88.9 → 90.3 % on 226 profile questions; a profile upload takes 73 s on DeepSeek). **E27**, the 24,000 threshold with the pass's cap at 136,000: confirmation run 86.1 % right against main's 54.3 % on the 20,700-token packs, all five lines hold, **NOT landed** (`cand/e27`, his word needed). **Arm C**: main with cloud embeddings (Voyage) 63.4 %. **E28 / E28b** (documents before the question, for the provider's cache): the plain move costs 2.8 points; with the question repeated last it holds its lines on 1,210 replayed prompts (+2.4 points on development prompts, 65 to 89 % less uncached input); not built. Earlier the same day: E24 and E25 failed, X2 measured, E21 not proposed, E22 confirmed main's calculation notice. |
+| Candidate branches | **`cand/e27` `0256eed4`** (worktree `er-main`): the 24,000 threshold, one commit on main `67fb1b24`, ready to fast-forward on Evin's word. Merged into main: `cand/e23`, `cand/e26`. Records only: `cand/e21` `298b2b5b`, `exp/x1-whole-pack-threshold` `237bba1a`. |
 
 What is not verified: nothing in this work was executed on Windows, and no packaged build was made. Every change is shared TypeScript with no platform branch, run on macOS in the dev build through the benchmark.
 
@@ -71,7 +71,9 @@ The last three days, in order:
 
 - **2026-10-09, second session (10:00–13:30 UTC).** Started from this file on Evin's brief for a final optimisation round. Fresh run of main with E19 (630 answers). Astra opened at 11:02 UTC, calibration 38/38, then an HTTP 403 access block two minutes into judging: no score. The rest was judge-free: two defects of the deterministic checks fixed and versioned; a failure-cause map of the last judged baseline; E21 measured in four stages and not proposed; E22; the 12,000 / 24,000 / 48,000 threshold experiment (X1); three new question sets written blind.
 
-- **2026-10-09, third session (18:05–20:20 UTC).** Evin's instructions: finish the 587 judgments when access legitimately returns, establish the baseline before any proposal, investigate a narrow source-aware provenance mechanism validated on unseen questions before any Astra call, evaluate realistic 24k packs; no E21, no broader calculation notice, no rewrite of the conflict instructions; everything off main. No Astra call was made (the window is at about 02:00 UTC). Found in the recorded prompts: the app's own derived résumé sections state wrong employers and dates (the benchmark runs the rule-based profile parser, because a DeepSeek-only user has no model for structured extraction), and three hard fails repeat them. E23 removes such statements; it holds on development rows and on rows it is not about, and its gain on 22 unseen rows is +6.8 points with an interval through 0, so it is not proposed. E24 and E25 failed. X2: four realistic packs of about 20,700 tokens; main answers 54.3 % of 361 questions right and delivers 48 % of the needed facts, the same build reading the pack whole 87.0 % and all of them, with a faster spoken first word, a slower typed one and the fix-up pass out of its budget on a quarter of its turns.
+- **2026-10-09, third session (18:05–20:20 UTC).** Evin's instructions: finish the 587 judgments when access legitimately returns, establish the baseline before any proposal, investigate a narrow source-aware provenance mechanism validated on unseen questions before any Astra call, evaluate realistic 24k packs; no E21, no broader calculation notice, no rewrite of the conflict instructions; everything off main. No Astra call was made (the window is at about 02:00 UTC). Found in the recorded prompts: the app's own derived résumé sections state wrong employers and dates (the benchmark runs the rule-based profile parser, because a DeepSeek-only user has no model for structured extraction), and three hard fails repeat them. E23 removes such statements; it holds on development rows and on rows it is not about, and its gain on 22 unseen rows is +6.8 points with an interval through 0, so it is not proposed. E24 and E25 failed. X2: four realistic packs of about 20,700 tokens; main answers 54.3 % of 361 questions right and delivers 48 % of the needed facts, the same build reading the pack whole 87.0 % and all of them, with a faster spoken first word and a slower typed one.
+
+- **2026-10-09 21:05 UTC to 2026-10-10 00:30 UTC, after "yes do all 4 one by one".** (1) E23 rebased, four suites against main's baseline, fast-forwarded. (2) E26 written, measured in the app on 226 profile questions, all lines hold, fast-forwarded; main had moved under it twice by another session's commits, none in the answer path. (3) The 24,000 threshold built as `cand/e27` with the pass's cap raised, confirmed on the larger packs, and main measured with a cloud embedding provider (arm C); not landed. (4) The benchmark branch pushed. A correction on the way: X2's "the pass is out of budget on a quarter of its turns" was a wrong proxy; by the app's own log it was once in 270. Then, on Evin's "maximise the window": one prioritized judging script scheduled for 07:30 IST, and the layout replays E28 / E28b.
 
 Evin's standing instructions that bind the next session:
 
@@ -592,16 +594,16 @@ Section 13 prints the pass's instruction block as it is on main and the full tex
 
 **Open with Evin**
 
-1. **Push the benchmark branch `bench/evidence-rich`?** GitHub has `df815379`; the local branch is ahead from `99001d3b` on. The push was denied on 2026-10-08 and must not be retried by any route without his explicit yes. Until then the commits exist only on this machine and in `~/natively-er-backup/`.
+1. **Land the 24,000 threshold?** `cand/e27` `0256eed4` is one commit on main, tested and confirmed (86.1 % right against 54.3 % on packs of about 20,700 tokens; spoken first word 0.77 s earlier, typed 0.49 s later; request 3.6 times the size on those turns). Not measured: models with a small context window, Windows, a packaged build. `git merge --ff-only cand/e27` in the main checkout, after rebasing if main has moved.
 2. **Merge or close draft PR #638.** Merging puts the blind holdout's questions on public main.
 3. **Delete the old-history branches on GitHub** (`fix/aq-astra`, `cand/e16b`, `cand/e15`)? They keep files purged on 2026-10-06 reachable.
-4. **A judged score of main with E19.** The run exists (`er6-dev-main`, `er6-dev2-main`); Astra's window of 2026-10-09 11:02 UTC was closed by an access block after 43 of 630 judgments. The next window finishes it (section 4). A holdout run of `73b18d97` has not been made.
+4. **A judged score of main with E19.** Still owed at 00:30 UTC on 10 October: 581 of 630 judgments missing. The window script of 02:00 UTC does them first. **Also his: pushing main** (local `67fb1b24` is one commit ahead of GitHub).
 5. **Windows and a packaged build.** Nothing in this work has been executed on Windows or in a packaged app.
-6. **The whole-pack threshold.** X1 (synthetic files) and now **X2 (realistic packs of about 20,700 tokens, 361 questions)**: main, which retrieves pieces above 12,000 tokens, is right on 54.3 % and puts 48 % of the needed facts in the request; reading the pack whole (24,000) is right on 87.0 %, with the spoken first word 0.76 s faster (no retrieval, no awaited rerank), the typed first word 0.43 s later, a request 3.6 times the size, and the fix-up pass settling late on 26.5 % of its turns instead of 16.4 %. Two of X2's seven lines fail on those costs, so it is reported as a gain with its price, not proposed. Arm A is the default configuration (bundled local embedding model: keyword search on spoken turns); a cloud embedding provider was not measured. His call whether to pursue "24,000 with the pass's cap and budget raised with it". A fixed sample of both arms is queued for Astra after the baseline.
+6. **The whole-pack threshold: see 1.** X1 (synthetic), X2 (realistic packs), arm C (cloud embeddings: 63.4 %) and the candidate's confirmation run are in the log. 48,000 is not safe.
 7. **The provider's access block.** Two in three days (2026-10-08 02:07 UTC, five calls; 2026-10-09 11:12 UTC, three calls two minutes into judging, after a clean calibration). Nothing was retried. If it keeps happening the judge budget is the limit on this work, not ideas.
 8. **Code verification is switched off app-wide** (`electron/llm/codeVerification/verificationEnabled.ts`, since 2026-07-18, no reason recorded in the commit). Main passes 34 of 36 coding questions of `code1` without it. Its correction is posted as a new message, which the benchmark harness does not capture, so it was not measured.
-9. **E23 as a correctness fix.** `cand/e23` `9bfff943` stops a résumé's derived experience statements from being served as evidence when the résumé's own text shows one of them to be wrong (a title paired with the next employer on the page, a description line or a page marker as the employer). It did not meet its gain line on unseen questions (+6.8 points, interval through 0), so it is not proposed as a score change. The statements it removes are wrong on their face on both benchmark résumés. Land it or leave it is his call.
-10. **A DeepSeek-only user's profile is extracted by rules, not by a model.** `generateContentStructured` answers "No reasoning model available" when DeepSeek is the only key, and the résumé falls to the rule-based parser, which is where the wrong pairings come from. Every profile row of this benchmark has run that way. Letting DeepSeek serve the structured extraction is a provider-routing decision.
+9. **A profile upload on DeepSeek takes about 73 s** (a résumé with a posting; 3 s with the rule-based parser it replaces), because the whole profile pipeline now runs on it, about ten calls one after the other. E26 landed with that cost stated. Shortening it (fewer calls, or in parallel) is a separate change.
+10. **Build E28b?** Putting the documents before the question and repeating the question last makes a whole pack a cached prefix: on 1,210 replayed prompts right answers +2.4 points (development), +2.3 (unseen, interval through 0), −1.1 (larger packs, inside the margin), and 65 to 89 % fewer input tokens read new. It touches the order of every request that carries documents; implementation notes are in the log.
 
 **Next candidates, in the order the data suggests**
 
@@ -4860,6 +4862,23 @@ Entry headings with their line numbers in `docs/ITERATIONS-ER.md`, and every lin
 - L2818: E25 — result: stage 1 holds, stage 2 fails; not proposed (2026-10-09 18:58 UTC; replayed 18:50–18:58 UTC; main's pass, cap 96,000, k = 2; every rebuilt request equals the recorded one; `report/rule-e25.mjs`)
 - L2843: X2 — result: on packs of about 20,700 tokens main is right on 54 % of the questions; read whole, 87 % (2026-10-09 20:17 UTC; arm A 19:00–19:37 UTC, arm B 19:37–20:14 UTC; experiment build `237bba1a`, direct DeepSeek; 361 turns per
 - L2902: Main moved during this session, by another session (noted 2026-10-09 20:19 UTC)
+- L2911: Evin, 2026-10-09 about 21:05 UTC: "yes do all 4 one by one"
+- L2915: 1. E23 landed on local main as a correctness fix (2026-10-09 21:24 UTC)
+- L2929: 2. E26 — a DeepSeek-only user's profile is extracted by the model (measured and declared 2026-10-09 21:25 UTC, before any app run of it)
+- L2959: X2 — correction to line 6: the pass was NOT out of its budget on a quarter of its turns (2026-10-09 21:27 UTC)
+- L2979: 4. `bench/evidence-rich` pushed (2026-10-09 21:26 UTC, on Evin's yes)
+- L2985: 3. E27 — the 24,000 threshold as a candidate, and arm C with a cloud embedding provider (lines written 2026-10-09 21:34 UTC, before either run)
+- L3011: Evin, 2026-10-09 about 21:45 UTC: start the judging by itself at 7:30 IST and use the whole window
+- L3020: E28 — the documents before the question, so that a whole pack is a prefix the provider can cache (rule written 2026-10-09 21:58 UTC, before any replay of it; replay only, nothing is built)
+- L3038: 2. E26 — result: all five lines hold; landed on local main (2026-10-09 22:51 UTC; app run 21:32–22:33 UTC, `er9-*`, 226 rows of the two profile modes, direct DeepSeek, all answered; `report/e26-read.mjs`)
+- L3077: 3. Arm C — main at 12,000 with a cloud embedding provider: 63.4 % right (2026-10-09 23:23 UTC; run `x2-c12v` 22:51–23:23 UTC on main `67fb1b24`, Voyage `voyage-4`, 1,024 dimensions; 361 questions, all answered; judge-free)
+- L3101: 3. E27 — the 24,000 candidate, confirmation run: all five lines hold; NOT landed (2026-10-09 23:58 UTC; run `x2-e27` 23:23–23:57 UTC on `cand/e27` rebased onto main `67fb1b24`, default configuration; 361 questions, all answered)
+- L3126: E28 — result: the pack is cached and the answers get worse; lines 1 and 3 fail, not a lead as it stands (2026-10-10 00:06 UTC; replayed 23:58–00:06 UTC on the 361 prompts of X2 arm B, k = 1, 0 failed calls)
+- L3142: E28b — the same, with the question repeated as the last thing in the request (declared 2026-10-10 00:06 UTC, before its replay; same base arm, same three lines)
+- L3147: E28b — result on the larger packs: all three lines hold (2026-10-10 00:10 UTC; replayed 00:06–00:10 UTC, 361 prompts, 0 failed calls)
+- L3163: E28b — the 630 development prompts: more right answers, a third of the input cost, no first-token gain (2026-10-10 00:20 UTC; replayed 00:10–00:20 UTC, 0 failed calls)
+- L3178: E28b — unseen prompts: the line holds (2026-10-10 00:24 UTC; replayed 00:20–00:24 UTC, 219 prompts, 0 failed calls; the two unread sets as aggregates)
+- L3195: E28b is not built tonight; the blind holdout is run on current main instead (2026-10-10 00:25 UTC)
 
 ### B.1 The log
 
@@ -7772,6 +7791,305 @@ downloaded models are checked for damage). `git diff --stat 73b18d97..4eb4b851` 
 `electron/services/modes` and `premium` is empty: the answer path is unchanged, so the runs of `73b18d97`
 (`er6-*`, `er7-*`, `er8-*`) and the experiment build on top of it still describe main. Nothing of this work
 touched main. A candidate would be rebased onto the new main before any landing.
+
+#### Evin, 2026-10-09 about 21:05 UTC: "yes do all 4 one by one"
+His answer to the four decisions put to him at 20:20 UTC: (1) land the résumé-statement fix as a correctness fix,
+(2) let DeepSeek do profile extraction, (3) pursue the 24,000 threshold, (4) push `bench/evidence-rich`.
+
+##### 1. E23 landed on local main as a correctness fix (2026-10-09 21:24 UTC)
+`cand/e23` rebased onto main `4eb4b851` (three commits by another session since `73b18d97`, none in the answer
+path), message rewritten with the evidence and the fact that it missed its gain bar: `4675ff0e`. Four suites on a
+fresh build of the candidate and of main, run back to back:
+| suite | main `4eb4b851` | candidate `4675ff0e` |
+|---|---|---|
+| intelligence + context-intelligence | 2,917 tests, 0 fail | 2,935 tests (18 new), 1 fail |
+| llm | 6,064 tests, 0 fail | 6,064 tests, 1 fail |
+| services | 5,791 tests, 121 fail, 12 cancelled | 5,791 tests, 121 fail, 12 cancelled (the same names) |
+The candidate's two failures are timing tests that ran while another job of mine loaded the machine (a queue that
+must drain within its window in `HindsightMemory.test.mjs`; a C++ compile in `CppRunner.test.mjs`): both files
+re-run alone three times, 41 of 41 each time. Neither touches the changed code. Fast-forwarded:
+**local main = `4675ff0e`**, one commit ahead of `origin/main` `4eb4b851`. Not pushed (the word was to land).
+
+##### 2. E26 — a DeepSeek-only user's profile is extracted by the model (measured and declared 2026-10-09 21:25 UTC, before any app run of it)
+**The gap.** `LLMHelper.generateContentStructured` builds its ladder from OpenAI, Claude, Gemini, Codex CLI, Ollama,
+a custom provider and the Natively API. There is no DeepSeek rung, so with DeepSeek as the only key the ladder is
+empty ("No reasoning model available") and the résumé goes to the rule-based parser.
+**Measured before any code** (the app's own extraction prompt and parser, `premium/…/StructuredExtractor.ts`,
+bundled; the request `generateWithDeepseek` sends: deepseek-flash, thinking off; the app's raw text of each
+document; two runs at the provider default and two at temperature 0.4):
+| document | result, 4 of 4 runs | time per call |
+|---|---|---|
+| résumé A (PDF, wrapped lines) | 3 entries: both titles at Quillhaven with their own dates, Tessarine; 4 projects | 6.1 to 6.3 s |
+| résumé B (two titles at one employer) | 4 entries, the second title at Lumenquay, Ondaverde and Plumewright right | 5.1 to 5.8 s |
+| posting A / posting B | title, company, level, location, minimum years right | 2.5 to 3.3 s |
+The pairing rule of E23 rejects none of those entries. Nothing differed between the two temperatures.
+**The change** (branch `cand/e26` from main `4675ff0e`): a DeepSeek rung, LAST in the ladder (after the Natively
+API), at 0.4 like the Gemini rungs; `generateWithDeepseek` takes an optional temperature and sends none for its
+chat callers. Last so that nobody who has a working rung today is moved to another model. Skipped when the
+provider is switched off, when the key failed permanently this session, and in local-only mode. New test file 14 of
+14; type check clean.
+**App run** (one build of `cand/e26`, direct DeepSeek, fresh user data): the Looking-for-work and
+Technical-Interview rows of dev, dev2, challenge, challenge-val, prov1 and prov1-val (224 rows), against main's
+recorded runs of the same rows (`er6-*`, `er7-*`, `er8-*`; main before E23, rule-based parser).
+**Lines.**
+1. Every profile upload reports model extraction; the app log has no "falling back to deterministic heuristic".
+2. No derived experience entry in any recorded prompt is rejected by the pairing rule.
+3. Rows right by the fixed checks: not more than 2 points below main on all 224; on the 28 which-employer and
+   length-of-time rows not below main.
+4. First word, spoken: median at most 150 ms above main on the same rows; no turn over 5 s.
+5. Every row answered, no provider failure; the time of a profile upload is reported.
+If 1, 2 and 5 hold and 3 or 4 does not, it is reported with its cost and not landed without Evin seeing it.
+
+##### X2 — correction to line 6: the pass was NOT out of its budget on a quarter of its turns (2026-10-09 21:27 UTC)
+The X2 reader counted a pass as over budget when the answer settled 3.5 s or more after the last streamed token.
+That interval holds every step after the stream (the spoken repair and the pass, one after the other), not the
+pass. The app logs the pass itself (`[ClaimVerifier] … <outcome> <ms>`). From those lines:
+| | A: 12,000 | B: 24,000 |
+|---|---|---|
+| passes logged | 272 | 270 |
+| pass time, spoken: median / p90 / max | 1,237 / 1,567 / 2,704 ms | 1,723 / 2,079 / 2,642 ms |
+| pass time, typed: median / p90 / max | 1,148 / 1,453 / 2,302 ms | 1,612 / 2,126 / 5,790 ms |
+| not finished inside the 3.5 s budget | 0 | 1 (0.4 %) |
+| outcomes | 191 unchanged, 74 edited, 7 edits refused by the rails | 238 unchanged, 31 edited, 1 timeout |
+So the pass is about 0.5 s slower on the whole pack and ran out of budget once in 270. **Line 6 holds** as it was
+written (answers the pass broke 3 → 2; passes over budget 0 % → 0.4 %, 2 points allowed). What the wrong proxy did
+measure is real and stays in the table above as the settled-answer time: everything after the stream takes longer
+when it reads 92,000 characters (settled, spoken p90 7.6 → 8.2 s; typed p90 2.97 → 4.13 s). X2 therefore fails one
+line only, by 30 ms: the typed first word (+430 ms, 400 allowed). The pass's budget does not need raising; its
+material cap does (2 requests were over 96,000 characters). The sentence "the pass out of budget on a quarter of
+its turns" in the X2 entry above, in the handoff head and in what Evin was told at 20:20 UTC is wrong and is
+corrected here; the reader's label is fixed in `report/x2-pack24.mjs`.
+
+##### 4. `bench/evidence-rich` pushed (2026-10-09 21:26 UTC, on Evin's yes)
+Plain fast-forward, `df815379..7b8050fb`, 52 commits, 296 files, all under `benchmarks/natively-answer-quality/`.
+The added lines were scanned for key-like strings first (none). Draft PR #638 now shows it; it stays a draft and is
+not merged. Done out of order because items 2 and 3 were waiting for another session's app to stop; later commits
+of this session are pushed to the same branch at the end.
+
+##### 3. E27 — the 24,000 threshold as a candidate, and arm C with a cloud embedding provider (lines written 2026-10-09 21:34 UTC, before either run)
+**Candidate** `cand/e27` (worktree `er-main`, from main `4675ff0e`): `WHOLE_PACK_MAX_TOKENS` 12,000 → 24,000 and
+`CLAIM_VERIFIER_MATERIAL_MAX_CHARS` 96,000 → 136,000 (a full pack, the whole profile of 6,000 tokens and 16,000
+characters for the rest of the request; an existing test holds the three figures to that relation). The pass's
+3.5 s budget is NOT changed: by the app's own log it was missed once in 270 on the whole pack (correction above).
+Four tests that built a "too large" pack of 13,500 to 22,000 tokens now build one above 24,000; one new test file
+(6 tests). Type check clean; intelligence + context-intelligence 0 failures, llm 0 failures on the candidate
+(services is run after the app runs).
+**Runs, both on `pack24` (361 questions), direct DeepSeek, fresh user data, one app at a time:**
+* **Arm C** (context, no line): the experiment build at main's 12,000 with a cloud embedding provider (Voyage,
+  activated by saving its key through the app's own setting before any file is uploaded; `ER_EMBEDDING=voyage`,
+  new in `run-er.mjs`). What a user with cloud embeddings gets from main on these packs. Arm A of X2 is the same
+  build with the bundled model.
+* **The candidate build**, default configuration (bundled embedding model), against X2's arms A and B.
+**Lines for the candidate:**
+1. right rows at least 84.0 % (arm B minus 3 points) and at least 25 points above arm A;
+2. rows with a forbidden string at most arm B + 3 (11);
+3. no pass request over the new cap, and passes not finished inside the budget (app log) at most 2 %;
+4. first word within 300 ms of arm B at the median, spoken and typed (another hour of the provider);
+5. every row answered, no error or timeout.
+Packs of 12,000 tokens or less are not re-run: for them neither figure changes anything (whole below both
+thresholds, requests under the old cap), which the unit tests hold.
+**Landing.** His word was to pursue it. The request on such a turn is 3.6 times the size, which is a cost on the
+Natively API and on users' own keys, so the candidate is taken to a measured, tested state and landed only on a
+further explicit word, with arm C's result beside it.
+
+#### Evin, 2026-10-09 about 21:45 UTC: start the judging by itself at 7:30 IST and use the whole window
+"auto start the remaining iterations at 7:30 am ist … gpt astra would be available for roughly over an hour,
+maximise the time availability, judge and benchmark as much as possible and as many iterations." He is asleep
+until then. Done: the in-session one-shot is moved to 07:30 IST (02:00 UTC) and starts ONE script,
+`window-oct10.mjs` (probe, calibration, then in priority order until the pool closes: the 587 baseline judgments;
+the 48 new pack24 rows of both X2 arms; the E26 candidate's profile rows with main's side of them; the 120 derived
+pack24 rows of both arms; arm C and the 24,000 candidate build; baseline drafts). A 403 stops everything, as
+before. Every app run that produces something to judge is made before the window.
+
+#### E28 — the documents before the question, so that a whole pack is a prefix the provider can cache (rule written 2026-10-09 21:58 UTC, before any replay of it; replay only, nothing is built)
+X2's cost side: a whole 20,700-token pack makes a request of about 29,800 prompt tokens of which 5,248 are cache
+hits (the system prompt). The user message starts with the question, so everything after it, the pack included, is
+new to the provider on every turn. Inside one meeting the pack's evidence section is byte-identical from turn to
+turn (52 of 60 recorded sales turns once the per-row session id is made constant; the benchmark opens a new
+session per question, a meeting does not).
+**Arms** (`replay-generator.mjs`, the 361 recorded prompts of X2 arm B, k = 1, three at a time, in recorded order):
+`e28-base` = the recorded request with the session id constant; `e28-first` = the same with the "# Evidence"
+section moved to the top of the user message, before the question and the conversation. Nothing else differs.
+**Lines.**
+1. rows right by the fixed checks: arm not more than 2 points below base; rows with a forbidden string at most
+   base + 3;
+2. cached share of the prompt tokens, median over the rows: at least 80 % in the arm;
+3. first token: the arm's median at least 300 ms below base.
+If all three hold it is a lead for a composer change (which would need its own app runs and a judged reading on
+every mode, since it moves the question on every turn that carries documents); nothing is built from the replay
+alone. It is run after the app runs of E26 and E27, never beside one.
+
+##### 2. E26 — result: all five lines hold; landed on local main (2026-10-09 22:51 UTC; app run 21:32–22:33 UTC, `er9-*`, 226 rows of the two profile modes, direct DeepSeek, all answered; `report/e26-read.mjs`)
+| | main (rule-based parser; `er6`, `er7`, `er8`) | candidate |
+|---|---|---|
+| profile rows extracted by the model | 0 of 163 | 163 of 163 |
+| structured calls answered by DeepSeek / failures / rule-based fallbacks (app log) | n/a | 424 / 0 / 0 |
+| derived experience entries in the recorded prompts that the pairing rule rejects | 259 | 0 |
+| rows right by the fixed checks, all 226 | 201 (88.9 %) | 204 (90.3 %) |
+| development (140) | 126 | 124 |
+| challenge + challenge-val (38) | 31 | 33 |
+| prov1 + prov1-val (48) | 44 | 47 |
+| which employer / length of time (28) | 25 | 27 |
+| own history with only the posting (12) | 11 | 12 |
+| rows with a forbidden string | 4 | 2 |
+| first word, spoken: median / p90 | 1,070 / 1,731 ms | 1,058 / 1,801 ms |
+| first word, typed: median | 989 ms | 955 ms |
+| **profile upload, résumé + posting: median / max** | 3.3 / 4.0 s | **73 / 82 s** |
+| profile upload, one document: median / max | 1.3 / 2.2 s | 25 / 29 s |
+Lines 1 to 5 hold. The sections that reach the prompt are now the résumé's own ("Achievements", "Leadership",
+"Responsibilities", one card per real job); the garbled ones are gone ("on-call engineer starts from. at Owned the
+desig…", "disk; about 260 GitHub stars."). No model-written profile artifact is in any recorded prompt. Rows that
+changed side, development: 5 right → wrong, 4 wrong → right (among them D-LFW-020, the tenure, now right in the app
+as well), the size of ordinary run-to-run change.
+**The cost, which no line covered and Evin should see:** a profile upload is slow on DeepSeek. With a model
+available the whole profile pipeline runs, as it does on every other provider (extraction, the stories, the
+prepared material: about ten structured calls for a résumé and a posting), and on deepseek-flash those take about
+6 s each, one after the other: 73 s at the median for a résumé with a posting, against 3 s with the rule-based
+parser. The answers do not wait for it; the upload does.
+**Suites.** A first llm run failed one source-pinning test (`FastModelPreferFast`: a 3,000-character window of
+the function that one added line pushed its target out of); the line was redundant and is removed. Then, on the
+candidate rebased onto the main of that moment: intelligence + context-intelligence 2,935 / 0 fail; llm 6,153 /
+1 fail; services 5,794 / 121 fail / 12 cancelled with the same names as main's baseline. The one llm failure
+(`QuickActionTurnRequest2026_10_09`: "a legacy prompt still gets the mode template") arrived with another
+session's commit and fails the same way on main `bbba4a58` built in the same worktree: not this change.
+**Main moved again meanwhile.** Another session committed three changes on top of E23 and pushed
+(`ac9e3ab0`, `71f718d8`, `bbba4a58`: quick actions, follow-up questions, shortcuts), so **E23 `4675ff0e` is on
+GitHub main** as part of that push, and the uncommitted edit to `LLMHelper.ts` in the main checkout is gone.
+`cand/e26` rebased onto `bbba4a58`: `67fb1b24`, fast-forwarded. **Local main = `67fb1b24`**, one commit ahead
+of `origin/main` `bbba4a58`; not pushed.
+
+##### 3. Arm C — main at 12,000 with a cloud embedding provider: 63.4 % right (2026-10-09 23:23 UTC; run `x2-c12v` 22:51–23:23 UTC on main `67fb1b24`, Voyage `voyage-4`, 1,024 dimensions; 361 questions, all answered; judge-free)
+A first start at 22:47 UTC was stopped after 8 turns and set aside (`x2-c12v-void-local`): saving the key had
+left the pipeline on the bundled model. The runner now also selects the provider and refuses to start unless the
+app reports it active (`provider: voyage, location: cloud`). In the run that counts no spoken turn is marked
+`local_lexical`.
+| | A: main, bundled model | C: main, Voyage embeddings | B: pack read whole (24,000) |
+|---|---|---|---|
+| right | 54.3 % | **63.4 %** | 87.0 % |
+| every required string (302 rows) | 47.7 % | 59.9 % | 86.8 % |
+| rows with a forbidden string | 21 | 23 | 8 |
+| calculation results right (105) | 39 | 54 | 84 |
+| needed document facts in the request | 48 % | 61 % | 100 % |
+| the 48 new rows | 17 | 20 | 39 |
+| spoken turns: right / facts in the request | 48.9 % / 42 % | 58.9 % / 55 % | 87.4 % / 100 % |
+| typed turns: right / facts in the request | 63.8 % / 60 % | 71.5 % / 72 % | 86.2 % / 100 % |
+| first word, spoken: median / p90 / p95 / max | 3,413 / 3,748 / 3,941 / 7,939 ms | 3,183 / 3,929 / 5,077 / 6,239 ms | 2,657 / 3,059 / 3,209 / 4,193 ms |
+| first word, typed: median / p90 | 899 / 1,188 ms | 1,874 / 2,403 ms | 1,329 / 1,728 ms |
+| turns over 5 s to the first word | 1 | 12 (all spoken) | 1 |
+By mode (right): sales 43.8 → 51.7 %, lecture 70.0 → 74.4 %, seminar 54.9 → 65.9 %, call-center 48.4 → 61.5 %.
+**Reading.** A cloud embedding provider gives main 9 points on these packs and still leaves it 24 points under
+reading the pack whole; retrieval, with either model, puts between half and three fifths of the needed facts in
+the request. It is also the slowest arm to the first word on a typed turn (the embedding round trip, about 1.06 s)
+and has twelve spoken turns over 5 s. So the gap that X2 measured is not an artefact of the bundled model.
+
+##### 3. E27 — the 24,000 candidate, confirmation run: all five lines hold; NOT landed (2026-10-09 23:58 UTC; run `x2-e27` 23:23–23:57 UTC on `cand/e27` rebased onto main `67fb1b24`, default configuration; 361 questions, all answered)
+| | A: main | C: main, cloud embeddings | B: experiment build at 24,000 | **candidate `cand/e27`** |
+|---|---|---|---|---|
+| right | 54.3 % | 63.4 % | 87.0 % | **86.1 %** (311 of 361) |
+| every required string (302 rows) | 47.7 % | 59.9 % | 86.8 % | 86.1 % |
+| rows with a forbidden string | 21 | 23 | 8 | 8 |
+| calculation results right (105) | 39 | 54 | 84 | 82 |
+| the 48 new rows / of them the 9 that need the whole pack | 17 / 0 | 20 | 39 / 6 | 39 / 7 |
+| needed document facts in the request | 48 % | 61 % | 100 % | 100 % |
+| first word, spoken: median / p90 / max | 3,413 / 3,748 / 7,939 ms | 3,183 / 3,929 / 6,239 ms | 2,657 / 3,059 / 4,193 ms | 2,639 / 2,999 / 3,537 ms |
+| first word, typed: median / p90 | 899 / 1,188 ms | 1,874 / 2,403 ms | 1,329 / 1,728 ms | 1,384 / 1,741 ms |
+| settled answer, spoken: median / p90 | 5,240 / 7,648 ms | 4,927 / 6,511 ms | 5,215 / 8,244 ms | 4,972 / 8,014 ms |
+| settled answer, typed: median / p90 | 2,341 / 2,974 ms | 3,063 / 4,003 ms | 3,145 / 4,131 ms | 3,225 / 3,935 ms |
+| fix-up pass: median / p90 / not finished in budget (app log) | 1.2 / 1.6 s / 0 | n/a | 1.7 / 2.1 s / 1 | 1.65 / 1.97 s / 0 of 270 |
+| pass requests over the cap | 0 | 0 | 2 (cap 96,000) | 0 (cap 136,000; largest request 95,771) |
+| prompt tokens, median | 8,183 | 8,262 | 29,759 | 29,757 |
+Lines: 1 holds (86.1 %, 31.8 points above arm A); 2 holds; 3 holds; 4 holds (spoken −18 ms, typed +55 ms against
+arm B); 5 holds. Suites on the candidate (rebased): the new and changed test files 30 of 30; intelligence +
+context-intelligence and llm had 0 failures before the rebase, services the same names as main's baseline.
+**Not landed.** `cand/e27` `0256eed4` (worktree `er-main`, one commit on main `67fb1b24`) is ready to fast-forward on Evin's word. What
+he is deciding: +32 points of right answers on packs between 12,000 and 24,000 tokens and a spoken first word
+0.77 s earlier, for a request 3.6 times the size on those turns and a typed first word 0.49 s later. Not measured:
+any model other than deepseek-flash (a model with a small context window would now be sent up to about 32,000
+tokens where it was sent about 16,000), Windows, a packaged build.
+
+##### E28 — result: the pack is cached and the answers get worse; lines 1 and 3 fail, not a lead as it stands (2026-10-10 00:06 UTC; replayed 23:58–00:06 UTC on the 361 prompts of X2 arm B, k = 1, 0 failed calls)
+| | base (question first) | documents first |
+|---|---|---|
+| cached share of the prompt tokens, median | 18 % | **97.6 %** |
+| prompt tokens not served from the cache, all 361 requests | 8.77 million | 0.93 million (−89 %) |
+| first token: median / p90 | 1,447 / 1,685 ms | 1,190 / 1,554 ms (−257 / −131 ms) |
+| right by the fixed checks | 89.2 % | 86.4 % (paired −2.8, 95 % −6.6 to 0.3) |
+| every required string (302 rows) | 89.7 % | 85.1 % (paired −4.6, 95 % −7.9 to −1.7) |
+| rows with a forbidden string | 9 | 7 |
+Line 2 holds (the pack really is a cacheable prefix inside a meeting). **Line 1 fails** (2.8 points fewer right
+answers, and the loss in required strings is outside its interval) and **line 3 fails** (257 ms, 300 asked). So
+simply moving the evidence above the question trades about 3 points of right answers for nine tenths of the input
+cost and a quarter of a second. Nothing is built. If the cost of the 24,000 threshold matters more than those
+points, the next thing to try is not this layout but one that keeps the question where the model reads it last
+AND first (the question repeated after the documents), which this replay did not test.
+
+##### E28b — the same, with the question repeated as the last thing in the request (declared 2026-10-10 00:06 UTC, before its replay; same base arm, same three lines)
+One further arm on the same 361 prompts: the evidence first, the rest unchanged, and the question section repeated
+word for word at the very end under "# The question again (answer this)". Lines 1 to 3 of E28 apply unchanged
+against `e28-base`. If line 1 fails again the layout idea is closed for today.
+
+##### E28b — result on the larger packs: all three lines hold (2026-10-10 00:10 UTC; replayed 00:06–00:10 UTC, 361 prompts, 0 failed calls)
+| | base (question first) | documents first, question repeated last |
+|---|---|---|
+| right by the fixed checks | 89.2 % | 88.1 % (paired −1.1, 95 % −5.3 to 0.8) |
+| every required string (302 rows) | 89.7 % | 87.4 % (paired −2.3, 95 % −5.0 to 0.7) |
+| rows with a forbidden string | 9 | 4 |
+| cached share of the prompt tokens, median | 18 % | 99.3 % (the prefix was already warm from the E28 arm) |
+| first token: median / p90 | 1,447 / 1,685 ms | 1,075 / 1,325 ms (−372 / −360 ms) |
+Repeating the question at the end gives back most of what moving the documents cost. It is a lead, not a change:
+the benchmark app opens a new session for every question, so an app run cannot show the caching (the session id
+is in every evidence tag); a confirmation needs several questions inside one session.
+**Second part, declared here before its replay:** the same two arms on the 630 ordinary development prompts
+(`er6-dev-main` + `er6-dev2-main`, packs of 2,300 to 9,800 tokens, all nine modes), k = 1. Lines: right not
+more than 2 points below base and forbidden-string rows at most base + 5; cached share at least 60 % at the
+median; first token at least 150 ms earlier at the median.
+
+##### E28b — the 630 development prompts: more right answers, a third of the input cost, no first-token gain (2026-10-10 00:20 UTC; replayed 00:10–00:20 UTC, 0 failed calls)
+| 630 prompts, nine modes | base (question first) | documents first, question repeated last |
+|---|---|---|
+| right by the fixed checks | 90.2 % | 92.5 % (paired +2.4, 95 % 0.2 to 3.8) |
+| every required string (484 rows) | 89.5 % | 91.5 % (paired +2.1, 95 % −0.6 to 5.0) |
+| rows with a forbidden string | 9 | 3 |
+| cached share of the prompt tokens, median | 34.8 % | 93.9 % |
+| prompt tokens not served from the cache, all 630 requests | 5.81 million | 2.05 million (−65 %) |
+| first token: median / p90 | 850 / 1,222 ms | 859 / 1,132 ms |
+Lines 1 and 2 hold; line 3 does not (no earlier first token at the median on packs this size; the 0.37 s was the
+larger packs). These are rows this work has read many times, so, as E21 taught, **the unseen sets are replayed
+before anything else is concluded** (declared now, before that replay): the same two arms on the prompts of
+`er7-chal-main`, `er7-chalval-main`, `er8-prov1-main` and `er8-prov1val-main` (219 prompts; the two unread
+sets as aggregates). Line: right not more than 2 points below base, forbidden-string rows at most base + 3.
+
+##### E28b — unseen prompts: the line holds (2026-10-10 00:24 UTC; replayed 00:20–00:24 UTC, 219 prompts, 0 failed calls; the two unread sets as aggregates)
+| 219 unseen prompts | base | documents first, question repeated last |
+|---|---|---|
+| right by the fixed checks | 80.8 % | 83.1 % (paired +2.3, 95 % −1.8 to 7.3) |
+| every required string (183 rows) | 83.6 % | 86.9 % (paired +3.3, 95 % −1.1 to 7.1) |
+| rows with a forbidden string | 17 | 17 |
+| cached share of the prompt tokens, median | 37.4 % | 64.4 % |
+| prompt tokens not served from the cache | 1.80 million | 1.14 million (−36 %) |
+Readable part: challenge 76.9 % → 81.2 % right (117 rows), prov1 95.8 % → 95.8 % (24 rows).
+**Where E28b stands.** Three replays, 1,210 prompts: right answers +2.4 points on development prompts (interval
+above 0), +2.3 on unseen ones (interval through 0), −1.1 on the larger packs (inside its margin); input tokens the
+provider has to read new −65 %, −36 % and −89 %; the first token 0.37 s earlier on the larger packs and unchanged
+on ordinary ones. Every line set for it holds except the first-token line on ordinary packs. It is a lead for a
+composer change (the evidence section first, the question section repeated last). It has NOT been run in the app:
+the layout moves the question on every turn that carries documents, the fix-up pass and the spoken repair inherit
+that request, and none of that is in a replay of the answer call alone.
+
+##### E28b is not built tonight; the blind holdout is run on current main instead (2026-10-10 00:25 UTC)
+The composer keeps the user's own instructions as the last thing in the request on purpose ("nothing the app says
+can follow, and so contradict, what the user asked for"), several tests pin the order of its sections, and the
+fix-up pass and the spoken repair inherit the request. The replayed layout put the repeated question at the very
+end, which is where the user's instructions go when there are any (the benchmark has none). Fitting the two
+together and re-pinning the tests is a change to make with a clear head and its own app runs, not in the hour
+before a judge window. For whoever builds it: the evidence section must be the first thing in the user message
+and byte-identical from turn to turn inside a meeting (the session id in `scope_id` already is; the transcript's
+evidence items must not be interleaved before the files); the question section stays where it is AND is repeated
+after the notices, before the user's instructions; a confirmation needs several questions in ONE session, which
+the benchmark runner does not do today.
+Started instead, at 00:25 UTC: the blind holdout (180 questions) on main `67fb1b24` in the app,
+`er10-holdout-main`: no holdout run of a build with E19 exists. Aggregates only. It is judged tonight only if
+the pool outlasts everything queued before it.
 
 ---
 
