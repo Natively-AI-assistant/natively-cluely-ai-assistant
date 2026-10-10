@@ -3494,3 +3494,16 @@ commits and pushes nothing. The window script re-reads that list before each of 
 while a window is open is judged at the next stage boundary; one listed later waits for the next window.
 **Window of 11 October, order now:** listed E30 runs (if any) → E29 repetition 1 (57) → the derived pack24 rows →
 E26 → the other X2 arms → the rest of the holdout → drafts.
+
+### Evin's "do both" (2026-10-10 21:21 UTC): main pushed; the documents-first layout may land when its rule holds
+Asked of him: (a) push main, one commit ahead of GitHub (the 24,000 threshold); (b) land the documents-first
+layout, once its lines and the judged comparison are read. His answer: "do both".
+**(a) Done.** `cdaedfad` pushed to GitHub `main` at 21:22 UTC (a fast-forward from `95490839`, no force; the
+remote was fetched first and had not moved). Local and GitHub main are the same commit.
+**(b) Read as an authorization in advance, not as "land it unmeasured":** the sentence he answered carried the
+condition, and the rule above was written so that a failing line stops the change. When every judge-free line
+(1 to 7) and J1 to J3 hold, `cand/e28b` `7067ab3c` is landed on local main without asking again (a fast-forward
+while main is `cdaedfad`; if main has moved: rebase, type check and the four suites on both first). If any line
+fails it is not landed and the numbers are reported. Pushing the landed commit is a new question for him.
+**State at 21:22 UTC:** nothing of E30 is measured. The DeepSeek account still answers `is_available: false`
+(asked every 5 minutes since 20:03 UTC); the waiting chain and the window script are both alive.

@@ -43,7 +43,7 @@ This file is generated: `node evidence-rich/report/build-handoff.mjs` (from `ben
 
 | Thing | State |
 |---|---|
-| App `main` | **Local `cdaedfad`, GitHub `95490839`** (local is one commit ahead: the 24,000 threshold, landed 2026-10-10 19:50 UTC on Evin's "1) yes"; pushing main needs his word). `cdaedfad` = `cand/e27` rebased: a reference pack is read whole up to 24,000 tokens, the claim pass's material cap is 136,000 characters. Below it: two commits of another session (`95490839`, `ea316087`), then `67fb1b24` = E26 (a DeepSeek key can do structured extraction). The main checkout carries other sessions' uncommitted edits; land a commit there without touching them (compare-and-swap `update-ref`, check out the clean files, `reset` + `apply` for an edited one; log entry of 2026-10-10 19:58 UTC). |
+| App `main` | **Local and GitHub both `cdaedfad`** (the 24,000 threshold, landed 2026-10-10 19:50 UTC on Evin's "1) yes", pushed 21:22 UTC on his "do both"; any later commit on main needs his word again before it is pushed). `cdaedfad` = `cand/e27` rebased: a reference pack is read whole up to 24,000 tokens, the claim pass's material cap is 136,000 characters. Below it: two commits of another session (`95490839`, `ea316087`), then `67fb1b24` = E26 (a DeepSeek key can do structured extraction). The main checkout carries other sessions' uncommitted edits; land a commit there without touching them (compare-and-swap `update-ref`, check out the clean files, `reset` + `apply` for an edited one; log entry of 2026-10-10 19:58 UTC). |
 | Last change landed | **E26** (`67fb1b24`, local main, 2026-10-09 22:45 UTC) and **E23** (`4675ff0e`, 21:23 UTC), both on Evin's "yes do all 4". Before them E19 (`73b18d97`). |
 | Benchmark | Branch `bench/evidence-rich`, draft PR #638, worktree `.claude/worktrees/aq-fix`. Folder `benchmarks/natively-answer-quality/evidence-rich/`. |
 | Benchmark branch on GitHub | **Pushed** on Evin's yes: `df815379..7b8050fb` at 21:26 UTC on 9 October, and the later commits of the session after that. Draft PR #638 stays a draft and unmerged. |
@@ -645,7 +645,7 @@ Section 13 prints the pass's instruction block as it is on main and the full tex
 7. **The judge's quota.** Two windows on 2026-10-10: 02:05–02:51 UTC (545 judgments, both accounts then out of quota) and, after Evin replaced a key, 11:03–11:56 UTC (254 judgments, both keys out of quota again). No access block that day; the blocks of 2026-10-08 (five calls) and 2026-10-09 (three calls) were not retried. About 1,050 judgments are queued, and the 630 drafts after them (the "Running or scheduled" row). The judge budget, not ideas, is the limit on this work. **Settled:** a 403 that carries the quota reply goes on to the other key (Evin, 2026-10-11 IST: "nope try with the other key"); every other 403 still stops everything.
 8. **Code verification is switched off app-wide** (`electron/llm/codeVerification/verificationEnabled.ts`, since 2026-07-18, no reason recorded in the commit). Main passes 34 of 36 coding questions of `code1` without it. Its correction is posted as a new message, which the benchmark harness does not capture, so it was not measured.
 9. **A profile upload on DeepSeek takes about 73 s** (a résumé with a posting; 3 s with the rule-based parser it replaces), because the whole profile pipeline now runs on it, about ten calls one after the other. E26 landed with that cost stated. Shortening it (fewer calls, or in parallel) is a separate change.
-10. **E28b is built as E30, not measured, not landed.** `cand/e28b` `7067ab3c` (worktree `er-main`, one commit on main `cdaedfad`): on a turn with an evidence block the evidence section comes first in the user message and the question is asked again last, before the user's own instructions; a turn with no evidence is unchanged; 9 new tests, suites as main. Evin's word was "do it" (2026-10-11 IST). Its rule (seven judge-free lines, three judged) is in the log. **Blocked on the DeepSeek balance** (see the "Running or scheduled" row). Landing is his word after the reading.
+10. **E28b is built as E30, not measured, not landed.** `cand/e28b` `7067ab3c` (worktree `er-main`, one commit on main `cdaedfad`): on a turn with an evidence block the evidence section comes first in the user message and the question is asked again last, before the user's own instructions; a turn with no evidence is unchanged; 9 new tests, suites as main. Evin's word was "do it" (2026-10-11 IST). Its rule (seven judge-free lines, three judged) is in the log. **Blocked on the DeepSeek balance** (see the "Running or scheduled" row). **Landing is authorized in advance, on one condition:** Evin's "do both" (2026-10-10 21:21 UTC) answered "land the documents-first layout, once its lines and the judged comparison are read". So: when every judge-free line (1 to 7) and J1 to J3 hold, land it on local main (a fast-forward while main is `cdaedfad`; otherwise rebase, type check and the four suites first) and report; if any line fails it is not landed. Pushing that commit is a new question for him.
 
 **Next candidates, in the order the data suggests**
 
@@ -4930,6 +4930,7 @@ Entry headings with their line numbers in `docs/ITERATIONS-ER.md`, and every lin
 - L3419: Evin's four answers, and the 24,000 threshold landed on local main (recorded 2026-10-10 19:58 UTC)
 - L3437: E30 — the documents-first layout built in the app (E28b), rule written 2026-10-10 19:58 UTC, before any run of it
 - L3478: E30 — the first app run stopped after four rows: the DeepSeek account has no balance (recorded 2026-10-10 20:04 UTC)
+- L3498: Evin's "do both" (2026-10-10 21:21 UTC): main pushed; the documents-first layout may land when its rule holds
 
 ### B.1 The log
 
@@ -8429,6 +8430,19 @@ commits and pushes nothing. The window script re-reads that list before each of 
 while a window is open is judged at the next stage boundary; one listed later waits for the next window.
 **Window of 11 October, order now:** listed E30 runs (if any) → E29 repetition 1 (57) → the derived pack24 rows →
 E26 → the other X2 arms → the rest of the holdout → drafts.
+
+##### Evin's "do both" (2026-10-10 21:21 UTC): main pushed; the documents-first layout may land when its rule holds
+Asked of him: (a) push main, one commit ahead of GitHub (the 24,000 threshold); (b) land the documents-first
+layout, once its lines and the judged comparison are read. His answer: "do both".
+**(a) Done.** `cdaedfad` pushed to GitHub `main` at 21:22 UTC (a fast-forward from `95490839`, no force; the
+remote was fetched first and had not moved). Local and GitHub main are the same commit.
+**(b) Read as an authorization in advance, not as "land it unmeasured":** the sentence he answered carried the
+condition, and the rule above was written so that a failing line stops the change. When every judge-free line
+(1 to 7) and J1 to J3 hold, `cand/e28b` `7067ab3c` is landed on local main without asking again (a fast-forward
+while main is `cdaedfad`; if main has moved: rebase, type check and the four suites on both first). If any line
+fails it is not landed and the numbers are reported. Pushing the landed commit is a new question for him.
+**State at 21:22 UTC:** nothing of E30 is measured. The DeepSeek account still answers `is_available: false`
+(asked every 5 minutes since 20:03 UTC); the waiting chain and the window script are both alive.
 
 ---
 
