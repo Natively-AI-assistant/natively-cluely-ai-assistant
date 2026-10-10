@@ -1,0 +1,1558 @@
+{
+ "mode": "technical-interview",
+ "world": "Reference files a candidate keeps for technical interviews. Candidate A, Advik Thorambath (backend, Quillhaven Freight Systems), has his own as-built notes on Skeinrouter, the Go and Kafka tracking pipeline from his résumé, and an early design proposal for it from May 2024 whose planned values (24 partitions keyed by carrier, a 25,000 events per second target, DynamoDB, 3 brokers, exactly-once transactions) were not what was built. Candidate B, Catarina Velmonte (frontend, Lumenquay), has her notes on Fernlatch, the booking-flow rebuild from her CV. Both also hold neutral interview material: a design brief with fixed requirements for a short-link service and a notification system, a sheet of four coding problems, and three code files that each contain one deliberate defect (a tier-pricing logic bug in Python, an N+1 query loop in TypeScript, a check-then-act lost update in Go). One unrelated document, another company's on-call onboarding checklist, is used as a tempting irrelevant file. Everything is fictional.",
+ "files": [
+  {
+   "id": "TI-REF-A-PROJECT-DEEPDIVE",
+   "mode": "technical-interview",
+   "filename": "skeinrouter-deep-dive-notes.md",
+   "source": "src/TI-REF-A-PROJECT-DEEPDIVE.md",
+   "format": "md",
+   "document_type": "project_deep_dive",
+   "title": "Skeinrouter: deep-dive notes",
+   "status": "current",
+   "effective_date": "2026-09-18",
+   "authority": 80,
+   "supersedes": [
+    "TI-REF-A-OLD-DESIGN-DOC"
+   ],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "Skeinrouter is built from five services, all written in Go 1.22: carrier-gateway, normalizer, shipment-projector, outbox-relay and webhook-dispatcher.",
+     "doc_needles": [
+      "Five services, all Go 1.22",
+      "outbox-relay"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "shipment-projector is the only writer of shipment state; the monolith reads it through a gRPC read API and no longer writes it.",
+     "doc_needles": [
+      "only writer of shipment state",
+      "gRPC read API"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "carrier-gateway terminates carrier integrations: push APIs for 61% of carriers and polling adapters for the rest; it validates, stamps an event ID and produces to tracking.raw.",
+     "doc_needles": [
+      "61% of carriers"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "normalizer maps 14 carrier status vocabularies onto 9 canonical shipment states.",
+     "doc_needles": [
+      "14 carrier status vocabularies",
+      "9 canonical shipment states"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "shipment-projector applies each event to shipment state in PostgreSQL and writes the outbox row in the same transaction.",
+     "doc_needles": [
+      "outbox row in the same transaction"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "outbox-relay reads the outbox every 200 ms with SKIP LOCKED and publishes to webhook.outbound.",
+     "doc_needles": [
+      "every 200 ms",
+      "SKIP LOCKED"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "webhook-dispatcher delivers status webhooks with 5 attempts and exponential backoff, then sends the message to the dead-letter topic.",
+     "doc_needles": [
+      "5 attempts with exponential backoff"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "On a typical weekday Skeinrouter carries about 620 million events.",
+     "doc_needles": [
+      "about 620 million events"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "Averaged over a full day the pipeline carries about 7,200 events per second.",
+     "doc_needles": [
+      "about 7,200 events per second"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "The daytime plateau, 10:00 to 18:00 IST, is 13,000 to 15,000 events per second.",
+     "doc_needles": [
+      "13,000 to 15,000 events per second"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "The peak sustained throughput is 41,000 events per second (the old cron module topped out at about 9,000); it was first reached in the capacity run of 14 January 2025.",
+     "doc_needles": [
+      "41,000 events per second",
+      "14 January 2025"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "The average event size on tracking.raw is 1.1 kB.",
+     "doc_needles": [
+      "1.1 kB"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "About 310,000 shipments are in transit at any moment.",
+     "doc_needles": [
+      "about 310,000"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "Kafka runs on Amazon MSK (Kafka 3.6) with 6 brokers across 3 availability zones, replication factor 3 and min.insync.replicas 2; producers use acks=all with idempotence on.",
+     "doc_needles": [
+      "6 brokers across 3 availability zones",
+      "replication factor 3"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "The main topic, tracking.raw, has 48 partitions keyed by shipment ID with 7 days of retention, consumed by the group normalizer-cg with 12 pods.",
+     "doc_needles": [
+      "Why 48 partitions",
+      "shipment ID | 7 days",
+      "normalizer-cg, 12 pods"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "tracking.normalized has 48 partitions keyed by shipment ID with 3 days of retention, consumed by projector-cg (16 pods) and analytics-sink-cg.",
+     "doc_needles": [
+      "projector-cg, 16 pods",
+      "analytics-sink-cg"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "webhook.outbound has 16 partitions keyed by carrier ID with 48 hours of retention, consumed by dispatcher-cg with 8 pods.",
+     "doc_needles": [
+      "dispatcher-cg, 8 pods",
+      "48 hours"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "tracking.dlq has 6 partitions and 14 days of retention; it is replayed by hand with a replay tool.",
+     "doc_needles": [
+      "14 days",
+      "replay tool, run by hand"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "48 partitions were chosen because one projector consumer sustains about 1,400 events per second on a single partition (bound by the database commit), which needs at least 30 partitions at the planned peak; 48 gives headroom and divides evenly across both 12 and 16 pods.",
+     "doc_needles": [
+      "about 1,400 events per second",
+      "at least 30 partitions"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "Shipment state lives in PostgreSQL 15 on Amazon RDS (the cluster moved to during Marrowgate); the shipment_state table is hash-partitioned into 32 partitions.",
+     "doc_needles": [
+      "PostgreSQL 15 on Amazon RDS",
+      "hash-partitioned into 32 partitions"
+     ]
+    },
+    {
+     "id": "F21",
+     "statement": "The outbox table is partitioned by day and a partition is dropped once it is 3 days old.",
+     "doc_needles": [
+      "once it is 3 days old"
+     ]
+    },
+    {
+     "id": "F22",
+     "statement": "The deduplication table processed_events is keyed on event ID and carrier ID; rows expire after 10 days, deliberately longer than the 7-day retention of tracking.raw, so a full replay of the topic is still deduplicated.",
+     "doc_needles": [
+      "Rows expire after 10 days",
+      "processed_events"
+     ]
+    },
+    {
+     "id": "F23",
+     "statement": "A managed key-value store for shipment state was considered and rejected, because the outbox needs one transaction covering the state change and the outgoing message and the shipments in transit fit in memory on one PostgreSQL primary.",
+     "doc_needles": [
+      "managed key-value store"
+     ]
+    },
+    {
+     "id": "F24",
+     "statement": "Kafka was chosen because per-shipment ordering comes from the partition key, events can be replayed from the topic (done twice: after a normalizer mapping error and to backfill the analytics sink), consumer groups scale by adding pods, and the team already ran MSK for the Marrowgate backfill.",
+     "doc_needles": [
+      "ordering comes from the partition key",
+      "We have replayed twice"
+     ]
+    },
+    {
+     "id": "F25",
+     "statement": "Amazon SQS FIFO queues were turned down for a throughput ceiling per message group and no replay; RabbitMQ was turned down because it has no replay and strict ordering needs a single consumer per queue.",
+     "doc_needles": [
+      "Amazon SQS FIFO queues",
+      "single consumer per queue"
+     ]
+    },
+    {
+     "id": "F26",
+     "statement": "Partitioning the main topic by carrier was turned down because the largest carrier alone is 9% of traffic and would have made one partition permanently hot.",
+     "doc_needles": [
+      "9% of traffic"
+     ]
+    },
+    {
+     "id": "F27",
+     "statement": "Kafka's own exactly-once transactions were turned down because the sinks are PostgreSQL and external webhooks, which those transactions do not cover; the pipeline runs at-least-once delivery with idempotent consumers.",
+     "doc_needles": [
+      "at-least-once delivery with idempotent consumers"
+     ]
+    },
+    {
+     "id": "F28",
+     "statement": "Offsets are committed only after the database transaction commits; if a pod dies mid-batch its partitions move to another member of the group, which re-reads from the last committed offset; at most one batch (up to 500 records) is processed again and the deduplication table turns the repeats into no-ops, so nothing is lost and nothing is applied twice.",
+     "doc_needles": [
+      "Offsets are committed only after",
+      "up to 500 records"
+     ]
+    },
+    {
+     "id": "F29",
+     "statement": "A record that fails 3 times goes to tracking.dlq with its error; under pressure partitions are paused once more than 2,000 records are in flight, rather than dropping events.",
+     "doc_needles": [
+      "fails 3 times",
+      "2,000 records are in flight"
+     ]
+    },
+    {
+     "id": "F30",
+     "statement": "The incident happened on Tuesday 19 November 2024, in the fourth week of the per-carrier rollout with 720 carriers live; it began at 14:05 IST with a rolling restart of the 16 projector pods for a routine deploy.",
+     "doc_needles": [
+      "Tuesday 19 November 2024",
+      "720 carriers"
+     ]
+    },
+    {
+     "id": "F31",
+     "statement": "Sev-2 was declared at 14:20 with Advik as incident commander and raised to Sev-1 at 15:30; consumer lag peaked at 96 million events and the worst-hit shipments were 47 minutes behind.",
+     "doc_needles": [
+      "96 million events",
+      "47 minutes behind"
+     ]
+    },
+    {
+     "id": "F32",
+     "statement": "Mitigation at 16:10: the deploy was paused, the group scaled down to 8 pods and max.poll.interval.ms raised from 30 seconds to 5 minutes; the backlog was drained at 17:45 and the incident closed after 3 hours 40 minutes.",
+     "doc_needles": [
+      "scaled down to 8 pods",
+      "from 30 seconds to 5 minutes",
+      "closed after 3 hours 40 minutes"
+     ]
+    },
+    {
+     "id": "F33",
+     "statement": "Root cause: the group still used eager rebalancing, so every pod restart stopped the whole group; while the database absorbed the backlog a batch could take longer than the 30-second max.poll.interval.ms, members were evicted, and each eviction triggered another rebalance (a rebalance storm).",
+     "doc_needles": [
+      "eager rebalancing",
+      "30-second max.poll.interval.ms"
+     ]
+    },
+    {
+     "id": "F34",
+     "statement": "During the incident no events were lost and nothing was rolled back; the deduplication table kept duplicates out.",
+     "doc_needles": [
+      "No events were lost"
+     ]
+    },
+    {
+     "id": "F35",
+     "statement": "The follow-up was finished on 6 December 2024: every consumer group moved to cooperative rebalancing with static membership, rolling restarts go one pod at a time behind a lag gate of 200,000 events, and consumer lag has a burn-rate alert.",
+     "doc_needles": [
+      "6 December 2024",
+      "lag gate of 200,000 events"
+     ]
+    },
+    {
+     "id": "F36",
+     "statement": "End-to-end latency from carrier event to committed shipment state is p50 38 ms and p99 140 ms (the old module: 870 ms); the p99 budget is 15 ms in carrier-gateway, 25 ms in normalizer and 100 ms in shipment-projector, where the PostgreSQL commit dominates.",
+     "doc_needles": [
+      "p50 38 ms",
+      "100 ms in shipment-projector"
+     ]
+    },
+    {
+     "id": "F37",
+     "statement": "Skeinrouter is deployed on Amazon EKS (Kubernetes 1.29) in ap-south-1 with Terraform and Argo CD, with a canary of 5% of pods for 20 minutes.",
+     "doc_needles": [
+      "Kubernetes 1.29",
+      "5% of pods for 20 minutes"
+     ]
+    },
+    {
+     "id": "F38",
+     "statement": "Shadow traffic ran for 6 weeks, 16 September to 27 October 2024; mismatches against the old module fell from 0.3% in the first week to under 0.002% in the last.",
+     "doc_needles": [
+      "16 September to 27 October 2024",
+      "under 0.002%"
+     ]
+    },
+    {
+     "id": "F39",
+     "statement": "Per-carrier flags were rolled out over 9 weeks, 28 October to 29 December 2024, and no carrier was moved back; the cron module was switched off on 3 February 2025.",
+     "doc_needles": [
+      "28 October to 29 December 2024",
+      "3 February 2025"
+     ]
+    },
+    {
+     "id": "F40",
+     "statement": "Running cost is about USD 9,300 a month, against USD 6,100 for the old polling workers.",
+     "doc_needles": [
+      "USD 9,300",
+      "USD 6,100"
+     ]
+    },
+    {
+     "id": "F41",
+     "statement": "Updates already more than 2 minutes old on arrival fell from 7.5% to 0.4%, and support tickets about late tracking fell from 430 a month to 95.",
+     "doc_needles": [
+      "from 7.5% to 0.4%",
+      "430 a month to 95"
+     ]
+    },
+    {
+     "id": "F42",
+     "statement": "Duplicate status webhooks fell from 0.6% of deliveries to under 0.01%.",
+     "doc_needles": [
+      "under 0.01%"
+     ]
+    },
+    {
+     "id": "F43",
+     "statement": "The notes describe the system as it runs and were last updated on 18 September 2026, more than two years after the May 2024 design document.",
+     "doc_needles": [
+      "Last updated 18 September 2026"
+     ]
+    }
+   ],
+   "intentional_conflicts": [
+    {
+     "fact": "F15",
+     "with_file": "TI-REF-A-OLD-DESIGN-DOC",
+     "this_value": "48 partitions",
+     "other_value": "24 partitions",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F15",
+     "with_file": "TI-REF-A-OLD-DESIGN-DOC",
+     "this_value": "shipment ID",
+     "other_value": "keyed by carrier ID",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F15",
+     "with_file": "TI-REF-A-OLD-DESIGN-DOC",
+     "this_value": "7 days",
+     "other_value": "topic is 24 hours",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F11",
+     "with_file": "TI-REF-A-OLD-DESIGN-DOC",
+     "this_value": "41,000 events per second",
+     "other_value": "25,000 events per second",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F20",
+     "with_file": "TI-REF-A-OLD-DESIGN-DOC",
+     "this_value": "PostgreSQL 15 on Amazon RDS",
+     "other_value": "Amazon DynamoDB",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F14",
+     "with_file": "TI-REF-A-OLD-DESIGN-DOC",
+     "this_value": "6 brokers",
+     "other_value": "with 3 brokers",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F27",
+     "with_file": "TI-REF-A-OLD-DESIGN-DOC",
+     "this_value": "at-least-once delivery with idempotent consumers",
+     "other_value": "transactional producers",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F1",
+     "with_file": "TI-REF-A-OLD-DESIGN-DOC",
+     "this_value": "Go 1.22",
+     "other_value": "Go 1.21",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F36",
+     "with_file": "TI-REF-A-OLD-DESIGN-DOC",
+     "this_value": "p99 140 ms",
+     "other_value": "latency of 250 ms",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F38",
+     "with_file": "TI-REF-A-OLD-DESIGN-DOC",
+     "this_value": "6 weeks",
+     "other_value": "2 weeks of shadow traffic",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F19",
+     "with_file": "TI-REF-A-OLD-DESIGN-DOC",
+     "this_value": "about 1,400 events per second",
+     "other_value": "about 1,100 events per second",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F40",
+     "with_file": "TI-REF-A-OLD-DESIGN-DOC",
+     "this_value": "USD 9,300",
+     "other_value": "USD 5,400",
+     "resolution": "current_wins"
+    }
+   ],
+   "must_not_infer": [
+    "The notes do not say who caused the November 2024 incident or that Advik caused it; he ran the deploy's incident response as incident commander.",
+    "Nothing in the notes says Skeinrouter moves money or that Advik has payments, ledger or reconciliation experience.",
+    "The 41,000 events per second figure is a peak; it must not be multiplied out into a daily volume. The typical weekday volume is stated separately.",
+    "The notes give no revenue, customer-churn or headcount-saving figures for Skeinrouter.",
+    "The notes do not say Kafka's exactly-once transactions are used anywhere in the pipeline; they say they were turned down."
+   ]
+  },
+  {
+   "id": "TI-REF-B-PROJECT-DEEPDIVE",
+   "mode": "technical-interview",
+   "filename": "fernlatch-project-notes.md",
+   "source": "src/TI-REF-B-PROJECT-DEEPDIVE.md",
+   "format": "md",
+   "document_type": "project_deep_dive",
+   "title": "Fernlatch booking flow: project notes",
+   "status": "current",
+   "effective_date": "2026-09-21",
+   "authority": 80,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "Fernlatch replaced a single client-rendered application that shipped one 1.9 MB JavaScript bundle; Catarina was tech lead of 3 frontend engineers with 1 designer, September 2022 to April 2023.",
+     "doc_needles": [
+      "one 1.9 MB JavaScript bundle",
+      "single client-rendered application"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "About 52,000 booking sessions were started on a typical weekday (launch-quarter figure).",
+     "doc_needles": [
+      "about 52,000"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "The busiest hour was Monday 08:00 to 09:00, with about 6,900 sessions.",
+     "doc_needles": [
+      "about 6,900 sessions"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "78% of sessions were on a phone, and weekend volume was roughly 40% of a weekday.",
+     "doc_needles": [
+      "78%",
+      "roughly 40% of a weekday"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "Rendering: Next.js 13 with the pages router; the first step (clinic page and service list) is rendered on the server so the largest element is already in the HTML.",
+     "doc_needles": [
+      "Next.js 13 with the pages router",
+      "rendered on the server"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "Clinic profile data uses incremental static regeneration with a revalidation time of 300 seconds.",
+     "doc_needles": [
+      "revalidation time of 300 seconds"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "Appointment slots are fetched in the browser and never cached for longer than 30 seconds.",
+     "doc_needles": [
+      "longer than 30 seconds"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "The five steps of the flow are client-side transitions with route-level code splitting, each later step prefetched.",
+     "doc_needles": [
+      "five steps of the flow"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "Rejected rendering options: a fully static export (slots change too often); keeping the single-page application and only splitting the bundle (the prototype got mobile LCP down to 3.1 s and no further); an islands framework (the flow shares React components with the clinic web app).",
+     "doc_needles": [
+      "fully static export",
+      "3.1 s",
+      "islands framework"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "First-load JavaScript at launch was 610 kB, 178 kB over the wire with Brotli: framework and runtime 190 kB, date and calendar code 85 kB, application code 335 kB.",
+     "doc_needles": [
+      "178 kB over the wire",
+      "335 kB"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "The biggest single saving was replacing a 290 kB date library with a tree-shaken subset.",
+     "doc_needles": [
+      "290 kB date library"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "The budget for the booking route is 650 kB of first-load JavaScript, enforced in Lighthouse CI; a pull request adding more than 25 kB is blocked until someone signs off.",
+     "doc_needles": [
+      "650 kB of first-load JavaScript"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "State management: the URL is the source of truth for the current step and selected service; server state lives in TanStack Query v4; the draft booking is a small Zustand store persisted to sessionStorage; forms use React Hook Form.",
+     "doc_needles": [
+      "TanStack Query v4",
+      "Zustand store persisted to sessionStorage",
+      "React Hook Form"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "Redux was removed; the old flow's store had 41 reducers, most of them caching server responses by hand.",
+     "doc_needles": [
+      "41 reducers",
+      "We removed Redux"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "Fernlatch was built to WCAG 2.1 AA and moved to 2.2 AA in 2024 when Pebblekit components replaced the hand-built ones.",
+     "doc_needles": [
+      "Built to WCAG 2.1 AA",
+      "moved to 2.2 AA in 2024"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "Accessibility work: date picker rebuilt as an ARIA grid with a roving tabindex and arrow keys; focus moves to the step heading on every step change; slot availability changes announced through a polite live region; error summary linked to fields; touch targets at least 44 px.",
+     "doc_needles": [
+      "ARIA grid with a roving tabindex",
+      "polite live region",
+      "at least 44 px"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "An internal audit two weeks before the experiment found 23 issues, 4 of them blocking; all 23 were fixed before it started; manual passes used NVDA with Firefox and VoiceOver with Safari on iOS.",
+     "doc_needles": [
+      "found 23 issues",
+      "NVDA with Firefox"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "The March 2023 regression: release 0.19 went out on Wed 8 March 2023 at 16:40 WET; it was detected on Thu 9 March at 18:55 through a support ticket from a clinic in the Azores and a real-user-monitoring alert; it was rolled back at 19:20, 25 minutes after detection; the fix was released on Mon 13 March 2023.",
+     "doc_needles": [
+      "Release 0.19",
+      "25 minutes after detection",
+      "Mon 13 March 2023"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "Root cause of the regression: slot times were formatted on the server in the server's time zone and again in the browser in the clinic's; where they differed the markup did not match, React threw away the server-rendered tree and rendered again in the browser, and clinics outside the server's zone saw slots one hour off on first paint.",
+     "doc_needles": [
+      "server's time zone",
+      "one hour off"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "Impact of the regression: interaction delay at p75 went from 130 ms to 410 ms while the release was live, and 312 bookings were made at the wrong hour in the 26 hours before it was caught.",
+     "doc_needles": [
+      "130 ms to 410 ms",
+      "312 bookings",
+      "26 hours"
+     ]
+    },
+    {
+     "id": "F21",
+     "statement": "Response to the regression: support contacted every affected clinic and owner within 2 days; the fix sends slots as ISO strings with the clinic's time zone and formats them only in the browser after mount; a Playwright run in three time zones was added, and any hydration error fails the build.",
+     "doc_needles": [
+      "ISO strings",
+      "three time zones",
+      "hydration error fails the build"
+     ]
+    },
+    {
+     "id": "F22",
+     "statement": "The experiment was a six-week A/B experiment, 20 February to 2 April 2023, split evenly by pet-owner account, with 853,400 sessions in the old flow and 852,100 in Fernlatch; data from 8 and 9 March was dropped from both arms.",
+     "doc_needles": [
+      "20 February to 2 April 2023",
+      "853,400",
+      "852,100"
+     ]
+    },
+    {
+     "id": "F23",
+     "statement": "Booking completion on all devices rose from 61.2% to 66.8%, a rise of 5.6 percentage points.",
+     "doc_needles": [
+      "5.6 percentage points"
+     ]
+    },
+    {
+     "id": "F24",
+     "statement": "Booking completion on phones went from 58.0% to 65.0% and on desktop from 72.5% to 73.2%; almost all of the gain came from phones.",
+     "doc_needles": [
+      "58.0%",
+      "65.0%",
+      "72.5%"
+     ]
+    },
+    {
+     "id": "F25",
+     "statement": "Guardrails: cancellations within one day were 4.1% against 4.0%, and support contacts per 1,000 bookings were 6.3 against 5.1.",
+     "doc_needles": [
+      "4.1%",
+      "6.3"
+     ]
+    },
+    {
+     "id": "F26",
+     "statement": "Field data, mobile p75, 28 days after full launch: LCP from 4.3 s to 1.7 s, interaction delay from 380 ms to 120 ms, layout shift (CLS) from 0.21 to 0.04.",
+     "doc_needles": [
+      "CLS",
+      "0.21 to 0.04"
+     ]
+    },
+    {
+     "id": "F27",
+     "statement": "Rollout: Next.js on Node 18 containers behind the CDN; traffic moved in three steps (10%, 50%, 100%) over 9 days; the old flow was deleted in June 2023.",
+     "doc_needles": [
+      "over 9 days",
+      "June 2023"
+     ]
+    },
+    {
+     "id": "F28",
+     "statement": "The notes were last updated on 21 September 2026; traffic figures are from the launch quarter.",
+     "doc_needles": [
+      "last updated 21 September 2026"
+     ]
+    }
+   ],
+   "intentional_conflicts": [],
+   "must_not_infer": [
+    "The notes describe no real-time collaboration, WebSocket, CRDT or AI/LLM work.",
+    "The Fernlatch audit was an internal audit; the external audit in the CV belongs to the Farolim portal at a previous employer.",
+    "Fernlatch was built to WCAG 2.1 AA; it reached 2.2 AA only in 2024 through Pebblekit components.",
+    "610 kB is above Hollowpine's 350 kB target; nothing in the notes says the booking flow meets that target.",
+    "The notes do not say who wrote the release that caused the March 2023 regression.",
+    "Traffic figures are from the launch quarter (2023), not current traffic."
+   ]
+  },
+  {
+   "id": "TI-REF-SYSDESIGN-BRIEF",
+   "mode": "technical-interview",
+   "filename": "System_Design_Exercise_Brief_v2.1.pdf",
+   "source": "src/TI-REF-SYSDESIGN-BRIEF.md",
+   "format": "pdf",
+   "document_type": "interview_design_brief",
+   "title": "System design exercise: candidate brief (short-link service and notification system)",
+   "status": "current",
+   "effective_date": "2026-09-29",
+   "authority": 100,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "The brief is version 2.1, issued 29 September 2026; its sizing conventions are a 30-day month, 86,400 seconds per day and decimal storage units (1 kB = 1,000 bytes, 1 TB = 1,000 GB).",
+     "doc_needles": [
+      "a month is 30 days",
+      "Version 2.1"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "System A (short-link service): 120 million new links are created per month.",
+     "doc_needles": [
+      "120 million per month"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "System A: the read to write ratio is 200 redirects for every link created.",
+     "doc_needles": [
+      "200 redirects for every link created"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "System A: peak load is 4 times the average, for reads and for writes.",
+     "doc_needles": [
+      "4 times the average"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "System A: one stored link record is 500 bytes, indexes included.",
+     "doc_needles": [
+      "500 bytes, indexes included"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "System A: a click event is 120 bytes per redirect and click events are kept for 90 days.",
+     "doc_needles": [
+      "120 bytes per redirect",
+      "kept for 90 days"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "System A: redirect latency target is a p99 of 80 ms, measured at the edge.",
+     "doc_needles": [
+      "p99 of 80 ms"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "System A: link creation latency target is a p99 of 300 ms.",
+     "doc_needles": [
+      "p99 of 300 ms"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "System A: availability of redirects is 99.95% per month.",
+     "doc_needles": [
+      "99.95% per month"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "System A: availability of the creation API is 99.9% per month.",
+     "doc_needles": [
+      "Availability of the creation API"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "System A: links are kept for 5 years from creation, then deleted.",
+     "doc_needles": [
+      "kept for 5 years"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "System A: short codes are 7 characters from a 62-character alphabet.",
+     "doc_needles": [
+      "7 characters from a 62-character alphabet"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "System A: custom aliases are allowed, up to 32 characters.",
+     "doc_needles": [
+      "up to 32 characters"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "System A: a link's destination cannot be edited after creation; a deactivated link must stop redirecting everywhere within 60 seconds.",
+     "doc_needles": [
+      "within 60 seconds"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "System A: two regions, both serving traffic, and no more than three storage technologies in the design.",
+     "doc_needles": [
+      "Two regions, both serving traffic",
+      "three storage technologies"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "System B (notification system): 40 million registered users and 9 million daily active users.",
+     "doc_needles": [
+      "40 million",
+      "9 million"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "System B: 180 million notifications are sent per day.",
+     "doc_needles": [
+      "180 million per day"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "System B: the channel mix is 70% push, 25% email and 5% SMS.",
+     "doc_needles": [
+      "70% push, 25% email, 5% SMS"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "System B: peak load is 6 times the average, during campaign bursts.",
+     "doc_needles": [
+      "6 times the average"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "System B: a delivery log entry is 400 bytes.",
+     "doc_needles": [
+      "400 bytes"
+     ]
+    },
+    {
+     "id": "F21",
+     "statement": "System B: transactional notifications (one-time codes and security alerts) must be handed to the provider within 2 seconds at p99; promotional ones within 15 minutes.",
+     "doc_needles": [
+      "within 2 seconds at p99",
+      "within 15 minutes"
+     ]
+    },
+    {
+     "id": "F22",
+     "statement": "System B: availability of the send API is 99.9% per month.",
+     "doc_needles": [
+      "Availability of the send API"
+     ]
+    },
+    {
+     "id": "F23",
+     "statement": "System B: delivery logs are kept 30 days in hot storage, then 13 months in an archive.",
+     "doc_needles": [
+      "30 days in hot storage",
+      "13 months in an archive"
+     ]
+    },
+    {
+     "id": "F24",
+     "statement": "System B: at most 3 promotional notifications per user per day; quiet hours 22:00 to 08:00 local time apply to promotional notifications only; transactional notifications bypass both.",
+     "doc_needles": [
+      "At most 3 promotional notifications",
+      "22:00 to 08:00"
+     ]
+    },
+    {
+     "id": "F25",
+     "statement": "System B: delivery is at-least-once and callers pass a deduplication key that must be honoured for 24 hours.",
+     "doc_needles": [
+      "honoured for 24 hours"
+     ]
+    },
+    {
+     "id": "F26",
+     "statement": "System B: the SMS vendor accepts at most 500 messages per second and charges USD 0.004 per message.",
+     "doc_needles": [
+      "500 messages per second",
+      "USD 0.004 per message"
+     ]
+    },
+    {
+     "id": "F27",
+     "statement": "System B: the push provider accepts at most 20,000 requests per second.",
+     "doc_needles": [
+      "20,000 requests per second"
+     ]
+    },
+    {
+     "id": "F28",
+     "statement": "The session is assessed on clarifying requirements 15%, capacity estimates 20%, high-level design 30%, deep dive 25%, trade-offs and failure handling 10%.",
+     "doc_needles": [
+      "Capacity estimates"
+     ]
+    },
+    {
+     "id": "F29",
+     "statement": "System A: every new destination is checked against a malware blocklist before the link becomes active.",
+     "doc_needles": [
+      "malware blocklist"
+     ]
+    }
+   ],
+   "intentional_conflicts": [],
+   "must_not_infer": [
+    "The brief prescribes no particular database, queue or cloud provider.",
+    "The 99.9% figures belong to the creation API and to the notification send API; the redirect path has its own target.",
+    "The brief does not state the length of the session or which of the two systems will be chosen.",
+    "The brief gives requirements, not a reference solution; a design choice in the answer is the candidate's own reasoning."
+   ]
+  },
+  {
+   "id": "TI-REF-CODING-PROBLEMS",
+   "mode": "technical-interview",
+   "filename": "coding-round-problem-sheet-set-c.md",
+   "source": "src/TI-REF-CODING-PROBLEMS.md",
+   "format": "md",
+   "document_type": "coding_problems",
+   "title": "Coding round: problem sheet, set C",
+   "status": "current",
+   "effective_date": "2026-09-29",
+   "authority": 100,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "Problem 1, is_palindrome(s): return true if the string reads the same both ways after skipping every character that is not an ASCII letter or digit and ignoring case; digits count as characters.",
+     "doc_needles": [
+      "is_palindrome(s)",
+      "Digits count as characters"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "Problem 1: a string with nothing left after skipping, including the empty string, is a palindrome.",
+     "doc_needles": [
+      "nothing left after skipping"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "Problem 1 constraints: length from 0 to 200,000; expected linear time and constant extra space.",
+     "doc_needles": [
+      "length from 0 to 200,000",
+      "constant extra space"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "Problem 2, merge_intervals(intervals): return the merged intervals sorted by start; overlapping intervals are merged and so are intervals that only touch ([1, 4] and [4, 6] become [1, 6]); an empty input returns an empty list.",
+     "doc_needles": [
+      "merge_intervals(intervals)",
+      "only touch"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "Problem 2 constraints: up to 100,000 intervals; expected O(n log n) time.",
+     "doc_needles": [
+      "up to 100,000 intervals"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "Problem 3, top_k_words(words, k): return the k most frequent words, most frequent first; words with the same count are ordered alphabetically.",
+     "doc_needles": [
+      "top_k_words(words, k)",
+      "ordered alphabetically"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "Problem 3 constraints: up to 500,000 words; expected O(n log k), better than sorting every distinct word when k is small.",
+     "doc_needles": [
+      "up to 500,000 words",
+      "O(n log k)"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "Problem 4, allowed_requests(timestamps, limit, window): a request at time t is allowed if fewer than limit earlier allowed requests have a timestamp greater than t minus window; rejected requests do not count against later ones; return one boolean per request.",
+     "doc_needles": [
+      "allowed_requests(timestamps, limit, window)",
+      "Rejected requests do not count"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "Problem 4 constraints: up to 1,000,000 timestamps; expected linear time and extra space proportional to limit, not to the number of requests.",
+     "doc_needles": [
+      "up to 1,000,000 timestamps",
+      "proportional to limit"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "Any mainstream language is allowed, but each function name must be kept exactly as written because the runner calls it by name.",
+     "doc_needles": [
+      "Keep each function name exactly",
+      "Any mainstream language is fine"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "The sheet is Set C, revised 29 September 2026.",
+     "doc_needles": [
+      "Set C"
+     ]
+    }
+   ],
+   "intentional_conflicts": [],
+   "must_not_infer": [
+    "The sheet contains four problems only; any other coding task is not on it.",
+    "The sheet does not restrict the language."
+   ]
+  },
+  {
+   "id": "TI-REF-SNIPPET-BUG",
+   "mode": "technical-interview",
+   "filename": "usage_billing.py",
+   "source": "src/TI-REF-SNIPPET-BUG.py",
+   "format": "py",
+   "document_type": "code",
+   "title": "usage_billing.py: usage metering and tiered pricing",
+   "status": "current",
+   "effective_date": "2026-09-29",
+   "authority": 80,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "usage_billing.py prices requests in tiers, in mills; DEFAULT_TIERS is [(1_000, 50), (10_000, 30), (None, 10)], where the first value of each pair is the cumulative number of requests up to which the rate applies: the first 1,000 requests cost 50 mills each, the next 9,000 cost 30, everything above 10,000 costs 10.",
+     "doc_needles": [
+      "(1_000, 50), (10_000, 30), (None, 10)",
+      "cumulative number of requests"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "Defect (logic bug): in tiered_cost (defined at line 56), line 63 computes in_tier = min(remaining, upper), which treats the cumulative upper bound of a tier as the tier's width; the second tier therefore absorbs up to 10,000 requests instead of 9,000.",
+     "doc_needles": [
+      "min(remaining, upper)"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "Effect of the defect: results are correct up to 10,000 units; above that the function overcharges, by up to 20,000 mills (20.00). For 12,000 units it returns 360,000 mills (360.00) instead of the correct 340,000 mills (340.00 = 1,000 x 50 + 9,000 x 30 + 2,000 x 10).",
+     "doc_needles": [
+      "def tiered_cost"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "Fix: keep the previous tier's upper bound and take the tier's width as upper minus previous, i.e. in_tier = min(remaining, upper - previous) and previous = upper after each bounded tier.",
+     "doc_needles": [
+      "in_tier * rate"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "invoice_amount subtracts a free allowance of 250 requests and applies a minimum charge of 5,000 mills; these parts are correct.",
+     "doc_needles": [
+      "FREE_ALLOWANCE = 250",
+      "MINIMUM_CHARGE_MILLS = 5_000"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "build_invoices returns rows sorted with the largest invoice first, ties by tenant name; parse_usage and monthly_totals are correct.",
+     "doc_needles": [
+      "largest invoice first"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "Not a second defect: format_mills drops the third decimal place instead of rounding, but every rate in DEFAULT_TIERS and the minimum charge are multiples of 10 mills, so no invoice amount loses anything. An answer may remark on it; it is not the bug in the file.",
+     "doc_needles": [
+      "fraction // 10:02d"
+     ]
+    }
+   ],
+   "intentional_conflicts": [],
+   "must_not_infer": [
+    "The free allowance and the minimum charge are intended behaviour, not defects.",
+    "The file states no currency."
+   ]
+  },
+  {
+   "id": "TI-REF-SNIPPET-PERF",
+   "mode": "technical-interview",
+   "filename": "teamReport.ts",
+   "source": "src/TI-REF-SNIPPET-PERF.ts",
+   "format": "ts",
+   "document_type": "code",
+   "title": "teamReport.ts: weekly workload report",
+   "status": "current",
+   "effective_date": "2026-09-29",
+   "authority": 80,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "Defect (N+1 queries): buildTeamReport in teamReport.ts loads the team's active members with one query and then, inside the for loop that starts at line 63, awaits two more queries per member (task counts at line 64, last login at line 65), one after another.",
+     "doc_needles": [
+      "for (const member of members.rows)",
+      "TASK_COUNTS_SQL, [member.id, now]"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "Effect: a report for N members costs 1 + 2N sequential database round trips, for example 501 for a team of 250, so latency grows linearly with team size.",
+     "doc_needles": [
+      "LAST_LOGIN_SQL, [member.id]"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "Fix: fetch the task counts and the last logins for all members in set-based queries (for example WHERE assignee_id = ANY($1) GROUP BY assignee_id, and the same for login_events, or joins from members) and match them to members in memory with a Map; the query count becomes constant (3, or fewer with a join) whatever the team size.",
+     "doc_needles": [
+      "WHERE assignee_id = $1"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "The report is cached per team for 60 seconds (REPORT_TTL_MS = 60_000); a cache hit returns without any query.",
+     "doc_needles": [
+      "REPORT_TTL_MS = 60_000"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "busiestMembers returns the top 5 members by default, sorted by open tasks descending and then by display name.",
+     "doc_needles": [
+      "limit = 5"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "Secondary observations an answer may add, neither of which is the main cost: the module-level cache never evicts expired entries, and concurrent cache misses for one team each rebuild the report with the full 1 + 2N queries.",
+     "doc_needles": [
+      "const cache = new Map"
+     ]
+    }
+   ],
+   "intentional_conflicts": [],
+   "must_not_infer": [
+    "The 60-second cache does not remove the defect; it only hides it for repeat calls.",
+    "The file gives no measured latency."
+   ]
+  },
+  {
+   "id": "TI-REF-SNIPPET-CONCURRENCY",
+   "mode": "technical-interview",
+   "filename": "quota.go",
+   "source": "src/TI-REF-SNIPPET-CONCURRENCY.go",
+   "format": "go",
+   "document_type": "code",
+   "title": "quota.go: per-tenant quota tracker",
+   "status": "current",
+   "effective_date": "2026-09-29",
+   "authority": 80,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "quota.go keeps one counter per tenant in a map guarded by a sync.RWMutex; Run clears every counter at the end of each window with a ticker.",
+     "doc_needles": [
+      "sync.RWMutex",
+      "time.NewTicker(t.window)"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "Defect (lost update, a check-then-act race): TryConsume (line 32) reads the counter under the read lock at line 38, releases the lock, checks the limit, and only then takes the write lock and stores used + n at line 46, computed from the stale value it read earlier.",
+     "doc_needles": [
+      "used := t.used[tenant]",
+      "t.used[tenant] = used + n"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "Effect: concurrent calls for the same tenant can all pass the limit check and overwrite each other's update, so more units are admitted than the limit allows and the counter under-counts; a reset by Run or a Refund that lands between the read and the write is overwritten as well.",
+     "doc_needles": [
+      "if used+n > t.limit"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "Fix: do the check and the update in one critical section under the write lock: t.mu.Lock(); defer t.mu.Unlock(); if t.used[tenant]+n > t.limit { return false }; t.used[tenant] += n; return true.",
+     "doc_needles": [
+      "func (t *Tracker) TryConsume"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "Remaining, Snapshot, Refund and Run each hold the lock for their whole read or read-modify-write, so none of them has the stale-read defect of TryConsume.",
+     "doc_needles": [
+      "func (t *Tracker) Refund"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "Secondary observation an answer may add, not the declared defect: a Refund that arrives after Run has cleared the counters is subtracted from the new window (floored at zero), so a refund for the previous window can free units in the current one.",
+     "doc_needles": [
+      "left := t.used[tenant] - n"
+     ]
+    }
+   ],
+   "intentional_conflicts": [],
+   "must_not_infer": [
+    "Every map access is under the mutex, so this is not a data race in the memory-model sense; the defect is the stale read between two critical sections."
+   ]
+  },
+  {
+   "id": "TI-REF-A-OLD-DESIGN-DOC",
+   "mode": "technical-interview",
+   "filename": "Skeinrouter_Design_Doc_v0.3.pdf",
+   "source": "src/TI-REF-A-OLD-DESIGN-DOC.md",
+   "format": "pdf",
+   "document_type": "design_proposal",
+   "title": "Skeinrouter: design document, version 0.3",
+   "status": "outdated",
+   "effective_date": "2024-05-09",
+   "authority": 40,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "The document is version 0.3 of the Skeinrouter design document, dated 9 May 2024, with status 'In review'; it describes a plan, not what was built.",
+     "doc_needles": [
+      "9 May 2024",
+      "In review"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "The proposal planned 24 partitions on the main topic, keyed by carrier ID.",
+     "doc_needles": [
+      "24 partitions keyed by carrier ID"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "The proposal's peak target was 25,000 events per second.",
+     "doc_needles": [
+      "25,000 events per second"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "The proposal put shipment state in Amazon DynamoDB with on-demand capacity.",
+     "doc_needles": [
+      "Amazon DynamoDB"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "The proposal planned a new MSK cluster with 3 brokers, one per availability zone.",
+     "doc_needles": [
+      "with 3 brokers"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "The proposal set retention on the main topic to 24 hours; replaying history was a stated non-goal.",
+     "doc_needles": [
+      "topic is 24 hours",
+      "Replaying history"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "The proposal chose exactly-once processing with transactional producers and read-committed consumers.",
+     "doc_needles": [
+      "transactional producers",
+      "Exactly-once processing"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "In the proposal webhooks are called directly from the processor, with no separate relay for outgoing messages.",
+     "doc_needles": [
+      "no separate relay for outgoing messages"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "The proposal's latency goal was a p99 end-to-end latency of 250 ms.",
+     "doc_needles": [
+      "latency of 250 ms"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "The proposal had three services written in Go 1.21: ingest, processor and notifier.",
+     "doc_needles": [
+      "Three services written in Go 1.21"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "The proposal planned 2 weeks of shadow traffic and a single cutover for all carriers on Sunday 22 September 2024.",
+     "doc_needles": [
+      "2 weeks of shadow traffic",
+      "22 September 2024"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "The proposal assumed a team of 3 engineers and completion by the end of September 2024.",
+     "doc_needles": [
+      "3 engineers from Dispatch Core",
+      "end of September 2024"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "The proposal estimated a monthly running cost of USD 5,400 with 8 processor instances.",
+     "doc_needles": [
+      "USD 5,400"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "The proposal's sizing assumed about 1,100 events per second per partition.",
+     "doc_needles": [
+      "about 1,100 events per second"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "The proposal's mitigation for a dominant carrier was to split that carrier's traffic if it passes 15% of the total.",
+     "doc_needles": [
+      "15% of the total"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "The proposal was written for the architecture forum of 16 May 2024.",
+     "doc_needles": [
+      "16 May 2024"
+     ]
+    }
+   ],
+   "intentional_conflicts": [
+    {
+     "fact": "F2",
+     "with_file": "TI-REF-A-PROJECT-DEEPDIVE",
+     "this_value": "24 partitions",
+     "other_value": "48 partitions",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F2",
+     "with_file": "TI-REF-A-PROJECT-DEEPDIVE",
+     "this_value": "keyed by carrier ID",
+     "other_value": "shipment ID",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F6",
+     "with_file": "TI-REF-A-PROJECT-DEEPDIVE",
+     "this_value": "topic is 24 hours",
+     "other_value": "7 days",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F3",
+     "with_file": "TI-REF-A-PROJECT-DEEPDIVE",
+     "this_value": "25,000 events per second",
+     "other_value": "41,000 events per second",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F4",
+     "with_file": "TI-REF-A-PROJECT-DEEPDIVE",
+     "this_value": "Amazon DynamoDB",
+     "other_value": "PostgreSQL 15 on Amazon RDS",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F5",
+     "with_file": "TI-REF-A-PROJECT-DEEPDIVE",
+     "this_value": "with 3 brokers",
+     "other_value": "6 brokers",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F7",
+     "with_file": "TI-REF-A-PROJECT-DEEPDIVE",
+     "this_value": "transactional producers",
+     "other_value": "at-least-once delivery with idempotent consumers",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F10",
+     "with_file": "TI-REF-A-PROJECT-DEEPDIVE",
+     "this_value": "Go 1.21",
+     "other_value": "Go 1.22",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F9",
+     "with_file": "TI-REF-A-PROJECT-DEEPDIVE",
+     "this_value": "latency of 250 ms",
+     "other_value": "p99 140 ms",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F11",
+     "with_file": "TI-REF-A-PROJECT-DEEPDIVE",
+     "this_value": "2 weeks of shadow traffic",
+     "other_value": "6 weeks",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F14",
+     "with_file": "TI-REF-A-PROJECT-DEEPDIVE",
+     "this_value": "about 1,100 events per second",
+     "other_value": "about 1,400 events per second",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F13",
+     "with_file": "TI-REF-A-PROJECT-DEEPDIVE",
+     "this_value": "USD 5,400",
+     "other_value": "USD 9,300",
+     "resolution": "current_wins"
+    }
+   ],
+   "must_not_infer": [
+    "This is a proposal in review from May 2024; none of its planned values describes what was built.",
+    "The proposal does not say the plan was approved."
+   ]
+  },
+  {
+   "id": "TI-REF-IRRELEVANT",
+   "mode": "technical-interview",
+   "filename": "Televisit_OnCall_Onboarding_Checklist.docx",
+   "source": "src/TI-REF-IRRELEVANT.md",
+   "format": "docx",
+   "document_type": "onboarding_checklist",
+   "title": "Televisit platform: on-call onboarding checklist (Brackenmoor Health)",
+   "status": "current",
+   "effective_date": "2026-08-11",
+   "authority": 80,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "The document is the on-call onboarding checklist of the Televisit platform at Brackenmoor Health, revision 7, dated 11 August 2026, owned by Ilse Varnholt.",
+     "doc_needles": [
+      "Brackenmoor Health",
+      "revision 7"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "Televisit rotation: one week in four as primary, with handover on Wednesday at 11:00.",
+     "doc_needles": [
+      "One week in four"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "Televisit: two full shadow shifts are required before going solo.",
+     "doc_needles": [
+      "Two full shadow shifts"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "Televisit: a Sev-1 page must be acknowledged within 5 minutes and a Sev-2 page within 15 minutes; escalate to the secondary after 10 minutes without progress.",
+     "doc_needles": [
+      "within 5 minutes",
+      "within 15 minutes"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "Televisit has 42 runbooks.",
+     "doc_needles": [
+      "42 runbooks"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "The Televisit visit-events Kafka cluster has 5 brokers and 36 partitions on the main topic.",
+     "doc_needles": [
+      "5 brokers, 36 partitions"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "Televisit objective: visit join success of 99.9% per calendar month, which leaves about 43 minutes of error budget.",
+     "doc_needles": [
+      "99.9% per calendar month",
+      "43 minutes of error budget"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "Televisit objective: time to join a visit, p99 under 1.8 seconds.",
+     "doc_needles": [
+      "p99 under 1.8 seconds"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "The Televisit platform is sized for 3,400 concurrent visits.",
+     "doc_needles": [
+      "3,400 concurrent visits"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "Last year the Televisit rotation handled 31 incidents at Sev-2 or above, with a median time to restore of 34 minutes.",
+     "doc_needles": [
+      "31 incidents",
+      "34 minutes"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "The Televisit visit signalling service is written in Kotlin and backed by PostgreSQL 14; media relays run in 4 regions.",
+     "doc_needles": [
+      "PostgreSQL 14"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "Televisit feature releases pause when more than half the error budget is gone before the 15th of the month.",
+     "doc_needles": [
+      "before the 15th of the month"
+     ]
+    }
+   ],
+   "intentional_conflicts": [],
+   "must_not_infer": [
+    "Nothing in this checklist describes the candidate, the candidate's employer or the hiring company; its rotation, targets and counts belong to another company's product."
+   ]
+  }
+ ]
+}

@@ -1,0 +1,20 @@
+pipeline_version,run_date,exported_by,calibration,scope,system,fault_class,episodes,detected,recall,f1,median_delay_min_iqr,notes
+v0.6,2026-03-09,M. Thornquist,fixed at commissioning window,held-out buildings,detector,all,201,163,0.81,0.82,48 (30-77),calibration set fixed at the commissioning window; episodes under 10 minutes still included; method not yet named
+v0.6,2026-03-09,M. Thornquist,fixed at commissioning window,held-out buildings,detector,stuck damper,49,45,0.92,,24 (14-41),mixing-box residual only; quickest class to show up
+v0.6,2026-03-09,M. Thornquist,fixed at commissioning window,held-out buildings,detector,leaking valve,44,38,0.86,,52 (31-88),coil residual; valve and drift signatures not yet separated
+v0.6,2026-03-09,M. Thornquist,fixed at commissioning window,held-out buildings,detector,fan belt,35,29,0.83,,39 (25-63),fan-pressure residual; belt slippage shows at high speed
+v0.6,2026-03-09,M. Thornquist,fixed at commissioning window,held-out buildings,detector,sensor drift,31,17,0.55,,176 (102-305),most drift episodes missed until the offset is large
+v0.6,2026-03-09,M. Thornquist,fixed at commissioning window,held-out buildings,detector,fouled filter,42,34,0.81,,95 (58-170),detected late; pressure residual moves slowly
+v0.6,2026-03-09,M. Thornquist,fixed at commissioning window,held-out building: Aldergate Primary,detector,all,29,26,0.90,0.88,40 (26-62),5 units; cleanest trend logs in the estate
+v0.6,2026-03-09,M. Thornquist,fixed at commissioning window,held-out building: Fenwick Hollow Secondary,detector,all,66,56,0.85,0.83,45 (28-70),9 units; many short episodes all from one logger
+v0.6,2026-03-09,M. Thornquist,fixed at commissioning window,held-out building: Marrowby Infants,detector,all,21,13,0.62,0.62,63 (38-110),4 units; noisy return-air sensor on two of them
+v0.6,2026-03-09,M. Thornquist,fixed at commissioning window,held-out building: Quarrelton Academy,detector,all,55,43,0.78,0.81,50 (31-82),8 units; sports hall unit behaves differently in the evenings
+v0.6,2026-03-09,M. Thornquist,fixed at commissioning window,held-out building: Tessel Lane Primary,detector,all,30,25,0.83,0.83,53 (33-85),5 units; kitchen extract interferes with one unit
+v0.6,2026-03-09,M. Thornquist,fixed at commissioning window,development buildings,detector,all,348,289,0.83,,44 (27-71),fit check only; signatures were learned on these buildings so the figure is optimistic
+v0.6,2026-03-09,M. Thornquist,fixed at commissioning window,development buildings,detector,stuck damper,84,76,0.90,,22 (13-38),fit check only; not a held-out figure
+v0.6,2026-03-09,M. Thornquist,fixed at commissioning window,development buildings,detector,leaking valve,75,63,0.84,,49 (30-84),fit check only; not a held-out figure
+v0.6,2026-03-09,M. Thornquist,fixed at commissioning window,development buildings,detector,fan belt,62,52,0.84,,37 (23-60),fit check only; not a held-out figure
+v0.6,2026-03-09,M. Thornquist,fixed at commissioning window,development buildings,detector,sensor drift,55,31,0.56,,168 (97-290),fit check only; drift is weak here as well
+v0.6,2026-03-09,M. Thornquist,fixed at commissioning window,development buildings,detector,fouled filter,72,67,0.93,,90 (55-160),fit check only; not a held-out figure
+v0.6,2026-03-09,M. Thornquist,7 days fixed,held-out buildings,detector (7 days variant),all,201,158,0.79,,51 (32-83),variant explored and dropped; no gain over the default
+v0.6,2026-03-09,M. Thornquist,28 days fixed,held-out buildings,detector (28 days variant),all,201,159,0.79,,50 (31-80),variant explored and dropped; no gain over the default

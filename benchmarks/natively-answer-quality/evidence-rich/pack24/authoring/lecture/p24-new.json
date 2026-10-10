@@ -1,0 +1,1289 @@
+{
+ "mode": "lecture",
+ "items": [
+  {
+   "id": "ER-P24-LEC-N-001",
+   "mode": "lecture",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "planning next week: what written work do i actually have to hand in during the week of the 12th across networks, econ and bio? and which one's first",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "lecture-p24",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "course_policy",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Three things are due in the week beginning Monday 12 October 2026, each from a different document. First, the BIO 1380 Practical 2 full report (yeast fermentation): Monday 12 October by 09:00, the same date for all four groups (practical handbook). Second, ECN 1620 problem set 3: Wednesday 14 October (lecture 5 slides; the tutorial pack adds that problem sets go in on paper at the start of the Wednesday lecture). Third, CNW 2140 Lab 3 (TCP trace analysis): Friday 16 October 2026 by 17:00 (this term's syllabus). Last year's syllabus has Lab 3 on Friday 17 October 2025 and must not be used. Not due that week: the P3 beetle report (Friday 23 October) and Lab 4. The P3 practical session and ECN tutorial 4 fall in that week, but nothing is handed in at either.",
+    "required_facts": [
+     {
+      "fact": "LEC-REF-BIO-PRACTICAL-HANDBOOK#F5",
+      "text": "The BIO 1380 Practical 2 full report (yeast fermentation) is due that week.",
+      "answer_needles": [
+       "Practical 2",
+       "P2",
+       "yeast",
+       "fermentation"
+      ]
+     },
+     {
+      "fact": "LEC-REF-BIO-PRACTICAL-HANDBOOK#F25",
+      "text": "It is due on Monday 12 October by 09:00, which makes it the first of the three.",
+      "answer_needles": [
+       "09:00",
+       "9:00",
+       "9 am",
+       "9am",
+       "9 a.m.",
+       "9.00"
+      ]
+     },
+     {
+      "fact": "LEC-REF-ECN-SLIDES-L05#F33",
+      "text": "ECN 1620 problem set 3 is due Wednesday 14 October.",
+      "answer_needles": [
+       "14 October",
+       "October 14",
+       "14 Oct",
+       "Oct 14",
+       "14th",
+       "Wednesday"
+      ]
+     },
+     {
+      "fact": "LEC-REF-CNW-SYLLABUS-2026#F20",
+      "text": "CNW 2140 Lab 3 is due Friday 16 October 2026.",
+      "answer_needles": [
+       "16 October",
+       "October 16",
+       "16 Oct",
+       "Oct 16",
+       "16th"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "LEC-REF-CNW-SYLLABUS-2026#F19",
+      "text": "Lab reports go in by 17:00 on the due date."
+     },
+     {
+      "fact": "LEC-REF-ECN-TUTORIAL-PACK-2#F5",
+      "text": "Problem sets are handed in on paper at the start of the Wednesday lecture."
+     },
+     {
+      "fact": "LEC-REF-BIO-PRACTICAL-HANDBOOK#F6",
+      "text": "The P3 beetle report is not due until Friday 23 October."
+     },
+     {
+      "fact": "LEC-REF-ECN-TUTORIAL-PACK-2#F3",
+      "text": "Nothing is handed in at a tutorial."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives last year's Lab 3 date, Friday 17 October.",
+      "kind": "stale",
+      "fact": "LEC-REF-CNW-SYLLABUS-2025#F12",
+      "answer_needles": [
+       "17 October",
+       "October 17",
+       "17 Oct",
+       "Oct 17",
+       "17th"
+      ]
+     },
+     {
+      "text": "Lists the P3 beetle report (due Friday 23 October) or Lab 4 as due in that week.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says the BIO date cannot be given without knowing the practical group (the due date is the same for all groups).",
+      "kind": "over_deferral",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+    "expected_action": "answer_directly",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "LEC-REF-BIO-PRACTICAL-HANDBOOK",
+     "LEC-REF-ECN-SLIDES-L05",
+     "LEC-REF-CNW-SYLLABUS-2026"
+    ],
+    "source_priority": [
+     "LEC-REF-CNW-SYLLABUS-2026",
+     "LEC-REF-BIO-PRACTICAL-HANDBOOK",
+     "LEC-REF-ECN-SLIDES-L05",
+     "LEC-REF-ECN-TUTORIAL-PACK-2",
+     "LEC-REF-CNW-SYLLABUS-2025"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "CNW 2140 Lab 3 due date",
+      "sources": [
+       "LEC-REF-CNW-SYLLABUS-2026",
+       "LEC-REF-CNW-SYLLABUS-2025"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Mentioning that the P3 practical session and its risk checklist, and ECN tutorial 4, also fall in that week."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-LEC-N-002",
+   "mode": "lecture",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "if i'm not going to make a deadline, who do i actually ask for more time in each of my three courses? can the lecturer or whoever marks it just say yes",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "lecture-p24",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "course_policy",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Nobody who teaches or marks can say yes; each course sends the request to an office, and the three offices are in three different documents. CNW 2140: extensions are granted only through the School office, not by the lecturer or the teaching assistant (this term's syllabus). BIO 1380 practical reports: demonstrators cannot change a deadline; the student applies to the Life Sciences teaching office, room LS 1.02, before the deadline has passed (practical handbook). ECN 1620 problem sets: neither the tutors nor the head tutor can move a deadline; the student applies to the Department of Economics office, room KD 2.03, before the deadline (tutorial pack 2). The material does not say what counts as a good reason.",
+    "required_facts": [
+     {
+      "fact": "LEC-REF-CNW-SYLLABUS-2026#F24",
+      "text": "CNW 2140: only through the School office.",
+      "answer_needles": [
+       "School office"
+      ]
+     },
+     {
+      "fact": "LEC-REF-BIO-PRACTICAL-HANDBOOK#F26",
+      "text": "BIO 1380 practical reports: the Life Sciences teaching office, before the deadline.",
+      "answer_needles": [
+       "teaching office"
+      ]
+     },
+     {
+      "fact": "LEC-REF-ECN-TUTORIAL-PACK-2#F7",
+      "text": "ECN 1620 problem sets: the Department of Economics office, before the deadline.",
+      "answer_needles": [
+       "Department of Economics office",
+       "Economics office",
+       "Economics department office",
+       "department office",
+       "KD 2.03"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "LEC-REF-BIO-PRACTICAL-HANDBOOK#F30",
+      "text": "Appendix C of the handbook repeats where a deadline that cannot be met goes."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says that a lecturer, the teaching assistant, a demonstrator or a tutor can grant the extra time.",
+      "kind": "unauthorized_promise",
+      "answer_needles": []
+     },
+     {
+      "text": "Sends the BIO request to the laboratory manager, who looks after equipment, lockers and lost property.",
+      "kind": "fabrication",
+      "fact": "LEC-REF-BIO-PRACTICAL-HANDBOOK#F11",
+      "answer_needles": [
+       "laboratory manager",
+       "lab manager",
+       "Penhallick"
+      ]
+     },
+     {
+      "text": "Names one office for all three courses.",
+      "kind": "fabrication",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+    "expected_action": "answer_directly",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "LEC-REF-CNW-SYLLABUS-2026",
+     "LEC-REF-BIO-PRACTICAL-HANDBOOK",
+     "LEC-REF-ECN-TUTORIAL-PACK-2"
+    ],
+    "source_priority": [
+     "LEC-REF-CNW-SYLLABUS-2026",
+     "LEC-REF-BIO-PRACTICAL-HANDBOOK",
+     "LEC-REF-ECN-TUTORIAL-PACK-2",
+     "LEC-REF-CNW-SYLLABUS-2025"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-LEC-N-003",
+   "mode": "lecture",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "workload check. leaving out exams, quizzes and the networks group project, how many separate pieces of written work do i hand in this term? i mean networks lab reports + bio practical reports + econ problem sets, all added up",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "lecture-p24",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "calculation",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Three counts from three documents. CNW 2140: five lab reports (this term's syllabus: five labs). BIO 1380: four practical reports, one short report for P1 and three full reports for P2, P3 and P4 (practical handbook; the laboratory notebook is not handed in). ECN 1620: six problem sets (tutorial pack 2; nothing is handed in at the seven tutorials). 5 + 4 + 6 = 15. Wrong totals: 14 (the three full BIO reports only), 16 (adding the group project report, which the question leaves out), 22 (adding the seven tutorials).",
+    "required_facts": [
+     {
+      "fact": "LEC-REF-CNW-SYLLABUS-2026#F11",
+      "text": "CNW 2140 has five labs, so five lab reports.",
+      "answer_needles": [
+       "5",
+       "five"
+      ]
+     },
+     {
+      "fact": "LEC-REF-BIO-PRACTICAL-HANDBOOK#F8",
+      "text": "BIO 1380 has four practical reports: one short and three full.",
+      "answer_needles": [
+       "4",
+       "four"
+      ]
+     },
+     {
+      "fact": "LEC-REF-ECN-TUTORIAL-PACK-2#F5",
+      "text": "ECN 1620 has six problem sets.",
+      "answer_needles": [
+       "6",
+       "six"
+      ]
+     },
+     {
+      "fact": "LEC-REF-BIO-PRACTICAL-HANDBOOK#F8",
+      "text": "The total is 15.",
+      "answer_needles": [
+       "15 pieces",
+       "15 hand-ins",
+       "15 things",
+       "15 items",
+       "15 submissions",
+       "15 separate",
+       "15 in total",
+       "15 altogether",
+       "15 in all",
+       "total of 15",
+       "15 total",
+       "= 15",
+       "is 15",
+       "that's 15",
+       "makes 15",
+       "comes to 15",
+       "fifteen",
+       "**15**",
+       "15 written",
+       "15 assignments"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "LEC-REF-BIO-PRACTICAL-HANDBOOK#F15",
+      "text": "The laboratory notebook is not handed in."
+     },
+     {
+      "fact": "LEC-REF-ECN-TUTORIAL-PACK-2#F3",
+      "text": "Nothing is handed in at a tutorial."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Counts only the three full BIO reports and gives 14.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "14 pieces",
+       "14 in total",
+       "14 hand-ins",
+       "14 things",
+       "14 items",
+       "total of 14",
+       "= 14",
+       "fourteen"
+      ]
+     },
+     {
+      "text": "Adds the group project report (16) or the seven tutorials (22).",
+      "kind": "fabrication",
+      "answer_needles": [
+       "16 pieces",
+       "16 in total",
+       "16 hand-ins",
+       "16 things",
+       "16 items",
+       "total of 16",
+       "= 16",
+       "sixteen",
+       "22 pieces",
+       "22 in total",
+       "total of 22",
+       "= 22",
+       "twenty-two"
+      ]
+     }
+    ],
+    "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "LEC-REF-CNW-SYLLABUS-2026",
+     "LEC-REF-BIO-PRACTICAL-HANDBOOK",
+     "LEC-REF-ECN-TUTORIAL-PACK-2"
+    ],
+    "source_priority": [
+     "LEC-REF-CNW-SYLLABUS-2026",
+     "LEC-REF-BIO-PRACTICAL-HANDBOOK",
+     "LEC-REF-ECN-TUTORIAL-PACK-2",
+     "LEC-REF-CNW-SYLLABUS-2025"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "5 + 4 + 6",
+     "result": 15,
+     "unit": "pieces of written work handed in",
+     "accepted_forms": [
+      "15 pieces",
+      "15 hand-ins",
+      "15 things",
+      "15 items",
+      "15 submissions",
+      "15 separate",
+      "15 in total",
+      "15 altogether",
+      "15 in all",
+      "total of 15",
+      "15 total",
+      "= 15",
+      "is 15",
+      "that's 15",
+      "makes 15",
+      "comes to 15",
+      "fifteen",
+      "**15**",
+      "15 written",
+      "15 assignments"
+     ],
+     "inputs": {
+      "cnw_lab_reports": "LEC-REF-CNW-SYLLABUS-2026#F11",
+      "bio_practical_reports": "LEC-REF-BIO-PRACTICAL-HANDBOOK#F8",
+      "ecn_problem_sets": "LEC-REF-ECN-TUTORIAL-PACK-2#F5"
+     },
+     "wrong_results_common": [
+      "14 pieces",
+      "14 in total",
+      "total of 14",
+      "= 14",
+      "fourteen",
+      "16 pieces",
+      "16 in total",
+      "total of 16",
+      "= 16",
+      "sixteen",
+      "total of 22",
+      "= 22",
+      "twenty-two"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-LEC-N-004",
+   "mode": "lecture",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Take their headline inflation and their output gap and put them through our rule. Where should the Bank of Harrowmere have its policy rate?",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "Tutorial four is Harrowmere, so let's warm up on it now. You all have the table from the pack in front of you."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "lecture-p24",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "calculation",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "One input set is in the new tutorial pack (Harrowmere: headline CPI inflation 3.2%, output gap 1.6% above potential); the rule is in this year's formula sheet and the lecture 5 slides: policy rate = neutral real rate + inflation + 0.5 x (inflation - target) + 0.25 x output gap, with a neutral real rate of 1% and a target of 2% unless told otherwise (the pack states no target for Harrowmere). 1 + 3.2 + 0.5 x (3.2 - 2) + 0.25 x 1.6 = 1 + 3.2 + 0.6 + 0.4 = 5.2%. Near-miss inputs: core inflation of 2.7% (gives 4.45%); last year's formula sheet, with a neutral real rate of 2% and a weight of 0.5 on the output gap (gives 6.6%); the figures of the lecture's own economy (7.0%). The Bank's actual policy rate, 5.75%, is not what the rule gives; an answer may add that it is 0.55 points above the rule.",
+    "required_facts": [
+     {
+      "fact": "LEC-REF-ECN-TUTORIAL-PACK-2#F12",
+      "text": "Harrowmere: headline inflation 3.2%, output gap 1.6% above potential.",
+      "answer_needles": [
+       "3.2"
+      ]
+     },
+     {
+      "fact": "LEC-REF-ECN-FORMULAS-2026#F12",
+      "text": "This year's rule gives a policy rate of 5.2%.",
+      "answer_needles": [
+       "5.2%",
+       "5.2 %",
+       "5.2 percent",
+       "5.2 per cent",
+       "5.20%",
+       "5.2"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "LEC-REF-ECN-FORMULAS-2026#F13",
+      "text": "The rule uses a neutral real rate of 1% and a target of 2% unless told otherwise."
+     },
+     {
+      "fact": "LEC-REF-ECN-SLIDES-L05#F22",
+      "text": "The same rule is on the lecture 5 slides."
+     },
+     {
+      "fact": "LEC-REF-ECN-TUTORIAL-PACK-2#F14",
+      "text": "The Bank of Harrowmere's actual policy rate is 5.75%."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Uses last year's Taylor rule (neutral real rate 2%, weight 0.5 on the output gap) and gives 6.6%.",
+      "kind": "stale",
+      "fact": "LEC-REF-ECN-FORMULAS-2025#F6",
+      "answer_needles": [
+       "6.6%",
+       "6.6 %",
+       "6.6 percent",
+       "6.6 per cent"
+      ]
+     },
+     {
+      "text": "Uses core inflation (2.7%) in place of headline and gives 4.45%.",
+      "kind": "fabrication",
+      "fact": "LEC-REF-ECN-TUTORIAL-PACK-2#F13",
+      "answer_needles": [
+       "4.45"
+      ]
+     },
+     {
+      "text": "Gives the Bank's actual policy rate, 5.75%, as what the rule prescribes.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Uses the figures of the lecture's own economy and repeats the slide's 7.0%.",
+      "kind": "fabrication",
+      "fact": "LEC-REF-ECN-SLIDES-L05#F25",
+      "answer_needles": [
+       "7.0%"
+      ]
+     }
+    ],
+    "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "LEC-REF-ECN-TUTORIAL-PACK-2",
+     "LEC-REF-ECN-FORMULAS-2026",
+     "LEC-REF-ECN-SLIDES-L05"
+    ],
+    "source_priority": [
+     "LEC-REF-ECN-FORMULAS-2026",
+     "LEC-REF-ECN-SLIDES-L05",
+     "LEC-REF-ECN-TUTORIAL-PACK-2",
+     "LEC-REF-ECN-FORMULAS-2025"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "Classroom rule: neutral real rate and weight on the output gap",
+      "sources": [
+       "LEC-REF-ECN-FORMULAS-2026",
+       "LEC-REF-ECN-FORMULAS-2025"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "1 + 3.2 + 0.5 * (3.2 - 2) + 0.25 * 1.6",
+     "result": 5.2,
+     "unit": "% (policy rate)",
+     "accepted_forms": [
+      "5.2%",
+      "5.2 %",
+      "5.2 percent",
+      "5.2 per cent",
+      "5.20%",
+      "5.2"
+     ],
+     "inputs": {
+      "headline_inflation": "LEC-REF-ECN-TUTORIAL-PACK-2#F12",
+      "output_gap": "LEC-REF-ECN-TUTORIAL-PACK-2#F12",
+      "rule": "LEC-REF-ECN-FORMULAS-2026#F12",
+      "neutral_rate_and_target": "LEC-REF-ECN-FORMULAS-2026#F13"
+     },
+     "wrong_results_common": [
+      "6.6%",
+      "4.45",
+      "5.6%",
+      "6.2%"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-LEC-N-005",
+   "mode": "lecture",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "How many fragments does the router make of it, and what size is the final one once it's on the wire?",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "Back to the Annex link from Tuesday. This time send one full-sized TCP segment across it, our usual size from the congestion control lecture, with both of its headers on."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "lecture-p24",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "calculation",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The segment size is in the frozen slides (every worked example uses an MSS of 1,200 bytes); the link and the rules are in the week 5 notes (Annex MTU 620 bytes; IP header 20 bytes; TCP header 20 bytes; each fragment carries a 20-byte IP header of its own and as much payload as the MTU allows, in multiples of 8 bytes; a TCP header is just payload to the router). The packet is 1,200 + 20 + 20 = 1,240 bytes, so the IP payload is 1,220 bytes. Each fragment can carry 600 bytes: 600 + 600 + 20. Three fragments, of 620, 620 and 40 bytes on the wire. The usual slip is to forget the TCP header (1,200 / 600 gives two fragments). Near-miss sizes in the pack: the lab Ethernet MTU of 1,500 bytes, the 1,232-byte DNS limit, and the notes' own slide example of a 1,500-byte packet, whose last fragment is 300 bytes.",
+    "required_facts": [
+     {
+      "fact": "LEC-REF-CNW-SLIDES-L07#F3",
+      "text": "A full-sized segment in this course carries an MSS of 1,200 bytes.",
+      "answer_needles": [
+       "1,200",
+       "1200",
+       "1 200"
+      ]
+     },
+     {
+      "fact": "LEC-REF-CNW-NOTES-W5#F12",
+      "text": "The router makes three fragments.",
+      "answer_needles": [
+       "3 fragments",
+       "three fragments",
+       "3 IP fragments",
+       "three IP fragments",
+       "3 pieces",
+       "three pieces",
+       "into 3",
+       "into three",
+       "**3**",
+       "**three**",
+       "3 fragment",
+       "three fragment"
+      ]
+     },
+     {
+      "fact": "LEC-REF-CNW-NOTES-W5#F11",
+      "text": "The last fragment is 40 bytes on the wire (20 bytes of payload and a 20-byte IP header).",
+      "answer_needles": [
+       "40 bytes",
+       "40-byte",
+       "40 byte"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "LEC-REF-CNW-NOTES-W5#F10",
+      "text": "An IP header is 20 bytes in this course."
+     },
+     {
+      "fact": "LEC-REF-CNW-NOTES-W5#F13",
+      "text": "Fragments are put back together only at the destination host."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Forgets that the TCP header is part of the IP payload and gets two fragments.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "into two",
+       "only two fragments",
+       "only 2 fragments",
+       "just two fragments",
+       "just 2 fragments",
+       "exactly two fragments",
+       "exactly 2 fragments"
+      ]
+     },
+     {
+      "text": "Uses a 1,460-byte segment.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "1,460",
+       "1460"
+      ]
+     },
+     {
+      "text": "Repeats the notes' slide example (a last fragment of 300 bytes).",
+      "kind": "fabrication",
+      "fact": "LEC-REF-CNW-NOTES-W5#F14",
+      "answer_needles": [
+       "300 bytes",
+       "300-byte"
+      ]
+     }
+    ],
+    "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "LEC-REF-CNW-SLIDES-L07",
+     "LEC-REF-CNW-NOTES-W5"
+    ],
+    "source_priority": [
+     "LEC-REF-CNW-NOTES-W5",
+     "LEC-REF-CNW-SLIDES-L07"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "ceil((1200 + 20 + 20 - 20) / (620 - 20)); last fragment = (1220 - 2 * 600) + 20",
+     "result": 3,
+     "unit": "fragments (620, 620 and 40 bytes on the wire)",
+     "accepted_forms": [
+      "3 fragments",
+      "three fragments",
+      "3 IP fragments",
+      "three IP fragments",
+      "3 pieces",
+      "three pieces",
+      "into 3",
+      "into three"
+     ],
+     "inputs": {
+      "mss": "LEC-REF-CNW-SLIDES-L07#F3",
+      "annex_mtu": "LEC-REF-CNW-NOTES-W5#F11",
+      "ip_header": "LEC-REF-CNW-NOTES-W5#F10",
+      "tcp_header_and_rules": "LEC-REF-CNW-NOTES-W5#F12"
+     },
+     "wrong_results_common": [
+      "into two",
+      "only two fragments",
+      "only 2 fragments",
+      "just two fragments",
+      "just 2 fragments",
+      "exactly two fragments",
+      "exactly 2 fragments",
+      "4 fragments",
+      "four fragments"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-LEC-N-006",
+   "mode": "lecture",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Stay inside the word limit, please. I stop reading where the limit falls, and your tables don't count towards it.",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "The beetle write-up is the first proper full report for most of you."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "lecture-p24",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "course_policy",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "From section 9 of the practical handbook, deep in the document: a full report is at most 1,400 words, not counting tables, figure legends and the reference list; the word count is printed on the first page; a report that runs over is read as far as the limit and marked on what has been read. The 350-word limit near the start of the handbook belongs to the P1 short report only and is the wrong figure for the P3 beetle report.",
+    "required_facts": [
+     {
+      "fact": "LEC-REF-BIO-PRACTICAL-HANDBOOK#F24",
+      "text": "A full report is at most 1,400 words, not counting tables, figure legends and the reference list.",
+      "answer_needles": [
+       "1,400",
+       "1400",
+       "1 400"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "LEC-REF-BIO-PRACTICAL-HANDBOOK#F9",
+      "text": "The 350-word limit is for the P1 short report only."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives 350 words, the limit of the P1 short report, as the limit for the beetle report.",
+      "kind": "fabrication",
+      "fact": "LEC-REF-BIO-PRACTICAL-HANDBOOK#F9",
+      "answer_needles": [
+       "350"
+      ]
+     }
+    ],
+    "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+    "expected_action": "answer_directly",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "LEC-REF-BIO-PRACTICAL-HANDBOOK"
+    ],
+    "source_priority": [
+     "LEC-REF-BIO-PRACTICAL-HANDBOOK"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-LEC-N-007",
+   "mode": "lecture",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "If you think we've put yours in the wrong band, there's one person to take it to and a time limit for doing it. After that the band stands.",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "Your yeast reports will come back through the course site with a band on each."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "lecture-p24",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "course_policy",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "From section 9 of the practical handbook: a band thought to be wrong is raised with the senior demonstrator (Ottoline Varkess) within 5 working days of the report being returned, bringing the report and the notebook; demonstrators do not re-mark at the bench. Near-misses: 2 working days, near the start of the handbook, is the time for reporting a missed session; 7 days and the teaching assistant are the CNW 2140 regrade rule and do not apply to BIO 1380; the laboratory manager deals with breakages, keys and lost property.",
+    "required_facts": [
+     {
+      "fact": "LEC-REF-BIO-PRACTICAL-HANDBOOK#F28",
+      "text": "The window is 5 working days from the report being returned.",
+      "answer_needles": [
+       "5 working days",
+       "five working days",
+       "5 working",
+       "five working"
+      ]
+     },
+     {
+      "fact": "LEC-REF-BIO-PRACTICAL-HANDBOOK#F10",
+      "text": "The person is the senior demonstrator, Ottoline Varkess.",
+      "answer_needles": [
+       "senior demonstrator",
+       "Varkess"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "LEC-REF-BIO-PRACTICAL-HANDBOOK#F27",
+      "text": "Reports are marked by the demonstrators and checked by the senior demonstrator."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives 2 working days, the time for reporting a missed session.",
+      "kind": "fabrication",
+      "fact": "LEC-REF-BIO-PRACTICAL-HANDBOOK#F14",
+      "answer_needles": [
+       "2 working days",
+       "two working days"
+      ]
+     },
+     {
+      "text": "Applies the CNW 2140 regrade rule: 7 days, to the teaching assistant.",
+      "kind": "fabrication",
+      "fact": "LEC-REF-CNW-SYLLABUS-2026#F25",
+      "answer_needles": [
+       "7 days",
+       "seven days",
+       "Feathersmythe",
+       "Juno"
+      ]
+     },
+     {
+      "text": "Sends the query to the laboratory manager.",
+      "kind": "fabrication",
+      "fact": "LEC-REF-BIO-PRACTICAL-HANDBOOK#F11",
+      "answer_needles": [
+       "laboratory manager",
+       "lab manager"
+      ]
+     }
+    ],
+    "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+    "expected_action": "answer_directly",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "LEC-REF-BIO-PRACTICAL-HANDBOOK"
+    ],
+    "source_priority": [
+     "LEC-REF-BIO-PRACTICAL-HANDBOOK"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-LEC-N-008",
+   "mode": "lecture",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Run over the limit in the handout and that name scores nothing, however right the answer is. So how long does a lookup get?",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "Lab four. Your resolver is timed on every single name it's given."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "lecture-p24",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "course_policy",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two versions of the Lab 4 handout are loaded. Version 2, issued Friday 9 October 2026, says that it replaces version 1 of Monday 5 October and that the time limit for a lookup has changed, without printing the old value: every lookup must finish within 3 seconds. Version 1 says 5 seconds and is superseded; nothing in version 1 itself says so. The 750 ms in both versions is the wait for any one server, not the limit for a lookup.",
+    "required_facts": [
+     {
+      "fact": "LEC-REF-CNW-LAB4-HANDOUT-V2#F9",
+      "text": "Every lookup must finish within 3 seconds (handout version 2).",
+      "answer_needles": [
+       "3 seconds",
+       "three seconds",
+       "3-second",
+       "three-second",
+       "3 sec",
+       "3s"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "LEC-REF-CNW-LAB4-HANDOUT-V2#F1",
+      "text": "Version 2 was issued on Friday 9 October 2026 and replaces version 1 of Monday 5 October."
+     },
+     {
+      "fact": "LEC-REF-CNW-LAB4-HANDOUT-V2#F10",
+      "text": "The resolver waits at most 750 ms for any one server."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives version 1's limit of 5 seconds.",
+      "kind": "stale",
+      "fact": "LEC-REF-CNW-LAB4-HANDOUT-V1#F3",
+      "answer_needles": [
+       "5 seconds",
+       "five seconds",
+       "5-second",
+       "five-second",
+       "5 sec"
+      ]
+     },
+     {
+      "text": "Gives 750 ms, the wait for one server, as the limit for a whole lookup.",
+      "kind": "fabrication",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+    "expected_action": "prefer_current_source",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "LEC-REF-CNW-LAB4-HANDOUT-V2"
+    ],
+    "source_priority": [
+     "LEC-REF-CNW-LAB4-HANDOUT-V2",
+     "LEC-REF-CNW-LAB4-HANDOUT-V1"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "Lab 4: time limit for one lookup",
+      "sources": [
+       "LEC-REF-CNW-LAB4-HANDOUT-V2",
+       "LEC-REF-CNW-LAB4-HANDOUT-V1"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-LEC-N-009",
+   "mode": "lecture",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "lab 4 question. if a reply comes back truncated, do i actually have to do the tcp retry or not? and does it count for marks",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "lecture-p24",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "course_policy",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two current sources disagree and neither says that it replaces the other. The Lab 4 handout (version 2, issued Friday 9 October 2026 and approved by the lecturer; version 1 says the same) says that no name in the published or the hidden list returns a reply large enough to be cut short, that the retry over TCP need not be implemented, and that it is not marked. Dr. Brantigern's week 5 notes, last edited the same day, say that the resolver must handle truncation by repeating the query over TCP, that one of the hidden names is there to check exactly that, and that a resolver without the retry will lose it. The right answer reports both statements, says that the material does not settle it, and suggests asking on the course forum; it may add that implementing the retry is the safe course.",
+    "required_facts": [
+     {
+      "fact": "LEC-REF-CNW-LAB4-HANDOUT-V2#F12",
+      "text": "The handout says the retry over TCP need not be implemented and is not marked.",
+      "answer_needles": [
+       "handout",
+       "not marked",
+       "isn't marked",
+       "is not marked",
+       "do not need",
+       "don't need",
+       "not required",
+       "not needed",
+       "no need"
+      ]
+     },
+     {
+      "fact": "LEC-REF-CNW-NOTES-W5#F17",
+      "text": "The lecturer's week 5 notes say a hidden name checks it and a resolver without the retry will lose it.",
+      "answer_needles": [
+       "notes",
+       "hidden name",
+       "hidden names",
+       "hidden list",
+       "lecturer",
+       "Brantigern"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "LEC-REF-CNW-NOTES-W3-4#F14",
+      "text": "The week 3 notes describe the repeat over TCP after a truncated reply."
+     },
+     {
+      "fact": "LEC-REF-CNW-LAB4-HANDOUT-V1#F7",
+      "text": "Version 1 of the handout says the same as version 2 on this point."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "States flatly that the retry is required, or flatly that it is not, without saying that the handout and the lecturer's notes disagree.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Explains the disagreement as version 1 against version 2 of the handout (both versions say the retry is not marked).",
+      "kind": "fabrication",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+    "expected_action": "surface_conflict",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "LEC-REF-CNW-LAB4-HANDOUT-V2",
+     "LEC-REF-CNW-NOTES-W5"
+    ],
+    "source_priority": [
+     "LEC-REF-CNW-LAB4-HANDOUT-V2",
+     "LEC-REF-CNW-NOTES-W5",
+     "LEC-REF-CNW-LAB4-HANDOUT-V1"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "Whether the Lab 4 resolver must retry a truncated reply over TCP, and whether that is marked",
+      "sources": [
+       "LEC-REF-CNW-LAB4-HANDOUT-V2",
+       "LEC-REF-CNW-NOTES-W5"
+      ],
+      "resolution": "unresolved"
+     }
+    ],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-LEC-N-010",
+   "mode": "lecture",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "lab 4 grader: if my resolver is slow on every single name, what's the longest the whole hidden list could take to get through? need a number of seconds",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "lecture-p24",
+   "pi_state": "none",
+   "condition": "missing_evidence",
+   "category": "course_policy",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "It cannot be worked out. The handout (version 2) gives the limit for one lookup, 3 seconds, and says that the published list holds 15 names, but of the hidden list it says only that it is a different set of names in the same three zones, and that the lab team does not say how many names it holds. Version 1 gives no number either. The grader also looks every name up at least twice, and some a third time. So there is no total: 45 seconds (15 x 3, as if the hidden list were the size of the published one), 90 seconds (the same with two lookups each) and 60 seconds (version 1's 12 names at 5 seconds) are inventions. The right answer gives what is known per lookup, says that the number of hidden names is not disclosed, and does not offer a total.",
+    "required_facts": [],
+    "optional_facts": [
+     {
+      "fact": "LEC-REF-CNW-LAB4-HANDOUT-V2#F9",
+      "text": "Every lookup must finish within 3 seconds."
+     },
+     {
+      "fact": "LEC-REF-CNW-LAB4-HANDOUT-V2#F14",
+      "text": "The handout does not say how many names the hidden list holds."
+     },
+     {
+      "fact": "LEC-REF-CNW-LAB4-HANDOUT-V2#F13",
+      "text": "The published list holds 15 names."
+     },
+     {
+      "fact": "LEC-REF-CNW-LAB4-HANDOUT-V2#F15",
+      "text": "The grader looks every name up twice, and a third time for the names that test expiry."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Assumes the hidden list is as long as the published one and gives 45 seconds, or 90 seconds for two lookups each.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "45 seconds",
+       "45 s",
+       "45s",
+       "forty-five seconds",
+       "90 seconds",
+       "90 s",
+       "90s",
+       "ninety seconds"
+      ]
+     },
+     {
+      "text": "Works from version 1 (12 names at 5 seconds) and gives 60 seconds.",
+      "kind": "stale",
+      "fact": "LEC-REF-CNW-LAB4-HANDOUT-V1#F3",
+      "answer_needles": [
+       "60 seconds",
+       "60 s",
+       "60s",
+       "sixty seconds",
+       "one minute",
+       "1 minute"
+      ]
+     },
+     {
+      "text": "Says that there is no hidden list, or that the hidden names are not timed.",
+      "kind": "false_denial",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+    "expected_action": "decline_to_invent_stay_useful",
+    "expected_response_type": "private_explanation",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-LEC-N-011",
+   "mode": "lecture",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "So put in the temperature they were reared at. It matters for how quickly they develop.",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "In the beetle report the methods section is short, but it does have to say how the broods were raised before they reached your bench."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "lecture-p24",
+   "pi_state": "none",
+   "condition": "missing_evidence",
+   "category": "lecture_recall",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "No loaded document gives the temperature at which the beetle broods were reared. The practical handbook says only that the technicians set the crosses up in the teaching laboratory's insectary five weeks before the session and took the parents out once the eggs had been laid. Every temperature in the handbook belongs to something else: the P1 water baths (5 to 75 degrees C), the P2 yeast bath (32 degrees C), and room temperature for the potato cylinders in P4; the 35 degrees C in the lecture notes is the balloon flask demonstration. The right answer says that the rearing temperature is not in the material, gives what the handbook does say about how the broods were raised, and suggests asking the senior demonstrator or the technicians. It must not supply a figure.",
+    "required_facts": [],
+    "optional_facts": [
+     {
+      "fact": "LEC-REF-BIO-PRACTICAL-HANDBOOK#F19",
+      "text": "The crosses were set up in the teaching laboratory's insectary five weeks before the session, and the parents were taken out once the eggs had been laid."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "States a rearing temperature, for example the 32 degrees C of the yeast water bath, the 35 degrees C of the lecture demonstration or the 37 degrees C bath of P1.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "32 degrees",
+       "32 °C",
+       "32°C",
+       "32 C",
+       "35 degrees",
+       "35 °C",
+       "35°C",
+       "35 C",
+       "37 degrees",
+       "37 °C",
+       "37°C",
+       "37 C"
+      ]
+     },
+     {
+      "text": "Says that the broods were reared at room temperature.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Says that the broods were not reared under set conditions, or that the temperature need not be reported.",
+      "kind": "false_denial",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+    "expected_action": "decline_to_invent_stay_useful",
+    "expected_response_type": "private_explanation",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-LEC-N-012",
+   "mode": "lecture",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Maltose is the tube I care about. Where had the class as a whole got to with it by the last reading?",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "Have the class sheet for the yeast practical open in front of you."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "lecture-p24",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "lecture_recall",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "From the class results sheet for Practical 2: the class mean for maltose at the last reading (40 minutes) is 9.7 mL; it was 0.3 mL at 10 minutes and 3.1 mL at 25 minutes, so it lags and then climbs. The other class means at 40 minutes belong to other tubes: glucose 21.3 mL, sucrose 18.4 mL, lactose 0.9 mL, water control 0.5 mL. The smallest and largest bench readings for maltose (7.9 and 12.0 mL) are not the class figure.",
+    "required_facts": [
+     {
+      "fact": "LEC-REF-BIO-P2-CLASS-RESULTS#F5",
+      "text": "The class mean for maltose at 40 minutes is 9.7 mL.",
+      "answer_needles": [
+       "9.7"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "LEC-REF-BIO-P2-CLASS-RESULTS#F8",
+      "text": "Bench readings for maltose at 40 minutes range from 7.9 to 12.0 mL."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives another tube's class mean at 40 minutes as the maltose figure: 21.3 (glucose), 18.4 (sucrose), 0.9 (lactose) or 0.5 (control).",
+      "kind": "fabrication",
+      "answer_needles": [
+       "21.3",
+       "18.4",
+       "0.9 mL",
+       "0.5 mL"
+      ]
+     },
+     {
+      "text": "Gives the maltose mean at an earlier reading (3.1 mL at 25 minutes) as the final one.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Gives a single bench's reading, or the smallest or largest bench reading, as the class figure.",
+      "kind": "fabrication",
+      "answer_needles": []
+     }
+    ],
+    "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+    "expected_action": "answer_directly",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "LEC-REF-BIO-P2-CLASS-RESULTS"
+    ],
+    "source_priority": [
+     "LEC-REF-BIO-P2-CLASS-RESULTS"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  }
+ ]
+}

@@ -1,0 +1,2379 @@
+{
+  "mode": "lecture",
+  "items": [
+    {
+      "id": "ER-D-LEC-001",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Then the timer goes off. Where does the window restart, and what's the new threshold? Shout it out.",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Okay, back to the trace on the slide. By round eleven we'd climbed to twelve segments."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "worked_example",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The lecturer is asking about her own lecture 7 trace. With the course's timeout rule, ssthresh becomes half of 12, which is 6 segments, and cwnd restarts at the course's initial window of 2 segments (not 1), followed by slow start again. A good answer gives both numbers and says why, and may add that the next rounds are 4 and then 6 (clamped).",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F22",
+            "text": "After the timeout in round 11 (cwnd 12), the window restarts at cwnd = 2 segments, the course's initial window.",
+            "answer_needles": [
+              "cwnd = 2",
+              "cwnd=2",
+              "back to 2",
+              "restarts at 2",
+              "restart at 2",
+              "window of 2",
+              "cwnd of 2",
+              "to 2 segments",
+              "at 2 segments",
+              "two segments",
+              "IW = 2",
+              "drops to 2",
+              "resets to 2",
+              "reset to 2",
+              "cwnd to 2",
+              "**2 segments",
+              "**2**",
+              "2 MSS",
+              "cwnd is 2",
+              "window is 2"
+            ]
+          },
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F22",
+            "text": "The new threshold is ssthresh = 6 segments (half of 12).",
+            "answer_needles": [
+              "ssthresh = 6",
+              "ssthresh=6",
+              "ssthresh of 6",
+              "ssthresh to 6",
+              "ssthresh becomes 6",
+              "ssthresh is 6",
+              "threshold of 6",
+              "threshold to 6",
+              "threshold becomes 6",
+              "threshold is 6",
+              "threshold = 6",
+              "12 / 2 = 6",
+              "12/2 = 6",
+              "half of 12",
+              "six segments",
+              "to 6",
+              "is 6",
+              "**6 segments",
+              "**6**",
+              "6 MSS",
+              "ssthresh: 6"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F14",
+            "text": "Timeout rule: ssthresh = cwnd / 2, then cwnd = IW, back to slow start."
+          },
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F23",
+            "text": "The trace then goes 4, 6 (clamped at ssthresh), 7."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "States that in this course the window restarts at 1 segment after a timeout (the common textbook default).",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Treats the timeout like duplicate ACKs and says the window drops to 6 (half) and continues in congestion avoidance.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-SLIDES-L07"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-SLIDES-L07"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Noting that real TCP stacks and most textbooks restart from 1 segment after a timeout, while this course restarts from its initial window of 2."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-002",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "what formula did the lecture use for average tcp throughput? was it the square root one",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "formula",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The lecture used throughput = 0.75 x W x MSS / RTT, where W is the window at which loss occurs (so the average window is 0.75 x W). It was not the square-root loss formula: the slide says that one is not used in this course and is further reading only.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F26",
+            "text": "The lecture's formula is throughput = 0.75 x W x MSS / RTT.",
+            "answer_needles": [
+              "0.75",
+              "3/4",
+              "three quarters",
+              "three-quarters"
+            ]
+          },
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F28",
+            "text": "The square-root loss formula (Mathis) is explicitly not used in this course; further reading only.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F25",
+            "text": "W is the window at which loss occurs; the window swings between W / 2 and W."
+          },
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F27",
+            "text": "Slide example: W = 20, MSS 1,200 bytes, RTT 80 ms gives 1.8 Mbit/s."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the lecture used the square-root loss formula (throughput proportional to MSS / (RTT x sqrt(p))).",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-SLIDES-L07"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-SLIDES-L07"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Briefly saying what the square-root formula is, as long as it is clear the lecture did not use it."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-003",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "So the way we count on this course, how many queries does it take to get the portal's address? And why isn't it eight?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Nothing cached anywhere. Not on the laptop, not on the campus resolver."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "course_convention",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "In this course a cold lookup costs 4 queries: laptop to campus resolver, resolver to root, resolver to the TLD server, resolver to the authoritative server. It is not eight because the course counts queries only; textbooks that say 8 are counting the replies too.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4#F5",
+            "text": "A cold lookup costs 4 queries in the course's count.",
+            "answer_needles": [
+              "4 queries",
+              "four",
+              "4 in total",
+              "is 4",
+              "= 4",
+              "costs 4",
+              "takes 4",
+              "it's 4"
+            ]
+          },
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4#F6",
+            "text": "Eight counts the replies as well (messages); the course counts queries only.",
+            "answer_needles": [
+              "repl",
+              "respons",
+              "messages",
+              "answers"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4#F5",
+            "text": "The four queries: laptop to campus resolver, then root, TLD, authoritative."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives 8 as the number this course uses.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-NOTES-W3-4"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-NOTES-W3-4"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-004",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "what was the etag thing she showed in the http demo? like what actually happened",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "lecture_example",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "In the demo the second load of the stylesheet came back 304 Not Modified: the browser sent If-None-Match with the stored ETag (v7-a41c), the file had not changed, so the server sent no body and the browser reused its copy.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4#F24",
+            "text": "The second load of the stylesheet replied 304 Not Modified because the browser sent If-None-Match with the ETag and the file had not changed.",
+            "answer_needles": [
+              "304"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4#F24",
+            "text": "The ETag value in the demo was v7-a41c."
+          },
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4#F26",
+            "text": "The stylesheet carries max-age=600, so the browser revalidates only after ten minutes."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Describes a different demo or a different status code (for example a 200 with a full body) as what was shown.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "explain",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-NOTES-W3-4"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-NOTES-W3-4"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-005",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "what's the coffee example kessandru gave for elasticity? need the actual numbers",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "lecture_example",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "The example is the flat white at the campus cafe Brindle & Oat: price up from 3.00 to 3.60 crowns, daily sales down from 440 cups to 360. With the course's midpoint method that is 20% over 18.2%, an elasticity of 1.10, so demand is elastic; revenue fell from 1,320 to 1,296 crowns a day.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-ECN-NOTES-L3-5#F8",
+            "text": "The price of a flat white rose from 3.00 to 3.60 crowns.",
+            "answer_needles": [
+              "3.60",
+              "3.6"
+            ]
+          },
+          {
+            "fact": "LEC-REF-ECN-NOTES-L3-5#F9",
+            "text": "Daily sales fell from 440 cups to 360.",
+            "answer_needles": [
+              "440"
+            ]
+          },
+          {
+            "fact": "LEC-REF-ECN-NOTES-L3-5#F11",
+            "text": "The elasticity is 1.10, so demand is elastic.",
+            "answer_needles": [
+              "1.10",
+              "1.1"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-ECN-NOTES-L3-5#F10",
+            "text": "Quantity change 20%, price change 18.2% (midpoint method)."
+          },
+          {
+            "fact": "LEC-REF-ECN-NOTES-L3-5#F12",
+            "text": "Revenue fell from 1,320 to 1,296 crowns a day."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Reports the example's elasticity as about 0.91 (computed from starting values) or calls demand inelastic.",
+            "kind": "stale",
+            "fact": "LEC-REF-ECN-FORMULAS-2025#F3",
+            "answer_needles": [
+              "0.91"
+            ]
+          },
+          {
+            "text": "Invents a different coffee example with other numbers.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-ECN-NOTES-L3-5"
+        ],
+        "source_priority": [
+          "LEC-REF-ECN-NOTES-L3-5"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Also mentioning the other places coffee comes up in the same lecture (the oat-milk cross-price example at -0.4, the 0.50-crown tax per cup), as long as the flat white price rise is given as the worked example with its own numbers."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-006",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "And the little mnemonic I gave you for the things that decide how elastic demand is. Who remembers what the letters stand for?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "lecture_definition",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "The professor's mnemonic is SPLAT: Substitutes, Proportion of income, Luxury or necessity, Addictive or habitual, Time. A good answer spells out the five letters and the direction of each.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-ECN-NOTES-L3-5#F16",
+            "text": "The mnemonic is SPLAT: substitutes, proportion of income, luxury or necessity, addictive or habitual, time.",
+            "answer_needles": [
+              "SPLAT"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Presents a different acronym, or a generic list of determinants under a made-up acronym, as the professor's mnemonic.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-ECN-NOTES-L3-5"
+        ],
+        "source_priority": [
+          "LEC-REF-ECN-NOTES-L3-5"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-007",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Take our student basket. Before we do this year, what was the inflation rate in the first year after the base year? Work it out from the basket costs.",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "calculation",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The basket cost 1,250 crowns in the base year 2024 and 1,300 in 2025, so inflation in 2025 was 50 / 1,250 = 4.0% (equivalently CPI 100.0 to 104.0). The 5.0% on the slide is the 2026 figure, not the one asked for.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-ECN-SLIDES-L05#F7",
+            "text": "Inflation in 2025, the first year after the base year, was 4.0%.",
+            "answer_needles": [
+              "4%",
+              "4.0%",
+              "4 percent",
+              "4.0 percent",
+              "four percent",
+              "4 per cent"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-ECN-SLIDES-L05#F8",
+            "text": "CPI went from 100.0 to 104.0."
+          },
+          {
+            "fact": "LEC-REF-ECN-SLIDES-L05#F9",
+            "text": "The following year, 2026, was 5.0%."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives 5.0% (the 2026 figure) as the first-year rate.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Gives 9.2% (the two-year change from the base year) as the first-year rate.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "9.2%"
+            ]
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-ECN-SLIDES-L05"
+        ],
+        "source_priority": [
+          "LEC-REF-ECN-SLIDES-L05"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "(1300 - 1250) / 1250 * 100",
+          "result": 4,
+          "unit": "percent",
+          "accepted_forms": [
+            "4%",
+            "4.0%",
+            "4 percent",
+            "4.0 percent",
+            "four percent",
+            "4 per cent"
+          ],
+          "inputs": {
+            "basket_2024": "LEC-REF-ECN-SLIDES-L05#F6",
+            "basket_2025": "LEC-REF-ECN-SLIDES-L05#F7"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-008",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Remember, one jump in prices doesn't count as inflation for us. It has to be sustained, and you know how I define sustained.",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "lecture_definition",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "In ECN 1620 'sustained' means lasting at least two consecutive quarters. A single jump in prices is a price-level shock, not inflation. The answer should give that course-specific threshold.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-ECN-SLIDES-L05#F4",
+            "text": "Sustained means lasting at least two consecutive quarters.",
+            "answer_needles": [
+              "two consecutive quarters",
+              "2 consecutive quarters",
+              "two quarters",
+              "two straight quarters",
+              "2 quarters"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-ECN-SLIDES-L05#F4",
+            "text": "A one-off jump is called a price-level shock."
+          },
+          {
+            "fact": "LEC-REF-ECN-SLIDES-L05#F3",
+            "text": "Inflation is a sustained rise in the general price level."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "States a different threshold (a year, several months, 'a prolonged period') as the course's definition of sustained.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "explain",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-ECN-SLIDES-L05"
+        ],
+        "source_priority": [
+          "LEC-REF-ECN-SLIDES-L05"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-009",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Why two and a half? Count the protons with me. How many get pumped, and how many does the synthase want?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "We said each NADH from the mitochondrion is worth two and a half ATP on this course."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "explanation",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Per NADH, Complex I pumps 4 protons, Complex III 4 and Complex IV 2, so 10 protons. ATP synthase needs 4 protons per ATP in this course (3 to turn the rotor, 1 to bring the phosphate in). 10 / 4 = 2.5.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F12",
+            "text": "10 protons are pumped per NADH (4 + 4 + 2).",
+            "answer_needles": [
+              "10 protons",
+              "ten protons",
+              "10 H",
+              "4 + 4 + 2",
+              "4+4+2",
+              "10 per NADH",
+              "total of 10",
+              "10 in total",
+              "= 10",
+              "10 are pumped"
+            ]
+          },
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F14",
+            "text": "ATP synthase needs 4 protons per ATP.",
+            "answer_needles": [
+              "4 protons",
+              "four protons",
+              "4 H",
+              "4 per ATP",
+              "10 / 4",
+              "10/4"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F14",
+            "text": "3 protons turn the rotor and 1 brings the phosphate in."
+          },
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F13",
+            "text": "FADH2 gives 6 protons and so 1.5 ATP."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Explains the figure with a different proton count than the notes (for example 3 protons per ATP).",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "explain",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-BIO-NOTES-L8-9"
+        ],
+        "source_priority": [
+          "LEC-REF-BIO-NOTES-L8-9"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-010",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Think of the dam again. What is DNP doing to our dam, and what happens to oxygen use?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "lecture_analogy",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "In the lecturer's dam picture, DNP is a hole in the dam wall: protons leak back across the membrane without passing the turbine (ATP synthase). Oxygen use goes up, ATP output goes down and the energy leaves as heat.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F18",
+            "text": "DNP is a hole in the dam wall: protons leak back without passing the turbine (ATP synthase).",
+            "answer_needles": [
+              "hole",
+              "leak"
+            ]
+          },
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F18",
+            "text": "Oxygen use goes up, ATP output goes down, and the energy leaves as heat.",
+            "answer_needles": [
+              "heat"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F16",
+            "text": "Pumps = electron transport chain, reservoir = proton gradient, turbine = ATP synthase, river below = oxygen."
+          },
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F17",
+            "text": "Cyanide, by contrast, is the outflow gate shut (Complex IV blocked)."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Describes DNP as shutting the outflow gate or blocking Complex IV (that is cyanide in the lecturer's picture).",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Says oxygen use falls with DNP.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "explain",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-BIO-NOTES-L8-9"
+        ],
+        "source_priority": [
+          "LEC-REF-BIO-NOTES-L8-9"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-011",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "how many bytes got sent during the first slow start bit of her trace? rounds 1 to 4",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "calculation",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Rounds 1 to 4 of the trace have cwnd 2, 4, 8 and 16 segments: 30 segments. With the course's MSS of 1,200 bytes that is 36,000 bytes. Using the common 1,460-byte MSS would be wrong for this course.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F18",
+            "text": "Rounds 1 to 4 send 2 + 4 + 8 + 16 = 30 segments, which at 1,200 bytes each is 36,000 bytes.",
+            "answer_needles": [
+              "36,000",
+              "36000",
+              "36 000",
+              "36 kB",
+              "36 KB",
+              "36kB"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F3",
+            "text": "The MSS in every worked example is 1,200 bytes."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses a 1,460-byte MSS and reports 43,800 bytes.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "43,800",
+              "43800"
+            ]
+          },
+          {
+            "text": "Starts the trace from 1 segment (1 + 2 + 4 + 8 = 15 segments, 18,000 bytes).",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-SLIDES-L07"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-SLIDES-L07"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "(2 + 4 + 8 + 16) * 1200",
+          "result": 36000,
+          "unit": "bytes",
+          "accepted_forms": [
+            "36,000",
+            "36000",
+            "36 000",
+            "36 kB",
+            "36 KB"
+          ],
+          "inputs": {
+            "cwnd_rounds_1_to_4": "LEC-REF-CNW-SLIDES-L07#F18",
+            "mss_bytes": "LEC-REF-CNW-SLIDES-L07#F3"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-012",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "But stretch the round trip to a hundred and twenty milliseconds. What's the average throughput now, in megabits per second?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Same sawtooth as on the slide: peak window of twenty, our usual segment size."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "calculation",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Use the lecture's formula, throughput = 0.75 x W x MSS / RTT, with the peak window of 20 segments and the course's 1,200-byte MSS, and the 120 ms round trip the lecturer just gave: 15 segments x 1,200 bytes = 18,000 bytes per round; 18,000 / 0.12 s = 150,000 bytes per second = 1.2 Mbit/s.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F26",
+            "text": "The lecture's formula is throughput = 0.75 x W x MSS / RTT.",
+            "answer_needles": [
+              "0.75",
+              "15 segments",
+              "3/4"
+            ]
+          },
+          {
+            "fact": "CONVERSATION",
+            "text": "With W = 20 segments and RTT = 120 ms the average throughput is 1.2 Mbit/s.",
+            "answer_needles": [
+              "1.2 M",
+              "1.2 m",
+              "1.2Mb",
+              "1,200,000",
+              "1.2"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F3",
+            "text": "MSS is 1,200 bytes in the course's examples."
+          },
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F27",
+            "text": "On the slide, with RTT = 80 ms, the same window gave 1.8 Mbit/s."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses a 1,460-byte segment and reports about 1.46 Mbit/s.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "1.46"
+            ]
+          },
+          {
+            "text": "Uses the peak window of 20 instead of the 0.75 x W average and reports 1.6 Mbit/s as the average.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Repeats the slide's 1.8 Mbit/s as the answer for the 120 ms case.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-SLIDES-L07",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-SLIDES-L07",
+          "CONVERSATION"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "0.75 * 20 * 1200 * 8 / 0.120 / 1e6",
+          "result": 1.2,
+          "unit": "Mbit/s",
+          "accepted_forms": [
+            "1.2 Mbit/s",
+            "1.2 Mbps",
+            "1.2 megabits",
+            "1.2 Mb/s",
+            "1,200,000 bit"
+          ],
+          "inputs": {
+            "W_segments": "CONVERSATION",
+            "mss_bytes": "LEC-REF-CNW-SLIDES-L07#F3",
+            "rtt_seconds": "CONVERSATION",
+            "formula": "LEC-REF-CNW-SLIDES-L07#F26"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-013",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "in her trace why does the window crawl 16, 17, 18 instead of doubling? and is that +1 for every ack",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "explanation",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The trace starts with ssthresh = 16, and slow start ends when cwnd reaches ssthresh; from there the sender is in congestion avoidance, which is additive. The '+1' is one segment per round (per RTT), not per ACK: the lecturer's notes say per ACK the growth is 1/cwnd of a segment, which adds up to one segment per window.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F17",
+            "text": "The trace's initial ssthresh is 16 segments, and slow start ends when cwnd reaches ssthresh, so from 16 the sender is in congestion avoidance.",
+            "answer_needles": [
+              "ssthresh",
+              "threshold"
+            ]
+          },
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4#F30",
+            "text": "+1 means one segment per round (per RTT), not per ACK; per ACK the growth is 1/cwnd of a segment.",
+            "answer_needles": [
+              "per round",
+              "per RTT",
+              "each round",
+              "each RTT",
+              "every round",
+              "every RTT",
+              "per round trip",
+              "per round-trip",
+              "a round"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F8",
+            "text": "Slow start ends when cwnd reaches ssthresh or on a loss."
+          },
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F11",
+            "text": "The slide itself only says 'additive increase, +1'."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the window grows by one whole segment for every ACK in congestion avoidance.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "explain",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-SLIDES-L07",
+          "LEC-REF-CNW-NOTES-W3-4"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-SLIDES-L07",
+          "LEC-REF-CNW-NOTES-W3-4"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-014",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "he said the reserve board is 'behind the curve'. what does that mean exactly and by how much?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "calculation",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The professor's notes pin the phrase down: the Board's actual policy rate is below the rate the classroom rule prescribes for today's inflation and output gap. From the slides the policy rate is 4.25% and the rule gives 7.0%, so the Board is 2.75 percentage points behind.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-ECN-NOTES-L3-5#F22",
+            "text": "'Behind the curve' means the actual policy rate is below the rate the classroom rule prescribes.",
+            "answer_needles": [
+              "rule"
+            ]
+          },
+          {
+            "fact": "LEC-REF-ECN-SLIDES-L05#F25",
+            "text": "The rule prescribes 7.0% against an actual policy rate of 4.25%: a gap of 2.75 percentage points.",
+            "answer_needles": [
+              "2.75",
+              "2.8"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-ECN-SLIDES-L05#F19",
+            "text": "Policy rate today: 4.25%."
+          },
+          {
+            "fact": "LEC-REF-ECN-SLIDES-L05#F22",
+            "text": "Classroom rule: neutral real rate + inflation + 0.5 x (inflation - target) + 0.25 x output gap."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Computes the prescribed rate with last year's Taylor weights (7.5%) and reports a 3.25-point gap.",
+            "kind": "stale",
+            "fact": "LEC-REF-ECN-FORMULAS-2025#F6",
+            "answer_needles": [
+              "3.25"
+            ]
+          },
+          {
+            "text": "Explains the phrase only as a general idiom without tying it to the classroom rule and the Norvale numbers.",
+            "kind": "over_deferral",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-ECN-NOTES-L3-5",
+          "LEC-REF-ECN-SLIDES-L05"
+        ],
+        "source_priority": [
+          "LEC-REF-ECN-NOTES-L3-5",
+          "LEC-REF-ECN-SLIDES-L05",
+          "LEC-REF-ECN-FORMULAS-2026",
+          "LEC-REF-ECN-FORMULAS-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Policy rule weights and neutral rate",
+            "sources": [
+              "LEC-REF-ECN-SLIDES-L05",
+              "LEC-REF-ECN-FORMULAS-2026",
+              "LEC-REF-ECN-FORMULAS-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "7.0 - 4.25",
+          "result": 2.75,
+          "unit": "percentage points",
+          "accepted_forms": [
+            "2.75",
+            "2.8"
+          ],
+          "inputs": {
+            "rule_rate": "LEC-REF-ECN-SLIDES-L05#F25",
+            "policy_rate": "LEC-REF-ECN-SLIDES-L05#F19"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-015",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "A laptop asks for it again at eight minutes past. Does that come out of the cache or not?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Say the campus resolver cached the portal's address record at two minutes and ten seconds past ten."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "calculation",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The record's TTL in the course example is 300 seconds, so a copy cached at 10:02:10 expires at 10:07:10. At 10:08 it has expired (by 50 seconds), so it is not served from the cache: the campus resolver has to fetch it again. Because the NS records (TTL 86,400 seconds) are still cached, it goes straight to ns1 rather than starting at the root.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4#F7",
+            "text": "The A record's TTL is 300 seconds, so the cached copy expires at 10:07:10 and the 10:08 request is not answered from the cache.",
+            "answer_needles": [
+              "10:07:10",
+              "10:07",
+              "50 seconds",
+              "expired",
+              "not from the cache",
+              "cache miss",
+              "not a hit"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4#F11",
+            "text": "With the NS records still cached the resolver skips the root and the TLD and goes straight to ns1."
+          },
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4#F8",
+            "text": "The 300 seconds belongs to this one record; it is not a general DNS rule."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the request at 10:08 is still served from the cache.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Says the resolver must start again from the root with a full cold lookup.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-NOTES-W3-4",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-NOTES-W3-4",
+          "CONVERSATION"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "2 * 60 + 10 + 300",
+          "result": 430,
+          "unit": "seconds after 10:00:00, i.e. the record expires at 10:07:10",
+          "accepted_forms": [
+            "10:07:10",
+            "10:07",
+            "50 seconds"
+          ],
+          "inputs": {
+            "cached_at": "CONVERSATION",
+            "ttl_seconds": "LEC-REF-CNW-NOTES-W3-4#F7"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-016",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "How many of those would we expect to come out grey with no spots?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "This brood's bigger than the one in my notes. Four hundred and eighty beetles, same cross, both parents heterozygous at both genes."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "calculation",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Both parents are R/r S/s, so the phenotypes come out 9 : 3 : 3 : 1 and grey plain (r/r s/s, both recessive) is the 1-in-16 class. For the brood of 480 the lecturer just mentioned, that is 30 beetles.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F31",
+            "text": "The double-heterozygote cross gives 9 : 3 : 3 : 1, and grey plain is the 1/16 class.",
+            "answer_needles": [
+              "1/16",
+              "one sixteenth",
+              "one in sixteen",
+              "1 in 16",
+              "9:3:3:1",
+              "9 : 3 : 3 : 1",
+              "sixteenth"
+            ]
+          },
+          {
+            "fact": "CONVERSATION",
+            "text": "In a brood of 480 that is 30 grey plain beetles.",
+            "answer_needles": [
+              "30 grey",
+              "30 beetles",
+              "30 of",
+              "about 30",
+              "= 30",
+              "thirty",
+              "expect 30",
+              "30 to be",
+              "30 offspring",
+              "30 would",
+              "is 30",
+              "be 30"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F25",
+            "text": "Grey (r) and plain (s) are the recessive forms."
+          },
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F32",
+            "text": "In the notes' brood of 320 the grey plain class was 20."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives 20, the figure for the notes' brood of 320, as the answer for this brood.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Gives 90 (3/16) or 270 (9/16) as the grey plain class.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-BIO-NOTES-L8-9",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "LEC-REF-BIO-NOTES-L8-9",
+          "CONVERSATION"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "480 / 16",
+          "result": 30,
+          "unit": "beetles",
+          "accepted_forms": [
+            "30",
+            "thirty"
+          ],
+          "inputs": {
+            "brood": "CONVERSATION",
+            "ratio": "LEC-REF-BIO-NOTES-L8-9#F31"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-017",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "at the 2026 inflation rate from the basket slide, how long till prices double? use whatever shortcut is on our sheet",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "calculation",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The current formula sheet gives the rule of 70: years to double = 70 / annual growth rate in percent. The basket slide gives 2026 inflation of 5.0%. 70 / 5 = 14 years.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-ECN-FORMULAS-2026#F14",
+            "text": "The sheet's shortcut is the rule of 70.",
+            "answer_needles": [
+              "70"
+            ]
+          },
+          {
+            "fact": "LEC-REF-ECN-SLIDES-L05#F9",
+            "text": "At 5.0% inflation prices double in 14 years.",
+            "answer_needles": [
+              "14 years",
+              "14 yrs",
+              "14 yr",
+              "14 year",
+              "14-year",
+              "fourteen"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Uses the rule of 72 and reports 14.4 years as the answer.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "14.4"
+            ]
+          },
+          {
+            "text": "Uses the 2025 rate of 4.0% (17.5 years).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "17.5"
+            ]
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-ECN-FORMULAS-2026",
+          "LEC-REF-ECN-SLIDES-L05"
+        ],
+        "source_priority": [
+          "LEC-REF-ECN-FORMULAS-2026",
+          "LEC-REF-ECN-SLIDES-L05"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "70 / 5.0",
+          "result": 14,
+          "unit": "years",
+          "accepted_forms": [
+            "14 years",
+            "14 yrs",
+            "14 yr",
+            "14-year",
+            "fourteen"
+          ],
+          "inputs": {
+            "rule": "LEC-REF-ECN-FORMULAS-2026#F14",
+            "inflation_2026": "LEC-REF-ECN-SLIDES-L05#F9"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-018",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "networks: say i get 80 on labs, 60 on the midterm, 90 on the project. what do i need on the final to finish on 70 overall?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "calculation",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Use this year's weights (labs 20%, midterm 25%, project 15%, final 40%), not last year's syllabus (15 / 25 / 10 / 50). Earned so far: 16 + 15 + 13.5 = 44.5. Needed from the final: 25.5 points at 40%, so 63.75 on the final exam.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F15",
+            "text": "With the 2026 weights (labs 20%, midterm 25%, project 15%, final 40%) the final exam mark needed is 63.75.",
+            "answer_needles": [
+              "63.75",
+              "63.8",
+              "64"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F17",
+            "text": "Passing also needs at least 45 out of 100 in the final exam."
+          },
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F11",
+            "text": "Labs are 20%."
+          },
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F14",
+            "text": "Project is 15%."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses the 2025 weights (labs 15%, project 10%, final 50%) and reports 68.",
+            "kind": "stale",
+            "fact": "LEC-REF-CNW-SYLLABUS-2025#F8",
+            "answer_needles": [
+              "68"
+            ]
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-SYLLABUS-2026"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-SYLLABUS-2026",
+          "LEC-REF-CNW-SYLLABUS-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "CNW 2140 assessment weights",
+            "sources": [
+              "LEC-REF-CNW-SYLLABUS-2026",
+              "LEC-REF-CNW-SYLLABUS-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "(70 - (0.20 * 80 + 0.25 * 60 + 0.15 * 90)) / 0.40",
+          "result": 63.75,
+          "unit": "marks out of 100 on the final exam",
+          "accepted_forms": [
+            "63.75",
+            "63.8",
+            "64"
+          ],
+          "inputs": {
+            "labs_weight": "LEC-REF-CNW-SYLLABUS-2026#F11",
+            "midterm_weight": "LEC-REF-CNW-SYLLABUS-2026#F12",
+            "project_weight": "LEC-REF-CNW-SYLLABUS-2026#F14",
+            "final_weight": "LEC-REF-CNW-SYLLABUS-2026#F15"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-019",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Usual late rules apply, so please don't leave it to the weekend after the deadline and then email me.",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Lab three goes out today. It builds on the trace we just did."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "course_policy",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The student needs to know what the late rules are this term. From the current syllabus: a late lab report loses 10 marks out of 100 for each day or part of a day, for up to 3 days, and scores zero after that. Lab 3 is due Friday 16 October 2026 by 17:00, and extensions come only through the School office, not from the lecturer. Last year's syllabus (5 marks a day for up to 5 days, due 17 October) must not be used.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F23",
+            "text": "A late lab report loses 10 marks out of 100 for each day or part of a day.",
+            "answer_needles": [
+              "10 marks",
+              "10 points",
+              "10%",
+              "ten marks",
+              "ten points",
+              "10 out of 100"
+            ]
+          },
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F23",
+            "text": "The penalty runs for up to 3 days; after 3 days the report scores zero.",
+            "answer_needles": [
+              "3 days",
+              "three days"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F20",
+            "text": "Lab 3 is due Friday 16 October 2026."
+          },
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F19",
+            "text": "Reports are due by 17:00 on the due date."
+          },
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F24",
+            "text": "Extensions are granted only through the School office."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "States last year's penalty of 5 marks a day for up to 5 days.",
+            "kind": "stale",
+            "fact": "LEC-REF-CNW-SYLLABUS-2025#F13",
+            "answer_needles": [
+              "5 marks",
+              "five marks",
+              "5 days",
+              "five days"
+            ]
+          },
+          {
+            "text": "Gives Friday 17 October as the Lab 3 deadline.",
+            "kind": "stale",
+            "fact": "LEC-REF-CNW-SYLLABUS-2025#F12",
+            "answer_needles": [
+              "Friday 17 October",
+              "Friday, 17 October",
+              "Friday the 17th",
+              "Friday 17 Oct",
+              "Fri 17 Oct",
+              "Friday, October 17",
+              "Friday October 17",
+              "17 October 2025",
+              "October 17, 2025"
+            ]
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-SYLLABUS-2026"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-SYLLABUS-2026",
+          "LEC-REF-CNW-SYLLABUS-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Late penalty for lab reports",
+            "sources": [
+              "LEC-REF-CNW-SYLLABUS-2026",
+              "LEC-REF-CNW-SYLLABUS-2025"
+            ],
+            "resolution": "current_wins"
+          },
+          {
+            "topic": "Lab 3 due date",
+            "sources": [
+              "LEC-REF-CNW-SYLLABUS-2026",
+              "LEC-REF-CNW-SYLLABUS-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Spelling out the days after the Friday 16 October deadline (Saturday 17 October one day late, and so on) to show what the weekend would cost."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-020",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "And no minus signs on your elasticity answers, please. You know which way of doing the percentage changes I expect, too.",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "course_convention",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "This year's convention, from the professor's notes and the current formula sheet (version 2026.2): price elasticity of demand is reported as a positive number, and every percentage change uses the midpoint method (change divided by the average of old and new). Last year's sheet (version 2025.1: keep the minus sign, starting value as the base) is superseded and must not be presented as the rule.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-ECN-FORMULAS-2026#F4",
+            "text": "PED is reported as a positive number; the minus sign is dropped.",
+            "answer_needles": [
+              "positive",
+              "absolute value",
+              "drop the minus",
+              "without the minus",
+              "no minus",
+              "drop the sign"
+            ]
+          },
+          {
+            "fact": "LEC-REF-ECN-FORMULAS-2026#F3",
+            "text": "Percentage changes use the midpoint method: the change divided by the average of the old and new values.",
+            "answer_needles": [
+              "midpoint",
+              "mid-point",
+              "average of"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-ECN-NOTES-L3-5#F4",
+            "text": "His reason: the midpoint method gives the same number in both directions."
+          },
+          {
+            "fact": "LEC-REF-ECN-NOTES-L3-5#F6",
+            "text": "For cross-price and income elasticity the sign is kept."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the course keeps the minus sign on price elasticity of demand.",
+            "kind": "stale",
+            "fact": "LEC-REF-ECN-FORMULAS-2025#F4",
+            "answer_needles": []
+          },
+          {
+            "text": "Says percentage changes are taken from the starting value.",
+            "kind": "stale",
+            "fact": "LEC-REF-ECN-FORMULAS-2025#F3",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-ECN-NOTES-L3-5",
+          "LEC-REF-ECN-FORMULAS-2026"
+        ],
+        "source_priority": [
+          "LEC-REF-ECN-FORMULAS-2026",
+          "LEC-REF-ECN-NOTES-L3-5",
+          "LEC-REF-ECN-FORMULAS-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "PED sign convention and percentage-change method",
+            "sources": [
+              "LEC-REF-ECN-FORMULAS-2026",
+              "LEC-REF-ECN-NOTES-L3-5",
+              "LEC-REF-ECN-FORMULAS-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-021",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "using the rule from the lecture, where should the policy rate be if inflation's 4% and the output gap is +2%?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "calculation",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Use the classroom rule from this year's slides and formula sheet: neutral real rate 1%, target 2%, weights 0.5 on the inflation gap and 0.25 on the output gap. 1 + 4 + 0.5 x (4 - 2) + 0.25 x 2 = 6.5%. Last year's sheet (neutral rate 2%, weight 0.5 on the output gap) would give 8.0% and is superseded.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-ECN-SLIDES-L05#F22",
+            "text": "With the classroom rule (neutral rate 1%, weights 0.5 and 0.25) the prescribed policy rate is 6.5%.",
+            "answer_needles": [
+              "6.5"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-ECN-SLIDES-L05#F23",
+            "text": "Neutral real rate of 1% and target of 2%."
+          },
+          {
+            "fact": "LEC-REF-ECN-SLIDES-L05#F24",
+            "text": "In ECN 1620 exams students use the classroom weights, not Taylor's 1993 numbers."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses last year's Taylor rule (neutral rate 2%, weight 0.5 on the output gap) and reports 8.0%.",
+            "kind": "stale",
+            "fact": "LEC-REF-ECN-FORMULAS-2025#F6",
+            "answer_needles": [
+              "8.0%",
+              "8%",
+              "8 percent",
+              "8.0 percent"
+            ]
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-ECN-SLIDES-L05",
+          "LEC-REF-ECN-FORMULAS-2026"
+        ],
+        "source_priority": [
+          "LEC-REF-ECN-SLIDES-L05",
+          "LEC-REF-ECN-FORMULAS-2026",
+          "LEC-REF-ECN-FORMULAS-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Policy rule weights and neutral rate",
+            "sources": [
+              "LEC-REF-ECN-SLIDES-L05",
+              "LEC-REF-ECN-FORMULAS-2026",
+              "LEC-REF-ECN-FORMULAS-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "1 + 4 + 0.5 * (4 - 2) + 0.25 * 2",
+          "result": 6.5,
+          "unit": "percent",
+          "accepted_forms": [
+            "6.5%",
+            "6.5 percent",
+            "6.5"
+          ],
+          "inputs": {
+            "neutral_rate": "LEC-REF-ECN-SLIDES-L05#F23",
+            "weights": "LEC-REF-ECN-SLIDES-L05#F22"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-022",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "does the networks midterm include lecture 8 or not?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "course_policy",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Two current sources disagree and neither says it replaces the other. The syllabus (version 1.1, 1 September 2026) says the midterm covers lectures 1 to 8. Dr. Brantigern's own notes, edited 30 September 2026, say it covers everything up to and including lecture 7 and that lecture 8 will be examined in the final only. The right answer tells the student about both and recommends confirming with the lecturer or the course forum; it may point out that the notes are the more recent statement. It must not state one of the two as settled fact while hiding the other.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F13",
+            "text": "The syllabus says the midterm covers lectures 1 to 8.",
+            "answer_needles": [
+              "1 to 8",
+              "1-8",
+              "1–8",
+              "through 8",
+              "syllabus"
+            ]
+          },
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4#F33",
+            "text": "The lecturer's notes of 30 September say the midterm covers up to and including lecture 7, with lecture 8 examined in the final only.",
+            "answer_needles": [
+              "lecture 7",
+              "up to 7",
+              "through 7",
+              "1 to 7",
+              "1-7",
+              "notes"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "States flatly that lecture 8 is on the midterm, or flatly that it is not, without mentioning that the syllabus and the lecturer's notes disagree.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "surface_conflict",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-SYLLABUS-2026",
+          "LEC-REF-CNW-NOTES-W3-4"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-SYLLABUS-2026",
+          "LEC-REF-CNW-NOTES-W3-4"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Whether the midterm covers lecture 8",
+            "sources": [
+              "LEC-REF-CNW-SYLLABUS-2026",
+              "LEC-REF-CNW-NOTES-W3-4"
+            ],
+            "resolution": "unresolved"
+          }
+        ],
+        "acceptable_inference": [
+          "Pointing out that the lecturer's notes are the more recent of the two and probably reflect her current intention, while still advising the student to confirm.",
+          "Advising the student to revise lecture 8 anyway until it is confirmed."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-023",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "quick one, how does dijkstra's algorithm actually work? step by step",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "irrelevant_source",
+      "category": "general_knowledge",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Nothing in the loaded material explains Dijkstra's algorithm (the syllabus only lists 'Routing inside a network' as a later lecture title). The right answer is a correct general-knowledge explanation: keep a tentative distance for every node, start with the source at 0 and the rest at infinity, repeatedly take the unvisited node with the smallest distance, relax its outgoing edges, mark it done; requires non-negative edge weights. It must not present this as something the lecture or the notes said, and must not pad the answer with TCP or DNS material.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Claims the lecture slides or the lecturer's notes covered Dijkstra's algorithm, or attributes the explanation to Dr. Brantigern.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Gives an incorrect account of the algorithm (for example, that it works with negative edge weights).",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Refuses to explain, or says it cannot help, because the topic is not in the uploaded lecture material.",
+            "kind": "over_deferral",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "explain",
+        "expected_response_type": "private_explanation",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Mentioning that routing inside a network is scheduled as a later lecture on the syllabus, without claiming what that lecture will contain."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-024",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "You'll remember photosynthesis: the light reactions make ATP and NADPH, and the Calvin cycle spends them. I won't go through it again.",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Respiration is the mirror image of something you did at school."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "irrelevant_source",
+      "category": "general_knowledge",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The lecturer is leaning on school knowledge that the loaded biology notes do not contain. The right answer is a short, correct refresher from general knowledge: light reactions on the thylakoid membrane split water, release oxygen and make ATP and NADPH; the Calvin cycle in the stroma uses that ATP and NADPH to fix carbon dioxide into sugar. It may link this to the lecturer's 'mirror image' remark. It must not say the course notes cover photosynthesis or invent course-specific numbers for it.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Claims Dr. Underhaye's notes cover photosynthesis, or cites course-specific figures or conventions for it.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Answers with a recap of the respiration ledger from the notes instead of explaining photosynthesis.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Refuses to explain, or says it cannot help, because the topic is not in the uploaded lecture material.",
+            "kind": "over_deferral",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "explain",
+        "expected_response_type": "private_explanation",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Contrasting photosynthesis with respiration in general terms (one stores energy in sugar, the other releases it)."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-025",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "what's comparative advantage again? like the simple version with an example",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "irrelevant_source",
+      "category": "general_knowledge",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Comparative advantage is not in any loaded economics document. The right answer is a correct general explanation: a producer has a comparative advantage in the good it can make at the lower opportunity cost, so both sides gain from specialising and trading even if one is better at everything; with an illustrative example of the assistant's own. The example must be offered as an illustration, not as 'the example from the lecture'.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Presents an example as the one Prof. Kessandru gave, or says the lecture or notes covered comparative advantage.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Confuses comparative advantage with absolute advantage.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Refuses to explain, or says it cannot help, because the topic is not in the uploaded lecture material.",
+            "kind": "over_deferral",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "explain",
+        "expected_response_type": "private_explanation",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Using an invented two-good, two-producer example, clearly as the assistant's own illustration."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-026",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "was cubic actually in today's networks lecture? the congestion control one. my friend swears she mentioned it",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "lecture_recall",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Neither the lecture 7 slides nor the lecturer's notes mention CUBIC. The answer must say it does not appear in the slides or notes and must not claim the lecture covered it. It should not swear that the word was never spoken aloud either, since the material cannot show that. To stay useful it can say what the lecture did cover (slow start, congestion avoidance, the two loss signals, the simplified Reno-style rules) and, if it explains what CUBIC is, label that as general background rather than lecture content.",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F16",
+            "text": "The lecture's loss handling is a simplified Reno-style rule set."
+          },
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F28",
+            "text": "The only thing the slides push to further reading is the square-root loss formula."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Claims the lecture or the slides covered CUBIC, or describes what the lecturer said about it.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "States as certain that the lecturer never mentioned CUBIC aloud.",
+            "kind": "false_denial",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "private_explanation",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Explaining briefly what CUBIC is from general knowledge, clearly marked as not from the lecture."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-027",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "when's the econ final and how much is it worth?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "course_policy",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "No loaded document gives the date or the weight of the ECN 1620 final: there is no economics syllabus in the pack, and the formula sheet only says a copy may be brought to the midterm and final. The answer must not offer a date or weight, and in particular must not pass off the Computer Networks values (Tuesday 15 December 2026, 40%) as the economics ones. It should say where the student would find it (the ECN 1620 syllabus or course page).",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-ECN-FORMULAS-2026#F2",
+            "text": "One unmarked printed copy of the formula sheet may be brought to the midterm and the final."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives a date or a weight for the ECN 1620 final exam, for example the CNW 2140 values.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Says ECN 1620 has no final exam or that it has not been scheduled.",
+            "kind": "false_denial",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "private_explanation",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Mentioning that the only syllabus on hand is the Computer Networks one, as long as its values are not presented as the economics ones."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-028",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "You'll remember the trace I drew last week, same starting window and same threshold, so I won't redraw it.",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Today we push on from slow start into congestion avoidance."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-none",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "lecture_recall",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "No lecture material is loaded, so the lecturer's own starting window, threshold and trace are unknown. The answer must not state specific numbers as hers. It stays useful by explaining how such a trace works in general (doubling per round in slow start until the threshold, then one segment per round) and, if it shows numbers, by labelling them as an assumed illustration and pointing the student to last week's slides for the real ones.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "States a specific starting window, threshold or sequence of window sizes as the trace the lecturer drew.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Gives no explanation at all and only says it has no information.",
+            "kind": "over_deferral",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "private_explanation",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Working through a generic slow start and congestion avoidance example with assumed numbers that are clearly labelled as assumptions."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-029",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "So that's slow start. Bit of a misnomer, as I keep saying.",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Window starts tiny and doubles every round until it hits the threshold."
+        }
+      ],
+      "conversation_id": "ER-D-LEC-029-C",
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "followup",
+      "category": "lecture_definition",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The student wants to know what the lecturer means. In her framing slow start is 'slow to start, not slow to grow': the window begins small (the course's initial window is 2 segments) but doubles every round, so it is the aggressive phase. The name only compares it with pre-1988 senders, which opened with the whole receiver window at once.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F7",
+            "text": "The name refers to starting from a small window, in contrast to earlier senders that opened with the whole receiver window; it is slow to start, not slow to grow.",
+            "answer_needles": [
+              "receiver window",
+              "1988",
+              "slow to start",
+              "starts small",
+              "small window",
+              "starting"
+            ]
+          },
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F6",
+            "text": "During slow start cwnd doubles each round, so growth is exponential.",
+            "answer_needles": [
+              "doubl",
+              "exponential"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F4",
+            "text": "The course's initial window is 2 segments."
+          },
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F10",
+            "text": "The lecturer calls it the aggressive phase, not the cautious one."
+          },
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F8",
+            "text": "It ends when cwnd reaches ssthresh or on a loss."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Explains slow start as a cautious phase of slow, linear growth.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "explain",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-SLIDES-L07"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-SLIDES-L07"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-LEC-030",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "ok and how does this connect to congestion avoidance?",
+      "prior_transcript": null,
+      "conversation_id": "ER-D-LEC-029-C",
+      "turn_index": 2,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "followup",
+      "category": "explanation",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Continuing from the slow start explanation: slow start hands over to congestion avoidance when cwnd reaches ssthresh (16 segments in the lecture's trace; the course's clamp rule stops slow start from overshooting it). From then on the window grows by one segment per round instead of doubling. A loss ties the two together again: after three duplicate ACKs ssthresh and cwnd are both set to half and the sender stays in congestion avoidance; after a timeout ssthresh is halved and the sender returns to slow start from the initial window.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F8",
+            "text": "Slow start ends, and congestion avoidance begins, when cwnd reaches ssthresh.",
+            "answer_needles": [
+              "ssthresh",
+              "threshold"
+            ]
+          },
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F11",
+            "text": "In congestion avoidance the window grows additively, one segment per round, instead of doubling.",
+            "answer_needles": [
+              "one segment",
+              "1 segment",
+              "+1",
+              "additive",
+              "linear"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4#F30",
+            "text": "+1 is per round (per RTT), not per ACK."
+          },
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F14",
+            "text": "After a timeout the sender goes back to slow start from the initial window with ssthresh halved."
+          },
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F13",
+            "text": "After three duplicate ACKs cwnd is set to the halved ssthresh and congestion avoidance continues."
+          },
+          {
+            "fact": "LEC-REF-CNW-SLIDES-L07#F9",
+            "text": "Clamp rule: next cwnd = min(2 x cwnd, ssthresh)."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Loses the thread and answers as if 'this' were something other than slow start.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Says congestion avoidance adds one segment per ACK.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "continue_previous_answer",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-SLIDES-L07",
+          "LEC-REF-CNW-NOTES-W3-4"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-SLIDES-L07",
+          "LEC-REF-CNW-NOTES-W3-4"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    }
+  ]
+}

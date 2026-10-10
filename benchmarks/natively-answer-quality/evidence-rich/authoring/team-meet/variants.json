@@ -1,0 +1,131 @@
+[
+  {
+    "id": "TEAM-REF-DECISION-LOG~offkept",
+    "base": "TEAM-REF-DECISION-LOG",
+    "replace": [
+      {
+        "find": "Offline mode is cut from 3.0 and moved to 3.1. Conflict handling in Sync API v3 is not ready for edits made without a connection, and Tobiah estimates five more weeks of work to make it safe. Crews keep the 2.x behaviour: an inspection can be opened without signal only if it was loaded earlier in the same session.",
+        "with": "Offline mode stays in 3.0 in a reduced form. Crews can open their assigned inspections and record new ones without a connection, and the app syncs when signal returns. Editing an inspection that has already been synced stays online-only, because conflict handling in Sync API v3 is not ready for it. The work is carried inside the Sync API v3 workstream."
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F9",
+        "statement": "D-016 (decided Wednesday 9 September 2026): offline mode stays in 3.0 in a reduced form; it was not cut.",
+        "doc_needles": [
+          "Offline mode stays in 3.0",
+          "reduced form"
+        ]
+      },
+      {
+        "fact": "F10",
+        "statement": "D-016: in the reduced form crews can open assigned inspections and record new ones without a connection and the app syncs when signal returns; editing an already-synced inspection stays online-only; the work is carried inside the Sync API v3 workstream.",
+        "doc_needles": [
+          "stays online-only",
+          "record new ones without a connection"
+        ]
+      }
+    ],
+    "note": "Decision log says offline mode is kept in 3.0 (reduced form) instead of cut."
+  },
+  {
+    "id": "TEAM-REF-DECISION-LOG~offpending",
+    "base": "TEAM-REF-DECISION-LOG",
+    "replace": [
+      {
+        "find": "Date: Wednesday 9 September 2026 | Decided by: Halvard Niemczyk, Saoirse Lindqvang, Tobiah Kessenich | Status: Decided",
+        "with": "Raised: Wednesday 9 September 2026 | Owners: Halvard Niemczyk, Saoirse Lindqvang, Tobiah Kessenich | Status: Open"
+      },
+      {
+        "find": "Offline mode is cut from 3.0 and moved to 3.1. Conflict handling in Sync API v3 is not ready for edits made without a connection, and Tobiah estimates five more weeks of work to make it safe. Crews keep the 2.x behaviour: an inspection can be opened without signal only if it was loaded earlier in the same session.",
+        "with": "No decision yet. Two options are on the table: ship offline mode in 3.0 in a reduced form, or move it to the next release. Tobiah is measuring how conflict handling in Sync API v3 copes with edits made without a connection, and the decision will be taken at the release review on Wednesday 7 October. Until then the work continues inside the Sync API v3 workstream."
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F9",
+        "statement": "D-016 is open: no decision has been taken on offline mode; the options are to ship it in 3.0 in a reduced form or to move it to the next release.",
+        "doc_needles": [
+          "No decision yet",
+          "Status: Open"
+        ]
+      },
+      {
+        "fact": "F10",
+        "statement": "D-016: the offline mode decision will be taken at the release review on Wednesday 7 October; until then the work continues inside the Sync API v3 workstream.",
+        "doc_needles": [
+          "release review on Wednesday 7 October",
+          "Until then the work continues"
+        ]
+      }
+    ],
+    "note": "Decision log shows the offline mode decision as open, due at the 7 October release review."
+  },
+  {
+    "id": "TEAM-REF-DECISION-LOG~offnorecord",
+    "base": "TEAM-REF-DECISION-LOG",
+    "replace": [
+      {
+        "find": "## D-016 Offline mode",
+        "with": "## D-016 In-app feedback"
+      },
+      {
+        "find": "Date: Wednesday 9 September 2026 | Decided by: Halvard Niemczyk, Saoirse Lindqvang, Tobiah Kessenich | Status: Decided",
+        "with": "Date: Wednesday 9 September 2026 | Decided by: Saoirse Lindqvang, Emeka Rautavaara | Status: Decided"
+      },
+      {
+        "find": "Offline mode is cut from 3.0 and moved to 3.1. Conflict handling in Sync API v3 is not ready for edits made without a connection, and Tobiah estimates five more weeks of work to make it safe. Crews keep the 2.x behaviour: an inspection can be opened without signal only if it was loaded earlier in the same session.",
+        "with": "The Send feedback entry in the app menu opens an in-app form instead of a mailto link. Submissions go to the product inbox with the app version and device model attached."
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F9",
+        "statement": "D-016 records that the Send feedback entry opens an in-app form instead of a mailto link; the log contains no entry about offline mode at all.",
+        "doc_needles": [
+          "mailto link"
+        ]
+      },
+      {
+        "fact": "F10",
+        "statement": "D-016: feedback submissions go to the product inbox with the app version and device model attached.",
+        "doc_needles": [
+          "product inbox"
+        ]
+      }
+    ],
+    "note": "The offline mode entry is replaced by an unrelated decision, so nothing loaded mentions offline mode."
+  },
+  {
+    "id": "TEAM-REF-SPRINT-STATUS-S41~freezeslipped",
+    "base": "TEAM-REF-SPRINT-STATUS-S41",
+    "replace": [
+      {
+        "find": "Overall status is GREEN with two amber workstreams. We are on track for the feature freeze on Friday 9 October. Export is the only amber workstream that touches the freeze; store submission prep is amber against its own later date. Every workstream that feeds the freeze expects to finish by then. The launch date on the roadmap is unchanged.",
+        "with": "Overall status is AMBER. The feature freeze has moved by two working days to Tuesday 13 October. The device lab is closed for a power shutdown on Thursday 8 and Friday 9 October, so the regression pass that has to finish before the freeze cannot complete until Monday 12 October, and Halvard moved the freeze rather than freeze without it. Release candidate 1 stays on Wednesday 14 October. Export and store submission prep remain at amber. The launch date on the roadmap is unchanged."
+      },
+      {
+        "find": "| Regression and release QA | Corbin Thistlewood | 55% | Green | Friday 9 October | None |",
+        "with": "| Regression and release QA | Corbin Thistlewood | 55% | Amber | Tuesday 13 October | Device lab closed on Thursday 8 and Friday 9 October |"
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F3",
+        "statement": "Overall status is amber: the feature freeze has moved by two working days from Friday 9 October to Tuesday 13 October, because the device lab is closed on 8 and 9 October and the pre-freeze regression pass cannot complete until Monday 12 October; release candidate 1 stays on Wednesday 14 October.",
+        "doc_needles": [
+          "Tuesday 13 October",
+          "moved by two working days"
+        ]
+      },
+      {
+        "fact": "F18",
+        "statement": "Regression and release QA is owned by Corbin Thistlewood, is 55% complete, amber, due Tuesday 13 October, and blocked by the device lab closure on 8 and 9 October.",
+        "doc_needles": [
+          "Device lab closed"
+        ]
+      }
+    ],
+    "note": "Sprint status says the feature freeze slipped from Friday 9 October to Tuesday 13 October."
+  }
+]

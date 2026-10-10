@@ -1,0 +1,5 @@
+# The evidence files are hashed in the frozen manifest: no line-ending conversion, ever.
+evidence/files/** -text
+authoring/**/src/** -text
+pack24/evidence/files/** -text
+pack24/authoring/**/src/** -text

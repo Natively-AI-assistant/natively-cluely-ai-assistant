@@ -1,0 +1,35 @@
+pipeline_version,run_date,scope,system,fault_class,episodes,detected,recall,precision,f1,median_delay_min_iqr,false_alarms,false_alarms_per_100_unit_months,notes
+v1.2,2026-08-21,held-out buildings,TERN,all,187,157,0.84,0.91,0.87,34 (21-58),16,3.2,isolation accuracy 81.5% (128 of 157 detected); alarms merged when under 60 minutes apart
+v1.2,2026-08-21,held-out buildings,TERN,stuck damper,46,43,0.93,,,18 (11-29),,,mixing-box residual responds within a few windows
+v1.2,2026-08-21,held-out buildings,TERN,leaking valve,41,36,0.88,,,37 (24-66),,,coil residual; most isolation errors are valve confused with drift
+v1.2,2026-08-21,held-out buildings,TERN,fan belt,33,29,0.88,,,29 (19-47),,,fan-pressure residual; slippage shows first at high speed
+v1.2,2026-08-21,held-out buildings,TERN,sensor drift,28,18,0.64,,,142 (85-260),,,slow drift is partly absorbed by the rolling calibration
+v1.2,2026-08-21,held-out buildings,TERN,fouled filter,39,31,0.79,,,71 (44-118),,,filters foul gradually so the fan-pressure residual moves late
+v1.2,2026-08-21,held-out buildings,LSTM-AE,all,187,155,0.83,0.76,0.79,52 (33-97),49,9.8,mean over 5 seeds
+v1.2,2026-08-21,held-out buildings,LSTM-AE,stuck damper,46,40,0.87,,,31 (20-55),,,reconstruction error rises quickly when the damper is fully open
+v1.2,2026-08-21,held-out buildings,LSTM-AE,leaking valve,41,35,0.85,,,58 (36-104),,,small leaks stay under the percentile threshold for a long time
+v1.2,2026-08-21,held-out buildings,LSTM-AE,fan belt,33,28,0.85,,,44 (27-80),,,comparable to the other data-driven detector on this class
+v1.2,2026-08-21,held-out buildings,LSTM-AE,sensor drift,28,19,0.68,,,165 (98-290),,,slightly more drift episodes found than any other system
+v1.2,2026-08-21,held-out buildings,LSTM-AE,fouled filter,39,33,0.85,,,83 (50-140),,,many alarms on this class also fire in cold weather
+v1.2,2026-08-21,held-out buildings,RB-28,all,187,122,0.65,0.78,0.71,126 (64-310),34,6.8,vendor default thresholds; rule set as running in the estate BMS
+v1.2,2026-08-21,held-out buildings,RB-28,stuck damper,46,38,0.83,,,75 (45-150),,,three dedicated damper rules in the vendor set
+v1.2,2026-08-21,held-out buildings,RB-28,leaking valve,41,27,0.66,,,138 (80-325),,,valve rule waits for its timer before firing
+v1.2,2026-08-21,held-out buildings,RB-28,fan belt,33,22,0.67,,,110 (62-240),,,only the fan status rule applies
+v1.2,2026-08-21,held-out buildings,RB-28,sensor drift,28,9,0.32,,,420 (230-900),,,no dedicated drift rule in the vendor set
+v1.2,2026-08-21,held-out buildings,RB-28,fouled filter,39,26,0.67,,,190 (105-410),,,filter differential-pressure switch rule; fires late
+v1.2,2026-08-21,held-out buildings,PCA-T2,all,187,131,0.70,0.63,0.66,74 (40-155),77,15.5,9 components
+v1.2,2026-08-21,held-out buildings,PCA-T2,stuck damper,46,36,0.78,,,46 (28-90),,,statistic dominated by outdoor temperature swings
+v1.2,2026-08-21,held-out buildings,PCA-T2,leaking valve,41,30,0.73,,,79 (45-160),,,detected mainly on mild days
+v1.2,2026-08-21,held-out buildings,PCA-T2,fan belt,33,24,0.73,,,68 (39-130),,,speed and pressure load on the same component
+v1.2,2026-08-21,held-out buildings,PCA-T2,sensor drift,28,14,0.50,,,210 (120-405),,,half of the drift episodes never cross the threshold
+v1.2,2026-08-21,held-out buildings,PCA-T2,fouled filter,39,27,0.69,,,101 (60-200),,,slow change is absorbed by the retained components
+v1.2,2026-08-21,held-out buildings,TERN,all (natural faults only),145,117,0.81,,,38 (23-64),,,episodes taken from maintenance work orders
+v1.2,2026-08-21,held-out buildings,TERN,all (injected faults only),42,40,0.95,,,24 (15-37),,,faults injected by the lead technician during school holidays
+v1.2,2026-08-21,held-out buildings,TERN-no-thermal-balance,all,187,131,0.70,0.78,0.74,61 (37-120),38,,ablation: conformal detector on raw points
+v1.2,2026-08-21,held-out buildings,TERN-no-conformal,all,187,158,0.84,0.78,0.81,29 (17-50),44,,ablation: fixed three-sigma threshold on residuals
+v1.2,2026-08-21,held-out buildings,TERN-no-rolling-calibration,all,187,156,0.83,0.85,0.84,41 (25-72),27,,ablation: calibration set frozen at commissioning window
+v1.2,2026-08-21,held-out building: Aldergate Primary,TERN,all,27,25,0.93,0.93,0.93,28 (18-45),2,,5 units
+v1.2,2026-08-21,held-out building: Fenwick Hollow Secondary,TERN,all,61,52,0.85,0.90,0.87,31 (20-52),6,,9 units
+v1.2,2026-08-21,held-out building: Marrowby Infants,TERN,all,19,14,0.74,0.88,0.80,44 (27-80),2,,4 units; oldest controllers in the estate
+v1.2,2026-08-21,held-out building: Quarrelton Academy,TERN,all,52,42,0.81,0.91,0.86,36 (22-61),4,,8 units
+v1.2,2026-08-21,held-out building: Tessel Lane Primary,TERN,all,28,24,0.86,0.92,0.89,39 (24-63),2,,5 units

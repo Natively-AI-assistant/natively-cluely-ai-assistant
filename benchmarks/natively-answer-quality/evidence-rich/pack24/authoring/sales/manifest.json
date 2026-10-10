@@ -1,0 +1,3428 @@
+{
+ "mode": "sales",
+ "world": "Kestravane, Inc. is a fictional B2B SaaS company selling Kestravane Fleet, a fleet-operations platform (vehicle tracking, fuel and idle analytics, maintenance planning, cold-chain temperature monitoring) with optional hardware: TrakNode telematics units, TempSense temperature sensors and RoadLens cameras. It is sold per vehicle per month in three plans (Launch, Operations, Enterprise). The user is a Kestravane account executive talking to prospects and customers. The pack holds the current price list (v4.2, 1 July 2026), the superseded 2025 price list (v3.1), an unapproved draft 2027 price list, the current integration matrix, a security and compliance overview, the support and service level guide, the implementation guide and one customer story (Hollowmere Produce Logistics). Dorrowick Telematics and Pennoway Fleet are fictional competitors; nothing about their products or prices is documented.",
+ "files": [
+  {
+   "id": "SALES-REF-PRICING-2026",
+   "mode": "sales",
+   "filename": "Kestravane_Fleet_Price_List_v4.2.pdf",
+   "source": "src/SALES-REF-PRICING-2026.md",
+   "format": "pdf",
+   "document_type": "pricing",
+   "title": "Kestravane Fleet price list, version 4.2",
+   "status": "current",
+   "effective_date": "2026-07-01",
+   "authority": 100,
+   "supersedes": [
+    "SALES-REF-PRICING-2025"
+   ],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "The Launch plan costs $29 per vehicle per month on annual billing.",
+     "doc_needles": [
+      "$29 per vehicle per month"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "The Launch plan costs $35 per vehicle per month on monthly billing.",
+     "doc_needles": [
+      "$35 per vehicle per month"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "The Launch plan has a minimum fleet of 10 vehicles.",
+     "doc_needles": [
+      "10 vehicles"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "The Operations plan costs $47 per vehicle per month on annual billing.",
+     "doc_needles": [
+      "$47"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "The Operations plan costs $55 per vehicle per month on monthly billing.",
+     "doc_needles": [
+      "$55"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "The Operations plan has a minimum fleet of 25 vehicles.",
+     "doc_needles": [
+      "25 vehicles"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "The Enterprise plan costs $72 per vehicle per month on annual billing.",
+     "doc_needles": [
+      "$72"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "The Enterprise plan is sold on annual contracts only; monthly billing is not offered.",
+     "doc_needles": [
+      "annual contracts only"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "The Enterprise plan has a minimum fleet of 150 vehicles.",
+     "doc_needles": [
+      "150 vehicles"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "Trailers and other unpowered assets are billed at $11 per asset per month on any plan.",
+     "doc_needles": [
+      "$11 per asset"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "A fleet smaller than the plan minimum may subscribe to the plan but is billed for the minimum fleet size.",
+     "doc_needles": [
+      "billed for the minimum fleet size"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "Vehicles added during a term are prorated to the end of the term at the contracted rate.",
+     "doc_needles": [
+      "prorated to the end"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "Annual billing is invoiced upfront on Net 30 terms.",
+     "doc_needles": [
+      "Net 30"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "The contracted rate is locked for the term, and renewal increases on annual contracts are capped at 6% per year.",
+     "doc_needles": [
+      "capped at 6%"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "The Driver Safety Scoring module costs $6 per vehicle per month.",
+     "doc_needles": [
+      "$6 per vehicle per month"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "The Fuel & Idle Analytics module costs $4 per vehicle per month.",
+     "doc_needles": [
+      "$4 per vehicle per month"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "The Maintenance Planner module costs $5 per vehicle per month.",
+     "doc_needles": [
+      "$5 per vehicle per month"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "The Cold Chain Monitoring module costs $3 per sensor per month and requires TempSense S2 sensors.",
+     "doc_needles": [
+      "$3 per sensor per month"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "The Extended Video Retention module costs $8 per camera per month.",
+     "doc_needles": [
+      "$8 per camera per month"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "The NetSuite connector costs $400 per month and is available on Enterprise only.",
+     "doc_needles": [
+      "$400 per month"
+     ]
+    },
+    {
+     "id": "F21",
+     "statement": "A Technical Account Manager costs $18,000 per year and is available on Enterprise only.",
+     "doc_needles": [
+      "$18,000 per year"
+     ]
+    },
+    {
+     "id": "F22",
+     "statement": "Assisted data migration costs $1,500 one-time on Operations and is included in the Enterprise onboarding fee.",
+     "doc_needles": [
+      "$1,500 one-time"
+     ]
+    },
+    {
+     "id": "F23",
+     "statement": "An on-site training day costs $1,400 per day plus travel.",
+     "doc_needles": [
+      "$1,400 per day"
+     ]
+    },
+    {
+     "id": "F24",
+     "statement": "A sandbox environment costs $150 per month on Operations and is included on Enterprise.",
+     "doc_needles": [
+      "$150 per month"
+     ]
+    },
+    {
+     "id": "F25",
+     "statement": "The Launch plan has no onboarding fee; setup is self-serve.",
+     "doc_needles": [
+      "No fee, self-serve setup"
+     ]
+    },
+    {
+     "id": "F26",
+     "statement": "The Operations onboarding fee is $2,500, charged once.",
+     "doc_needles": [
+      "$2,500"
+     ]
+    },
+    {
+     "id": "F27",
+     "statement": "The Enterprise onboarding fee is $7,500, charged once.",
+     "doc_needles": [
+      "$7,500"
+     ]
+    },
+    {
+     "id": "F28",
+     "statement": "The onboarding fee covers the kickoff call, configuration, two remote admin training sessions and support through go-live; it does not cover hardware installation.",
+     "doc_needles": [
+      "does not cover hardware installation"
+     ]
+    },
+    {
+     "id": "F29",
+     "statement": "A TrakNode T4 telematics unit costs $89 per unit and one is required per vehicle.",
+     "doc_needles": [
+      "$89 per unit",
+      "TrakNode T4 telematics unit"
+     ]
+    },
+    {
+     "id": "F30",
+     "statement": "A TempSense S2 temperature sensor costs $64 per sensor.",
+     "doc_needles": [
+      "$64 per sensor"
+     ]
+    },
+    {
+     "id": "F31",
+     "statement": "A RoadLens dual-facing camera costs $229 per camera.",
+     "doc_needles": [
+      "$229 per camera"
+     ]
+    },
+    {
+     "id": "F32",
+     "statement": "Professional installation costs $45 per vehicle and covers every device fitted in the same visit.",
+     "doc_needles": [
+      "$45 per vehicle"
+     ]
+    },
+    {
+     "id": "F33",
+     "statement": "Self-installation carries no charge.",
+     "doc_needles": [
+      "Self-installation carries no charge"
+     ]
+    },
+    {
+     "id": "F34",
+     "statement": "Shipping is free on orders of 20 units or more in the contiguous United States; smaller orders ship for $75 flat.",
+     "doc_needles": [
+      "$75 flat",
+      "20 units or more"
+     ]
+    },
+    {
+     "id": "F35",
+     "statement": "All hardware carries a 3-year warranty with advance replacement.",
+     "doc_needles": [
+      "3-year warranty"
+     ]
+    },
+    {
+     "id": "F36",
+     "statement": "Discounts apply to plan subscription fees only; modules, add-ons, hardware, installation and onboarding fees are never discounted.",
+     "doc_needles": [
+      "never discounted"
+     ]
+    },
+    {
+     "id": "F37",
+     "statement": "The volume discount is applied automatically on annual billing; monthly billing is not eligible.",
+     "doc_needles": [
+      "applied automatically on annual billing"
+     ]
+    },
+    {
+     "id": "F38",
+     "statement": "Fleets of 100 to 249 vehicles get a 5% volume discount.",
+     "doc_needles": [
+      "5% volume discount"
+     ]
+    },
+    {
+     "id": "F39",
+     "statement": "Fleets of 250 to 499 vehicles get an 8% volume discount.",
+     "doc_needles": [
+      "8% volume discount"
+     ]
+    },
+    {
+     "id": "F40",
+     "statement": "Fleets of 500 or more vehicles get a 12% volume discount.",
+     "doc_needles": [
+      "12% volume discount"
+     ]
+    },
+    {
+     "id": "F41",
+     "statement": "Approval thresholds refer to the total discount off list, with the volume discount counted in.",
+     "doc_needles": [
+      "volume discount counted in"
+     ]
+    },
+    {
+     "id": "F42",
+     "statement": "An Account Executive may approve a total discount of up to 10% without further approval.",
+     "doc_needles": [
+      "Up to 10%"
+     ]
+    },
+    {
+     "id": "F43",
+     "statement": "A total discount above 10% and up to 18% needs the Regional Sales Director's approval.",
+     "doc_needles": [
+      "up to 18%"
+     ]
+    },
+    {
+     "id": "F44",
+     "statement": "A total discount above 18% and up to 25% needs the VP Sales, after Deal Desk review.",
+     "doc_needles": [
+      "up to 25%"
+     ]
+    },
+    {
+     "id": "F45",
+     "statement": "A total discount above 25% is not available without a written exception from the CFO.",
+     "doc_needles": [
+      "written exception from the CFO"
+     ]
+    },
+    {
+     "id": "F46",
+     "statement": "A quote that exceeds the signer's authority is not valid until the approval is recorded in the Deal Desk queue.",
+     "doc_needles": [
+      "Deal Desk queue"
+     ]
+    },
+    {
+     "id": "F47",
+     "statement": "A three-year term locks the rate for the whole term but adds no further percentage discount.",
+     "doc_needles": [
+      "three-year term"
+     ]
+    },
+    {
+     "id": "F48",
+     "statement": "A 21-day pilot of up to 5 vehicles with loaned hardware needs the Regional Sales Director's sign-off.",
+     "doc_needles": [
+      "21-day pilot",
+      "up to 5 vehicles"
+     ]
+    },
+    {
+     "id": "F49",
+     "statement": "The price list says Enterprise fleets of 250 or more vehicles are assigned a named Customer Success Manager; smaller Enterprise fleets get the pooled team.",
+     "doc_needles": [
+      "250 or more vehicles"
+     ]
+    },
+    {
+     "id": "F50",
+     "statement": "Monthly billing is charged to a card and can be cancelled with one full billing cycle of written notice.",
+     "doc_needles": [
+      "one full billing cycle"
+     ]
+    }
+   ],
+   "intentional_conflicts": [
+    {
+     "fact": "F4",
+     "with_file": "SALES-REF-PRICING-2025",
+     "this_value": "$47",
+     "other_value": "$42",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F4",
+     "with_file": "SALES-REF-PRICING-2027-DRAFT",
+     "this_value": "$47",
+     "other_value": "$51",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F5",
+     "with_file": "SALES-REF-PRICING-2025",
+     "this_value": "$55",
+     "other_value": "$50",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F5",
+     "with_file": "SALES-REF-PRICING-2027-DRAFT",
+     "this_value": "$55",
+     "other_value": "$60",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F6",
+     "with_file": "SALES-REF-PRICING-2025",
+     "this_value": "25 vehicles",
+     "other_value": "20 vehicles",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F6",
+     "with_file": "SALES-REF-PRICING-2027-DRAFT",
+     "this_value": "25 vehicles",
+     "other_value": "30 vehicles",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F7",
+     "with_file": "SALES-REF-PRICING-2025",
+     "this_value": "$72",
+     "other_value": "$66",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F7",
+     "with_file": "SALES-REF-PRICING-2027-DRAFT",
+     "this_value": "$72",
+     "other_value": "$78",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F9",
+     "with_file": "SALES-REF-PRICING-2025",
+     "this_value": "150 vehicles",
+     "other_value": "100 vehicles",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F14",
+     "with_file": "SALES-REF-PRICING-2027-DRAFT",
+     "this_value": "capped at 6%",
+     "other_value": "7.5%",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F26",
+     "with_file": "SALES-REF-PRICING-2025",
+     "this_value": "$2,500",
+     "other_value": "$2,000",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F26",
+     "with_file": "SALES-REF-PRICING-2027-DRAFT",
+     "this_value": "$2,500",
+     "other_value": "$3,000",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F27",
+     "with_file": "SALES-REF-PRICING-2025",
+     "this_value": "$7,500",
+     "other_value": "$6,000",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F27",
+     "with_file": "SALES-REF-PRICING-2027-DRAFT",
+     "this_value": "$7,500",
+     "other_value": "$8,500",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F29",
+     "with_file": "SALES-REF-PRICING-2025",
+     "this_value": "$89 per unit",
+     "other_value": "$99 per unit",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F29",
+     "with_file": "SALES-REF-PRICING-2027-DRAFT",
+     "this_value": "$89 per unit",
+     "other_value": "$79 per unit",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F31",
+     "with_file": "SALES-REF-PRICING-2027-DRAFT",
+     "this_value": "$229 per camera",
+     "other_value": "$199 per camera",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F39",
+     "with_file": "SALES-REF-PRICING-2025",
+     "this_value": "8% volume discount",
+     "other_value": "9% volume discount",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F40",
+     "with_file": "SALES-REF-PRICING-2025",
+     "this_value": "12% volume discount",
+     "other_value": "14% volume discount",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F42",
+     "with_file": "SALES-REF-PRICING-2025",
+     "this_value": "Up to 10%",
+     "other_value": "Up to 15%",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F42",
+     "with_file": "SALES-REF-PRICING-2027-DRAFT",
+     "this_value": "Up to 10%",
+     "other_value": "Up to 7%",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F43",
+     "with_file": "SALES-REF-PRICING-2025",
+     "this_value": "up to 18%",
+     "other_value": "up to 22%",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F43",
+     "with_file": "SALES-REF-PRICING-2027-DRAFT",
+     "this_value": "up to 18%",
+     "other_value": "up to 16%",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F44",
+     "with_file": "SALES-REF-PRICING-2025",
+     "this_value": "up to 25%",
+     "other_value": "up to 30%",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F44",
+     "with_file": "SALES-REF-PRICING-2027-DRAFT",
+     "this_value": "up to 25%",
+     "other_value": "up to 24%",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F48",
+     "with_file": "SALES-REF-PRICING-2025",
+     "this_value": "21-day pilot",
+     "other_value": "14-day pilot",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F48",
+     "with_file": "SALES-REF-PRICING-2025",
+     "this_value": "up to 5 vehicles",
+     "other_value": "up to 10 vehicles",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F34",
+     "with_file": "SALES-REF-PRICING-2025",
+     "this_value": "20 units or more",
+     "other_value": "50 units or more",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F29",
+     "with_file": "SALES-REF-PRICING-2025",
+     "this_value": "TrakNode T4 telematics unit",
+     "other_value": "TrakNode T3 telematics unit",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F49",
+     "with_file": "SALES-REF-SUPPORT-SLA-2026",
+     "this_value": "250 or more vehicles",
+     "other_value": "300 or more vehicles",
+     "resolution": "unresolved"
+    },
+    {
+     "fact": "F49",
+     "with_file": "SALES-REF-PRICING-2025",
+     "this_value": "250 or more vehicles",
+     "other_value": "whatever the fleet size",
+     "resolution": "current_wins"
+    }
+   ],
+   "must_not_infer": [
+    "Nothing here says a price is negotiable outside the discount table, or that an Account Executive can exceed 10% total discount on their own.",
+    "The list does not say whether the Salesforce or HubSpot connectors carry a fee; it refers to the Integration Matrix for connector availability.",
+    "The list does not enumerate the features of each plan; a feature that is not named here is not thereby excluded from the product.",
+    "It gives no reason for the change in prices from the earlier list.",
+    "It says nothing about any competitor's prices.",
+    "The named Customer Success Manager threshold stated here (250 vehicles) disagrees with the Support Plans and Service Level Guide (300 vehicles); neither document settles it."
+   ]
+  },
+  {
+   "id": "SALES-REF-PRICING-2025",
+   "mode": "sales",
+   "filename": "Kestravane_Fleet_Price_List.pdf",
+   "source": "src/SALES-REF-PRICING-2025.md",
+   "format": "pdf",
+   "document_type": "pricing",
+   "title": "Kestravane Fleet price list, version 3.1",
+   "status": "outdated",
+   "effective_date": "2025-07-01",
+   "authority": 40,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "In the 2025 list the Launch plan cost $29 per vehicle per month on annual billing (unchanged in 2026).",
+     "doc_needles": [
+      "$29 per vehicle per month"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "In the 2025 list the Launch plan cost $35 per vehicle per month on monthly billing (unchanged in 2026).",
+     "doc_needles": [
+      "$35 per vehicle per month"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "In the 2025 list the Operations plan cost $42 per vehicle per month on annual billing.",
+     "doc_needles": [
+      "$42"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "In the 2025 list the Operations plan cost $50 per vehicle per month on monthly billing.",
+     "doc_needles": [
+      "$50"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "In the 2025 list the Operations plan had a minimum fleet of 20 vehicles.",
+     "doc_needles": [
+      "20 vehicles"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "In the 2025 list the Enterprise plan cost $66 per vehicle per month on annual billing.",
+     "doc_needles": [
+      "$66"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "In the 2025 list the Enterprise plan had a minimum fleet of 100 vehicles.",
+     "doc_needles": [
+      "100 vehicles"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "In the 2025 list the Operations onboarding fee was $2,000.",
+     "doc_needles": [
+      "$2,000"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "In the 2025 list the Enterprise onboarding fee was $6,000.",
+     "doc_needles": [
+      "$6,000"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "In the 2025 list the telematics unit was the TrakNode T3 at $99 per unit.",
+     "doc_needles": [
+      "$99 per unit",
+      "TrakNode T3 telematics unit"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "In the 2025 list a TempSense S2 sensor cost $64 per sensor (unchanged in 2026).",
+     "doc_needles": [
+      "$64 per sensor"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "In the 2025 list professional installation cost $45 per vehicle (unchanged in 2026).",
+     "doc_needles": [
+      "$45 per vehicle"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "In the 2025 list fleets of 250 to 499 vehicles got a 9% volume discount.",
+     "doc_needles": [
+      "9% volume discount"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "In the 2025 list fleets of 500 or more vehicles got a 14% volume discount.",
+     "doc_needles": [
+      "14% volume discount"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "In the 2025 list an Account Executive could approve a total discount of up to 15%.",
+     "doc_needles": [
+      "Up to 15%"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "In the 2025 list the Regional Sales Director could approve up to 22%.",
+     "doc_needles": [
+      "up to 22%"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "In the 2025 list the VP Sales could approve up to 30%.",
+     "doc_needles": [
+      "up to 30%"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "In the 2025 list a 14-day pilot of up to 10 vehicles could be offered at the Account Executive's discretion.",
+     "doc_needles": [
+      "14-day pilot",
+      "up to 10 vehicles"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "The 2025 list said every Enterprise customer gets a named Customer Success Manager, whatever the fleet size.",
+     "doc_needles": [
+      "whatever the fleet size"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "This list is version 3.1, effective 1 July 2025.",
+     "doc_needles": [
+      "Version 3.1",
+      "1 July 2025"
+     ]
+    },
+    {
+     "id": "F21",
+     "statement": "In the 2025 list Driver Safety Scoring was $6, Fuel & Idle Analytics $4 per vehicle per month and Cold Chain Monitoring $3 per sensor per month (all unchanged in 2026).",
+     "doc_needles": [
+      "$6 per vehicle per month"
+     ]
+    },
+    {
+     "id": "F22",
+     "statement": "In the 2025 list shipping was free on orders of 50 units or more.",
+     "doc_needles": [
+      "50 units or more"
+     ]
+    },
+    {
+     "id": "F23",
+     "statement": "In the 2025 list fleets of 100 to 249 vehicles got a 5% volume discount (unchanged in 2026).",
+     "doc_needles": [
+      "5% volume discount"
+     ]
+    }
+   ],
+   "intentional_conflicts": [
+    {
+     "fact": "F3",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "$42",
+     "other_value": "$47",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F4",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "$50",
+     "other_value": "$55",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F5",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "20 vehicles",
+     "other_value": "25 vehicles",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F6",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "$66",
+     "other_value": "$72",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F7",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "100 vehicles",
+     "other_value": "150 vehicles",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F8",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "$2,000",
+     "other_value": "$2,500",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F9",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "$6,000",
+     "other_value": "$7,500",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F10",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "$99 per unit",
+     "other_value": "$89 per unit",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F13",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "9% volume discount",
+     "other_value": "8% volume discount",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F14",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "14% volume discount",
+     "other_value": "12% volume discount",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F15",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "Up to 15%",
+     "other_value": "Up to 10%",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F16",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "up to 22%",
+     "other_value": "up to 18%",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F17",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "up to 30%",
+     "other_value": "up to 25%",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F18",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "14-day pilot",
+     "other_value": "21-day pilot",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F18",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "up to 10 vehicles",
+     "other_value": "up to 5 vehicles",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F22",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "50 units or more",
+     "other_value": "20 units or more",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F10",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "TrakNode T3 telematics unit",
+     "other_value": "TrakNode T4 telematics unit",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F19",
+     "with_file": "SALES-REF-SUPPORT-SLA-2026",
+     "this_value": "whatever the fleet size",
+     "other_value": "300 or more vehicles",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F19",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "whatever the fleet size",
+     "other_value": "250 or more vehicles",
+     "resolution": "current_wins"
+    }
+   ],
+   "must_not_infer": [
+    "This list is superseded by version 4.2; none of its changed values may be quoted as current.",
+    "Nothing here obliges Kestravane to honour 2025 prices for a new contract in 2026.",
+    "Its file name and title carry no year; only the version and effective-date lines show it is the older list."
+   ]
+  },
+  {
+   "id": "SALES-REF-PRICING-2027-DRAFT",
+   "mode": "sales",
+   "filename": "Price_List_2027_proposal_DRAFT_v0.3.docx",
+   "source": "src/SALES-REF-PRICING-2027-DRAFT.md",
+   "format": "docx",
+   "document_type": "pricing",
+   "title": "DRAFT Kestravane Fleet price list 2027 (proposal)",
+   "status": "draft",
+   "effective_date": "2027-01-01",
+   "authority": 20,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "The draft proposes an Operations price of $51 per vehicle per month on annual billing.",
+     "doc_needles": [
+      "$51"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "The draft proposes an Operations price of $60 per vehicle per month on monthly billing.",
+     "doc_needles": [
+      "$60"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "The draft proposes an Operations minimum fleet of 30 vehicles.",
+     "doc_needles": [
+      "30 vehicles"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "The draft proposes an Enterprise price of $78 per vehicle per month.",
+     "doc_needles": [
+      "$78"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "The draft leaves the Launch plan unchanged at $29 annual and $35 monthly.",
+     "doc_needles": [
+      "billed annually, unchanged"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "The draft proposes a new Route Optimizer module at $9 per vehicle per month; it is not released, with general availability planned for Q1 2027 pending a product readiness review.",
+     "doc_needles": [
+      "$9 per vehicle per month",
+      "Route Optimizer"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "Route Optimizer is not on the current price list and must not be offered or priced to customers until the readiness review has passed and the list is approved.",
+     "doc_needles": [
+      "must not be offered or priced"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "The draft proposes a TrakNode T4 price of $79 per unit.",
+     "doc_needles": [
+      "$79 per unit"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "The draft proposes a RoadLens camera price of $199 per camera.",
+     "doc_needles": [
+      "$199 per camera"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "The draft proposes an Operations onboarding fee of $3,000.",
+     "doc_needles": [
+      "$3,000"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "The draft proposes an Enterprise onboarding fee of $8,500.",
+     "doc_needles": [
+      "$8,500"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "The draft proposes that an Account Executive may approve up to 7% total discount.",
+     "doc_needles": [
+      "Up to 7%"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "The draft proposes that the Regional Sales Director may approve up to 16%.",
+     "doc_needles": [
+      "up to 16%"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "The draft proposes that the VP Sales may approve up to 24%.",
+     "doc_needles": [
+      "up to 24%"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "The draft proposes raising the renewal cap to 7.5% per year.",
+     "doc_needles": [
+      "7.5%"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "The draft (0.3, prepared 22 September 2026) has a proposed effective date of 1 January 2027, is not approved, and must not be quoted; version 4.2 remains in force.",
+     "doc_needles": [
+      "1 January 2027",
+      "Do not quote from it"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "Comments are due by 16 October 2026 and the Pricing Committee meets on 28 October 2026.",
+     "doc_needles": [
+      "28 October 2026"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "The draft leaves the prices of the existing modules unchanged.",
+     "doc_needles": [
+      "stay at their current prices"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "The draft leaves the volume discount bands unchanged.",
+     "doc_needles": [
+      "bands stay as they are"
+     ]
+    }
+   ],
+   "intentional_conflicts": [
+    {
+     "fact": "F1",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "$51",
+     "other_value": "$47",
+     "resolution": "final_wins"
+    },
+    {
+     "fact": "F2",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "$60",
+     "other_value": "$55",
+     "resolution": "final_wins"
+    },
+    {
+     "fact": "F3",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "30 vehicles",
+     "other_value": "25 vehicles",
+     "resolution": "final_wins"
+    },
+    {
+     "fact": "F4",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "$78",
+     "other_value": "$72",
+     "resolution": "final_wins"
+    },
+    {
+     "fact": "F8",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "$79 per unit",
+     "other_value": "$89 per unit",
+     "resolution": "final_wins"
+    },
+    {
+     "fact": "F9",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "$199 per camera",
+     "other_value": "$229 per camera",
+     "resolution": "final_wins"
+    },
+    {
+     "fact": "F10",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "$3,000",
+     "other_value": "$2,500",
+     "resolution": "final_wins"
+    },
+    {
+     "fact": "F11",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "$8,500",
+     "other_value": "$7,500",
+     "resolution": "final_wins"
+    },
+    {
+     "fact": "F12",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "Up to 7%",
+     "other_value": "Up to 10%",
+     "resolution": "final_wins"
+    },
+    {
+     "fact": "F13",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "up to 16%",
+     "other_value": "up to 18%",
+     "resolution": "final_wins"
+    },
+    {
+     "fact": "F14",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "up to 24%",
+     "other_value": "up to 25%",
+     "resolution": "final_wins"
+    },
+    {
+     "fact": "F15",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "7.5%",
+     "other_value": "capped at 6%",
+     "resolution": "final_wins"
+    }
+   ],
+   "must_not_infer": [
+    "Nothing in the draft is approved; it does not establish that prices will rise in January 2027.",
+    "It does not make Route Optimizer an available product, nor $9 its price.",
+    "It must not be quoted to a customer."
+   ]
+  },
+  {
+   "id": "SALES-REF-INTEGRATIONS-2026",
+   "mode": "sales",
+   "filename": "Kestravane_Integration_Matrix_2026-Q3.pdf",
+   "source": "src/SALES-REF-INTEGRATIONS-2026.md",
+   "format": "pdf",
+   "document_type": "integration_matrix",
+   "title": "Kestravane Fleet integration matrix, edition 2026-Q3",
+   "status": "current",
+   "effective_date": "2026-07-01",
+   "authority": 100,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "The Salesforce connector is included at no additional charge on the Operations and Enterprise plans.",
+     "doc_needles": [
+      "Included at no additional charge",
+      "carries no connector fee"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "The Salesforce connector is two-way and syncs Accounts, Contacts, Cases and Work Orders on a 15-minute cycle.",
+     "doc_needles": [
+      "15-minute sync cycle"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "Custom fields on the standard Salesforce objects can be mapped, up to 40 mapped fields per object.",
+     "doc_needles": [
+      "40 mapped fields"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "Salesforce custom objects can be mapped on Enterprise only, up to 5 custom objects.",
+     "doc_needles": [
+      "5 custom objects"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "The Salesforce connector needs Salesforce Enterprise Edition or higher, or Professional Edition with API access enabled.",
+     "doc_needles": [
+      "Professional Edition with API access"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "One Salesforce org can be connected per Kestravane account.",
+     "doc_needles": [
+      "One Salesforce org"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "The HubSpot connector is available on Operations and Enterprise with no connector fee; it is one-way (Kestravane to HubSpot) and posts once an hour.",
+     "doc_needles": [
+      "once an hour",
+      "No connector fee"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "The HubSpot connector requires HubSpot Professional or higher.",
+     "doc_needles": [
+      "HubSpot Professional or higher"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "The NetSuite connector is available on Enterprise only, as a $400 per month add-on.",
+     "doc_needles": [
+      "$400 per month add-on"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "The NetSuite connector exchanges five standard record types (Customer, Vendor, Item, Invoice, Purchase Order) as a nightly batch with on-demand sync.",
+     "doc_needles": [
+      "five standard record types",
+      "nightly batch"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "NetSuite custom records, custom segments and other custom objects are not supported by the connector; customers build that part against the REST API; there is no committed date for custom record support.",
+     "doc_needles": [
+      "are not supported by the connector",
+      "no committed date"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "The Slack app is available on all plans at no fee, sends four kinds of alert, connects up to 25 channels and accepts no commands.",
+     "doc_needles": [
+      "Up to 25 channels"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "The Microsoft Teams app is in beta, available on Operations and Enterprise; beta features fall outside the uptime commitment.",
+     "doc_needles": [
+      "is in beta",
+      "App, in beta"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "QuickBooks Online is supported as a one-way invoice export on all plans.",
+     "doc_needles": [
+      "One-way invoice export"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "WEX fuel card transactions are supported as an inbound data feed on Operations and Enterprise.",
+     "doc_needles": [
+      "WEX fuel cards"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "The REST API and webhooks are included on Operations and Enterprise at no fee and are not available on Launch.",
+     "doc_needles": [
+      "is not available on Launch"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "The API rate limit on Operations is 600 requests per minute.",
+     "doc_needles": [
+      "600 requests per minute"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "The API rate limit on Enterprise is 2,400 requests per minute.",
+     "doc_needles": [
+      "2,400 requests per minute"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "There is no GraphQL endpoint and no bulk export endpoint; bulk extracts are delivered as scheduled CSV files.",
+     "doc_needles": [
+      "no GraphQL endpoint"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "No native connector exists for SAP S/4HANA, Microsoft Dynamics 365, Sage Intacct, QuickBooks Desktop or Comdata fuel cards, and none is planned for 2026; they can be reached through the REST API.",
+     "doc_needles": [
+      "Microsoft Dynamics 365",
+      "none is planned for 2026"
+     ]
+    },
+    {
+     "id": "F21",
+     "statement": "None of the native connectors is available on the Launch plan.",
+     "doc_needles": [
+      "available on the Launch plan"
+     ]
+    },
+    {
+     "id": "F22",
+     "statement": "Each connector connects to a single production instance; field mappings are changed by the customer's administrator.",
+     "doc_needles": [
+      "single production instance"
+     ]
+    },
+    {
+     "id": "F23",
+     "statement": "Connector sync history is kept for 45 days.",
+     "doc_needles": [
+      "45 days"
+     ]
+    },
+    {
+     "id": "F24",
+     "statement": "An integration that does not appear in the matrix is not supported.",
+     "doc_needles": [
+      "is not supported"
+     ]
+    },
+    {
+     "id": "F25",
+     "statement": "The matrix is edition 2026-Q3, effective 1 July 2026, published together with price list version 4.2.",
+     "doc_needles": [
+      "Edition 2026-Q3"
+     ]
+    }
+   ],
+   "intentional_conflicts": [],
+   "must_not_infer": [
+    "The matrix is not a roadmap: it gives no date for NetSuite custom record support or for a connector to SAP, Dynamics 365, Sage Intacct or QuickBooks Desktop.",
+    "It says nothing about what any competitor integrates with.",
+    "It does not cover product features such as electronic logging of driver hours."
+   ]
+  },
+  {
+   "id": "SALES-REF-SECURITY-2026",
+   "mode": "sales",
+   "filename": "Kestravane_Security_and_Compliance_Overview.pdf",
+   "source": "src/SALES-REF-SECURITY-2026.md",
+   "format": "pdf",
+   "document_type": "security_brief",
+   "title": "Kestravane Fleet security and compliance overview, version 2026.2",
+   "status": "current",
+   "effective_date": "2026-06-12",
+   "authority": 100,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "The default hosting region is the United States (Oregon, with disaster recovery in Ohio), available on all plans.",
+     "doc_needles": [
+      "Oregon"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "An EU hosting region in Frankfurt, Germany is available on Enterprise only.",
+     "doc_needles": [
+      "Frankfurt, Germany"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "The region is chosen at provisioning; moving an account between regions after go-live is not supported.",
+     "doc_needles": [
+      "Moving an account between regions"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "No other hosting regions are available and there is no on-premises or customer-hosted deployment.",
+     "doc_needles": [
+      "No other hosting regions"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "Data at rest is encrypted with AES-256.",
+     "doc_needles": [
+      "AES-256"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "Data in transit is protected with TLS 1.2 or higher.",
+     "doc_needles": [
+      "TLS 1.2 or higher"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "Encryption keys are held in AWS Key Management Service and rotated every 12 months.",
+     "doc_needles": [
+      "rotated every 12 months"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "Customer-managed encryption keys are not offered.",
+     "doc_needles": [
+      "Customer-managed encryption keys are not offered"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "Single sign-on (SAML 2.0 or OpenID Connect) is included on Operations and Enterprise and not available on Launch.",
+     "doc_needles": [
+      "SAML 2.0 or OpenID Connect"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "SCIM 2.0 user provisioning is included on Enterprise only.",
+     "doc_needles": [
+      "SCIM 2.0 user provisioning"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "Single sign-on has been verified with Okta, Microsoft Entra ID, Google Workspace and Ping Identity.",
+     "doc_needles": [
+      "Okta, Microsoft Entra ID"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "Audit logs are retained for 30 days on Launch, 90 days on Operations and 13 months on Enterprise.",
+     "doc_needles": [
+      "90 days",
+      "13 months"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "Enterprise customers can pull audit events into their own SIEM through the audit log API.",
+     "doc_needles": [
+      "audit log API"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "Kestravane holds a SOC 2 Type II report covering 1 April 2025 to 31 March 2026, issued on 22 May 2026 by Harrowgate Assurance LLP.",
+     "doc_needles": [
+      "SOC 2 Type II",
+      "31 March 2026",
+      "22 May 2026"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "The SOC 2 report covers the Security and Availability criteria; Confidentiality, Processing Integrity and Privacy are outside its scope.",
+     "doc_needles": [
+      "Security and Availability"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "Kestravane is not ISO 27001 certified: Stage 1 was completed in March 2026, Stage 2 is scheduled for November 2026, and certification is not expected before Q1 2027 with no date committed.",
+     "doc_needles": [
+      "not ISO 27001 certified",
+      "Stage 2 audit"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "An external penetration assessment is carried out once a year; the most recent was completed in February 2026 by Corvane Labs; only a summary letter is shared.",
+     "doc_needles": [
+      "Corvane Labs"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "Vehicle location and engine data is retained for 25 months and then deleted.",
+     "doc_needles": [
+      "25 months, then deleted"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "Temperature sensor readings are retained for 36 months.",
+     "doc_needles": [
+      "36 months"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "Camera footage is retained for 45 days, or 180 days with Extended Video Retention.",
+     "doc_needles": [
+      "45 days, or 180 days"
+     ]
+    },
+    {
+     "id": "F21",
+     "statement": "After termination the customer can export data for 30 days; all customer data is deleted from production within 60 days of the termination date and from backups within a further 35 days.",
+     "doc_needles": [
+      "60 days of the termination date",
+      "a further 35 days"
+     ]
+    },
+    {
+     "id": "F22",
+     "statement": "Databases are backed up daily; the recovery point objective is 24 hours and the recovery time objective is 8 hours.",
+     "doc_needles": [
+      "recovery time objective is 8 hours"
+     ]
+    },
+    {
+     "id": "F23",
+     "statement": "A data processing addendum with the EU Standard Contractual Clauses is available on request for any plan.",
+     "doc_needles": [
+      "data processing addendum"
+     ]
+    },
+    {
+     "id": "F24",
+     "statement": "Customers are notified 30 days before a new sub-processor is added.",
+     "doc_needles": [
+      "30 days before a new sub-processor"
+     ]
+    },
+    {
+     "id": "F25",
+     "statement": "Critical vulnerabilities are remediated within 7 days; security incidents affecting customer data are notified within 72 hours of confirmation.",
+     "doc_needles": [
+      "within 72 hours"
+     ]
+    },
+    {
+     "id": "F26",
+     "statement": "Assurance reports are released under a non-disclosure agreement.",
+     "doc_needles": [
+      "non-disclosure agreement"
+     ]
+    },
+    {
+     "id": "F27",
+     "statement": "On Launch, multi-factor authentication is required for password logins.",
+     "doc_needles": [
+      "Required for password logins"
+     ]
+    }
+   ],
+   "intentional_conflicts": [],
+   "must_not_infer": [
+    "The overview does not mention HIPAA, business associate agreements or protected health information; Kestravane's position on them is unknown, neither compliant nor non-compliant.",
+    "It does not mention FedRAMP, PCI DSS or any other regime beyond those named.",
+    "Being in the middle of the ISO 27001 audit does not make Kestravane ISO 27001 certified.",
+    "The SOC 2 report does not cover the Confidentiality or Privacy criteria.",
+    "The overview states that it is not a complete list of controls, so silence on a topic is not a denial."
+   ]
+  },
+  {
+   "id": "SALES-REF-SUPPORT-SLA-2026",
+   "mode": "sales",
+   "filename": "Support_Plans_and_Service_Level_Guide_rev3.docx",
+   "source": "src/SALES-REF-SUPPORT-SLA-2026.md",
+   "format": "docx",
+   "document_type": "support_sla_guide",
+   "title": "Kestravane Fleet support plans and service level guide, revision 3",
+   "status": "current",
+   "effective_date": "2026-07-01",
+   "authority": 100,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "Launch support is by email and help centre, Monday to Friday, 8:00 to 18:00 Central, in English.",
+     "doc_needles": [
+      "8:00 to 18:00 Central"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "Operations support is by email and chat, 24 hours a day, Monday to Friday.",
+     "doc_needles": [
+      "24 hours a day, Monday"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "Enterprise support is by phone, email and chat, 24 hours a day, 7 days a week.",
+     "doc_needles": [
+      "7 days a week"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "Phone support is offered on Enterprise only; Operations customers are asked to open a chat or email ticket.",
+     "doc_needles": [
+      "offered on Enterprise only"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "The Priority 1 first response target is 4 business hours on Launch, 1 hour on Operations and 30 minutes on Enterprise.",
+     "doc_needles": [
+      "Priority 1: 30 minutes"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "The Priority 2 first response target is 1 business day on Launch, 4 business hours on Operations and 2 hours on Enterprise.",
+     "doc_needles": [
+      "Priority 2: 4 business hours"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "The Priority 3 first response target is 3 business days on Launch, 1 business day on Operations and 8 business hours on Enterprise.",
+     "doc_needles": [
+      "Priority 3: 8 business hours"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "Response targets are for a first response within the plan's support hours; they are not resolution times and carry no service credit.",
+     "doc_needles": [
+      "not resolution times"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "The Launch plan has no uptime commitment.",
+     "doc_needles": [
+      "No commitment"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "The Operations plan has a monthly uptime commitment of 99.5%.",
+     "doc_needles": [
+      "99.5%"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "On Operations the service credit is 5% of the monthly subscription fee if uptime is below 99.5%, and 10% if it is below 99.0%.",
+     "doc_needles": [
+      "5% of the monthly subscription fee"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "The Enterprise plan has a monthly uptime commitment of 99.95%.",
+     "doc_needles": [
+      "99.95%"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "On Enterprise the service credit is 10% of the monthly subscription fee if uptime is below 99.95%, and 25% if it is below 99.0%.",
+     "doc_needles": [
+      "10% of the monthly subscription fee",
+      "25% if it is below 99.0%"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "For annual contracts the monthly subscription fee is one-twelfth of the annual plan fee; a credit must be claimed in writing within 45 days of the end of the month and is applied to the next invoice, not paid in cash.",
+     "doc_needles": [
+      "one-twelfth of the annual plan fee",
+      "within 45 days"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "Service credits are the sole remedy for missed uptime.",
+     "doc_needles": [
+      "sole remedy"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "Scheduled maintenance is on Sundays between 02:00 and 05:00 Central, announced 5 business days ahead, limited to 6 hours a month, and excluded from uptime.",
+     "doc_needles": [
+      "02:00 and 05:00 Central"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "Beta features, the customer's own network and third-party systems on the other end of a connector are outside the uptime commitment.",
+     "doc_needles": [
+      "Beta features"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "The stated uptime figures are the only ones offered; a different uptime figure, credit schedule or response-time commitment is a non-standard term needing written approval from the VP Customer Operations and Legal through Deal Desk; account teams must not offer or imply other service levels.",
+     "doc_needles": [
+      "non-standard term",
+      "must not offer or imply"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "The support guide says Enterprise accounts with 300 or more vehicles get a named Customer Success Manager with a quarterly business review.",
+     "doc_needles": [
+      "300 or more vehicles"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "Enterprise accounts with fewer than 300 vehicles are served by the pooled Customer Success team with a business review twice a year.",
+     "doc_needles": [
+      "fewer than 300 vehicles"
+     ]
+    },
+    {
+     "id": "F21",
+     "statement": "Operations accounts are served by the pooled Customer Success team with a group check-in webinar each quarter.",
+     "doc_needles": [
+      "group check-in webinar"
+     ]
+    },
+    {
+     "id": "F22",
+     "statement": "A Technical Account Manager can be added to any Enterprise account as a paid add-on.",
+     "doc_needles": [
+      "Technical Account Manager"
+     ]
+    },
+    {
+     "id": "F23",
+     "statement": "A Priority 1 ticket unresolved after 2 hours is escalated to the Duty Incident Manager; at 4 hours the VP Customer Operations is notified.",
+     "doc_needles": [
+      "Duty Incident Manager"
+     ]
+    },
+    {
+     "id": "F24",
+     "statement": "During a Priority 1 incident Enterprise customers get an update every hour and Operations customers every 4 hours.",
+     "doc_needles": [
+      "an update every hour"
+     ]
+    },
+    {
+     "id": "F25",
+     "statement": "Any customer can request an escalation at any time; Enterprise customers can call the escalation line.",
+     "doc_needles": [
+      "calling the escalation line"
+     ]
+    },
+    {
+     "id": "F26",
+     "statement": "Hardware that fails under warranty is replaced in advance; the replacement ships within 2 business days of the fault being confirmed.",
+     "doc_needles": [
+      "within 2 business days"
+     ]
+    },
+    {
+     "id": "F27",
+     "statement": "Support languages are English on Launch, English and Spanish on Operations, and English, Spanish and French on Enterprise.",
+     "doc_needles": [
+      "English, Spanish, French"
+     ]
+    },
+    {
+     "id": "F28",
+     "statement": "Support does not cover the customer's own API code, editing connector mappings, or on-site visits.",
+     "doc_needles": [
+      "On-site visits"
+     ]
+    },
+    {
+     "id": "F29",
+     "statement": "The guide is revision 3, effective 1 July 2026.",
+     "doc_needles": [
+      "Revision 3"
+     ]
+    }
+   ],
+   "intentional_conflicts": [
+    {
+     "fact": "F19",
+     "with_file": "SALES-REF-PRICING-2026",
+     "this_value": "300 or more vehicles",
+     "other_value": "250 or more vehicles",
+     "resolution": "unresolved"
+    },
+    {
+     "fact": "F19",
+     "with_file": "SALES-REF-PRICING-2025",
+     "this_value": "300 or more vehicles",
+     "other_value": "whatever the fleet size",
+     "resolution": "current_wins"
+    }
+   ],
+   "must_not_infer": [
+    "A 99.95% commitment in the guide does not authorise a seller to put 99.99% or any other figure in a contract.",
+    "Response targets are not resolution guarantees.",
+    "The named Customer Success Manager threshold stated here (300 vehicles) disagrees with the current price list (250 vehicles); neither document settles it.",
+    "Nothing here says a non-standard term will be approved if requested."
+   ]
+  },
+  {
+   "id": "SALES-REF-IMPLEMENTATION-2026",
+   "mode": "sales",
+   "filename": "Implementation_and_Onboarding_Guide_v2.3.docx",
+   "source": "src/SALES-REF-IMPLEMENTATION-2026.md",
+   "format": "docx",
+   "document_type": "implementation_guide",
+   "title": "Kestravane Fleet implementation and onboarding guide, version 2.3",
+   "status": "current",
+   "effective_date": "2026-04-14",
+   "authority": 80,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "A rollout has six stages; Launch is self-run, Operations is guided by an onboarding specialist, Enterprise is run by a named project manager with a weekly status call.",
+     "doc_needles": [
+      "weekly status call"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "The kickoff call is normally held within 5 business days of contract signature, and every duration is counted from the kickoff call, not the signature.",
+     "doc_needles": [
+      "counted from the kickoff call"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "A Launch rollout typically takes 5 to 10 business days.",
+     "doc_needles": [
+      "5 to 10 business days"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "An Operations rollout of up to 200 vehicles typically takes 30 days from kickoff to go-live.",
+     "doc_needles": [
+      "Typically 30 days"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "An Operations rollout of more than 200 vehicles takes 45 to 75 days.",
+     "doc_needles": [
+      "45 to 75 days"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "An Enterprise rollout takes 60 to 90 days.",
+     "doc_needles": [
+      "60 to 90 days"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "The durations are planning estimates, not commitments; go-live dates are not written into order forms; a committed date exists only in a Statement of Work signed by the Director of Professional Services after a scoping call; account teams cannot commit to a date on their own.",
+     "doc_needles": [
+      "They are not commitments",
+      "cannot commit to a date"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "The most common causes of delay are vehicles not released for installation, a late vehicle list, and waiting for single sign-on configuration.",
+     "doc_needles": [
+      "a late vehicle list"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "Hardware arrives 7 to 10 business days after the hardware order is placed.",
+     "doc_needles": [
+      "7 to 10 business days"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "Professional installation is booked at least 10 business days ahead; one two-person crew fits about 15 vehicles per working day at a single depot.",
+     "doc_needles": [
+      "about 15 vehicles per working day"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "A professional installation keeps a vehicle off the road for about 40 minutes; a self-installed TrakNode on a light vehicle takes about 20 minutes; heavy trucks need the 9-pin harness.",
+     "doc_needles": [
+      "about 40 minutes",
+      "about 20 minutes"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "Each native connector takes 3 to 5 business days to configure and validate, and the customer's administrator for the connected system must be available.",
+     "doc_needles": [
+      "3 to 5 business days"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "Single sign-on setup needs the customer's identity provider team; allow one week.",
+     "doc_needles": [
+      "allow one week"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "The customer names a project lead, with authority over vehicle scheduling, within 3 business days of the kickoff call.",
+     "doc_needles": [
+      "within 3 business days"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "The customer supplies the vehicle list (VIN, licence plate, home depot, vehicle class) at least 5 business days before the first installation date.",
+     "doc_needles": [
+      "at least 5 business days before"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "The customer releases vehicles on the agreed days, supplies the driver roster, sends administrators to two 90-minute remote training sessions and signs the go-live checklist.",
+     "doc_needles": [
+      "each lasting 90 minutes"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "Only the most recent 24 months of trip and location history can be migrated; older trip history is not loaded under any plan.",
+     "doc_needles": [
+      "most recent 24 months only"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "Maintenance history can be migrated for up to 5 years.",
+     "doc_needles": [
+      "Up to 5 years"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "Driver safety scores and camera footage cannot be migrated.",
+     "doc_needles": [
+      "scores are recalculated"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "Migration files must be UTF-8 CSV in the Kestravane templates; ready-made converters exist for exports from Dorrowick Telematics and Pennoway Fleet.",
+     "doc_needles": [
+      "Dorrowick Telematics"
+     ]
+    },
+    {
+     "id": "F21",
+     "statement": "Assisted data migration is a paid service on Operations and part of the onboarding fee on Enterprise; Launch customers load their own files.",
+     "doc_needles": [
+      "is a paid service on Operations"
+     ]
+    },
+    {
+     "id": "F22",
+     "statement": "Tracking hardware from another supplier cannot be reused; every vehicle needs a TrakNode unit.",
+     "doc_needles": [
+      "cannot be reused"
+     ]
+    },
+    {
+     "id": "F23",
+     "statement": "A rollout is live when 95% of contracted vehicles have reported data for three consecutive days, training is complete and the checklist is signed.",
+     "doc_needles": [
+      "95% of contracted vehicles"
+     ]
+    },
+    {
+     "id": "F24",
+     "statement": "For 14 days after go-live the onboarding specialist or project manager stays assigned (hypercare); after that the account moves to standard support.",
+     "doc_needles": [
+      "14 days after go-live"
+     ]
+    },
+    {
+     "id": "F25",
+     "statement": "Changes after kickoff are handled through a change note and can move the go-live date.",
+     "doc_needles": [
+      "change note"
+     ]
+    },
+    {
+     "id": "F26",
+     "statement": "Two remote administrator training sessions are included on Operations and Enterprise; on-site training is a paid day.",
+     "doc_needles": [
+      "Two remote sessions"
+     ]
+    },
+    {
+     "id": "F27",
+     "statement": "A signed Statement of Work takes precedence over the guide.",
+     "doc_needles": [
+      "takes precedence"
+     ]
+    }
+   ],
+   "intentional_conflicts": [],
+   "must_not_infer": [
+    "A typical duration of 30 days is an estimate, not a guarantee; the seller has no authority to promise a go-live date.",
+    "The guide does not say an exception will be made for trip history older than 24 months.",
+    "The guide gives no fee amounts; those are in the price list.",
+    "Having a converter for Dorrowick exports says nothing about Dorrowick's product, quality or prices."
+   ]
+  },
+  {
+   "id": "SALES-REF-CASESTUDY-HOLLOWMERE",
+   "mode": "sales",
+   "filename": "Hollowmere_Customer_Story.pdf",
+   "source": "src/SALES-REF-CASESTUDY-HOLLOWMERE.md",
+   "format": "pdf",
+   "document_type": "case_study",
+   "title": "Customer story: Hollowmere Produce Logistics",
+   "status": "current",
+   "effective_date": "2026-02-01",
+   "authority": 80,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "Hollowmere Produce Logistics is a family-owned refrigerated carrier based in Yakima, Washington.",
+     "doc_needles": [
+      "Yakima, Washington"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "Hollowmere's fleet is 212 refrigerated trucks at three depots, with about 260 drivers.",
+     "doc_needles": [
+      "212 refrigerated trucks"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "Hollowmere runs the Operations plan with the Fuel & Idle Analytics and Cold Chain Monitoring modules.",
+     "doc_needles": [
+      "runs the Operations plan"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "Each Hollowmere truck carries one TrakNode and two TempSense sensors, 424 sensors in all.",
+     "doc_needles": [
+      "424 sensors"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "Hollowmere did not take cameras or Driver Safety Scoring and uses none of the native connectors.",
+     "doc_needles": [
+      "did not take cameras"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "The measured period was 1 March to 31 August 2025, compared with the same six months of 2024.",
+     "doc_needles": [
+      "1 March to 31 August 2025"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "Average engine idling per truck per day fell from 73 minutes to 59 minutes, 19% lower.",
+     "doc_needles": [
+      "19% lower",
+      "73 minutes"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "Fuel consumed per 100 miles fell from 16.4 to 15.4 gallons, 6.1% lower.",
+     "doc_needles": [
+      "6.1% lower"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "Temperature-related load claims fell from 41 to 17.",
+     "doc_needles": [
+      "41 claims",
+      "17 claims"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "Claims accepted without dispute fell from 33 to 6.",
+     "doc_needles": [
+      "33 claims"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "Hollowmere estimates the lower fuel consumption was worth about $186,000 over the six months.",
+     "doc_needles": [
+      "$186,000"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "Hollowmere's finance team puts payback on hardware and first-year subscription at under 9 months.",
+     "doc_needles": [
+      "under 9 months"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "The figures come from Hollowmere's own records and have not been audited by Kestravane or a third party.",
+     "doc_needles": [
+      "have not been audited"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "There was no control group; the comparison is the same fleet against its previous year.",
+     "doc_needles": [
+      "no control group"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "Hollowmere launched a driver coaching programme in April 2025, during the measured period; its effect cannot be separated from Kestravane's.",
+     "doc_needles": [
+      "driver coaching programme"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "The results are from one refrigerated fleet in one region and are not a forecast or a promise of results.",
+     "doc_needles": [
+      "a promise of results"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "Hollowmere's own maintenance staff fitted the hardware, depot by depot.",
+     "doc_needles": [
+      "own maintenance staff"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "The customer story was published in February 2026.",
+     "doc_needles": [
+      "Published February 2026"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "The Hollowmere spokesperson is Wendeline Aukes, Director of Fleet Operations.",
+     "doc_needles": [
+      "Wendeline Aukes"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "Hollowmere is evaluating Maintenance Planner and has asked for trailer door sensors, which Kestravane does not currently make.",
+     "doc_needles": [
+      "trailer door sensors"
+     ]
+    }
+   ],
+   "intentional_conflicts": [],
+   "must_not_infer": [
+    "The Hollowmere results are not a promise or forecast for any other customer.",
+    "The improvement cannot be attributed to Kestravane alone, because a driver coaching programme ran in the same period.",
+    "The story gives no rollout duration and says nothing about how long go-live took.",
+    "No other customer's results are documented."
+   ]
+  },
+  {
+   "id": "SALES-REF-PARTNER-PROGRAM-2026",
+   "mode": "sales",
+   "filename": "Kestravane_Partner_Program_Guide_2026-27.pdf",
+   "source": "src/SALES-REF-PARTNER-PROGRAM-2026.md",
+   "format": "pdf",
+   "document_type": "partner_program_guide",
+   "title": "Kestravane partner program guide, program year 2026-27, version 2.0",
+   "status": "current",
+   "effective_date": "2026-07-01",
+   "authority": 100,
+   "supersedes": [
+    "SALES-REF-PARTNER-OVERVIEW-2025"
+   ],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "The partner program guide is version 2.0 for program year 2026-27, effective 1 July 2026, and replaces the 2025-26 program overview.",
+     "doc_needles": [
+      "Version 2.0",
+      "Program year 2026-27"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "The program applies to companies established in the United States and Canada; the program year runs from 1 July to 30 June.",
+     "doc_needles": [
+      "1 July to 30 June"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "There are three kinds of partner: referral partners (paid a referral fee once), resellers (paid a resale margin) and installation partners (paid a per-vehicle rate).",
+     "doc_needles": [
+      "Partner types at a glance"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "A referral partner earns a referral fee of 9% of the plan subscription fees billed to the referred customer for its first twelve months, calculated after any discount.",
+     "doc_needles": [
+      "referral fee of 9%"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "Fees for modules, add-ons, hardware, installation and onboarding are left out of the referral fee calculation.",
+     "doc_needles": [
+      "left out of the calculation"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "The referral fee is limited to $20,000 for any one referred customer.",
+     "doc_needles": [
+      "$20,000"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "The referral fee is paid once; nothing is paid on renewals or on vehicles added after the first twelve months.",
+     "doc_needles": [
+      "The referral fee is paid once"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "An introduction qualifies when the prospect operates at least 12 vehicles, Kestravane has had no open opportunity with it in the previous 9 months, the partner registered it before Kestravane's first meeting, and the prospect becomes a paying customer while the registration is protected.",
+     "doc_needles": [
+      "at least 12 vehicles"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "The referral fee becomes payable once the customer has paid its first bill in full and appears on the next quarterly statement; it is forfeited if the customer cancels or stops paying within its first 4 months.",
+     "doc_needles": [
+      "within its first 4 months"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "A reseller sells in its own name, quotes from the price list in force and bills the customer; it has no discount authority of its own, and any discount follows the approval rules of the price list through its Partner Manager.",
+     "doc_needles": [
+      "no discount authority of its own"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "Reseller tier thresholds on subscription revenue sourced in the previous program year: Registered no minimum, Certified $120,000, Premier $450,000.",
+     "doc_needles": [
+      "$120,000",
+      "$450,000"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "Certified staff required: sales certification 1 / 2 / 4 and technical certification none / 1 / 3 for Registered / Certified / Premier.",
+     "doc_needles": [
+      "Staff with the technical certification"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "Resale margin on first-year subscriptions is 19% for Registered, 23% for Certified and 27% for Premier resellers.",
+     "doc_needles": [
+      "19%",
+      "23%",
+      "27%"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "Resale margin on renewals is 2% for Registered, 3% for Certified and 4% for Premier resellers.",
+     "doc_needles": [
+      "Resale margin on renewals"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "Demo kits on loan: none for Registered, 2 kits for Certified, 6 kits for Premier.",
+     "doc_needles": [
+      "6 kits"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "Co-marketing funds: not available to Registered, up to $6,500 a year for Certified, up to $16,000 a year for Premier; the amounts are annual ceilings and unclaimed money lapses.",
+     "doc_needles": [
+      "Up to $6,500 a year",
+      "Up to $16,000 a year"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "Resale margin is earned on plan subscription fees and module fees after any discount; hardware, installation, onboarding fees and add-on services carry no margin.",
+     "doc_needles": [
+      "carry no margin"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "Tiers are set at the annual review in July; a promotion during the year is approved by the reseller's Partner Manager; a reseller that falls short keeps its tier for the first half of the new program year.",
+     "doc_needles": [
+      "promotions are approved by the reseller's Partner Manager"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "The sales certification is six online modules with an 80% pass mark and costs $350 per person; the technical certification costs $900 per person; a certification is valid for 18 months.",
+     "doc_needles": [
+      "pass mark is 80%",
+      "$350 per person"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "An accepted deal registration is protected for 120 days from the date of acceptance.",
+     "doc_needles": [
+      "protected for 120 days"
+     ]
+    },
+    {
+     "id": "F21",
+     "statement": "Protection can be extended once, by 30 days, where the prospect has confirmed in writing that its evaluation is still running; the extension is granted by the partner's Partner Manager.",
+     "doc_needles": [
+      "extended once, by 30 days"
+     ]
+    },
+    {
+     "id": "F22",
+     "statement": "A registration with no logged activity for 60 days is closed, whether or not its protection has run out.",
+     "doc_needles": [
+      "no logged activity for 60 days"
+     ]
+    },
+    {
+     "id": "F23",
+     "statement": "A registration is turned down when there is or was an open opportunity in the previous 9 months, when the prospect is on the direct named-account list, or when it is already a customer.",
+     "doc_needles": [
+      "direct named-account list"
+     ]
+    },
+    {
+     "id": "F24",
+     "statement": "Inbound enquiries from fleets of fewer than 35 vehicles are offered in rotation to Certified and Premier resellers; the reseller makes first contact within four working days; a passed lead earns normal margin but does not count as sourced revenue.",
+     "doc_needles": [
+      "fewer than 35 vehicles",
+      "within four working days"
+     ]
+    },
+    {
+     "id": "F25",
+     "statement": "Account executives are paid the same commission on a partner-sourced deal as on a direct one.",
+     "doc_needles": [
+      "paid the same commission"
+     ]
+    },
+    {
+     "id": "F26",
+     "statement": "A partner has no authority to vary Kestravane's subscription terms, service levels or delivery dates.",
+     "doc_needles": [
+      "no authority to vary"
+     ]
+    },
+    {
+     "id": "F27",
+     "statement": "For a customer that buys through a reseller, onboarding is delivered by Kestravane Professional Services in the same way as for a direct customer on the same plan; resellers do not run onboarding and do not quote go-live dates.",
+     "doc_needles": [
+      "Resellers do not run onboarding"
+     ]
+    },
+    {
+     "id": "F28",
+     "statement": "A resold customer contacts Kestravane support directly, through the channels and during the hours of its plan; the reseller is not a first line of support.",
+     "doc_needles": [
+      "not a first line of support"
+     ]
+    },
+    {
+     "id": "F29",
+     "statement": "The Support Plans and Service Level Guide applies to resold customers exactly as to direct customers; a service credit is issued to the reseller as a credit note and must be passed on in full on the reseller's next bill.",
+     "doc_needles": [
+      "as a credit note"
+     ]
+    },
+    {
+     "id": "F30",
+     "statement": "Installation is always booked and paid for through Kestravane; fitters carry an installer certificate (two-day course, renewed every 18 months); a fault traced to the installation within 28 days is put right at the installation partner's cost; liability cover is at least $2 million per occurrence.",
+     "doc_needles": [
+      "within 28 days",
+      "$2 million"
+     ]
+    },
+    {
+     "id": "F31",
+     "statement": "A demo kit holds one TrakNode T4, one RoadLens camera, two TempSense S2 sensors and a bench power supply; kits are not lent to prospects.",
+     "doc_needles": [
+      "not lent to prospects"
+     ]
+    },
+    {
+     "id": "F32",
+     "statement": "Partner statements appear in the portal during the first month of every quarter; Premier resellers review pipeline monthly, Certified quarterly.",
+     "doc_needles": [
+      "during the first month of every quarter"
+     ]
+    },
+    {
+     "id": "F33",
+     "statement": "The Enterprise plan is always contracted by Kestravane directly and is not resold, whatever the reseller's tier.",
+     "doc_needles": [
+      "always contracted by Kestravane directly"
+     ]
+    },
+    {
+     "id": "F34",
+     "statement": "When a reseller's registered opportunity closes on the Enterprise plan, the reseller earns a co-sell fee of 13% of the first-year plan subscription fees, after any discount, in place of any resale margin; the fee is the same for every tier and is paid once, with nothing on renewal.",
+     "doc_needles": [
+      "co-sell fee of 13%"
+     ]
+    },
+    {
+     "id": "F35",
+     "statement": "Enterprise revenue counts towards a reseller's tier threshold at half its value; a referral that closes on Enterprise earns the normal referral fee.",
+     "doc_needles": [
+      "at half its value"
+     ]
+    },
+    {
+     "id": "F36",
+     "statement": "Disputes that the registration date does not settle (two partners claiming the same prospect, a contested rejection or named-account ruling) are decided by the Director of Channel Operations, Hyacinth Morgenroth; her decision is final, and Partner Managers do not rule on disputes involving their own partners.",
+     "doc_needles": [
+      "Her decision is final",
+      "Hyacinth Morgenroth"
+     ]
+    },
+    {
+     "id": "F37",
+     "statement": "Exceptions to the rates in the guide need the written agreement of the Head of Partnerships before the reseller quotes.",
+     "doc_needles": [
+      "written agreement of the Head of Partnerships"
+     ]
+    },
+    {
+     "id": "F38",
+     "statement": "Gifts and hospitality offered to a prospect are limited to $80 per person per occasion.",
+     "doc_needles": [
+      "$80 per person"
+     ]
+    },
+    {
+     "id": "F39",
+     "statement": "Either side can end a partner's participation with 50 days' written notice; a Registered reseller with no accepted registration for 9 consecutive months is set to inactive.",
+     "doc_needles": [
+      "50 days' written notice"
+     ]
+    },
+    {
+     "id": "F40",
+     "statement": "Partner Managers are Ignatius Brandvold (West), Marguerite Oyelowo-Finch (Central) and Casimir Thorvaldsen (East); the channel desk is staffed on working days from 7:30 to 16:30 Mountain time.",
+     "doc_needles": [
+      "Marguerite Oyelowo-Finch",
+      "7:30 to 16:30 Mountain"
+     ]
+    },
+    {
+     "id": "F41",
+     "statement": "The guide was approved by Leontyne Abernethy-Osei, Head of Partnerships, and is maintained by Channel Operations.",
+     "doc_needles": [
+      "Leontyne Abernethy-Osei"
+     ]
+    }
+   ],
+   "intentional_conflicts": [
+    {
+     "fact": "F4",
+     "with_file": "SALES-REF-PARTNER-OVERVIEW-2025",
+     "this_value": "referral fee of 9%",
+     "other_value": "referral fee of 11%",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F6",
+     "with_file": "SALES-REF-PARTNER-OVERVIEW-2025",
+     "this_value": "$20,000",
+     "other_value": "no ceiling on the fee",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F11",
+     "with_file": "SALES-REF-PARTNER-OVERVIEW-2025",
+     "this_value": "$120,000",
+     "other_value": "$100,000",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F11",
+     "with_file": "SALES-REF-PARTNER-OVERVIEW-2025",
+     "this_value": "$450,000",
+     "other_value": "$380,000",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F13",
+     "with_file": "SALES-REF-PARTNER-OVERVIEW-2025",
+     "this_value": "19%",
+     "other_value": "20%",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F13",
+     "with_file": "SALES-REF-PARTNER-OVERVIEW-2025",
+     "this_value": "23%",
+     "other_value": "24%",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F13",
+     "with_file": "SALES-REF-PARTNER-OVERVIEW-2025",
+     "this_value": "27%",
+     "other_value": "28%",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F16",
+     "with_file": "SALES-REF-PARTNER-OVERVIEW-2025",
+     "this_value": "Up to $16,000 a year",
+     "other_value": "Up to $12,000 a year",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F19",
+     "with_file": "SALES-REF-PARTNER-OVERVIEW-2025",
+     "this_value": "pass mark is 80%",
+     "other_value": "pass mark is 75%",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F19",
+     "with_file": "SALES-REF-PARTNER-OVERVIEW-2025",
+     "this_value": "$350 per person",
+     "other_value": "$275 per person",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F20",
+     "with_file": "SALES-REF-PARTNER-OVERVIEW-2025",
+     "this_value": "protected for 120 days",
+     "other_value": "protected for 150 days",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F21",
+     "with_file": "SALES-REF-PARTNER-OVERVIEW-2025",
+     "this_value": "extended once, by 30 days",
+     "other_value": "cannot be extended this year",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F22",
+     "with_file": "SALES-REF-PARTNER-OVERVIEW-2025",
+     "this_value": "no logged activity for 60 days",
+     "other_value": "no logged activity for 70 days",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F8",
+     "with_file": "SALES-REF-PARTNER-OVERVIEW-2025",
+     "this_value": "at least 12 vehicles",
+     "other_value": "at least 8 vehicles",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F39",
+     "with_file": "SALES-REF-PARTNER-OVERVIEW-2025",
+     "this_value": "50 days' written notice",
+     "other_value": "30 days' written notice",
+     "resolution": "current_wins"
+    }
+   ],
+   "must_not_infer": [
+    "The guide gives no time within which Channel Operations accepts or rejects a registration, and no time for any approval.",
+    "A referral fee or resale margin is what Kestravane pays a partner; it is not a discount to the end customer and gives a partner no authority over customer prices.",
+    "The guide does not give the per-vehicle rate paid to installation partners; that is in each partner's installation schedule.",
+    "Nothing here lets a partner or a seller promise that a registration, an extension or an exception will be granted.",
+    "The guide does not say how many partners there are, who they are or where installers are available.",
+    "The resale margins in the tier table do not apply to an opportunity that closes on Enterprise."
+   ]
+  },
+  {
+   "id": "SALES-REF-PARTNER-OVERVIEW-2025",
+   "mode": "sales",
+   "filename": "Partner_Program_Overview.docx",
+   "source": "src/SALES-REF-PARTNER-OVERVIEW-2025.md",
+   "format": "docx",
+   "document_type": "partner_program_overview",
+   "title": "Kestravane partner program, overview for new partners, program year 2025-26",
+   "status": "outdated",
+   "effective_date": "2025-08-04",
+   "authority": 40,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "The overview for new partners was issued on 4 August 2025 for program year 2025-26.",
+     "doc_needles": [
+      "Issued 4 August 2025",
+      "Program year 2025-26"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "In 2025-26 the referral fee was 11% of the plan subscription fees billed for the customer's first twelve months, with no ceiling, paid once.",
+     "doc_needles": [
+      "referral fee of 11%",
+      "no ceiling on the fee"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "In 2025-26 the reseller tier thresholds were $100,000 for Certified and $380,000 for Premier.",
+     "doc_needles": [
+      "$100,000",
+      "$380,000"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "In 2025-26 the resale margin on first-year subscriptions was 20% for Registered, 24% for Certified and 28% for Premier.",
+     "doc_needles": [
+      "20%",
+      "24%",
+      "28%"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "In 2025-26 the resale margin on renewals was 3.5% for every tier.",
+     "doc_needles": [
+      "3.5%"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "In 2025-26 margin was earned on plan subscription fees only; modules, hardware, installation and onboarding carried no margin.",
+     "doc_needles": [
+      "carry no margin this year"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "In 2025-26 demo kits were none / 1 kit / 4 kits, and co-marketing funds were for Premier only, up to $12,000 a year.",
+     "doc_needles": [
+      "Up to $12,000 a year",
+      "4 kits"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "In 2025-26 an accepted registration was protected for 150 days and protection could not be extended.",
+     "doc_needles": [
+      "protected for 150 days",
+      "cannot be extended this year"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "In 2025-26 a registration with no logged activity for 70 days was closed, and the prospect had to run at least 8 vehicles.",
+     "doc_needles": [
+      "no logged activity for 70 days",
+      "at least 8 vehicles"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "In 2025-26 the sales certification had four modules, a 75% pass mark, cost $275 per person and lasted 12 months.",
+     "doc_needles": [
+      "pass mark is 75%",
+      "$275 per person"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "In 2025-26 there were two Partner Managers, Ignatius Brandvold (west) and Casimir Thorvaldsen (east); the channel desk answered between 8:00 and 16:00 Mountain time.",
+     "doc_needles": [
+      "between 8:00 and 16:00 Mountain"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "In 2025-26 partner statements were sent twice a year.",
+     "doc_needles": [
+      "Twice a year, in the first weeks"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "In 2025-26 either side could leave the program with 30 days' written notice.",
+     "doc_needles": [
+      "30 days' written notice"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "Co-marketing claims for program year 2025-26 closed on 31 July 2026.",
+     "doc_needles": [
+      "31 July 2026"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "In 2025-26 the new-partner call ran on the first Tuesday of every month at 11:00 Mountain time.",
+     "doc_needles": [
+      "11:00 Mountain time"
+     ]
+    }
+   ],
+   "intentional_conflicts": [
+    {
+     "fact": "F2",
+     "with_file": "SALES-REF-PARTNER-PROGRAM-2026",
+     "this_value": "referral fee of 11%",
+     "other_value": "referral fee of 9%",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F3",
+     "with_file": "SALES-REF-PARTNER-PROGRAM-2026",
+     "this_value": "$100,000",
+     "other_value": "$120,000",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F3",
+     "with_file": "SALES-REF-PARTNER-PROGRAM-2026",
+     "this_value": "$380,000",
+     "other_value": "$450,000",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F4",
+     "with_file": "SALES-REF-PARTNER-PROGRAM-2026",
+     "this_value": "20%",
+     "other_value": "19%",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F4",
+     "with_file": "SALES-REF-PARTNER-PROGRAM-2026",
+     "this_value": "24%",
+     "other_value": "23%",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F4",
+     "with_file": "SALES-REF-PARTNER-PROGRAM-2026",
+     "this_value": "28%",
+     "other_value": "27%",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F7",
+     "with_file": "SALES-REF-PARTNER-PROGRAM-2026",
+     "this_value": "Up to $12,000 a year",
+     "other_value": "Up to $16,000 a year",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F8",
+     "with_file": "SALES-REF-PARTNER-PROGRAM-2026",
+     "this_value": "protected for 150 days",
+     "other_value": "protected for 120 days",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F8",
+     "with_file": "SALES-REF-PARTNER-PROGRAM-2026",
+     "this_value": "cannot be extended this year",
+     "other_value": "extended once, by 30 days",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F9",
+     "with_file": "SALES-REF-PARTNER-PROGRAM-2026",
+     "this_value": "no logged activity for 70 days",
+     "other_value": "no logged activity for 60 days",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F9",
+     "with_file": "SALES-REF-PARTNER-PROGRAM-2026",
+     "this_value": "at least 8 vehicles",
+     "other_value": "at least 12 vehicles",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F10",
+     "with_file": "SALES-REF-PARTNER-PROGRAM-2026",
+     "this_value": "pass mark is 75%",
+     "other_value": "pass mark is 80%",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F10",
+     "with_file": "SALES-REF-PARTNER-PROGRAM-2026",
+     "this_value": "$275 per person",
+     "other_value": "$350 per person",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F13",
+     "with_file": "SALES-REF-PARTNER-PROGRAM-2026",
+     "this_value": "30 days' written notice",
+     "other_value": "50 days' written notice",
+     "resolution": "current_wins"
+    }
+   ],
+   "must_not_infer": [
+    "This overview is replaced by the 2026-27 partner program guide; none of its changed values may be given as current.",
+    "Its file name carries no year; only the program-year and issue-date lines show that it is the older document.",
+    "It says nothing about how an opportunity that closes on Enterprise is paid."
+   ]
+  },
+  {
+   "id": "SALES-REF-HARDWARE-INSTALL-2026",
+   "mode": "sales",
+   "filename": "TrakNode_T4_RoadLens_Installation_Guide_revC.pdf",
+   "source": "src/SALES-REF-HARDWARE-INSTALL-2026.md",
+   "format": "pdf",
+   "document_type": "installation_guide",
+   "title": "TrakNode T4 and RoadLens installation guide, revision C",
+   "status": "current",
+   "effective_date": "2026-06-08",
+   "authority": 80,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "The installation guide is revision C, dated 8 June 2026, owned by Anselm Vukovich-Tran, Field Engineering Manager.",
+     "doc_needles": [
+      "Revision C - 8 June 2026",
+      "Anselm Vukovich-Tran"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "The guide covers the TrakNode T4 and the RoadLens; TempSense sensors have their own fitting sheet and are not covered.",
+     "doc_needles": [
+      "are not covered here"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "A TrakNode T4 carton holds the unit, an adhesive pad, four cable ties and the ordered harness; the serial number has twelve characters and begins with KT4.",
+     "doc_needles": [
+      "begins with KT4"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "The TrakNode T4 measures 94 x 61 x 24 mm and weighs 78 g; the RoadLens measures 108 x 66 x 38 mm and weighs 164 g.",
+     "doc_needles": [
+      "94 x 61 x 24 mm",
+      "164 g"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "Harness by connector: OBD-II 16-pin KH-16Y; 16-pin carrying J1939 on medium-duty cab-overs KH-16J; green 9-pin on heavy trucks from 2016 KH-9G; black 9-pin on heavy trucks before 2016 and on yard tractors KH-9B; no diagnostic connector KH-3W three-wire kit.",
+     "doc_needles": [
+      "KH-3W three-wire kit",
+      "Heavy trucks before 2016, yard tractors"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "Every harness except the three-wire kit is a Y-harness that leaves the vehicle's own connector available for a workshop tool; the 9-pin harnesses have a 1.5-metre lead.",
+     "doc_needles": [
+      "is a Y-harness",
+      "1.5-metre lead"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "The KH-16Y and KH-16J look alike apart from the grey band on the KH-16J; fitting the wrong one gives position but no engine data.",
+     "doc_needles": [
+      "grey band on the KH-16J"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "The installation guide says the plug-in OBD-II connection is supported on light vehicles from model year 2008 onward; older light vehicles get the three-wire kit.",
+     "doc_needles": [
+      "from model year 2008 onward"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "With the three-wire kit the unit reports position, trips and ignition time but has no odometer, fuel level or fault codes from the vehicle.",
+     "doc_needles": [
+      "no odometer, fuel level or fault codes"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "The unit is mounted under the dash or behind trim, label side up, at least 8 cm from airbag modules, and never in the engine bay, in a door or outside the vehicle.",
+     "doc_needles": [
+      "at least 8 cm from airbag modules"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "The TrakNode T4 runs on 9 to 32 volts (12-volt and 24-volt vehicles), draws less than 3 milliamps asleep and wakes on ignition and on movement.",
+     "doc_needles": [
+      "9 to 32 volts",
+      "less than 3 milliamps"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "Out of cellular coverage the unit stores up to 9 days of trip data and sends it when coverage returns; beyond that the oldest data is overwritten first.",
+     "doc_needles": [
+      "up to 9 days of trip data"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "A small internal backup cell keeps the unit reporting for a short time after power is removed, long enough to send a \"power removed\" message with its position; the vehicle then shows as offline. The guide gives no duration.",
+     "doc_needles": [
+      "small internal backup cell",
+      "for a short time after power is removed"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "Activation checks: the network light turns solid green within 2 minutes, a first position fix takes up to 3 minutes, and the vehicle is driven at least 500 metres to confirm a trip.",
+     "doc_needles": [
+      "within 2 minutes",
+      "up to 3 minutes",
+      "at least 500 metres"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "Status lights: amber slow blink means no vehicle data (wrong harness or protocol not detected), amber fast blink means supply below 9 volts, amber solid means a firmware update is in progress.",
+     "doc_needles": [
+      "Supply below 9 volts",
+      "Firmware update in progress; do not unplug"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "The status lights switch off 10 minutes after the ignition is turned on; the recessed button shows them again.",
+     "doc_needles": [
+      "switch off 10 minutes after"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "Units leave the warehouse with firmware 4.4 or later; an over-the-air update installs with the ignition on, takes about 6 minutes and rolls back if it fails.",
+     "doc_needles": [
+      "firmware 4.4 or later",
+      "about 6 minutes"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "The RoadLens is powered from the camera port of the TrakNode T4 through a 3-metre camera cable, so the TrakNode is fitted first; one RoadLens can be connected to each TrakNode.",
+     "doc_needles": [
+      "3-metre camera cable",
+      "One RoadLens can be connected to each TrakNode"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "The camera goes on the windshield on the passenger side of the mirror, inside the wiper sweep, with its top edge no more than 6 cm below the headliner.",
+     "doc_needles": [
+      "no more than 6 cm below the headliner"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "The camera alignment drive is at least 3 km at more than 50 km/h on a road with lane markings, and is repeated if the camera is moved or the windshield replaced.",
+     "doc_needles": [
+      "at least 3 km at more than 50 km/h"
+     ]
+    },
+    {
+     "id": "F21",
+     "statement": "Three photographs per vehicle are uploaded from the installer page (unit, harness at the connector, serial label); they are optional for customers who fit their own units.",
+     "doc_needles": [
+      "Upload three photographs"
+     ]
+    },
+    {
+     "id": "F22",
+     "statement": "Faulty units go back through Kestravane support and a fitter never opens a unit.",
+     "doc_needles": [
+      "A fitter never opens a unit"
+     ]
+    },
+    {
+     "id": "F23",
+     "statement": "Leased and rented vehicles are fitted with the pad and cable ties only, without drilling or cutting the vehicle's wiring.",
+     "doc_needles": [
+      "Leased and rented vehicles"
+     ]
+    }
+   ],
+   "intentional_conflicts": [
+    {
+     "fact": "F8",
+     "with_file": "SALES-REF-VEHICLE-COMPAT-2026",
+     "this_value": "2008",
+     "other_value": "2010",
+     "resolution": "unresolved"
+    }
+   ],
+   "must_not_infer": [
+    "The guide does not say how long the backup cell keeps the unit reporting; the 9 days is the memory for trip data while out of coverage, not a battery life.",
+    "It says nothing about TempSense sensors beyond that they are not covered: no battery life, no temperature range, no fitting position.",
+    "It gives no installation times, no prices and no warranty terms.",
+    "The earliest model year for the plug-in connection stated here (2008) disagrees with the vehicle compatibility list (2010); neither document settles it.",
+    "It does not say whether a RoadLens can be fitted by the customer or how long fitting one takes."
+   ]
+  },
+  {
+   "id": "SALES-REF-RELEASE-NOTES-2026",
+   "mode": "sales",
+   "filename": "Kestravane_Fleet_Release_Notes_2026.md",
+   "source": "src/SALES-REF-RELEASE-NOTES-2026.md",
+   "format": "md",
+   "document_type": "release_notes",
+   "title": "Kestravane Fleet release notes 2026, releases 2026.1 to 2026.10",
+   "status": "current",
+   "effective_date": "2026-09-28",
+   "authority": 80,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "The release notes cover releases 2026.1 to 2026.10, were last updated on 2026-09-28, and describe shipped functionality only, with no statement about future releases.",
+     "doc_needles": [
+      "Last updated 2026-09-28",
+      "Releases 2026.1 to 2026.10"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "Release 2026.10 was deployed in the scheduled maintenance window on 2026-09-20; the web application and API were unavailable for 65 minutes.",
+     "doc_needles": [
+      "unavailable for 65 minutes"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "Release 2026.9 was deployed in the scheduled maintenance window on 2026-08-23; the web application and API were unavailable for 155 minutes.",
+     "doc_needles": [
+      "unavailable for 155 minutes"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "Release 2026.8 was deployed in the scheduled maintenance window on 2026-08-02; the web application and API were unavailable for 110 minutes.",
+     "doc_needles": [
+      "unavailable for 110 minutes"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "Release 2026.7 (2026-07-19) was firmware and email changes only, with no interruption.",
+     "doc_needles": [
+      "firmware and email changes only"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "Release 2026.6 was deployed on 2026-06-28; the web application and API were unavailable for 80 minutes.",
+     "doc_needles": [
+      "unavailable for 80 minutes"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "Release 2026.5 was deployed on 2026-06-14; the web application and API were unavailable for 140 minutes.",
+     "doc_needles": [
+      "unavailable for 140 minutes"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "Release 2026.4 was released behind a feature switch turned on on 2026-05-10, with no interruption.",
+     "doc_needles": [
+      "released behind a feature switch"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "Release 2026.3 was deployed on 2026-04-12; the web application and API were unavailable for 125 minutes.",
+     "doc_needles": [
+      "unavailable for 125 minutes"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "Release 2026.1 was deployed on 2026-01-11 and was unavailable for 70 minutes; release 2026.2 (2026-02-15) had no interruption.",
+     "doc_needles": [
+      "unavailable for 70 minutes"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "Custom dashboards (release 2026.2) are available on Operations and Enterprise: 12 per account on Operations, any number on Enterprise; Launch accounts keep the three built-in dashboards.",
+     "doc_needles": [
+      "Custom dashboards are available on Operations and Enterprise",
+      "three built-in dashboards"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "Saved report templates (release 2026.6): Operations accounts can keep 30 templates, Enterprise accounts have no limit, Launch accounts use the built-in reports.",
+     "doc_needles": [
+      "can keep 30 templates"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "Bulk edit (release 2026.6) changes up to 500 vehicle records in one action.",
+     "doc_needles": [
+      "Up to 500 vehicle records"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "Since release 2026.3 harsh braking is recorded from 0.38 g (previously 0.42 g), harsh acceleration from 0.33 g and harsh cornering from 0.36 g.",
+     "doc_needles": [
+      "0.38 g",
+      "0.42 g",
+      "0.33 g"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "Since release 2026.3 speeding is measured against the posted limit for the road, taken from map data, in place of one fleet-wide limit typed in by the administrator. The notes give no margin over the limit.",
+     "doc_needles": [
+      "measured against the posted limit"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "A driver's safety score is a number from 0 to 100, worked out each night from the previous 28 days of driving; braking, acceleration, cornering and speeding each make up a quarter of it.",
+     "doc_needles": [
+      "previous 28 days of driving",
+      "a quarter of the score"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "Since release 2026.4 the idle threshold can be set for each depot between 1 and 12 minutes (new depots start at 3 minutes), and the idle report shows an estimated cost from a fuel price the administrator enters.",
+     "doc_needles": [
+      "between 1 and 12 minutes",
+      "New depots start at 3 minutes"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "Since release 2026.5 a temperature excursion alert is raised only after the alert delay, settable between 2 and 30 minutes (new accounts start at 4 minutes); set-range profiles and a PDF temperature record were added.",
+     "doc_needles": [
+      "between 2 and 30 minutes",
+      "New accounts start at 4 minutes"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "TrakNode T4 firmware 4.5 was released on 2026-07-19 and rolled out over the air across ten days.",
+     "doc_needles": [
+      "firmware 4.5"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "Since release 2026.7 a RoadLens event clip starts 8 seconds before the trigger and ends 12 seconds after it; before, it ran 6 seconds either side.",
+     "doc_needles": [
+      "8 seconds before the trigger"
+     ]
+    },
+    {
+     "id": "F21",
+     "statement": "The depot comparison report (release 2026.8) is available on every plan.",
+     "doc_needles": [
+      "Depot comparison report: ranks depots"
+     ]
+    },
+    {
+     "id": "F22",
+     "statement": "Maintenance Planner gained parts lists and printable work orders in release 2026.9 and engine-hour schedules in release 2026.1.",
+     "doc_needles": [
+      "Maintenance Planner: parts lists"
+     ]
+    },
+    {
+     "id": "F23",
+     "statement": "The unavailable time given for a release is measured from the start of the interruption until the web application and API were serving requests again; firmware releases never need an interruption.",
+     "doc_needles": [
+      "measured time from the start of the interruption"
+     ]
+    },
+    {
+     "id": "F24",
+     "statement": "The web application is supported on the current and previous major version of Chrome, Edge, Firefox and Safari.",
+     "doc_needles": [
+      "Chrome, Edge, Firefox and Safari"
+     ]
+    },
+    {
+     "id": "F25",
+     "statement": "Known issues: a depot can belong to one region only, and a bulk change cannot be undone in one step.",
+     "doc_needles": [
+      "one region only"
+     ]
+    }
+   ],
+   "intentional_conflicts": [],
+   "must_not_infer": [
+    "The notes do not say how far over the posted limit a vehicle must be before a speeding event is recorded.",
+    "They are not a roadmap: nothing in them says what will ship next or when.",
+    "An unavailable time during a scheduled maintenance window is not an uptime figure and does not by itself mean a service credit is due.",
+    "A feature not mentioned in the notes is not thereby absent from the product; the notes list only what changed during 2026.",
+    "They give no prices."
+   ]
+  },
+  {
+   "id": "SALES-REF-VEHICLE-COMPAT-2026",
+   "mode": "sales",
+   "filename": "TrakNode_T4_Vehicle_Compatibility_2026-06.csv",
+   "source": "src/SALES-REF-VEHICLE-COMPAT-2026.csv",
+   "format": "csv",
+   "document_type": "compatibility_list",
+   "title": "TrakNode T4 vehicle compatibility list, edition 2026-06",
+   "status": "current",
+   "effective_date": "2026-06-08",
+   "authority": 80,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "The vehicle compatibility list is edition 2026-06, with each row last verified between April and June 2026.",
+     "doc_needles": [
+      "list_edition"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "The compatibility list gives gasoline vans (Ford Transit, Transit Connect, Ram ProMaster, Chevrolet Express, GMC Savana) the OBD-II 16-pin connection with harness KH-16Y and a minimum model year of 2010.",
+     "doc_needles": [
+      "Vans, gasoline",
+      "Chevrolet Express, GMC Savana"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "Diesel vans (Mercedes-Benz Sprinter, Ford Transit diesel, Ram ProMaster diesel) use KH-16Y from model year 2010 and send engine hours.",
+     "doc_needles": [
+      "Vans, diesel"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "Heavy-duty diesel pickups (Ford F-350, Ram 3500, GMC Sierra 3500HD) use KH-16Y from model year 2011.",
+     "doc_needles": [
+      "Pickups, heavy-duty diesel"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "Medium-duty cab-over trucks (Isuzu NPR, Isuzu NQR, Hino 195, Mitsubishi Fuso FE) use harness KH-16J from model year 2012; KH-16Y fits the connector but gives position only.",
+     "doc_needles": [
+      "16-pin carrying J1939",
+      "KH-16J",
+      "KH-16Y fits it but gives position only"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "Class 8 tractors from 2016 (Freightliner Cascadia, Kenworth T680, Peterbilt 579, International LT) use the green 9-pin connector with harness KH-9G.",
+     "doc_needles": [
+      "Class 8 tractors (2016 and later)"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "Class 8 tractors before 2016 use the black 9-pin connector with harness KH-9B, from model year 2007.",
+     "doc_needles": [
+      "Class 8 tractors (before 2016)"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "Class 8 vocational trucks from 2016 (Mack Granite, Kenworth T880, Peterbilt 567, Western Star 4700) use KH-9G; the unit is fitted inside the cab, never on the body.",
+     "doc_needles": [
+      "Class 8 vocational trucks (2016 and later)"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "Volvo and Mack tractors from 2016 use the green 9-pin connector with KH-9G; before 2016 they have the black connector and use KH-9B.",
+     "doc_needles": [
+      "Volvo and Mack tractors (2016 and later)"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "Yard tractors (Kalmar Ottawa T2, Capacity TJ, TICO Pro-Spotter) use the black 9-pin connector with harness KH-9B from model year 2010; the odometer is not sent, so engine hours are used for service schedules.",
+     "doc_needles": [
+      "Yard tractors",
+      "Odometer is not sent"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "Refuse trucks use KH-9G; power take-off time is reported apart from idling.",
+     "doc_needles": [
+      "Refuse trucks"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "Forklifts, construction plant and light vehicles older than the minimum model year use the KH-3W kit and report position, trips and ignition time only.",
+     "doc_needles": [
+      "Light vehicles older than the minimum model year"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "Motorcycles, ATVs and golf carts are not supported; no harness is offered.",
+     "doc_needles": [
+      "Motorcycles, ATVs and golf carts"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "Medium-duty conventional trucks use KH-9G (green 9-pin) from 2016 and KH-9B (black 9-pin) before 2016.",
+     "doc_needles": [
+      "Conventional trucks, medium duty (2016 and later)"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "On transit buses the fuel level is not sent on CNG buses.",
+     "doc_needles": [
+      "Fuel level is not sent on CNG buses"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "Gasoline step vans use KH-16Y from model year 2012; diesel step vans have the green 9-pin connector.",
+     "doc_needles": [
+      "Step vans"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "Gasoline pickups, cars and SUVs, and gasoline cutaway and box trucks use KH-16Y with a minimum model year of 2010.",
+     "doc_needles": [
+      "Pickups, gasoline",
+      "Cars and SUVs"
+     ]
+    }
+   ],
+   "intentional_conflicts": [
+    {
+     "fact": "F2",
+     "with_file": "SALES-REF-HARDWARE-INSTALL-2026",
+     "this_value": "2010",
+     "other_value": "2008",
+     "resolution": "unresolved"
+    }
+   ],
+   "must_not_infer": [
+    "The minimum model year for light vehicles stated here (2010) disagrees with the installation guide (2008); neither document settles it.",
+    "The recommended_fitting column is a recommendation; it does not forbid a customer from fitting a unit.",
+    "The list covers powered vehicles only and says nothing about trailers or other unpowered assets.",
+    "A vehicle or model that is not listed is not thereby unsupported; the list gives example models for each group.",
+    "It gives no prices for harnesses."
+   ]
+  }
+ ]
+}

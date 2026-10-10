@@ -1,0 +1,3072 @@
+{
+ "mode": "call-center",
+ "world": "Brindlewatch is a fictional consumer company (warehouse in the invented town of Tolliver Falls, US) that sells home security cameras - Lantern Cam (indoor), Eave Cam (outdoor, battery) and Trek Cam (portable, cellular) - with Keep subscriptions (Basic, Plus, Pro; monthly or annual) and a cellular add-on, Roam Link, that charges per-camera, per-calendar-day Roam Day fees abroad. The user is a Tier 1 Customer Care agent on live calls. The pack is the agent's policy shelf: verification, refunds, shipping, account recovery, privacy and camera access, escalation, billing and travel rates, an outage and troubleshooting guide, and a 2025 Support Policy Handbook that is outdated on verification and refunds. Two current documents genuinely disagree on how long Identity Review takes (3 vs 5 business days). All names, people and policies are invented.",
+ "files": [
+  {
+   "id": "CC-REF-VERIFICATION-2026",
+   "mode": "call-center",
+   "filename": "Brindlewatch_Account_Verification_Standard_v4.2.pdf",
+   "source": "src/CC-REF-VERIFICATION-2026.md",
+   "format": "pdf",
+   "document_type": "policy",
+   "title": "Brindlewatch Account Verification Standard v4.2",
+   "status": "current",
+   "effective_date": "2026-06-15",
+   "authority": 100,
+   "supersedes": [
+    "CC-REF-HANDBOOK-V2"
+   ],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "Standard verification requires the caller to give 3 of the 5 listed identifiers correctly before anything account-specific is discussed.",
+     "doc_needles": [
+      "3 of the 5 identifiers"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "The five identifiers are: full name on the account, login e-mail address, billing postal code, last four digits of the payment card on file, and the serial number of a registered camera.",
+     "doc_needles": [
+      "Serial number of a registered camera",
+      "Billing postal code"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "Agents never ask for a password, a full card number, an expiry date or a security code.",
+     "doc_needles": [
+      "Never ask for a password"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "After 2 failed attempts in the same contact the agent stops; the account is locked for phone and chat verification for 24 hours and the caller is pointed to Identity Review.",
+     "doc_needles": [
+      "After 2 failed attempts",
+      "verification for 24 hours"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "Step-up verification is a 6-digit one-time code sent to the phone number or e-mail address on file; it expires after 10 minutes.",
+     "doc_needles": [
+      "6-digit one-time code",
+      "expires after 10 minutes"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "Step-up verification is required before changing the login e-mail, adding or removing an Authorised Contact, filing a recordings Deletion Request, changing the delivery address on an open order, or closing the account.",
+     "doc_needles": [
+      "filing a recordings Deletion Request",
+      "delivery address on an open order"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "Only the account holder or a registered Authorised Contact may be helped with an account; spouses, partners, children, parents, housemates, landlords and installers are third parties however much they know and wherever they live.",
+     "doc_needles": [
+      "Everyone else is a third party",
+      "spouses, partners, children, parents"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "With a third party the agent gives general product and policy information only, does not confirm that an account exists, and invites them to have the account holder call or to be registered as an Authorised Contact.",
+     "doc_needles": [
+      "general product and policy information only"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "An account can have up to 2 Authorised Contacts, added by the account holder in the app or on a verified call after a step-up code.",
+     "doc_needles": [
+      "up to 2 Authorised Contacts"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "An Authorised Contact is verified by their own name plus a 4-digit contact PIN.",
+     "doc_needles": [
+      "4-digit contact PIN"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "An Authorised Contact may get troubleshooting help, check order status and billing status, and ask for a carrier trace.",
+     "doc_needles": [
+      "Check order status and billing status",
+      "Ask for a carrier trace"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "An Authorised Contact may not change the login e-mail or password, receive a reset link, change the payment method, delete recordings, request a refund or close the account.",
+     "doc_needles": [
+      "Change the payment method",
+      "or receive a reset link",
+      "Delete recordings, request a refund"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "Power of attorney, guardianship and accounts of customers who have died are handled by Tier 2 Account Integrity on documents; Tier 1 makes no change.",
+     "doc_needles": [
+      "Power of attorney, guardianship"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "A customer who cannot reach the e-mail on file is verified with 3 of 5 identifiers and then sent the step-up code by text message to the phone number on file; after that the login e-mail can be changed.",
+     "doc_needles": [
+      "step-up code by text message"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "With no phone number on file the route is Identity Review (form IR-7): government photo ID plus proof of purchase or a photo of a camera's serial label, decided by Tier 2 Account Integrity.",
+     "doc_needles": [
+      "government photo ID",
+      "form IR-7"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "The Verification Standard tells agents to say Identity Review takes up to 5 business days.",
+     "doc_needles": [
+      "allow up to 5 business days"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "A Tier 1 agent never changes a login e-mail without a confirmed step-up code or an approved IR-7.",
+     "doc_needles": [
+      "never changes a login e-mail"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "A call through a telephone relay service or video relay interpreter is treated as the customer speaking; the relay operator is not asked to verify.",
+     "doc_needles": [
+      "video relay interpreter",
+      "relay operator"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "On an assisted call a helper may speak for the account holder provided the account holder is present and consents, by voice or by replying YES to the consent message sent to the phone or e-mail on file.",
+     "doc_needles": [
+      "is present and consents",
+      "replying YES"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "The helper may relay the account holder's identifiers, and the consent covers that call only.",
+     "doc_needles": [
+      "Consent covers that call only"
+     ]
+    },
+    {
+     "id": "F21",
+     "statement": "Any customer may continue by live chat or by e-mail to the address on file, which agents offer unprompted when hearing is the difficulty; one-time codes can go by text message.",
+     "doc_needles": [
+      "continue by live chat",
+      "when hearing is the difficulty"
+     ]
+    },
+    {
+     "id": "F22",
+     "statement": "Reset links, one-time codes and security notices are sent only to the contact details on file, including during an assisted call, and never to a helper's e-mail address or phone.",
+     "doc_needles": [
+      "never to a helper's e-mail address",
+      "never where credentials go"
+     ]
+    },
+    {
+     "id": "F23",
+     "statement": "A helper who needs lasting access is set up as an Authorised Contact or through a Shared Access invitation, which gives view-only access to chosen cameras.",
+     "doc_needles": [
+      "Shared Access invitation",
+      "view-only access to chosen cameras"
+     ]
+    },
+    {
+     "id": "F24",
+     "statement": "Customers who need more time can book a 45-minute accessibility appointment on Tuesday and Thursday afternoons.",
+     "doc_needles": [
+      "45-minute accessibility appointment"
+     ]
+    },
+    {
+     "id": "F25",
+     "statement": "A business account is verified through its named administrator; other employees are third parties.",
+     "doc_needles": [
+      "administrator named on it"
+     ]
+    },
+    {
+     "id": "F26",
+     "statement": "Ticket notes record which identifiers were used, never their values.",
+     "doc_needles": [
+      "never their values"
+     ]
+    },
+    {
+     "id": "F27",
+     "statement": "The Verification Standard is version 4.2, effective 15 June 2026, and replaces earlier verification guidance including section 2 of the Support Policy Handbook.",
+     "doc_needles": [
+      "Effective 15 June 2026",
+      "Support Policy Handbook"
+     ]
+    }
+   ],
+   "intentional_conflicts": [
+    {
+     "fact": "F1",
+     "with_file": "CC-REF-HANDBOOK-V2",
+     "this_value": "3 of the 5",
+     "other_value": "2 of the 4",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F4",
+     "with_file": "CC-REF-HANDBOOK-V2",
+     "this_value": "After 2 failed attempts",
+     "other_value": "up to three attempts",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F7",
+     "with_file": "CC-REF-HANDBOOK-V2",
+     "this_value": "Everyone else is a third party",
+     "other_value": "as if they were the account",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F22",
+     "with_file": "CC-REF-HANDBOOK-V2",
+     "this_value": "never to a helper's e-mail address",
+     "other_value": "alternate e-mail address",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F16",
+     "with_file": "CC-REF-RECOVERY-2026",
+     "this_value": "up to 5 business days",
+     "other_value": "up to 3 business days",
+     "resolution": "unresolved"
+    }
+   ],
+   "must_not_infer": [
+    "Nothing here says an Authorised Contact may change the plan or cancel a subscription; the list of what they may do is troubleshooting, order and billing status, and carrier traces.",
+    "Nothing here lets an agent send a reset link or code to a helper, relative or Authorised Contact.",
+    "Nothing here describes how to transfer an account to a new owner.",
+    "The accessibility appointment is a scheduling option, not a different verification standard."
+   ]
+  },
+  {
+   "id": "CC-REF-REFUND-2026",
+   "mode": "call-center",
+   "filename": "Brindlewatch_Refund_and_Cancellation_Policy.pdf",
+   "source": "src/CC-REF-REFUND-2026.md",
+   "format": "pdf",
+   "document_type": "policy",
+   "title": "Brindlewatch Refund and Cancellation Policy v3.1",
+   "status": "current",
+   "effective_date": "2026-07-01",
+   "authority": 100,
+   "supersedes": [
+    "CC-REF-HANDBOOK-V2"
+   ],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "Subscriptions billed through a phone's app store cannot be refunded by Brindlewatch; the customer has to ask the app store.",
+     "doc_needles": [
+      "ask the app store"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "Cameras bought from a retail partner go back to the retailer under the retailer's rules.",
+     "doc_needles": [
+      "go back to the retailer"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "An annual plan charge (first purchase or renewal) is refunded in full if the customer asks within 30 days of the charge date.",
+     "doc_needles": [
+      "within 30 days of the charge"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "After the annual refund window there is no refund for the unused part of the term; the plan stays active until the term ends and auto-renew can be switched off.",
+     "doc_needles": [
+      "unused part of the term",
+      "auto-renew can be switched off"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "A monthly plan gets no refund for a partial month; cancelling stops the next charge and the plan runs to the end of the paid month.",
+     "doc_needles": [
+      "No refund for a partial month"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "A monthly renewal charge is refunded in full if the customer cancels within 48 hours of that charge.",
+     "doc_needles": [
+      "within 48 hours of that charge"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "Renewal reminders are e-mailed 21 days and again 3 days before an annual renewal; not seeing one does not extend the refund window.",
+     "doc_needles": [
+      "21 days before the renewal date",
+      "does not extend the refund window"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "Moving to a cheaper plan during an annual term gives a credit of (old annual price - new annual price) / 12 x full months remaining, as account credit and not paid back to the card.",
+     "doc_needles": [
+      "/ 12 x full months remaining",
+      "not paid back to the card"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "A camera bought directly can be returned for any reason within 60 days of the delivery date.",
+     "doc_needles": [
+      "within 60 days of the delivery"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "Original shipping is refunded only for a defective camera; the return label is free if defective, otherwise $8 is deducted from the refund.",
+     "doc_needles": [
+      "$8 is deducted"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "A subscription bought in the same order as a camera returned in time is refunded in full as well.",
+     "doc_needles": [
+      "refunded in full as well"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "Cameras carry a 2-year limited warranty against defects (repair or replace).",
+     "doc_needles": [
+      "2-year limited warranty"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "A refund goes back to the original payment method only, never to a different card, a bank account, a gift card or another person.",
+     "doc_needles": [
+      "original payment method and nowhere else"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "If the original card was closed or replaced the card issuer normally forwards the refund; if the issuer returns the money, Billing Operations (Tier 2) arranges a cheque or account credit.",
+     "doc_needles": [
+      "card issuer normally forwards",
+      "arranges a cheque or account credit"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "Card refunds take 5 to 7 business days after approval.",
+     "doc_needles": [
+      "5 to 7 business days"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "Digital-wallet refunds take up to 3 business days, direct bank debit up to 10 business days, account credit the same day.",
+     "doc_needles": [
+      "up to 10 business days"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "Refund exceptions (charged after a confirmed cancellation, death of the account holder, defective camera awaiting replacement, documented billing error) each need a supervisor's approval whatever the amount.",
+     "doc_needles": [
+      "charged after a cancellation",
+      "supervisor's approval whatever the amount"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "Forgetting to cancel, not using the service, moving home or switching brand are not exceptions.",
+     "doc_needles": [
+      "not using the service"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "A duplicate charge (same plan, same amount, same day) is reversed by a Tier 1 agent on the spot, whatever the amount.",
+     "doc_needles": [
+      "duplicate charge",
+      "reverses it on the spot"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "A Tier 1 agent may approve refunds that the policy plainly allows up to $150 per request.",
+     "doc_needles": [
+      "up to $150 per request"
+     ]
+    },
+    {
+     "id": "F21",
+     "statement": "A supervisor (Team Lead) approves refunds above $150 and up to $500, and every exception.",
+     "doc_needles": [
+      "above $150 and up to $500"
+     ]
+    },
+    {
+     "id": "F22",
+     "statement": "The Billing Operations manager approves refunds above $500 and any refund by cheque.",
+     "doc_needles": [
+      "Refunds above $500"
+     ]
+    },
+    {
+     "id": "F23",
+     "statement": "When a refund needs a supervisor the Tier 1 agent submits it and tells the customer it is submitted, that a supervisor decides, and that the decision arrives by e-mail within 2 business days, without saying or implying it will be approved.",
+     "doc_needles": [
+      "by e-mail within 2 business days",
+      "does not say or imply"
+     ]
+    },
+    {
+     "id": "F24",
+     "statement": "If the customer has already disputed the charge with their bank, the agent does not refund and routes the ticket to Billing Operations.",
+     "doc_needles": [
+      "disputed the charge with their bank"
+     ]
+    },
+    {
+     "id": "F25",
+     "statement": "The Refund and Cancellation Policy is version 3.1, effective 1 July 2026.",
+     "doc_needles": [
+      "Effective 1 July 2026"
+     ]
+    },
+    {
+     "id": "F26",
+     "statement": "Gift subscriptions cannot be refunded once activated.",
+     "doc_needles": [
+      "Gift subscriptions"
+     ]
+    }
+   ],
+   "intentional_conflicts": [
+    {
+     "fact": "F3",
+     "with_file": "CC-REF-HANDBOOK-V2",
+     "this_value": "within 30 days of the charge",
+     "other_value": "within 45 days",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F5",
+     "with_file": "CC-REF-HANDBOOK-V2",
+     "this_value": "No refund for a partial month",
+     "other_value": "pro rata",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F15",
+     "with_file": "CC-REF-HANDBOOK-V2",
+     "this_value": "5 to 7 business days",
+     "other_value": "10 to 14 business days",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F20",
+     "with_file": "CC-REF-HANDBOOK-V2",
+     "this_value": "up to $150 per request",
+     "other_value": "$250",
+     "resolution": "current_wins"
+    }
+   ],
+   "must_not_infer": [
+    "This policy does not mention the 2025 handbook; that it prevails is decidable only from its later date and version.",
+    "A supervisor being able to approve an exception does not let a Tier 1 agent promise it.",
+    "Nothing here says a stolen or lost camera is replaced, and nothing says it is not; the warranty wording covers defects only.",
+    "Nothing here gives a refund for not using the service.",
+    "The 60-day camera return window is not the subscription refund window."
+   ]
+  },
+  {
+   "id": "CC-REF-SHIPPING-2026",
+   "mode": "call-center",
+   "filename": "Shipping_and_Delivery_Policy_May2026.docx",
+   "source": "src/CC-REF-SHIPPING-2026.md",
+   "format": "docx",
+   "document_type": "policy",
+   "title": "Shipping and Delivery Policy (revision of 4 May 2026)",
+   "status": "current",
+   "effective_date": "2026-05-04",
+   "authority": 100,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "Standard delivery is estimated at 4 to 7 business days and costs $6.95, free on orders of $75 or more.",
+     "doc_needles": [
+      "4 to 7 business days",
+      "orders of $75 or more"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "Expedited delivery is estimated at 2 to 3 business days and costs $14.95.",
+     "doc_needles": [
+      "2 to 3 business days",
+      "$14.95"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "Next Business Day delivery costs $29.00 and applies when ordered by 1:00 pm Central.",
+     "doc_needles": [
+      "1:00 pm Central"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "Canada gets Standard delivery only, 8 to 12 business days, $19.50, with import duties paid by the customer.",
+     "doc_needles": [
+      "8 to 12 business days",
+      "$19.50"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "Standard and Expedited parcels travel with Corvane Parcel, Next Business Day with Halberd Air; PO boxes get Standard only.",
+     "doc_needles": [
+      "Corvane Parcel",
+      "Halberd Air"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "Brindlewatch does not guarantee a delivery date on any method; agents quote the estimated range and do not promise a particular day.",
+     "doc_needles": [
+      "do not guarantee a delivery date",
+      "do not promise a particular day"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "If a Next Business Day order arrives late its $29.00 shipping charge is refunded automatically; late Standard and Expedited orders are not compensated.",
+     "doc_needles": [
+      "shipping charge is refunded automatically"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "For a delivered-but-missing parcel the agent first confirms the address and asks the customer to check with the household, neighbours, building office and around the property.",
+     "doc_needles": [
+      "with neighbours"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "The customer waits 48 hours from the delivered scan, because carriers sometimes scan before dropping off.",
+     "doc_needles": [
+      "48 hours from the delivered scan"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "After those 48 hours a Tier 1 agent opens a carrier trace.",
+     "doc_needles": [
+      "opens a carrier trace"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "A delivered-but-missing parcel must be reported within 14 calendar days of the delivered scan; later reports go to a supervisor.",
+     "doc_needles": [
+      "within 14 calendar days"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "A carrier trace takes up to 6 business days and the customer is e-mailed when the carrier answers.",
+     "doc_needles": [
+      "up to 6 business days"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "If the trace does not find the parcel the customer chooses a replacement sent Expedited at no charge or a refund to the original payment method.",
+     "doc_needles": [
+      "replacement sent Expedited at no charge"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "A Tier 1 agent may approve the replacement or refund for orders up to $300; above that a supervisor approves.",
+     "doc_needles": [
+      "orders up to $300"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "No replacement or refund is issued before the trace closes.",
+     "doc_needles": [
+      "before the trace closes"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "A second delivered-but-missing claim on the same account within 12 months is passed to Tier 2 Order Integrity and any replacement is sent signature required.",
+     "doc_needles": [
+      "passed to Tier 2 Order Integrity",
+      "within 12 months"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "With no delivered scan and no tracking movement for 5 business days (10 for Canada) the parcel is treated as lost and a Tier 1 agent sends a replacement straight away without a trace.",
+     "doc_needles": [
+      "no movement for 5 business days",
+      "sends a replacement straight away"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "Brindlewatch carries the risk until the carrier records delivery at the address the customer gave.",
+     "doc_needles": [
+      "carries the risk until the carrier"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "If the customer entered a wrong address: a parcel that comes back is resent for a $6.95 reshipping fee; a parcel delivered to the address as entered is the customer's responsibility and no free replacement is sent.",
+     "doc_needles": [
+      "$6.95 reshipping fee",
+      "no free replacement is sent"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "For freight forwarders and parcel-receiving services, responsibility ends when the parcel is delivered to the forwarder.",
+     "doc_needles": [
+      "delivered to the forwarder"
+     ]
+    },
+    {
+     "id": "F21",
+     "statement": "Orders over $400 are sent with signature required.",
+     "doc_needles": [
+      "Orders over $400"
+     ]
+    },
+    {
+     "id": "F22",
+     "statement": "Damage must be reported within 7 calendar days of delivery with photos; a replacement and a prepaid label are sent.",
+     "doc_needles": [
+      "within 7 calendar days of delivery"
+     ]
+    },
+    {
+     "id": "F23",
+     "statement": "The delivery address can be changed, after step-up verification, until the order status shows Label created; afterwards only through the carrier's redirect service.",
+     "doc_needles": [
+      "order status shows Label created"
+     ]
+    },
+    {
+     "id": "F24",
+     "statement": "The Shipping and Delivery Policy is the revision of 4 May 2026.",
+     "doc_needles": [
+      "Revision of 4 May 2026"
+     ]
+    }
+   ],
+   "intentional_conflicts": [],
+   "must_not_infer": [
+    "A delivery estimate, or an expected date on the tracking page, is not a guarantee.",
+    "Next Business Day refunds its shipping charge when late; that is not a delivery guarantee.",
+    "Nothing here covers theft of a camera after it was delivered and installed.",
+    "Nothing here says what happens on a third delivered-but-missing claim."
+   ]
+  },
+  {
+   "id": "CC-REF-RECOVERY-2026",
+   "mode": "call-center",
+   "filename": "Password_and_Account_Recovery_Procedure_v2.3.docx",
+   "source": "src/CC-REF-RECOVERY-2026.md",
+   "format": "docx",
+   "document_type": "procedure",
+   "title": "Password and Account Recovery Procedure v2.3",
+   "status": "current",
+   "effective_date": "2026-04-20",
+   "authority": 100,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "Agents cannot see, read out or set a customer's password; they can trigger a reset e-mail from the console.",
+     "doc_needles": [
+      "cannot see, read out or set",
+      "trigger a reset e-mail"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "The reset link goes to the login e-mail address on file; any exception is set by the Account Verification Standard.",
+     "doc_needles": [
+      "login e-mail address on file"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "A reset link expires 30 minutes after it is sent.",
+     "doc_needles": [
+      "expires 30 minutes after"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "The reset e-mail can take up to 5 minutes to arrive; the customer should look in junk and promotions folders before another is sent.",
+     "doc_needles": [
+      "up to 5 minutes to arrive"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "No more than 5 reset e-mails can be sent to one account in 24 hours.",
+     "doc_needles": [
+      "No more than 5 reset e-mails"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "The Recovery Procedure tells agents to say Identity Review takes up to 3 business days.",
+     "doc_needles": [
+      "allow up to 3 business days"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "A customer who cannot get into the e-mail on file is sent a one-time code by text message to the phone on file; then the login e-mail is changed and the reset sent there.",
+     "doc_needles": [
+      "one-time code by text message"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "Two-step sign-in comes with 10 single-use backup codes; a customer with no authenticator and no codes goes through Identity Review, and agents cannot switch two-step sign-in off.",
+     "doc_needles": [
+      "10 backup codes",
+      "cannot switch two-step sign-in off"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "After 6 failed sign-in attempts the account locks for 15 minutes and agents cannot lift the lock.",
+     "doc_needles": [
+      "After 6 failed sign-in attempts",
+      "locks for 15 minutes"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "When a login e-mail was changed without the customer's knowledge, Tier 1 does not change it back, does not send a reset to either address, does not remove devices, and escalates at once to the Trust & Security desk as Priority 1.",
+     "doc_needles": [
+      "do not change the e-mail back",
+      "Security desk as Priority 1"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "Security freezes the account (signs out every session, pauses Shared Access) and restores it to its owner.",
+     "doc_needles": [
+      "signs out every session"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "When a login e-mail is changed the previous address receives a notice with a \"This wasn't me\" link that works for 7 days and reverses the change immediately.",
+     "doc_needles": [
+      "The link works for 7 days",
+      "reverses the change immediately"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "For 72 hours after any change of login e-mail, deleting recordings, removing cameras and changing the payment method are blocked.",
+     "doc_needles": [
+      "For 72 hours after any change",
+      "deleting recordings, removing cameras"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "A sign-in from a new device sends an alert e-mail; the customer can use Sign out everywhere, and an alert the customer cannot explain goes to the Trust & Security desk.",
+     "doc_needles": [
+      "Sign out everywhere"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "Shared Access lets the account holder invite up to 4 guests who can watch live view and clips but cannot change settings, delete anything or see billing.",
+     "doc_needles": [
+      "up to 4 guests"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "The Password and Account Recovery Procedure is version 2.3, effective 20 April 2026.",
+     "doc_needles": [
+      "Effective 20 April 2026"
+     ]
+    }
+   ],
+   "intentional_conflicts": [
+    {
+     "fact": "F6",
+     "with_file": "CC-REF-VERIFICATION-2026",
+     "this_value": "up to 3 business days",
+     "other_value": "up to 5 business days",
+     "resolution": "unresolved"
+    }
+   ],
+   "must_not_infer": [
+    "Nothing here lets an agent set, read or reveal a password.",
+    "The 72-hour block and the 7-day reversal link are not a promise of when Security will restore an account.",
+    "Shared Access guests are not Authorised Contacts."
+   ]
+  },
+  {
+   "id": "CC-REF-PRIVACY-2026",
+   "mode": "call-center",
+   "filename": "Brindlewatch_Privacy_and_Camera_Access_Policy_v5.pdf",
+   "source": "src/CC-REF-PRIVACY-2026.md",
+   "format": "pdf",
+   "document_type": "policy",
+   "title": "Brindlewatch Privacy and Camera Access Policy v5.0",
+   "status": "current",
+   "effective_date": "2026-03-01",
+   "authority": 100,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "No Brindlewatch employee or contractor, at any tier, can watch a customer's live view; no internal tool opens a live stream.",
+     "doc_needles": [
+      "can watch a customer's live view",
+      "no internal tool that opens"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "The live stream is encrypted between the camera and the devices signed in to the customer's account.",
+     "doc_needles": [
+      "encrypted between the camera"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "Recorded clips are stored encrypted; Tier 1 agents cannot open, play or download a clip and the console shows no video, still images or audio.",
+     "doc_needles": [
+      "cannot open, play or download",
+      "no still images and no audio"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "With Share with Support the customer shares one clip, which can be viewed for 72 hours only by the Tier 2 Device Diagnostics engineer assigned to the ticket; every viewing is logged and the customer can withdraw the share.",
+     "doc_needles": [
+      "Share with Support",
+      "viewed for 72 hours",
+      "Every viewing is logged"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "Staff can see a recording in only two situations: the customer shares it, or the law requires it.",
+     "doc_needles": [
+      "only two situations"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "Agents can see whether a camera is online, when it was last online, firmware version, the plan and the daily count of motion events.",
+     "doc_needles": [
+      "how many motion events"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "Keep Basic clips are kept for 14 days.",
+     "doc_needles": [
+      "14 days"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "Keep Plus clips are kept for 30 days.",
+     "doc_needles": [
+      "Keep Plus"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "Keep Pro clips are kept for 60 days.",
+     "doc_needles": [
+      "60 days"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "Cancelling a plan does not delete the clips already recorded; each stays until its own retention period runs out.",
+     "doc_needles": [
+      "does not delete the clips",
+      "own retention period runs out"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "Customers delete their own recordings in the app under Settings > Privacy > Delete all recordings, after entering the account password.",
+     "doc_needles": [
+      "Delete all recordings",
+      "asks for the account password"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "Deleted clips disappear from the account immediately, are erased from primary storage within 24 hours and from backups within 30 days; deletion cannot be undone.",
+     "doc_needles": [
+      "disappear from the account immediately",
+      "primary storage within 24 hours",
+      "from backups within 30 days"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "Agents cannot delete recordings from the support console.",
+     "doc_needles": [
+      "Agents cannot delete recordings"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "If the customer cannot use the app the Tier 1 agent completes step-up verification and files a Deletion Request (form DR-2); the Privacy Office carries it out within 4 business days and confirms by e-mail.",
+     "doc_needles": [
+      "form DR-2",
+      "within 4 business days"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "Erasing an entire account is a separate request to the Privacy Office, completed within 30 calendar days.",
+     "doc_needles": [
+      "within 30 calendar days"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "Recordings under a legal preservation order are held until it ends; Tier 1 agents are not told which accounts and refer enquiries to the Privacy Office.",
+     "doc_needles": [
+      "legal preservation order"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "Every request from police, a government body, a court or a lawyer is handled only by the Legal Response team at legalresponse@brindlewatch.example.",
+     "doc_needles": [
+      "legalresponse@brindlewatch.example",
+      "Legal Response team"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "A Tier 1 agent who gets such a call does not confirm whether the person named has an account, shares nothing, gives the Legal Response address and logs the call.",
+     "doc_needles": [
+      "does not confirm whether the person"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "Recordings are handed over only in response to a search warrant or court order; a subpoena obtains basic account details only, never video.",
+     "doc_needles": [
+      "search warrant or court order",
+      "never video"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "Where there is imminent danger of death or serious physical injury, Legal Response alone may disclose without a court order and can be reached around the clock.",
+     "doc_needles": [
+      "imminent danger of death"
+     ]
+    },
+    {
+     "id": "F21",
+     "statement": "The account holder is told before disclosure unless the law forbids it.",
+     "doc_needles": [
+      "unless the law forbids it"
+     ]
+    },
+    {
+     "id": "F22",
+     "statement": "A customer who wants the police to have their own footage can download the clips and hand them over themselves.",
+     "doc_needles": [
+      "hand them over themselves"
+     ]
+    },
+    {
+     "id": "F23",
+     "statement": "Sound recording is off by default on Eave Cam.",
+     "doc_needles": [
+      "Sound recording is off by default"
+     ]
+    },
+    {
+     "id": "F24",
+     "statement": "Familiar Faces is opt-in and its data can be erased by the customer.",
+     "doc_needles": [
+      "Familiar Faces"
+     ]
+    },
+    {
+     "id": "F25",
+     "statement": "Brindlewatch does not sell customer data or video.",
+     "doc_needles": [
+      "do not sell customer data"
+     ]
+    },
+    {
+     "id": "F26",
+     "statement": "The Privacy and Camera Access Policy is version 5.0, effective 1 March 2026.",
+     "doc_needles": [
+      "Effective 1 March 2026"
+     ]
+    }
+   ],
+   "intentional_conflicts": [],
+   "must_not_infer": [
+    "Nothing here says in which country, region or data centre video is stored, or which cloud provider is used.",
+    "Nothing here names a security or privacy certification (SOC 2, ISO 27001, GDPR or CCPA status).",
+    "'Disappear from the account immediately' does not mean erased everywhere immediately: primary storage takes up to 24 hours and backups up to 30 days.",
+    "Tier 1 agents cannot view a clip even when the customer shares it; only the assigned Tier 2 engineer can."
+   ]
+  },
+  {
+   "id": "CC-REF-ESCALATION-2026",
+   "mode": "call-center",
+   "filename": "Support_Escalation_Matrix_v6.docx",
+   "source": "src/CC-REF-ESCALATION-2026.md",
+   "format": "docx",
+   "document_type": "handbook",
+   "title": "Customer Care Escalation Matrix v6",
+   "status": "current",
+   "effective_date": "2026-08-10",
+   "authority": 100,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "Tier 1 verifies callers, handles plan and billing enquiries, plan changes, refunds within its limit, order status, carrier traces and the six troubleshooting steps; most contacts should end at Tier 1.",
+     "doc_needles": [
+      "should end at Tier 1"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "A device fault goes to Tier 2 Device Diagnostics when all six troubleshooting steps are done and the fault remains, when the light is solid red, or when it is the customer's third contact about the same fault within 14 days even if the steps were not all repeated.",
+     "doc_needles": [
+      "All six troubleshooting steps are done",
+      "third contact about the same fault"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "Tier 2 Account Integrity takes Identity Review (IR-7), power of attorney or guardianship, and accounts of holders who have died.",
+     "doc_needles": [
+      "power of attorney or guardianship"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "Tier 2 Billing Operations takes refunds that cannot reach the original payment method, chargebacks, invoice errors and travel-charge disputes beyond the first-trip courtesy.",
+     "doc_needles": [
+      "travel-charge dispute beyond the first-trip courtesy"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "Tier 2 Order Integrity takes a second delivered-but-missing claim within 12 months and suspected reselling or fraud.",
+     "doc_needles": [
+      "second delivered-but-missing claim"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "Tier 2 handover is a warm transfer Monday to Saturday, 8:00 am to 8:00 pm Central; outside those hours a ticket, with first contact within 1 business day.",
+     "doc_needles": [
+      "8:00 am to 8:00 pm Central",
+      "first contact within 1 business day"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "Before handing over the agent writes up what was reported, steps done, and firmware version and light colour for a device fault.",
+     "doc_needles": [
+      "firmware version and light colour"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "Tier 1 never contacts Engineering; only Tier 2 opens an Engineering case, when a defect is reproduced on 5 or more accounts on the same firmware version or recordings have been lost.",
+     "doc_needles": [
+      "Tier 1 never contacts Engineering",
+      "5 or more accounts"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "Engineering has no customer-facing response target; agents do not quote a fix date or a firmware release date.",
+     "doc_needles": [
+      "do not quote a fix date"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "Security cases go straight from Tier 1 to the Trust & Security desk, not through Tier 2; the desk is staffed 24 hours a day, every day, and every case is Priority 1.",
+     "doc_needles": [
+      "not routed through Tier 2",
+      "staffed 24 hours a day"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "Security triggers: someone else in the account or watching cameras, login e-mail changed without the customer, an unfamiliar voice through a camera's speaker, an unrecognised device in the Devices list, danger from someone with access, a reported security weakness.",
+     "doc_needles": [
+      "an unfamiliar voice has come through",
+      "the login e-mail was changed"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "The agent warm-transfers and stays on the line until Security answers; if nobody answers within 10 minutes the agent opens a Priority 1 ticket and tells the customer Security will call back within 1 hour.",
+     "doc_needles": [
+      "until Security answers",
+      "within 10 minutes",
+      "call back within 1 hour"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "In security cases the agent does not troubleshoot, reset passwords or remove devices.",
+     "doc_needles": [
+      "Do not troubleshoot, reset passwords"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "If a customer asks for a supervisor the agent never refuses; if none is free a supervisor calls back within 4 business hours.",
+     "doc_needles": [
+      "Never refuse",
+      "calls back within 4 business hours"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "A refund above the Tier 1 approval limit, or any refund exception, goes to a supervisor.",
+     "doc_needles": [
+      "above the Tier 1 approval limit"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "A Tier 1 agent may give a goodwill credit of up to $25, once per account in any 3 months; more needs a supervisor.",
+     "doc_needles": [
+      "goodwill credit of up to $25",
+      "in any 3 months"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "If the customer threatens legal action or the press, the case goes to a supervisor, who informs Legal Response.",
+     "doc_needles": [
+      "threatens legal action"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "A caller who remains abusive after 2 warnings goes to a supervisor.",
+     "doc_needles": [
+      "abusive after 2 warnings"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "Deletion and data-copy requests go to the Privacy Office; anything from police, courts or lawyers goes to Legal Response and is never handled on the call.",
+     "doc_needles": [
+      "never handled on the call"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "When escalating, the agent gives the ticket number, the team name and that team's response target, and does not promise an outcome or a resolution time.",
+     "doc_needles": [
+      "Do not promise an outcome",
+      "the ticket number"
+     ]
+    },
+    {
+     "id": "F21",
+     "statement": "The Escalation Matrix is version 6, effective 10 August 2026.",
+     "doc_needles": [
+      "Effective 10 August 2026"
+     ]
+    },
+    {
+     "id": "F22",
+     "statement": "If unsure which Tier 2 desk applies the agent asks in the Tier 2 duty channel before transferring.",
+     "doc_needles": [
+      "Tier 2 duty channel"
+     ]
+    }
+   ],
+   "intentional_conflicts": [],
+   "must_not_infer": [
+    "A response target is when a team first responds, not when the problem is resolved.",
+    "This document does not state the Tier 1 refund approval limit as an amount.",
+    "An upset or angry caller is not an abusive caller.",
+    "Nothing here gives customers a fix date or an Engineering contact."
+   ]
+  },
+  {
+   "id": "CC-REF-BILLING-TRAVEL-2026",
+   "mode": "call-center",
+   "filename": "Brindlewatch_Billing_Guide_and_Roam_Link_Rates_2026.pdf",
+   "source": "src/CC-REF-BILLING-TRAVEL-2026.md",
+   "format": "pdf",
+   "document_type": "pricing",
+   "title": "Brindlewatch Billing Guide and Roam Link Rates v2.4",
+   "status": "current",
+   "effective_date": "2026-02-01",
+   "authority": 100,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "Keep Basic costs $6 per month or $60 per year, covers 1 camera and keeps 14 days of clips.",
+     "doc_needles": [
+      "$6 per month",
+      "$60 per year"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "Keep Plus costs $13 per month or $130 per year, covers up to 5 cameras and keeps 30 days of clips.",
+     "doc_needles": [
+      "$13 per month",
+      "$130 per year"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "Keep Pro costs $22 per month or $220 per year, covers up to 20 cameras and keeps 60 days of clips plus continuous recording.",
+     "doc_needles": [
+      "$22 per month",
+      "$220 per year"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "Without a plan a camera gives live view and alerts but nothing is recorded.",
+     "doc_needles": [
+      "nothing is recorded"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "A monthly plan bills on the same day of each month as it started, or the last day of a shorter month.",
+     "doc_needles": [
+      "same day of each month"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "Moving up on a monthly plan takes effect at once and is charged (new monthly price - old monthly price) x days remaining / 30, every month being treated as 30 days.",
+     "doc_needles": [
+      "x days remaining / 30",
+      "treated as 30 days"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "Moving down on a monthly plan takes effect on the next billing date with no credit for the current month.",
+     "doc_needles": [
+      "no credit for the current month"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "Roam Link costs $5 per camera per month and covers the United States.",
+     "doc_needles": [
+      "$5 per camera per month"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "Each Trek Cam on Roam Link includes 3 GB of data per month, not shared between cameras.",
+     "doc_needles": [
+      "3 GB of data per month",
+      "not shared between cameras"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "Extra Roam Link data is $4 per GB, with a part GB rounded up to a whole one.",
+     "doc_needles": [
+      "$4 per GB",
+      "rounded up to a whole one"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "The Zone 1 (Canada, Mexico) Roam Day fee is $10 per camera per day.",
+     "doc_needles": [
+      "$10 per camera per day",
+      "Canada, Mexico"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "The Zone 2 (United Kingdom, Ireland, European Union) Roam Day fee is $15 per camera per day.",
+     "doc_needles": [
+      "$15 per camera per day"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "Roam Day fees are capped per camera per billing cycle at $60 in Zone 1 and $90 in Zone 2; the cap counts Roam Day fees only.",
+     "doc_needles": [
+      "$90",
+      "cap counts Roam Day fees only"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "A Roam Week pass costs $45 per camera in Zone 1 and $70 per camera in Zone 2 and covers one camera for 7 consecutive calendar days from activation.",
+     "doc_needles": [
+      "$45 per camera",
+      "$70 per camera",
+      "7 consecutive calendar days"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "A Roam Week pass has to be activated before the camera first connects abroad and cannot be added to a trip afterwards.",
+     "doc_needles": [
+      "before the camera first connects abroad"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "Days abroad outside the pass's 7 days are charged as Roam Days.",
+     "doc_needles": [
+      "are charged as Roam Days"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "A Roam Day is a calendar day, midnight to midnight in the account's home time zone, not a 24-hour period from first connection.",
+     "doc_needles": [
+      "A day is a calendar day",
+      "home time zone"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "Any connection to a partner network on a day, however short, makes it a Roam Day.",
+     "doc_needles": [
+      "however short"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "Each Trek Cam is charged Roam Day fees separately.",
+     "doc_needles": [
+      "Each Trek Cam is charged separately"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "A camera that is switched off or set to Wi-Fi only is not charged.",
+     "doc_needles": [
+      "set to Wi-Fi only"
+     ]
+    },
+    {
+     "id": "F21",
+     "statement": "Roam Link does not work outside the United States, Zone 1 and Zone 2.",
+     "doc_needles": [
+      "does not work in other countries"
+     ]
+    },
+    {
+     "id": "F22",
+     "statement": "Invoice lines read ROAM DAY Z1 or ROAM DAY Z2 and the quantity is camera-days.",
+     "doc_needles": [
+      "ROAM DAY Z1",
+      "quantity is camera-days"
+     ]
+    },
+    {
+     "id": "F23",
+     "statement": "A Roam Day charge is correct when the connection log shows the camera on a partner network that day; Tier 1 agents see the camera-day count but not the log.",
+     "doc_needles": [
+      "but not the log"
+     ]
+    },
+    {
+     "id": "F24",
+     "statement": "First-trip courtesy: if the invoice is the account's first ever with Roam Day fees, a Tier 1 agent may credit up to $30 of them, once per account.",
+     "doc_needles": [
+      "credit up to $30",
+      "First-trip courtesy"
+     ]
+    },
+    {
+     "id": "F25",
+     "statement": "Any larger travel-charge adjustment, or a second request, goes to Billing Operations (Tier 2), and the agent does not say what Billing Operations will decide.",
+     "doc_needles": [
+      "Any larger adjustment",
+      "what Billing Operations will decide"
+     ]
+    },
+    {
+     "id": "F26",
+     "statement": "A failed charge is retried 3, 6 and 10 days after the failed charge; if the day-10 retry fails the plan is suspended.",
+     "doc_needles": [
+      "3, 6 and 10 days after",
+      "day-10 retry"
+     ]
+    },
+    {
+     "id": "F27",
+     "statement": "After suspension live view keeps working and recorded clips are kept for 30 days, then deleted; paying within that time restores plan and clips.",
+     "doc_needles": [
+      "kept for 30 days after suspension"
+     ]
+    },
+    {
+     "id": "F28",
+     "statement": "Customers in Canada are billed in US dollars.",
+     "doc_needles": [
+      "billed in US dollars"
+     ]
+    },
+    {
+     "id": "F29",
+     "statement": "The Billing Guide is version 2.4, effective 1 February 2026.",
+     "doc_needles": [
+      "Effective 1 February 2026"
+     ]
+    },
+    {
+     "id": "F30",
+     "statement": "Data used abroad comes out of the same monthly allowance.",
+     "doc_needles": [
+      "same monthly allowance"
+     ]
+    }
+   ],
+   "intentional_conflicts": [],
+   "must_not_infer": [
+    "Nothing here mentions discounts for seniors, students, military or multi-year terms, or a planned price change.",
+    "Nothing here says a Roam Day charge can be waived beyond the one-time $30 first-trip courtesy by a Tier 1 agent.",
+    "Nothing here contains a refund window for subscriptions.",
+    "The cap applies per camera per billing cycle and to Roam Day fees only, not to a Roam Week pass."
+   ]
+  },
+  {
+   "id": "CC-REF-TROUBLESHOOTING-2026",
+   "mode": "call-center",
+   "filename": "Outage_and_Troubleshooting_Guide.md",
+   "source": "src/CC-REF-TROUBLESHOOTING-2026.md",
+   "format": "md",
+   "document_type": "guide",
+   "title": "Outage and Troubleshooting Guide (revised 1 September 2026)",
+   "status": "current",
+   "effective_date": "2026-09-01",
+   "authority": 80,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "Agents open the Incident Board before touching the customer's setup.",
+     "doc_needles": [
+      "Open the Incident Board"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "Severity 1 means live view or recording is unavailable for more than 10% of cameras in a region.",
+     "doc_needles": [
+      "more than 10% of cameras"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "Severity 2 means the service works but is degraded (late notifications, slow clip loading).",
+     "doc_needles": [
+      "late notifications, slow clip loading"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "During an open incident agents do not run device steps or factory resets, say there is a known incident, and give a fix time only if the Incident Board shows one, never an estimate of their own.",
+     "doc_needles": [
+      "Incident Board shows one",
+      "never estimate one yourself"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "Customers can follow incident updates at status.brindlewatch.example.",
+     "doc_needles": [
+      "status.brindlewatch.example"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "When a Severity 1 incident lasts more than 24 hours in a row, affected subscribers are credited 10% of their monthly plan fee for each full 24 hours, up to a maximum of 50%.",
+     "doc_needles": [
+      "for each full 24 hours",
+      "maximum of 50%"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "Annual subscribers get the same outage-credit percentages of one-twelfth of the annual price.",
+     "doc_needles": [
+      "one-twelfth of the annual price"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "The outage credit is applied automatically on the next invoice; customers need not ask, agents do not add it by hand, and Severity 2 incidents carry no credit.",
+     "doc_needles": [
+      "applied automatically on the next invoice",
+      "do not add it by hand"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "Light meanings: solid green online, blinking blue pairing, solid amber starting up (up to 90 seconds), blinking red no network connection.",
+     "doc_needles": [
+      "No network connection",
+      "up to 90 seconds"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "A solid red light means a hardware fault: stop and escalate to Tier 2 Device Diagnostics.",
+     "doc_needles": [
+      "Hardware fault - stop here"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "An Eave Cam needs its battery above 15% to reconnect.",
+     "doc_needles": [
+      "battery above 15%"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "Lantern Cam (2nd generation) and Eave Cam connect on 2.4 GHz only; Lantern Cam (3rd generation) uses 2.4 or 5 GHz; a 5 GHz-only router will not work with a 2.4 GHz camera.",
+     "doc_needles": [
+      "connect on 2.4 GHz only",
+      "only a 5 GHz network"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "Router restart: unplug for 30 seconds, plug back in, wait 3 minutes.",
+     "doc_needles": [
+      "Unplug it for 30 seconds",
+      "wait 3 minutes"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "Signal in Device Health should read -67 dBm or stronger.",
+     "doc_needles": [
+      "-67 dBm or stronger"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "Factory reset: hold the reset button for 12 seconds until the light blinks amber, then pair again in the app.",
+     "doc_needles": [
+      "for 12 seconds",
+      "until the light blinks amber"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "A factory reset clears the camera's Wi-Fi settings and activity zones; it does not delete recordings already in the cloud and does not change the plan.",
+     "doc_needles": [
+      "Wi-Fi settings and activity zones",
+      "does not delete recordings already"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "If the camera is still offline after step 6 the agent escalates to Tier 2 Device Diagnostics with light colour, firmware version and steps done.",
+     "doc_needles": [
+      "still offline after step 6"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "Current firmware: Lantern Cam 3rd generation 4.8.2, Lantern Cam 2nd generation 4.5.9 (final release), Eave Cam 3.11.0, Trek Cam 2.6.1.",
+     "doc_needles": [
+      "4.8.2",
+      "2.6.1",
+      "4.5.9 (final release)"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "Cameras update themselves between 2:00 am and 4:00 am local time when idle; a customer cannot force an update.",
+     "doc_needles": [
+      "2:00 am and 4:00 am"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "Eave Cam firmware 3.10.4 made night vision flicker; it is corrected in 3.11.0.",
+     "doc_needles": [
+      "3.10.4",
+      "corrected in 3.11.0"
+     ]
+    },
+    {
+     "id": "F21",
+     "statement": "For late notifications the app must be version 7.3 or newer.",
+     "doc_needles": [
+      "version 7.3 or newer"
+     ]
+    },
+    {
+     "id": "F22",
+     "statement": "If live view will not load although the camera is online, check for a VPN; reinstalling the app does not affect recordings.",
+     "doc_needles": [
+      "on a VPN"
+     ]
+    },
+    {
+     "id": "F23",
+     "statement": "A Trek Cam on cellular should show SIM status Active and at least two signal bars.",
+     "doc_needles": [
+      "at least two signal bars"
+     ]
+    },
+    {
+     "id": "F24",
+     "statement": "An Eave Cam charge typically lasts 4 to 6 months; below -10 C it drains faster and it will not charge below 0 C.",
+     "doc_needles": [
+      "4 to 6 months",
+      "Below -10 C"
+     ]
+    },
+    {
+     "id": "F25",
+     "statement": "The Outage and Troubleshooting Guide was revised 1 September 2026.",
+     "doc_needles": [
+      "Revised 1 September 2026"
+     ]
+    }
+   ],
+   "intentional_conflicts": [],
+   "must_not_infer": [
+    "Nothing here gives a time by which an incident will be fixed.",
+    "A factory reset is not an account transfer and does not delete cloud recordings.",
+    "The outage credit counts full 24-hour periods only and is not added by agents."
+   ]
+  },
+  {
+   "id": "CC-REF-HANDBOOK-V2",
+   "mode": "call-center",
+   "filename": "Brindlewatch_Support_Policy_Handbook.pdf",
+   "source": "src/CC-REF-HANDBOOK-V2.md",
+   "format": "pdf",
+   "document_type": "handbook",
+   "title": "Brindlewatch Support Policy Handbook v2.0 (March 2025)",
+   "status": "outdated",
+   "effective_date": "2025-03-10",
+   "authority": 40,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "The 2025 handbook asked for 2 of 4 identifiers (name, login e-mail, billing postal code, last four card digits).",
+     "doc_needles": [
+      "2 of the 4 identifiers"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "The 2025 handbook allowed up to three verification attempts, then a hand-off to the Team Lead.",
+     "doc_needles": [
+      "up to three attempts"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "The 2025 handbook let a spouse or another adult at the billing address who passed verification be helped as if they were the account holder.",
+     "doc_needles": [
+      "as if they were the account",
+      "another adult living at"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "The 2025 handbook let the agent send a reset link to an alternate e-mail address provided by the caller once verification was passed.",
+     "doc_needles": [
+      "alternate e-mail address"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "The 2025 handbook gave a full refund on annual plans within 45 days of the charge.",
+     "doc_needles": [
+      "within 45 days"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "The 2025 handbook refunded the unused days of a monthly plan pro rata on cancellation.",
+     "doc_needles": [
+      "pro rata"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "The 2025 handbook said refunds reach the customer in 10 to 14 business days.",
+     "doc_needles": [
+      "10 to 14 business days"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "The 2025 handbook let an agent approve a refund of up to $250 alone.",
+     "doc_needles": [
+      "$250"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "The 2025 handbook said not to leave a caller on hold for more than 2 minutes without coming back.",
+     "doc_needles": [
+      "more than 2 minutes"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "The Support Policy Handbook is version 2.0, effective 10 March 2025, with its next review scheduled for March 2026.",
+     "doc_needles": [
+      "Effective 10 March 2025",
+      "Version 2.0"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "The 2025 handbook asked for three wrap-up lines on every ticket.",
+     "doc_needles": [
+      "three lines"
+     ]
+    }
+   ],
+   "intentional_conflicts": [],
+   "must_not_infer": [
+    "The handbook does not say it has been replaced; only its 2025 date, version 2.0 and lapsed review date show that it is outdated.",
+    "Its verification, reset-destination and refund rules no longer apply."
+   ]
+  },
+  {
+   "id": "CC-REF-REPAIR-2026",
+   "mode": "call-center",
+   "filename": "Brindlewatch_Repair_and_Replacement_Service_Terms_v2.2.pdf",
+   "source": "src/CC-REF-REPAIR-2026.md",
+   "format": "pdf",
+   "document_type": "policy",
+   "title": "Brindlewatch Repair and Replacement Service Terms v2.2",
+   "status": "current",
+   "effective_date": "2026-09-01",
+   "authority": 100,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "The Repair and Replacement Service Terms are version 2.2, effective 1 September 2026, owned by Florentyn Akabueze-Marsh, Head of Device Service.",
+     "doc_needles": [
+      "Effective 1 September 2026",
+      "Florentyn Akabueze-Marsh"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "A claim starts only when Tier 2 Device Diagnostics has confirmed a hardware fault and recorded a fault code; Tier 1 agents do not diagnose hardware and do not open a claim on their own judgement.",
+     "doc_needles": [
+      "recorded a fault code",
+      "do not open a claim on their own judgement"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "Device Diagnostics issues the Return Authorisation and chooses the service route; Tier 1 can read the route and its progress in the console and explain them.",
+     "doc_needles": [
+      "chooses the service route"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "Standard exchange is the default route for a fault inside the warranty: a replacement unit is dispatched no later than 4 business days after the faulty unit is scanned in at the service centre.",
+     "doc_needles": [
+      "no later than 4 business days"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "Under advance exchange the replacement is dispatched first and the faulty unit must be scanned in within 20 calendar days, counted from the day the replacement is dispatched.",
+     "doc_needles": [
+      "scanned in within 20 calendar days",
+      "The 20 calendar days run from"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "A replacement unit is either new or renewed; the customer cannot choose and agents do not say which will be sent.",
+     "doc_needles": [
+      "either new or renewed"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "Every replacement unit is covered for the remainder of the original warranty or for 90 days from its delivery, whichever is longer; an exchange does not start a new warranty.",
+     "doc_needles": [
+      "90 days from its delivery"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "Only Device Diagnostics authorises an advance exchange; Tier 1 may tell a customer the route exists but not that it will be granted.",
+     "doc_needles": [
+      "Only Device Diagnostics authorises",
+      "not that it will be granted"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "The advance-exchange card hold for a Lantern Cam is $65.",
+     "doc_needles": [
+      "$65"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "The advance-exchange card hold for an Eave Cam is $115.",
+     "doc_needles": [
+      "$115"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "The advance-exchange card hold for a Trek Cam is $185.",
+     "doc_needles": [
+      "$185"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "The hold is an authorisation, not a charge; it is released when the faulty unit is scanned in, and if the unit has not been scanned in in time the hold becomes a charge and the claim is closed.",
+     "doc_needles": [
+      "an authorisation, not a charge",
+      "the hold becomes a charge"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "Advance exchange is not offered on a paid repair, on accessories, or to a customer who already has an advance-exchange hold open.",
+     "doc_needles": [
+      "not offered on a paid repair"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "A Return Authorisation number begins RA-; the number and the label stay valid for 25 calendar days from the day of issue.",
+     "doc_needles": [
+      "25 calendar days"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "The customer sends the camera only; accessories sent in with a camera are not returned.",
+     "doc_needles": [
+      "accessories sent in with a camera are not returned"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "Units travel under the label to the service centre in Marrow Creek; under a claim inside the warranty the label is prepaid.",
+     "doc_needles": [
+      "service centre in Marrow Creek"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "Proof of purchase is the order number for a web store order or the dated receipt for a retail-partner purchase; with neither, the manufacturing date is used as the purchase date.",
+     "doc_needles": [
+      "the dated receipt",
+      "manufacturing date"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "Impact damage, liquid inside the housing as described, damage from a non-Brindlewatch adapter or charger, an opened or modified unit and cosmetic marks are not defects and go down the paid repair route whatever the age of the camera.",
+     "doc_needles": [
+      "impact damage",
+      "cosmetic marks"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "The paid repair flat fee for a Lantern Cam (either generation) is $34.",
+     "doc_needles": [
+      "$34"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "The paid repair flat fee for an Eave Cam is $52.",
+     "doc_needles": [
+      "$52"
+     ]
+    },
+    {
+     "id": "F21",
+     "statement": "The paid repair flat fee for a Trek Cam is $68.",
+     "doc_needles": [
+      "$68"
+     ]
+    },
+    {
+     "id": "F22",
+     "statement": "The flat fee is charged for each unit, is the same whatever the fault, and covers the inbound label, bench work, parts and the return by Standard delivery; a unit that cannot be repaired is replaced by a renewed unit of the same model for the same fee.",
+     "doc_needles": [
+      "charged for each unit",
+      "return of the unit by Standard delivery"
+     ]
+    },
+    {
+     "id": "F23",
+     "statement": "For a faster return the customer can pay the Expedited charge set out in the Shipping and Delivery Policy, charged once for each return parcel and not for each unit; units on the same Return Authorisation travel back in one parcel, and Next Business Day is not offered for service returns.",
+     "doc_needles": [
+      "once for each return parcel",
+      "Next Business Day is not offered for service returns"
+     ]
+    },
+    {
+     "id": "F24",
+     "statement": "The Service Terms say a repair quote stays open for 10 calendar days from the day it is sent; if it is not accepted the unit is sent back unrepaired by Standard delivery at no charge.",
+     "doc_needles": [
+      "stays open for 10 calendar days"
+     ]
+    },
+    {
+     "id": "F25",
+     "statement": "A repaired unit is dispatched no later than 9 business days after payment; this is a dispatch target, not a delivery date.",
+     "doc_needles": [
+      "no later than 9 business days after payment"
+     ]
+    },
+    {
+     "id": "F26",
+     "statement": "A repair fee is paid by card or digital wallet; account credit cannot be put towards it.",
+     "doc_needles": [
+      "cannot be put towards a repair fee"
+     ]
+    },
+    {
+     "id": "F27",
+     "statement": "Brindlewatch accessories are covered against defects for 1 year from purchase; a faulty one is exchanged, never repaired, without the old one having to come back.",
+     "doc_needles": [
+      "for 1 year from purchase"
+     ]
+    },
+    {
+     "id": "F28",
+     "statement": "An accessory claim needs no fault code and is raised by a Tier 1 agent; the console allows 2 accessory exchanges against any one order before a Team Lead has to sign off the next.",
+     "doc_needles": [
+      "2 accessory exchanges"
+     ]
+    },
+    {
+     "id": "F29",
+     "statement": "The service centre does not open a parcel without a Return Authorisation number on the label, and units sent from outside the United States and Canada are not accepted.",
+     "doc_needles": [
+      "it goes back to the sender"
+     ]
+    },
+    {
+     "id": "F30",
+     "statement": "In Canada the label is not prepaid: the customer pays the postage and is reimbursed against a postal receipt, up to $28 for each claim.",
+     "doc_needles": [
+      "up to $28"
+     ]
+    },
+    {
+     "id": "F31",
+     "statement": "In Canada advance exchange is offered for Lantern Cam and Eave Cam only.",
+     "doc_needles": [
+      "Lantern Cam and Eave Cam only"
+     ]
+    },
+    {
+     "id": "F32",
+     "statement": "The first no-fault-found return of a camera is free; a second no-fault-found return of the same camera inside one year carries a $19 handling charge.",
+     "doc_needles": [
+      "$19 handling charge"
+     ]
+    },
+    {
+     "id": "F33",
+     "statement": "When customer damage is found on a claim inside the warranty the claim moves to the paid repair route; a customer who disagrees may ask for a second inspection, and has to ask within 21 calendar days of the date on the inspection report.",
+     "doc_needles": [
+      "within 21 calendar days"
+     ]
+    },
+    {
+     "id": "F34",
+     "statement": "The second inspection is carried out by a different technician, the quote is paused while it is pending, its result is final, and each claim can have one.",
+     "doc_needles": [
+      "a different technician",
+      "its result is final"
+     ]
+    },
+    {
+     "id": "F35",
+     "statement": "When a camera has already been exchanged twice for the same fault code, the next unit sent is new and the Head of Device Service reviews the case.",
+     "doc_needles": [
+      "exchanged twice for the same fault code"
+     ]
+    },
+    {
+     "id": "F36",
+     "statement": "A paid repair is covered for 180 days from the day the repaired unit is delivered: the same fault is repaired again at no charge; the cover neither restarts nor lengthens the limited warranty.",
+     "doc_needles": [
+      "covered for 180 days"
+     ]
+    },
+    {
+     "id": "F37",
+     "statement": "Agents do not tell a customer that a claim, an exchange or an advance exchange will be granted, and only the Device Service desk can waive a fee.",
+     "doc_needles": [
+      "only the Device Service desk can waive a fee"
+     ]
+    },
+    {
+     "id": "F38",
+     "statement": "Tier 1 reaches the Device Service desk by a note on the claim record, answered by the end of the next business day; customers are not put through to the desk.",
+     "doc_needles": [
+      "Customers are not put through to the desk"
+     ]
+    }
+   ],
+   "intentional_conflicts": [
+    {
+     "fact": "F24",
+     "with_file": "CC-REF-QUALITY-2026",
+     "this_value": "10 calendar days",
+     "other_value": "15 calendar days",
+     "resolution": "unresolved"
+    }
+   ],
+   "must_not_infer": [
+    "Nothing here gives a street address, opening hours or telephone number for the service centre, and nothing says whether a unit may be handed in there in person.",
+    "Tier 1 saying that a route exists is not a promise that Device Diagnostics will grant it.",
+    "The dispatch targets are targets for dispatch, not delivery dates.",
+    "These terms do not state the length of the limited warranty.",
+    "Nothing here settles the disagreement with the Quality Scorecard Guide on how long a repair quote stays open.",
+    "The 90 days on a replacement unit and the 180 days on a paid repair are different covers."
+   ]
+  },
+  {
+   "id": "CC-REF-FIT-2026",
+   "mode": "call-center",
+   "filename": "Brindlewatch_Fit_Installation_Service_Guide_v3.docx",
+   "source": "src/CC-REF-FIT-2026.md",
+   "format": "docx",
+   "document_type": "guide",
+   "title": "Brindlewatch Fit: Installation Service Guide v3.0",
+   "status": "current",
+   "effective_date": "2026-08-17",
+   "authority": 100,
+   "supersedes": [
+    "CC-REF-FIT-PILOT-2025"
+   ],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "The Fit Installation Service Guide is version 3.0, effective 17 August 2026, owned by Wilhelmina Castellanos-Reid, Fit Programme Lead.",
+     "doc_needles": [
+      "Effective 17 August 2026",
+      "Fit Programme Lead"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "Fit is a paid home visit available for Lantern Cam and Eave Cam wherever the camera was bought; Trek Cam is not part of Fit.",
+     "doc_needles": [
+      "is not part of Fit"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "Visits are carried out by two partner companies, Thornapple Home Services and Kestrel & Vane Installations; installers are employed by the partner and carry a Fit badge.",
+     "doc_needles": [
+      "two partner companies",
+      "employed by the partner"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "A customer does not need a Keep plan to book Fit and the price does not change with the plan.",
+     "doc_needles": [
+      "does not need a Keep plan"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "The first camera in a Fit visit costs $95.",
+     "doc_needles": [
+      "$95"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "Every additional camera in the same Fit visit costs $55.",
+     "doc_needles": [
+      "$55"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "A high mount, a camera fixed more than 12 feet above the ground, costs $24 on top for that camera.",
+     "doc_needles": [
+      "$24 on top",
+      "more than 12 feet"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "A travel fee applies in outer-ring areas only: the amount shown against the area in the Fit Service Areas sheet, once for the visit.",
+     "doc_needles": [
+      "outer-ring areas only"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "A visit covers up to 8 cameras; a larger job is two visits, each priced from the first camera again; the full amount is paid at booking.",
+     "doc_needles": [
+      "up to 8 cameras"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "A visit is priced by the cameras fitted, not by time, and agents do not estimate how long an installer will be at the address.",
+     "doc_needles": [
+      "do not estimate how long"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "The earliest-slot figure in the sheet is the number of calendar days between the day of booking and the first day that can be offered.",
+     "doc_needles": [
+      "earliest-slot figure"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "There are three arrival windows: 8 am to 11 am, 11 am to 2 pm, and 2 pm to 5 pm; the window is when the installer arrives, not when the work is finished.",
+     "doc_needles": [
+      "8 am to 11 am"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "A confirmation is e-mailed with a booking reference beginning FIT-, and a reminder on the day before the visit.",
+     "doc_needles": [
+      "beginning FIT-"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "The cameras have to be at the address before the installer arrives; a visit can be booked while an order is on its way if the first day offered is later than the end of the delivery estimate.",
+     "doc_needles": [
+      "later than the end of the delivery estimate"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "Someone aged 18 or over has to be at the address for the whole visit.",
+     "doc_needles": [
+      "throughout the visit"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "For an area marked Planned the agent says Fit is not available there yet and gives an opening date only when the sheet shows one marked as announced.",
+     "doc_needles": [
+      "marked as announced"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "A customer who changes or cancels 36 hours or more before the start of the arrival window pays no fee, and a cancelled visit is refunded in full.",
+     "doc_needles": [
+      "36 hours or more before"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "A customer who cancels less than 36 hours before the start of the arrival window has a $40 late cancellation fee kept and the rest refunded.",
+     "doc_needles": [
+      "$40 late cancellation fee"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "Moving a visit less than 36 hours before the start of the arrival window is treated as a late cancellation followed by a new booking.",
+     "doc_needles": [
+      "followed by a new booking"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "If nobody aged 18 or over is at the address the installer waits 20 minutes and records a missed visit; the same $40 fee is kept.",
+     "doc_needles": [
+      "waits 20 minutes"
+     ]
+    },
+    {
+     "id": "F21",
+     "statement": "If the cameras have not been delivered the visit is moved at no fee, whatever the notice, after the agent checks the order status.",
+     "doc_needles": [
+      "moved at no fee, whatever the notice"
+     ]
+    },
+    {
+     "id": "F22",
+     "statement": "If the partner cancels, the customer chooses a new slot or a full refund and nothing further is owed.",
+     "doc_needles": [
+      "Nothing further is owed"
+     ]
+    },
+    {
+     "id": "F23",
+     "statement": "A Tier 1 agent cannot waive the late cancellation fee; the agent can submit a waiver request to the Fit Programme desk and does not say what the desk will decide.",
+     "doc_needles": [
+      "cannot waive the late cancellation fee"
+     ]
+    },
+    {
+     "id": "F24",
+     "statement": "The installer fixes the mount on brick, timber, siding or render, runs a Lantern Cam cable to the nearest existing outlet, connects the camera on the customer's own phone and takes the packaging away.",
+     "doc_needles": [
+      "on brick, timber, siding or render"
+     ]
+    },
+    {
+     "id": "F25",
+     "statement": "The installer does not fit new outlets or alter wiring, work on a roof or more than 20 feet above the ground, fit other makers' equipment, take down existing equipment, or ask for the password or keep access to the account.",
+     "doc_needles": [
+      "more than 20 feet above the ground",
+      "take down or dispose of equipment"
+     ]
+    },
+    {
+     "id": "F26",
+     "statement": "The mounting work is guaranteed for 1 year from the day of the visit; the guarantee does not cover the camera.",
+     "doc_needles": [
+      "guaranteed for 1 year"
+     ]
+    },
+    {
+     "id": "F27",
+     "statement": "When a fitted camera is returned under the Refund and Cancellation Policy and the visit has taken place, the Fit charge for that camera is refunded less a $35 call-out charge; if the visit has not taken place it is refunded in full.",
+     "doc_needles": [
+      "less a $35 call-out charge"
+     ]
+    },
+    {
+     "id": "F28",
+     "statement": "A high-mount amount or a travel fee is not refunded once the visit has taken place, and Fit does not offer a removal visit.",
+     "doc_needles": [
+      "does not offer a removal visit"
+     ]
+    },
+    {
+     "id": "F29",
+     "statement": "Reported property damage is logged for the Fit Programme desk and passed to the partner, whose insurer deals with the customer; agents do not accept liability or offer payment.",
+     "doc_needles": [
+      "partner's insurer"
+     ]
+    },
+    {
+     "id": "F30",
+     "statement": "The Fit Programme desk works on weekdays, 9 am to 6 pm Central, and replies by the end of the next business day.",
+     "doc_needles": [
+      "9 am to 6 pm Central"
+     ]
+    },
+    {
+     "id": "F31",
+     "statement": "Fit is a service for homes; business premises go to the Brindlewatch for Business team.",
+     "doc_needles": [
+      "Fit is a service for homes"
+     ]
+    },
+    {
+     "id": "F32",
+     "statement": "A camera can be added to a booked visit at the additional-camera price up to the cut-off for free changes.",
+     "doc_needles": [
+      "at the additional-camera price"
+     ]
+    }
+   ],
+   "intentional_conflicts": [
+    {
+     "fact": "F5",
+     "with_file": "CC-REF-FIT-PILOT-2025",
+     "this_value": "$95",
+     "other_value": "$69",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F6",
+     "with_file": "CC-REF-FIT-PILOT-2025",
+     "this_value": "$55",
+     "other_value": "$39",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F9",
+     "with_file": "CC-REF-FIT-PILOT-2025",
+     "this_value": "up to 8 cameras",
+     "other_value": "up to 4 cameras",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F18",
+     "with_file": "CC-REF-FIT-PILOT-2025",
+     "this_value": "$40 late cancellation fee",
+     "other_value": "$20 late fee",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F17",
+     "with_file": "CC-REF-FIT-PILOT-2025",
+     "this_value": "36 hours or more before",
+     "other_value": "until 6 pm on the day before",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F26",
+     "with_file": "CC-REF-FIT-PILOT-2025",
+     "this_value": "guaranteed for 1 year",
+     "other_value": "for 6 months",
+     "resolution": "current_wins"
+    },
+    {
+     "fact": "F27",
+     "with_file": "CC-REF-FIT-PILOT-2025",
+     "this_value": "less a $35 call-out charge",
+     "other_value": "the entire Fit charge",
+     "resolution": "current_wins"
+    }
+   ],
+   "must_not_infer": [
+    "Nothing here says how long a visit takes.",
+    "Nothing here gives an opening date for any planned area.",
+    "A waiver request is not a waiver: only the Fit Programme desk decides.",
+    "The arrival window is when the installer arrives; it is not a promised time and not a finishing time.",
+    "Nothing here says whether installers are vetted, and nothing names what the partner's insurer will pay."
+   ]
+  },
+  {
+   "id": "CC-REF-FIT-PILOT-2025",
+   "mode": "call-center",
+   "filename": "Fit_Pilot_Briefing_for_Customer_Care.txt",
+   "source": "src/CC-REF-FIT-PILOT-2025.txt",
+   "format": "txt",
+   "document_type": "briefing",
+   "title": "Brindlewatch Fit pilot briefing for Customer Care, November 2025",
+   "status": "outdated",
+   "effective_date": "2025-11-10",
+   "authority": 40,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "The Fit pilot briefing was issued on 10 November 2025 for a pilot running from 24 November 2025 to 31 March 2026.",
+     "doc_needles": [
+      "Issued 10 November 2025",
+      "24 November 2025 to 31 March 2026"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "The pilot ran in two areas only, Harrowmere and Dunmere Heights.",
+     "doc_needles": [
+      "Harrowmere and Dunmere Heights"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "The pilot had one partner, Thornapple Home Services, whose installers carried no Brindlewatch badge.",
+     "doc_needles": [
+      "One partner, Thornapple Home Services"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "The pilot price for the first camera in a visit was $69.",
+     "doc_needles": [
+      "$69"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "The pilot price for every additional camera in the same visit was $39.",
+     "doc_needles": [
+      "$39"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "A pilot visit covered up to 4 cameras, with no high-mount work above 10 feet and no travel fee.",
+     "doc_needles": [
+      "up to 4 cameras",
+      "more than 10 feet"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "The pilot had two arrival windows, 8 am to 12 noon and 12 noon to 5 pm, on weekdays only.",
+     "doc_needles": [
+      "8 am to 12 noon"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "In the pilot a visit could be moved or cancelled free until 6 pm on the day before; after that, or if nobody was in, a $20 late fee was kept.",
+     "doc_needles": [
+      "until 6 pm on the day before",
+      "$20 late fee"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "In the pilot Team Leads could waive the late fee; agents could not.",
+     "doc_needles": [
+      "Team Leads can waive the late fee"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "In the pilot, when a fitted camera was returned inside the normal return period the entire Fit charge for that camera went back to the customer.",
+     "doc_needles": [
+      "the entire Fit charge"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "In the pilot Thornapple guaranteed their mounting work for 6 months.",
+     "doc_needles": [
+      "for 6 months"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "In the pilot the cameras had to be at the address already when the visit was booked.",
+     "doc_needles": [
+      "must already be at the address when you book"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "The pilot aimed at 400 completed visits across the two areas by the end of March.",
+     "doc_needles": [
+      "the aim is 400"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "Pilot matters went to the pilot mailbox fitpilot@brindlewatch.example.",
+     "doc_needles": [
+      "fitpilot@brindlewatch.example"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "The pilot ended on 31 March 2026 and the briefing says nothing in it should be read as what the service would look like afterwards.",
+     "doc_needles": [
+      "The pilot ends on 31 March 2026"
+     ]
+    }
+   ],
+   "intentional_conflicts": [],
+   "must_not_infer": [
+    "The briefing's prices, cancellation rule, guarantee and return rule ended with the pilot; the Installation Service Guide v3.0 states the current ones.",
+    "The briefing does not say what the later prices or rules would be."
+   ]
+  },
+  {
+   "id": "CC-REF-QUALITY-2026",
+   "mode": "call-center",
+   "filename": "Customer_Care_Quality_Scorecard_Guide_v1.4.docx",
+   "source": "src/CC-REF-QUALITY-2026.md",
+   "format": "docx",
+   "document_type": "guide",
+   "title": "Customer Care Quality Scorecard Guide v1.4",
+   "status": "current",
+   "effective_date": "2026-09-28",
+   "authority": 100,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "The Quality Scorecard Guide is version 1.4, effective 28 September 2026, owned by Leocadia Brannigan-Oyelaran, Quality Lead, and applies to Tier 1 contacts by phone and chat.",
+     "doc_needles": [
+      "Effective 28 September 2026",
+      "Leocadia Brannigan-Oyelaran"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "Six contacts are reviewed in a calendar month for an agent past their first 12 weeks, and ten for an agent in their first 12 weeks.",
+     "doc_needles": [
+      "Agent past their first 12 weeks",
+      "Agent in their first 12 weeks"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "Contacts shorter than 60 seconds, and contacts transferred in from another agent, are left out of review.",
+     "doc_needles": [
+      "shorter than 60 seconds"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "The scorecard sections are Verification and account safety 25 points, Accuracy 30, Ownership 20, Communication 15 and Record keeping 10.",
+     "doc_needles": [
+      "Verification and account safety",
+      "Record keeping"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "The sections add up to 100 and a contact passes at 85 or above; the monthly score is the plain average of the contacts reviewed.",
+     "doc_needles": [
+      "passes at 85 or above"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "Each wrong price, fee, time limit or rule stated to the customer takes 10 points off the Accuracy section; an error put right before the contact ends costs nothing.",
+     "doc_needles": [
+      "takes 10 points off the Accuracy section"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "An automatic fail sets the score for the whole contact to 0; one of the five is an account action or disclosure made without the verification the Account Verification Standard requires, including step-up verification that was needed and skipped.",
+     "doc_needles": [
+      "set the score for the entire contact to 0",
+      "step-up verification that was needed and skipped"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "Another automatic fail is a promise of an outcome that is somebody else's to decide; an automatic fail is looked at by a second reviewer before it is published.",
+     "doc_needles": [
+      "somebody else's to decide",
+      "second reviewer before it is published"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "Each missing required statement takes 5 points off the Accuracy section.",
+     "doc_needles": [
+      "takes 5 points off the Accuracy section"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "The Quality Scorecard Guide says the customer must hear that a repair quote stays open for 15 calendar days.",
+     "doc_needles": [
+      "stays open for 15 calendar days"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "Every second Wednesday reviewers and Team Leads score the same 4 contacts, and any score more than 5 points away from the Quality Lead's reference is talked through.",
+     "doc_needles": [
+      "Every second Wednesday",
+      "more than 5 points away"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "Scorecards are published in the quality tool each Friday.",
+     "doc_needles": [
+      "each Friday"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "A contact below 85 is followed by a coaching conversation with the Team Lead within 12 calendar days of publication.",
+     "doc_needles": [
+      "within 12 calendar days of publication"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "A monthly score below 85 in 2 consecutive months leads to a support plan, reviewed after 8 weeks.",
+     "doc_needles": [
+      "reviewed after 8 weeks"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "A monthly score of 95 or above for three months running makes an agent eligible to be a guest scorer.",
+     "doc_needles": [
+      "guest scorer"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "A dispute is raised in the quality tool within 8 calendar days of the scorecard being published, naming the section and a reason that points to a document.",
+     "doc_needles": [
+      "within 8 calendar days"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "The Quality Lead, or a reviewer who did not score the contact, decides a dispute no later than 6 business days after it is raised; there is one dispute for each contact and the decision is final.",
+     "doc_needles": [
+      "no later than 6 business days"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "The scorecard leaves out handle time, the number of contacts, whether the customer bought anything, and the customer's own rating.",
+     "doc_needles": [
+      "Handle time and the number of contacts"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "Call recordings and chat transcripts held for review are kept for 120 days.",
+     "doc_needles": [
+      "kept for 120 days"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "Scores from an agent's first 4 weeks on live contacts are left out of every average; from week 5 they count.",
+     "doc_needles": [
+      "From week 5 the scores count"
+     ]
+    },
+    {
+     "id": "F21",
+     "statement": "Coaching is not a disciplinary step and nothing in the guide sets pay.",
+     "doc_needles": [
+      "nothing in this guide sets pay"
+     ]
+    }
+   ],
+   "intentional_conflicts": [
+    {
+     "fact": "F10",
+     "with_file": "CC-REF-REPAIR-2026",
+     "this_value": "15 calendar days",
+     "other_value": "10 calendar days",
+     "resolution": "unresolved"
+    }
+   ],
+   "must_not_infer": [
+    "Nothing here sets a bonus, a pay rate or a target for handle time.",
+    "Nothing here settles the disagreement with the Repair and Replacement Service Terms on how long a repair quote stays open.",
+    "The guide applies to Tier 1 contacts; it says nothing about how Tier 2 contacts are reviewed.",
+    "A wrong figure is a points deduction, not an automatic fail."
+   ]
+  },
+  {
+   "id": "CC-REF-FIT-AREAS-2026",
+   "mode": "call-center",
+   "filename": "Fit_Service_Areas_October_2026.csv",
+   "source": "src/CC-REF-FIT-AREAS-2026.csv",
+   "format": "csv",
+   "document_type": "reference",
+   "title": "Brindlewatch Fit Service Areas sheet, October 2026 issue",
+   "status": "current",
+   "effective_date": "2026-10-01",
+   "authority": 80,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "The Fit Service Areas sheet is the October 2026 issue, issued 1 October 2026 by the Fit Programme desk.",
+     "doc_needles": [
+      "October 2026 issue",
+      "Issued 1 October 2026"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "Osterbrook is a live outer-ring area served by Thornapple Home Services from the Northcaster depot since 9 June 2026: appointments Tuesday to Saturday, earliest slot 6 days from booking, travel fee $20.",
+     "doc_needles": [
+      "FA-04,Osterbrook,outer",
+      "Tue-Sat,6,20,40"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "Greyling Ford is a live outer-ring area served by Kestrel & Vane Installations since 22 September 2026: appointments Tuesday to Saturday, earliest slot 9 days from booking, travel fee $25, no high mount.",
+     "doc_needles": [
+      "FA-14,Greyling Ford,outer",
+      "Tue-Sat,9,25,45,no"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "Elmhollow is a live core area with appointments Monday to Friday and an earliest slot 4 days from booking.",
+     "doc_needles": [
+      "FA-13,Elmhollow,core"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "Halvergate is a live core area with appointments Monday to Saturday and an earliest slot 2 days from booking.",
+     "doc_needles": [
+      "FA-15,Halvergate,core",
+      "usually the shortest wait"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "Pellham Sound is a planned area with Kestrel & Vane Installations: no live date, no appointment days, and no bookings are taken.",
+     "doc_needles": [
+      "FA-05,Pellham Sound,outer",
+      "Partner contract signed. Do not take bookings."
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "Fennick Bay is a planned area with a target opening of January 2027 that has not been announced to customers.",
+     "doc_needles": [
+      "Target opening January 2027; not announced to customers."
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "Brackwater is paused: visits already booked go ahead and no new bookings are taken.",
+     "doc_needles": [
+      "FA-12,Brackwater,outer",
+      "take no new bookings"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "Harrowmere and Dunmere Heights are the original pilot areas, live since 24 November 2025.",
+     "doc_needles": [
+      "FA-01,Harrowmere,core",
+      "Live,2025-11-24"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "Quillfeather has no ladder crew, so a high mount cannot be booked there.",
+     "doc_needles": [
+      "a high mount cannot be booked here"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "In a core area there is no travel fee; in an outer area the travel fee is added once for the visit however many cameras are fitted.",
+     "doc_needles": [
+      "added once for the visit however many cameras are fitted"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "The earliest_slot_days column is the calendar days between the day of booking and the first day the calendar can offer.",
+     "doc_needles": [
+      "Calendar days between the day of booking"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "Live means bookable, Paused means no new bookings for now, Planned means not open with no bookings and no visits.",
+     "doc_needles": [
+      "Planned = not open"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "Lowmoor is a live outer-ring area with an earliest slot 6 days from booking and a travel fee of $40.",
+     "doc_needles": [
+      "FA-17,Lowmoor,outer",
+      "Mon-Fri,6,40,55,yes"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "Yarrowby is a live outer-ring area with appointments Thursday to Saturday, an earliest slot 10 days from booking and a travel fee of $30.",
+     "doc_needles": [
+      "FA-19,Yarrowby,outer",
+      "Thu-Sat,10,30,45,no"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "Oldacre is a planned area where crew recruitment is under way.",
+     "doc_needles": [
+      "FA-26,Oldacre,outer"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "Saltmarsh Landing has a travel fee of $35 and visits are not booked into the 8 am window.",
+     "doc_needles": [
+      "FA-10,Saltmarsh Landing,outer",
+      "not booked into the 8 am window"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "Cinder Bluff has appointments Wednesday to Saturday, an earliest slot 8 days from booking and a travel fee of $30.",
+     "doc_needles": [
+      "FA-08,Cinder Bluff,outer",
+      "Wed-Sat,8,30,45,no"
+     ]
+    }
+   ],
+   "intentional_conflicts": [],
+   "must_not_infer": [
+    "The sheet gives no opening date for Pellham Sound or Oldacre.",
+    "Fennick Bay's January 2027 target is not announced to customers and is not another area's date.",
+    "An area's earliest slot is a number of days, not a promised date."
+   ]
+  },
+  {
+   "id": "CC-REF-SERVICE-REPORT-2026-09",
+   "mode": "call-center",
+   "filename": "Device_Service_and_Fit_Monthly_Report_Sept_2026.md",
+   "source": "src/CC-REF-SERVICE-REPORT-2026-09.md",
+   "format": "md",
+   "document_type": "report",
+   "title": "Device Service and Fit: monthly report for Customer Care, September 2026",
+   "status": "current",
+   "effective_date": "2026-10-05",
+   "authority": 80,
+   "supersedes": [],
+   "facts": [
+    {
+     "id": "F1",
+     "statement": "The monthly report for September 2026 was issued on 5 October 2026; it describes what happened and sets no rule.",
+     "doc_needles": [
+      "Issued 5 October 2026",
+      "it sets no rule"
+     ]
+    },
+    {
+     "id": "F2",
+     "statement": "In September 1,312 units were scanned in at Marrow Creek, against 1,187 in August.",
+     "doc_needles": [
+      "1,312 units were scanned in",
+      "1,187 in August"
+     ]
+    },
+    {
+     "id": "F3",
+     "statement": "Dispatch targets were met on 96.4% of standard exchanges and 91.8% of paid repairs in September.",
+     "doc_needles": [
+      "96.4%",
+      "91.8%"
+     ]
+    },
+    {
+     "id": "F4",
+     "statement": "September claims by camera: Lantern Cam 521, Eave Cam 617, Trek Cam 174.",
+     "doc_needles": [
+      "521",
+      "617",
+      "174"
+     ]
+    },
+    {
+     "id": "F5",
+     "statement": "September claims by route: 808 standard exchanges, 181 advance exchanges, 323 paid repairs.",
+     "doc_needles": [
+      "808",
+      "323"
+     ]
+    },
+    {
+     "id": "F6",
+     "statement": "September bench outcomes: 1,021 fault confirmed (77.8%), 148 no fault found (11.3%), 96 customer damage on a claim inside the warranty (7.3%), 47 could not be repaired (3.6%).",
+     "doc_needles": [
+      "1,021",
+      "77.8%",
+      "11.3%"
+     ]
+    },
+    {
+     "id": "F7",
+     "statement": "Nine second inspections were requested in September: 5 upheld the first report, 2 overturned it and 2 were pending.",
+     "doc_needles": [
+      "Of the 9 requested"
+     ]
+    },
+    {
+     "id": "F8",
+     "statement": "September averages: standard exchange replacement dispatched 2.6 business days after scan-in, paid repair dispatched 6.2 business days after payment, advance-exchange faulty unit scanned in after 11.5 calendar days.",
+     "doc_needles": [
+      "average 2.6",
+      "average 6.2",
+      "average 11.5"
+     ]
+    },
+    {
+     "id": "F9",
+     "statement": "Of 181 advance-exchange holds in September, 7 became a charge.",
+     "doc_needles": [
+      "7 became a charge"
+     ]
+    },
+    {
+     "id": "F10",
+     "statement": "Of 323 repair quotes sent in September, 271 were accepted and paid, 38 lapsed and 14 were still open.",
+     "doc_needles": [
+      "271 were accepted and paid",
+      "38 lapsed"
+     ]
+    },
+    {
+     "id": "F11",
+     "statement": "In September 63 parcels arrived with accessories in the box, 29 with no Return Authorisation number on the label, and 112 claims waited an average of 3.4 days for proof of purchase.",
+     "doc_needles": [
+      "63 parcels",
+      "112 claims",
+      "average of 3.4 days"
+     ]
+    },
+    {
+     "id": "F12",
+     "statement": "Fit visits completed in September: Thornapple Home Services 1,283 (94.1% arrived inside the window), Kestrel & Vane Installations 763 (89.7%), both 2,046 (92.5%).",
+     "doc_needles": [
+      "1,283",
+      "763",
+      "92.5%"
+     ]
+    },
+    {
+     "id": "F13",
+     "statement": "September had 58 missed Fit visits and 102 late cancellations.",
+     "doc_needles": [
+      "| Both partners | 2,046 | 92.5% | 58 | 102 |"
+     ]
+    },
+    {
+     "id": "F14",
+     "statement": "The 2,046 visits fitted 4,410 cameras, about 2.2 a visit, of which 388 were high mounts.",
+     "doc_needles": [
+      "4,410 cameras",
+      "388 of those"
+     ]
+    },
+    {
+     "id": "F15",
+     "statement": "The Fit Programme desk received 37 waiver requests for the late fee in September and granted 12.",
+     "doc_needles": [
+      "37 waiver requests and granted 12"
+     ]
+    },
+    {
+     "id": "F16",
+     "statement": "Tier 1 took 2,874 contacts about open claims in September; 41% were about where the unit or replacement had got to.",
+     "doc_needles": [
+      "2,874 contacts",
+      "41%"
+     ]
+    },
+    {
+     "id": "F17",
+     "statement": "Greyling Ford and Yarrowby opened during September and Brackwater was paused on 28 September.",
+     "doc_needles": [
+      "Brackwater was paused on 28 September"
+     ]
+    },
+    {
+     "id": "F18",
+     "statement": "The bench at Marrow Creek closes for a stock count on Friday 30 October; units are still scanned in and the day does not count towards the dispatch targets.",
+     "doc_needles": [
+      "Friday 30 October"
+     ]
+    },
+    {
+     "id": "F19",
+     "statement": "The desk releases a card hold on the day the faulty unit is scanned in; the bank decides when it shows, and agents can give the release date from the claim record.",
+     "doc_needles": [
+      "release date on the claim record"
+     ]
+    },
+    {
+     "id": "F20",
+     "statement": "In September partners returned to 19 addresses under the workmanship guarantee, 6 damage reports were passed to partners, and 71 fitted cameras were sent back for a refund.",
+     "doc_needles": [
+      "19 addresses",
+      "71 cameras"
+     ]
+    }
+   ],
+   "intentional_conflicts": [],
+   "must_not_infer": [
+    "The report describes one month; its averages are not targets and not promises.",
+    "The share of waiver requests granted does not mean a given waiver will be granted.",
+    "The report does not say how long a repair quote stays open."
+   ]
+  }
+ ]
+}

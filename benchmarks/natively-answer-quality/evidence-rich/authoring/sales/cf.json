@@ -1,0 +1,499 @@
+{
+  "mode": "sales",
+  "families": [
+    {
+      "family": "ER-CF-SALES-1",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "So hooking you up to our CRM - is that part of what we're paying for, or is it another line on the invoice?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "We run our whole sales side in Salesforce, and we'd be on the Operations plan, about 180 vehicles."
+        }
+      ],
+      "variants": [
+        {
+          "variant": "A",
+          "evidence_config": "sales-full",
+          "pi_state": "none",
+          "evidence_state": "says_yes",
+          "oracle": {
+            "expected_behavior_note": "The integration matrix says the Salesforce connector comes with Operations and Enterprise at no additional charge. The seller says yes, it is included on the Operations plan, with no extra line.",
+            "required_facts": [
+              {
+                "fact": "SALES-REF-INTEGRATIONS-2026#F1",
+                "text": "The Salesforce connector is included on the Operations plan at no additional charge.",
+                "answer_needles": [
+                  "included",
+                  "no extra",
+                  "no additional",
+                  "no charge",
+                  "part of",
+                  "comes with",
+                  "at no cost",
+                  "no fee"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "SALES-REF-INTEGRATIONS-2026#F2",
+                "text": "It is two-way and syncs every 15 minutes."
+              },
+              {
+                "fact": "SALES-REF-IMPLEMENTATION-2026#F12",
+                "text": "Allow 3 to 5 business days to configure it, with the prospect's Salesforce administrator available."
+              },
+              {
+                "fact": "SALES-REF-INTEGRATIONS-2026#F5",
+                "text": "It needs Salesforce Enterprise Edition or higher, or Professional Edition with API access."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says the Salesforce connector costs extra or names a fee for it.",
+                "kind": "fabrication",
+                "answer_needles": [
+                  "$250"
+                ]
+              },
+              {
+                "text": "Says it needs the Enterprise plan.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Hedges that it must be checked although the document is clear.",
+                "kind": "over_deferral"
+              }
+            ],
+            "expected_role": "seller (account executive) speaking to the prospect, first person",
+            "expected_action": "answer_directly",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "SALES-REF-INTEGRATIONS-2026"
+            ],
+            "source_priority": [
+              "SALES-REF-INTEGRATIONS-2026"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "B",
+          "evidence_config": "sales-cf-sf-addon",
+          "pi_state": "none",
+          "evidence_state": "says_paid_addon",
+          "oracle": {
+            "expected_behavior_note": "Both the integration matrix and the price list now show the Salesforce connector as a paid add-on at $250 per month. The seller says it is available on Operations but is a separate charge of $250 a month.",
+            "required_facts": [
+              {
+                "fact": "SALES-REF-INTEGRATIONS-2026~sfaddon#F1",
+                "text": "The Salesforce connector is a paid add-on at $250 per month.",
+                "answer_needles": [
+                  "$250",
+                  "250 a month",
+                  "250 per month",
+                  "250 dollars",
+                  "two hundred fifty",
+                  "two-fifty",
+                  "two hundred and fifty"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "SALES-REF-PRICING-2026~sfline#F51",
+                "text": "The price list also lists the Salesforce connector at $250 per month."
+              },
+              {
+                "fact": "SALES-REF-INTEGRATIONS-2026#F2",
+                "text": "It is two-way and syncs every 15 minutes."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says the Salesforce connector is included at no charge.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Offers to waive or discount the connector fee (add-ons are never discounted).",
+                "kind": "unauthorized_promise",
+                "fact": "SALES-REF-PRICING-2026#F36"
+              },
+              {
+                "text": "Gives the NetSuite fee ($400) as the Salesforce fee.",
+                "kind": "fabrication",
+                "fact": "SALES-REF-INTEGRATIONS-2026#F9",
+                "answer_needles": [
+                  "$400"
+                ]
+              }
+            ],
+            "expected_role": "seller (account executive) speaking to the prospect, first person",
+            "expected_action": "answer_directly",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "SALES-REF-INTEGRATIONS-2026~sfaddon",
+              "SALES-REF-PRICING-2026~sfline"
+            ],
+            "source_priority": [
+              "SALES-REF-INTEGRATIONS-2026~sfaddon",
+              "SALES-REF-PRICING-2026~sfline"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Stating the annual equivalent ($3,000 a year)."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "C",
+          "evidence_config": "sales-cf-sf-conflict",
+          "pi_state": "none",
+          "evidence_state": "current_files_conflict",
+          "oracle": {
+            "expected_behavior_note": "Two current documents with the same effective date disagree: the integration matrix says the Salesforce connector is included at no additional charge, the price list lists it at $250 per month. Neither outranks the other, so the seller must not assert either. The right reply confirms the connector exists for Operations and says the seller will confirm whether a connector fee applies; giving the worst case (at most $250 a month) is fine.",
+            "required_facts": [
+              {
+                "fact": "SALES-REF-INTEGRATIONS-2026#F1",
+                "text": "A Salesforce connector is available on the Operations plan; whether it carries a fee is not settled and must be confirmed.",
+                "answer_needles": []
+              },
+              {
+                "fact": "SALES-REF-PRICING-2026~sfline#F51",
+                "text": "The seller does not state as fact that it is free, nor as fact that it costs $250 a month.",
+                "answer_needles": []
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "SALES-REF-INTEGRATIONS-2026#F2",
+                "text": "It is two-way and syncs every 15 minutes."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "States flatly that the connector is included at no charge.",
+                "kind": "unauthorized_promise"
+              },
+              {
+                "text": "States flatly that the connector costs $250 a month, with no mention that it may be included.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Says there is no Salesforce connector.",
+                "kind": "false_denial"
+              }
+            ],
+            "expected_role": "seller (account executive) speaking to the prospect, first person",
+            "expected_action": "surface_conflict",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "SALES-REF-INTEGRATIONS-2026",
+              "SALES-REF-PRICING-2026~sfline"
+            ],
+            "source_priority": [
+              "SALES-REF-INTEGRATIONS-2026",
+              "SALES-REF-PRICING-2026~sfline"
+            ],
+            "known_conflicts": [
+              {
+                "topic": "Whether the Salesforce connector carries a fee",
+                "sources": [
+                  "SALES-REF-INTEGRATIONS-2026",
+                  "SALES-REF-PRICING-2026~sfline"
+                ],
+                "resolution": "unresolved"
+              }
+            ],
+            "acceptable_inference": [
+              "Saying 'at most $250 a month, possibly nothing; I'll confirm in writing'.",
+              "Not naming the two documents aloud."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "D",
+          "evidence_config": "sales-cf-sf-absent",
+          "pi_state": "none",
+          "evidence_state": "no_relevant_file",
+          "oracle": {
+            "expected_behavior_note": "The integration matrix is not loaded. Nothing loaded says whether a Salesforce connector exists, on which plan, or at what cost; the price list only points to the matrix for connector availability. The seller must not say it is included, must not name a fee, and must not say there is no connector; says they will confirm and come back.",
+            "required_facts": [],
+            "optional_facts": [
+              {
+                "fact": "SALES-REF-IMPLEMENTATION-2026#F12",
+                "text": "Native connectors in general take 3 to 5 business days to set up (this does not establish that a Salesforce connector exists or what it costs)."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Says the Salesforce connector is included or free.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "States a fee for the Salesforce connector.",
+                "kind": "fabrication",
+                "answer_needles": [
+                  "$250",
+                  "$400"
+                ]
+              },
+              {
+                "text": "Says there is no Salesforce connector or that it is not supported.",
+                "kind": "false_denial"
+              },
+              {
+                "text": "Presents a figure or policy belonging to another loaded mode's material (another company or product) as Kestravane's.",
+                "kind": "other_mode"
+              },
+              {
+                "text": "Answers like a system ('the documents don't say') instead of something a seller would say.",
+                "kind": "over_deferral"
+              }
+            ],
+            "expected_role": "seller (account executive) speaking to the prospect, first person",
+            "expected_action": "defer_to_verify",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [],
+            "source_priority": [],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Asking which Salesforce objects they need connected, so the follow-up is specific."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        }
+      ]
+    },
+    {
+      "family": "ER-CF-SALES-2",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Peak season is close. Can you commit, in writing, that we're fully live thirty days after we start?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "We're about 140 trucks and we'd be going with Operations."
+        }
+      ],
+      "variants": [
+        {
+          "variant": "A",
+          "evidence_config": "sales-cf-golive-guarantee",
+          "pi_state": "none",
+          "evidence_state": "policy_guarantees_30_days",
+          "oracle": {
+            "expected_behavior_note": "The implementation guide now carries an explicit 30-Day Go-Live Commitment for Operations rollouts of up to 200 vehicles, which account teams may state. At 140 trucks on Operations the prospect is in scope, so the seller says yes, within the scope: 30 calendar days from the kickoff call, provided the prospect supplies the vehicle list within 5 business days of kickoff and releases the vehicles on the agreed installation days.",
+            "required_facts": [
+              {
+                "fact": "SALES-REF-IMPLEMENTATION-2026~guarantee#F7",
+                "text": "Yes: go-live within 30 calendar days is guaranteed for an Operations rollout of this size, and it is in the standard order form.",
+                "answer_needles": []
+              },
+              {
+                "fact": "SALES-REF-IMPLEMENTATION-2026~guarantee#F7",
+                "text": "The 30 days run from the kickoff call.",
+                "answer_needles": [
+                  "kickoff",
+                  "kick-off",
+                  "kick off"
+                ]
+              },
+              {
+                "fact": "SALES-REF-IMPLEMENTATION-2026~guarantee#F7",
+                "text": "It is conditional on the customer supplying the vehicle list within 5 business days of kickoff and releasing vehicles on the agreed days.",
+                "answer_needles": []
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "SALES-REF-IMPLEMENTATION-2026~guarantee#F7",
+                "text": "If Kestravane misses the date for reasons within its control, the onboarding fee is refunded in full."
+              },
+              {
+                "fact": "SALES-REF-IMPLEMENTATION-2026#F2",
+                "text": "Kickoff is normally held within 5 business days of signature."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Refuses to commit or says it can only be an estimate, although the policy guarantees it for this case.",
+                "kind": "over_deferral"
+              },
+              {
+                "text": "Guarantees 30 days from signature, or unconditionally, with no mention of the conditions.",
+                "kind": "unauthorized_promise"
+              },
+              {
+                "text": "Promises a remedy beyond the onboarding fee refund (penalties, free months).",
+                "kind": "unauthorized_promise"
+              }
+            ],
+            "expected_role": "seller (account executive) speaking to the prospect, first person",
+            "expected_action": "answer_directly",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "SALES-REF-IMPLEMENTATION-2026~guarantee"
+            ],
+            "source_priority": [
+              "SALES-REF-IMPLEMENTATION-2026~guarantee"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "B",
+          "evidence_config": "sales-full",
+          "pi_state": "none",
+          "evidence_state": "document_says_estimate_only",
+          "oracle": {
+            "expected_behavior_note": "The implementation guide gives about 30 days from kickoff as the typical duration for an Operations fleet of this size, and says explicitly that it is an estimate, not a commitment, and that account teams cannot commit to a date. The seller says 30 days is typical for a fleet like theirs but does not guarantee it; a committed date needs a Statement of Work signed by the head of Professional Services after a scoping call, which the seller can offer to arrange.",
+            "required_facts": [
+              {
+                "fact": "SALES-REF-IMPLEMENTATION-2026#F4",
+                "text": "About 30 days from kickoff is typical for an Operations fleet of up to 200 vehicles.",
+                "answer_needles": [
+                  "typical",
+                  "usually",
+                  "normally",
+                  "on average",
+                  "estimate",
+                  "generally"
+                ]
+              },
+              {
+                "fact": "SALES-REF-IMPLEMENTATION-2026#F7",
+                "text": "It is an estimate, not a commitment; the seller cannot guarantee it or put it in writing alone.",
+                "answer_needles": []
+              },
+              {
+                "fact": "SALES-REF-IMPLEMENTATION-2026#F7",
+                "text": "A committed date is possible only through a Statement of Work signed by the Director of Professional Services after a scoping call.",
+                "answer_needles": []
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "SALES-REF-IMPLEMENTATION-2026#F2",
+                "text": "The clock starts at the kickoff call, normally within 5 business days of signature."
+              },
+              {
+                "fact": "SALES-REF-IMPLEMENTATION-2026#F8",
+                "text": "The usual causes of delay are vehicles not released, a late vehicle list and single sign-on setup."
+              },
+              {
+                "fact": "SALES-REF-IMPLEMENTATION-2026#F9",
+                "text": "Hardware arrives 7 to 10 business days after the order."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Guarantees or commits in writing to go-live in 30 days.",
+                "kind": "unauthorized_promise"
+              },
+              {
+                "text": "Says a guarantee or refund applies if the date is missed.",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Refuses to give any timeline although the guide gives a typical one.",
+                "kind": "over_deferral"
+              }
+            ],
+            "expected_role": "seller (account executive) speaking to the prospect, first person",
+            "expected_action": "answer_then_scope_authority",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [
+              "SALES-REF-IMPLEMENTATION-2026"
+            ],
+            "source_priority": [
+              "SALES-REF-IMPLEMENTATION-2026"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Offering to set up the scoping call so a committed date can go into a Statement of Work."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "C",
+          "evidence_config": "sales-cf-golive-absent",
+          "pi_state": "none",
+          "evidence_state": "no_implementation_document",
+          "oracle": {
+            "expected_behavior_note": "The implementation guide is not loaded and nothing else gives a rollout duration or a go-live policy. The seller must not guarantee thirty days and must not present a typical duration as fact; says they will check with the implementation team what can be committed for 140 trucks and come back quickly.",
+            "required_facts": [],
+            "optional_facts": [
+              {
+                "fact": "SALES-REF-PRICING-2026#F28",
+                "text": "The onboarding fee covers the kickoff call, configuration, training and support through go-live (no duration is given)."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Guarantees or commits to go-live in 30 days.",
+                "kind": "unauthorized_promise"
+              },
+              {
+                "text": "States a typical rollout duration as fact (for example 'we usually do it in about a month').",
+                "kind": "fabrication"
+              },
+              {
+                "text": "Says a 30-day go-live is impossible.",
+                "kind": "false_denial"
+              },
+              {
+                "text": "Presents a figure or policy belonging to another loaded mode's material (another company or product) as Kestravane's.",
+                "kind": "other_mode"
+              },
+              {
+                "text": "Answers like a system ('I don't have that document') instead of something a seller would say.",
+                "kind": "over_deferral"
+              }
+            ],
+            "expected_role": "seller (account executive) speaking to the prospect, first person",
+            "expected_action": "defer_to_verify",
+            "expected_response_type": "spoken_reply",
+            "source_ids": [],
+            "source_priority": [],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Asking when peak season starts and what must be live by then, to take a concrete request to the implementation team."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        }
+      ]
+    }
+  ]
+}

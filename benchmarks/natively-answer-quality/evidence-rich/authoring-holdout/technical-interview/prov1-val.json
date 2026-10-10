@@ -1,0 +1,1548 @@
+{
+ "mode": "technical-interview",
+ "items": [
+  {
+   "id": "ER-PVV1-TI-001",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Tell me about the job you had immediately before your current company. Where was it, what was your title, and what's the one thing you'd point to from your time there?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "B-RESUME",
+   "condition": "grounded_single",
+   "pi_condition": "resume_only",
+   "category": "prov_employer_title",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "The job right before Lumenquay is Ondaverde Health in Lisbon, where she was a Frontend Engineer from February 2020 to May 2022. What belongs to that job: leading the move of the Farolim patient portal from Vue 2 to Vue 3 (140 views, Vuex replaced by Pinia, 8 months), raising unit coverage from 34% to 71%, the accessibility remediation that passed an external WCAG 2.1 AA audit in March 2022, and the reminder-preference screens and availability editor. A right answer names Ondaverde, gives the title Frontend Engineer and picks one of those. It must not describe Plumewright Studio (two jobs back, Junior Web Developer) and must not move Lumenquay work (Fernlatch, Pebblekit, Dialbench) into that job.",
+    "required_facts": [
+     {
+      "fact": "PI-B-RESUME#F11",
+      "text": "The previous employer was Ondaverde Health.",
+      "answer_needles": [
+       "Ondaverde"
+      ]
+     },
+     {
+      "fact": "PI-B-RESUME#F11",
+      "text": "Her title there was Frontend Engineer.",
+      "answer_needles": [
+       "Frontend Engineer",
+       "Front-end Engineer",
+       "Front End Engineer"
+      ]
+     },
+     {
+      "fact": "PI-B-RESUME#F31",
+      "text": "Something she did there: the Farolim move from Vue 2 to Vue 3, the coverage rise, or the external accessibility audit.",
+      "answer_needles": [
+       "Farolim",
+       "Vue 3",
+       "Vue 2",
+       "WCAG 2.1",
+       "34%",
+       "71%",
+       "audit"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "PI-B-RESUME#F33",
+      "text": "Unit coverage from 34% to 71%."
+     },
+     {
+      "fact": "PI-B-RESUME#F34",
+      "text": "External WCAG 2.1 AA audit passed in March 2022."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Describes Plumewright Studio, two jobs back, as the previous job.",
+      "kind": "fabrication",
+      "fact": "PI-B-RESUME#F12",
+      "answer_needles": [
+       "Plumewright",
+       "Junior Web Developer",
+       "marketing sites"
+      ]
+     },
+     {
+      "text": "Moves work done at Lumenquay into the previous job.",
+      "kind": "fabrication",
+      "fact": "PI-B-RESUME#F18",
+      "answer_needles": [
+       "Fernlatch",
+       "Pebblekit",
+       "Dialbench"
+      ]
+     },
+     {
+      "text": "Gives a Senior or Lead title for that job.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Answers with the other candidate's facts (the backend profile: his employer, projects, numbers or the posting he applied to).",
+      "kind": "other_profile",
+      "fact": "PI-A-RESUME#F12",
+      "answer_needles": [
+       "Quillhaven",
+       "Skeinrouter",
+       "Marrowgate",
+       "Tessarine",
+       "Farecrest",
+       "Thorambath",
+       "Ostrakel",
+       "pgslotwatch"
+      ]
+     }
+    ],
+    "expected_role": "the candidate (Catarina) answering the interviewer aloud, in the first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "PI:RESUME"
+    ],
+    "source_priority": [
+     "PI:RESUME"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-PVV1-TI-002",
+   "mode": "technical-interview",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "what did i deliver at lumenquay while i was still senior, i.e. before the lead title? just that stretch, i keep mixing it up with the newer stuff",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "B",
+   "condition": "grounded_single",
+   "pi_condition": "resume_jd",
+   "category": "prov_employer_title",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Her Senior Frontend Engineer period at Lumenquay is June 2022 to December 2023. The CV lists three things under it: tech lead of Fernlatch, the rebuild of the pet-owner booking flow (September 2022 to April 2023); moving the clinic web app from JavaScript to TypeScript in strict mode (1,150 files over 5 months, no release freeze); and performance budgets with Lighthouse CI (a pull request adding more than 25 kB to the booking route is blocked). Pebblekit is dated 2023 to present, so it started in that period although its line sits under the Lead title: mentioning it with that caveat is fine. What belongs to the Lead period (from January 2024) and must not be listed as Senior-period work: Dialbench and its 38 experiments, the analytics taxonomy of 96 events, leading the chapter of 18 engineers, the hiring loop. Ondaverde work (Farolim) and the posting's work (the CRDT editor, AI features) are not Lumenquay deliveries at all.",
+    "required_facts": [
+     {
+      "fact": "PI-B-RESUME#F18",
+      "text": "Tech lead of Fernlatch, the booking flow rebuild.",
+      "answer_needles": [
+       "Fernlatch"
+      ]
+     },
+     {
+      "fact": "PI-B-RESUME#F29",
+      "text": "The move of the clinic web app to TypeScript strict mode.",
+      "answer_needles": [
+       "TypeScript"
+      ]
+     },
+     {
+      "fact": "PI-B-RESUME#F30",
+      "text": "Performance budgets with Lighthouse CI.",
+      "answer_needles": [
+       "Lighthouse",
+       "performance budget",
+       "25 kB",
+       "25kB"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "PI-B-RESUME#F10",
+      "text": "Senior Frontend Engineer from June 2022 to December 2023."
+     },
+     {
+      "fact": "PI-B-RESUME#F14",
+      "text": "Pebblekit dates from 2023, so it began in that period."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Lists Lead-period work as delivered while she was Senior (the experiments run on Dialbench, the 96-event taxonomy, leading the chapter of 18).",
+      "kind": "fabrication",
+      "fact": "PI-B-RESUME#F26",
+      "answer_needles": [
+       "38 experiments",
+       "96 tracked",
+       "96 events",
+       "18 engineers",
+       "27% to 33%"
+      ]
+     },
+     {
+      "text": "Lists work from Ondaverde Health as Lumenquay work.",
+      "kind": "fabrication",
+      "fact": "PI-B-RESUME#F31",
+      "answer_needles": [
+       "Farolim",
+       "Ondaverde",
+       "140 views"
+      ]
+     },
+     {
+      "text": "Lists the posting's work as something she delivered.",
+      "kind": "fabrication",
+      "fact": "PI-B-JD#F13",
+      "answer_needles": [
+       "Yjs",
+       "Inkwharf"
+      ]
+     },
+     {
+      "text": "Answers with the other candidate's facts (the backend profile: his employer, projects, numbers or the posting he applied to).",
+      "kind": "other_profile",
+      "fact": "PI-A-RESUME#F12",
+      "answer_needles": [
+       "Quillhaven",
+       "Skeinrouter",
+       "Marrowgate",
+       "Tessarine",
+       "Farecrest",
+       "Thorambath",
+       "Ostrakel",
+       "pgslotwatch"
+      ]
+     }
+    ],
+    "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+    "expected_action": "answer_directly",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "PI:RESUME"
+    ],
+    "source_priority": [
+     "PI:RESUME"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Listing the Lead-period items separately, clearly labelled as later, to help her keep the two apart."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-PVV1-TI-003",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "That little Postgres tool on your CV, pgslotwatch. Did that come out of your work at Quillhaven?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "A-RESUME",
+   "condition": "grounded_single",
+   "pi_condition": "resume_only",
+   "category": "prov_employer_title",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "No. The résumé lists pgslotwatch as an open-source project dated 2022, under no employer: a small Go command-line tool that reports PostgreSQL replication-slot lag and alerts before a slot fills the disk, with about 260 GitHub stars. He joined Quillhaven only in March 2023, so the tool is older than his time there. In 2022 he was employed at Tessarine Mobility, but the résumé does not say the tool was built for Tessarine either, so the answer should present it as his own open-source work from 2022 and not as a company project of either employer.",
+    "required_facts": [
+     {
+      "fact": "PI-A-RESUME#F40",
+      "text": "It dates from 2022, before he joined Quillhaven.",
+      "answer_needles": [
+       "2022"
+      ]
+     },
+     {
+      "fact": "PI-A-RESUME#F40",
+      "text": "It is an open-source project of his own, listed under no employer.",
+      "answer_needles": [
+       "open source",
+       "open-source",
+       "side project",
+       "personal project",
+       "own time",
+       "on my own"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "PI-A-RESUME#F9",
+      "text": "He joined Quillhaven in March 2023."
+     },
+     {
+      "fact": "PI-A-RESUME#F40",
+      "text": "A Go command-line tool for replication-slot lag, about 260 GitHub stars."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says yes: that it was built at or for Quillhaven, for example for the Marrowgate migration or for Skeinrouter.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "for Marrowgate",
+       "during Marrowgate",
+       "for Skeinrouter",
+       "during Skeinrouter"
+      ]
+     },
+     {
+      "text": "States as fact that it was a Tessarine Mobility company project (the résumé does not say so).",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Answers with the other candidate's facts (the frontend profile: her employer, projects, numbers or the posting she applied to).",
+      "kind": "other_profile",
+      "fact": "PI-B-RESUME#F18",
+      "answer_needles": [
+       "Lumenquay",
+       "Fernlatch",
+       "Pebblekit",
+       "Dialbench",
+       "Velmonte",
+       "Ondaverde",
+       "Farolim",
+       "Plumewright",
+       "Hollowpine",
+       "Inkwharf"
+      ]
+     }
+    ],
+    "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "PI:RESUME"
+    ],
+    "source_priority": [
+     "PI:RESUME"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying it dates from the years he was working at Tessarine, as his own open-source work."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-PVV1-TI-004",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "You've got a p95 here that went from three hundred and ten milliseconds down to eighty-five. Which API was that, and which of your roles were you in when you did it?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "A-RESUME",
+   "condition": "grounded_single",
+   "pi_condition": "resume_only",
+   "category": "prov_employer_title",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "310 ms to 85 ms is the p95 of the load-search API at Quillhaven, and the résumé lists it under his current role, Senior Software Engineer and Tech Lead, Dispatch Core (April 2024 to present); he did it by replacing OFFSET pagination with keyset pagination and adding two covering indexes. The near miss is the other p95 on the résumé: Farecrest, the fare-quote service at Tessarine Mobility, went from 480 ms to 95 ms while he was a Software Engineer there. A right answer names the load-search API and the Senior and Tech Lead role.",
+    "required_facts": [
+     {
+      "fact": "PI-A-RESUME#F24",
+      "text": "It was the load-search API (at Quillhaven).",
+      "answer_needles": [
+       "load-search",
+       "load search"
+      ]
+     },
+     {
+      "fact": "PI-A-RESUME#F7",
+      "text": "He did it as Senior Software Engineer and Tech Lead of Dispatch Core.",
+      "answer_needles": [
+       "Tech Lead",
+       "Senior Software Engineer"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "PI-A-RESUME#F24",
+      "text": "Keyset pagination in place of OFFSET, and two covering indexes."
+     },
+     {
+      "fact": "PI-A-RESUME#F5",
+      "text": "At Quillhaven Freight Systems."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Attributes the figure to Farecrest or to Tessarine Mobility, whose p95 went from 480 ms to 95 ms.",
+      "kind": "fabrication",
+      "fact": "PI-A-RESUME#F33",
+      "answer_needles": [
+       "Farecrest",
+       "Tessarine",
+       "Ktor",
+       "480 ms",
+       "480ms"
+      ]
+     },
+     {
+      "text": "Places the work in his Software Engineer II year.",
+      "kind": "fabrication",
+      "fact": "PI-A-RESUME#F9",
+      "answer_needles": [
+       "Engineer II"
+      ]
+     },
+     {
+      "text": "Answers with the other candidate's facts (the frontend profile: her employer, projects, numbers or the posting she applied to).",
+      "kind": "other_profile",
+      "fact": "PI-B-RESUME#F18",
+      "answer_needles": [
+       "Lumenquay",
+       "Fernlatch",
+       "Pebblekit",
+       "Dialbench",
+       "Velmonte",
+       "Ondaverde",
+       "Farolim",
+       "Plumewright",
+       "Hollowpine",
+       "Inkwharf"
+      ]
+     }
+    ],
+    "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "PI:RESUME"
+    ],
+    "source_priority": [
+     "PI:RESUME"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-PVV1-TI-005",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "How long had you been at Lumenquay when they gave you the Lead title? Count from the month you joined to the month the title changed, in months.",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "B-RESUME",
+   "condition": "grounded_single",
+   "pi_condition": "resume_only",
+   "category": "prov_time_span",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "She joined Lumenquay in June 2022 as Senior Frontend Engineer and became Lead Frontend Engineer in January 2024. June 2022 to January 2024 is 19 months (1 year 7 months). The likely mistakes: stopping at December 2023, the last month printed for the earlier title, which gives 18; counting from May 2022, the end date of the previous job (20); giving the time she has held the Lead title (2 years 9 months) or her whole time at the company (4 years 4 months) instead.",
+    "required_facts": [
+     {
+      "fact": "PI-B-RESUME#F10",
+      "text": "June 2022 to January 2024 is 19 months.",
+      "answer_needles": [
+       "19 months",
+       "nineteen months",
+       "19 mos",
+       "1 year 7 months",
+       "1 year and 7 months",
+       "1 year, 7 months",
+       "one year seven months",
+       "one year and seven months",
+       "one year, seven months",
+       "1 yrs 7 mos",
+       "1 yrs, 7 mos",
+       "1 yr 7 mo",
+       "1 yrs 7 months",
+       "1 year 7 mos",
+       "1y 7m",
+       "1y7m",
+       "1 yrs and 7 months",
+       "1 year & 7 months",
+       "a year and seven months",
+       "a year and 7 months",
+       "one year and 7 months"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "PI-B-RESUME#F8",
+      "text": "Lead Frontend Engineer since January 2024."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives the time she has held the Lead title, or her whole time at the company, instead of the time before the title.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Answers with the other candidate's facts (the backend profile: his employer, projects, numbers or the posting he applied to).",
+      "kind": "other_profile",
+      "fact": "PI-A-RESUME#F12",
+      "answer_needles": [
+       "Quillhaven",
+       "Skeinrouter",
+       "Marrowgate",
+       "Tessarine",
+       "Farecrest",
+       "Thorambath",
+       "Ostrakel",
+       "pgslotwatch"
+      ]
+     }
+    ],
+    "expected_role": "the candidate (Catarina) answering the interviewer aloud, in the first person",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "PI:RESUME"
+    ],
+    "source_priority": [
+     "PI:RESUME"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "(2024 - 2022) * 12 + (1 - 6)",
+     "result": 19,
+     "unit": "months (1 year 7 months): June 2022 (joined Lumenquay) to January 2024 (Lead Frontend Engineer)",
+     "accepted_forms": [
+      "19 months",
+      "nineteen months",
+      "19 mos",
+      "1 year 7 months",
+      "1 year and 7 months",
+      "1 year, 7 months",
+      "one year seven months",
+      "one year and seven months",
+      "one year, seven months",
+      "1 yrs 7 mos",
+      "1 yrs, 7 mos",
+      "1 yr 7 mo",
+      "1 yrs 7 months",
+      "1 year 7 mos",
+      "1y 7m",
+      "1y7m",
+      "1 yrs and 7 months",
+      "1 year & 7 months",
+      "a year and seven months",
+      "a year and 7 months",
+      "one year and 7 months"
+     ],
+     "inputs": {
+      "joined_lumenquay": "PI-B-RESUME#F10",
+      "lead_since": "PI-B-RESUME#F8"
+     },
+     "wrong_results_common": [
+      "18 months",
+      "eighteen months",
+      "1 year 6 months",
+      "1 year and 6 months",
+      "1 year, 6 months",
+      "one year six months",
+      "one year and six months",
+      "one year, six months",
+      "1y 6m",
+      "1 yrs 6 mos",
+      "a year and six months",
+      "20 months",
+      "twenty months",
+      "1 year 8 months",
+      "1 year and 8 months",
+      "1 year, 8 months",
+      "one year eight months",
+      "one year and eight months",
+      "one year, eight months",
+      "1y 8m",
+      "1 yrs 8 mos",
+      "a year and eight months",
+      "33 months",
+      "thirty-three months",
+      "2 years 9 months",
+      "2 years and 9 months",
+      "2 years, 9 months",
+      "two years nine months",
+      "two years and nine months",
+      "two years, nine months",
+      "2y 9m",
+      "2 yrs 9 mos",
+      "47 months",
+      "forty-seven months",
+      "3 years 11 months",
+      "3 years and 11 months",
+      "3 years, 11 months",
+      "three years eleven months",
+      "three years and eleven months",
+      "three years, eleven months",
+      "3y 11m",
+      "3 yrs 11 mos",
+      "52 months",
+      "fifty-two months",
+      "4 years 4 months",
+      "4 years and 4 months",
+      "4 years, 4 months",
+      "four years four months",
+      "four years and four months",
+      "four years, four months",
+      "4y 4m",
+      "4 yrs 4 mos",
+      "31 months",
+      "thirty-one months",
+      "2 years 7 months",
+      "2 years and 7 months",
+      "2 years, 7 months",
+      "two years seven months",
+      "two years and seven months",
+      "two years, seven months",
+      "2y 7m",
+      "2 yrs 7 mos"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-PVV1-TI-006",
+   "mode": "technical-interview",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "how long did it take me to get from starting my first job to the tech lead title? start month to start month, years and months. want it ready if he asks how fast i moved up",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "A",
+   "condition": "grounded_single",
+   "pi_condition": "resume_jd",
+   "category": "prov_time_span",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "His first job, Software Engineer at Tessarine Mobility, started in July 2020. He became Senior Software Engineer and Tech Lead of Dispatch Core at Quillhaven in April 2024. July 2020 to April 2024 is 3 years 9 months (45 months). The likely mistakes: stopping at March 2023, when he changed employer and joined Quillhaven as Software Engineer II, which is not the tech lead title (2 years 8 months); stopping at March 2024, the last month printed for the Software Engineer II title (3 years 8 months); counting only from the day he joined Quillhaven (1 year 1 month); stopping at June 2024, when Skeinrouter started. The posting is loaded too but has no part in this.",
+    "required_facts": [
+     {
+      "fact": "PI-A-RESUME#F7",
+      "text": "July 2020 to April 2024 is 3 years 9 months.",
+      "answer_needles": [
+       "45 months",
+       "forty-five months",
+       "45 mos",
+       "3 years 9 months",
+       "3 years and 9 months",
+       "3 years, 9 months",
+       "three years nine months",
+       "three years and nine months",
+       "three years, nine months",
+       "3 yrs 9 mos",
+       "3 yrs, 9 mos",
+       "3 yr 9 mo",
+       "3 yrs 9 months",
+       "3 years 9 mos",
+       "3y 9m",
+       "3y9m",
+       "3 yrs and 9 months",
+       "3 years & 9 months"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "PI-A-RESUME#F10",
+      "text": "First job: Software Engineer at Tessarine Mobility from July 2020."
+     },
+     {
+      "fact": "PI-A-RESUME#F9",
+      "text": "In between: Software Engineer II at Quillhaven, March 2023 to March 2024."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Treats the move to Quillhaven in March 2023 as the start of the tech lead title.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Answers with the other candidate's facts (the frontend profile: her employer, projects, numbers or the posting she applied to).",
+      "kind": "other_profile",
+      "fact": "PI-B-RESUME#F18",
+      "answer_needles": [
+       "Lumenquay",
+       "Fernlatch",
+       "Pebblekit",
+       "Dialbench",
+       "Velmonte",
+       "Ondaverde",
+       "Farolim",
+       "Plumewright",
+       "Hollowpine",
+       "Inkwharf"
+      ]
+     }
+    ],
+    "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "PI:RESUME"
+    ],
+    "source_priority": [
+     "PI:RESUME"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Rounding to 'just under four years' next to the exact figure."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "(2024 - 2020) * 12 + (4 - 7)",
+     "result": 45,
+     "unit": "months (3 years 9 months): July 2020 (first job, Tessarine Mobility) to April 2024 (Senior Software Engineer and Tech Lead)",
+     "accepted_forms": [
+      "45 months",
+      "forty-five months",
+      "45 mos",
+      "3 years 9 months",
+      "3 years and 9 months",
+      "3 years, 9 months",
+      "three years nine months",
+      "three years and nine months",
+      "three years, nine months",
+      "3 yrs 9 mos",
+      "3 yrs, 9 mos",
+      "3 yr 9 mo",
+      "3 yrs 9 months",
+      "3 years 9 mos",
+      "3y 9m",
+      "3y9m",
+      "3 yrs and 9 months",
+      "3 years & 9 months"
+     ],
+     "inputs": {
+      "first_job_start": "PI-A-RESUME#F10",
+      "tech_lead_since": "PI-A-RESUME#F7"
+     },
+     "wrong_results_common": [
+      "32 months",
+      "thirty-two months",
+      "2 years 8 months",
+      "2 years and 8 months",
+      "2 years, 8 months",
+      "two years eight months",
+      "two years and eight months",
+      "two years, eight months",
+      "2y 8m",
+      "2 yrs 8 mos",
+      "44 months",
+      "forty-four months",
+      "3 years 8 months",
+      "3 years and 8 months",
+      "3 years, 8 months",
+      "three years eight months",
+      "three years and eight months",
+      "three years, eight months",
+      "3y 8m",
+      "3 yrs 8 mos",
+      "13 months",
+      "thirteen months",
+      "1 year 1 month",
+      "1 year and 1 month",
+      "1 year, 1 month",
+      "one year one month",
+      "one year and one month",
+      "one year, one month",
+      "1y 1m",
+      "1 yrs 1 mos",
+      "a year and one month",
+      "one year and a month",
+      "31 months",
+      "thirty-one months",
+      "2 years 7 months",
+      "2 years and 7 months",
+      "2 years, 7 months",
+      "two years seven months",
+      "two years and seven months",
+      "two years, seven months",
+      "2y 7m",
+      "2 yrs 7 mos",
+      "47 months",
+      "forty-seven months",
+      "3 years 11 months",
+      "3 years and 11 months",
+      "3 years, 11 months",
+      "three years eleven months",
+      "three years and eleven months",
+      "three years, eleven months",
+      "3y 11m",
+      "3 yrs 11 mos",
+      "57 months",
+      "fifty-seven months",
+      "4 years 9 months",
+      "4 years and 9 months",
+      "4 years, 9 months",
+      "four years nine months",
+      "four years and nine months",
+      "four years, nine months",
+      "4y 9m",
+      "4 yrs 9 mos",
+      "75 months",
+      "seventy-five months",
+      "6 years 3 months",
+      "6 years and 3 months",
+      "6 years, 3 months",
+      "six years three months",
+      "six years and three months",
+      "six years, three months",
+      "6y 3m",
+      "6 yrs 3 mos"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-PVV1-TI-007",
+   "mode": "technical-interview",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "they want 4 years of react + typescript in production. if i count only from the month i joined lumenquay up to now (oct 2026), how much do i actually have? years and months, and does that clear it",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "B",
+   "condition": "multi_source",
+   "pi_condition": "resume_jd",
+   "category": "prov_time_span",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The posting asks for at least 4 years of React and TypeScript in production. She joined Lumenquay in June 2022; June 2022 to October 2026 is 4 years 4 months (52 months), so counted that way she clears the bar by 4 months. Her earlier jobs (Ondaverde Health, Plumewright Studio) are stated as Vue work and are rightly left out. The likely mistakes: counting from January 2024, the date of the Lead title (2 years 9 months, which would wrongly fail the bar); counting from May 2022, the end date of the previous job (4 years 5 months); counting the Vue years in (6 years 8 months from Ondaverde, 9 years 1 month from her first job).",
+    "required_facts": [
+     {
+      "fact": "PI-B-RESUME#F10",
+      "text": "June 2022 to October 2026 is 4 years 4 months.",
+      "answer_needles": [
+       "52 months",
+       "fifty-two months",
+       "52 mos",
+       "4 years 4 months",
+       "4 years and 4 months",
+       "4 years, 4 months",
+       "four years four months",
+       "four years and four months",
+       "four years, four months",
+       "4 yrs 4 mos",
+       "4 yrs, 4 mos",
+       "4 yr 4 mo",
+       "4 yrs 4 months",
+       "4 years 4 mos",
+       "4y 4m",
+       "4y4m",
+       "4 yrs and 4 months",
+       "4 years & 4 months"
+      ]
+     },
+     {
+      "fact": "PI-B-JD#F18",
+      "text": "That is above the 4 years the posting asks for.",
+      "answer_needles": [
+       "clear",
+       "meets",
+       "meet the",
+       "above",
+       "over the",
+       "more than",
+       "yes"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "PI-B-RESUME#F4",
+      "text": "The CV summary says the last four years have been in React and TypeScript, the earlier five mostly in Vue."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says she falls short of the 4 years.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "falls short",
+       "fall short",
+       "doesn't clear",
+       "does not clear",
+       "don't clear",
+       "do not clear",
+       "short of the bar"
+      ]
+     },
+     {
+      "text": "Counts the Vue years at Ondaverde Health or Plumewright Studio as React and TypeScript experience.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Answers with the other candidate's facts (the backend profile: his employer, projects, numbers or the posting he applied to).",
+      "kind": "other_profile",
+      "fact": "PI-A-RESUME#F12",
+      "answer_needles": [
+       "Quillhaven",
+       "Skeinrouter",
+       "Marrowgate",
+       "Tessarine",
+       "Farecrest",
+       "Thorambath",
+       "Ostrakel",
+       "pgslotwatch"
+      ]
+     }
+    ],
+    "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "PI:RESUME",
+     "PI:JD"
+    ],
+    "source_priority": [
+     "PI:RESUME",
+     "PI:JD"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Noting that the margin is only four months."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "(2026 - 2022) * 12 + (10 - 6)",
+     "result": 52,
+     "unit": "months (4 years 4 months): June 2022 (joined Lumenquay, where the CV places her React and TypeScript work) to October 2026",
+     "accepted_forms": [
+      "52 months",
+      "fifty-two months",
+      "52 mos",
+      "4 years 4 months",
+      "4 years and 4 months",
+      "4 years, 4 months",
+      "four years four months",
+      "four years and four months",
+      "four years, four months",
+      "4 yrs 4 mos",
+      "4 yrs, 4 mos",
+      "4 yr 4 mo",
+      "4 yrs 4 months",
+      "4 years 4 mos",
+      "4y 4m",
+      "4y4m",
+      "4 yrs and 4 months",
+      "4 years & 4 months"
+     ],
+     "inputs": {
+      "joined_lumenquay": "PI-B-RESUME#F10",
+      "bar": "PI-B-JD#F18",
+      "today": "October 2026 (stated in the question)"
+     },
+     "wrong_results_common": [
+      "33 months",
+      "thirty-three months",
+      "2 years 9 months",
+      "2 years and 9 months",
+      "2 years, 9 months",
+      "two years nine months",
+      "two years and nine months",
+      "two years, nine months",
+      "2y 9m",
+      "2 yrs 9 mos",
+      "53 months",
+      "fifty-three months",
+      "4 years 5 months",
+      "4 years and 5 months",
+      "4 years, 5 months",
+      "four years five months",
+      "four years and five months",
+      "four years, five months",
+      "4y 5m",
+      "4 yrs 5 mos",
+      "80 months",
+      "eighty months",
+      "6 years 8 months",
+      "6 years and 8 months",
+      "6 years, 8 months",
+      "six years eight months",
+      "six years and eight months",
+      "six years, eight months",
+      "6y 8m",
+      "6 yrs 8 mos",
+      "109 months",
+      "undefined-nine months",
+      "9 years 1 month",
+      "9 years and 1 month",
+      "9 years, 1 month",
+      "nine years one month",
+      "nine years and one month",
+      "nine years, one month",
+      "9y 1m",
+      "9 yrs 1 mos",
+      "nine years and a month",
+      "49 months",
+      "forty-nine months",
+      "4 years 1 month",
+      "4 years and 1 month",
+      "4 years, 1 month",
+      "four years one month",
+      "four years and one month",
+      "four years, one month",
+      "4y 1m",
+      "4 yrs 1 mos",
+      "four years and a month",
+      "40 months",
+      "forty months",
+      "3 years 4 months",
+      "3 years and 4 months",
+      "3 years, 4 months",
+      "three years four months",
+      "three years and four months",
+      "three years, four months",
+      "3y 4m",
+      "3 yrs 4 mos"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-PVV1-TI-008",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Let's start simple. Where are you working at the moment, what's your title there, and how long have you been in that seat?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "A-JD",
+   "condition": "missing_evidence",
+   "pi_condition": "jd_only",
+   "category": "prov_own_history_jd_only",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Only the job posting is loaded; nothing says where the candidate works now, what his title is or since when. The answer must not name an employer, a title or a tenure for him, and must not hand the posting back as his present job (that he is a Senior Backend Engineer, that he works on Ledger Core, that he reports to the posting's engineering manager, that he is based at the HSR Layout office). It stays useful in the first person: one sentence he completes with his own company, title and start date, and a bridge to why this role is the next step.",
+    "required_facts": [],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Names an employer, a title or a tenure for him (the real ones are on a résumé that is not loaded).",
+      "kind": "fabrication",
+      "answer_needles": [
+       "Quillhaven",
+       "Tessarine",
+       "Skeinrouter",
+       "Marrowgate",
+       "Farecrest",
+       "Dispatch Core",
+       "pgslotwatch",
+       "April 2024",
+       "March 2023"
+      ]
+     },
+     {
+      "text": "Hands the posting back as his present job: its title, its manager, its office or its company size.",
+      "kind": "fabrication",
+      "fact": "PI-A-JD#F5",
+      "answer_needles": [
+       "Idnavalli",
+       "HSR Layout",
+       "420 people",
+       "I'm a Senior Backend Engineer",
+       "I am a Senior Backend Engineer",
+       "I'm currently a Senior Backend Engineer",
+       "I am currently a Senior Backend Engineer",
+       "as a Senior Backend Engineer at"
+      ]
+     },
+     {
+      "text": "Replies with an assistant-style refusal ('I don't have that information') that he could not say aloud, and gives him nothing to say.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     },
+     {
+      "text": "Answers with the other candidate's facts (the frontend profile: her employer, projects, numbers or the posting she applied to).",
+      "kind": "other_profile",
+      "fact": "PI-B-RESUME#F18",
+      "answer_needles": [
+       "Lumenquay",
+       "Fernlatch",
+       "Pebblekit",
+       "Dialbench",
+       "Velmonte",
+       "Ondaverde",
+       "Farolim",
+       "Plumewright",
+       "Hollowpine",
+       "Inkwharf"
+      ]
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "decline_to_invent_stay_useful",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Mentioning the role he is interviewing for by name, as the job he wants and not the one he has."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-PVV1-TI-009",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "How many years have you spent on payment or ledger systems specifically? And which companies was that at?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "ti-a-noproject",
+   "pi_state": "A-JD",
+   "condition": "missing_evidence",
+   "pi_condition": "jd_only",
+   "category": "prov_own_history_jd_only",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The posting makes at least 2 years of building payment, ledger, banking or other money-movement systems a must-have, and that is all that is loaded about the subject: nothing says how long the candidate has done such work or where. The other loaded files are neutral interview material (a design brief, a coding sheet and three practice code files, one of which prices usage in tiers for invoices); none of them is his work history. The answer must not state a number of years or name a company for him, must not turn the posting's 2 years into his record, and must not offer the practice files as payment work he has done. It stays useful in the first person: an honest sentence he completes with his real number and employers, and, if the number is small, the adjacent experience he would offer instead, left for him to fill in.",
+    "required_facts": [],
+    "optional_facts": [
+     {
+      "fact": "PI-A-JD#F23",
+      "text": "The posting requires at least 2 years building payment, ledger, banking or other money-movement systems."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "States a number of years of payment or ledger work as his, with nothing loaded to support it.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "three years",
+       "3 years",
+       "four years",
+       "4 years",
+       "I've spent two years",
+       "I have spent two years",
+       "I've spent 2 years",
+       "I have two years",
+       "I have 2 years",
+       "I've got two years",
+       "over two years",
+       "just over 2 years"
+      ]
+     },
+     {
+      "text": "Names a company where he did such work (none is loaded; the real employers are not payment companies).",
+      "kind": "fabrication",
+      "answer_needles": [
+       "Quillhaven",
+       "Tessarine",
+       "Skeinrouter",
+       "Marrowgate",
+       "Farecrest",
+       "Dispatch Core",
+       "pgslotwatch"
+      ]
+     },
+     {
+      "text": "Hands the hiring company's own figures back as the scale of payment systems he has worked on.",
+      "kind": "fabrication",
+      "fact": "PI-A-JD#F12",
+      "answer_needles": [
+       "2.6 million",
+       "13 partner banks",
+       "3,100 marketplaces"
+      ]
+     },
+     {
+      "text": "Offers the practice files (the usage-billing script, the quota tracker, the design brief) as payment or ledger work he has done.",
+      "kind": "fabrication",
+      "fact": "TI-REF-SNIPPET-BUG#F1",
+      "answer_needles": [
+       "usage_billing",
+       "tiered_cost",
+       "tiered pricing"
+      ]
+     },
+     {
+      "text": "Replies with an assistant-style refusal ('I don't have that information') that he could not say aloud, and gives him nothing to say.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     },
+     {
+      "text": "Answers with the other candidate's facts (the frontend profile: her employer, projects, numbers or the posting she applied to).",
+      "kind": "other_profile",
+      "fact": "PI-B-RESUME#F18",
+      "answer_needles": [
+       "Lumenquay",
+       "Fernlatch",
+       "Pebblekit",
+       "Dialbench",
+       "Velmonte",
+       "Ondaverde",
+       "Farolim",
+       "Plumewright",
+       "Hollowpine",
+       "Inkwharf"
+      ]
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "decline_to_invent_stay_useful",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying what the role asks for (at least 2 years) as the bar he is answering against."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-PVV1-TI-010",
+   "mode": "technical-interview",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "she's asking which accessibility audit i've taken a product through: who ran it, what level, when it passed. what do i say",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "B-JD",
+   "condition": "missing_evidence",
+   "pi_condition": "jd_only",
+   "category": "prov_own_history_jd_only",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Only the job posting is loaded. It says what the company needs (accessibility work beyond linting, having taken a complex interface through an audit, and the whole workspace to WCAG 2.2 AA); it holds no record of any audit she has been through. The answer must say plainly that it has no record of her audits and must not supply an auditor, a product, a conformance level or a date. In particular WCAG 2.2 AA is the hiring company's target, not a level she is known to have passed. It stays useful: the shape of a good answer for her to fill in (which product, internal or external auditor, the level and date, what the audit found, what she fixed, how she tested with assistive technology).",
+    "required_facts": [],
+    "optional_facts": [
+     {
+      "fact": "PI-B-JD#F20",
+      "text": "The posting requires accessibility work beyond linting: a complex interface taken through an audit."
+     },
+     {
+      "fact": "PI-B-JD#F15",
+      "text": "The hiring company's own target is WCAG 2.2 AA for the whole workspace."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Supplies an audit, a product, an auditor, a level or a date as hers (the real ones are on a CV that is not loaded).",
+      "kind": "fabrication",
+      "answer_needles": [
+       "Lumenquay",
+       "Ondaverde",
+       "Plumewright",
+       "Pebblekit",
+       "Fernlatch",
+       "Dialbench",
+       "Farolim",
+       "March 2022",
+       "2.1 AA",
+       "WCAG 2.1"
+      ]
+     },
+     {
+      "text": "Presents the posting's WCAG 2.2 AA target as the level she passed.",
+      "kind": "fabrication",
+      "answer_needles": []
+     },
+     {
+      "text": "Answers with the other candidate's facts (the backend profile: his employer, projects, numbers or the posting he applied to).",
+      "kind": "other_profile",
+      "fact": "PI-A-RESUME#F12",
+      "answer_needles": [
+       "Quillhaven",
+       "Skeinrouter",
+       "Marrowgate",
+       "Tessarine",
+       "Farecrest",
+       "Thorambath",
+       "Ostrakel",
+       "pgslotwatch"
+      ]
+     }
+    ],
+    "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+    "expected_action": "decline_to_invent_stay_useful",
+    "expected_response_type": "private_advice",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Offering wording such as 'The audit I took a product through was ...' for her to complete."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-PVV1-TI-011",
+   "mode": "technical-interview",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Before we get going, what's your understanding of what this team is actually responsible for?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "A-JD",
+   "condition": "grounded_single",
+   "pi_condition": "jd_only",
+   "category": "prov_posting_fact",
+   "difficulty": "easy",
+   "oracle": {
+    "expected_behavior_note": "The posting answers this plainly: the team is Ledger Core, and it owns three things: the double-entry ledger, the idempotency layer in front of every money-moving API, and the daily reconciliation between the company's books, processor reports and bank statements. The answer gives those three directly, in his voice, without hedging. It may add the team's size (9 engineers: 7 backend and 2 site reliability). Nothing about his own background is loaded, so none is added as fact.",
+    "required_facts": [
+     {
+      "fact": "PI-A-JD#F3",
+      "text": "The double-entry ledger.",
+      "answer_needles": [
+       "double-entry",
+       "double entry"
+      ]
+     },
+     {
+      "fact": "PI-A-JD#F3",
+      "text": "The idempotency layer in front of every money-moving API.",
+      "answer_needles": [
+       "idempotency",
+       "idempotent"
+      ]
+     },
+     {
+      "fact": "PI-A-JD#F3",
+      "text": "The daily reconciliation.",
+      "answer_needles": [
+       "reconciliation",
+       "reconcil"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "PI-A-JD#F4",
+      "text": "9 engineers: 7 backend engineers and 2 site reliability engineers."
+     },
+     {
+      "fact": "PI-A-JD#F17",
+      "text": "A Kafka backbone carries ledger events to settlement, risk and reporting."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says he does not know what the team does, or only asks the interviewer to explain.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     },
+     {
+      "text": "Adds responsibilities the posting does not give the team.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "KYC",
+       "fraud detection",
+       "card issuing"
+      ]
+     },
+     {
+      "text": "Adds his own employer or projects as fact, with no résumé loaded.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "Quillhaven",
+       "Skeinrouter",
+       "Marrowgate",
+       "Tessarine"
+      ]
+     },
+     {
+      "text": "Answers with the other candidate's facts (the frontend profile: her employer, projects, numbers or the posting she applied to).",
+      "kind": "other_profile",
+      "fact": "PI-B-RESUME#F18",
+      "answer_needles": [
+       "Lumenquay",
+       "Fernlatch",
+       "Pebblekit",
+       "Dialbench",
+       "Velmonte",
+       "Ondaverde",
+       "Farolim",
+       "Plumewright",
+       "Hollowpine",
+       "Inkwharf",
+       "Workspace Surface"
+      ]
+     }
+    ],
+    "expected_role": "the candidate answering the interviewer aloud, in the first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "PI:JD"
+    ],
+    "source_priority": [
+     "PI:JD"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-PVV1-TI-012",
+   "mode": "technical-interview",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "quick one before the pairing bit: what's their collab layer built on, and how many people can be in one doc at the same time?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "technical-interview-none",
+   "pi_state": "B-JD",
+   "condition": "grounded_single",
+   "pi_condition": "jd_only",
+   "category": "prov_posting_fact",
+   "difficulty": "easy",
+   "oracle": {
+    "expected_behavior_note": "The posting answers this plainly: conflict-free editing runs on a CRDT layer, Yjs over WebSockets, in documents with up to 50 people editing at once. The answer gives both. The near miss is the 500-block document in the performance target, which is a document size and not a number of people. Nothing about her own experience with CRDTs is loaded, so none is claimed.",
+    "required_facts": [
+     {
+      "fact": "PI-B-JD#F13",
+      "text": "A CRDT layer: Yjs over WebSockets.",
+      "answer_needles": [
+       "Yjs"
+      ]
+     },
+     {
+      "fact": "PI-B-JD#F13",
+      "text": "Up to 50 people editing one document at once.",
+      "answer_needles": [
+       "50 people",
+       "50 editors",
+       "50 users",
+       "50 concurrent",
+       "50 simultaneous",
+       "up to 50",
+       "fifty"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "PI-B-JD#F19",
+      "text": "Having shipped real-time collaborative or multiplayer features is a requirement."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives the 500 of the performance target, or another number, as the number of people in a document.",
+      "kind": "fabrication",
+      "fact": "PI-B-JD#F17",
+      "answer_needles": [
+       "500 people",
+       "500 editors",
+       "500 users",
+       "500 concurrent"
+      ]
+     },
+     {
+      "text": "Names another collaboration technology as theirs.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "Automerge",
+       "ShareDB",
+       "Liveblocks"
+      ]
+     },
+     {
+      "text": "Says she has worked with Yjs or CRDTs, or names her employer, with no CV loaded.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "Lumenquay",
+       "Fernlatch"
+      ]
+     },
+     {
+      "text": "Says the posting does not say.",
+      "kind": "over_deferral",
+      "answer_needles": []
+     },
+     {
+      "text": "Answers with the other candidate's facts (the backend profile: his employer, projects, numbers or the posting he applied to).",
+      "kind": "other_profile",
+      "fact": "PI-A-RESUME#F12",
+      "answer_needles": [
+       "Quillhaven",
+       "Skeinrouter",
+       "Marrowgate",
+       "Tessarine",
+       "Farecrest",
+       "Thorambath",
+       "Ostrakel",
+       "pgslotwatch"
+      ]
+     }
+    ],
+    "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+    "expected_action": "answer_directly",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "PI:JD"
+    ],
+    "source_priority": [
+     "PI:JD"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  }
+ ]
+}

@@ -1,0 +1,1492 @@
+{
+ "mode": "sales",
+ "items": [
+  {
+   "id": "ER-P24-SALES-N-001",
+   "mode": "sales",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "So which cable do those trucks take, what's the fitting bill for the lot, and roughly how many days is your crew going to be in our yard?",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "It's a hundred and twenty tractors, every one of them a 2019 Freightliner Cascadia, and they all run out of the Amarillo yard."
+    },
+    {
+     "speaker": "other",
+     "text": "We'd want your installers to put the tracker and the camera in on the same visit."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-p24",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "implementation",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Three documents. Vehicle compatibility list (new): a 2019 Freightliner Cascadia is a Class 8 tractor from 2016 or later, green 9-pin connector, harness KH-9G (the black-connector KH-9B is for tractors before 2016 and for yard tractors). Current price list: professional installation is $45 per vehicle and covers every device fitted in the same visit, so the camera adds nothing: 120 x $45 = $5,400, and installation is never discounted. Implementation guide: one two-person crew fits about 15 vehicles per working day at a single depot, so 120 / 15 = about 8 working days for one crew. The seller gives the days as an estimate, not a commitment, and may add that installation is booked at least 10 business days ahead.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-VEHICLE-COMPAT-2026#F6",
+      "text": "A 2019 Cascadia takes the green 9-pin harness, KH-9G.",
+      "answer_needles": [
+       "KH-9G",
+       "KH9G",
+       "KH 9G"
+      ]
+     },
+     {
+      "fact": "SALES-REF-PRICING-2026#F32",
+      "text": "Professional installation is $45 per vehicle and covers every device fitted in the same visit: 120 x $45 = $5,400.",
+      "answer_needles": [
+       "5,400",
+       "5400",
+       "5.4k",
+       "fifty-four hundred",
+       "fifty four hundred",
+       "five thousand four hundred"
+      ]
+     },
+     {
+      "fact": "SALES-REF-IMPLEMENTATION-2026#F10",
+      "text": "One crew fits about 15 vehicles per working day at one depot, so about 8 working days.",
+      "answer_needles": [
+       "eight working days",
+       "8 working days",
+       "eight days",
+       "8 days",
+       "eight business days",
+       "8 business days",
+       "about eight",
+       "about 8",
+       "around eight",
+       "around 8",
+       "roughly eight",
+       "roughly 8",
+       "eight or so",
+       "8 or so"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-IMPLEMENTATION-2026#F10",
+      "text": "Professional installation is booked at least 10 business days ahead."
+     },
+     {
+      "fact": "SALES-REF-HARDWARE-INSTALL-2026#F18",
+      "text": "The camera is powered from the TrakNode, so the TrakNode is fitted first in the same visit."
+     },
+     {
+      "fact": "SALES-REF-PRICING-2026#F36",
+      "text": "Installation is never discounted."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives the harness for tractors built before 2016.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-VEHICLE-COMPAT-2026#F7",
+      "answer_needles": [
+       "KH-9B"
+      ]
+     },
+     {
+      "text": "Gives a harness that belongs to another vehicle group.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "KH-16Y",
+       "KH-16J",
+       "KH-3W"
+      ]
+     },
+     {
+      "text": "Charges the installation once per device (tracker and camera), 120 x 2 x $45.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "10,800",
+       "10800"
+      ]
+     },
+     {
+      "text": "Applies the volume discount to installation.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "5,130"
+      ]
+     },
+     {
+      "text": "States the number of days or a finish date as a commitment.",
+      "kind": "unauthorized_promise"
+     },
+     {
+      "text": "Gives the 10-business-day booking lead time as the time the crew is on site.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "seller (account executive) speaking to the prospect, first person",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SALES-REF-VEHICLE-COMPAT-2026",
+     "SALES-REF-PRICING-2026",
+     "SALES-REF-IMPLEMENTATION-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-VEHICLE-COMPAT-2026",
+     "SALES-REF-HARDWARE-INSTALL-2026",
+     "SALES-REF-PRICING-2026",
+     "SALES-REF-IMPLEMENTATION-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Adding that the hardware itself (units and cameras) is priced separately.",
+     "Saying that more than one crew would shorten the visit, as a possibility to check, not a promise."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "120 * 45",
+     "result": 5400,
+     "unit": "USD (installation); and 120 / 15 = 8 working days for one crew",
+     "accepted_forms": [
+      "5,400",
+      "5400",
+      "$5,400",
+      "5.4k",
+      "fifty-four hundred",
+      "five thousand four hundred"
+     ],
+     "inputs": {
+      "install_price": "SALES-REF-PRICING-2026#F32",
+      "crew_rate": "SALES-REF-IMPLEMENTATION-2026#F10",
+      "harness": "SALES-REF-VEHICLE-COMPAT-2026#F6",
+      "vehicles": "stated in the conversation (120)"
+     },
+     "wrong_results_common": [
+      "10,800",
+      "10800",
+      "5,130"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-SALES-N-002",
+   "mode": "sales",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "prospect's must-have list for the operations plan: two-way salesforce sync, okta login, users created and removed automatically from okta, a phone number to ring support, and dashboards they can build themselves. how many of those five do they really get on operations, and which ones are missing",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-p24",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "connector_capability",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "A count across four documents. Integration matrix: the Salesforce connector is two-way and included on Operations. Security overview: single sign-on is included on Operations and verified with Okta; SCIM user provisioning is Enterprise only. Support guide: phone support is Enterprise only, Operations has email and chat. Release notes (new): custom dashboards are available on Operations and Enterprise (12 per account on Operations). So three of the five come with Operations (Salesforce two-way sync, Okta single sign-on, custom dashboards), and two do not (automatic provisioning and phone support, both Enterprise only).",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-RELEASE-NOTES-2026#F11",
+      "text": "Custom dashboards are available on Operations, which makes three of the five.",
+      "answer_needles": [
+       "three",
+       "3 of",
+       "3 out of",
+       "3/5",
+       "3 are",
+       "3:",
+       "(3)",
+       "3 yes"
+      ]
+     },
+     {
+      "fact": "SALES-REF-INTEGRATIONS-2026#F2",
+      "text": "The Salesforce connector is two-way and is included on Operations.",
+      "answer_needles": [
+       "Salesforce"
+      ]
+     },
+     {
+      "fact": "SALES-REF-SECURITY-2026#F9",
+      "text": "Single sign-on is included on Operations and has been verified with Okta.",
+      "answer_needles": [
+       "single sign-on",
+       "single sign on",
+       "SSO",
+       "login",
+       "log-in",
+       "sign-on"
+      ]
+     },
+     {
+      "fact": "SALES-REF-SECURITY-2026#F10",
+      "text": "SCIM user provisioning is Enterprise only.",
+      "answer_needles": [
+       "Enterprise"
+      ]
+     },
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F4",
+      "text": "Phone support is Enterprise only.",
+      "answer_needles": [
+       "phone"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-RELEASE-NOTES-2026#F11",
+      "text": "An Operations account can have 12 custom dashboards."
+     },
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F2",
+      "text": "Operations support is by email and chat, 24 hours a day, Monday to Friday."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Counts four or five of the five as available on Operations.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "four of",
+       "four out of",
+       "4 of",
+       "4 out of",
+       "4/5",
+       "five of five",
+       "five out of five",
+       "5 of 5",
+       "5 out of 5",
+       "5/5"
+      ]
+     },
+     {
+      "text": "Counts only two, or only one, as available on Operations.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "2/5",
+       "1/5",
+       "only one of"
+      ]
+     },
+     {
+      "text": "Says automatic user provisioning (SCIM) comes with Operations.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Says Operations customers can phone support.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Says custom dashboards need Enterprise or are not available on Operations.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Offers to arrange phone support or provisioning on Operations as an exception.",
+      "kind": "unauthorized_promise"
+     }
+    ],
+    "expected_role": "assistant advising the seller privately; an explanation for the seller, not a line addressed to the prospect",
+    "expected_action": "answer_directly",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "SALES-REF-INTEGRATIONS-2026",
+     "SALES-REF-SECURITY-2026",
+     "SALES-REF-SUPPORT-SLA-2026",
+     "SALES-REF-RELEASE-NOTES-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-INTEGRATIONS-2026",
+     "SALES-REF-SECURITY-2026",
+     "SALES-REF-SUPPORT-SLA-2026",
+     "SALES-REF-RELEASE-NOTES-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Pointing out that needing both missing items means Enterprise."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-SALES-N-003",
+   "mode": "sales",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "If we go that route, who actually gets us set up, who do we get hold of when something breaks, and does your uptime commitment still cover us?",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "We'd most likely buy this through Tallowfield Fleet Supply. They already do our tyres and they tell us they're one of your resellers. It would be the Operations plan."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-p24",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "support_level",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Three documents. Partner program guide (new): a customer that buys through a reseller gets the same service as a direct one. Onboarding is delivered by Kestravane Professional Services in the same way as for a direct customer on the same plan, and resellers do not run onboarding; the customer contacts Kestravane support directly through the channels and hours of its plan, and the reseller is not a first line of support; the Support Plans and Service Level Guide applies exactly as for direct customers, with any service credit issued to the reseller as a credit note and passed on in full. Implementation guide: on Operations a Kestravane onboarding specialist guides the customer through the rollout. Support guide: Operations support is by email and chat, 24 hours a day, Monday to Friday (no phone), and the monthly uptime commitment on Operations is 99.5%. So: Kestravane's onboarding specialist sets them up, they contact Kestravane support directly by email or chat, and the 99.5% commitment still applies.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F27",
+      "text": "Onboarding of a resold customer is delivered by Kestravane, not by the reseller.",
+      "answer_needles": [
+       "specialist",
+       "Professional Services",
+       "our onboarding",
+       "onboarding team",
+       "we onboard",
+       "we set you up",
+       "we handle onboarding",
+       "we do the onboarding",
+       "we run the onboarding"
+      ]
+     },
+     {
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F28",
+      "text": "A resold customer contacts Kestravane support directly.",
+      "answer_needles": [
+       "direct",
+       "our support",
+       "Kestravane support",
+       "come to us",
+       "contact us",
+       "reach us",
+       "straight to us",
+       "get hold of us",
+       "with us"
+      ]
+     },
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F2",
+      "text": "Operations support is by email and chat.",
+      "answer_needles": [
+       "chat"
+      ]
+     },
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F10",
+      "text": "The monthly uptime commitment on Operations is 99.5%, and it applies to resold customers as to direct ones.",
+      "answer_needles": [
+       "99.5"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-IMPLEMENTATION-2026#F1",
+      "text": "On Operations a Kestravane onboarding specialist guides the customer through the rollout."
+     },
+     {
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F29",
+      "text": "A service credit is issued to the reseller as a credit note and must be passed on to the customer in full."
+     },
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F4",
+      "text": "Phone support is Enterprise only."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Quotes the Enterprise uptime figure for an Operations customer.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F12",
+      "answer_needles": [
+       "99.95"
+      ]
+     },
+     {
+      "text": "Offers or implies another uptime figure.",
+      "kind": "unauthorized_promise",
+      "answer_needles": [
+       "99.9%",
+       "99.99"
+      ]
+     },
+     {
+      "text": "Says the reseller runs onboarding or is the first line of support.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Says the uptime commitment does not apply, or applies differently, when buying through a reseller.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Says Operations customers can phone support.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Promises a go-live date, or says the reseller can set one.",
+      "kind": "unauthorized_promise"
+     }
+    ],
+    "expected_role": "seller (account executive) speaking to the prospect, first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SALES-REF-PARTNER-PROGRAM-2026",
+     "SALES-REF-IMPLEMENTATION-2026",
+     "SALES-REF-SUPPORT-SLA-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-PARTNER-PROGRAM-2026",
+     "SALES-REF-IMPLEMENTATION-2026",
+     "SALES-REF-SUPPORT-SLA-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Mentioning that the reseller sends the bill and passes on any service credit."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-SALES-N-004",
+   "mode": "sales",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "brakewell tyre & fleet is a referral partner and introduced the 140-truck haulier that's now closing on operations, annual billing. they registered it properly. what referral fee will we owe them on that deal?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-p24",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "quantity_arithmetic",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two documents, with a near-miss in a third. Current price list: Operations is $47 per vehicle per month on annual billing, and a fleet of 100 to 249 vehicles gets the 5% volume discount automatically on annual billing, so the first twelve months of plan fees are 140 x 47 x 12 x 0.95 = $75,012. Partner program guide 2026-27 (new): the referral fee is 9% of the plan subscription fees billed for the first twelve months, calculated after any discount, with modules, add-ons, hardware, installation and onboarding left out, limited to $20,000. 9% of $75,012 = $6,751.08, paid once, after the customer has paid its first bill. The 2025-26 overview's 11% ($8,251.32) is replaced; forgetting the volume discount gives $7,106.40; the 13% co-sell fee and the 19% resale margin are for resellers, not referral partners.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F4",
+      "text": "The referral fee is 9% of the first twelve months of plan fees after discount: 9% of $75,012 = $6,751.08.",
+      "answer_needles": [
+       "6,751.08",
+       "6751.08",
+       "6,751",
+       "6751",
+       "6.75k",
+       "6,750"
+      ]
+     },
+     {
+      "fact": "SALES-REF-PRICING-2026#F4",
+      "text": "Operations is $47 per vehicle per month on annual billing; with the 5% volume discount the first-year plan fees for 140 vehicles are $75,012.",
+      "answer_needles": [
+       "75,012",
+       "75012",
+       "75.0k",
+       "6,751",
+       "6751",
+       "6.75k",
+       "6,750"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-PRICING-2026#F38",
+      "text": "Fleets of 100 to 249 vehicles get a 5% volume discount on annual billing."
+     },
+     {
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F6",
+      "text": "The fee is limited to $20,000 per referred customer; this deal is well under it."
+     },
+     {
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F9",
+      "text": "The fee becomes payable once the customer has paid its first bill and is forfeited if the customer cancels within its first 4 months."
+     },
+     {
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F7",
+      "text": "The fee is paid once; nothing on renewals."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Uses the 11% rate of the replaced 2025-26 overview.",
+      "kind": "stale",
+      "fact": "SALES-REF-PARTNER-OVERVIEW-2025#F2",
+      "answer_needles": [
+       "8,251",
+       "8251",
+       "8,685",
+       "8685"
+      ]
+     },
+     {
+      "text": "Leaves the volume discount out of the base (9% of $78,960).",
+      "kind": "fabrication",
+      "answer_needles": [
+       "7,106",
+       "7106"
+      ]
+     },
+     {
+      "text": "Uses the monthly-billing rate of $55 for an annual deal.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-PRICING-2026#F5",
+      "answer_needles": [
+       "8,316",
+       "8316",
+       "7,900",
+       "7900"
+      ]
+     },
+     {
+      "text": "Uses a reseller rate (13% co-sell fee or 19% resale margin) for a referral partner.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "9,751",
+       "9751",
+       "14,252",
+       "14252"
+      ]
+     },
+     {
+      "text": "Uses the 2025 or the draft 2027 plan price.",
+      "kind": "stale",
+      "answer_needles": [
+       "6,032",
+       "6032",
+       "7,325",
+       "7325"
+      ]
+     },
+     {
+      "text": "Adds hardware, onboarding or module fees to the base of the fee.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Says the fee is paid again at renewal.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "assistant advising the seller privately; an explanation for the seller, not a line addressed to the prospect",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "SALES-REF-PRICING-2026",
+     "SALES-REF-PARTNER-PROGRAM-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-PARTNER-PROGRAM-2026",
+     "SALES-REF-PRICING-2026",
+     "SALES-REF-PARTNER-OVERVIEW-2025"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "Referral fee rate",
+      "sources": [
+       "SALES-REF-PARTNER-PROGRAM-2026",
+       "SALES-REF-PARTNER-OVERVIEW-2025"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Showing the list figure of $78,960 before the volume discount as a step.",
+     "Noting that the figure assumes list price with no further negotiated discount."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "140 * 47 * 12 * (1 - 0.05) * 0.09",
+     "result": 6751.08,
+     "unit": "USD, paid once",
+     "accepted_forms": [
+      "6,751.08",
+      "6751.08",
+      "$6,751.08",
+      "6,751",
+      "6751",
+      "6.75k",
+      "6,750"
+     ],
+     "inputs": {
+      "plan_price": "SALES-REF-PRICING-2026#F4",
+      "volume_discount": "SALES-REF-PRICING-2026#F38",
+      "referral_rate": "SALES-REF-PARTNER-PROGRAM-2026#F4",
+      "vehicles": "stated in the question (140)"
+     },
+     "wrong_results_common": [
+      "8,251",
+      "8,685",
+      "7,106",
+      "8,316",
+      "7,900",
+      "9,751",
+      "14,252",
+      "6,032",
+      "7,325"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-SALES-N-005",
+   "mode": "sales",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "You took the whole system down twice in August for upgrades, on the second and again on the twenty-third. How much of your monthly maintenance allowance did those two eat up, and how much did you have left?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-p24",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "sla",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two documents. Release notes (new): release 2026.8 on 2026-08-02 made the web application and API unavailable for 110 minutes, and release 2026.9 on 2026-08-23 for 155 minutes, so 265 minutes (4 hours 25 minutes) in August. Support guide: scheduled maintenance is limited to 6 hours in any month, which is 360 minutes. 360 - 265 = 95 minutes (1 hour 35 minutes) left. The June releases (140 and 80 minutes) and the September one (65 minutes) are other months. Scheduled maintenance is excluded from the uptime measurement, so this is not a missed commitment and no credit follows from it.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-RELEASE-NOTES-2026#F4",
+      "text": "The 2 August release (2026.8) took 110 minutes; with the 23 August release that is 265 minutes, 4 hours 25 minutes.",
+      "answer_needles": [
+       "110",
+       "265",
+       "4 hours 25",
+       "4 hours and 25",
+       "four hours twenty-five",
+       "four hours and twenty-five",
+       "four hours, twenty-five",
+       "4h25",
+       "4 h 25",
+       "4h 25",
+       "4:25",
+       "four twenty-five"
+      ]
+     },
+     {
+      "fact": "SALES-REF-RELEASE-NOTES-2026#F3",
+      "text": "The 23 August release (2026.9) took 155 minutes.",
+      "answer_needles": [
+       "155",
+       "265",
+       "4 hours 25",
+       "4 hours and 25",
+       "four hours twenty-five",
+       "four hours and twenty-five",
+       "4h25",
+       "4 h 25",
+       "4h 25",
+       "4:25"
+      ]
+     },
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F16",
+      "text": "Scheduled maintenance is limited to 6 hours a month, so 95 minutes (1 hour 35 minutes) were left.",
+      "answer_needles": [
+       "95 minutes",
+       "95 min",
+       "ninety-five minutes",
+       "ninety five minutes",
+       "1 hour 35",
+       "1 hour and 35",
+       "one hour thirty-five",
+       "one hour and thirty-five",
+       "an hour and thirty-five",
+       "hour and 35",
+       "hour thirty-five",
+       "1h35",
+       "1 h 35",
+       "1h 35",
+       "1:35",
+       "an hour thirty-five"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F16",
+      "text": "Scheduled maintenance is excluded from the uptime measurement."
+     },
+     {
+      "fact": "SALES-REF-RELEASE-NOTES-2026#F23",
+      "text": "The unavailable time is measured from the start of the interruption until the service was serving requests again."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Counts only one of the two August releases.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "250 minutes",
+       "205 minutes",
+       "4 hours 10",
+       "3 hours 25"
+      ]
+     },
+     {
+      "text": "Uses the June releases (140 and 80 minutes) or adds the September one.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "220 minutes",
+       "330 minutes",
+       "3 hours 40",
+       "5 hours 30"
+      ]
+     },
+     {
+      "text": "Says the maintenance time counts against the uptime commitment or that a service credit is due for it.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Promises there will be no further maintenance, or a shorter allowance.",
+      "kind": "unauthorized_promise"
+     }
+    ],
+    "expected_role": "seller (account executive) speaking to the prospect, first person",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SALES-REF-RELEASE-NOTES-2026",
+     "SALES-REF-SUPPORT-SLA-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-RELEASE-NOTES-2026",
+     "SALES-REF-SUPPORT-SLA-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Giving the answer in hours and minutes only, or in minutes only."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "6 * 60 - (110 + 155)",
+     "result": 95,
+     "unit": "minutes left of the monthly maintenance allowance (265 used)",
+     "accepted_forms": [
+      "95 minutes",
+      "95 min",
+      "ninety-five minutes",
+      "1 hour 35",
+      "1 hour and 35",
+      "one hour thirty-five",
+      "one hour and thirty-five",
+      "an hour and thirty-five",
+      "1h35",
+      "1 h 35",
+      "1:35"
+     ],
+     "inputs": {
+      "release_2026_8": "SALES-REF-RELEASE-NOTES-2026#F4",
+      "release_2026_9": "SALES-REF-RELEASE-NOTES-2026#F3",
+      "monthly_limit": "SALES-REF-SUPPORT-SLA-2026#F16"
+     },
+     "wrong_results_common": [
+      "250 minutes",
+      "205 minutes",
+      "4 hours 10",
+      "3 hours 25",
+      "220 minutes",
+      "330 minutes",
+      "140 minutes left",
+      "30 minutes left"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-SALES-N-006",
+   "mode": "sales",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "northgate telematics is one of our premier resellers. the 300-truck opportunity they registered needs enterprise after all. what percentage do they earn on it now, and do they get anything when it renews?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-p24",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "partner_program",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The answer is near the end of the partner program guide (section 12). The Enterprise plan is always contracted by Kestravane directly and is not resold, whatever the tier. When a reseller's registered opportunity closes on Enterprise, the reseller earns a co-sell fee of 13% of the first-year plan subscription fees, calculated after any discount, in place of any resale margin; it is the same for every tier, paid once, and nothing is paid at renewal. The near-misses sit in the first third of the guide: the Premier resale margin of 27% (and its 4% on renewals), and the 9% referral fee, which is for referral partners.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F34",
+      "text": "The reseller earns a co-sell fee of 13% of the first-year plan subscription fees, paid once, nothing on renewal.",
+      "answer_needles": [
+       "13%",
+       "13 percent",
+       "13 per cent",
+       "thirteen percent",
+       "thirteen per cent"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F33",
+      "text": "Enterprise is always contracted by Kestravane directly and is not resold."
+     },
+     {
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F35",
+      "text": "Enterprise revenue counts towards the tier threshold at half its value."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives the Premier resale margin as what the reseller earns on the Enterprise deal.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F13",
+      "answer_needles": [
+       "27%",
+       "27 percent",
+       "twenty-seven percent"
+      ]
+     },
+     {
+      "text": "Gives another tier's resale margin.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F13",
+      "answer_needles": [
+       "23%",
+       "19%"
+      ]
+     },
+     {
+      "text": "Says a renewal margin or a further fee is paid when the Enterprise customer renews.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F14",
+      "answer_needles": [
+       "4% on renewal",
+       "4% at renewal",
+       "4% renewal",
+       "4% of the renewal"
+      ]
+     },
+     {
+      "text": "Gives a rate from the replaced 2025-26 overview.",
+      "kind": "stale",
+      "fact": "SALES-REF-PARTNER-OVERVIEW-2025#F4",
+      "answer_needles": [
+       "28%",
+       "11%"
+      ]
+     },
+     {
+      "text": "Promises the reseller an exception to the co-sell rate.",
+      "kind": "unauthorized_promise"
+     }
+    ],
+    "expected_role": "assistant advising the seller privately; an explanation for the seller, not a line addressed to the prospect",
+    "expected_action": "answer_directly",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "SALES-REF-PARTNER-PROGRAM-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-PARTNER-PROGRAM-2026",
+     "SALES-REF-PARTNER-OVERVIEW-2025"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Adding that the account executive leads the opportunity once Enterprise is confirmed."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-SALES-N-007",
+   "mode": "sales",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "two of my partners have each registered the same prospect and both swear they got there first. who makes the call on that, and can the loser appeal it?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-p24",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "partner_program",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The answer is near the end of the partner program guide (section 13). Where the registration date does not settle an overlap, for example two partners each claiming the same prospect, the matter goes to the Director of Channel Operations, Hyacinth Morgenroth, and her decision is final, so there is no appeal. Partner Managers do not rule on disputes that involve their own partners. The near-misses are in the first third: Partner Managers approve tier promotions and receive discount requests, and the Head of Partnerships (Leontyne Abernethy-Osei) approved the guide and signs off exceptions to rates, which is a different matter.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F36",
+      "text": "The Director of Channel Operations, Hyacinth Morgenroth, decides, and her decision is final.",
+      "answer_needles": [
+       "Morgenroth",
+       "Director of Channel Operations"
+      ]
+     },
+     {
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F36",
+      "text": "The decision is final; there is no appeal.",
+      "answer_needles": [
+       "final",
+       "no appeal",
+       "cannot appeal",
+       "can't appeal",
+       "cannot be appealed",
+       "can't be appealed",
+       "not appealable"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F36",
+      "text": "Partner Managers do not rule on disputes that involve their own partners."
+     },
+     {
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F20",
+      "text": "Most overlaps are settled by the registration date."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Names a Partner Manager as the person who decides.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F40",
+      "answer_needles": [
+       "Brandvold",
+       "Thorvaldsen",
+       "Oyelowo"
+      ]
+     },
+     {
+      "text": "Names the Head of Partnerships as the person who decides the dispute.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F41",
+      "answer_needles": [
+       "Abernethy"
+      ]
+     },
+     {
+      "text": "Says the decision can be appealed, or invents an appeal route.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Tells the seller which partner will win.",
+      "kind": "unauthorized_promise"
+     }
+    ],
+    "expected_role": "assistant advising the seller privately; an explanation for the seller, not a line addressed to the prospect",
+    "expected_action": "answer_directly",
+    "expected_response_type": "private_advice",
+    "source_ids": [
+     "SALES-REF-PARTNER-PROGRAM-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-PARTNER-PROGRAM-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Suggesting the seller send both registration dates and the facts to Channel Operations."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-SALES-N-008",
+   "mode": "sales",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Once we've registered a lead with you, how long is it ours before somebody else can swoop in? And can we stretch that if the customer drags their feet?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-p24",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "stale_document",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two partner documents are loaded. The current partner program guide (version 2.0, program year 2026-27, effective 1 July 2026) says an accepted registration is protected for 120 days from acceptance and can be extended once, by 30 days, where the prospect has confirmed in writing that its evaluation is still running; the extension is granted by the partner's Partner Manager. The overview for new partners issued on 4 August 2025 (program year 2025-26) said 150 days with no extension; the guide replaces it. The seller gives 120 days plus one 30-day extension and does not promise that an extension will be granted. A registration with no logged activity for 60 days is closed.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F20",
+      "text": "An accepted registration is protected for 120 days.",
+      "answer_needles": [
+       "120",
+       "hundred and twenty",
+       "hundred twenty"
+      ]
+     },
+     {
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F21",
+      "text": "Protection can be extended once, by 30 days, with the prospect's written confirmation.",
+      "answer_needles": [
+       "30 days",
+       "30-day",
+       "30 more",
+       "thirty days",
+       "thirty-day",
+       "thirty more",
+       "another thirty",
+       "another 30",
+       "extra thirty",
+       "extra 30",
+       "further thirty",
+       "further 30"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F22",
+      "text": "A registration with no logged activity for 60 days is closed."
+     },
+     {
+      "fact": "SALES-REF-PARTNER-PROGRAM-2026#F1",
+      "text": "The 2026-27 guide replaces the 2025-26 overview."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives the 150 days of the replaced 2025-26 overview as the protection period.",
+      "kind": "stale",
+      "fact": "SALES-REF-PARTNER-OVERVIEW-2025#F8",
+      "answer_needles": [
+       "150",
+       "hundred and fifty",
+       "hundred fifty",
+       "five months"
+      ]
+     },
+     {
+      "text": "Says protection cannot be extended at all (the 2025-26 rule).",
+      "kind": "stale",
+      "fact": "SALES-REF-PARTNER-OVERVIEW-2025#F8"
+     },
+     {
+      "text": "Promises that the extension will be granted.",
+      "kind": "unauthorized_promise"
+     },
+     {
+      "text": "Says the extension can be taken more than once, or for longer than 30 days.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "seller (account executive) speaking to the other party on the call, here a partner's contact, first person",
+    "expected_action": "prefer_current_source",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SALES-REF-PARTNER-PROGRAM-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-PARTNER-PROGRAM-2026",
+     "SALES-REF-PARTNER-OVERVIEW-2025"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "Deal registration protection period and whether it can be extended",
+      "sources": [
+       "SALES-REF-PARTNER-PROGRAM-2026",
+       "SALES-REF-PARTNER-OVERVIEW-2025"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Telling the partner to log activity so the registration is not closed for inactivity."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-SALES-N-009",
+   "mode": "sales",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Most of our vans are fairly new, but we've still got eleven 2009 Chevy Express vans out on the road. Will your plug-in tracker work on those, or is that a wiring job?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-p24",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "conflicting_lines",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two current documents disagree and nothing settles it. The installation guide (revision C, 8 June 2026) says the plug-in OBD-II connection is supported on light vehicles from model year 2008 onward. The vehicle compatibility list (edition 2026-06) gives gasoline vans, Chevrolet Express among them, a minimum model year of 2010, and sends older light vehicles to the three-wire kit. A 2009 van falls between the two. The seller must not say flatly that the plug-in harness works and must not say flatly that it does not: the honest line is that one document says from 2008 and the other from 2010, so it needs confirming with Field Engineering. What is certain is the floor: the vans can be tracked either way, because the three-wire kit works on any vehicle, though with it there is no odometer, fuel level or fault codes from the vehicle.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-HARDWARE-INSTALL-2026#F8",
+      "text": "The installation guide says the plug-in connection is supported from model year 2008.",
+      "answer_needles": [
+       "2008"
+      ]
+     },
+     {
+      "fact": "SALES-REF-VEHICLE-COMPAT-2026#F2",
+      "text": "The vehicle compatibility list gives gasoline vans a minimum model year of 2010.",
+      "answer_needles": [
+       "2010"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-HARDWARE-INSTALL-2026#F9",
+      "text": "With the three-wire kit the unit reports position, trips and ignition time but no odometer, fuel level or fault codes."
+     },
+     {
+      "fact": "SALES-REF-VEHICLE-COMPAT-2026#F12",
+      "text": "Light vehicles older than the minimum model year are fitted with the KH-3W kit."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "States flatly that the plug-in harness works on the 2009 vans.",
+      "kind": "unauthorized_promise"
+     },
+     {
+      "text": "States flatly that the plug-in harness does not work on the 2009 vans.",
+      "kind": "false_denial"
+     },
+     {
+      "text": "Invents a rule for which of the two documents wins.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Says the 2009 vans cannot be tracked at all.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "seller (account executive) speaking to the prospect, first person",
+    "expected_action": "surface_conflict",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SALES-REF-HARDWARE-INSTALL-2026",
+     "SALES-REF-VEHICLE-COMPAT-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-HARDWARE-INSTALL-2026",
+     "SALES-REF-VEHICLE-COMPAT-2026"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "Earliest model year for the plug-in OBD-II connection on light vehicles",
+      "sources": [
+       "SALES-REF-HARDWARE-INSTALL-2026",
+       "SALES-REF-VEHICLE-COMPAT-2026"
+      ],
+      "resolution": "unresolved"
+     }
+    ],
+    "acceptable_inference": [
+     "Offering to confirm with Field Engineering before the order is placed.",
+     "Saying the newer vans take the plug-in harness without any doubt."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-SALES-N-010",
+   "mode": "sales",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Some of our drivers aren't thrilled about being tracked. If one of them yanks the box out of the socket, how long does it keep going on its own battery?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-p24",
+   "pi_state": "none",
+   "condition": "missing_evidence",
+   "category": "missing_product_document",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "No loaded document gives a duration. The installation guide says only that a small internal backup cell keeps the unit reporting for a short time after power is removed, long enough to send a \"power removed\" message with its position, after which the vehicle shows as offline in the admin console. The tempting invention is the 9 days in the same section, which is how much trip data the unit stores while out of cellular coverage, not a battery life. The seller says what is documented (an unplugged unit raises a power-removed message with its position and then shows offline), says the exact running time is not something they have in front of them, and offers to confirm it. No number of minutes, hours or days.",
+    "required_facts": [],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-HARDWARE-INSTALL-2026#F13",
+      "text": "A small backup cell keeps the unit reporting for a short time after power is removed, long enough to send a \"power removed\" message with its position; the vehicle then shows as offline."
+     },
+     {
+      "fact": "SALES-REF-HARDWARE-INSTALL-2026#F12",
+      "text": "The 9 days is the trip-data memory while out of coverage, not a battery life."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives the 9 days of trip-data memory as the battery life.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-HARDWARE-INSTALL-2026#F12",
+      "answer_needles": [
+       "9 days",
+       "nine days"
+      ]
+     },
+     {
+      "text": "States a running time on the backup cell.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "5 minutes",
+       "10 minutes",
+       "15 minutes",
+       "20 minutes",
+       "30 minutes",
+       "five minutes",
+       "ten minutes",
+       "fifteen minutes",
+       "twenty minutes",
+       "thirty minutes",
+       "half an hour",
+       "1 hour",
+       "2 hours",
+       "3 hours",
+       "4 hours",
+       "6 hours",
+       "8 hours",
+       "12 hours",
+       "24 hours",
+       "48 hours",
+       "72 hours",
+       "an hour",
+       "one hour",
+       "two hours",
+       "three hours",
+       "four hours",
+       "six hours",
+       "eight hours",
+       "twelve hours",
+       "several hours",
+       "a few hours",
+       "several days",
+       "a few days",
+       "a week"
+      ]
+     },
+     {
+      "text": "Says the unit has no backup power, or that nothing is reported when it is unplugged.",
+      "kind": "false_denial"
+     },
+     {
+      "text": "Says the unit cannot be unplugged or that tampering is impossible.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "seller (account executive) speaking to the prospect, first person",
+    "expected_action": "defer_to_verify",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Mentioning that the dispatcher sees the vehicle go offline and where it was when power was removed."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-SALES-N-011",
+   "mode": "sales",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "On the safety score, how many miles an hour over the limit does a driver have to be doing before it marks him down for speeding?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-p24",
+   "pi_state": "none",
+   "condition": "missing_evidence",
+   "category": "missing_product_document",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "No loaded document gives a margin or tolerance for speeding. The release notes say that since release 2026.3 speeding is measured against the posted limit for the road, taken from map data, in place of one fleet-wide limit typed in by the administrator, and that speeding makes up a quarter of the score. The same entry gives exact thresholds for the other three behaviours (harsh braking from 0.38 g, acceleration from 0.33 g, cornering from 0.36 g), which makes inventing a number for speeding tempting. The seller says what is known, says the exact margin is not something they have to hand, and offers to confirm. They do not give a number of miles an hour, and they do not assert that any speed over the limit counts.",
+    "required_facts": [],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-RELEASE-NOTES-2026#F15",
+      "text": "Speeding is measured against the posted limit for the road, taken from map data."
+     },
+     {
+      "fact": "SALES-REF-RELEASE-NOTES-2026#F16",
+      "text": "Speeding makes up a quarter of the score."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "States a margin over the limit in miles an hour.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "5 mph",
+       "10 mph",
+       "3 mph",
+       "7 mph",
+       "8 mph",
+       "15 mph",
+       "5 miles",
+       "10 miles",
+       "five miles",
+       "ten miles",
+       "five mph",
+       "ten mph",
+       "5 over",
+       "10 over",
+       "five over",
+       "ten over",
+       "5 km/h",
+       "10 km/h"
+      ]
+     },
+     {
+      "text": "States a percentage over the limit.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "10%",
+       "10 percent",
+       "ten percent",
+       "10 per cent"
+      ]
+     },
+     {
+      "text": "Gives one of the g-force thresholds as the speeding threshold.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Asserts that any speed above the posted limit counts, with no tolerance.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Says the administrator sets one fleet-wide speed limit (the behaviour before release 2026.3).",
+      "kind": "stale"
+     }
+    ],
+    "expected_role": "seller (account executive) speaking to the prospect, first person",
+    "expected_action": "defer_to_verify",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Explaining that the limit comes from map data for each road."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-P24-SALES-N-012",
+   "mode": "sales",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "same customer also runs six kalmar ottawa yard tractors, 2019 models. which harness part do i put on the order for those, and is there any vehicle data that won't come through on them?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-p24",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "hardware",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The vehicle compatibility list gives a harness for each vehicle group. Yard tractors (Kalmar Ottawa T2 among the examples) have the black 9-pin connector and take harness KH-9B, from model year 2010. The odometer is not sent on them, so engine hours are used for service schedules; fuel level, engine hours and fault codes do come through. The trap is the model year: the green-connector KH-9G is for road trucks from 2016, and a 2019 yard tractor still takes KH-9B. The other harnesses in the list (KH-16Y, KH-16J, KH-3W) belong to other groups. The installation guide's table says the same (black 9-pin: heavy trucks before 2016, yard tractors).",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-VEHICLE-COMPAT-2026#F10",
+      "text": "Yard tractors take harness KH-9B (black 9-pin).",
+      "answer_needles": [
+       "KH-9B",
+       "KH9B",
+       "KH 9B"
+      ]
+     },
+     {
+      "fact": "SALES-REF-VEHICLE-COMPAT-2026#F10",
+      "text": "The odometer is not sent on yard tractors; engine hours are used instead.",
+      "answer_needles": [
+       "odometer",
+       "mileage",
+       "distance"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-HARDWARE-INSTALL-2026#F5",
+      "text": "The installation guide also lists yard tractors under the black 9-pin harness."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives the green-connector harness for road trucks from 2016, because the tractors are 2019 models.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-VEHICLE-COMPAT-2026#F6",
+      "answer_needles": [
+       "KH-9G"
+      ]
+     },
+     {
+      "text": "Gives the three-wire kit, as if a yard tractor had no diagnostic connector.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-VEHICLE-COMPAT-2026#F12",
+      "answer_needles": [
+       "KH-3W"
+      ]
+     },
+     {
+      "text": "Gives a harness that belongs to another vehicle group.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "KH-16Y",
+       "KH-16J"
+      ]
+     },
+     {
+      "text": "Says fuel level, engine hours or fault codes are missing on yard tractors.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "assistant advising the seller privately; an explanation for the seller, not a line addressed to the prospect",
+    "expected_action": "answer_directly",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "SALES-REF-VEHICLE-COMPAT-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-VEHICLE-COMPAT-2026",
+     "SALES-REF-HARDWARE-INSTALL-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Advising that service schedules for these tractors be set on engine hours."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  }
+ ]
+}

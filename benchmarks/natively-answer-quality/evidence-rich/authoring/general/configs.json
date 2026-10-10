@@ -1,0 +1,89 @@
+[
+  {
+    "id": "general-full",
+    "mode": "general",
+    "base": true,
+    "files": [
+      "GEN-REF-RENO-QUOTE-REVC",
+      "GEN-REF-RENO-QUOTE-REVA",
+      "GEN-REF-TRIP-PLAN",
+      "GEN-REF-BUDGET-OCT",
+      "GEN-REF-CAR-ESTIMATE",
+      "GEN-REF-CONTRACTOR-EMAILS",
+      "GEN-REF-HOA-NOTICE",
+      "GEN-REF-HOUSE-NOTES"
+    ]
+  },
+  {
+    "id": "general-cf-hw-yes",
+    "mode": "general",
+    "files": [
+      "GEN-REF-RENO-QUOTE-REVC~hwincl",
+      "GEN-REF-RENO-QUOTE-REVA",
+      "GEN-REF-TRIP-PLAN",
+      "GEN-REF-BUDGET-OCT",
+      "GEN-REF-CAR-ESTIMATE",
+      "GEN-REF-CONTRACTOR-EMAILS",
+      "GEN-REF-HOA-NOTICE",
+      "GEN-REF-HOUSE-NOTES"
+    ]
+  },
+  {
+    "id": "general-cf-hw-conflict",
+    "mode": "general",
+    "files": [
+      "GEN-REF-RENO-QUOTE-REVC",
+      "GEN-REF-RENO-QUOTE-REVA",
+      "GEN-REF-TRIP-PLAN",
+      "GEN-REF-BUDGET-OCT",
+      "GEN-REF-CAR-ESTIMATE",
+      "GEN-REF-CONTRACTOR-EMAILS~hwyes",
+      "GEN-REF-HOA-NOTICE",
+      "GEN-REF-HOUSE-NOTES"
+    ]
+  },
+  {
+    "id": "general-cf-noquotes",
+    "mode": "general",
+    "files": [
+      "GEN-REF-TRIP-PLAN",
+      "GEN-REF-BUDGET-OCT",
+      "GEN-REF-CAR-ESTIMATE",
+      "GEN-REF-CONTRACTOR-EMAILS",
+      "GEN-REF-HOA-NOTICE",
+      "GEN-REF-HOUSE-NOTES"
+    ]
+  },
+  {
+    "id": "general-cf-rotors-worn",
+    "mode": "general",
+    "files": [
+      "GEN-REF-RENO-QUOTE-REVC",
+      "GEN-REF-RENO-QUOTE-REVA",
+      "GEN-REF-TRIP-PLAN",
+      "GEN-REF-BUDGET-OCT",
+      "GEN-REF-CAR-ESTIMATE~rotorsworn",
+      "GEN-REF-CONTRACTOR-EMAILS",
+      "GEN-REF-HOA-NOTICE",
+      "GEN-REF-HOUSE-NOTES"
+    ]
+  },
+  {
+    "id": "general-cf-noestimate",
+    "mode": "general",
+    "files": [
+      "GEN-REF-RENO-QUOTE-REVC",
+      "GEN-REF-RENO-QUOTE-REVA",
+      "GEN-REF-TRIP-PLAN",
+      "GEN-REF-BUDGET-OCT",
+      "GEN-REF-CONTRACTOR-EMAILS",
+      "GEN-REF-HOA-NOTICE",
+      "GEN-REF-HOUSE-NOTES"
+    ]
+  },
+  {
+    "id": "general-none",
+    "mode": "general",
+    "files": []
+  }
+]

@@ -1,0 +1,569 @@
+{
+  "mode": "lecture",
+  "families": [
+    {
+      "family": "ER-CF-LEC-1",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "how much does the networks final count for, and what day is it?",
+      "prior_transcript": null,
+      "variants": [
+        {
+          "variant": "A",
+          "evidence_config": "lecture-full",
+          "pi_state": "none",
+          "evidence_state": "syllabus_says_40_percent_15_dec",
+          "oracle": {
+            "expected_behavior_note": "The current syllabus (Autumn 2026, version 1.1) says the final exam is 40% of the course mark and is on Tuesday 15 December 2026, 09:00 to 12:00. Last year's syllabus (50%, Thursday 11 December 2025) is loaded too and must not be used.",
+            "required_facts": [
+              {
+                "fact": "LEC-REF-CNW-SYLLABUS-2026#F15",
+                "text": "The final exam is worth 40% of the course mark.",
+                "answer_needles": [
+                  "40%",
+                  "40 percent",
+                  "40 per cent",
+                  "forty percent"
+                ]
+              },
+              {
+                "fact": "LEC-REF-CNW-SYLLABUS-2026#F16",
+                "text": "The final exam is on Tuesday 15 December 2026.",
+                "answer_needles": [
+                  "15 December",
+                  "December 15",
+                  "15 Dec",
+                  "Dec 15",
+                  "15th of December",
+                  "December 15th",
+                  "15th December"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "LEC-REF-CNW-SYLLABUS-2026#F16",
+                "text": "09:00 to 12:00 in Sports Hall B."
+              },
+              {
+                "fact": "LEC-REF-CNW-SYLLABUS-2026#F17",
+                "text": "At least 45 out of 100 in the final is needed to pass."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Gives last year's weight of 50% as the weight of the final.",
+                "kind": "stale",
+                "fact": "LEC-REF-CNW-SYLLABUS-2025#F8",
+                "answer_needles": [
+                  "50% of the course",
+                  "worth 50%",
+                  "counts for 50%",
+                  "count for 50%",
+                  "is 50%"
+                ]
+              },
+              {
+                "text": "Gives last year's date, Thursday 11 December, as the date of the final.",
+                "kind": "stale",
+                "fact": "LEC-REF-CNW-SYLLABUS-2025#F9",
+                "answer_needles": [
+                  "11 December",
+                  "December 11",
+                  "11 Dec",
+                  "Dec 11"
+                ]
+              }
+            ],
+            "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+            "expected_action": "prefer_current_source",
+            "expected_response_type": "private_explanation",
+            "source_ids": [
+              "LEC-REF-CNW-SYLLABUS-2026"
+            ],
+            "source_priority": [
+              "LEC-REF-CNW-SYLLABUS-2026",
+              "LEC-REF-CNW-SYLLABUS-2025"
+            ],
+            "known_conflicts": [
+              {
+                "topic": "Weight and date of the CNW 2140 final exam",
+                "sources": [
+                  "LEC-REF-CNW-SYLLABUS-2026",
+                  "LEC-REF-CNW-SYLLABUS-2025"
+                ],
+                "resolution": "current_wins"
+              }
+            ],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "B",
+          "evidence_config": "lecture-cf-final-35",
+          "pi_state": "none",
+          "evidence_state": "syllabus_says_35_percent_17_dec",
+          "oracle": {
+            "expected_behavior_note": "In this configuration the current syllabus says the final exam is 35% of the course mark and is on Thursday 17 December 2026, 09:00 to 12:00. Last year's syllabus (50%, 11 December 2025) must not be used, and nothing loaded says 40% or 15 December.",
+            "required_facts": [
+              {
+                "fact": "LEC-REF-CNW-SYLLABUS-2026~final35#F15",
+                "text": "The final exam is worth 35% of the course mark.",
+                "answer_needles": [
+                  "35%",
+                  "35 percent",
+                  "35 per cent",
+                  "thirty-five percent"
+                ]
+              },
+              {
+                "fact": "LEC-REF-CNW-SYLLABUS-2026~final35#F16",
+                "text": "The final exam is on Thursday 17 December 2026.",
+                "answer_needles": [
+                  "17 December",
+                  "December 17",
+                  "17 Dec",
+                  "Dec 17",
+                  "17th of December",
+                  "December 17th",
+                  "17th December"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "LEC-REF-CNW-SYLLABUS-2026#F17",
+                "text": "At least 45 out of 100 in the final is needed to pass."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Gives last year's weight of 50% as the weight of the final.",
+                "kind": "stale",
+                "fact": "LEC-REF-CNW-SYLLABUS-2025#F8",
+                "answer_needles": [
+                  "50% of the course",
+                  "worth 50%",
+                  "counts for 50%",
+                  "count for 50%",
+                  "is 50%"
+                ]
+              },
+              {
+                "text": "Gives last year's date, Thursday 11 December, as the date of the final.",
+                "kind": "stale",
+                "fact": "LEC-REF-CNW-SYLLABUS-2025#F9",
+                "answer_needles": [
+                  "11 December",
+                  "December 11",
+                  "11 Dec",
+                  "Dec 11"
+                ]
+              },
+              {
+                "text": "Gives 40% or 15 December, which no loaded document states.",
+                "kind": "fabrication",
+                "answer_needles": [
+                  "40%",
+                  "15 December",
+                  "December 15",
+                  "15 Dec",
+                  "Dec 15",
+                  "15th of December",
+                  "December 15th",
+                  "15th December"
+                ]
+              }
+            ],
+            "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+            "expected_action": "prefer_current_source",
+            "expected_response_type": "private_explanation",
+            "source_ids": [
+              "LEC-REF-CNW-SYLLABUS-2026~final35"
+            ],
+            "source_priority": [
+              "LEC-REF-CNW-SYLLABUS-2026~final35",
+              "LEC-REF-CNW-SYLLABUS-2025"
+            ],
+            "known_conflicts": [
+              {
+                "topic": "Weight and date of the CNW 2140 final exam",
+                "sources": [
+                  "LEC-REF-CNW-SYLLABUS-2026~final35",
+                  "LEC-REF-CNW-SYLLABUS-2025"
+                ],
+                "resolution": "current_wins"
+              }
+            ],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "C",
+          "evidence_config": "lecture-cf-final-conflict",
+          "pi_state": "none",
+          "evidence_state": "current_syllabus_and_lecturer_notes_conflict",
+          "oracle": {
+            "expected_behavior_note": "Two current sources disagree. The syllabus (version 1.1, 1 September 2026) says 40% and Tuesday 15 December 2026. The lecturer's notes, edited 30 September 2026, say she announced at the end of lecture 7 that the final counts for 45% and will be held on Friday 18 December 2026; they do not say the syllabus has been reissued. The answer gives both versions, says they conflict, and tells the student to confirm with the lecturer or the course site; it may add that the notes are the more recent statement. Last year's syllabus (50%, 11 December 2025) is not one of the live options.",
+            "required_facts": [
+              {
+                "fact": "LEC-REF-CNW-SYLLABUS-2026#F15",
+                "text": "The syllabus says 40% of the course mark.",
+                "answer_needles": [
+                  "40%",
+                  "40 percent",
+                  "40 per cent"
+                ]
+              },
+              {
+                "fact": "LEC-REF-CNW-SYLLABUS-2026#F16",
+                "text": "The syllabus says Tuesday 15 December 2026.",
+                "answer_needles": [
+                  "15 December",
+                  "December 15",
+                  "15 Dec",
+                  "Dec 15",
+                  "15th of December",
+                  "December 15th",
+                  "15th December"
+                ]
+              },
+              {
+                "fact": "LEC-REF-CNW-NOTES-W3-4~final45#F34",
+                "text": "The lecturer's notes say 45% of the course mark.",
+                "answer_needles": [
+                  "45%",
+                  "45 percent",
+                  "45 per cent"
+                ]
+              },
+              {
+                "fact": "LEC-REF-CNW-NOTES-W3-4~final45#F34",
+                "text": "The lecturer's notes say Friday 18 December 2026.",
+                "answer_needles": [
+                  "18 December",
+                  "December 18",
+                  "18 Dec",
+                  "Dec 18",
+                  "18th of December",
+                  "December 18th",
+                  "18th December"
+                ]
+              }
+            ],
+            "optional_facts": [],
+            "forbidden_claims": [
+              {
+                "text": "Gives last year's weight of 50% as the weight of the final.",
+                "kind": "stale",
+                "fact": "LEC-REF-CNW-SYLLABUS-2025#F8",
+                "answer_needles": [
+                  "50% of the course",
+                  "worth 50%",
+                  "counts for 50%",
+                  "count for 50%",
+                  "is 50%"
+                ]
+              },
+              {
+                "text": "Gives last year's date, Thursday 11 December, as the date of the final.",
+                "kind": "stale",
+                "fact": "LEC-REF-CNW-SYLLABUS-2025#F9",
+                "answer_needles": [
+                  "11 December",
+                  "December 11",
+                  "11 Dec",
+                  "Dec 11"
+                ]
+              },
+              {
+                "text": "States only one of the two current versions as settled fact, without saying that the syllabus and the lecturer's notes disagree.",
+                "kind": "fabrication",
+                "answer_needles": []
+              }
+            ],
+            "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+            "expected_action": "surface_conflict",
+            "expected_response_type": "private_explanation",
+            "source_ids": [
+              "LEC-REF-CNW-SYLLABUS-2026",
+              "LEC-REF-CNW-NOTES-W3-4~final45"
+            ],
+            "source_priority": [
+              "LEC-REF-CNW-SYLLABUS-2026",
+              "LEC-REF-CNW-NOTES-W3-4~final45",
+              "LEC-REF-CNW-SYLLABUS-2025"
+            ],
+            "known_conflicts": [
+              {
+                "topic": "Weight and date of the CNW 2140 final exam",
+                "sources": [
+                  "LEC-REF-CNW-SYLLABUS-2026",
+                  "LEC-REF-CNW-NOTES-W3-4~final45"
+                ],
+                "resolution": "unresolved"
+              },
+              {
+                "topic": "Weight and date of the CNW 2140 final exam (last year's syllabus)",
+                "sources": [
+                  "LEC-REF-CNW-SYLLABUS-2026",
+                  "LEC-REF-CNW-SYLLABUS-2025"
+                ],
+                "resolution": "current_wins"
+              }
+            ],
+            "acceptable_inference": [
+              "Saying the lecturer's announcement is more recent and is probably what will apply, while still advising the student to confirm."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "D",
+          "evidence_config": "lecture-cf-no-syllabus",
+          "pi_state": "none",
+          "evidence_state": "no_relevant_file",
+          "oracle": {
+            "expected_behavior_note": "No syllabus is loaded. The remaining networks material shows only that a final exam exists (lecture 8 is 'examined in the final only'); it gives neither its weight nor its date. The answer must not invent either and must not deny that there is a final; it should point the student to the CNW 2140 syllabus or course site.",
+            "required_facts": [],
+            "optional_facts": [
+              {
+                "fact": "LEC-REF-CNW-NOTES-W3-4#F33",
+                "text": "The lecturer's notes mention that lecture 8 will be examined in the final only."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "States a weight or a date for the CNW 2140 final exam.",
+                "kind": "fabrication",
+                "answer_needles": [
+                  "40%",
+                  "50%",
+                  "35%",
+                  "45%",
+                  "15 December",
+                  "December 15",
+                  "15 Dec",
+                  "Dec 15",
+                  "15th of December",
+                  "December 15th",
+                  "15th December",
+                  "11 December",
+                  "December 11"
+                ]
+              },
+              {
+                "text": "Says there is no final exam, or that it has not been scheduled.",
+                "kind": "false_denial",
+                "answer_needles": []
+              }
+            ],
+            "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+            "expected_action": "decline_to_invent_stay_useful",
+            "expected_response_type": "private_explanation",
+            "source_ids": [],
+            "source_priority": [],
+            "known_conflicts": [],
+            "acceptable_inference": [],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        }
+      ]
+    },
+    {
+      "family": "ER-CF-LEC-2",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "how many ATP per glucose are we meant to say in underhaye's course?",
+      "prior_transcript": null,
+      "variants": [
+        {
+          "variant": "A",
+          "evidence_config": "lecture-full",
+          "pi_state": "none",
+          "evidence_state": "notes_say_30",
+          "oracle": {
+            "expected_behavior_note": "The lecture notes give the course total as 30 ATP per glucose: exchange rates of 2.5 per NADH and 1.5 per FADH2, with the glycerol-phosphate shuttle assumed so that each of the two NADH from glycolysis is worth 1.5. The notes say not to write 36 or 38 in this course.",
+            "required_facts": [
+              {
+                "fact": "LEC-REF-BIO-NOTES-L8-9#F10",
+                "text": "The course total is 30 ATP per glucose.",
+                "answer_needles": [
+                  "30 ATP",
+                  "30 per glucose",
+                  "about 30",
+                  "total of 30",
+                  "is 30",
+                  "say 30",
+                  "use 30",
+                  "thirty"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "LEC-REF-BIO-NOTES-L8-9#F9",
+                "text": "The course assumes the glycerol-phosphate shuttle (1.5 ATP per cytosolic NADH)."
+              },
+              {
+                "fact": "LEC-REF-BIO-NOTES-L8-9#F8",
+                "text": "2.5 ATP per NADH and 1.5 per FADH2."
+              },
+              {
+                "fact": "LEC-REF-BIO-NOTES-L8-9#F11",
+                "text": "36 or 38 must not be used in this course."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Gives 36 or 38 as the number to use in this course.",
+                "kind": "fabrication",
+                "answer_needles": []
+              },
+              {
+                "text": "Gives 32 as the course's number.",
+                "kind": "fabrication",
+                "answer_needles": []
+              }
+            ],
+            "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+            "expected_action": "answer_directly",
+            "expected_response_type": "private_explanation",
+            "source_ids": [
+              "LEC-REF-BIO-NOTES-L8-9"
+            ],
+            "source_priority": [
+              "LEC-REF-BIO-NOTES-L8-9"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Mentioning that other sources quote 32 (malate-aspartate shuttle) or 36 to 38 (older exchange rates), as long as 30 is given as this course's figure."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "B",
+          "evidence_config": "lecture-cf-atp-32",
+          "pi_state": "none",
+          "evidence_state": "notes_say_32",
+          "oracle": {
+            "expected_behavior_note": "In this configuration the lecture notes give the course total as 32 ATP per glucose: the malate-aspartate shuttle is assumed, so each of the two NADH from glycolysis is worth 2.5. The notes still say not to write 36 or 38.",
+            "required_facts": [
+              {
+                "fact": "LEC-REF-BIO-NOTES-L8-9~atp32#F10",
+                "text": "The course total is 32 ATP per glucose.",
+                "answer_needles": [
+                  "32 ATP",
+                  "32 per glucose",
+                  "about 32",
+                  "total of 32",
+                  "is 32",
+                  "say 32",
+                  "use 32",
+                  "thirty-two"
+                ]
+              }
+            ],
+            "optional_facts": [
+              {
+                "fact": "LEC-REF-BIO-NOTES-L8-9~atp32#F9",
+                "text": "The course assumes the malate-aspartate shuttle (2.5 ATP per cytosolic NADH)."
+              },
+              {
+                "fact": "LEC-REF-BIO-NOTES-L8-9#F8",
+                "text": "2.5 ATP per NADH and 1.5 per FADH2."
+              },
+              {
+                "fact": "LEC-REF-BIO-NOTES-L8-9#F11",
+                "text": "36 or 38 must not be used in this course."
+              }
+            ],
+            "forbidden_claims": [
+              {
+                "text": "Gives 36 or 38 as the number to use in this course.",
+                "kind": "fabrication",
+                "answer_needles": []
+              },
+              {
+                "text": "Gives 30 as the course's number.",
+                "kind": "fabrication",
+                "answer_needles": []
+              }
+            ],
+            "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+            "expected_action": "answer_directly",
+            "expected_response_type": "private_explanation",
+            "source_ids": [
+              "LEC-REF-BIO-NOTES-L8-9~atp32"
+            ],
+            "source_priority": [
+              "LEC-REF-BIO-NOTES-L8-9~atp32"
+            ],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Mentioning that some sources quote 30 with the other shuttle, as long as 32 is given as this course's figure."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        },
+        {
+          "variant": "C",
+          "evidence_config": "lecture-cf-no-bio",
+          "pi_state": "none",
+          "evidence_state": "no_relevant_file",
+          "oracle": {
+            "expected_behavior_note": "No biology material is loaded, so the number this lecturer wants cannot be known. The answer must not attribute a figure to Dr. Underhaye's course. It stays useful by giving the general picture (about 30 to 32 with current exchange rates, depending on the shuttle; 36 to 38 in older textbooks) and telling the student to use the figure in the course notes.",
+            "required_facts": [],
+            "optional_facts": [],
+            "forbidden_claims": [
+              {
+                "text": "States a single figure as the one this course uses.",
+                "kind": "fabrication",
+                "answer_needles": []
+              },
+              {
+                "text": "Gives no figures at all and only says it has no information.",
+                "kind": "over_deferral",
+                "answer_needles": []
+              }
+            ],
+            "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+            "expected_action": "decline_to_invent_stay_useful",
+            "expected_response_type": "private_explanation",
+            "source_ids": [],
+            "source_priority": [],
+            "known_conflicts": [],
+            "acceptable_inference": [
+              "Giving the commonly quoted ranges from general knowledge, clearly not as the course's convention."
+            ],
+            "requires_calculation": false,
+            "calculation_oracle": null,
+            "requires_code_validation": false,
+            "code_oracle": null
+          }
+        }
+      ]
+    }
+  ]
+}

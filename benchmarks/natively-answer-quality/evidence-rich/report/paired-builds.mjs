@@ -1,0 +1,16 @@
+// Paired comparison of two builds on the same sets: node evidence-rich/report/paired-builds.mjs base e1 dev cf
+// Run from benchmarks/natively-answer-quality. Judge files: ER_JUDGE=opus (default, provisional) or ER_JUDGE=astra; never pooled.
+import { loadRun, funnel, readJsonl } from '../objective.mjs';
+import { mean, ci95, CRITICAL_FLAGS } from '../judge/score-er.mjs';
+const JUDGE = process.env.ER_JUDGE || 'opus';
+const [tagA, tagB, ...sets] = process.argv.slice(2); const P = [];
+for (const s of sets) { const A = loadRun(`evidence-rich/results/er-${s}-${tagA}`), B = loadRun(`evidence-rich/results/er-${s}-${tagB}`);
+  const JA = Object.fromEntries(readJsonl(`evidence-rich/judge/out/base/er-${s}-${tagA}.${JUDGE}.jsonl`).filter((j) => j.ok).map((j) => [j.benchmark_id, j])); const JB = Object.fromEntries(readJsonl(`evidence-rich/judge/out/base/er-${s}-${tagB}.${JUDGE}.jsonl`).filter((j) => j.ok).map((j) => [j.benchmark_id, j]));
+  for (const ra of A.rows) { const rb = B.rowsById[ra.benchmark_id]; const a = JA[ra.benchmark_id], b = JB[ra.benchmark_id]; if (!rb || !a || !b) continue; const item = A.ds.byId[ra.benchmark_id]; P.push({ item, a: a.official, b: b.official, fa: funnel(item, ra, A), fb: funnel(item, rb, B), ra, rb }); } }
+const line = (l, xs) => { const d = xs.map((p) => p.b.overall - p.a.overall); console.log(`${l.padEnd(52)} n=${String(xs.length).padStart(3)}  ${mean(xs.map((p) => p.a.overall)).toFixed(2)} → ${mean(xs.map((p) => p.b.overall)).toFixed(2)}  Δ ${mean(d) >= 0 ? '+' : ''}${mean(d).toFixed(2)} ±${(ci95(d) ?? 0).toFixed(2)}  hard ${xs.filter((p) => p.a.hard_fail).length} → ${xs.filter((p) => p.b.hard_fail).length}  critical ${xs.filter((p) => p.a.critical).length} → ${xs.filter((p) => p.b.critical).length}`); };
+const req = P.filter((p) => p.fa.evidence_required);
+line('all', P); line('evidence required', req); line('missing + irrelevant', P.filter((p) => ['missing_evidence', 'irrelevant_source'].includes(p.item.condition))); line('conflict / stale', P.filter((p) => p.item.condition === 'conflict_stale'));
+const fl = (k, side) => P.filter((p) => p[side].flags.some((f) => ['stale_source_preferred', 'draft_source_preferred'].includes(f))).length; console.log('rows flagged stale/draft preferred', fl(0, 'a'), '→', fl(0, 'b'));
+const refCases = (side) => { const xs = P.filter((p) => p[side].doc_fact_reached_prompt !== null && p[side].file_uploaded !== null); return `${xs.filter((p) => p[side].doc_fact_reached_prompt).length}/${xs.length}`; }; console.log('every needed reference fact in the prompt', refCases('fa'), '→', refCases('fb'));
+const allDel = (side) => { const xs = P.filter((p) => p[side].evidence_required && p[side].evidence_delivered !== null); return `${xs.filter((p) => p[side].evidence_delivered).length}/${xs.length}`; }; console.log('every needed fact (files and profile) in the prompt', allDel('fa'), '→', allDel('fb'));
+const del = P.filter((p) => p.fb.evidence_required && p.fb.evidence_delivered); const v = del.map((p) => p.b.overall).sort((x, y) => x - y); console.log(`B: delivered rows n=${del.length} mean ${mean(v).toFixed(2)} p10 ${v[Math.floor(v.length * 0.1)].toFixed(1)} hard ${del.filter((p) => p.b.hard_fail).length} critical ${del.filter((p) => p.b.critical).length} (${(100 * del.filter((p) => p.b.critical).length / del.length).toFixed(1)} %)`);

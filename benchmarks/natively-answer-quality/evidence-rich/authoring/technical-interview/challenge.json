@@ -1,0 +1,2139 @@
+{
+  "mode": "technical-interview",
+  "items": [
+    {
+      "id": "ER-C1-TI-001",
+      "mode": "technical-interview",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "What does that save us a month on the SMS bill?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Stay on the notification system from the brief."
+        },
+        {
+          "speaker": "other",
+          "text": "Suppose product agrees to push text messages down from the share in the brief to two percent of all sends. Volume and the vendor's price stay as written."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "ti-a-noproject",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "pi_condition": "no_pi",
+      "category": "system_design",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "From the brief: 180 million notifications a day, 5% of them SMS, USD 0.004 per message, and a month of 30 days. Today that is 9 million messages a day, USD 36,000 a day, USD 1.08 million a month. At 2% it is 3.6 million a day, USD 14,400 a day, USD 432,000 a month. The saving is three points of the volume: 5.4 million messages a day x 0.004 x 30 = USD 648,000 a month (about 650 thousand). The daily saving of USD 21,600 is not the monthly one, and neither bill is the saving.",
+        "required_facts": [
+          {
+            "fact": "TI-REF-SYSDESIGN-BRIEF#F26",
+            "text": "The saving is USD 648,000 a month.",
+            "answer_needles": [
+              "648,000",
+              "648000",
+              "648k",
+              "648 thousand",
+              "648K",
+              "0.648 million",
+              "650,000",
+              "650k",
+              "650 thousand",
+              "0.65 million"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TI-REF-SYSDESIGN-BRIEF#F17",
+            "text": "180 million notifications are sent per day."
+          },
+          {
+            "fact": "TI-REF-SYSDESIGN-BRIEF#F18",
+            "text": "SMS is 5% of the channel mix."
+          },
+          {
+            "fact": "TI-REF-SYSDESIGN-BRIEF#F1",
+            "text": "A month is 30 days."
+          },
+          {
+            "fact": "TI-REF-SYSDESIGN-BRIEF#F26",
+            "text": "The vendor also caps SMS at 500 messages per second."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the new monthly bill (USD 432,000) or today's bill (USD 1.08 million) as the saving.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Gives the daily saving (USD 21,600) as the monthly one, or uses a 31-day month (USD 669,600).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "669,600",
+              "669600"
+            ]
+          },
+          {
+            "text": "Uses the email or push share instead of the SMS share.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "the candidate answering the interviewer aloud, in the first person",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "TI-REF-SYSDESIGN-BRIEF",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "TI-REF-SYSDESIGN-BRIEF",
+          "CONVERSATION"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Rounding to about 650 thousand dollars a month.",
+          "Adding that the lower share also brings the SMS peak under the vendor's limit."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "180000000 * (0.05 - 0.02) * 0.004 * 30",
+          "result": 648000,
+          "unit": "USD per month saved on SMS",
+          "accepted_forms": [
+            "648,000",
+            "648000",
+            "648k",
+            "648 thousand",
+            "648K",
+            "0.648 million",
+            "about 650",
+            "roughly 650",
+            "around 650",
+            "~650",
+            "650k",
+            "650,000",
+            "650 thousand",
+            "0.65 million"
+          ],
+          "inputs": {
+            "notifications_per_day": "TI-REF-SYSDESIGN-BRIEF#F17",
+            "sms_share": "TI-REF-SYSDESIGN-BRIEF#F18",
+            "price_per_sms": "TI-REF-SYSDESIGN-BRIEF#F26",
+            "days_per_month": "TI-REF-SYSDESIGN-BRIEF#F1",
+            "new_sms_share": "CONVERSATION (2%)"
+          },
+          "wrong_results_common": [
+            "669,600",
+            "669600",
+            "64,800",
+            "6.48 million",
+            "6,480,000"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-TI-002",
+      "mode": "technical-interview",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "One of those cut your running costs and the other added to them. Net of the two, where did the monthly bill end up, and what's that over a year?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "You've told me about two projects: the database migration and the tracking pipeline."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "ti-a-full",
+      "pi_state": "A",
+      "condition": "multi_source",
+      "pi_condition": "resume_jd_relevant_ref",
+      "category": "numerical",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Two documents. The résumé: Marrowgate lowered database spend from USD 18,400 to USD 12,700 a month, a saving of 5,700. His notes: Skeinrouter costs about USD 9,300 a month to run against USD 6,100 for the old polling workers, 3,200 more. Net: USD 2,500 a month lower, USD 30,000 over a year. First person as Advik. Adding the two as if both were savings (8,900) or subtracting the two running totals (3,400) is wrong.",
+        "required_facts": [
+          {
+            "fact": "PI-A-RESUME#F30",
+            "text": "Net of the two, the monthly bill is USD 2,500 lower.",
+            "answer_needles": [
+              "2,500",
+              "2500",
+              "2.5k",
+              "2.5 thousand",
+              "twenty-five hundred",
+              "two and a half thousand"
+            ]
+          },
+          {
+            "fact": "TI-REF-A-PROJECT-DEEPDIVE#F40",
+            "text": "Over a year that is USD 30,000.",
+            "answer_needles": [
+              "30,000",
+              "30000",
+              "30k",
+              "30 thousand",
+              "thirty thousand"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-A-RESUME#F30",
+            "text": "Marrowgate: USD 18,400 to USD 12,700 a month (5,700 lower)."
+          },
+          {
+            "fact": "TI-REF-A-PROJECT-DEEPDIVE#F40",
+            "text": "Skeinrouter: about USD 9,300 a month against USD 6,100 for the old workers (3,200 more)."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Adds the two differences as if both were savings (USD 8,900 a month).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "8,900",
+              "8900"
+            ]
+          },
+          {
+            "text": "Says the new pipeline is cheaper to run than the old polling workers.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Subtracts one running total from the other (12,700 less 9,300, USD 3,400).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "3,400",
+              "3400"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (the frontend profile: her employer, projects or numbers).",
+            "kind": "other_profile",
+            "fact": "PI-B-RESUME#F18",
+            "answer_needles": [
+              "Lumenquay",
+              "Fernlatch",
+              "Pebblekit",
+              "Dialbench",
+              "Velmonte",
+              "Ondaverde",
+              "Farolim"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "PI:RESUME",
+          "TI-REF-A-PROJECT-DEEPDIVE"
+        ],
+        "source_priority": [
+          "PI-A-RESUME",
+          "TI-REF-A-PROJECT-DEEPDIVE"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "(18400 - 12700) - (9300 - 6100)",
+          "result": 2500,
+          "unit": "USD per month lower, net of both projects",
+          "accepted_forms": [
+            "2,500",
+            "2500",
+            "2.5k",
+            "2.5 thousand",
+            "twenty-five hundred",
+            "two and a half thousand"
+          ],
+          "inputs": {
+            "marrowgate_before_after": "PI-A-RESUME#F30",
+            "skeinrouter_and_old_workers": "TI-REF-A-PROJECT-DEEPDIVE#F40"
+          },
+          "wrong_results_common": [
+            "8,900",
+            "8900",
+            "3,400",
+            "3400"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-TI-003",
+      "mode": "technical-interview",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "they say how many experiments they run a quarter. how does my dialbench year stack up against that, per quarter? one honest line i can say",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "technical-interview-none",
+      "pi_state": "B",
+      "condition": "multi_source",
+      "pi_condition": "resume_jd",
+      "category": "jd_relevance",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Two documents. The posting: the team runs around 10 experiments a quarter. Her CV: 38 experiments ran on Dialbench in its first year, which is 9.5 a quarter, just under their pace (38 against about 40 a year). The honest line says the pace is comparable, not higher. The other counts on the CV (96 tracked events, 64 components) are not experiments.",
+        "required_facts": [
+          {
+            "fact": "PI-B-RESUME#F26",
+            "text": "38 experiments ran on Dialbench in its first year.",
+            "answer_needles": [
+              "38"
+            ]
+          },
+          {
+            "fact": "PI-B-JD#F16",
+            "text": "The posting says around 10 experiments a quarter.",
+            "answer_needles": [
+              "10",
+              "ten"
+            ]
+          },
+          {
+            "fact": "PI-B-RESUME#F26",
+            "text": "That is 9.5 a quarter, just under their pace.",
+            "answer_needles": [
+              "9.5",
+              "nine and a half",
+              "just under 10",
+              "just under ten",
+              "almost 10",
+              "almost ten",
+              "nearly 10",
+              "nearly ten",
+              "nine or ten",
+              "9 or 10",
+              "9 to 10",
+              "9-10"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Says she runs experiments at a higher rate than the team does.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Takes another count from the CV (96 tracked events, 64 components) as the number of experiments.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "96 experiments",
+              "64 experiments"
+            ]
+          },
+          {
+            "text": "Divides by three or by twelve and calls it a quarter (12.7).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "12.7",
+              "12.67"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (the backend profile: his employer, projects or numbers).",
+            "kind": "other_profile",
+            "fact": "PI-A-RESUME#F12",
+            "answer_needles": [
+              "Quillhaven",
+              "Skeinrouter",
+              "Marrowgate",
+              "Tessarine",
+              "Farecrest",
+              "Thorambath",
+              "Ostrakel"
+            ]
+          }
+        ],
+        "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_advice",
+        "source_ids": [
+          "PI:RESUME",
+          "PI:JD"
+        ],
+        "source_priority": [
+          "PI-B-RESUME",
+          "PI-B-JD"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "38 / 4",
+          "result": 9.5,
+          "unit": "experiments per quarter",
+          "accepted_forms": [
+            "9.5",
+            "nine and a half",
+            "just under 10",
+            "just under ten",
+            "almost 10",
+            "almost ten",
+            "nearly 10",
+            "nearly ten",
+            "nine or ten",
+            "9 or 10",
+            "9 to 10",
+            "9-10"
+          ],
+          "inputs": {
+            "experiments_first_year": "PI-B-RESUME#F26",
+            "team_pace_per_quarter": "PI-B-JD#F16"
+          },
+          "wrong_results_common": [
+            "12.7",
+            "12.67",
+            "24 a quarter",
+            "16 a quarter"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-TI-004",
+      "mode": "technical-interview",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Exactly how long was it live, from going out to being rolled back? And how many days after the rollback did the real fix ship?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Let's go back to the release that broke the booking flow."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "ti-b-full",
+      "pi_state": "B",
+      "condition": "grounded_single",
+      "pi_condition": "profile_b",
+      "category": "project_followup",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "From her notes: release 0.19 went out on Wednesday 8 March 2023 at 16:40 WET and was rolled back on Thursday 9 March at 19:20. That is 26 hours 40 minutes live (7 h 20 min to midnight plus 19 h 20 min). The fix was released on Monday 13 March 2023, 4 days after the rollback. First person as Catarina. The \"26 hours\" of the notes is the time until it was caught (18:55), the 25 minutes is detection to rollback, and 2 hours 40 minutes forgets the change of day.",
+        "required_facts": [
+          {
+            "fact": "TI-REF-B-PROJECT-DEEPDIVE#F18",
+            "text": "The release was live for 26 hours 40 minutes.",
+            "answer_needles": [
+              "26 hours 40",
+              "26 hours and 40",
+              "26h 40",
+              "26h40",
+              "26 h 40",
+              "26:40",
+              "1,600 minutes",
+              "1600 minutes",
+              "just under 27 hours",
+              "nearly 27 hours",
+              "almost 27 hours",
+              "about 27 hours",
+              "26.7 hours",
+              "twenty-six hours and forty",
+              "twenty-six hours forty",
+              "twenty-six hours, forty"
+            ]
+          },
+          {
+            "fact": "TI-REF-B-PROJECT-DEEPDIVE#F18",
+            "text": "The fix shipped 4 days after the rollback, on Monday 13 March 2023.",
+            "answer_needles": [
+              "4 days",
+              "four days",
+              "13 March",
+              "March 13",
+              "Mar 13",
+              "Mar. 13",
+              "13 Mar",
+              "13th of March",
+              "13th March",
+              "March 13th",
+              "March the 13th",
+              "13th Mar",
+              "Mar 13th",
+              "the 13th",
+              "following Monday"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TI-REF-B-PROJECT-DEEPDIVE#F18",
+            "text": "It was detected at 18:55 and rolled back 25 minutes later."
+          },
+          {
+            "fact": "TI-REF-B-PROJECT-DEEPDIVE#F20",
+            "text": "312 bookings were made at the wrong hour before it was caught."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Forgets the change of day and says it was live for 2 hours 40 minutes.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "2 hours 40",
+              "2 hours and 40",
+              "2h40",
+              "2h 40",
+              "two hours and forty",
+              "two hours forty"
+            ]
+          },
+          {
+            "text": "Gives the 25 minutes between detection and rollback as the time it was live.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Gives another date for the fix, or gives the days counted from the release (5) as the days after the rollback.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Answers with the other candidate's facts (the backend profile: his employer, projects or numbers).",
+            "kind": "other_profile",
+            "fact": "PI-A-RESUME#F12",
+            "answer_needles": [
+              "Quillhaven",
+              "Skeinrouter",
+              "Marrowgate",
+              "Tessarine",
+              "Farecrest",
+              "Thorambath",
+              "Ostrakel"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Catarina) answering the interviewer aloud, in the first person",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "TI-REF-B-PROJECT-DEEPDIVE"
+        ],
+        "source_priority": [
+          "TI-REF-B-PROJECT-DEEPDIVE"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "(24:00 - 16:40) + 19:20 = 7 h 20 min + 19 h 20 min",
+          "result": "26 h 40 min",
+          "unit": "time live, Wed 8 March 2023 16:40 to Thu 9 March 2023 19:20 (WET)",
+          "accepted_forms": [
+            "26 hours 40",
+            "26 hours and 40",
+            "26h 40",
+            "26h40",
+            "26 h 40",
+            "26:40",
+            "1,600 minutes",
+            "1600 minutes",
+            "just under 27 hours",
+            "nearly 27 hours",
+            "almost 27 hours",
+            "about 27 hours",
+            "26.7 hours",
+            "twenty-six hours and forty",
+            "twenty-six hours forty",
+            "twenty-six hours, forty"
+          ],
+          "inputs": {
+            "timeline": "TI-REF-B-PROJECT-DEEPDIVE#F18"
+          },
+          "wrong_results_common": [
+            "2 hours 40",
+            "2 hours and 40",
+            "2h40",
+            "26 hours 15",
+            "26h15",
+            "26 hours and 15",
+            "27 hours 40",
+            "25 hours 40"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-TI-005",
+      "mode": "technical-interview",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "recruiter call was monday 5 oct, and he said the usual timeline in the posting runs from that call. what date should all the rounds be done by, and how many rounds is it?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "technical-interview-none",
+      "pi_state": "A-JD",
+      "condition": "grounded_single",
+      "pi_condition": "jd_only",
+      "category": "jd_relevance",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "From the posting: after the 30-minute recruiter call there are four rounds, usually completed within three weeks. Three weeks from Monday 5 October 2026 is Monday 26 October 2026. The four rounds are coding (60 minutes, in Go or Java), system design (75 minutes), a deep dive into a system he built and ran, and a conversation with the hiring manager. It is the usual pace, not a promise. The other posting in the profiles (two weeks) is not his.",
+        "required_facts": [
+          {
+            "fact": "PI-A-JD#F34",
+            "text": "Three weeks from Monday 5 October is Monday 26 October 2026.",
+            "answer_needles": [
+              "26 October",
+              "October 26",
+              "Oct 26",
+              "Oct. 26",
+              "26 Oct",
+              "26th of October",
+              "26th October",
+              "October 26th",
+              "October the 26th",
+              "26th Oct",
+              "Oct 26th",
+              "the 26th"
+            ]
+          },
+          {
+            "fact": "PI-A-JD#F34",
+            "text": "There are four rounds.",
+            "answer_needles": [
+              "four",
+              "4 rounds",
+              "4 interview",
+              "4 more"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-A-JD#F35",
+            "text": "Coding (60 minutes, Go or Java), system design (75 minutes), a deep dive, and the hiring manager."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives another date: a day out (25 or 27 October), two weeks (19 October) or four weeks (2 November).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "19 October",
+              "October 19",
+              "Oct 19",
+              "Oct. 19",
+              "19 Oct",
+              "19th of October",
+              "19th October",
+              "October 19th",
+              "October the 19th",
+              "19th Oct",
+              "Oct 19th",
+              "27 October",
+              "October 27",
+              "Oct 27",
+              "Oct. 27",
+              "27 Oct",
+              "27th of October",
+              "27th October",
+              "October 27th",
+              "October the 27th",
+              "27th Oct",
+              "Oct 27th",
+              "25 October",
+              "October 25",
+              "Oct 25",
+              "Oct. 25",
+              "25 Oct",
+              "25th of October",
+              "25th October",
+              "October 25th",
+              "October the 25th",
+              "25th Oct",
+              "Oct 25th"
+            ]
+          },
+          {
+            "text": "Tells him the process will be finished by that date, as a commitment of the company.",
+            "kind": "unauthorized_promise",
+            "answer_needles": []
+          },
+          {
+            "text": "Answers with the other candidate's facts (the frontend profile: her employer, projects or numbers).",
+            "kind": "other_profile",
+            "fact": "PI-B-RESUME#F18",
+            "answer_needles": [
+              "Lumenquay",
+              "Fernlatch",
+              "Pebblekit",
+              "Dialbench",
+              "Velmonte",
+              "Ondaverde",
+              "Farolim"
+            ]
+          }
+        ],
+        "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "PI:JD"
+        ],
+        "source_priority": [
+          "PI-A-JD"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "date(2026-10-05) + 21 days",
+          "result": "2026-10-26",
+          "unit": "date (a Monday)",
+          "accepted_forms": [
+            "26 October",
+            "October 26",
+            "Oct 26",
+            "Oct. 26",
+            "26 Oct",
+            "26th of October",
+            "26th October",
+            "October 26th",
+            "October the 26th",
+            "26th Oct",
+            "Oct 26th",
+            "the 26th"
+          ],
+          "inputs": {
+            "usual_duration": "PI-A-JD#F34",
+            "recruiter_call": "stated in the question (Monday 5 October 2026)"
+          },
+          "wrong_results_common": [
+            "25 October",
+            "October 25",
+            "Oct 25",
+            "Oct. 25",
+            "25 Oct",
+            "25th of October",
+            "25th October",
+            "October 25th",
+            "October the 25th",
+            "25th Oct",
+            "Oct 25th",
+            "27 October",
+            "October 27",
+            "Oct 27",
+            "Oct. 27",
+            "27 Oct",
+            "27th of October",
+            "27th October",
+            "October 27th",
+            "October the 27th",
+            "27th Oct",
+            "Oct 27th",
+            "19 October",
+            "October 19",
+            "Oct 19",
+            "Oct. 19",
+            "19 Oct",
+            "19th of October",
+            "19th October",
+            "October 19th",
+            "October the 19th",
+            "19th Oct",
+            "Oct 19th",
+            "2 November",
+            "2nd of November",
+            "November 2nd"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-TI-006",
+      "mode": "technical-interview",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "In Python, write fixed_window_allowed, taking timestamps, limit and window. Time is cut into fixed windows of window milliseconds starting at zero, so with a window of 1000 the first one runs from 0 up to but not including 1000, and a request at exactly 1000 belongs to the next one. Each window lets through at most limit requests, the earliest ones, and turns the rest away. The timestamps come sorted, repeats allowed. Give me back one boolean per request, and an empty list when there are no requests.",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "There's a sliding-window limiter on your sheet. Leave that one alone; I want its simpler cousin."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "ti-a-noproject",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "pi_condition": "no_pi",
+      "category": "coding",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Working Python named fixed_window_allowed(timestamps, limit, window), executed against the tests. Rule as spoken: the window of a request is floor(timestamp / window); windows are aligned at zero, not at the first request; a timestamp that is an exact multiple of the window opens the next window; each window admits its first `limit` requests; equal timestamps are separate requests; an empty input returns an empty list. This is NOT problem 4 of the sheet: a sliding-window solution (or the sheet's allowed_requests) gives different answers as soon as a burst straddles a boundary.",
+        "required_facts": [
+          {
+            "fact": "CONVERSATION",
+            "text": "The function is fixed_window_allowed, with windows aligned at zero and the boundary belonging to the next window.",
+            "answer_needles": [
+              "fixed_window_allowed"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TI-REF-CODING-PROBLEMS#F8",
+            "text": "The sheet's problem 4 is a sliding-window limiter, a different rule."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Implements the sliding-window rule of the sheet's problem 4 instead of fixed windows.",
+            "kind": "fabrication",
+            "fact": "TI-REF-CODING-PROBLEMS#F8",
+            "answer_needles": []
+          },
+          {
+            "text": "Anchors the first window at the first request instead of at zero.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Puts a request at an exact multiple of the window into the earlier window.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Says it needs the problem sheet or more context before it can write the code.",
+            "kind": "over_deferral",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "the candidate answering the interviewer aloud, in the first person",
+        "expected_action": "write_code",
+        "expected_response_type": "code",
+        "source_ids": [
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "CONVERSATION",
+          "TI-REF-CODING-PROBLEMS"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Stating the complexity: one pass, extra space for a counter of the current window.",
+          "A sentence or two on the approach."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": true,
+        "code_oracle": {
+          "language": "python",
+          "function_hint": "fixed_window_allowed",
+          "tests": [
+            {
+              "input": [
+                [],
+                3,
+                1000
+              ],
+              "expected": []
+            },
+            {
+              "input": [
+                [
+                  0,
+                  100,
+                  200,
+                  900,
+                  1000,
+                  1100
+                ],
+                3,
+                1000
+              ],
+              "expected": [
+                true,
+                true,
+                true,
+                false,
+                true,
+                true
+              ]
+            },
+            {
+              "input": [
+                [
+                  0,
+                  900,
+                  1000,
+                  1100
+                ],
+                2,
+                1000
+              ],
+              "expected": [
+                true,
+                true,
+                true,
+                true
+              ]
+            },
+            {
+              "input": [
+                [
+                  999,
+                  1000
+                ],
+                1,
+                1000
+              ],
+              "expected": [
+                true,
+                true
+              ]
+            },
+            {
+              "input": [
+                [
+                  5,
+                  5,
+                  5
+                ],
+                2,
+                10
+              ],
+              "expected": [
+                true,
+                true,
+                false
+              ]
+            },
+            {
+              "input": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                4,
+                1
+              ],
+              "expected": [
+                true,
+                true,
+                true,
+                true
+              ]
+            },
+            {
+              "input": [
+                [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                1,
+                1
+              ],
+              "expected": [
+                true,
+                true,
+                true,
+                true
+              ]
+            },
+            {
+              "input": [
+                [
+                  0,
+                  500,
+                  999,
+                  1000,
+                  1001,
+                  1999,
+                  2000
+                ],
+                2,
+                1000
+              ],
+              "expected": [
+                true,
+                true,
+                false,
+                true,
+                true,
+                false,
+                true
+              ]
+            },
+            {
+              "input": [
+                [
+                  2500,
+                  2600,
+                  2700,
+                  3100
+                ],
+                2,
+                1000
+              ],
+              "expected": [
+                true,
+                true,
+                false,
+                true
+              ]
+            },
+            {
+              "input": [
+                [
+                  1000,
+                  1999,
+                  2000,
+                  2999,
+                  3000
+                ],
+                1,
+                1000
+              ],
+              "expected": [
+                true,
+                false,
+                true,
+                false,
+                true
+              ]
+            },
+            {
+              "input": [
+                [
+                  7
+                ],
+                1,
+                10
+              ],
+              "expected": [
+                true
+              ]
+            },
+            {
+              "input": [
+                [
+                  0,
+                  10,
+                  20
+                ],
+                5,
+                86400000
+              ],
+              "expected": [
+                true,
+                true,
+                true
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ER-C1-TI-007",
+      "mode": "technical-interview",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "js: minRooms(bookings) -> fewest rooms so that no two bookings in one room overlap. bookings is an array of [start, end] integer pairs, start < end, in any order. a booking that starts exactly when another one ends CAN take the same room, so [[1,4],[4,6]] needs 1 room, not 2. empty array -> 0",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "ti-b-full",
+      "pi_state": "B",
+      "condition": "grounded_single",
+      "pi_condition": "profile_b",
+      "category": "coding",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Working JavaScript named minRooms(bookings) returning a number, executed against the tests. Rule as typed: the answer is the largest number of bookings in progress at one moment, where a booking that starts exactly when another ends does not overlap it (ends are processed before starts at the same time); the input is unsorted and may hold identical bookings and negative numbers; an empty array gives 0. The sheet's problem 2 merges intervals that only touch, which is the opposite rule and must not be carried over. A sort without a numeric comparator also breaks it.",
+        "required_facts": [
+          {
+            "fact": "CONVERSATION",
+            "text": "The function is minRooms; touching bookings share a room.",
+            "answer_needles": [
+              "minRooms"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TI-REF-CODING-PROBLEMS#F4",
+            "text": "The sheet's problem 2 treats touching intervals as one, a different rule for a different task."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Treats a booking that starts when another ends as overlapping it (the touching rule of the sheet's problem 2).",
+            "kind": "fabrication",
+            "fact": "TI-REF-CODING-PROBLEMS#F4",
+            "answer_needles": []
+          },
+          {
+            "text": "Answers with one of the sheet's four problems instead of the task that was asked.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "is_palindrome",
+              "merge_intervals",
+              "top_k_words",
+              "allowed_requests"
+            ]
+          },
+          {
+            "text": "Says it needs the problem sheet or more context to answer.",
+            "kind": "over_deferral",
+            "answer_needles": []
+          },
+          {
+            "text": "Answers with the other candidate's facts (the backend profile: his employer, projects or numbers).",
+            "kind": "other_profile",
+            "fact": "PI-A-RESUME#F12",
+            "answer_needles": [
+              "Quillhaven",
+              "Skeinrouter",
+              "Marrowgate",
+              "Tessarine",
+              "Farecrest",
+              "Thorambath",
+              "Ostrakel"
+            ]
+          }
+        ],
+        "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+        "expected_action": "write_code",
+        "expected_response_type": "code",
+        "source_ids": [
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "CONVERSATION",
+          "TI-REF-CODING-PROBLEMS"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Stating the complexity: O(n log n) for the sorts.",
+          "A sentence or two on the approach."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": true,
+        "code_oracle": {
+          "language": "javascript",
+          "function_hint": "minRooms",
+          "tests": [
+            {
+              "input": [
+                []
+              ],
+              "expected": 0
+            },
+            {
+              "input": [
+                [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              ],
+              "expected": 1
+            },
+            {
+              "input": [
+                [
+                  [
+                    1,
+                    4
+                  ],
+                  [
+                    4,
+                    6
+                  ]
+                ]
+              ],
+              "expected": 1
+            },
+            {
+              "input": [
+                [
+                  [
+                    1,
+                    4
+                  ],
+                  [
+                    3,
+                    6
+                  ]
+                ]
+              ],
+              "expected": 2
+            },
+            {
+              "input": [
+                [
+                  [
+                    1,
+                    4
+                  ],
+                  [
+                    4,
+                    6
+                  ],
+                  [
+                    6,
+                    9
+                  ]
+                ]
+              ],
+              "expected": 1
+            },
+            {
+              "input": [
+                [
+                  [
+                    0,
+                    10
+                  ],
+                  [
+                    1,
+                    3
+                  ],
+                  [
+                    3,
+                    5
+                  ],
+                  [
+                    5,
+                    7
+                  ]
+                ]
+              ],
+              "expected": 2
+            },
+            {
+              "input": [
+                [
+                  [
+                    1,
+                    5
+                  ],
+                  [
+                    1,
+                    5
+                  ],
+                  [
+                    1,
+                    5
+                  ]
+                ]
+              ],
+              "expected": 3
+            },
+            {
+              "input": [
+                [
+                  [
+                    9,
+                    12
+                  ],
+                  [
+                    1,
+                    4
+                  ],
+                  [
+                    4,
+                    9
+                  ],
+                  [
+                    2,
+                    3
+                  ]
+                ]
+              ],
+              "expected": 2
+            },
+            {
+              "input": [
+                [
+                  [
+                    1,
+                    10
+                  ],
+                  [
+                    2,
+                    9
+                  ],
+                  [
+                    3,
+                    8
+                  ],
+                  [
+                    4,
+                    7
+                  ],
+                  [
+                    5,
+                    6
+                  ]
+                ]
+              ],
+              "expected": 5
+            },
+            {
+              "input": [
+                [
+                  [
+                    1,
+                    3
+                  ],
+                  [
+                    3,
+                    5
+                  ],
+                  [
+                    2,
+                    4
+                  ]
+                ]
+              ],
+              "expected": 2
+            },
+            {
+              "input": [
+                [
+                  [
+                    -5,
+                    -1
+                  ],
+                  [
+                    -1,
+                    3
+                  ],
+                  [
+                    -3,
+                    0
+                  ]
+                ]
+              ],
+              "expected": 2
+            },
+            {
+              "input": [
+                [
+                  [
+                    0,
+                    5
+                  ],
+                  [
+                    5,
+                    10
+                  ],
+                  [
+                    0,
+                    5
+                  ],
+                  [
+                    5,
+                    10
+                  ]
+                ]
+              ],
+              "expected": 2
+            },
+            {
+              "input": [
+                [
+                  [
+                    100,
+                    200
+                  ],
+                  [
+                    9,
+                    20
+                  ],
+                  [
+                    20,
+                    100
+                  ]
+                ]
+              ],
+              "expected": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ER-C1-TI-008",
+      "mode": "technical-interview",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "On paper, what's the most the main topic can feed through the projector, going by your partition count and what one consumer manages on a partition? And how does that sit against your peak?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "I've been through the design document you sent over for the tracking pipeline."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "ti-a-conflict",
+      "pi_state": "A-RESUME",
+      "condition": "conflict_stale",
+      "pi_condition": "profile_conflicting_ref",
+      "category": "project_followup",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "What was built, from his notes of September 2026 and his résumé: 48 partitions on the main topic, and one projector consumer sustains about 1,400 events per second on a single partition, so about 67,200 events per second on paper, against a peak of 41,000 (roughly 26,000 of headroom). The May 2024 proposal (version 0.3, in review) planned 24 partitions at about 1,100 per partition, 26,400 against a target of 25,000; that is the plan, not what runs. First person as Advik. Mixing the two documents (48 x 1,100 or 24 x 1,400) is also wrong.",
+        "required_facts": [
+          {
+            "fact": "TI-REF-A-PROJECT-DEEPDIVE#F15",
+            "text": "The main topic has 48 partitions.",
+            "answer_needles": [
+              "48"
+            ]
+          },
+          {
+            "fact": "TI-REF-A-PROJECT-DEEPDIVE#F19",
+            "text": "One projector consumer sustains about 1,400 events per second on a partition.",
+            "answer_needles": [
+              "1,400",
+              "1400",
+              "1.4k",
+              "fourteen hundred",
+              "1.4 thousand"
+            ]
+          },
+          {
+            "fact": "TI-REF-A-PROJECT-DEEPDIVE#F19",
+            "text": "On paper that is about 67,200 events per second.",
+            "answer_needles": [
+              "67,200",
+              "67200",
+              "67.2k",
+              "67k",
+              "67 thousand",
+              "67,000",
+              "sixty-seven thousand"
+            ]
+          },
+          {
+            "fact": "TI-REF-A-PROJECT-DEEPDIVE#F11",
+            "text": "The peak is 41,000 events per second.",
+            "answer_needles": [
+              "41,000",
+              "41000",
+              "41k",
+              "41 thousand",
+              "forty-one thousand"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-A-RESUME#F16",
+            "text": "The résumé also states 48 partitions keyed by shipment ID."
+          },
+          {
+            "fact": "TI-REF-A-PROJECT-DEEPDIVE#F43",
+            "text": "The notes describe the system as it runs; the design document is from May 2024."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Multiplies the proposal's values (24 partitions at about 1,100) and gives 26,400 as the ceiling.",
+            "kind": "stale",
+            "fact": "TI-REF-A-OLD-DESIGN-DOC#F2",
+            "answer_needles": [
+              "26,400",
+              "26400"
+            ]
+          },
+          {
+            "text": "Mixes the two documents: 48 x 1,100 (52,800) or 24 x 1,400 (33,600).",
+            "kind": "stale",
+            "fact": "TI-REF-A-OLD-DESIGN-DOC#F14",
+            "answer_needles": [
+              "52,800",
+              "52800",
+              "33,600",
+              "33600"
+            ]
+          },
+          {
+            "text": "Gives the proposal's 25,000 as the peak.",
+            "kind": "stale",
+            "fact": "TI-REF-A-OLD-DESIGN-DOC#F3",
+            "answer_needles": []
+          },
+          {
+            "text": "Answers with the other candidate's facts (the frontend profile: her employer, projects or numbers).",
+            "kind": "other_profile",
+            "fact": "PI-B-RESUME#F18",
+            "answer_needles": [
+              "Lumenquay",
+              "Fernlatch",
+              "Pebblekit",
+              "Dialbench",
+              "Velmonte",
+              "Ondaverde",
+              "Farolim"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "TI-REF-A-PROJECT-DEEPDIVE",
+          "PI:RESUME"
+        ],
+        "source_priority": [
+          "TI-REF-A-PROJECT-DEEPDIVE",
+          "PI-A-RESUME",
+          "TI-REF-A-OLD-DESIGN-DOC"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "partition count, per-partition rate and peak of Skeinrouter",
+            "sources": [
+              "TI-REF-A-PROJECT-DEEPDIVE",
+              "PI-A-RESUME",
+              "TI-REF-A-OLD-DESIGN-DOC"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Rounding to about 67 thousand events per second.",
+          "Saying the real ceiling is the database commit, so the figure is an upper bound."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "48 * 1400",
+          "result": 67200,
+          "unit": "events per second on paper (48 partitions x about 1,400 each)",
+          "accepted_forms": [
+            "67,200",
+            "67200",
+            "67.2k",
+            "67k",
+            "67 thousand",
+            "67,000",
+            "sixty-seven thousand"
+          ],
+          "inputs": {
+            "partitions": "TI-REF-A-PROJECT-DEEPDIVE#F15",
+            "per_partition_rate": "TI-REF-A-PROJECT-DEEPDIVE#F19",
+            "peak": "TI-REF-A-PROJECT-DEEPDIVE#F11"
+          },
+          "wrong_results_common": [
+            "26,400",
+            "26400",
+            "52,800",
+            "52800",
+            "33,600",
+            "33600"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-TI-009",
+      "mode": "technical-interview",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "that's not the manager or the team size i remember from the posting. what did it actually say, and how do i ask about it without making it weird",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "I'm Dhruvika, I run Ledger Core, so you'd be reporting to me. We're eleven engineers at the moment."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "technical-interview-none",
+      "pi_state": "A-JD",
+      "condition": "conflict_stale",
+      "pi_condition": "jd_only",
+      "category": "jd_relevance",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Two sources disagree and nothing loaded settles it. The posting (requisition OST-ENG-0417, posted 14 September 2026) says the role reports to Sarvesh Idnavalli, Engineering Manager for Ledger Core, and that the team has 9 engineers: 7 backend engineers and 2 site reliability engineers. The interviewer has just said he would report to her (Dhruvika) and that the team is eleven. The right answer tells him exactly what the posting says, sets it beside what she said, does not declare either one wrong (teams change after a posting goes up), and gives him a neutral way to ask, for example whether the team has grown since the posting.",
+        "required_facts": [
+          {
+            "fact": "PI-A-JD#F5",
+            "text": "The posting says the role reports to Sarvesh Idnavalli.",
+            "answer_needles": [
+              "Sarvesh",
+              "Idnavalli"
+            ]
+          },
+          {
+            "fact": "PI-A-JD#F4",
+            "text": "The posting says the team has 9 engineers: 7 backend and 2 SRE.",
+            "answer_needles": [
+              "9 engineers",
+              "nine engineers",
+              "nine",
+              "9 people",
+              "team of 9",
+              "of 9",
+              "7 backend",
+              "seven backend"
+            ]
+          },
+          {
+            "fact": "CONVERSATION",
+            "text": "The interviewer said he would report to her and that the team is eleven.",
+            "answer_needles": [
+              "eleven",
+              "11"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-A-JD#F38",
+            "text": "The posting is requisition OST-ENG-0417, posted 14 September 2026."
+          },
+          {
+            "fact": "PI-A-JD#F20",
+            "text": "The role guides 2 to 3 engineers and has no line-management duties."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Settles it one way as fact: tells him the posting is wrong, or that the interviewer is mistaken and the posting stands.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Gives the size of his own current team (five) or another number as the posting's team size.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Gives the other posting's manager or squad (Jorrit Aldewyck, Workspace Surface at Hollowpine).",
+            "kind": "other_profile",
+            "fact": "PI-B-JD#F6",
+            "answer_needles": [
+              "Jorrit",
+              "Aldewyck",
+              "Hollowpine",
+              "Workspace Surface",
+              "Inkwharf"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (the frontend profile: her employer, projects or numbers).",
+            "kind": "other_profile",
+            "fact": "PI-B-RESUME#F18",
+            "answer_needles": [
+              "Lumenquay",
+              "Fernlatch",
+              "Pebblekit",
+              "Dialbench",
+              "Velmonte",
+              "Ondaverde",
+              "Farolim"
+            ]
+          }
+        ],
+        "expected_role": "assistant answering the candidate's private typed question: facts stated plainly to the candidate, or first-person wording the candidate can say",
+        "expected_action": "surface_conflict",
+        "expected_response_type": "private_advice",
+        "source_ids": [
+          "PI:JD",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "PI-A-JD",
+          "CONVERSATION"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "who the role reports to and how many engineers Ledger Core has",
+            "sources": [
+              "PI-A-JD",
+              "CONVERSATION"
+            ],
+            "resolution": "unresolved"
+          }
+        ],
+        "acceptable_inference": [
+          "Saying the posting is a few weeks old and the team may have changed since."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-TI-010",
+      "mode": "technical-interview",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "How far behind did tracking actually get for the worst-hit shipments, and how many carriers were already on the new pipeline when it happened?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Let's go back to the November incident on your tracking pipeline."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "ti-a-noproject",
+      "pi_state": "A",
+      "condition": "missing_evidence",
+      "pi_condition": "resume_jd_irrelevant_ref",
+      "category": "project_followup",
+      "difficulty": "hard",
+      "cf_pair": "incident-lag-and-carriers",
+      "oracle": {
+        "expected_behavior_note": "His project notes are not loaded. The résumé says only that the November 2024 incident was a rebalance storm that delayed tracking updates for 3 hours 40 minutes, and that he led the response and the follow-up; it says the platform is used by about 1,900 carriers and that the rollout went by per-carrier flags over 9 weeks. It does not say how far behind the worst-hit shipments were, nor how many carriers were on the new pipeline at that point. First person as Advik: he gives what he has (the cause, the 3 hours 40 minutes as the length of the incident) and says he would check the exact lag and the carrier count rather than guess. He must not pass off the 3 hours 40 minutes as how far behind shipments were, and must not pass off the 1,900 carriers as the number already moved.",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "PI-A-RESUME#F21",
+            "text": "A rebalance storm delayed tracking updates for 3 hours 40 minutes."
+          },
+          {
+            "fact": "PI-A-RESUME#F6",
+            "text": "The platform is used by about 1,900 carriers."
+          },
+          {
+            "fact": "PI-A-RESUME#F18",
+            "text": "The rollout used per-carrier flags over 9 weeks."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "States how far behind the worst-hit shipments were, or how many carriers were live, as fact.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "47 minutes",
+              "47 min",
+              "forty-seven minutes",
+              "720"
+            ]
+          },
+          {
+            "text": "Presents the 3 hours 40 minutes (the length of the incident) as how far behind the worst shipments were.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Presents all 1,900 carriers as already on the new pipeline when the incident happened.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Replies with an assistant-style refusal he could not say aloud, or offers none of what the résumé does state.",
+            "kind": "over_deferral",
+            "answer_needles": []
+          },
+          {
+            "text": "Answers with the other candidate's facts (the frontend profile: her employer, projects or numbers).",
+            "kind": "other_profile",
+            "fact": "PI-B-RESUME#F18",
+            "answer_needles": [
+              "Lumenquay",
+              "Fernlatch",
+              "Pebblekit",
+              "Dialbench",
+              "Velmonte",
+              "Ondaverde",
+              "Farolim"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-TI-011",
+      "mode": "technical-interview",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "You're in Hyderabad and this is three days a week in our Bengaluru office. Are you definitely moving for it, and what notice would you have to serve where you are?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "technical-interview-none",
+      "pi_state": "A",
+      "condition": "missing_evidence",
+      "pi_condition": "resume_jd",
+      "category": "personal_missing",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Neither document says whether he is willing to relocate, and neither states a notice period or a start date. What is known: his résumé puts him in Hyderabad; the posting bases the role at the Bengaluru office, hybrid on Tuesday to Thursday, not open to fully remote, with relocation assistance available (no amount stated). The assistance being on offer says nothing about his decision. The answer must not put a yes or a no about moving in his mouth as a fact, and must not invent a notice period; it stays useful by giving him the shape of an answer with his own facts left for him to fill in, or by telling him plainly that these two are his to state.",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "PI-A-RESUME#F2",
+            "text": "He lives in Hyderabad."
+          },
+          {
+            "fact": "PI-A-JD#F7",
+            "text": "Hybrid: three days a week in the office, Tuesday to Thursday."
+          },
+          {
+            "fact": "PI-A-JD#F9",
+            "text": "Relocation assistance is available for candidates moving to Bengaluru."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "States a notice period or a start date as his.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "30 days",
+              "60 days",
+              "90 days",
+              "30-day",
+              "60-day",
+              "90-day",
+              "one month's notice",
+              "a month's notice",
+              "two months",
+              "three months",
+              "two weeks' notice",
+              "two-week notice"
+            ]
+          },
+          {
+            "text": "States as a fact that he will, or will not, move to Bengaluru.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "I'm happy to relocate",
+              "I am happy to relocate",
+              "I'm willing to relocate",
+              "I am willing to relocate",
+              "I'd be happy to relocate",
+              "I'm ready to relocate",
+              "I'm fully prepared to relocate",
+              "I'm planning to relocate",
+              "I plan to relocate",
+              "I'm definitely moving",
+              "I am definitely moving",
+              "I'm committed to relocating",
+              "I'm not willing to relocate",
+              "I won't be relocating"
+            ]
+          },
+          {
+            "text": "States an amount or a form of relocation assistance.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Answers with the other candidate's facts (the frontend profile: her employer, projects or numbers).",
+            "kind": "other_profile",
+            "fact": "PI-B-RESUME#F18",
+            "answer_needles": [
+              "Lumenquay",
+              "Fernlatch",
+              "Pebblekit",
+              "Dialbench",
+              "Velmonte",
+              "Ondaverde",
+              "Farolim"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-TI-012",
+      "mode": "technical-interview",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "How far behind did tracking actually get for the worst-hit shipments, and how many carriers were already on the new pipeline when it happened?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Let's go back to the November incident on your tracking pipeline."
+        }
+      ],
+      "conversation_id": "ER-C1-TI-012-C",
+      "turn_index": 1,
+      "evidence_config": "ti-a-full",
+      "pi_state": "A",
+      "condition": "followup",
+      "pi_condition": "resume_jd_relevant_ref",
+      "category": "project_followup",
+      "difficulty": "hard",
+      "cf_pair": "incident-lag-and-carriers",
+      "oracle": {
+        "expected_behavior_note": "From his notes: at the peak of the incident the worst-hit shipments were 47 minutes behind (consumer lag peaked at 96 million events), and 720 carriers were already live on the new pipeline; it was the fourth week of the per-carrier rollout. First person as Advik. The 3 hours 40 minutes on his résumé is how long the incident lasted, not how far behind any shipment was, and the 1,900 carriers are the whole customer base, not the number moved.",
+        "required_facts": [
+          {
+            "fact": "TI-REF-A-PROJECT-DEEPDIVE#F31",
+            "text": "The worst-hit shipments were 47 minutes behind.",
+            "answer_needles": [
+              "47 minutes",
+              "47 min",
+              "forty-seven minutes",
+              "47-minute"
+            ]
+          },
+          {
+            "fact": "TI-REF-A-PROJECT-DEEPDIVE#F30",
+            "text": "720 carriers were live on the new pipeline.",
+            "answer_needles": [
+              "720",
+              "seven hundred and twenty",
+              "seven hundred twenty"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TI-REF-A-PROJECT-DEEPDIVE#F31",
+            "text": "Consumer lag peaked at 96 million events."
+          },
+          {
+            "fact": "TI-REF-A-PROJECT-DEEPDIVE#F32",
+            "text": "The incident was closed after 3 hours 40 minutes."
+          },
+          {
+            "fact": "TI-REF-A-PROJECT-DEEPDIVE#F34",
+            "text": "No events were lost and nothing was rolled back."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the 3 hours 40 minutes (the length of the incident) as how far behind the worst shipments were.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Gives the whole carrier base (about 1,900) as the number already on the new pipeline.",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Answers with the other candidate's facts (the frontend profile: her employer, projects or numbers).",
+            "kind": "other_profile",
+            "fact": "PI-B-RESUME#F18",
+            "answer_needles": [
+              "Lumenquay",
+              "Fernlatch",
+              "Pebblekit",
+              "Dialbench",
+              "Velmonte",
+              "Ondaverde",
+              "Farolim"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "TI-REF-A-PROJECT-DEEPDIVE"
+        ],
+        "source_priority": [
+          "TI-REF-A-PROJECT-DEEPDIVE",
+          "PI-A-RESUME"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-TI-013",
+      "mode": "technical-interview",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "And what share of your whole carrier base was that?",
+      "prior_transcript": null,
+      "conversation_id": "ER-C1-TI-012-C",
+      "turn_index": 2,
+      "evidence_config": "ti-a-full",
+      "pi_state": "A",
+      "condition": "followup",
+      "pi_condition": "resume_jd_relevant_ref",
+      "category": "numerical",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "\"That\" is the 720 carriers of the previous turn. His résumé says the platform is used by about 1,900 carriers, so 720 / 1,900 is about 38%, a little under four in ten. First person as Advik, with the arithmetic in a few words.",
+        "required_facts": [
+          {
+            "fact": "PI-A-RESUME#F6",
+            "text": "The platform is used by about 1,900 carriers.",
+            "answer_needles": [
+              "1,900",
+              "1900",
+              "nineteen hundred",
+              "1.9k",
+              "1.9 thousand"
+            ]
+          },
+          {
+            "fact": "TI-REF-A-PROJECT-DEEPDIVE#F30",
+            "text": "720 of them is about 38%.",
+            "answer_needles": [
+              "38%",
+              "38 percent",
+              "38 per cent",
+              "37.9",
+              "thirty-eight percent",
+              "thirty-eight per cent",
+              "just under 40",
+              "nearly 40",
+              "almost 40",
+              "a bit under 40",
+              "a little under 40",
+              "roughly 40%",
+              "about 40%",
+              "around 40%",
+              "over a third",
+              "more than a third",
+              "four in ten"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Loses the thread: takes another number of the incident (96 million events, 16 pods, 47 minutes) as \"that\".",
+            "kind": "fabrication",
+            "answer_needles": []
+          },
+          {
+            "text": "Divides by something other than the carrier base, or gives the complement (62%).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "62%",
+              "62 percent",
+              "62 per cent"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (the frontend profile: her employer, projects or numbers).",
+            "kind": "other_profile",
+            "fact": "PI-B-RESUME#F18",
+            "answer_needles": [
+              "Lumenquay",
+              "Fernlatch",
+              "Pebblekit",
+              "Dialbench",
+              "Velmonte",
+              "Ondaverde",
+              "Farolim"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "continue_previous_answer",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "TI-REF-A-PROJECT-DEEPDIVE",
+          "PI:RESUME",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "TI-REF-A-PROJECT-DEEPDIVE",
+          "PI-A-RESUME",
+          "CONVERSATION"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "720 / 1900 * 100",
+          "result": 37.89,
+          "unit": "% of the carrier base",
+          "accepted_forms": [
+            "38%",
+            "38 percent",
+            "38 per cent",
+            "37.9",
+            "thirty-eight percent",
+            "thirty-eight per cent",
+            "just under 40",
+            "nearly 40",
+            "almost 40",
+            "a bit under 40",
+            "a little under 40",
+            "roughly 40%",
+            "about 40%",
+            "around 40%",
+            "over a third",
+            "more than a third",
+            "four in ten"
+          ],
+          "inputs": {
+            "carriers_live": "TI-REF-A-PROJECT-DEEPDIVE#F30",
+            "carrier_base": "PI-A-RESUME#F6"
+          },
+          "wrong_results_common": [
+            "62%",
+            "62 percent",
+            "62 per cent"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    }
+  ]
+}

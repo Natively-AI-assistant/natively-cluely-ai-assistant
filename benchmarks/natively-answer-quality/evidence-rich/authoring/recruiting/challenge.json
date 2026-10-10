@@ -1,0 +1,1976 @@
+{
+  "mode": "recruiting",
+  "items": [
+    {
+      "id": "ER-C1-REC-001",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "On retirement, put a number on it for me. If I came in right at the bottom of your salary band, what's the most the company would chip in over a year?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "benefits_question",
+      "difficulty": "hard",
+      "cf_pair": "retirement-match-dollars",
+      "oracle": {
+        "expected_behavior_note": "Two documents are needed. The current Total Rewards overview (version 4.1, 2026) says Kestrelwick matches 401(k) contributions dollar for dollar up to 5% of salary, and the match vests immediately. The job description puts the bottom of the posted range at $172,000. 5% of 172,000 is $8,600 a year, which she gets only if she puts in at least that much herself. The 2025 overview said 4% (that would be $6,880) with a two-year vest; it is out of date. The 12% in the pack is the bonus target, not the match. The recruiter gives the $8,600 figure as the ceiling at that base and does not suggest where an offer would land.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-BENEFITS-2026#F23",
+            "text": "The match is dollar for dollar up to 5% of salary, so at a $172,000 base the most the company puts in is $8,600 a year.",
+            "answer_needles": [
+              "8,600",
+              "8600",
+              "8.6k",
+              "8.6 k",
+              "8.6 thousand",
+              "eighty-six hundred",
+              "eighty six hundred",
+              "eight thousand six hundred",
+              "eight thousand, six hundred",
+              "eight and a half thousand",
+              "8.6 grand"
+            ]
+          },
+          {
+            "fact": "REC-REF-JD-2026#F2",
+            "text": "The bottom of the posted base salary range is $172,000; 5% of it is $8,600.",
+            "answer_needles": [
+              "172",
+              "8,600",
+              "8600",
+              "8.6k",
+              "8.6 k",
+              "8.6 thousand",
+              "eighty-six hundred",
+              "eighty six hundred",
+              "eight thousand six hundred",
+              "eight thousand, six hundred",
+              "eight and a half thousand",
+              "8.6 grand"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-BENEFITS-2026#F23",
+            "text": "The match vests immediately."
+          },
+          {
+            "fact": "REC-REF-JD-2026#F17",
+            "text": "Where an offer lands inside the range depends on experience and internal equity."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses the 2025 match of 4% of salary, which gives $6,880.",
+            "kind": "stale",
+            "fact": "REC-REF-BENEFITS-2025#F16",
+            "answer_needles": [
+              "4%",
+              "4 percent",
+              "four percent",
+              "6,880",
+              "6880"
+            ]
+          },
+          {
+            "text": "Says the match vests over two years.",
+            "kind": "stale",
+            "fact": "REC-REF-BENEFITS-2025#F16",
+            "answer_needles": [
+              "over two years",
+              "two-year vest",
+              "2-year vest",
+              "two year vest"
+            ]
+          },
+          {
+            "text": "Applies the 12% bonus target instead of the 5% match, which gives $20,640.",
+            "kind": "fabrication",
+            "fact": "REC-REF-BENEFITS-2026#F15",
+            "answer_needles": [
+              "20,640",
+              "20640"
+            ]
+          },
+          {
+            "text": "Gives the figure for the top or the midpoint of the range as the answer for the bottom of the range.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Promises an offer, or says where in the range her offer would land.",
+            "kind": "unauthorized_promise",
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F28"
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "REC-REF-BENEFITS-2026",
+          "REC-REF-JD-2026"
+        ],
+        "source_priority": [
+          "REC-REF-BENEFITS-2026",
+          "REC-REF-JD-2026",
+          "REC-REF-BENEFITS-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "401(k) match rate and vesting",
+            "sources": [
+              "REC-REF-BENEFITS-2026",
+              "REC-REF-BENEFITS-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Saying she has to contribute at least 5% herself to get the full match.",
+          "Adding what the ceiling would be at the top of the range ($9,900), as long as $8,600 is given for the bottom."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "172000 * 0.05",
+          "result": 8600,
+          "unit": "USD per year (most the company matches at the bottom of the posted range)",
+          "accepted_forms": [
+            "8,600",
+            "8600",
+            "8.6k",
+            "8.6 k",
+            "8.6 thousand",
+            "eighty-six hundred",
+            "eighty six hundred",
+            "eight thousand six hundred",
+            "eight thousand, six hundred",
+            "eight and a half thousand",
+            "8.6 grand"
+          ],
+          "inputs": {
+            "range_low": "REC-REF-JD-2026#F2",
+            "match_rate": "REC-REF-BENEFITS-2026#F23"
+          },
+          "wrong_results_common": [
+            "6,880",
+            "6880",
+            "20,640",
+            "20640",
+            "7,920",
+            "7920",
+            "17,200",
+            "17200"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-REC-002",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "So across a full year, do I come out ahead or behind on those two if I move over?",
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "Is there anything on the benefits side you'd want to line up against what you have today?"
+        },
+        {
+          "speaker": "other",
+          "text": "Yeah, two small ones. I get eighteen hundred a year for training and conferences, and sixty a month toward a gym."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "benefits_question",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Her two figures were said a moment ago: $1,800 a year for training and $60 a month for the gym, which is 1,800 + 60 x 12 = $2,520 a year. The current Total Rewards overview gives a learning stipend of $2,000 per year and a wellness allowance of $50 per month, which is 2,000 + 50 x 12 = $2,600 a year. So she comes out ahead, by $80 a year ($200 more for learning, $120 less for wellness). The trap is the monthly figure next to the yearly one, and the pack's other numbers: the 2025 overview's $1,500 stipend and $75 monthly remote stipend, and the one-time $600 home-office allowance, which is not a yearly perk.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-BENEFITS-2026#F24",
+            "text": "With a $2,000 learning stipend she is ahead overall, by $80 a year ($2,600 against $2,520).",
+            "answer_needles": [
+              "$80",
+              "80 dollars",
+              "eighty dollars",
+              "eighty bucks",
+              "80 bucks",
+              "80 a year",
+              "80 per year",
+              "eighty a year",
+              "eighty per year",
+              "80 more",
+              "eighty more",
+              "80 ahead",
+              "eighty ahead",
+              "about eighty",
+              "about 80",
+              "around eighty",
+              "around 80",
+              "roughly eighty",
+              "roughly 80",
+              "by eighty",
+              "by 80",
+              "eighty or so",
+              "80 or so"
+            ]
+          },
+          {
+            "fact": "REC-REF-BENEFITS-2026#F25",
+            "text": "The wellness allowance is $50 per month, $600 a year, so the two together are $2,600 a year at Kestrelwick.",
+            "answer_needles": [
+              "2,600",
+              "2600",
+              "twenty-six hundred",
+              "twenty six hundred",
+              "two thousand six hundred",
+              "600",
+              "six hundred",
+              "$50",
+              "fifty",
+              "50 a month",
+              "$120",
+              "120 less",
+              "hundred and twenty",
+              "hundred twenty",
+              "$10",
+              "ten dollars",
+              "ten a month"
+            ]
+          },
+          {
+            "fact": "CONVERSATION",
+            "text": "Her current two perks come to $2,520 a year (1,800 + 60 x 12).",
+            "answer_needles": [
+              "2,520",
+              "2520",
+              "twenty-five twenty",
+              "twenty five twenty",
+              "twenty-five hundred and twenty",
+              "two thousand five hundred",
+              "720",
+              "seven twenty",
+              "seven hundred",
+              "1,800",
+              "1800",
+              "eighteen hundred",
+              "ahead",
+              "better off",
+              "in front",
+              "slightly more",
+              "a little more",
+              "a bit more",
+              "up by",
+              "come out up"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-BENEFITS-2026#F13",
+            "text": "There is also a one-time $600 home-office setup allowance for new hires, which is separate."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses the 2025 learning stipend of $1,500 (which would put her behind).",
+            "kind": "stale",
+            "fact": "REC-REF-BENEFITS-2025#F17",
+            "answer_needles": [
+              "1,500",
+              "1500",
+              "fifteen hundred"
+            ]
+          },
+          {
+            "text": "Uses the 2025 overview's $75 monthly remote stipend as the wellness figure.",
+            "kind": "stale",
+            "fact": "REC-REF-BENEFITS-2025#F10",
+            "answer_needles": [
+              "$75",
+              "75 a month",
+              "75 per month",
+              "seventy-five"
+            ]
+          },
+          {
+            "text": "Adds the monthly $50 to the yearly $2,000 without multiplying by twelve ($2,050).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "2,050",
+              "2050",
+              "twenty fifty"
+            ]
+          },
+          {
+            "text": "Says she would come out behind, or that the two are the same.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Promises to match or top up her current perks.",
+            "kind": "unauthorized_promise",
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F28"
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "REC-REF-BENEFITS-2026",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "REC-REF-BENEFITS-2026",
+          "CONVERSATION",
+          "REC-REF-BENEFITS-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Learning stipend amount",
+            "sources": [
+              "REC-REF-BENEFITS-2026",
+              "REC-REF-BENEFITS-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Mentioning the one-time $600 home-office setup allowance as a separate extra.",
+          "Saying the two packages are close."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "(2000 + 50 * 12) - (1800 + 60 * 12)",
+          "result": 80,
+          "unit": "USD per year (Kestrelwick learning stipend plus wellness allowance, minus her current two perks)",
+          "accepted_forms": [
+            "$80",
+            "80 dollars",
+            "eighty dollars",
+            "eighty bucks",
+            "80 bucks",
+            "80 a year",
+            "80 per year",
+            "eighty a year",
+            "eighty per year",
+            "80 more",
+            "eighty more",
+            "80 ahead",
+            "eighty ahead",
+            "about eighty",
+            "about 80",
+            "around eighty",
+            "around 80",
+            "roughly eighty",
+            "roughly 80",
+            "by eighty",
+            "by 80",
+            "eighty or so",
+            "80 or so"
+          ],
+          "inputs": {
+            "learning_stipend_per_year": "REC-REF-BENEFITS-2026#F24",
+            "wellness_per_month": "REC-REF-BENEFITS-2026#F25",
+            "her_training_per_year": "CONVERSATION (1,800)",
+            "her_gym_per_month": "CONVERSATION (60)"
+          },
+          "wrong_results_common": [
+            "2,100",
+            "2100",
+            "twenty-one hundred",
+            "$420",
+            "420 behind",
+            "four twenty",
+            "four hundred twenty",
+            "four hundred and twenty",
+            "2,050",
+            "2050",
+            "$190",
+            "one ninety",
+            "hundred and ninety",
+            "hundred ninety",
+            "$380",
+            "380",
+            "three eighty",
+            "three hundred eighty",
+            "three hundred and eighty",
+            "2,900",
+            "2900",
+            "twenty-nine hundred"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-REC-003",
+      "mode": "recruiting",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "her cv says the 23% infra cut was worth $410K a year. so what was the yearly bill before she cut it, ballpark? and is 23 more or less than what we're going for with tiered storage",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "experience_verification",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The resume says she cut pipeline infrastructure spend by 23% ($410K annualized). If $410K is 23% of the bill, the bill before the cut was 410,000 / 0.23, about $1.78 million a year (about $1.37 million after). The team brief's 2027 priority is to move Kafka to tiered storage with a target of 30% lower storage spend, so 23 is less than what Kestrelwick is aiming for; hers is a result on the whole pipeline's infrastructure and Kestrelwick's is a target on storage spend, so they are not like for like. The usual slip is to multiply (23% of 410K, about $94K) or to divide by 0.77.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-RESUME-VASKIRK#F8",
+            "text": "The 23% saving was $410K a year, so the yearly bill before the cut was about $1.78 million.",
+            "answer_needles": [
+              "1.78",
+              "1.8 million",
+              "1.8m",
+              "$1.8",
+              "1,782",
+              "1.8 mil",
+              "1.7 to 1.8",
+              "1.8"
+            ]
+          },
+          {
+            "fact": "REC-REF-TEAM-BRIEF-2026#F23",
+            "text": "Kestrelwick's tiered-storage target is 30% lower storage spend, so 23% is less.",
+            "answer_needles": [
+              "30%",
+              "30 percent",
+              "thirty percent",
+              "30 per cent",
+              "30 %"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-RESUME-VASKIRK#F8",
+            "text": "She got there through tiered retention and right-sizing brokers."
+          },
+          {
+            "fact": "REC-REF-JD-2026#F16",
+            "text": "Managing the cost of cloud data infrastructure is a nice-to-have on the job description."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Multiplies instead of dividing and gives about $94K as the earlier bill.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "94.3",
+              "94,300",
+              "$94"
+            ]
+          },
+          {
+            "text": "Divides by 0.77 (about $532K) or takes 77% of $410K (about $316K).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "532",
+              "315.7",
+              "315,700",
+              "$316"
+            ]
+          },
+          {
+            "text": "Says 23% is above Kestrelwick's target, or gives the 30% as something already achieved.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the resume gives the total bill directly, or that it cannot be worked out.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "private assistant to the recruiter; the reply is for the recruiter's eyes, not words spoken to the candidate",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "REC-REF-RESUME-VASKIRK",
+          "REC-REF-TEAM-BRIEF-2026"
+        ],
+        "source_priority": [
+          "REC-REF-RESUME-VASKIRK",
+          "REC-REF-TEAM-BRIEF-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Giving the bill after the cut (about $1.37 million).",
+          "Pointing out that her 23% is on all pipeline infrastructure and the 30% target is on storage only."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "410000 / 0.23",
+          "result": 1782609,
+          "unit": "USD per year (pipeline infrastructure spend before the cut)",
+          "accepted_forms": [
+            "1.78",
+            "1.8 million",
+            "1.8M",
+            "$1.8",
+            "1,782",
+            "1.8 mil",
+            "1.7 to 1.8",
+            "1.8"
+          ],
+          "inputs": {
+            "saving_per_year": "REC-REF-RESUME-VASKIRK#F8",
+            "saving_share": "REC-REF-RESUME-VASKIRK#F8",
+            "kestrelwick_target": "REC-REF-TEAM-BRIEF-2026#F23"
+          },
+          "wrong_results_common": [
+            "94.3",
+            "94,300",
+            "$94",
+            "532",
+            "315.7",
+            "315,700",
+            "$316",
+            "17.8"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-REC-004",
+      "mode": "recruiting",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "idris said in his notes he'd be off two days the week he wrote them. which calendar dates was that? logging it in greenhollow",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "recruiter_responsibility",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Idris's notes are dated Monday 28 September 2026 and say he is out Thursday and Friday of that week. Thursday is three days after the 28th and September has 30 days, so the two days are Thursday 1 October and Friday 2 October 2026. The week runs across the month end, which is where it goes wrong (30 September and 1 October, or 2 and 3 October). 'This week' in the notes is the week they were written, not the current week, so 8 and 9 October are wrong.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-HM-NOTES#F13",
+            "text": "He was out on Thursday 1 October 2026.",
+            "answer_needles": [
+              "October 1",
+              "1 October",
+              "Oct 1",
+              "1 Oct",
+              "Oct. 1",
+              "1st of October",
+              "1st October",
+              "first of October",
+              "October first",
+              "October the 1st",
+              "Thursday 1",
+              "Thu 1",
+              "Thursday the 1st",
+              "1st and 2nd",
+              "1 and 2",
+              "1-2",
+              "1/2 Oct",
+              "10/1"
+            ]
+          },
+          {
+            "fact": "REC-REF-HM-NOTES#F13",
+            "text": "He was out on Friday 2 October 2026.",
+            "answer_needles": [
+              "2 October",
+              "2 Oct",
+              "October 2nd",
+              "2nd of October",
+              "2nd October",
+              "second of October",
+              "October second",
+              "October the 2nd",
+              "Friday 2",
+              "Fri 2",
+              "Friday the 2nd",
+              "1st and 2nd",
+              "1 and 2",
+              "1-2",
+              "October 2 ",
+              "October 2,",
+              "October 2.",
+              "Oct 2 ",
+              "Oct 2,",
+              "Oct 2.",
+              "Oct. 2 ",
+              "Oct. 2,",
+              "10/2"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-HM-NOTES#F1",
+            "text": "The notes were written on Monday 28 September 2026."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Reads 'this week' as the current week and gives 8 and 9 October.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "October 8",
+              "8 October",
+              "Oct 8",
+              "the 8th",
+              "October 9",
+              "9 October",
+              "Oct 9",
+              "the 9th"
+            ]
+          },
+          {
+            "text": "Slips a day at the month end and gives 2 and 3 October.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "October 3",
+              "3 October",
+              "Oct 3",
+              "the 3rd"
+            ]
+          },
+          {
+            "text": "Gives the Thursday and Friday of the week before (24 and 25 September).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "September 24",
+              "24 September",
+              "Sept 24",
+              "Sep 24",
+              "September 25",
+              "25 September",
+              "Sept 25",
+              "Sep 25"
+            ]
+          },
+          {
+            "text": "Gives 30 September as one of the two days.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the notes do not allow the dates to be worked out.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "private assistant to the recruiter; the reply is for the recruiter's eyes, not words spoken to the candidate",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "REC-REF-HM-NOTES"
+        ],
+        "source_priority": [
+          "REC-REF-HM-NOTES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Adding that both dates are already past."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "2026-09-28 (Mon, the date on the notes) + 3 days = 2026-10-01 (Thu); + 4 days = 2026-10-02 (Fri)",
+          "result": "2026-10-01 and 2026-10-02",
+          "unit": "the two dates Idris was out",
+          "accepted_forms": [
+            "October 1",
+            "1 October",
+            "Oct 1",
+            "1 Oct",
+            "Oct. 1",
+            "1st of October",
+            "1st October",
+            "first of October",
+            "October first",
+            "October the 1st",
+            "Thursday 1",
+            "Thu 1",
+            "Thursday the 1st",
+            "1st and 2nd",
+            "1 and 2",
+            "1-2",
+            "1/2 Oct",
+            "10/1"
+          ],
+          "inputs": {
+            "notes_date": "REC-REF-HM-NOTES#F1",
+            "days_out": "REC-REF-HM-NOTES#F13"
+          },
+          "wrong_results_common": [
+            "October 8",
+            "8 October",
+            "Oct 8",
+            "the 8th",
+            "October 9",
+            "9 October",
+            "Oct 9",
+            "the 9th",
+            "October 3",
+            "3 October",
+            "Oct 3",
+            "the 3rd",
+            "September 24",
+            "24 September",
+            "Sept 24",
+            "September 25",
+            "25 September",
+            "Sept 25"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-REC-005",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Hypothetically, say you ring me with a verbal offer on Thursday the twelfth of November, and the paperwork follows as late as your process lets it. What date would the offer run out?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "next_step_question",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Two rules from the process guide chain together. A written offer follows a verbal offer within 1 business day, so after a call on Thursday 12 November 2026 the paperwork arrives on Friday 13 November at the latest. Offers stay open for 5 business days, and business days are Monday to Friday, so from Friday the 13th the five days are Monday 16 to Friday 20 November: the offer runs out on Friday 20 November 2026. No US public holiday falls in that stretch. Counting from the phone call, or counting the 13th itself as day one, gives the 19th; counting calendar days gives the 18th. The recruiter answers the hypothetical and does not promise an offer.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F15",
+            "text": "With the written offer on Friday 13 November and 5 business days to decide, the offer runs out on Friday 20 November 2026.",
+            "answer_needles": [
+              "November 20 ",
+              "November 20,",
+              "November 20.",
+              "November 20;",
+              "November 20)",
+              "20 November",
+              "Nov 20 ",
+              "Nov 20,",
+              "Nov 20.",
+              "Nov 20;",
+              "Nov 20)",
+              "20 Nov",
+              "Nov. 20 ",
+              "Nov. 20,",
+              "Nov. 20.",
+              "Nov. 20;",
+              "Nov. 20)",
+              "November 20th",
+              "20th of November",
+              "20th November",
+              "twentieth of November",
+              "November twentieth",
+              "November the 20th",
+              "November the twentieth",
+              "the 20th",
+              "the twentieth"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F15",
+            "text": "The written offer follows the verbal one within 1 business day (Friday 13 November)."
+          },
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F16",
+            "text": "Business days are Monday to Friday, excluding company holidays."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives Thursday 19 November (counts from the call, or counts the 13th as the first day).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "November 19",
+              "19 November",
+              "Nov 19",
+              "19 Nov",
+              "Nov. 19",
+              "November 19th",
+              "19th of November",
+              "19th November",
+              "nineteenth of November",
+              "November nineteenth",
+              "November the 19th",
+              "November the nineteenth",
+              "the 19th",
+              "the nineteenth"
+            ]
+          },
+          {
+            "text": "Counts calendar days and gives 17 or 18 November.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "November 18",
+              "18 November",
+              "Nov 18",
+              "18 Nov",
+              "Nov. 18",
+              "November 18th",
+              "18th of November",
+              "18th November",
+              "eighteenth of November",
+              "November eighteenth",
+              "November the 18th",
+              "November the eighteenth",
+              "the 18th",
+              "the eighteenth",
+              "November 17",
+              "17 November",
+              "Nov 17",
+              "17 Nov",
+              "Nov. 17",
+              "November 17th",
+              "17th of November",
+              "17th November",
+              "seventeenth of November",
+              "November seventeenth",
+              "November the 17th",
+              "November the seventeenth",
+              "the 17th",
+              "the seventeenth"
+            ]
+          },
+          {
+            "text": "Gives Monday 23 November.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "November 23",
+              "23 November",
+              "Nov 23",
+              "23 Nov",
+              "Nov. 23",
+              "November 23rd",
+              "23rd of November",
+              "23rd November",
+              "twenty-third of November",
+              "November twenty-third",
+              "November the 23rd",
+              "November the twenty-third",
+              "the 23rd",
+              "the twenty-third"
+            ]
+          },
+          {
+            "text": "Promises that an offer will be made, or promises an extension.",
+            "kind": "unauthorized_promise",
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F28"
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "REC-REF-PROCESS-GUIDE-2026"
+        ],
+        "source_priority": [
+          "REC-REF-PROCESS-GUIDE-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying the written offer would arrive by Friday the 13th.",
+          "Saying it could run out sooner if the paperwork goes out the same day."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "2026-11-12 (Thu, verbal offer) + 1 business day = 2026-11-13 (Fri, written offer at the latest); + 5 business days = 2026-11-20 (Fri)",
+          "result": "2026-11-20",
+          "unit": "date (last day the offer is open)",
+          "accepted_forms": [
+            "November 20 ",
+            "November 20,",
+            "November 20.",
+            "November 20;",
+            "November 20)",
+            "20 November",
+            "Nov 20 ",
+            "Nov 20,",
+            "Nov 20.",
+            "Nov 20;",
+            "Nov 20)",
+            "20 Nov",
+            "Nov. 20 ",
+            "Nov. 20,",
+            "Nov. 20.",
+            "Nov. 20;",
+            "Nov. 20)",
+            "November 20th",
+            "20th of November",
+            "20th November",
+            "twentieth of November",
+            "November twentieth",
+            "November the 20th",
+            "November the twentieth",
+            "the 20th",
+            "the twentieth"
+          ],
+          "inputs": {
+            "verbal_offer_date": "CONVERSATION (Thursday 12 November 2026)",
+            "written_within_business_days": "REC-REF-PROCESS-GUIDE-2026#F15",
+            "open_for_business_days": "REC-REF-PROCESS-GUIDE-2026#F15",
+            "business_day_rule": "REC-REF-PROCESS-GUIDE-2026#F16"
+          },
+          "wrong_results_common": [
+            "November 19",
+            "19 November",
+            "Nov 19",
+            "19 Nov",
+            "Nov. 19",
+            "November 19th",
+            "19th of November",
+            "19th November",
+            "nineteenth of November",
+            "November nineteenth",
+            "November the 19th",
+            "November the nineteenth",
+            "the 19th",
+            "the nineteenth",
+            "November 18",
+            "18 November",
+            "Nov 18",
+            "18 Nov",
+            "Nov. 18",
+            "November 18th",
+            "18th of November",
+            "18th November",
+            "eighteenth of November",
+            "November eighteenth",
+            "November the 18th",
+            "November the eighteenth",
+            "the 18th",
+            "the eighteenth",
+            "November 17",
+            "17 November",
+            "Nov 17",
+            "17 Nov",
+            "Nov. 17",
+            "November 17th",
+            "17th of November",
+            "17th November",
+            "seventeenth of November",
+            "November seventeenth",
+            "November the 17th",
+            "November the seventeenth",
+            "the 17th",
+            "the seventeenth",
+            "November 23",
+            "23 November",
+            "Nov 23",
+            "23 Nov",
+            "Nov. 23",
+            "November 23rd",
+            "23rd of November",
+            "23rd November",
+            "twenty-third of November",
+            "November twenty-third",
+            "November the 23rd",
+            "November the twenty-third",
+            "the 23rd",
+            "the twenty-third"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-REC-006",
+      "mode": "recruiting",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "she wants to know how much of the medical premium for her partner and their daughter comes out of her own pocket. what % is hers?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "benefits_question",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The current overview (version 4.1) gives two shares: the company pays 90% of the employee premium and 70% of dependent premiums. The partner and daughter are dependents, so the company pays 70% and she carries the other 30%. The 90% (leaving her 10%) is for her own premium only. The 2025 overview said 85% and 60%, which would leave her 40% for dependents; it is out of date.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-BENEFITS-2026#F20",
+            "text": "The company pays 70% of dependent premiums, so 30% of the premium for her partner and daughter is hers.",
+            "answer_needles": [
+              "30%",
+              "30 percent",
+              "thirty percent",
+              "30 per cent",
+              "30 %",
+              "thirty per cent"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-BENEFITS-2026#F20",
+            "text": "On her own premium the company pays 90%, so she pays 10%."
+          },
+          {
+            "fact": "REC-REF-BENEFITS-2026#F21",
+            "text": "Dental and vision are fully paid for employees, and coverage starts on the first day."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses the 2025 dependent share (company 60%, so 40% hers).",
+            "kind": "stale",
+            "fact": "REC-REF-BENEFITS-2025#F15",
+            "answer_needles": [
+              "40%",
+              "40 percent",
+              "forty percent",
+              "60%",
+              "60 percent",
+              "sixty percent"
+            ]
+          },
+          {
+            "text": "Uses the 2025 employee share (company 85%, so 15% hers).",
+            "kind": "stale",
+            "fact": "REC-REF-BENEFITS-2025#F15",
+            "answer_needles": [
+              "85%",
+              "85 percent",
+              "15%",
+              "15 percent",
+              "fifteen percent"
+            ]
+          },
+          {
+            "text": "Gives 10% as her share for the dependents (the employee-premium share applied to the dependents' premium).",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Quotes a premium in dollars; the overview gives none.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "private assistant to the recruiter; the reply is for the recruiter's eyes, not words spoken to the candidate",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "REC-REF-BENEFITS-2026"
+        ],
+        "source_priority": [
+          "REC-REF-BENEFITS-2026",
+          "REC-REF-BENEFITS-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Company share of medical premiums",
+            "sources": [
+              "REC-REF-BENEFITS-2026",
+              "REC-REF-BENEFITS-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Adding that her own premium is 90% company-paid.",
+          "Saying the dollar amount depends on which of the three plans she picks."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "100 - 70",
+          "result": 30,
+          "unit": "% of the dependents' medical premium paid by the employee",
+          "accepted_forms": [
+            "30%",
+            "30 percent",
+            "thirty percent",
+            "30 per cent",
+            "30 %",
+            "thirty per cent"
+          ],
+          "inputs": {
+            "company_share_dependents": "REC-REF-BENEFITS-2026#F20"
+          },
+          "wrong_results_common": [
+            "40%",
+            "40 percent",
+            "forty percent",
+            "15%",
+            "15 percent",
+            "fifteen percent"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-REC-007",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "From a trailer firing off a reading to someone actually being able to pull it up, what's the usual lag on your side?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "candidate_question",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The pack holds three delay figures for three different things. The team brief gives Kestrelwick's own number: the median delay from a trailer sending a reading to that reading being queryable is 4 seconds. The job description's 60 seconds is the service-level objective (99.9% of device messages processed within 60 seconds), an upper bound and not the usual lag. The resume's 4.2 s and 900 ms are the candidate's p99 ingestion latency at Halcyard, before and after her work. The recruiter gives the 4-second median as Kestrelwick's usual lag.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-TEAM-BRIEF-2026#F21",
+            "text": "The median delay from a trailer sending a reading to it being queryable is 4 seconds.",
+            "answer_needles": [
+              "4 seconds",
+              "four seconds",
+              "4-second",
+              "four-second",
+              "4 sec",
+              "4s",
+              "4 s ",
+              "4 s.",
+              "4 s,"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-JD-2026#F7",
+            "text": "The service-level objective is 99.9% of device messages processed within 60 seconds."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the candidate's own Halcyard latency figures (900 ms, or 4.2 s) as Kestrelwick's.",
+            "kind": "fabrication",
+            "fact": "REC-REF-RESUME-VASKIRK#F7",
+            "answer_needles": [
+              "900 ms",
+              "900ms",
+              "900 milliseconds",
+              "nine hundred",
+              "4.2 s",
+              "4.2s",
+              "4.2 seconds",
+              "4.2-second"
+            ]
+          },
+          {
+            "text": "Gives the 60-second objective as the usual lag.",
+            "kind": "fabrication",
+            "fact": "REC-REF-JD-2026#F7"
+          },
+          {
+            "text": "Invents a sub-second figure.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "sub-second",
+              "under a second",
+              "less than a second"
+            ]
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "answer_candidate_question",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "REC-REF-TEAM-BRIEF-2026"
+        ],
+        "source_priority": [
+          "REC-REF-TEAM-BRIEF-2026",
+          "REC-REF-JD-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Adding the 60-second objective as the bound the team is held to, clearly as a different number.",
+          "Saying it is a median, so some readings take longer."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-REC-008",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "I'm terrible at taking time off. If I only got through fourteen days in a year, what happens to the rest? Does it all roll over?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "benefits_question",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Version 4.1 (2026) is current: 24 days of PTO a year, and up to 5 unused days carry into the next year. Fourteen used leaves 10; 5 of those carry over and the other 5 are lost. Version 3.2 (2025) said 20 days and a carry-over of up to 10, which would leave 6 and roll all of them: that is the out-of-date answer. Only the version line and date show which overview is newer.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-BENEFITS-2026#F4",
+            "text": "Only up to 5 unused days carry into the next year, so of her 10 unused days 5 carry over and 5 are lost.",
+            "answer_needles": [
+              "five",
+              "5 days",
+              "5 unused",
+              "up to 5",
+              "5 of",
+              "5 carry",
+              "only 5",
+              "5 roll",
+              "5 would",
+              "5 will"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-BENEFITS-2026#F2",
+            "text": "PTO is 24 days a year, so 14 used leaves 10."
+          },
+          {
+            "fact": "REC-REF-BENEFITS-2026#F5",
+            "text": "Sick days are separate from PTO."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses the 2025 carry-over of up to 10 days, so that everything rolls over.",
+            "kind": "stale",
+            "fact": "REC-REF-BENEFITS-2025#F4",
+            "answer_needles": [
+              "up to 10",
+              "up to ten",
+              "ten days carry",
+              "10 days carry",
+              "ten can carry",
+              "10 can carry"
+            ]
+          },
+          {
+            "text": "Uses the 2025 allowance of 20 days, which leaves 6 unused.",
+            "kind": "stale",
+            "fact": "REC-REF-BENEFITS-2025#F2",
+            "answer_needles": [
+              "20 days",
+              "twenty days",
+              "six left",
+              "6 left",
+              "six unused",
+              "6 unused",
+              "six days",
+              "6 days",
+              "lose one",
+              "lose 1"
+            ]
+          },
+          {
+            "text": "Says nothing carries over, or that unused days are paid out.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "paid out",
+              "cash out",
+              "cashed out"
+            ]
+          },
+          {
+            "text": "Promises an exception to the carry-over limit.",
+            "kind": "unauthorized_promise",
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F28"
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "REC-REF-BENEFITS-2026"
+        ],
+        "source_priority": [
+          "REC-REF-BENEFITS-2026",
+          "REC-REF-BENEFITS-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "PTO allowance and carry-over limit",
+            "sources": [
+              "REC-REF-BENEFITS-2026",
+              "REC-REF-BENEFITS-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Saying the winter closure and sick days do not use up PTO."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "24 - 14 - 5",
+          "result": 5,
+          "unit": "days lost (10 unused, 5 carry into the next year, 5 do not)",
+          "accepted_forms": [
+            "five",
+            "5 days",
+            "5 unused",
+            "up to 5",
+            "5 of",
+            "5 carry",
+            "only 5",
+            "5 roll",
+            "5 would",
+            "5 will"
+          ],
+          "inputs": {
+            "pto_days": "REC-REF-BENEFITS-2026#F2",
+            "days_used": "CONVERSATION (fourteen)",
+            "carry_over_cap": "REC-REF-BENEFITS-2026#F4"
+          },
+          "wrong_results_common": [
+            "up to 10",
+            "up to ten",
+            "six left",
+            "6 left",
+            "six unused",
+            "6 unused",
+            "six days",
+            "6 days",
+            "20 days",
+            "twenty days"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-REC-009",
+      "mode": "recruiting",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "is ingestion the biggest of the three data platform teams or the smallest? she asked and i dodged",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-cf-reports-conflict",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "role_question",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Two current documents, both dated 1 September 2026, give different sizes for the Ingestion Platform team. The team brief says the Engineering Lead has 4 direct reports; the job description says the lead line-manages seven engineers. The brief puts Query Platform at 6 engineers and Device Gateway at 5. So by the brief Ingestion is the smallest of the three, and by the job description it is the biggest: the answer flips with the document. Nothing loaded says which is right. The right answer names both numbers, says they conflict, and suggests settling it with Idris before telling the candidate.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-TEAM-BRIEF-2026#F9",
+            "text": "The team brief says the lead has 4 direct reports, which would make Ingestion the smallest team.",
+            "answer_needles": [
+              "four",
+              "4 direct",
+              "4 engineers",
+              "4 people",
+              "4 reports",
+              "has 4",
+              "says 4",
+              "of 4",
+              "at 4",
+              "4 (",
+              "4,",
+              "4 vs",
+              "4 versus",
+              "4 or 7",
+              "4 to 7",
+              "4 and 7",
+              "4 on"
+            ]
+          },
+          {
+            "fact": "REC-REF-JD-2026~seven#F6",
+            "text": "The job description says the lead line-manages seven engineers, which would make Ingestion the biggest team.",
+            "answer_needles": [
+              "seven",
+              "7 engineers",
+              "7 people",
+              "7 reports",
+              "7 direct",
+              "has 7",
+              "says 7",
+              "of 7",
+              "at 7",
+              "7 (",
+              "7,",
+              "7 vs",
+              "7 versus",
+              "4 or 7",
+              "4 to 7",
+              "4 and 7",
+              "7 on"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-TEAM-BRIEF-2026#F7",
+            "text": "Query Platform has 6 engineers."
+          },
+          {
+            "fact": "REC-REF-TEAM-BRIEF-2026#F8",
+            "text": "Device Gateway has 5 engineers."
+          },
+          {
+            "fact": "REC-REF-HM-NOTES#F12",
+            "text": "Idris says the team brief is up to date."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "States one of the two sizes as settled (smallest with four, or biggest with seven) without saying the other document disagrees.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Uses the candidate's own Halcyard team of 5 as the size of the Kestrelwick team.",
+            "kind": "fabrication",
+            "fact": "REC-REF-RESUME-VASKIRK#F3"
+          },
+          {
+            "text": "Says the documents give no team sizes.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "private assistant to the recruiter; the reply is for the recruiter's eyes, not words spoken to the candidate",
+        "expected_action": "surface_conflict",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "REC-REF-TEAM-BRIEF-2026",
+          "REC-REF-JD-2026~seven"
+        ],
+        "source_priority": [
+          "REC-REF-TEAM-BRIEF-2026",
+          "REC-REF-JD-2026~seven"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Size of the Ingestion Platform team (4 direct reports versus seven engineers)",
+            "sources": [
+              "REC-REF-TEAM-BRIEF-2026",
+              "REC-REF-JD-2026~seven"
+            ],
+            "resolution": "unresolved"
+          }
+        ],
+        "acceptable_inference": [
+          "Suggesting she confirm the headcount with Idris.",
+          "Leaning towards one document with a stated reason (for example that Idris calls the team brief up to date), provided both numbers are given and confirmation is still suggested."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-REC-010",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "On retirement, put a number on it for me. If I came in right at the bottom of your salary band, what's the most the company would chip in over a year?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-cf-remote-absent",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "benefits_question",
+      "difficulty": "hard",
+      "cf_pair": "retirement-match-dollars",
+      "oracle": {
+        "expected_behavior_note": "Neither Total Rewards overview is loaded here, and nothing else says anything about a retirement plan or a match: the job description mentions only an annual bonus and an equity grant and points to the Total Rewards overview. The salary band is known ($172,000 at the bottom), which makes it tempting to apply a typical match rate and quote a dollar figure. The recruiter does not give a rate or an amount and does not say there is no match: she says she will send the Total Rewards overview or confirm the figure and come back. Spoken wording stays human (for example 'let me get you the exact number'); it does not talk about files, documents or loaded context.",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-JD-2026#F2",
+            "text": "The bottom of the posted range is $172,000."
+          },
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F26",
+            "text": "The Total Rewards overview is cleared for candidates, so she can send it."
+          },
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F29",
+            "text": "She sends a follow-up email the same day."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "States a match rate or a dollar amount for the company contribution.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "5%",
+              "5 percent",
+              "five percent",
+              "8,600",
+              "8600",
+              "4%",
+              "4 percent",
+              "four percent",
+              "6,880",
+              "6880",
+              "3%",
+              "3 percent",
+              "three percent",
+              "6%",
+              "6 percent",
+              "six percent",
+              "dollar for dollar",
+              "dollar-for-dollar",
+              "50 cents"
+            ]
+          },
+          {
+            "text": "Says Kestrelwick has no retirement plan or does not match.",
+            "kind": "false_denial",
+            "answer_needles": [
+              "there's no match",
+              "there is no match",
+              "we don't match",
+              "we do not match",
+              "doesn't match contributions",
+              "no retirement plan",
+              "no 401"
+            ]
+          },
+          {
+            "text": "Promises a match, or a figure, as part of her offer.",
+            "kind": "unauthorized_promise",
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F28"
+          },
+          {
+            "text": "Uses a company, person, policy or figure from material loaded for another mode (anything that is not Kestrelwick, this role or this candidate).",
+            "kind": "other_mode"
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "defer_to_verify",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [
+          "REC-REF-JD-2026",
+          "REC-REF-PROCESS-GUIDE-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying the bottom of the band is $172,000.",
+          "Committing to send the Total Rewards overview in the same-day follow-up email."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-REC-011",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "And what did that round value the company at? How many months of cash does it leave you with?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Can I ask how you're doing money-wise? Have you raised recently?"
+        },
+        {
+          "speaker": "user",
+          "text": "Sure. We closed a Series D of eighty-five million in May of last year, led by Tamarack Ridge Partners."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "candidate_question",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The team brief gives the round ($85 million Series D, May 2025, led by Tamarack Ridge Partners) and nothing more: no valuation, no revenue, no runway. It also tells recruiters not to share revenue or runway and to say that the hiring manager can speak to the business in more depth at the next stage. The round size sitting right there makes a valuation or a runway figure tempting to derive. The recruiter gives neither, does not present $85 million as the valuation, and points to the hiring manager conversation. Spoken wording stays human; it does not talk about files, documents or loaded context.",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-TEAM-BRIEF-2026#F27",
+            "text": "Revenue and runway are not shared by recruiters; the hiring manager can speak to the business at the next stage."
+          },
+          {
+            "fact": "REC-REF-TEAM-BRIEF-2026#F5",
+            "text": "The Series D was $85 million, closed in May 2025, led by Tamarack Ridge Partners."
+          },
+          {
+            "fact": "REC-REF-TEAM-BRIEF-2026#F2",
+            "text": "Kestrelwick was founded in 2014 and has about 310 employees."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "States a valuation, or gives the $85 million round size as the valuation.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "valued at $",
+              "valued us at $",
+              "valued the company at $",
+              "valuation of $",
+              "valuation was $",
+              "valuation is $",
+              "valuation of around",
+              "valuation of about",
+              "valuation of roughly",
+              "85 million valuation",
+              "eighty-five million valuation",
+              "billion",
+              "unicorn"
+            ]
+          },
+          {
+            "text": "States a runway (a number of months or years of cash).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "12 months",
+              "18 months",
+              "24 months",
+              "30 months",
+              "36 months",
+              "twelve months",
+              "eighteen months",
+              "twenty-four months",
+              "thirty-six months",
+              "two years of",
+              "three years of",
+              "four years of",
+              "a couple of years of"
+            ]
+          },
+          {
+            "text": "States revenue, burn or profitability.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "in revenue",
+              "in annual revenue",
+              "ARR of",
+              "burn rate of",
+              "we are profitable",
+              "we're profitable"
+            ]
+          },
+          {
+            "text": "Says the company has not disclosed or does not have a valuation (the material is silent, it does not say that).",
+            "kind": "false_denial"
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [
+          "REC-REF-TEAM-BRIEF-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying Idris can go into the business side at the next stage.",
+          "Repeating the round size, the date and the lead investor."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-REC-012",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Do you shut down at all around the holidays, or do people just keep working through?",
+      "prior_transcript": null,
+      "conversation_id": "ER-C1-REC-012-C",
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "followup",
+      "category": "benefits_question",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Turn 1 of a two-turn chain. The current overview says the company closes from December 24 through January 1, and the closure days are not deducted from PTO. The recruiter says so.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-BENEFITS-2026#F7",
+            "text": "The company closes from December 24.",
+            "answer_needles": [
+              "December 24",
+              "Dec 24",
+              "24 December",
+              "24 Dec",
+              "Dec. 24",
+              "24th",
+              "twenty-fourth",
+              "Christmas Eve"
+            ]
+          },
+          {
+            "fact": "REC-REF-BENEFITS-2026#F7",
+            "text": "The closure runs through January 1.",
+            "answer_needles": [
+              "January 1",
+              "Jan 1",
+              "1 January",
+              "1 Jan",
+              "Jan. 1",
+              "1st of January",
+              "first of January",
+              "January first",
+              "New Year's Day",
+              "New Year's",
+              "New Year"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-BENEFITS-2026#F7",
+            "text": "Closure days are not deducted from PTO."
+          },
+          {
+            "fact": "REC-REF-BENEFITS-2026#F6",
+            "text": "There are also 11 company holidays."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says there is no closure, or that the closure days come out of PTO.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Gives other dates for the closure.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "answer_candidate_question",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "REC-REF-BENEFITS-2026"
+        ],
+        "source_priority": [
+          "REC-REF-BENEFITS-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Mentioning the 24 days of PTO alongside."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-C1-REC-013",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Nice. So this coming winter, twenty-six into twenty-seven, how many weekdays does that actually work out to?",
+      "prior_transcript": null,
+      "conversation_id": "ER-C1-REC-012-C",
+      "turn_index": 2,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "followup",
+      "category": "benefits_question",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Turn 2 of the chain; 'that' is the winter closure from turn 1, December 24 through January 1. For winter 2026 into 2027: Thursday 24 and Friday 25 December, then Monday 28, Tuesday 29, Wednesday 30 and Thursday 31 December, and Friday 1 January 2027. That is 7 weekdays inside 9 calendar days (26 and 27 December are a weekend). The answer is seven. Some of those days may also be company holidays, which the material does not list; either way none of them is taken from PTO.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-BENEFITS-2026#F7",
+            "text": "December 24, 2026 through January 1, 2027 covers 7 weekdays.",
+            "answer_needles": [
+              "seven",
+              "7 weekdays",
+              "7 working",
+              "7 business",
+              "7 days",
+              "7 week days",
+              "7 work days",
+              "7 workdays"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-BENEFITS-2026#F7",
+            "text": "Closure days are not deducted from PTO."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Counts the weekend in and gives nine working days.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "nine weekdays",
+              "9 weekdays",
+              "nine working",
+              "9 working",
+              "nine business",
+              "9 business",
+              "nine work days",
+              "9 work days"
+            ]
+          },
+          {
+            "text": "Gives five, six or eight weekdays.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "five weekdays",
+              "5 weekdays",
+              "five working",
+              "5 working",
+              "five business",
+              "5 business",
+              "six weekdays",
+              "6 weekdays",
+              "six working",
+              "6 working",
+              "six business",
+              "6 business",
+              "eight weekdays",
+              "8 weekdays",
+              "eight working",
+              "8 working",
+              "eight business",
+              "8 business"
+            ]
+          },
+          {
+            "text": "Does not recognise that the question is about the closure from the previous turn.",
+            "kind": "over_deferral"
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "REC-REF-BENEFITS-2026",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "REC-REF-BENEFITS-2026",
+          "CONVERSATION"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying it is nine calendar days in all.",
+          "Saying some of those days are public holidays anyway."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "weekdays from 2026-12-24 (Thu) through 2027-01-01 (Fri): Dec 24, 25, 28, 29, 30, 31 and Jan 1",
+          "result": 7,
+          "unit": "weekdays covered by the winter closure of 2026-27",
+          "accepted_forms": [
+            "seven",
+            "7 weekdays",
+            "7 working",
+            "7 business",
+            "7 days",
+            "7 week days",
+            "7 work days",
+            "7 workdays"
+          ],
+          "inputs": {
+            "closure_start": "REC-REF-BENEFITS-2026#F7",
+            "closure_end": "REC-REF-BENEFITS-2026#F7",
+            "winter": "CONVERSATION (2026 into 2027)"
+          },
+          "wrong_results_common": [
+            "nine weekdays",
+            "9 weekdays",
+            "nine working",
+            "9 working",
+            "nine business",
+            "9 business",
+            "five weekdays",
+            "5 weekdays",
+            "five working",
+            "5 working",
+            "six weekdays",
+            "6 weekdays",
+            "six working",
+            "6 working",
+            "eight weekdays",
+            "8 weekdays",
+            "eight working",
+            "8 working"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+// E18: the claim pass says whether a conflict is settled by the material. Settled: the reply gives the value that holds
+// now and may name the earlier one as no longer in force. Open: as today (neither asserted, "given two ways").
+// Replaces the CONFLICT line and rule 3 of LIST_THEN_REWRITE; everything else is the app's prompt, byte for byte.
+const OLD_LINE = `Then one line starting "CONFLICT:" — if the material itself gives two different values or rules for the very thing that was asked, both in a few words; otherwise "CONFLICT: none".`;
+export const NEW_LINE = `Then one line starting "CONFLICT:" — if the material itself gives two different values or rules for the very thing that was asked: both in a few words, then "settled: " and the one that holds now when the material itself says which holds (one is marked current, in force, newer, a later version or a later date, or the other is marked earlier, old, superseded, replaced, retired, a draft or out of date; or one is the general rule and the other the specific case that was asked about), or "open" when nothing in the material says which holds. Otherwise "CONFLICT: none".`;
+const OLD_RULE = `3. If CONFLICT is not "none", the reply asserts neither value. Where the draft asserted one, one sentence says it is given two ways, names both values, and says it needs confirming before anyone relies on it. If the draft already says so, leave it.`;
+export const NEW_RULE = `3. If CONFLICT is "open", the reply asserts neither value. Where the draft asserted one, one sentence says it is given two ways, names both values, and says it needs confirming before anyone relies on it. If the draft already says so, leave it. If CONFLICT is settled, the reply gives the value that holds now as the answer, and nothing about it is left to confirm: where the draft gave the other value, replace it with the one that holds now; where the draft gave the right one, keep its sentence. One short clause may name the earlier value as no longer in force, when the other person may be relying on it.`;
+export function systemPrompt(recorded) {
+  if (!recorded.includes(OLD_LINE) || !recorded.includes(OLD_RULE)) throw new Error('e18-settled: the app prompt no longer holds the lines this variant replaces');
+  return recorded.replace(OLD_LINE, NEW_LINE).replace(OLD_RULE, NEW_RULE);
+}

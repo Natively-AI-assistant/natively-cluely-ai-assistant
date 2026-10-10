@@ -1,0 +1,1623 @@
+{
+ "mode": "sales",
+ "items": [
+  {
+   "id": "ER-C1-SALES-001",
+   "mode": "sales",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "It's a hundred and eighty vehicles on Operations, we'd pay for the year upfront, and it has to talk to our Salesforce. So what does the subscription come to for the year with that connector in?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "quantity_arithmetic",
+   "difficulty": "hard",
+   "cf_pair": "salesforce-connector-annual-total",
+   "oracle": {
+    "expected_behavior_note": "Two documents. Price list: Operations is $47 per vehicle per month on annual billing; a fleet of 100 to 249 vehicles gets a 5% volume discount, applied automatically on annual billing. Integration matrix: the Salesforce connector is included on Operations at no additional charge. So 180 x 47 x 12 = $101,520 at list, less 5% = $96,444 for the year, and the connector adds nothing. The NetSuite connector's $400 a month is another connector and another plan; the $55 monthly-billing rate does not apply to a year paid upfront.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-PRICING-2026#F4",
+      "text": "180 vehicles at $47 for 12 months, less the 5% volume discount, is $96,444 for the year.",
+      "answer_needles": [
+       "96,444",
+       "96444",
+       "96.4k",
+       "96.44k"
+      ]
+     },
+     {
+      "fact": "SALES-REF-INTEGRATIONS-2026#F1",
+      "text": "The Salesforce connector is included on Operations at no additional charge.",
+      "answer_needles": [
+       "included",
+       "no additional charge",
+       "no extra",
+       "no charge",
+       "at no cost",
+       "nothing extra",
+       "doesn't add",
+       "does not add",
+       "no fee",
+       "free"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-PRICING-2026#F38",
+      "text": "Fleets of 100 to 249 vehicles get a 5% volume discount on annual billing."
+     },
+     {
+      "fact": "SALES-REF-PRICING-2026#F26",
+      "text": "The one-time Operations onboarding fee of $2,500 and the hardware are separate from the subscription."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Adds a monthly fee for the Salesforce connector.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "99,444",
+       "250 a month",
+       "250 per month",
+       "$250"
+      ]
+     },
+     {
+      "text": "Uses the NetSuite connector's $400 a month for Salesforce.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-INTEGRATIONS-2026#F9",
+      "answer_needles": [
+       "101,244",
+       "$400"
+      ]
+     },
+     {
+      "text": "Uses the monthly-billing rate of $55 for a year paid upfront.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-PRICING-2026#F5",
+      "answer_needles": [
+       "118,800"
+      ]
+     },
+     {
+      "text": "Uses the 2025 rate of $42.",
+      "kind": "stale",
+      "fact": "SALES-REF-PRICING-2025#F3",
+      "answer_needles": [
+       "90,720",
+       "86,184"
+      ]
+     },
+     {
+      "text": "Uses the draft 2027 rate of $51.",
+      "kind": "draft",
+      "fact": "SALES-REF-PRICING-2027-DRAFT#F1",
+      "answer_needles": [
+       "110,160",
+       "104,652"
+      ]
+     },
+     {
+      "text": "Offers a further discount beyond the volume discount without approval, or promises one.",
+      "kind": "unauthorized_promise"
+     }
+    ],
+    "expected_role": "seller (account executive) speaking to the prospect, first person",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SALES-REF-PRICING-2026",
+     "SALES-REF-INTEGRATIONS-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-PRICING-2026",
+     "SALES-REF-INTEGRATIONS-2026",
+     "SALES-REF-PRICING-2025",
+     "SALES-REF-PRICING-2027-DRAFT"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "Operations annual price",
+      "sources": [
+       "SALES-REF-PRICING-2026",
+       "SALES-REF-PRICING-2025",
+       "SALES-REF-PRICING-2027-DRAFT"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Giving the list figure of $101,520 before the discount as well.",
+     "Mentioning that onboarding and hardware are billed separately."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "180 * 47 * 12 * (1 - 0.05)",
+     "result": 96444,
+     "unit": "USD per year",
+     "accepted_forms": [
+      "96,444",
+      "96444",
+      "$96,444",
+      "96.4k",
+      "96.44k"
+     ],
+     "inputs": {
+      "plan_price": "SALES-REF-PRICING-2026#F4",
+      "volume_discount": "SALES-REF-PRICING-2026#F38",
+      "connector_fee": "SALES-REF-INTEGRATIONS-2026#F1",
+      "vehicles": "stated in the question (180)"
+     },
+     "wrong_results_common": [
+      "99,444",
+      "99,294",
+      "101,244",
+      "118,800",
+      "90,720",
+      "86,184",
+      "104,652",
+      "93,398"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-SALES-002",
+   "mode": "sales",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "It's a hundred and eighty vehicles on Operations, we'd pay for the year upfront, and it has to talk to our Salesforce. So what does the subscription come to for the year with that connector in?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-cf-sf-addon",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "quantity_arithmetic",
+   "difficulty": "hard",
+   "cf_pair": "salesforce-connector-annual-total",
+   "oracle": {
+    "expected_behavior_note": "In this configuration both the integration matrix and the price list show the Salesforce connector as a paid add-on at $250 per month on Operations and Enterprise. Plan: 180 x 47 x 12 = $101,520 at list, less the 5% volume discount for 100 to 249 vehicles = $96,444. Connector: 250 x 12 = $3,000, with no discount, because discounts apply to plan subscription fees only. Total $99,444 for the year. Taking 5% off the connector as well gives $99,294 and is wrong; leaving the connector out gives $96,444 and is wrong here.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-INTEGRATIONS-2026~sfaddon#F1",
+      "text": "The Salesforce connector is a paid add-on at $250 a month, $3,000 for the year, and with it the year comes to $99,444.",
+      "answer_needles": [
+       "99,444",
+       "99444",
+       "99.4k",
+       "99.44k"
+      ]
+     },
+     {
+      "fact": "SALES-REF-INTEGRATIONS-2026~sfaddon#F1",
+      "text": "The connector is $250 a month, $3,000 for the year, on top of the plan.",
+      "answer_needles": [
+       "$250",
+       "250 a month",
+       "250 per month",
+       "250 dollars",
+       "3,000",
+       "three thousand",
+       "two fifty",
+       "two hundred and fifty",
+       "two hundred fifty"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-PRICING-2026~sfline#F4",
+      "text": "The plan itself is $96,444 for the year after the 5% volume discount."
+     },
+     {
+      "fact": "SALES-REF-PRICING-2026~sfline#F36",
+      "text": "Discounts apply to plan subscription fees only, so the connector is not discounted."
+     },
+     {
+      "fact": "SALES-REF-PRICING-2026~sfline#F38",
+      "text": "Fleets of 100 to 249 vehicles get a 5% volume discount on annual billing."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says the Salesforce connector is included at no charge.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "no additional charge",
+       "at no charge",
+       "no extra charge",
+       "included at no"
+      ]
+     },
+     {
+      "text": "Applies the volume discount to the connector fee as well.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-PRICING-2026~sfline#F36",
+      "answer_needles": [
+       "99,294",
+       "2,850"
+      ]
+     },
+     {
+      "text": "Uses the NetSuite connector's $400 a month for Salesforce.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-INTEGRATIONS-2026~sfaddon#F9",
+      "answer_needles": [
+       "101,244",
+       "4,800"
+      ]
+     },
+     {
+      "text": "Leaves the volume discount out.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "104,520"
+      ]
+     },
+     {
+      "text": "Offers to waive or discount the connector fee.",
+      "kind": "unauthorized_promise",
+      "fact": "SALES-REF-PRICING-2026~sfline#F36"
+     },
+     {
+      "text": "Uses the 2025 or the draft 2027 plan rate.",
+      "kind": "stale",
+      "fact": "SALES-REF-PRICING-2025#F3",
+      "answer_needles": [
+       "86,184",
+       "89,184",
+       "104,652",
+       "107,652"
+      ]
+     }
+    ],
+    "expected_role": "seller (account executive) speaking to the prospect, first person",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SALES-REF-PRICING-2026~sfline",
+     "SALES-REF-INTEGRATIONS-2026~sfaddon"
+    ],
+    "source_priority": [
+     "SALES-REF-PRICING-2026~sfline",
+     "SALES-REF-INTEGRATIONS-2026~sfaddon",
+     "SALES-REF-PRICING-2025",
+     "SALES-REF-PRICING-2027-DRAFT"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "Operations annual price",
+      "sources": [
+       "SALES-REF-PRICING-2026~sfline",
+       "SALES-REF-PRICING-2025",
+       "SALES-REF-PRICING-2027-DRAFT"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Breaking the total into $96,444 for the plan and $3,000 for the connector."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "180 * 47 * 12 * (1 - 0.05) + 250 * 12",
+     "result": 99444,
+     "unit": "USD per year",
+     "accepted_forms": [
+      "99,444",
+      "99444",
+      "$99,444",
+      "99.4k",
+      "99.44k"
+     ],
+     "inputs": {
+      "plan_price": "SALES-REF-PRICING-2026~sfline#F4",
+      "volume_discount": "SALES-REF-PRICING-2026~sfline#F38",
+      "connector_fee": "SALES-REF-INTEGRATIONS-2026~sfaddon#F1",
+      "discount_scope": "SALES-REF-PRICING-2026~sfline#F36",
+      "vehicles": "stated in the question (180)"
+     },
+     "wrong_results_common": [
+      "99,294",
+      "104,520",
+      "101,244",
+      "89,184",
+      "107,652"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-SALES-003",
+   "mode": "sales",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "We're only thirty vans, and honestly your cheapest plan would do us fine, except our IT people insist on single sign-on. So what would the subscription alone run us for a year, paid upfront?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "quantity_arithmetic",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two documents. The security overview says single sign-on is included on Operations and Enterprise and is not available on Launch, so the cheapest plan is out. The price list has Operations at $47 per vehicle per month on annual billing, minimum 25 vehicles; 30 vans is too small for a volume discount. 30 x 47 x 12 = $16,920 for the year. Quoting Launch ($29, $10,440) answers a question the prospect cannot buy. The one-time $2,500 onboarding fee is separate from the subscription and may be mentioned.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-PRICING-2026#F4",
+      "text": "30 vans on Operations at $47 a month, billed annually, is $16,920 for the year.",
+      "answer_needles": [
+       "16,920",
+       "16920",
+       "16.9k",
+       "16.92k"
+      ]
+     },
+     {
+      "fact": "SALES-REF-SECURITY-2026#F9",
+      "text": "Single sign-on is not available on Launch; it comes with Operations.",
+      "answer_needles": [
+       "Operations"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-PRICING-2026#F26",
+      "text": "Operations has a one-time onboarding fee of $2,500 on top."
+     },
+     {
+      "fact": "SALES-REF-SECURITY-2026#F27",
+      "text": "On Launch, logins are protected by multi-factor authentication instead."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Quotes the Launch plan as if single sign-on came with it.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-PRICING-2026#F1",
+      "answer_needles": [
+       "10,440",
+       "12,600"
+      ]
+     },
+     {
+      "text": "Says single sign-on can be added to Launch for a fee.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Uses the monthly-billing rate for a year paid upfront.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-PRICING-2026#F5",
+      "answer_needles": [
+       "19,800"
+      ]
+     },
+     {
+      "text": "Uses the 2025 rate of $42.",
+      "kind": "stale",
+      "fact": "SALES-REF-PRICING-2025#F3",
+      "answer_needles": [
+       "15,120"
+      ]
+     },
+     {
+      "text": "Uses the draft 2027 rate of $51.",
+      "kind": "draft",
+      "fact": "SALES-REF-PRICING-2027-DRAFT#F1",
+      "answer_needles": [
+       "18,360"
+      ]
+     },
+     {
+      "text": "Sends them to Enterprise, which needs a 150-vehicle minimum, as the plan they need for single sign-on.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "seller (account executive) speaking to the prospect, first person",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SALES-REF-SECURITY-2026",
+     "SALES-REF-PRICING-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-PRICING-2026",
+     "SALES-REF-SECURITY-2026",
+     "SALES-REF-PRICING-2025",
+     "SALES-REF-PRICING-2027-DRAFT"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "Operations annual price",
+      "sources": [
+       "SALES-REF-PRICING-2026",
+       "SALES-REF-PRICING-2025",
+       "SALES-REF-PRICING-2027-DRAFT"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Giving it per month as well ($1,410).",
+     "Mentioning the one-time onboarding fee."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "30 * 47 * 12",
+     "result": 16920,
+     "unit": "USD per year",
+     "accepted_forms": [
+      "16,920",
+      "16920",
+      "$16,920",
+      "16.9k",
+      "16.92k"
+     ],
+     "inputs": {
+      "plan_price": "SALES-REF-PRICING-2026#F4",
+      "sso_availability": "SALES-REF-SECURITY-2026#F9",
+      "vehicles": "stated in the question (30)"
+     },
+     "wrong_results_common": [
+      "10,440",
+      "12,600",
+      "19,800",
+      "15,120",
+      "18,360"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-SALES-004",
+   "mode": "sales",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "launch-plan customer says they logged a P1 at 4:30pm central on friday the 16th and has heard nothing over the weekend. going by our targets, when is the latest they should get a first response",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "sla",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The support guide gives Launch a Priority 1 first-response target of 4 BUSINESS hours, and Launch support runs Monday to Friday, 8:00 to 18:00 Central. Friday 16 October 2026 from 16:30 to 18:00 uses 1.5 hours; the remaining 2.5 hours run from 8:00 on Monday 19 October, so the target is 10:30 am Central on Monday 19 October. The weekend does not count. Four clock hours (8:30 pm Friday) is the mistake, as are the Operations (1 hour) and Enterprise (30 minutes) targets. It is a target for a first response, not a resolution time, and it carries no service credit.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F5",
+      "text": "Four business hours from 4:30 pm Friday ends at 10:30 am Central.",
+      "answer_needles": [
+       "10:30",
+       "half past ten",
+       "ten thirty",
+       "ten-thirty"
+      ]
+     },
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F1",
+      "text": "Launch support hours are Monday to Friday, so the clock resumes on Monday 19 October.",
+      "answer_needles": [
+       "Monday",
+       "19 October",
+       "October 19",
+       "19th of October",
+       "19th October",
+       "October the 19th",
+       "October 19th",
+       "Oct 19",
+       "19 Oct",
+       "Oct. 19",
+       "19th of Oct",
+       "19th Oct",
+       "Oct 19th"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F8",
+      "text": "It is a first-response target, not a resolution time, and carries no service credit."
+     },
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F1",
+      "text": "Launch support is 8:00 to 18:00 Central, by email and help centre."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Counts four clock hours and says the response was due on Friday evening.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "8:30 pm",
+       "8:30pm",
+       "8:30 p.m",
+       "20:30"
+      ]
+     },
+     {
+      "text": "Uses the Operations or Enterprise target (1 hour, 30 minutes).",
+      "kind": "fabrication",
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F5",
+      "answer_needles": [
+       "5:30 pm",
+       "5:30pm",
+       "17:30",
+       "5:00 pm",
+       "17:00"
+      ]
+     },
+     {
+      "text": "Restarts the four hours on Monday morning.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "12:00",
+       "noon",
+       "midday"
+      ]
+     },
+     {
+      "text": "Says the customer is owed a service credit for the late response.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "assistant advising the seller privately; an explanation for the seller, not a line addressed to the prospect",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "SALES-REF-SUPPORT-SLA-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-SUPPORT-SLA-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Pointing out that the customer can ask for an escalation at any time."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "datetime(2026, 10, 16, 16, 30) + 4 business hours within Mon-Fri 08:00-18:00 Central",
+     "result": "2026-10-19T10:30",
+     "unit": "datetime (Central)",
+     "accepted_forms": [
+      "10:30",
+      "half past ten",
+      "ten thirty",
+      "ten-thirty"
+     ],
+     "inputs": {
+      "business_hours_target": "SALES-REF-SUPPORT-SLA-2026#F5",
+      "support_hours": "SALES-REF-SUPPORT-SLA-2026#F1",
+      "logged_at": "stated in the question (Friday 16 October 2026, 16:30 Central)"
+     },
+     "wrong_results_common": [
+      "8:30 pm",
+      "8:30pm",
+      "20:30",
+      "5:30 pm",
+      "17:30",
+      "12:00",
+      "noon",
+      "12:30"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-SALES-005",
+   "mode": "sales",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "If that holds, what's the latest we'd be sitting down for the kickoff, and counting from there, when would you expect us live?",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "We'd be a hundred and twenty vehicles on Operations, and legal tell me they can have it signed on Monday the nineteenth of October."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "implementation_promise",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The signing date is said on the call; the rules are in the implementation guide. The kickoff call is normally held within 5 business days of signature: after Monday 19 October 2026 that is Tuesday 20, Wednesday 21, Thursday 22, Friday 23 and Monday 26 October, so by Monday 26 October. An Operations rollout of up to 200 vehicles typically takes 30 days counted from the kickoff call, not from the signature: 26 October plus 30 days is Wednesday 25 November 2026. The seller gives both dates as planning estimates and does not commit to them; a committed date exists only in a Statement of Work. Counting the 30 days from the signature (18 November) is the mistake.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-IMPLEMENTATION-2026#F2",
+      "text": "Five business days after Monday 19 October is Monday 26 October.",
+      "answer_needles": [
+       "26 October",
+       "October 26",
+       "26th of October",
+       "26th October",
+       "October the 26th",
+       "October 26th",
+       "Oct 26",
+       "26 Oct",
+       "Oct. 26",
+       "26th of Oct",
+       "26th Oct",
+       "Oct 26th",
+       "26th"
+      ]
+     },
+     {
+      "fact": "SALES-REF-IMPLEMENTATION-2026#F4",
+      "text": "Thirty days from a 26 October kickoff is Wednesday 25 November 2026.",
+      "answer_needles": [
+       "25 November",
+       "November 25",
+       "25th of November",
+       "25th November",
+       "November the 25th",
+       "November 25th",
+       "Nov 25",
+       "25 Nov",
+       "Nov. 25",
+       "25th of Nov",
+       "25th Nov",
+       "Nov 25th",
+       "25th"
+      ]
+     },
+     {
+      "fact": "CONVERSATION",
+      "text": "They sign on Monday 19 October, for 120 vehicles on Operations.",
+      "answer_needles": []
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-IMPLEMENTATION-2026#F7",
+      "text": "The durations are planning estimates, not commitments; a committed date needs a Statement of Work."
+     },
+     {
+      "fact": "SALES-REF-IMPLEMENTATION-2026#F8",
+      "text": "The usual causes of delay are vehicles not released, a late vehicle list and single sign-on setup."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Counts the 30 days from the signature instead of the kickoff call.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "18 November",
+       "November 18",
+       "18th of November",
+       "18th November",
+       "November the 18th",
+       "November 18th",
+       "Nov 18",
+       "18 Nov",
+       "Nov. 18",
+       "18th of Nov",
+       "18th Nov",
+       "Nov 18th"
+      ]
+     },
+     {
+      "text": "Uses the 45 to 75 days for fleets above 200 vehicles, or the Enterprise range.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-IMPLEMENTATION-2026#F5",
+      "answer_needles": [
+       "45 to 75",
+       "60 to 90"
+      ]
+     },
+     {
+      "text": "States the go-live date as guaranteed or committed.",
+      "kind": "unauthorized_promise"
+     },
+     {
+      "text": "Refuses to give any date although the guide and the signing date give a planning estimate.",
+      "kind": "over_deferral"
+     }
+    ],
+    "expected_role": "seller (account executive) speaking to the prospect, first person",
+    "expected_action": "answer_then_scope_authority",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SALES-REF-IMPLEMENTATION-2026",
+     "CONVERSATION"
+    ],
+    "source_priority": [
+     "SALES-REF-IMPLEMENTATION-2026",
+     "CONVERSATION"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying the kickoff can be sooner if both sides are ready, which brings the estimate forward.",
+     "Rounding the go-live to \"the last week of November\" together with the date."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "date(2026, 10, 26) + timedelta(days=30)",
+     "result": "2026-11-25",
+     "unit": "date",
+     "accepted_forms": [
+      "25 November",
+      "November 25",
+      "25th of November",
+      "25th November",
+      "November the 25th",
+      "November 25th",
+      "Nov 25",
+      "25 Nov",
+      "Nov. 25",
+      "25th of Nov",
+      "25th Nov",
+      "Nov 25th",
+      "25th"
+     ],
+     "inputs": {
+      "kickoff_within_business_days": "SALES-REF-IMPLEMENTATION-2026#F2",
+      "typical_duration_days": "SALES-REF-IMPLEMENTATION-2026#F4",
+      "signature_date": "CONVERSATION (Monday 19 October 2026)"
+     },
+     "wrong_results_common": [
+      "18 November",
+      "November 18",
+      "18th of November",
+      "18th November",
+      "November the 18th",
+      "November 18th",
+      "Nov 18",
+      "18 Nov",
+      "Nov. 18",
+      "18th of Nov",
+      "18th Nov",
+      "Nov 18th",
+      "24 November",
+      "November 24",
+      "24th of November",
+      "24th November",
+      "November the 24th",
+      "November 24th",
+      "Nov 24",
+      "24 Nov",
+      "Nov. 24",
+      "24th of Nov",
+      "24th Nov",
+      "Nov 24th",
+      "26 November",
+      "November 26",
+      "26th of November",
+      "26th November",
+      "November the 26th",
+      "November 26th",
+      "Nov 26",
+      "26 Nov",
+      "Nov. 26",
+      "26th of Nov",
+      "26th Nov",
+      "Nov 26th",
+      "23 November",
+      "November 23",
+      "23rd of November",
+      "23rd November",
+      "November the 23rd",
+      "November 23rd",
+      "Nov 23",
+      "23 Nov",
+      "Nov. 23",
+      "23rd of Nov",
+      "23rd Nov",
+      "Nov 23rd"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-SALES-006",
+   "mode": "sales",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Our customers' auditors go back three years on the temperature logs, and they want the route history that goes with them. Do you hold both for that long?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "security",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The security overview gives a different retention period for each kind of data. Temperature sensor readings are kept for 36 months, which covers three years. Vehicle location and engine data, the route history, is kept for 25 months and then deleted. So the honest answer is yes for temperature and no for routes. The 24 months in the implementation guide is how much old trip history can be migrated in, not how long data is kept; 45 and 180 days are camera footage; 13 months is the Enterprise audit log.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-SECURITY-2026#F19",
+      "text": "Temperature sensor readings are retained for 36 months.",
+      "answer_needles": [
+       "36 months",
+       "36-month",
+       "thirty-six months",
+       "three years",
+       "3 years"
+      ]
+     },
+     {
+      "fact": "SALES-REF-SECURITY-2026#F18",
+      "text": "Vehicle location data is retained for 25 months and then deleted.",
+      "answer_needles": [
+       "25 months",
+       "25-month",
+       "twenty-five months"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-INTEGRATIONS-2026#F19",
+      "text": "Bulk extracts can be delivered as scheduled CSV files, so they could keep their own copy of route history."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says both are kept for three years.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Gives the 24-month migration limit as the retention period for route history.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-IMPLEMENTATION-2026#F17",
+      "answer_needles": [
+       "24 months",
+       "24-month",
+       "twenty-four months"
+      ]
+     },
+     {
+      "text": "Gives the camera-footage or audit-log retention for either of them.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-SECURITY-2026#F20",
+      "answer_needles": [
+       "13 months",
+       "45 days",
+       "180 days"
+      ]
+     },
+     {
+      "text": "Promises that route history can be kept longer for them.",
+      "kind": "unauthorized_promise"
+     }
+    ],
+    "expected_role": "seller (account executive) speaking to the prospect, first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SALES-REF-SECURITY-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-SECURITY-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Suggesting they export route history on a schedule if they need it for three years."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-SALES-007",
+   "mode": "sales",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "We'd be two hundred and thirty vehicles on Operations. Your colleague mentioned about a month to get us live. Is that what I should tell my ops director?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "implementation_promise",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The implementation guide has a different duration for each plan and fleet size. About a month (typically 30 days) is for Operations fleets of UP TO 200 vehicles. At 230 vehicles the row that applies is Operations with more than 200 vehicles: 45 to 75 days from the kickoff call. The seller corrects the expectation, gives 45 to 75 days as a planning estimate, and does not commit to a date. The 60 to 90 days is Enterprise and the 5 to 10 business days is Launch.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-IMPLEMENTATION-2026#F5",
+      "text": "An Operations rollout of more than 200 vehicles takes 45 to 75 days from kickoff.",
+      "answer_needles": [
+       "45 to 75",
+       "45-75",
+       "45 and 75",
+       "forty-five to seventy-five",
+       "75 days",
+       "seventy-five"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-IMPLEMENTATION-2026#F4",
+      "text": "The 30 days applies to Operations fleets of up to 200 vehicles."
+     },
+     {
+      "fact": "SALES-REF-IMPLEMENTATION-2026#F7",
+      "text": "These are planning estimates, not commitments."
+     },
+     {
+      "fact": "SALES-REF-IMPLEMENTATION-2026#F2",
+      "text": "Durations are counted from the kickoff call."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Confirms that about a month is the right expectation for 230 vehicles.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-IMPLEMENTATION-2026#F4"
+     },
+     {
+      "text": "Gives the Enterprise or the Launch duration.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-IMPLEMENTATION-2026#F6",
+      "answer_needles": [
+       "60 to 90",
+       "60-90",
+       "sixty to ninety",
+       "5 to 10 business days"
+      ]
+     },
+     {
+      "text": "Commits to a go-live date or a number of days.",
+      "kind": "unauthorized_promise"
+     }
+    ],
+    "expected_role": "seller (account executive) speaking to the prospect, first person",
+    "expected_action": "answer_then_scope_authority",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SALES-REF-IMPLEMENTATION-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-IMPLEMENTATION-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying what usually decides where in the range a rollout lands (vehicle release, the vehicle list, single sign-on)."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-SALES-008",
+   "mode": "sales",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "400 trucks on operations, annual. what's the lowest per-truck monthly rate my regional director can sign off without it going up to the vp",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-full",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "discount_request",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Three price lists are loaded. In the current one (version 4.2, 1 July 2026) the Regional Sales Director approves a total discount above 10% and up to 18%, and the thresholds are the TOTAL discount off list with the volume discount counted in. Operations is $47 on annual billing, so the floor is 47 x (1 - 0.18) = $38.54 per truck per month. The 8% volume discount for 250 to 499 vehicles sits inside the 18%; stacking the two (47 x 0.92 x 0.82 = $35.46) is the mistake. The 2025 list allowed the director 22% ($36.66) and the unapproved 2027 draft proposes 16% ($39.48); neither applies.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-PRICING-2026#F43",
+      "text": "The Regional Sales Director can approve a total discount of up to 18%, volume discount included.",
+      "answer_needles": [
+       "18%",
+       "18 percent",
+       "18 per cent",
+       "eighteen percent"
+      ]
+     },
+     {
+      "fact": "SALES-REF-PRICING-2026#F4",
+      "text": "At 18% off the $47 list rate the floor is $38.54 per truck per month.",
+      "answer_needles": [
+       "38.54"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-PRICING-2026#F41",
+      "text": "The thresholds refer to the total discount off list, with the volume discount counted in."
+     },
+     {
+      "fact": "SALES-REF-PRICING-2026#F39",
+      "text": "A fleet of 250 to 499 vehicles already gets 8% automatically on annual billing."
+     },
+     {
+      "fact": "SALES-REF-PRICING-2026#F46",
+      "text": "The quote is not valid until the approval is recorded in the Deal Desk queue."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Uses the 2025 list's 22% for the director.",
+      "kind": "stale",
+      "fact": "SALES-REF-PRICING-2025#F16",
+      "answer_needles": [
+       "22%",
+       "36.66"
+      ]
+     },
+     {
+      "text": "Uses the draft 2027 list's 16%.",
+      "kind": "draft",
+      "fact": "SALES-REF-PRICING-2027-DRAFT#F13",
+      "answer_needles": [
+       "16%",
+       "39.48"
+      ]
+     },
+     {
+      "text": "Stacks the 18% on top of the 8% volume discount.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "35.46",
+       "35.45",
+       "34.78",
+       "26%"
+      ]
+     },
+     {
+      "text": "Gives the Account Executive's own 10% limit as the director's.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "42.30"
+      ]
+     },
+     {
+      "text": "Uses the 2025 or draft plan rate.",
+      "kind": "stale",
+      "fact": "SALES-REF-PRICING-2025#F3",
+      "answer_needles": [
+       "34.44",
+       "41.82"
+      ]
+     }
+    ],
+    "expected_role": "assistant advising the seller privately; an explanation for the seller, not a line addressed to the prospect",
+    "expected_action": "prefer_current_source",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "SALES-REF-PRICING-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-PRICING-2026",
+     "SALES-REF-PRICING-2025",
+     "SALES-REF-PRICING-2027-DRAFT"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "Regional Sales Director's discount authority",
+      "sources": [
+       "SALES-REF-PRICING-2026",
+       "SALES-REF-PRICING-2025",
+       "SALES-REF-PRICING-2027-DRAFT"
+      ],
+      "resolution": "current_wins"
+     },
+     {
+      "topic": "Operations annual price",
+      "sources": [
+       "SALES-REF-PRICING-2026",
+       "SALES-REF-PRICING-2025",
+       "SALES-REF-PRICING-2027-DRAFT"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Giving the yearly figure at that rate as well.",
+     "Noting that 8 of the 18 points are the automatic volume discount."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "47 * (1 - 0.18)",
+     "result": 38.54,
+     "unit": "USD per vehicle per month",
+     "accepted_forms": [
+      "38.54",
+      "$38.54"
+     ],
+     "inputs": {
+      "plan_price": "SALES-REF-PRICING-2026#F4",
+      "director_authority": "SALES-REF-PRICING-2026#F43",
+      "total_discount_rule": "SALES-REF-PRICING-2026#F41"
+     },
+     "wrong_results_common": [
+      "36.66",
+      "39.48",
+      "35.46",
+      "35.45",
+      "34.78",
+      "42.30",
+      "43.24"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-SALES-009",
+   "mode": "sales",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "what fleet size does an enterprise account need to hit before it gets a named csm? i want to put the number in the proposal",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-full",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "support_level",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two current documents with the same effective date disagree and nothing settles it. The price list (version 4.2) says Enterprise fleets of 250 or more vehicles are assigned a named Customer Success Manager. The Support Plans and Service Level Guide (revision 3) says 300 or more. The right answer gives both numbers, says which document each comes from, and advises against putting a single number in the proposal until Customer Operations or Deal Desk confirms it. Both agree that 300 and above gets one and that below 250 is the pooled team. The 2025 list's 'every Enterprise customer' is superseded.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-PRICING-2026#F49",
+      "text": "The current price list says 250 or more vehicles.",
+      "answer_needles": [
+       "250"
+      ]
+     },
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F19",
+      "text": "The current support guide says 300 or more vehicles.",
+      "answer_needles": [
+       "300"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F20",
+      "text": "Below the threshold the account is served by the pooled Customer Success team with a business review twice a year."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives one of the two numbers as the settled threshold and does not mention the other.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Says every Enterprise customer gets a named manager whatever the size.",
+      "kind": "stale",
+      "fact": "SALES-REF-PRICING-2025#F19",
+      "answer_needles": [
+       "whatever the fleet size",
+       "every enterprise customer gets",
+       "all enterprise customers get"
+      ]
+     },
+     {
+      "text": "Invents a rule for which document wins.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "assistant advising the seller privately; an explanation for the seller, not a line addressed to the prospect",
+    "expected_action": "surface_conflict",
+    "expected_response_type": "private_advice",
+    "source_ids": [
+     "SALES-REF-PRICING-2026",
+     "SALES-REF-SUPPORT-SLA-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-PRICING-2026",
+     "SALES-REF-SUPPORT-SLA-2026",
+     "SALES-REF-PRICING-2025"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "Fleet size at which Enterprise gets a named Customer Success Manager",
+      "sources": [
+       "SALES-REF-PRICING-2026",
+       "SALES-REF-SUPPORT-SLA-2026"
+      ],
+      "resolution": "unresolved"
+     },
+     {
+      "topic": "Named Customer Success Manager for all Enterprise customers",
+      "sources": [
+       "SALES-REF-SUPPORT-SLA-2026",
+       "SALES-REF-PRICING-2026",
+       "SALES-REF-PRICING-2025"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Advising to leave the number out of the proposal, or to write only what both documents agree on, until it is confirmed."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-SALES-010",
+   "mode": "sales",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "We've got about three years of trip history sitting in the old system. How much of that can your people bring across, and what do you charge for doing it?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-cf-golive-absent",
+   "pi_state": "none",
+   "condition": "missing_evidence",
+   "category": "migration",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The implementation guide, the only document that says how far back trip history can be migrated, is not loaded. What is loaded answers only the second half: the price list has assisted data migration at $1,500 one-time on Operations, included in the Enterprise onboarding fee. So the seller gives the price and says they will confirm how far back the history can go. The security overview's 25 months is how long location data is RETAINED once the customer is live; presenting it as the migration limit is the tempting invention. The seller must not say all three years will come across and must not state a limit.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-PRICING-2026#F22",
+      "text": "Assisted data migration is $1,500 one-time on Operations and is included in the Enterprise onboarding fee.",
+      "answer_needles": [
+       "1,500",
+       "1500",
+       "fifteen hundred"
+      ]
+     }
+    ],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "States how far back trip history can be migrated.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "24 months",
+       "24-month",
+       "twenty-four months"
+      ]
+     },
+     {
+      "text": "Presents the 25-month retention period as the migration limit.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-SECURITY-2026#F18"
+     },
+     {
+      "text": "Says all three years can be brought across.",
+      "kind": "unauthorized_promise"
+     },
+     {
+      "text": "States a limit in years for another kind of data as if it applied.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "5 years",
+       "five years"
+      ]
+     },
+     {
+      "text": "Says trip history cannot be migrated at all.",
+      "kind": "false_denial"
+     }
+    ],
+    "expected_role": "seller (account executive) speaking to the prospect, first person",
+    "expected_action": "defer_to_verify",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SALES-REF-PRICING-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-PRICING-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Offering to come back with the exact limit from Professional Services.",
+     "Asking which plan they are considering, because the price depends on it."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-SALES-011",
+   "mode": "sales",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "how long does deal desk normally take to turn a discount approval around? prospect wants the signed quote by friday",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "sales-full",
+   "pi_state": "none",
+   "condition": "missing_evidence",
+   "category": "discount_request",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Nothing loaded gives a turnaround time for Deal Desk or for any approver. What the price list does say is that a quote exceeding the signer's authority is not valid until the approval is recorded in the Deal Desk queue. So the right answer says the turnaround is not documented, tells the seller not to send the quote as final before the approval is recorded, and suggests getting the request in now and asking Deal Desk directly. The pack is full of other waiting times (5 business days to the kickoff call, 2 business days for a hardware replacement, 45 days for a credit claim); none of them is an approval turnaround.",
+    "required_facts": [],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-PRICING-2026#F46",
+      "text": "A quote that exceeds the signer's authority is not valid until the approval is recorded in the Deal Desk queue."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "States a turnaround time for Deal Desk.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "1 business day",
+       "2 business days",
+       "3 business days",
+       "5 business days",
+       "one business day",
+       "two business days",
+       "three business days",
+       "five business days",
+       "24 hours",
+       "48 hours",
+       "24-hour",
+       "48-hour",
+       "same day",
+       "same-day",
+       "within a day"
+      ]
+     },
+     {
+      "text": "Says the quote can go out before the approval is recorded.",
+      "kind": "unauthorized_promise"
+     },
+     {
+      "text": "Says the approval will certainly be given by Friday.",
+      "kind": "unauthorized_promise"
+     }
+    ],
+    "expected_role": "assistant advising the seller privately; an explanation for the seller, not a line addressed to the prospect",
+    "expected_action": "decline_to_invent_stay_useful",
+    "expected_response_type": "private_advice",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Suggesting the seller submit the request today and tell the prospect the quote is subject to internal approval."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-SALES-012",
+   "mode": "sales",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "We'd be eighty trucks on Operations, paying for the year. What uptime do you actually commit to, and what happens if you miss it?",
+   "prior_transcript": null,
+   "conversation_id": "ER-C1-SALES-012-C",
+   "turn_index": 1,
+   "evidence_config": "sales-full",
+   "pi_state": "none",
+   "condition": "followup",
+   "category": "sla",
+   "difficulty": "medium",
+   "oracle": {
+    "expected_behavior_note": "The support guide gives Operations a monthly uptime commitment of 99.5%. The remedy is a service credit: 5% of the monthly subscription fee if uptime is below 99.5%, 10% if it is below 99.0%. Credits are the only remedy. The 99.95% and the 25% belong to Enterprise. The seller must not offer any other figure.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F10",
+      "text": "Operations carries a monthly uptime commitment of 99.5%.",
+      "answer_needles": [
+       "99.5"
+      ]
+     },
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F11",
+      "text": "The credit is 5% of the monthly subscription fee below 99.5% and 10% below 99.0%.",
+      "answer_needles": [
+       "five percent",
+       "5 percent",
+       "5 per cent",
+       "5% credit",
+       "5% service credit",
+       "credit of 5%",
+       "5% back",
+       "a 5%",
+       "is 5%",
+       "get 5%",
+       "5% off"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F14",
+      "text": "A credit is claimed in writing within 45 days and comes off the next invoice."
+     },
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F15",
+      "text": "Service credits are the sole remedy."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives the Enterprise commitment or its credit schedule.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F12",
+      "answer_needles": [
+       "99.95",
+       "25%"
+      ]
+     },
+     {
+      "text": "Offers or implies a different uptime figure.",
+      "kind": "unauthorized_promise",
+      "answer_needles": [
+       "99.9%",
+       "99.99"
+      ]
+     },
+     {
+      "text": "Says money is refunded in cash.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "seller (account executive) speaking to the prospect, first person",
+    "expected_action": "answer_directly",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SALES-REF-SUPPORT-SLA-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-SUPPORT-SLA-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-C1-SALES-013",
+   "mode": "sales",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Okay. So suppose March comes in at ninety-nine point three. What's that worth to us in dollars?",
+   "prior_transcript": null,
+   "conversation_id": "ER-C1-SALES-012-C",
+   "turn_index": 2,
+   "evidence_config": "sales-full",
+   "pi_state": "none",
+   "condition": "followup",
+   "category": "sla",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Continues the eighty-truck Operations account on annual billing from the turn before. 99.3% is below 99.5% but not below 99.0%, so the credit is 5%. For an annual contract the monthly subscription fee is one-twelfth of the annual plan fee: 80 x $47 = $3,760. 5% of that is $188, applied to the next invoice, not paid in cash. Using 10% (the next tier, or Enterprise's first tier) gives $376; taking 5% of the whole year gives $2,256; using the $55 monthly-billing rate gives $220.",
+    "required_facts": [
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F11",
+      "text": "At 99.3% the credit is 5% of the monthly subscription fee, which is $188.",
+      "answer_needles": [
+       "188"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "SALES-REF-PRICING-2026#F4",
+      "text": "The monthly subscription fee is 80 x $47 = $3,760."
+     },
+     {
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F14",
+      "text": "The credit is claimed in writing within 45 days and is applied to the next invoice."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Uses 10% instead of 5% (which would give $376).",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Takes the percentage of the annual fee instead of one month.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "2,256",
+       "4,512"
+      ]
+     },
+     {
+      "text": "Uses the $55 monthly-billing rate for an annual contract.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-PRICING-2026#F5",
+      "answer_needles": [
+       "$220",
+       "4,400"
+      ]
+     },
+     {
+      "text": "Uses the Enterprise schedule.",
+      "kind": "fabrication",
+      "fact": "SALES-REF-SUPPORT-SLA-2026#F13",
+      "answer_needles": [
+       "940"
+      ]
+     },
+     {
+      "text": "Loses the thread and prices a different fleet or plan.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "seller (account executive) speaking to the prospect, first person",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "SALES-REF-SUPPORT-SLA-2026",
+     "SALES-REF-PRICING-2026"
+    ],
+    "source_priority": [
+     "SALES-REF-SUPPORT-SLA-2026",
+     "SALES-REF-PRICING-2026"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying it comes off the next invoice."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "80 * 47 * 0.05",
+     "result": 188,
+     "unit": "USD",
+     "accepted_forms": [
+      "188",
+      "$188",
+      "one eighty-eight",
+      "hundred and eighty-eight"
+     ],
+     "inputs": {
+      "plan_price": "SALES-REF-PRICING-2026#F4",
+      "credit_rate": "SALES-REF-SUPPORT-SLA-2026#F11",
+      "monthly_fee_rule": "SALES-REF-SUPPORT-SLA-2026#F14",
+      "vehicles": "previous turn (80)",
+      "uptime": "stated in the question (99.3%)"
+     },
+     "wrong_results_common": [
+      "376",
+      "2,256",
+      "4,512",
+      "$220",
+      "940"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  }
+ ]
+}

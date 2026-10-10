@@ -1,0 +1,53 @@
+run er8-prov1-main: 24/24 units to do (24 rows)
+llm config: {"provider":"gemini","model":"deepseek-flash","modelId":"deepseek-flash","displayName":"deepseek-flash","isOllama":false}
+warm-up hotkey: ttft 1040 ms total 1965 ms (excluded)
+warm-up typed: ttft 767 ms total 931 ms (excluded)
+warm-up hotkey: ttft 727 ms total 1866 ms (excluded)
+  files general → general-full: uploaded 8 [ready,ready,ready,ready,ready,ready,ready,ready]
+  files sales → sales-full: uploaded 8 [ready,ready,ready,ready,ready,ready,ready,ready]
+  files recruiting → rec-full: uploaded 8 [ready,ready,ready,ready,ready,ready,ready,ready]
+  files team-meet → team-meet-full: uploaded 8 [ready,ready,ready,ready,ready,ready,ready,ready]
+  files lecture → lecture-full: uploaded 9 [ready,ready,ready,ready,ready,ready,ready,ready,ready]
+  files technical-interview → ti-a-full: uploaded 6 [ready,ready,ready,ready,ready,ready]
+  files seminar → seminar-full: uploaded 7 [ready,ready,ready,ready,ready,ready,ready]
+  files call-center → call-center-full: uploaded 9 [ready,ready,ready,ready,ready,ready,ready,ready,ready]
+  pi → A-JD (clear_then_upload) r:null j:true mode:null 1277 ms
+ER-PV1-LFW-008     hotkey ok  ttft   989.8 total   2510.9 GROUNDED ev  5 refs 0 "I'm not leading a team right now. The role I'm in is a senio"
+ER-PV1-LFW-011     typed  ok  ttft   674.5 total   1978.1 GROUNDED ev  5 refs 0 "After the recruiter screen there are four rounds, and the wh"
+  pi → A-RESUME (clear_then_upload) r:true j:null mode:heuristic 1364 ms
+ER-PV1-LFW-001     hotkey ok  ttft    1103 total   2526.4 GROUNDED ev  7 refs 0 "That was Tessarine Mobility, in Pune. I was a Software Engin"
+ER-PV1-LFW-007     hotkey ok  ttft   752.8 total   1874.8 GROUNDED ev  7 refs 0 "I started at Tessarine in July 2020, and I became tech lead "
+  pi → A (clear_then_upload) r:true j:true mode:heuristic 2609 ms
+ER-PV1-LFW-002     hotkey ok  ttft   931.9 total   2667.6 GROUNDED ev  8 refs 0 "In that first year as Software Engineer II, I owned the desi"
+ER-PV1-LFW-006     hotkey ok  ttft  1040.4 total     2343 GROUNDED ev  8 refs 0 "I was at Tessarine Mobility from July 2020 to February 2023,"
+  pi → B-JD (clear_then_upload) r:null j:true mode:null 1219 ms
+ER-PV1-LFW-009     hotkey ok  ttft   716.6 total   2450.6 GROUNDED ev  1 refs 0 "The closest experience I can point to is the design-system w"
+ER-PV1-LFW-010     typed  ok  ttft   747.9 total   2333.5 GROUNDED ev  1 refs 0 "I don't have a count of experiments I've personally run in f"
+ER-PV1-LFW-012     typed  ok  ttft   891.8 total   2067.2 GROUNDED ev  5 refs 0 "From the posting: they ship behind flags, run around 10 expe"
+  pi → B-RESUME (clear_then_upload) r:true j:null mode:heuristic 2132 ms
+ER-PV1-LFW-003     typed  ok  ttft   614.5 total     1846 GROUNDED ev  7 refs 0 "At the time of Fernlatch I was a **Senior Frontend Engineer*"
+ER-PV1-LFW-005     typed  ok  ttft   990.2 total   2200.1 GROUNDED ev  7 refs 0 "I joined Lumenquay in June 2022 as a Senior Frontend Enginee"
+  pi → B (clear_then_upload) r:true j:true mode:heuristic 3366 ms
+ER-PV1-LFW-004     hotkey ok  ttft  1430.2 total   2719.8 GROUNDED ev  8 refs 0 "That was at Ondaverde Health in Lisbon, where I was a Fronte"
+  files looking-for-work → lfw-a-full: uploaded 2 [ready,ready]
+  pi → A-JD (clear_then_upload) r:null j:true mode:null 1269 ms
+ER-PV1-TI-008      hotkey ok  ttft  1634.1 total     2023 GROUNDED ev  5 refs 0 "I don't have a specific migration of my own to size up for y"
+ER-PV1-TI-011      typed  ok  ttft  1061.5 total   1326.1 GROUNDED ev  7 refs 0 "The posting says on-call is one week in six as primary for L"
+  files technical-interview → ti-a-irrelevant: uploaded 1 [ready]
+ER-PV1-TI-010      typed  ok  ttft   559.7 total   1108.2 GROUNDED ev  2 refs 1 "I don't have my exact on-call numbers in front of me, so I'd"
+  pi → A-RESUME (clear_then_upload) r:true j:null mode:heuristic 1340 ms
+ER-PV1-TI-001      hotkey ok  ttft   947.5 total   2418.5 GROUNDED ev  7 refs 0 "I was a **Software Engineer II** at Quillhaven then, from **"
+ER-PV1-TI-005      hotkey ok  ttft   694.6 total     1967 GROUNDED ev  7 refs 0 "I was a Software Engineer II from March 2023 to March 2024, "
+  pi → A (clear_then_upload) r:true j:true mode:heuristic 2610 ms
+ER-PV1-TI-002      hotkey ok  ttft  2182.9 total   2443.4 GROUNDED ev  8 refs 0 "My first production Kafka was at Tessarine Mobility, on the "
+  pi → B-JD (clear_then_upload) r:null j:true mode:null 1208 ms
+ER-PV1-TI-009      hotkey ok  ttft  1019.2 total   2724.5 GROUNDED ev  1 refs 0 "I don't want to claim a component count or a name that isn't"
+ER-PV1-TI-012      hotkey ok  ttft     756 total   1050.8 GROUNDED ev  1 refs 0 "The role is remote within Europe, so I wouldn't need to be i"
+  pi → B-RESUME (clear_then_upload) r:true j:null mode:heuristic 2127 ms
+ER-PV1-TI-004      typed  ok  ttft   838.4 total   2352.3 GROUNDED ev  7 refs 0 "That was at Lumenquay, on Dialbench. The reminder opt-in red"
+ER-PV1-TI-006      typed  ok  ttft     675 total   1544.7 GROUNDED ev  7 refs 0 "I've held the Lead Frontend Engineer title at Lumenquay sinc"
+ER-PV1-TI-007      hotkey ok  ttft   929.1 total   2139.4 GROUNDED ev  7 refs 0 "The audit was at Ondaverde Health. I joined in February 2020"
+  pi → B (clear_then_upload) r:true j:true mode:heuristic 3359 ms
+ER-PV1-TI-003      hotkey ok  ttft   948.3 total   2390.9 GROUNDED ev  8 refs 0 "I'm a **Lead Frontend Engineer** in **Product Engineering** "
+
+done in 2.6 min → /Users/evin/natively-cluely-ai-assistant/.claude/worktrees/aq-fix/benchmarks/natively-answer-quality/evidence-rich/results/er8-prov1-main

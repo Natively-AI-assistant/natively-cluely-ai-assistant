@@ -1,0 +1,2318 @@
+{
+  "mode": "general",
+  "items": [
+    {
+      "id": "ER-D-GEN-001",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "whats the code for the car park gate at the inn and which space is ours",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "direct_retrieval",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Gives the gate code 4417# and parking space B-12 (lower level). Does not hand over the 2290 side-door code as the gate code.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-TRIP-PLAN#F13",
+            "text": "The car park gate code is 4417#.",
+            "answer_needles": [
+              "4417"
+            ]
+          },
+          {
+            "fact": "GEN-REF-TRIP-PLAN#F13",
+            "text": "The parking space is B-12, on the lower level.",
+            "answer_needles": [
+              "B-12",
+              "B12",
+              "B 12"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-TRIP-PLAN#F14",
+            "text": "2290 is the side-door code after 10 pm, not the gate."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives 2290 as the gate code.",
+            "kind": "fabrication",
+            "fact": "GEN-REF-TRIP-PLAN#F14"
+          },
+          {
+            "text": "Gives the hotel confirmation or a booking reference as the gate code.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "GEN-REF-TRIP-PLAN"
+        ],
+        "source_priority": [
+          "GEN-REF-TRIP-PLAN"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Mentioning the car park entrance is on Cooper's Ropewalk behind the inn."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-002",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Lovely. And have you got the reservation number there?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Hi there, welcome to Brindlecar. Picking up today?"
+        },
+        {
+          "speaker": "user",
+          "text": "Yes, we've got a compact booked for three days."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "direct_retrieval",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "At the Brindlecar desk the user reads out the car reservation BRC-774102. The hotel confirmation, the boat booking and the dinner reference are other bookings and must not be given.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-TRIP-PLAN#F4",
+            "text": "The Brindlecar reservation number is BRC-774102.",
+            "answer_needles": [
+              "774102",
+              "BRC-774102",
+              "BRC 774102"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-TRIP-PLAN#F4",
+            "text": "The booking is in Jorrit Aldemere's name, a compact automatic."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the hotel confirmation CK-58213-M as the car reservation.",
+            "kind": "fabrication",
+            "fact": "GEN-REF-TRIP-PLAN#F8",
+            "answer_needles": [
+              "CK-58213",
+              "58213"
+            ]
+          },
+          {
+            "text": "Gives the boat tour booking PW-2217 or the dinner reference SM-3306 as the car reservation.",
+            "kind": "fabrication",
+            "fact": "GEN-REF-TRIP-PLAN#F15",
+            "answer_needles": [
+              "PW-2217",
+              "SM-3306"
+            ]
+          }
+        ],
+        "expected_role": "the user speaking aloud to the car rental desk agent, first person, as an ordinary person with no specialised role",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "GEN-REF-TRIP-PLAN"
+        ],
+        "source_priority": [
+          "GEN-REF-TRIP-PLAN"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-003",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "And say you pay them the deposit and then get cold feet, is that money just gone?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "terms",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Explains that the deposit comes back minus a $500 administration fee if they cancel in writing before the cabinets are ordered, that the order goes in within 3 business days of the deposit, and that after that it is non-refundable. Spoken, short, no source names.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F21",
+            "text": "The deposit is refundable less a $500 administration fee if cancelled in writing before the cabinets are ordered.",
+            "answer_needles": [
+              "$500",
+              "500 dollar",
+              "500 admin",
+              "500 fee",
+              "500 bucks",
+              "five hundred"
+            ]
+          },
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F21",
+            "text": "The cabinet order is placed within 3 business days of the deposit, after which the deposit is non-refundable.",
+            "answer_needles": [
+              "3 business days",
+              "three business days",
+              "3 working days",
+              "three working days",
+              "three days",
+              "3 days"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F16",
+            "text": "The deposit is $7,750."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the deposit is fully refundable at any time.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the deposit is lost the moment it is paid.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Quotes a different fee or a different window.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "the user speaking aloud to a friend, first person, as an ordinary person with no specialised role",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "GEN-REF-RENO-QUOTE-REVC"
+        ],
+        "source_priority": [
+          "GEN-REF-RENO-QUOTE-REVC"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying the window to back out is short, a few days.",
+          "Saying the order may go in sooner than three business days, because the office places it as soon as the deposit arrives."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-004",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "So what'll it be, just the pads, or pads and rotors?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "So the fronts are down to about two millimeters, those have got to be done."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "casual_decision",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "A present decision, and the estimate supports one: front pads only, because the rotors measured within specification (26.4 mm against a 25.0 mm minimum). The reply is a short spoken decision. Choosing both for peace of mind is not wrong in itself, but the reply must not say the rotors are worn, below minimum or required.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-CAR-ESTIMATE#F4",
+            "text": "The rotors are within specification and do not need replacing with this set of pads, so pads only is the supported choice.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-CAR-ESTIMATE#F3",
+            "text": "Rotors measure 26.4 mm against a 25.0 mm minimum."
+          },
+          {
+            "fact": "GEN-REF-CAR-ESTIMATE#F7",
+            "text": "Pads only totals $266.68."
+          },
+          {
+            "fact": "GEN-REF-CAR-ESTIMATE#F4",
+            "text": "Ask them to measure the rotors again at the next pad change."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the rotors are worn out, below the minimum thickness, or have to be replaced.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "States a rotor measurement or a price that is not on the estimate.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Declines to choose because it lacks information.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "the user speaking aloud to the service advisor at the auto shop, first person, as an ordinary person with no specialised role",
+        "expected_action": "make_current_decision",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "GEN-REF-CAR-ESTIMATE"
+        ],
+        "source_priority": [
+          "GEN-REF-CAR-ESTIMATE"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Asking them to re-check the rotors next time.",
+          "A brief reason such as 'you said they're still in spec'."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-005",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "how long are we going to be without a sink once they start ripping things out",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "direct_retrieval",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "About 3 weeks from demolition day, until the countertops are in and the plumber has been back. This comes from the contractor's email, not the quote. It must not give the 5-week length of the whole job as the time without a sink.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-CONTRACTOR-EMAILS#F4",
+            "text": "There is no sink for about 3 weeks from demolition day.",
+            "answer_needles": [
+              "3 weeks",
+              "three weeks"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-CONTRACTOR-EMAILS#F4",
+            "text": "The stove and fridge go out the same day as demolition; the room is usable again a few days before the job ends."
+          },
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F22",
+            "text": "Demolition starts Monday 9 November 2026 if the slot is held."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives 5 weeks (the whole job) as the time without a sink.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Presents the figure as a guarantee rather than the contractor's estimate.",
+            "kind": "unauthorized_promise"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "GEN-REF-CONTRACTOR-EMAILS"
+        ],
+        "source_priority": [
+          "GEN-REF-CONTRACTOR-EMAILS"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Noting it is Dunmore's estimate from his email."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-006",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Remind me, what am I paying for the room once the kitchen's out of action?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "arithmetic",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Perry normally pays $750 and gets $150 off for November and December, so $600 for each of those two months, back to $750 in January.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-HOUSE-NOTES#F6",
+            "text": "Perry pays $600 a month while the kitchen is out ($750 less $150).",
+            "answer_needles": [
+              "600",
+              "six hundred"
+            ]
+          },
+          {
+            "fact": "GEN-REF-HOUSE-NOTES#F6",
+            "text": "The reduction applies to November and December only.",
+            "answer_needles": [
+              "November",
+              "December",
+              "Nov and Dec",
+              "Nov/Dec",
+              "Nov-Dec",
+              "two months"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-HOUSE-NOTES#F6",
+            "text": "Rent goes back to $750 in January whatever happens with the schedule."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the rent stays at $750 or gives $150 as the rent.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Extends the reduction beyond December.",
+            "kind": "unauthorized_promise"
+          }
+        ],
+        "expected_role": "the user speaking aloud to Perry, the lodger, first person, as an ordinary person with no specialised role",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "GEN-REF-HOUSE-NOTES"
+        ],
+        "source_priority": [
+          "GEN-REF-HOUSE-NOTES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "750 - 150",
+          "result": 600,
+          "unit": "USD",
+          "accepted_forms": [
+            "600",
+            "$600",
+            "six hundred"
+          ],
+          "inputs": {
+            "750": "GEN-REF-HOUSE-NOTES#F1",
+            "150": "GEN-REF-HOUSE-NOTES#F6"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-007",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "are the builders allowed in on a saturday under the hoa rules",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "rules",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Yes, but only 10 am to 2 pm and quiet work only: no demolition and no power saws. No work on Sundays or federal holidays.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-HOA-NOTICE#F7",
+            "text": "Saturday work is allowed from 10:00 am to 2:00 pm.",
+            "answer_needles": [
+              "10 am",
+              "10:00",
+              "10am",
+              "10 a.m.",
+              "10 to 2",
+              "10-2",
+              "10–2",
+              "ten to two",
+              "ten am"
+            ]
+          },
+          {
+            "fact": "GEN-REF-HOA-NOTICE#F7",
+            "text": "Saturdays are quiet work only: no demolition and no power saws.",
+            "answer_needles": [
+              "demolition",
+              "saw",
+              "quiet"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-HOA-NOTICE#F8",
+            "text": "No contractor work on Sundays or federal holidays."
+          },
+          {
+            "fact": "GEN-REF-HOA-NOTICE#F9",
+            "text": "The fine for work outside permitted hours is $75 per day."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the weekday hours (8:30 am to 5:00 pm) as the Saturday hours.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says Saturday work is not allowed at all.",
+            "kind": "false_denial"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "GEN-REF-HOA-NOTICE"
+        ],
+        "source_priority": [
+          "GEN-REF-HOA-NOTICE"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-008",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "if we had to bail on the corrowick whats the last point we can cancel and not lose money",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "direct_retrieval",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Free cancellation runs until 6:00 pm on Monday 19 October; after that the first night ($210) is kept.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-TRIP-PLAN#F12",
+            "text": "The hotel can be cancelled free until 6:00 pm on Monday 19 October.",
+            "answer_needles": [
+              "19 October",
+              "October 19",
+              "Oct 19",
+              "19 Oct",
+              "19th"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-TRIP-PLAN#F9",
+            "text": "After the cutoff the first night, $210, is kept."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the restaurant's 48-hour rule as the hotel's cancellation rule.",
+            "kind": "fabrication",
+            "fact": "GEN-REF-TRIP-PLAN#F19"
+          },
+          {
+            "text": "Says the whole stay is forfeited after the cutoff.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "GEN-REF-TRIP-PLAN"
+        ],
+        "source_priority": [
+          "GEN-REF-TRIP-PLAN"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-009",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "when's the house insurance due and how much is it this year",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "direct_retrieval",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The home insurance annual premium with Brackwater Mutual is $1,284, due 20 October 2026. The $118 car insurance with the same insurer is a different row.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-BUDGET-OCT#F10",
+            "text": "The home insurance premium is $1,284.",
+            "answer_needles": [
+              "1,284",
+              "1284"
+            ]
+          },
+          {
+            "fact": "GEN-REF-BUDGET-OCT#F10",
+            "text": "It is due on 20 October 2026.",
+            "answer_needles": [
+              "20 October",
+              "October 20",
+              "Oct 20",
+              "20 Oct",
+              "20th",
+              "10-20",
+              "10/20"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-BUDGET-OCT#F10",
+            "text": "It is the yearly renewal of policy HB-66201, paid from joint checking."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the $118 car insurance payment as the home insurance.",
+            "kind": "fabrication",
+            "fact": "GEN-REF-BUDGET-OCT#F11",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "GEN-REF-BUDGET-OCT"
+        ],
+        "source_priority": [
+          "GEN-REF-BUDGET-OCT"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-010",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "what do i owe jorrit for the phones this month",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "direct_retrieval",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Ottilie reimburses $46, half of the $92 two-line plan, once the payment has gone out on 18 October.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-BUDGET-OCT#F12",
+            "text": "Ottilie owes Jorrit $46 for the phone plan.",
+            "answer_needles": [
+              "46"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-BUDGET-OCT#F12",
+            "text": "The plan is $92 for two lines, paid by Jorrit on 18 October."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the amount owed is the full $92.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Splits the phone plan in thirds with Perry.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "GEN-REF-BUDGET-OCT"
+        ],
+        "source_priority": [
+          "GEN-REF-BUDGET-OCT"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-011",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "does the kitchen price cover lights underneath the wall cabinets",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "inclusions",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "No. Under-cabinet lighting is listed as not included. The six recessed ceiling lights on a dimmer are in the price, which is a different thing.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F14",
+            "text": "Under-cabinet lighting is not included in the quote.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F10",
+            "text": "Six recessed LED lights on a dimmer are included under plumbing and electrical."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says under-cabinet lighting is included.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Invents a price for adding under-cabinet lighting.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "GEN-REF-RENO-QUOTE-REVC"
+        ],
+        "source_priority": [
+          "GEN-REF-RENO-QUOTE-REVC"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Suggesting she ask Dunmore to price it if she wants it."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-012",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "how much do we need in total this month for the kitchen deposit plus whatever's left to pay on marrowby, and do the funds cover it",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "arithmetic",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Deposit $7,750 (current quote) plus $730 still to pay on the trip (hotel balance $483, car $168, tidepool walk $44, second kayak $35) is $8,480. The kitchen fund holds $9,300 and the trip fund $900, $10,200 together, so yes, with $1,720 to spare ($1,550 left in the kitchen fund, $170 in the trip fund). The dinner bill and food are extra. An answer that shows the cover fund by fund is equally correct.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F16",
+            "text": "The kitchen deposit is $7,750.",
+            "answer_needles": [
+              "7,750",
+              "7750"
+            ]
+          },
+          {
+            "fact": "GEN-REF-TRIP-PLAN#F21",
+            "text": "The trip still needs $730 (hotel balance $483, car $168, tidepool walk $44, second kayak $35).",
+            "answer_needles": [
+              "730"
+            ]
+          },
+          {
+            "fact": "GEN-REF-BUDGET-OCT#F2",
+            "text": "The kitchen fund ($9,300) and the trip fund ($900) cover both, so the answer is yes.",
+            "answer_needles": [
+              "9,300",
+              "9300",
+              "10,200",
+              "10200",
+              "1,550",
+              "1550",
+              "1,720",
+              "1720"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-TRIP-PLAN#F21",
+            "text": "The dinner bill and day-to-day food are not in the $730."
+          },
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F17",
+            "text": "The next kitchen payment, $15,500 on cabinet delivery, falls in November and needs the loan."
+          },
+          {
+            "fact": "GEN-REF-BUDGET-OCT#F3",
+            "text": "$1,720 is left across the two funds."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses the June quote's $4,500 deposit.",
+            "kind": "stale",
+            "fact": "GEN-REF-RENO-QUOTE-REVA#F7",
+            "answer_needles": [
+              "5,230",
+              "5230"
+            ]
+          },
+          {
+            "text": "Uses the email's ballpark of 7,500 as the deposit.",
+            "kind": "stale",
+            "fact": "GEN-REF-CONTRACTOR-EMAILS#F1",
+            "answer_needles": [
+              "8,230",
+              "8230"
+            ]
+          },
+          {
+            "text": "Counts money already paid on the trip ($497) as still owed.",
+            "kind": "fabrication",
+            "fact": "GEN-REF-TRIP-PLAN#F20",
+            "answer_needles": [
+              "8,977",
+              "8977"
+            ]
+          },
+          {
+            "text": "Says they cannot afford it.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "GEN-REF-RENO-QUOTE-REVC",
+          "GEN-REF-TRIP-PLAN",
+          "GEN-REF-BUDGET-OCT"
+        ],
+        "source_priority": [
+          "GEN-REF-RENO-QUOTE-REVC",
+          "GEN-REF-TRIP-PLAN",
+          "GEN-REF-BUDGET-OCT",
+          "GEN-REF-CONTRACTOR-EMAILS",
+          "GEN-REF-RENO-QUOTE-REVA"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "kitchen deposit amount",
+            "sources": [
+              "GEN-REF-RENO-QUOTE-REVC",
+              "GEN-REF-RENO-QUOTE-REVA"
+            ],
+            "resolution": "current_wins"
+          },
+          {
+            "topic": "kitchen deposit amount",
+            "sources": [
+              "GEN-REF-RENO-QUOTE-REVC",
+              "GEN-REF-CONTRACTOR-EMAILS"
+            ],
+            "resolution": "authoritative_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Pointing out that November's payments are a separate matter."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "7750 + 483 + 168 + 44 + 35",
+          "result": 8480,
+          "unit": "USD",
+          "accepted_forms": [
+            "8,480",
+            "8480",
+            "$8,480"
+          ],
+          "inputs": {
+            "7750": "GEN-REF-RENO-QUOTE-REVC#F16",
+            "483": "GEN-REF-TRIP-PLAN#F9",
+            "168": "GEN-REF-TRIP-PLAN#F6",
+            "44": "GEN-REF-TRIP-PLAN#F16",
+            "35": "GEN-REF-TRIP-PLAN#F17"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-013",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "My guys usually roll up around eight, is that going to be a problem with your neighbors?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "rules",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The association only allows contractor work from 8:30 am on weekdays (to 5:00 pm), so the user asks the crew to start at 8:30, not 8. The owner is the one fined, $75 a day. The user cannot wave the rule away.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-HOA-NOTICE#F6",
+            "text": "Work may not start before 8:30 am on weekdays.",
+            "answer_needles": [
+              "8:30",
+              "8.30",
+              "eight thirty",
+              "eight-thirty",
+              "half past eight",
+              "half eight"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-HOA-NOTICE#F9",
+            "text": "The owner is fined $75 for each day of work outside the hours."
+          },
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F25",
+            "text": "The quote lists crew hours of 8:00 am to 4:30 pm, which starts half an hour too early."
+          },
+          {
+            "fact": "GEN-REF-HOA-NOTICE#F6",
+            "text": "Work can run until 5:00 pm."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says an 8 o'clock start is fine.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Promises the association will make an exception.",
+            "kind": "unauthorized_promise"
+          }
+        ],
+        "expected_role": "the user speaking aloud to the contractor, Dunmore, first person, as an ordinary person with no specialised role",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "GEN-REF-HOA-NOTICE",
+          "GEN-REF-RENO-QUOTE-REVC"
+        ],
+        "source_priority": [
+          "GEN-REF-HOA-NOTICE",
+          "GEN-REF-RENO-QUOTE-REVC"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Suggesting the crew can arrive and set up quietly but not start work before 8:30 is a reasonable gloss, as long as it does not claim the rules say so."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-014",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "if we go with the november start whats the latest i can get the hoa paperwork in",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "date_arithmetic",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The Renovation Notification Form has to be filed at least 14 days before work begins. Work begins Monday 9 November 2026, so the latest is Monday 26 October 2026. No Committee approval is needed for this job because the fixtures stay where they are.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-HOA-NOTICE#F4",
+            "text": "The form must be filed at least 14 days before the 9 November start, so by Monday 26 October 2026.",
+            "answer_needles": [
+              "26 October",
+              "October 26",
+              "Oct 26",
+              "26 Oct",
+              "26th"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-HOA-NOTICE#F5",
+            "text": "The form needs the contractor's license number, dates and an insurance certificate for at least $1,000,000."
+          },
+          {
+            "fact": "GEN-REF-TRIP-PLAN#F1",
+            "text": "They are away 22 to 25 October, so filing before the trip is the practical deadline."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Counts back from the June quote's 14 September start.",
+            "kind": "stale",
+            "fact": "GEN-REF-RENO-QUOTE-REVA#F8",
+            "answer_needles": [
+              "31 August",
+              "August 31",
+              "Aug 31"
+            ]
+          },
+          {
+            "text": "Says Architectural Committee approval or a 30-day wait is required for this kitchen.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Gives 9 October, the quote's booking deadline, as the association's deadline.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "GEN-REF-HOA-NOTICE",
+          "GEN-REF-RENO-QUOTE-REVC"
+        ],
+        "source_priority": [
+          "GEN-REF-HOA-NOTICE",
+          "GEN-REF-RENO-QUOTE-REVC",
+          "GEN-REF-RENO-QUOTE-REVA"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "start date",
+            "sources": [
+              "GEN-REF-RENO-QUOTE-REVC",
+              "GEN-REF-RENO-QUOTE-REVA"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "date(2026, 11, 9) - days(14)",
+          "result": "2026-10-26",
+          "unit": "date",
+          "accepted_forms": [
+            "26 October",
+            "October 26",
+            "Oct 26",
+            "26 Oct",
+            "26th"
+          ],
+          "inputs": {
+            "date(2026, 11, 9)": "GEN-REF-RENO-QUOTE-REVC#F22",
+            "days(14)": "GEN-REF-HOA-NOTICE#F4"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-015",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "between the kitchen fund and the credit union loan have we got the whole job covered",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "arithmetic",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Not quite. The kitchen fund ($9,300) plus the loan ($28,000) is $37,300 against a contract total of $38,750, so they are $1,450 short as quoted. Without the island ($34,000) it fits with $3,300 over. The quote has no contingency in it.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F13",
+            "text": "The fund and the loan together ($37,300) fall $1,450 short of the $38,750 total.",
+            "answer_needles": [
+              "1,450",
+              "1450"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F7",
+            "text": "Dropping the $4,750 island brings the total to $34,000, which the fund and loan cover with $3,300 to spare."
+          },
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F30",
+            "text": "The quote carries no contingency; the contractor suggests about $3,100 in reserve."
+          },
+          {
+            "fact": "GEN-REF-BUDGET-OCT#F4",
+            "text": "The loan can be drawn from 26 October."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses the June quote's total of $37,850.",
+            "kind": "stale",
+            "fact": "GEN-REF-RENO-QUOTE-REVA#F6",
+            "answer_needles": [
+              "37,850",
+              "37850"
+            ]
+          },
+          {
+            "text": "Says the fund and loan fully cover the job as quoted.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "GEN-REF-RENO-QUOTE-REVC",
+          "GEN-REF-BUDGET-OCT"
+        ],
+        "source_priority": [
+          "GEN-REF-RENO-QUOTE-REVC",
+          "GEN-REF-BUDGET-OCT",
+          "GEN-REF-RENO-QUOTE-REVA"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "contract total",
+            "sources": [
+              "GEN-REF-RENO-QUOTE-REVC",
+              "GEN-REF-RENO-QUOTE-REVA"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "38750 - (9300 + 28000)",
+          "result": 1450,
+          "unit": "USD",
+          "accepted_forms": [
+            "1,450",
+            "1450",
+            "$1,450"
+          ],
+          "inputs": {
+            "38750": "GEN-REF-RENO-QUOTE-REVC#F13",
+            "9300": "GEN-REF-BUDGET-OCT#F2",
+            "28000": "GEN-REF-BUDGET-OCT#F4"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-016",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "So are we square for last month, or who owes who?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "arithmetic",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Perry's third of electricity ($131.40), gas ($48.60) and internet ($78.00) is $86. He paid the plumber $140, which was the owners' bill. So the household owes Perry $54. It comes off utilities, not the rent.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-HOUSE-NOTES#F5",
+            "text": "After netting his $86 utilities share against the $140 plumber bill he paid, the owners owe Perry $54.",
+            "answer_needles": [
+              "54",
+              "fifty-four"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-BUDGET-OCT#F21",
+            "text": "Perry's share of the utilities is $86."
+          },
+          {
+            "fact": "GEN-REF-HOUSE-NOTES#F7",
+            "text": "He paid Grindlewood Plumbing $140 on 18 September."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says Perry owes money on balance.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Includes water, HOA dues or the mortgage in Perry's share.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the difference will come off his rent.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "the user speaking aloud to Perry, the lodger, first person, as an ordinary person with no specialised role",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "GEN-REF-BUDGET-OCT",
+          "GEN-REF-HOUSE-NOTES"
+        ],
+        "source_priority": [
+          "GEN-REF-BUDGET-OCT",
+          "GEN-REF-HOUSE-NOTES"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "140 - (131.40 + 48.60 + 78.00) / 3",
+          "result": 54,
+          "unit": "USD",
+          "accepted_forms": [
+            "54",
+            "$54",
+            "54.00",
+            "fifty-four"
+          ],
+          "inputs": {
+            "140": "GEN-REF-HOUSE-NOTES#F7",
+            "131.40": "GEN-REF-BUDGET-OCT#F7",
+            "48.60": "GEN-REF-BUDGET-OCT#F8",
+            "78.00": "GEN-REF-BUDGET-OCT#F9",
+            "3": "GEN-REF-HOUSE-NOTES#F2"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-017",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "So do we just sign the thing today, or what?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Dunmore rang again while you were out. He wants to know where we're at with the quote."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "conversational_decision",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "A present decision with a real deadline behind it. The reply gives a clear view (sign now, or hold off a day or two for a named reason) and anchors it on the date: acceptance and deposit are needed by Friday 9 October to keep the 9 November start. The strongest reason to wait is the island, which is easy to drop before signing and costly after the cabinets are ordered. No invented discount, no pressure that is not in the documents, no list of every term.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F26",
+            "text": "The quote has to be accepted with the deposit by Friday 9 October to hold the November start, so it does not have to be today.",
+            "answer_needles": [
+              "9 October",
+              "October 9",
+              "Oct 9",
+              "9 Oct",
+              "9th",
+              "Friday"
+            ]
+          },
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F26",
+            "text": "A clear recommendation either way (sign now, or wait until something specific is settled, before the deadline).",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-CONTRACTOR-EMAILS#F2",
+            "text": "Decide the island first: after the cabinets are ordered, removing it is a change order with 15% restocking."
+          },
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F27",
+            "text": "Missing the date pushes the start to 11 January 2027."
+          },
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F16",
+            "text": "Signing means paying the $7,750 deposit."
+          },
+          {
+            "fact": "GEN-REF-CONTRACTOR-EMAILS#F6",
+            "text": "Dunmore is away 5 to 7 October; Mirella in the office takes the paperwork."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses the June deadline of 17 July or says the deadline has passed.",
+            "kind": "stale",
+            "fact": "GEN-REF-RENO-QUOTE-REVA#F9",
+            "answer_needles": [
+              "17 July",
+              "July 17"
+            ]
+          },
+          {
+            "text": "Invents a discount for signing today or a price rise if they wait.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the quote has already been signed by them.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "the user speaking aloud to their partner, Jorrit, first person, as an ordinary person with no specialised role",
+        "expected_action": "make_current_decision",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "GEN-REF-RENO-QUOTE-REVC",
+          "GEN-REF-CONTRACTOR-EMAILS"
+        ],
+        "source_priority": [
+          "GEN-REF-RENO-QUOTE-REVC",
+          "GEN-REF-CONTRACTOR-EMAILS",
+          "GEN-REF-RENO-QUOTE-REVA"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "booking deadline",
+            "sources": [
+              "GEN-REF-RENO-QUOTE-REVC",
+              "GEN-REF-RENO-QUOTE-REVA"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Either recommendation is acceptable if it respects the 9 October deadline.",
+          "Mentioning that hardware is not in the price as something to be aware of."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-018",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Wait, didn't the old quote include the hardware?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "outdated_vs_current",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Yes, the June version did include knobs and pulls, but the current revision does not: they supply their own, and the crew fits them free if they are on site when cabinet installation starts. The reply confirms the memory and corrects the present position in one breath.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVA#F2",
+            "text": "The earlier (June) quote did include the hardware.",
+            "answer_needles": []
+          },
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F5",
+            "text": "The current revision does not include it: the owners supply their own knobs and pulls.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F5",
+            "text": "The contractor fits owner-supplied hardware at no charge if it is on site by cabinet installation day."
+          },
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVA#F2",
+            "text": "The June cabinetry line was $15,250 against $14,600 now."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says hardware is included in the quote they are about to sign.",
+            "kind": "stale",
+            "fact": "GEN-REF-RENO-QUOTE-REVA#F2"
+          },
+          {
+            "text": "Denies that the earlier quote ever included hardware.",
+            "kind": "false_denial"
+          }
+        ],
+        "expected_role": "the user speaking aloud to their partner, Jorrit, first person, as an ordinary person with no specialised role",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "GEN-REF-RENO-QUOTE-REVC",
+          "GEN-REF-RENO-QUOTE-REVA"
+        ],
+        "source_priority": [
+          "GEN-REF-RENO-QUOTE-REVC",
+          "GEN-REF-RENO-QUOTE-REVA"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "cabinet hardware",
+            "sources": [
+              "GEN-REF-RENO-QUOTE-REVC",
+              "GEN-REF-RENO-QUOTE-REVA"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-019",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "how much do i need to send to lock dunmore in",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "outdated_vs_current",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "$7,750, which is 20% of the $38,750 total in the signed Revision C. Not the flat $4,500 of the June quote, and not the 'around 7,500' Dunmore ballparked by email before the revision was issued.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F16",
+            "text": "The deposit is $7,750 (20% of the contract total).",
+            "answer_needles": [
+              "7,750",
+              "7750"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F26",
+            "text": "It is due with acceptance by Friday 9 October."
+          },
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F20",
+            "text": "Check or bank transfer; a card adds 2.9%."
+          },
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F8",
+            "text": "If the island is removed first, 20% of the lower total applies."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the June quote's $4,500.",
+            "kind": "stale",
+            "fact": "GEN-REF-RENO-QUOTE-REVA#F7",
+            "answer_needles": [
+              "4,500",
+              "4500"
+            ]
+          },
+          {
+            "text": "Gives the email's 7,500 as the amount to send.",
+            "kind": "stale",
+            "fact": "GEN-REF-CONTRACTOR-EMAILS#F1"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "GEN-REF-RENO-QUOTE-REVC"
+        ],
+        "source_priority": [
+          "GEN-REF-RENO-QUOTE-REVC",
+          "GEN-REF-CONTRACTOR-EMAILS",
+          "GEN-REF-RENO-QUOTE-REVA"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "deposit amount",
+            "sources": [
+              "GEN-REF-RENO-QUOTE-REVC",
+              "GEN-REF-RENO-QUOTE-REVA"
+            ],
+            "resolution": "current_wins"
+          },
+          {
+            "topic": "deposit amount",
+            "sources": [
+              "GEN-REF-RENO-QUOTE-REVC",
+              "GEN-REF-CONTRACTOR-EMAILS"
+            ],
+            "resolution": "authoritative_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Briefly noting that the email figure was only a ballpark."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-020",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "So when do they actually start tearing it apart?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "outdated_vs_current",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Monday 9 November 2026, provided they accept by 9 October. Not 14 September, which was the June quote's date.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F22",
+            "text": "Work starts on Monday 9 November 2026.",
+            "answer_needles": [
+              "9 November",
+              "November 9",
+              "Nov 9",
+              "9 Nov",
+              "9th of November",
+              "ninth of November",
+              "November the 9th",
+              "November ninth"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F26",
+            "text": "The slot is held only if they accept by 9 October."
+          },
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F24",
+            "text": "It should be finished around 15 December."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives 14 September.",
+            "kind": "stale",
+            "fact": "GEN-REF-RENO-QUOTE-REVA#F8",
+            "answer_needles": [
+              "14 September",
+              "September 14",
+              "Sept 14",
+              "Sep 14"
+            ]
+          },
+          {
+            "text": "Says work has already started.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "the user speaking aloud to a friend, first person, as an ordinary person with no specialised role",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "GEN-REF-RENO-QUOTE-REVC"
+        ],
+        "source_priority": [
+          "GEN-REF-RENO-QUOTE-REVC",
+          "GEN-REF-RENO-QUOTE-REVA"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "start date",
+            "sources": [
+              "GEN-REF-RENO-QUOTE-REVC",
+              "GEN-REF-RENO-QUOTE-REVA"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-021",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "what number should i put in the budget for the brakes",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "informal_vs_written",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The shop's written estimate: $266.68 for front pads only, which is the option it recommends. The $350 in the budget was a guess made before the inspection and should be replaced. If they chose pads and rotors it would be $521.14.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-CAR-ESTIMATE#F7",
+            "text": "The written estimate for front pads only is $266.68.",
+            "answer_needles": [
+              "266.68",
+              "266.7",
+              "267"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-CAR-ESTIMATE#F8",
+            "text": "Pads and rotors together would be $521.14."
+          },
+          {
+            "fact": "GEN-REF-BUDGET-OCT#F13",
+            "text": "The $350 in the budget was Jorrit's guess before the shop looked."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Tells her to keep $350 as the figure.",
+            "kind": "stale",
+            "fact": "GEN-REF-BUDGET-OCT#F13"
+          },
+          {
+            "text": "Gives $521.14 as the figure without saying it is the optional pads-and-rotors total.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "GEN-REF-CAR-ESTIMATE"
+        ],
+        "source_priority": [
+          "GEN-REF-CAR-ESTIMATE",
+          "GEN-REF-BUDGET-OCT"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "brake job cost",
+            "sources": [
+              "GEN-REF-CAR-ESTIMATE",
+              "GEN-REF-BUDGET-OCT"
+            ],
+            "resolution": "authoritative_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-022",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "What's the whole kitchen coming to now, all in?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "outdated_vs_current",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "$38,750 in the current revision. The June total of $37,850 has the same digits in a different order and must not be given.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F13",
+            "text": "The contract total is $38,750.",
+            "answer_needles": [
+              "38,750",
+              "38750",
+              "thirty-eight thousand seven",
+              "38.75"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F11",
+            "text": "That includes the $6,000 appliance allowance."
+          },
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F29",
+            "text": "It has no contingency in it."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the June total of $37,850.",
+            "kind": "stale",
+            "fact": "GEN-REF-RENO-QUOTE-REVA#F6",
+            "answer_needles": [
+              "37,850",
+              "37850"
+            ]
+          }
+        ],
+        "expected_role": "the user speaking aloud to their partner, Jorrit, first person, as an ordinary person with no specialised role",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "GEN-REF-RENO-QUOTE-REVC"
+        ],
+        "source_priority": [
+          "GEN-REF-RENO-QUOTE-REVC",
+          "GEN-REF-RENO-QUOTE-REVA"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "contract total",
+            "sources": [
+              "GEN-REF-RENO-QUOTE-REVC",
+              "GEN-REF-RENO-QUOTE-REVA"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-023",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "whats actually the difference between quartz and quartzite",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "irrelevant_source",
+      "category": "general_knowledge",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "A general-knowledge explanation: quartz counters are engineered (ground quartz bound with resin), uniform, non-porous and need no sealing but dislike high heat; quartzite is a natural stone, harder and more heat tolerant, with natural veining, and needs sealing. The uploaded quote is not the source and must not be recited (prices, square footage, payment terms).",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Says the documents explain the difference or state which is better.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the quote specifies quartzite.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says it cannot answer because the files do not cover it.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "explain",
+        "expected_response_type": "private_explanation",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "One short remark that their quote is for quartz is fine.",
+          "General statements about relative cost are fine if hedged."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-024",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Are you going to hang around while we do it, or shall we give you a ring when it's ready?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "irrelevant_source",
+      "category": "casual_decision",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "A present choice. Either 'I'll wait' or 'call me' is right; the reply is one short spoken line. It must not read out findings or prices from the estimate, and must not invent an appointment or errand as a fact about the user's day.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Recites inspection findings or totals instead of answering.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "States a specific invented commitment (a named meeting, a pickup at a stated time) as fact.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says it cannot decide without more information.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "the user speaking aloud to the service advisor at the auto shop, first person, as an ordinary person with no specialised role",
+        "expected_action": "make_current_decision",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Mentioning that it is only about an hour and a half, which the estimate says, is fine.",
+          "Giving a phone number is not required."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-025",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Just gut feel, brushed nickel or matte black for the faucet?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "irrelevant_source",
+      "category": "casual_decision",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "A matter of taste asked for on the spot. The reply picks one, or says what it would depend on (seeing both against the cabinet color), in a natural spoken line. Nothing loaded names a faucet finish, and the reply must not claim one was already chosen or bought.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Says the quote or any document specifies the faucet finish.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the user has already bought or chosen a particular faucet.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Refuses to give a preference because no document covers it.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "the user speaking aloud to the kitchen showroom assistant, first person, as an ordinary person with no specialised role",
+        "expected_action": "make_current_decision",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Either finish is acceptable.",
+          "Saying they would like to see both next to the cabinet sample."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-026",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Have you watched anything good lately?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Anyway, that's enough about my week."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "small_talk",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "There is no single factual answer. The judged behaviour is a natural, short spoken reply that a person could say and that invents no personal history: no named show, film, outing or event presented as something the user actually did. Keeping it light, being non-committal, or turning the ask back to the other person is all fine. It must not sound like an AI system reporting missing context. The budget lists a streaming subscription; that is not evidence of anything watched.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Names a specific show, film or series as something the user watched.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the user has been watching things on Lumenreel, or cites the subscription as proof of viewing.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Invents a specific recent event or outing as the reason for not watching.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "the user speaking aloud to a friend, first person, as an ordinary person with no specialised role",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying the kitchen plans and the trip have taken up the evenings is supported by the documents.",
+          "Asking the friend for a recommendation."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-027",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "if they run past the finish date do we get anything back, is that in the quote anywhere",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "missing_term",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The quote gives a target completion of Tuesday 15 December 2026 but has no clause on late completion: no penalty, credit or compensation, and nothing ruling one out. The answer says the quote is silent on it and suggests asking Dunmore to write something in before signing. This is a typed, private ask, so saying the quote does not cover it is appropriate.",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F24",
+            "text": "The quote's target completion is Tuesday 15 December 2026, described as a target."
+          },
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F26",
+            "text": "Anything they want added should be agreed before the 9 October acceptance deadline."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Invents a late-completion penalty, daily credit or refund.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the contractor has refused compensation or that the owners waive it.",
+            "kind": "false_denial"
+          },
+          {
+            "text": "Treats the two-year workmanship warranty or the change-order clause as a delay remedy.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "private_explanation",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Suggesting a per-day credit as something to negotiate, clearly as a suggestion."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-028",
+      "mode": "general",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "what's the confirmation number for our hotel",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "general-none",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "no_documents",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Nothing is loaded. The answer says it does not have the booking and points to where the number would be (the confirmation email, the hotel's app, or calling the hotel). It must not produce a number.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Produces any confirmation number.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Names a hotel, dates or a guest name as if known.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "private_explanation",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Offering to keep it handy if the user pastes or uploads the booking."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-029",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "If we drop the island, where does that leave the total?",
+      "prior_transcript": null,
+      "conversation_id": "ER-D-GEN-029-C",
+      "turn_index": 1,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "followup",
+      "category": "arithmetic",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "$38,750 less the $4,750 island is $34,000. The line can be removed before acceptance.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F7",
+            "text": "Without the $4,750 island the total is $34,000.",
+            "answer_needles": [
+              "34,000",
+              "34000",
+              "thirty-four thousand",
+              "34 thousand",
+              "34k",
+              "34 grand"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F8",
+            "text": "The island line can be removed any time before acceptance."
+          },
+          {
+            "fact": "GEN-REF-CONTRACTOR-EMAILS#F2",
+            "text": "It is cheapest to decide before the cabinets are ordered."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Subtracts the June quote's $5,600 island.",
+            "kind": "stale",
+            "fact": "GEN-REF-RENO-QUOTE-REVA#F3",
+            "answer_needles": [
+              "33,150",
+              "33150"
+            ]
+          },
+          {
+            "text": "Works from the June total of $37,850.",
+            "kind": "stale",
+            "fact": "GEN-REF-RENO-QUOTE-REVA#F6",
+            "answer_needles": [
+              "32,250",
+              "32250",
+              "33,100",
+              "33100"
+            ]
+          }
+        ],
+        "expected_role": "the user speaking aloud to their partner, Jorrit, first person, as an ordinary person with no specialised role",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "GEN-REF-RENO-QUOTE-REVC"
+        ],
+        "source_priority": [
+          "GEN-REF-RENO-QUOTE-REVC",
+          "GEN-REF-RENO-QUOTE-REVA"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "island price and contract total",
+            "sources": [
+              "GEN-REF-RENO-QUOTE-REVC",
+              "GEN-REF-RENO-QUOTE-REVA"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "38750 - 4750",
+          "result": 34000,
+          "unit": "USD",
+          "accepted_forms": [
+            "34,000",
+            "34000",
+            "thirty-four thousand",
+            "34k",
+            "34 thousand",
+            "34 grand"
+          ],
+          "inputs": {
+            "38750": "GEN-REF-RENO-QUOTE-REVC#F13",
+            "4750": "GEN-REF-RENO-QUOTE-REVC#F7"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D-GEN-030",
+      "mode": "general",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "And what would we have to put down up front, then?",
+      "prior_transcript": null,
+      "conversation_id": "ER-D-GEN-029-C",
+      "turn_index": 2,
+      "evidence_config": "general-full",
+      "pi_state": "none",
+      "condition": "followup",
+      "category": "arithmetic",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Carries the no-island total forward: the deposit is 20% of the contract total, so 20% of $34,000 is $6,800, which is $950 less than the $7,750 on the quote as written.",
+        "required_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F16",
+            "text": "With the island removed the 20% deposit is $6,800.",
+            "answer_needles": [
+              "6,800",
+              "6800",
+              "sixty-eight hundred",
+              "six thousand eight hundred",
+              "6.8"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "GEN-REF-RENO-QUOTE-REVC#F16",
+            "text": "That is $950 less than the $7,750 deposit with the island."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the deposit stays at $7,750 after the island is removed.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Gives the June quote's flat $4,500.",
+            "kind": "stale",
+            "fact": "GEN-REF-RENO-QUOTE-REVA#F7",
+            "answer_needles": [
+              "4,500",
+              "4500"
+            ]
+          },
+          {
+            "text": "Loses the thread and gives 20% of the full $38,750 as the answer to this turn.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "the user speaking aloud to their partner, Jorrit, first person, as an ordinary person with no specialised role",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "GEN-REF-RENO-QUOTE-REVC",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "GEN-REF-RENO-QUOTE-REVC",
+          "GEN-REF-RENO-QUOTE-REVA"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "deposit",
+            "sources": [
+              "GEN-REF-RENO-QUOTE-REVC",
+              "GEN-REF-RENO-QUOTE-REVA"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "0.20 * (38750 - 4750)",
+          "result": 6800,
+          "unit": "USD",
+          "accepted_forms": [
+            "6,800",
+            "6800",
+            "sixty-eight hundred",
+            "six thousand eight hundred"
+          ],
+          "inputs": {
+            "0.20": "GEN-REF-RENO-QUOTE-REVC#F16",
+            "38750": "GEN-REF-RENO-QUOTE-REVC#F13",
+            "4750": "GEN-REF-RENO-QUOTE-REVC#F7"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    }
+  ]
+}

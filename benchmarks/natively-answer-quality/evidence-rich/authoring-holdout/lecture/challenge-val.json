@@ -1,0 +1,644 @@
+{
+  "mode": "lecture",
+  "items": [
+    {
+      "id": "ER-CV1-LEC-001",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "practice q for bio: carrier female fly x red-eyed male, 480 offspring and exactly half of them are sons. how many white-eyed flies should i expect altogether?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "worked_example",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "White eye is recessive and X-linked. From a carrier female and a red-eyed male, half of the sons are white-eyed and none of the daughters are. Of 480 offspring 240 are sons, so 120 white-eyed flies are expected, all of them male (a quarter of the whole brood). Taking half of all 480 (240 white-eyed) is the wrong denominator.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F37",
+            "text": "Half of the sons are white-eyed: 120 flies.",
+            "answer_needles": [
+              "120"
+            ]
+          },
+          {
+            "fact": "LEC-REF-BIO-NOTES-L8-9#F37",
+            "text": "None of the daughters are white-eyed.",
+            "answer_needles": [
+              "daughter"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Takes half of all the offspring and gives 240 white-eyed flies.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "240 white"
+            ]
+          },
+          {
+            "text": "Counts white-eyed daughters as well.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-BIO-NOTES-L8-9"
+        ],
+        "source_priority": [
+          "LEC-REF-BIO-NOTES-L8-9"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "480 / 2 / 2",
+          "result": 120,
+          "unit": "white-eyed flies (all sons)",
+          "accepted_forms": [
+            "120"
+          ],
+          "inputs": {
+            "ratio": "LEC-REF-BIO-NOTES-L8-9#F37"
+          },
+          "wrong_results_common": [
+            "240 white"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-LEC-002",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "So what's the earliest that laptop can get the real address out of the campus resolver?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "At ten to three in the afternoon a laptop asks the campus resolver for a hostname that isn't in our zone yet, and what comes back is: no such domain."
+        },
+        {
+          "speaker": "other",
+          "text": "Twenty seconds later the zone admin adds the record."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "worked_example",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "A reply of NXDOMAIN is cached too. In the course's zone the negative-caching time is 900 seconds (15 minutes), taken from the SOA record. The resolver cached the negative answer at 14:50:00, so it keeps saying \"no such domain\" until 15:05:00, whatever the admin did at 14:50:20. The earliest is 15:05 (five past three). The 300 seconds of the portal's A record (14:55), the 600 seconds of the stylesheet's max-age (15:00) and the 60 seconds of the Lab 4 sandbox resolver (14:51) belong to other things.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4#F12",
+            "text": "The negative-caching time is 900 seconds.",
+            "answer_needles": [
+              "900",
+              "15 minutes",
+              "fifteen minutes",
+              "15 min",
+              "quarter of an hour"
+            ]
+          },
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4#F12",
+            "text": "So the earliest is 15:05.",
+            "answer_needles": [
+              "15:05",
+              "3:05",
+              "five past three",
+              "five past 3",
+              "five minutes past three",
+              "5 past 3",
+              "3.05"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Uses the 300-second TTL of the portal's address record and says 14:55.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "14:55",
+              "2:55",
+              "five to three"
+            ]
+          },
+          {
+            "text": "Uses the 600 seconds of the stylesheet's max-age and says 15:00.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "15:00",
+              "3:00 pm",
+              "three o'clock",
+              "3 o'clock"
+            ]
+          },
+          {
+            "text": "Says the new record is visible at once, or after the sandbox resolver's 60 seconds.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "14:51",
+              "2:51"
+            ]
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-NOTES-W3-4",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-NOTES-W3-4"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "14:50:00 + 900 s",
+          "result": "15:05",
+          "unit": "time of day (24-hour clock)",
+          "accepted_forms": [
+            "15:05",
+            "3:05",
+            "five past three",
+            "five past 3",
+            "five minutes past three",
+            "5 past 3",
+            "3.05"
+          ],
+          "inputs": {
+            "negative_caching_seconds": "LEC-REF-CNW-NOTES-W3-4#F12",
+            "time_of_the_failed_lookup": "CONVERSATION (14:50)"
+          },
+          "wrong_results_common": [
+            "14:55",
+            "2:55",
+            "15:00",
+            "3:00 pm",
+            "14:51",
+            "2:51"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-LEC-003",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "how many times longer can the resolver keep the zone's name server records than the portal's own address record? i swapped the two numbers in my notes",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "course_convention",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "In the course example the portal's A record has a TTL of 300 seconds and the NS records for the zone carry 86,400 seconds (one day). 86,400 / 300 = 288 times longer. The 900 seconds (negative caching), the 600 seconds (the stylesheet's max-age) and the 60 seconds (the Lab 4 sandbox resolver) are other things' timers.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4#F7",
+            "text": "The A record has a TTL of 300 seconds.",
+            "answer_needles": [
+              "300"
+            ]
+          },
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4#F9",
+            "text": "The NS records carry 86,400 seconds, one day.",
+            "answer_needles": [
+              "86,400",
+              "86400",
+              "86 400",
+              "one day",
+              "a day",
+              "24 hours",
+              "full day"
+            ]
+          },
+          {
+            "fact": "LEC-REF-CNW-NOTES-W3-4#F9",
+            "text": "That is 288 times longer.",
+            "answer_needles": [
+              "288"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Uses the 900-second negative-caching time for one of the two (96 times, or 3 times).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "96 times",
+              "96x",
+              "96×"
+            ]
+          },
+          {
+            "text": "Uses the 600 seconds of the stylesheet's max-age (144 times).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "144 times",
+              "144x",
+              "144×"
+            ]
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-NOTES-W3-4"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-NOTES-W3-4"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "86400 / 300",
+          "result": 288,
+          "unit": "times",
+          "accepted_forms": [
+            "288"
+          ],
+          "inputs": {
+            "a_record_ttl": "LEC-REF-CNW-NOTES-W3-4#F7",
+            "ns_record_ttl": "LEC-REF-CNW-NOTES-W3-4#F9"
+          },
+          "wrong_results_common": [
+            "96 times",
+            "144 times",
+            "1,440 times",
+            "1440 times"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-LEC-004",
+      "mode": "lecture",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "does the networks project report go in before or after our last lecture, and how many days apart are the two?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "course_policy",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "From this term's syllabus: the last lecture is on Thursday 26 November 2026 and the group project report is due Friday 27 November 2026, so the report goes in after the last lecture, one day later. Last year's syllabus (last lecture Wednesday 26 November 2025, report due Friday 28 November 2025, two days apart) is out of date.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F14",
+            "text": "The report is due Friday 27 November 2026.",
+            "answer_needles": [
+              "27 November",
+              "November 27",
+              "Nov 27",
+              "Nov. 27",
+              "27 Nov",
+              "27th of November",
+              "27th November",
+              "November 27th",
+              "November the 27th",
+              "27th Nov",
+              "Nov 27th",
+              "the 27th"
+            ]
+          },
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F6",
+            "text": "The last lecture is on Thursday 26 November 2026.",
+            "answer_needles": [
+              "26 November",
+              "November 26",
+              "Nov 26",
+              "Nov. 26",
+              "26 Nov",
+              "26th of November",
+              "26th November",
+              "November 26th",
+              "November the 26th",
+              "26th Nov",
+              "Nov 26th",
+              "the 26th"
+            ]
+          },
+          {
+            "fact": "LEC-REF-CNW-SYLLABUS-2026#F14",
+            "text": "The report is due the day after the last lecture.",
+            "answer_needles": [
+              "one day",
+              "1 day",
+              "day after",
+              "next day",
+              "following day",
+              "a day later",
+              "a day apart",
+              "a single day"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Gives last year's due date, Friday 28 November.",
+            "kind": "stale",
+            "fact": "LEC-REF-CNW-SYLLABUS-2025#F7",
+            "answer_needles": [
+              "28 November",
+              "November 28",
+              "Nov 28",
+              "Nov. 28",
+              "28 Nov",
+              "28th of November",
+              "28th November",
+              "November 28th",
+              "November the 28th",
+              "28th Nov",
+              "Nov 28th"
+            ]
+          },
+          {
+            "text": "Says the two are two days apart (last year's dates).",
+            "kind": "stale",
+            "fact": "LEC-REF-CNW-SYLLABUS-2025#F17",
+            "answer_needles": [
+              "two days",
+              "2 days"
+            ]
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-CNW-SYLLABUS-2026"
+        ],
+        "source_priority": [
+          "LEC-REF-CNW-SYLLABUS-2026",
+          "LEC-REF-CNW-SYLLABUS-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Last lecture and project report dates of CNW 2140",
+            "sources": [
+              "LEC-REF-CNW-SYLLABUS-2026",
+              "LEC-REF-CNW-SYLLABUS-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "date(2026-11-27) - date(2026-11-26)",
+          "result": 1,
+          "unit": "day (the report is due the day after the last lecture)",
+          "accepted_forms": [
+            "one day",
+            "1 day",
+            "day after",
+            "next day",
+            "following day",
+            "a day later",
+            "a day apart",
+            "a single day"
+          ],
+          "inputs": {
+            "last_lecture": "LEC-REF-CNW-SYLLABUS-2026#F6",
+            "report_due": "LEC-REF-CNW-SYLLABUS-2026#F14"
+          },
+          "wrong_results_common": [
+            "two days",
+            "2 days"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-LEC-005",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "And the base year itself? What was Norvale's inflation that year, going by our basket?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Four percent in the second year of our basket, five percent in the third."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "lecture_example",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "It cannot be worked out from the material. The course measures inflation from the previous year's index, and the slides give the basket only for 2024 (the base year, 1,250 crowns, CPI 100.0), 2025 and 2026; there is no 2023 cost or index. An index of 100 in the base year is a definition, not a rate, so the answer must not say inflation was zero that year, and must not offer any other figure. It says what is known (4.0% in 2025, 5.0% in 2026) and what would be needed (the 2023 basket cost).",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "LEC-REF-ECN-SLIDES-L05#F10",
+            "text": "Inflation is measured from the previous year's index, not from the base year."
+          },
+          {
+            "fact": "LEC-REF-ECN-SLIDES-L05#F8",
+            "text": "CPI is 100.0 in 2024, 104.0 in 2025 and 109.2 in 2026."
+          },
+          {
+            "fact": "LEC-REF-ECN-SLIDES-L05#F6",
+            "text": "The base-year basket cost 1,250 crowns."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says inflation in the base year was zero because the index is 100.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "inflation was 0%",
+              "inflation is 0%",
+              "inflation of 0%",
+              "0% inflation",
+              "inflation was zero",
+              "inflation is zero",
+              "zero inflation",
+              "no inflation in"
+            ]
+          },
+          {
+            "text": "Gives a figure for 2024, for example by repeating the 4.0% of 2025.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "private_explanation",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-LEC-006",
+      "mode": "lecture",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Is it the number we got the first time, or a different one? And tell me why I make you do it my way.",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "Back to the flat white, and this time run it the other way. The cafe cuts the price from three sixty back down to three crowns, and sales climb from three hundred and sixty cups a day back up to four hundred and forty."
+        },
+        {
+          "speaker": "other",
+          "text": "Work out the elasticity for that."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lecture-full",
+      "pi_state": "none",
+      "condition": "followup",
+      "category": "course_convention",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The same number: 1.10. By the course's midpoint method the quantity change is 80 on an average of 400 (20%) and the price change is 0.60 on an average of 3.30 (18.2%), exactly as in the notes' worked example, whichever way the price moves. That is the professor's stated reason for the method: it gives the same number in both directions. With the starting value as the base (last year's sheet) the cut would come out at 1.33 and the rise at 0.91.",
+        "required_facts": [
+          {
+            "fact": "LEC-REF-ECN-NOTES-L3-5#F11",
+            "text": "The elasticity is 1.10, the same as in the worked example.",
+            "answer_needles": [
+              "1.10",
+              "1.1"
+            ]
+          },
+          {
+            "fact": "LEC-REF-ECN-NOTES-L3-5#F4",
+            "text": "The midpoint method gives the same number in both directions.",
+            "answer_needles": [
+              "both directions",
+              "either direction",
+              "same number",
+              "same result",
+              "same answer",
+              "same value",
+              "same elasticity",
+              "both ways",
+              "whichever way",
+              "which way"
+            ]
+          },
+          {
+            "fact": "LEC-REF-ECN-NOTES-L3-5#F3",
+            "text": "The method is the midpoint method.",
+            "answer_needles": [
+              "midpoint",
+              "mid-point",
+              "average of"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Computes with the starting value as the base and reports a different elasticity (1.33) as the answer.",
+            "kind": "stale",
+            "fact": "LEC-REF-ECN-FORMULAS-2025#F3",
+            "answer_needles": []
+          },
+          {
+            "text": "Says the elasticity differs between the price rise and the price cut in this course.",
+            "kind": "fabrication",
+            "answer_needles": []
+          }
+        ],
+        "expected_role": "private study assistant explaining to the student in the second person; an explanation for the student to read, not words to say aloud, and not held to spoken brevity",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "LEC-REF-ECN-NOTES-L3-5",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "LEC-REF-ECN-NOTES-L3-5",
+          "LEC-REF-ECN-FORMULAS-2026",
+          "LEC-REF-ECN-FORMULAS-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "How a percentage change is computed for an elasticity",
+            "sources": [
+              "LEC-REF-ECN-NOTES-L3-5",
+              "LEC-REF-ECN-FORMULAS-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "(80 / 400) / (0.60 / 3.30)",
+          "result": 1.1,
+          "unit": "price elasticity of demand (positive, midpoint method)",
+          "accepted_forms": [
+            "1.10",
+            "1.1"
+          ],
+          "inputs": {
+            "worked_example_changes": "LEC-REF-ECN-NOTES-L3-5#F10",
+            "worked_example_result": "LEC-REF-ECN-NOTES-L3-5#F11",
+            "reason": "LEC-REF-ECN-NOTES-L3-5#F4",
+            "reversed_numbers": "CONVERSATION"
+          },
+          "wrong_results_common": [
+            "1.33",
+            "0.91"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    }
+  ]
+}

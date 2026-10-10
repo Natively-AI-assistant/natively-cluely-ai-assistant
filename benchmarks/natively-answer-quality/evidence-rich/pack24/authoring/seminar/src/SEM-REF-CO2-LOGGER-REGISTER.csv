@@ -1,0 +1,37 @@
+logger_id,school_label,building_code,room,year_group,ventilation,installed,retrieved,floor_area_m2,openable_windows,logger_position,valid_classroom_days,pct_teaching_hours_above_1500ppm,median_ppm,p95_ppm,retrieval_check_ppm_off,notes
+Q2-2203,A,BF-02,Room 1,Reception,mechanical supply,2026-01-08,2026-04-01,56,2,back wall above the coat pegs,50,6,1030,1690,12,
+Q2-2207,A,BF-02,Room 2,Year 1,mechanical supply,2026-01-08,2026-04-01,58,3,side wall away from the windows,49,9,1030,1680,26,one day lost: logger unplugged by cleaning staff
+Q2-2211,A,BF-02,Room 3,Year 2,mechanical supply,2026-01-08,2026-04-01,55,2,shelf beside the teacher desk,50,10,1070,1840,19,
+Q2-2215,A,BF-02,Room 4,Year 3,mechanical supply,2026-01-08,2026-04-01,61,4,interior wall beside the whiteboard,47,12,1090,1980,33,moved to a windowsill 3-5 February; those days dropped
+Q2-2219,A,BF-02,Room 5,Year 4,mechanical supply,2026-01-08,2026-04-01,57,2,back wall above the coat pegs,43,14,1150,1940,8,battery failed 24 February; seven days lost
+Q2-2223,A,BF-02,Room 6,Year 5,mechanical supply,2026-01-08,2026-04-01,59,3,side wall away from the windows,50,8,1020,1770,22,
+Q2-2227,A,BF-02,Room 7,Year 6,mechanical supply,2026-01-08,2026-04-01,60,2,shelf beside the teacher desk,49,16,1170,1950,38,largest class in the school
+Q2-2231,A,BF-02,Room 8,Year 6,mechanical supply,2026-01-08,2026-04-01,58,4,interior wall beside the whiteboard,40,13,1110,1920,16,room closed for redecoration for two weeks in March
+Q2-2235,B,BF-05,Room 1,Reception,mechanical supply,2026-01-08,2026-04-01,53,2,back wall above the coat pegs,50,7,1010,1730,27,
+Q2-2239,B,BF-05,Room 2,Year 1,mechanical supply,2026-01-08,2026-04-01,55,3,side wall away from the windows,50,9,1060,1740,11,
+Q2-2243,B,BF-05,Room 3,Year 2,mechanical supply,2026-01-08,2026-04-01,57,2,shelf beside the teacher desk,49,11,1120,1950,35,
+Q2-2247,B,BF-05,Room 4,Year 3,mechanical supply,2026-01-08,2026-04-01,56,4,interior wall beside the whiteboard,47,8,1030,1710,24,used in the November trial of the procedure
+Q2-2251,B,BF-05,Room 5,Year 4,mechanical supply,2026-01-08,2026-04-01,59,2,back wall above the coat pegs,50,6,1030,1780,9,used in the November trial of the procedure
+Q2-2255,B,BF-05,Annexe 1,Year 5,window-only,2026-01-08,2026-04-01,49,6,side wall away from the windows,46,27,1270,2400,40,annexe has no ducted supply
+Q2-2259,B,BF-05,Annexe 2,Year 6,window-only,2026-01-08,2026-04-01,47,5,shelf beside the teacher desk,40,33,1380,2540,18,annexe has no ducted supply; class away on a residential trip for two weeks
+Q2-2263,C,BF-09,Room 2,Reception,mechanical supply,2026-01-08,2026-04-01,52,4,interior wall beside the whiteboard,50,12,1110,1910,21,
+Q2-2267,C,BF-09,Room 3,Year 1,mechanical supply,2026-01-08,2026-04-01,55,2,back wall above the coat pegs,49,18,1160,2130,46,
+Q2-2271,C,BF-09,Room 5,Year 3,window-only,2026-01-08,2026-04-01,58,5,side wall away from the windows,47,39,1480,2800,13,indicator light from 9 March
+Q2-2275,C,BF-09,Room 6,Year 4,window-only,2026-01-08,2026-04-01,57,4,shelf beside the teacher desk,46,43,1510,2990,36,indicator light from 9 March
+Q2-2279,C,BF-09,Room 7,Year 5,window-only,2026-01-08,2026-04-01,60,6,interior wall beside the whiteboard,49,46,1590,3000,24,indicator light from 9 March; windows face a main road
+Q2-2283,C,BF-09,Room 8,Year 6,window-only,2026-01-08,2026-04-01,59,5,back wall above the coat pegs,40,40,1480,2870,49,indicator light from 9 March; logger unplugged for two weeks in January
+Q2-2287,D,BF-11,Room 1,Reception,mechanical supply,2026-01-09,2026-04-02,55,3,side wall away from the windows,50,9,1030,1840,17,
+Q2-2291,D,BF-11,Room 2,Year 1,mechanical supply,2026-01-09,2026-04-02,56,2,shelf beside the teacher desk,50,11,1090,1800,32,
+Q2-2295,D,BF-11,Room 4,Year 3,mechanical supply,2026-01-09,2026-04-02,58,4,interior wall beside the whiteboard,49,12,1120,1960,10,
+Q2-2299,D,BF-11,Room 5,Year 4,mechanical supply,2026-01-09,2026-04-02,57,2,back wall above the coat pegs,45,10,1060,1800,39,logger found behind a bookcase on 23 March; that week dropped
+Q2-2303,D,BF-11,Hut 1,Year 5,window-only,2026-01-09,2026-04-02,46,6,side wall away from the windows,46,35,1420,2630,20,indicator light from 9 March; temporary classroom
+Q2-2307,D,BF-11,Hut 2,Year 6,window-only,2026-01-09,2026-04-02,46,5,shelf beside the teacher desk,43,33,1350,2670,14,indicator light from 9 March; temporary classroom
+Q2-2311,E,BF-12,Room 1,Reception,mechanical supply,2026-01-09,2026-04-02,50,4,interior wall beside the whiteboard,50,7,1040,1730,45,
+Q2-2315,E,BF-12,Room 2,Reception,mechanical supply,2026-01-09,2026-04-02,52,2,back wall above the coat pegs,49,9,1080,1730,24,
+Q2-2319,E,BF-12,Room 3,Year 1,mechanical supply,2026-01-09,2026-04-02,53,3,side wall away from the windows,50,8,1030,1770,33,
+Q2-2323,E,BF-12,Room 4,Year 2,mechanical supply,2026-01-09,2026-04-02,55,2,shelf beside the teacher desk,47,11,1100,1790,27,
+Q2-2327,E,BF-12,Room 5,Year 2,mechanical supply,2026-01-09,2026-04-02,56,4,interior wall beside the whiteboard,38,10,1070,1830,96,reading high at the retrieval check; last twelve school days removed
+Q2-2331,F,BF-14,Room 1,Reception,mechanical supply,2026-01-09,2026-04-02,49,2,back wall above the coat pegs,50,6,1000,1630,22,
+Q2-2335,F,BF-14,Room 2,Year 1,mechanical supply,2026-01-09,2026-04-02,50,3,side wall away from the windows,49,8,1070,1860,17,
+Q2-2339,F,BF-14,Room 3,Year 2,window-only,2026-01-09,2026-04-02,52,6,shelf beside the teacher desk,46,26,1290,2310,19,
+Q2-2343,F,BF-14,Room 4,Year 2,window-only,2026-01-09,2026-04-02,53,5,interior wall beside the whiteboard,39,27,1270,2440,88,reading high at the retrieval check; last eleven school days removed

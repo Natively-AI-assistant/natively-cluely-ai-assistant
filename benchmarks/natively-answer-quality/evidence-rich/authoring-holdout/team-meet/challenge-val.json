@@ -1,0 +1,782 @@
+{
+  "mode": "team-meet",
+  "items": [
+    {
+      "id": "ER-CV1-TEAM-001",
+      "mode": "team-meet",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "it's monday of week two. what daily pace do we need from today to land everything we committed this sprint, and how does that compare with the pace we ran in week one?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "sprint_progress",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "From the Sprint 41 status: 84 points committed, 52 done as of Friday 2 October, the end of week 1 of a two-week sprint (28 September to 9 October). Week 1 was five working days, so the pace was 52 / 5 = 10.4 points a day. The remaining 32 points (21 in progress and 11 not started) over the five working days of week 2 need 32 / 5 = 6.4 points a day, which is slower than week 1. The slips are dividing by ten days, or dividing the whole commitment by five.",
+        "required_facts": [
+          {
+            "fact": "TEAM-REF-SPRINT-STATUS-S41#F5",
+            "text": "Week 1 closed 52 points in five working days, 10.4 a day.",
+            "answer_needles": [
+              "10.4"
+            ]
+          },
+          {
+            "fact": "TEAM-REF-SPRINT-STATUS-S41#F4",
+            "text": "The remaining 32 of the 84 committed points over five working days need 6.4 points a day.",
+            "answer_needles": [
+              "6.4"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-SPRINT-STATUS-S41#F6",
+            "text": "21 points are in progress and 11 are not started."
+          },
+          {
+            "fact": "TEAM-REF-SPRINT-STATUS-S41#F1",
+            "text": "Sprint 41 runs from Monday 28 September to Friday 9 October."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Divides by ten days (3.2 or 5.2 or 8.4 a day) or divides the whole commitment by five (16.8).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "3.2",
+              "5.2",
+              "8.4",
+              "16.8"
+            ]
+          },
+          {
+            "text": "Uses the Sprint 37 or Sprint 40 totals instead of the Sprint 41 numbers.",
+            "kind": "stale",
+            "fact": "TEAM-REF-SPRINT-REPORT-S37#F2",
+            "answer_needles": [
+              "58 of 76",
+              "78 of 81",
+              "11.6",
+              "15.6"
+            ]
+          },
+          {
+            "text": "Says the needed pace is faster than week 1.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "assistant answering Ilka Vantongeren (Android lead and release captain) privately while the meeting goes on; short and direct",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "TEAM-REF-SPRINT-STATUS-S41"
+        ],
+        "source_priority": [
+          "TEAM-REF-SPRINT-STATUS-S41"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying the sprint is ahead of the pace it needs.",
+          "Giving the 32 points left."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "(84 - 52) / 5",
+          "result": 6.4,
+          "unit": "points per working day needed in week 2 (week 1 ran at 52 / 5 = 10.4)",
+          "accepted_forms": [
+            "6.4"
+          ],
+          "inputs": {
+            "committed": "TEAM-REF-SPRINT-STATUS-S41#F4",
+            "done": "TEAM-REF-SPRINT-STATUS-S41#F5",
+            "status_date": "TEAM-REF-SPRINT-STATUS-S41#F2",
+            "sprint_dates": "TEAM-REF-SPRINT-STATUS-S41#F1"
+          },
+          "wrong_results_common": [
+            "3.2",
+            "5.2",
+            "8.4",
+            "16.8",
+            "11.6",
+            "15.6"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-TEAM-002",
+      "mode": "team-meet",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "how long will i have had android by the day of the go/no-go? want the exact figure for when halvard asks",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "ownership",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Both dates are in the decision log. D-015: Ilka owns the Android workstream from Monday 7 September 2026. D-020: the go/no-go call is made on Monday 2 November. From 7 September to 2 November is 23 days left in September plus 31 in October plus 2 in November, 56 days, exactly 8 weeks, Monday to Monday. Counting to launch day (3 November) or to the date of this sync gives other figures.",
+        "required_facts": [
+          {
+            "fact": "TEAM-REF-DECISION-LOG#F8",
+            "text": "She has owned Android since Monday 7 September 2026, which is 8 weeks (56 days) before the go/no-go.",
+            "answer_needles": [
+              "8 weeks",
+              "eight weeks",
+              "56 days",
+              "fifty-six days",
+              "8 wks",
+              "eight full weeks",
+              "8 full weeks"
+            ]
+          },
+          {
+            "fact": "TEAM-REF-DECISION-LOG#F21",
+            "text": "The go/no-go call is on Monday 2 November.",
+            "answer_needles": [
+              "8 weeks",
+              "eight weeks",
+              "56 days",
+              "fifty-six days",
+              "8 wks",
+              "eight full weeks",
+              "8 full weeks",
+              "2 November",
+              "November 2nd",
+              "2 Nov",
+              "the 2nd",
+              "second of November",
+              "go/no-go"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-ROADMAP-V4#F8",
+            "text": "Launch is the day after, Tuesday 3 November."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives seven or nine weeks, or a day count that is one off.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "seven weeks",
+              "7 weeks",
+              "nine weeks",
+              "9 weeks",
+              "57 days",
+              "55 days",
+              "49 days",
+              "63 days"
+            ]
+          },
+          {
+            "text": "Counts from 2 September (the day the decision was taken, and the day she was welcomed in chat) instead of 7 September.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "61 days",
+              "sixty-one days",
+              "2 September",
+              "September 2nd",
+              "2nd of September"
+            ]
+          },
+          {
+            "text": "Says the start date is not recorded.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "assistant answering Ilka Vantongeren (Android lead and release captain) privately while the meeting goes on; short and direct",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "TEAM-REF-DECISION-LOG"
+        ],
+        "source_priority": [
+          "TEAM-REF-DECISION-LOG"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying it is eight weeks to the day, Monday to Monday."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "2026-11-02 (Mon) minus 2026-09-07 (Mon), in days",
+          "result": 56,
+          "unit": "days (exactly 8 weeks)",
+          "accepted_forms": [
+            "8 weeks",
+            "eight weeks",
+            "56 days",
+            "fifty-six days",
+            "8 wks",
+            "eight full weeks",
+            "8 full weeks"
+          ],
+          "inputs": {
+            "android_ownership_start": "TEAM-REF-DECISION-LOG#F8",
+            "go_no_go_date": "TEAM-REF-DECISION-LOG#F21"
+          },
+          "wrong_results_common": [
+            "seven weeks",
+            "7 weeks",
+            "nine weeks",
+            "9 weeks",
+            "57 days",
+            "55 days",
+            "49 days",
+            "63 days",
+            "61 days"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-TEAM-003",
+      "mode": "team-meet",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "On b6, which platform's actually over the bar and which one isn't, and by how much either way?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "stability",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The approved bar is 99.5% crash-free sessions on each platform (decision log, D-018). The sprint status gives beta build b6 at 99.6% on iOS and 99.2% on Android, both early figures that are not yet seven days. So iOS is over by 0.1 of a point and Android is under by 0.3. The other crash-free numbers in the pack belong to other things: 99.7% and 99.4% are from the unapproved gates draft, 99.9% was a remark in chat, 99.0% was the August bar, and 99.1% is the halt line during rollout.",
+        "required_facts": [
+          {
+            "fact": "TEAM-REF-SPRINT-STATUS-S41#F23",
+            "text": "iOS is at 99.6% on b6, 0.1 over the 99.5% bar.",
+            "answer_needles": [
+              "99.6"
+            ]
+          },
+          {
+            "fact": "TEAM-REF-SPRINT-STATUS-S41#F22",
+            "text": "Android is at 99.2% on b6, 0.3 under the bar.",
+            "answer_needles": [
+              "99.2"
+            ]
+          },
+          {
+            "fact": "TEAM-REF-DECISION-LOG#F14",
+            "text": "The bar is 99.5% crash-free sessions on each platform.",
+            "answer_needles": [
+              "99.5",
+              "0.3",
+              "0.1",
+              "three tenths",
+              "a tenth",
+              "one tenth"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-SPRINT-STATUS-S41#F29",
+            "text": "Fixes for the two remaining Android crash clusters are planned for b7."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Measures against the draft's 99.7% bar, which puts both platforms under.",
+            "kind": "draft",
+            "fact": "TEAM-REF-ROLLOUT-GATES-DRAFT#F3",
+            "answer_needles": [
+              "99.7",
+              "0.5 under",
+              "0.5 short",
+              "0.5 below",
+              "half a point"
+            ]
+          },
+          {
+            "text": "Measures against 99.0% (August), 99.9% (chat) or the 99.1% halt line.",
+            "kind": "stale",
+            "fact": "TEAM-REF-SPRINT-REPORT-S37#F11",
+            "answer_needles": [
+              "99.0",
+              "99.9",
+              "99.1",
+              "99.4"
+            ]
+          },
+          {
+            "text": "Says both platforms are over the bar, or both under.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Presents the b6 numbers as the seven-day figures.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "TEAM-REF-SPRINT-STATUS-S41",
+          "TEAM-REF-DECISION-LOG"
+        ],
+        "source_priority": [
+          "TEAM-REF-DECISION-LOG",
+          "TEAM-REF-SPRINT-STATUS-S41",
+          "TEAM-REF-ROLLOUT-GATES-DRAFT"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Crash-free bar",
+            "sources": [
+              "TEAM-REF-DECISION-LOG",
+              "TEAM-REF-ROLLOUT-GATES-DRAFT",
+              "TEAM-REF-SPRINT-REPORT-S37",
+              "TEAM-REF-CHAT-EXPORT"
+            ],
+            "resolution": "final_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Saying both are early reads, not yet seven days."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "99.6 - 99.5",
+          "result": 0.1,
+          "unit": "points by which iOS is over the bar on b6 (Android: 99.2 - 99.5 = -0.3)",
+          "accepted_forms": [
+            "0.1",
+            "a tenth",
+            "one tenth",
+            "0.3",
+            "three tenths",
+            "99.6"
+          ],
+          "inputs": {
+            "ios_b6": "TEAM-REF-SPRINT-STATUS-S41#F23",
+            "android_b6": "TEAM-REF-SPRINT-STATUS-S41#F22",
+            "bar": "TEAM-REF-DECISION-LOG#F14"
+          },
+          "wrong_results_common": [
+            "99.7",
+            "0.5 under",
+            "0.5 short",
+            "0.5 below",
+            "half a point",
+            "99.9",
+            "99.0"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-TEAM-004",
+      "mode": "team-meet",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "How long do we actually get between the freeze and cutting the RC?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-cf-freeze-slipped",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "milestones",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Two documents give different freeze dates. The roadmap (approved 14 September) has the feature freeze on Friday 9 October and release candidate 1 on Wednesday 14 October. The sprint status of 2 October is newer and says the freeze has moved to Tuesday 13 October because the device lab is closed on 8 and 9 October, while release candidate 1 stays on Wednesday 14 October. So the gap is now one day: freeze on Tuesday the 13th, release candidate the next day. Answering from the roadmap alone (Friday to Wednesday, five days) is out of date.",
+        "required_facts": [
+          {
+            "fact": "TEAM-REF-SPRINT-STATUS-S41~freezeslipped#F3",
+            "text": "The freeze has moved to Tuesday 13 October.",
+            "answer_needles": [
+              "October 13",
+              "13 October",
+              "Oct 13",
+              "13 Oct",
+              "Oct. 13",
+              "October 13th",
+              "13th of October",
+              "13th October",
+              "thirteenth of October",
+              "October thirteenth",
+              "October the 13th",
+              "October the thirteenth",
+              "the 13th",
+              "the thirteenth",
+              "Tuesday"
+            ]
+          },
+          {
+            "fact": "TEAM-REF-ROADMAP-V4#F5",
+            "text": "Release candidate 1 is Wednesday 14 October, one day after the freeze.",
+            "answer_needles": [
+              "one day",
+              "1 day",
+              "a day",
+              "next day",
+              "day after",
+              "day before",
+              "single day",
+              "24 hours",
+              "overnight",
+              "following day",
+              "one working day",
+              "1 working day",
+              "no gap",
+              "no buffer",
+              "back to back"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-SPRINT-STATUS-S41~freezeslipped#F18",
+            "text": "The pre-freeze regression pass cannot complete until Monday 12 October because the device lab is closed."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses the roadmap freeze date of Friday 9 October and gives a gap of five days (three working days).",
+            "kind": "stale",
+            "fact": "TEAM-REF-ROADMAP-V4#F4",
+            "answer_needles": [
+              "five days between",
+              "5 days between",
+              "get five days",
+              "get 5 days",
+              "have five days",
+              "have 5 days",
+              "that's five days",
+              "that's 5 days",
+              "five days from",
+              "three working days",
+              "3 working days",
+              "the weekend plus"
+            ]
+          },
+          {
+            "text": "Says the release candidate has moved as well.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "15 October",
+              "October 15",
+              "16 October",
+              "October 16",
+              "19 October",
+              "October 19"
+            ]
+          },
+          {
+            "text": "Gives the August plan freeze of Friday 18 September.",
+            "kind": "stale",
+            "fact": "TEAM-REF-SPRINT-REPORT-S37#F3",
+            "answer_needles": [
+              "18 September",
+              "September 18"
+            ]
+          }
+        ],
+        "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "TEAM-REF-SPRINT-STATUS-S41~freezeslipped",
+          "TEAM-REF-ROADMAP-V4"
+        ],
+        "source_priority": [
+          "TEAM-REF-SPRINT-STATUS-S41~freezeslipped",
+          "TEAM-REF-ROADMAP-V4",
+          "TEAM-REF-SPRINT-REPORT-S37"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Feature freeze date",
+            "sources": [
+              "TEAM-REF-SPRINT-STATUS-S41~freezeslipped",
+              "TEAM-REF-ROADMAP-V4"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Saying that leaves no slack for a late fix before the release candidate."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "2026-10-14 (Wed, release candidate 1) minus 2026-10-13 (Tue, freeze as moved), in days",
+          "result": 1,
+          "unit": "day between the freeze and release candidate 1",
+          "accepted_forms": [
+            "one day",
+            "1 day",
+            "a day",
+            "next day",
+            "day after",
+            "day before",
+            "single day",
+            "24 hours",
+            "overnight",
+            "following day",
+            "one working day",
+            "1 working day",
+            "no gap",
+            "no buffer",
+            "back to back"
+          ],
+          "inputs": {
+            "freeze_date": "TEAM-REF-SPRINT-STATUS-S41~freezeslipped#F3",
+            "rc1_date": "TEAM-REF-ROADMAP-V4#F5"
+          },
+          "wrong_results_common": [
+            "five days between",
+            "5 days between",
+            "get five days",
+            "get 5 days",
+            "have five days",
+            "have 5 days",
+            "that's five days",
+            "that's 5 days",
+            "three working days",
+            "3 working days"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-TEAM-005",
+      "mode": "team-meet",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Ilka, what was Tobiah's estimate for making offline mode safe? How many weeks did he say?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-cf-offline-norecord",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "scope",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Nothing loaded here mentions offline mode at all: the decision log entry D-016 is about in-app feedback, and no other document has an estimate for offline work. The pack does hold other estimates in weeks that are easy to borrow: Yevgenia's three extra weeks for XLSX in the channel export, and the gates draft's one more week of Android stabilisation. The reply gives no number of weeks and does not say what was decided about offline mode; it says it has no record of the estimate and asks Tobiah, who is in the meeting.",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-CHAT-EXPORT#F3",
+            "text": "The three extra weeks in chat were an estimate for XLSX export, not for offline mode."
+          },
+          {
+            "fact": "TEAM-REF-ROADMAP-V4#F18",
+            "text": "Sync API v3 must be running in production before the closed beta starts."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "States an estimate in weeks for offline mode.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "five weeks",
+              "5 weeks",
+              "five more",
+              "three weeks",
+              "3 weeks",
+              "three extra",
+              "three more weeks",
+              "four weeks",
+              "4 weeks",
+              "six weeks",
+              "6 weeks",
+              "two weeks",
+              "2 weeks",
+              "one more week",
+              "a couple of weeks",
+              "a month"
+            ]
+          },
+          {
+            "text": "States that offline mode was cut, or kept, as a recorded decision.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "moved to 3.1",
+              "cut from 3.0",
+              "pushed to 3.1"
+            ]
+          },
+          {
+            "text": "Says Tobiah never gave an estimate.",
+            "kind": "false_denial"
+          }
+        ],
+        "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [
+          "TEAM-REF-DECISION-LOG"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Asking Tobiah for the number.",
+          "Offering to check and note it after the meeting."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-TEAM-006",
+      "mode": "team-meet",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "And if a supervisor exports a full batch, what's the most photos that could be riding along in one export?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "What's the photo limit on an inspection in the end?"
+        },
+        {
+          "speaker": "user",
+          "text": "Twelve annotated photos per inspection."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "team-meet-full",
+      "pi_state": "none",
+      "condition": "followup",
+      "category": "export",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "A follow-up to the limit just given, 12 annotated photos per inspection (decision log, D-022). The decision log (D-017) says an export covers one inspection or a batch of up to 50 inspections. So a full batch can carry 50 x 12 = 600 annotated photos. The chat export's 8 photos per inspection was a question, not the decision; 50 x 8 = 400 is the out-of-date answer. The 200 in the risk register is a sync batch cap in records, not an export limit.",
+        "required_facts": [
+          {
+            "fact": "TEAM-REF-DECISION-LOG#F12",
+            "text": "A batch export covers up to 50 inspections, so at 12 photos each the most is 600.",
+            "answer_needles": [
+              "600",
+              "six hundred"
+            ]
+          },
+          {
+            "fact": "CONVERSATION",
+            "text": "The limit just stated is 12 annotated photos per inspection.",
+            "answer_needles": [
+              "600",
+              "six hundred",
+              "twelve",
+              "12"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "TEAM-REF-DECISION-LOG#F24",
+            "text": "An inspection can hold up to 12 annotated photos, stored at a maximum of 2048 pixels on the long edge."
+          },
+          {
+            "fact": "TEAM-REF-DECISION-LOG#F13",
+            "text": "Exports are generated on the device."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses the 8 photos per inspection from the channel export (400).",
+            "kind": "stale",
+            "fact": "TEAM-REF-CHAT-EXPORT#F8",
+            "answer_needles": [
+              "400",
+              "four hundred"
+            ]
+          },
+          {
+            "text": "Uses the sync batch cap of 200 records as the export batch size (2,400).",
+            "kind": "fabrication",
+            "fact": "TEAM-REF-RISK-REGISTER#F12",
+            "answer_needles": [
+              "2,400",
+              "2400",
+              "200 inspections"
+            ]
+          },
+          {
+            "text": "Gives 50 or 12 as the number of photos.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Does not recognise that the question builds on the limit from the previous turn.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "Ilka Vantongeren (Android lead and release captain) speaking aloud to colleagues in the team sync, first person, in a sentence or two a person would actually say",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "TEAM-REF-DECISION-LOG",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "TEAM-REF-DECISION-LOG",
+          "CONVERSATION",
+          "TEAM-REF-CHAT-EXPORT"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Photos per inspection",
+            "sources": [
+              "TEAM-REF-DECISION-LOG",
+              "TEAM-REF-CHAT-EXPORT"
+            ],
+            "resolution": "authoritative_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Saying each photo is stored at up to 2048 pixels on the long edge."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "50 * 12",
+          "result": 600,
+          "unit": "annotated photos at most in one batch export",
+          "accepted_forms": [
+            "600",
+            "six hundred"
+          ],
+          "inputs": {
+            "batch_limit_inspections": "TEAM-REF-DECISION-LOG#F12",
+            "photos_per_inspection": "CONVERSATION (twelve; also TEAM-REF-DECISION-LOG#F24)"
+          },
+          "wrong_results_common": [
+            "400",
+            "four hundred",
+            "2,400",
+            "2400"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    }
+  ]
+}

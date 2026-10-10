@@ -1,0 +1,49 @@
+MOSSGAUGE WEEKLY TEAM SYNC - NOTES
+
+Date: Monday 28 September 2026, 14:00 to 14:50
+Notes taken by: Corbin Thistlewood
+Present: Halvard Niemczyk, Saoirse Lindqvang, Ilka Vantongeren, Dorrin Ashgrove-Patel, Tobiah Kessenich, Yevgenia Marchetti-Oduya, Corbin Thistlewood, Lucinda Farthingale
+Apologies: Emeka Rautavaara
+
+1. SPRINT 40 WRAP-UP
+
+Sprint 40 closed at 78 of 81 points. The three points carried over are both export stories. Sprint 41 was planned this morning at 84 points.
+
+2. EXPORT
+
+Yevgenia reported export at 45% complete. CSV works end to end. PDF work is stopped because the Inkspindle licence purchase order is still waiting for finance approval, so the team cannot use the production build of the renderer. Yevgenia will chase finance. Halvard asked for a daily update in the channel until it is cleared.
+
+3. ANDROID STABILITY
+
+Ilka reported crash-free sessions of 98.9% on beta build b5. The largest cluster is the camera-permission resume crash (MG-2240): the app dies when a crew member grants the camera permission and comes back to the inspection. Ilka took the fix. Two smaller clusters, sync worker memory and the map tile cache, follow after that.
+
+4. STORE SUBMISSION
+
+Dorrin has started on the store listings. The Play Data safety form needs an up-to-date list of third-party SDKs. Tobiah has it because the sync client pulled in two new libraries. Screenshots wait until dark theme is final on both platforms.
+
+5. REGRESSION RUNTIME
+
+The full regression suite now takes 6 hours 40 minutes, which is too long to run between a late fix and a morning sign-off. Corbin will split it across device farms and aims to get it under 4 hours.
+
+6. PILOT CUSTOMERS
+
+Saoirse confirmed that the pilot group is settled. Invitations go out once the crews are nominated.
+
+7. ANY OTHER BUSINESS
+
+- The retro for Sprint 41 will be on Monday 12 October at 10:00, before the Sprint 42 planning session.
+- Emeka's mock-ups for an Android tablet layout are parked until 3.1 planning.
+- Lucinda finishes photo annotation this week and then picks up sync on-call shadowing.
+- Halvard reminded everyone to book the device lab through the shared calendar and not by message.
+
+ACTIONS
+
+A1 - Ilka Vantongeren - fix MG-2240, the camera-permission resume crash - due Thursday 1 October
+A2 - Yevgenia Marchetti-Oduya - chase finance for the Inkspindle purchase order - due Wednesday 30 September
+A3 - Tobiah Kessenich - send the updated SDK list to Dorrin - due Monday 5 October
+A4 - Corbin Thistlewood - regression suite under 4 hours - due Thursday 8 October
+A5 - Saoirse Lindqvang - send the beta invitation list to the pilot customers - due Thursday 8 October
+A6 - Dorrin Ashgrove-Patel - store listing screenshots for both stores - due Thursday 15 October
+A7 - Halvard Niemczyk - confirm cover for Tobiah's leave - due Wednesday 7 October
+
+Next sync: Monday 5 October 2026, 14:00.

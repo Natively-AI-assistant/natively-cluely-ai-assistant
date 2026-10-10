@@ -1,0 +1,731 @@
+{
+  "mode": "looking-for-work",
+  "items": [
+    {
+      "id": "ER-CV1-LFW-001",
+      "mode": "looking-for-work",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "in the january 2024 version of my cv i'd projected the database saving as a percentage. in dollars a month, how did the real saving compare with that projection?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-a-conflict",
+      "pi_state": "A-RESUME",
+      "pi_condition": "profile_conflicting_ref",
+      "condition": "multi_source",
+      "category": "saving_against_projection",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Both documents are needed, and here the old one is used for what it is: a projection. The January 2024 export of the CV said the migration was expected to cut database spend by about 25%. The current résumé gives the measured result: from USD 18,400 to USD 12,700 a month, 31% lower. 25% of 18,400 is USD 4,600 a month; the real saving is 18,400 - 12,700 = USD 5,700 a month; so the result beat the projection by about USD 1,100 a month. Taking 25% of the new bill (3,175) or mixing in the yearly figure is wrong.",
+        "required_facts": [
+          {
+            "fact": "PI-A-RESUME#F30",
+            "text": "The measured saving is USD 5,700 a month (18,400 to 12,700).",
+            "answer_needles": [
+              "5,700",
+              "5700",
+              "5.7k",
+              "5.7 thousand"
+            ]
+          },
+          {
+            "fact": "LFW-REF-A-OLD-RESUME#F4",
+            "text": "The January 2024 projection of about 25% is USD 4,600 a month, so the real saving is about USD 1,100 a month higher.",
+            "answer_needles": [
+              "1,100",
+              "1100",
+              "1.1k",
+              "eleven hundred",
+              "4,600",
+              "4600",
+              "4.6k"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-A-RESUME#F29",
+            "text": "The cutover took one 11-minute read-only window, with no rollback."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Takes 25% of the new monthly bill (3,175) and compares that.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "3,175",
+              "3175",
+              "2,525",
+              "2525"
+            ]
+          },
+          {
+            "text": "Presents the 25% projection as the result.",
+            "kind": "stale",
+            "fact": "LFW-REF-A-OLD-RESUME#F4"
+          },
+          {
+            "text": "Says the old CV cannot be used at all, so no comparison is possible.",
+            "kind": "over_deferral"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "Natively answering the candidate's private typed question; any wording offered to say aloud is first person as the candidate",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "PI-A-RESUME",
+          "LFW-REF-A-OLD-RESUME"
+        ],
+        "source_priority": [
+          "PI-A-RESUME",
+          "LFW-REF-A-OLD-RESUME"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Database saving from the migration (about 25% expected in January 2024, 31% measured)",
+            "sources": [
+              "PI-A-RESUME",
+              "LFW-REF-A-OLD-RESUME"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Saying that is 6 percentage points better than projected.",
+          "Giving the yearly difference as well, clearly labelled."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "(18400 - 12700) - 0.25 * 18400",
+          "result": 1100,
+          "unit": "USD per month by which the measured saving exceeds the January 2024 projection",
+          "accepted_forms": [
+            "1,100",
+            "1100",
+            "1.1k",
+            "eleven hundred"
+          ],
+          "inputs": {
+            "spend_before": "PI-A-RESUME#F30",
+            "spend_after": "PI-A-RESUME#F30",
+            "projected_share": "LFW-REF-A-OLD-RESUME#F4"
+          },
+          "wrong_results_common": [
+            "3,175",
+            "3175",
+            "2,525",
+            "2525"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-LFW-002",
+      "mode": "looking-for-work",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "as of this month, october 2026, how far past their react + typescript requirement am i? in months",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "looking-for-work-none",
+      "pi_state": "B",
+      "pi_condition": "resume_jd",
+      "condition": "multi_source",
+      "category": "requirement_margin_months",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The posting requires at least 4 years of React and TypeScript in production. Her CV says her last four years have been in React and TypeScript and the earlier five mostly in Vue; the React years are her time at Lumenquay, which she joined in June 2022. June 2022 to October 2026 is 52 months, 4 years and 4 months, so she is 4 months past the requirement. Her nine years overall are not nine years of React.",
+        "required_facts": [
+          {
+            "fact": "PI-B-RESUME#F10",
+            "text": "Her React and TypeScript time runs from June 2022: 52 months by October 2026, which is 4 months past four years.",
+            "answer_needles": [
+              "4 months",
+              "four months",
+              "52 months",
+              "fifty-two months"
+            ]
+          },
+          {
+            "fact": "PI-B-JD#F18",
+            "text": "The requirement is at least 4 years of React and TypeScript in production.",
+            "answer_needles": [
+              "4 months",
+              "four months",
+              "52 months",
+              "fifty-two months",
+              "4 years",
+              "four years",
+              "48 months"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-B-RESUME#F4",
+            "text": "Her last four years have been in React and TypeScript and the earlier five mostly in Vue."
+          },
+          {
+            "fact": "PI-B-RESUME#F3",
+            "text": "She has nine years of frontend experience overall."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Counts all nine years as React and TypeScript (five years, or 60 months, past the requirement).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "five years over",
+              "5 years over",
+              "five years past",
+              "5 years past",
+              "60 months",
+              "61 months",
+              "109 months"
+            ]
+          },
+          {
+            "text": "Is a month or more out (3 or 5 months), or counts from January 2024 when she became Lead.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "3 months",
+              "three months",
+              "5 months",
+              "five months",
+              "53 months",
+              "51 months",
+              "33 months"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (Advik Thorambath, Quillhaven, Ostrakel Payments).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Quillhaven",
+              "Skeinrouter",
+              "Marrowgate",
+              "Farecrest",
+              "Tessarine",
+              "Ostrakel",
+              "Thorambath",
+              "Ledger Core"
+            ]
+          }
+        ],
+        "expected_role": "Natively answering the candidate's private typed question; any wording offered to say aloud is first person as the candidate",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "PI-B-RESUME",
+          "PI-B-JD"
+        ],
+        "source_priority": [
+          "PI-B-RESUME",
+          "PI-B-JD"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying the margin is thin, so the Vue years should be presented as breadth and not counted towards it."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "(2026 * 12 + 10) - (2022 * 12 + 6) - 48",
+          "result": 4,
+          "unit": "months past the 4-year React and TypeScript requirement (52 months since June 2022)",
+          "accepted_forms": [
+            "4 months",
+            "four months",
+            "52 months",
+            "fifty-two months"
+          ],
+          "inputs": {
+            "react_typescript_since": "PI-B-RESUME#F10",
+            "required_years": "PI-B-JD#F18",
+            "as_of": "CONVERSATION (October 2026)"
+          },
+          "wrong_results_common": [
+            "3 months",
+            "three months",
+            "5 months",
+            "five months",
+            "53 months",
+            "51 months",
+            "60 months",
+            "33 months"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-LFW-003",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "On the database move, how long did you keep writing to both the old store and the new one before you switched over?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "looking-for-work-none",
+      "pi_state": "A-RESUME",
+      "pi_condition": "resume_only",
+      "condition": "grounded_single",
+      "category": "resume_duration_attribution",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The CV has several durations for several things. For Marrowgate, the database migration, the application wrote to both stores for 5 weeks. The 6 weeks of shadow traffic and the 9 weeks of per-carrier flags belong to the Skeinrouter rollout, the two-week dual-publish period belongs to the move from RabbitMQ to Kafka at Tessarine, and the 10 nights are the run of clean checksum comparisons. The answer is five weeks.",
+        "required_facts": [
+          {
+            "fact": "PI-A-RESUME#F28",
+            "text": "Marrowgate ran dual writes from the application for 5 weeks.",
+            "answer_needles": [
+              "5 weeks",
+              "five weeks",
+              "five-week",
+              "5-week"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-A-RESUME#F28",
+            "text": "Nightly row-level checksums ran until mismatches stayed at zero for 10 consecutive nights."
+          },
+          {
+            "fact": "PI-A-RESUME#F29",
+            "text": "The cutover took one 11-minute read-only window."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the Skeinrouter rollout durations (6 weeks of shadow traffic, 9 weeks of flags, 15 weeks in all).",
+            "kind": "fabrication",
+            "fact": "PI-A-RESUME#F18",
+            "answer_needles": [
+              "six weeks",
+              "6 weeks",
+              "nine weeks",
+              "9 weeks",
+              "fifteen weeks",
+              "15 weeks"
+            ]
+          },
+          {
+            "text": "Gives the two-week dual-publish period from Tessarine.",
+            "kind": "fabrication",
+            "fact": "PI-A-RESUME#F36",
+            "answer_needles": [
+              "two weeks",
+              "2 weeks",
+              "two-week",
+              "2-week",
+              "a fortnight"
+            ]
+          },
+          {
+            "text": "Gives the 10 nights of clean checksums as the length of the dual writes.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "PI-A-RESUME"
+        ],
+        "source_priority": [
+          "PI-A-RESUME"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Adding the nightly checksum comparison and the 11-minute read-only window."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-LFW-004",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "In this seat you'd be guiding two or three people on the projects you own. How does that sit next to the number you look after today?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-a-conflict",
+      "pi_state": "A",
+      "pi_condition": "profile_conflicting_ref",
+      "condition": "conflict_stale",
+      "category": "team_scope_old_cv",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The current résumé (2026) says he is tech lead of Dispatch Core, a team of five, and leads 4 engineers. The older export of his CV, dated 18 January 2024, has him as a member of a team of three with the title Software Engineer II; only its date line shows it is the older one. So the answer is that he leads four today, and guiding two or three is slightly smaller and familiar. Answering as a member of a team of three who leads nobody is out of date. Neither role is line management.",
+        "required_facts": [
+          {
+            "fact": "PI-A-RESUME#F8",
+            "text": "Today he leads 4 engineers as tech lead of a team of five.",
+            "answer_needles": [
+              "four",
+              "4 engineers",
+              "4 people",
+              "lead 4",
+              "leading 4",
+              "leads 4"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "PI-A-JD#F20",
+            "text": "The role leads design reviews and guides 2 to 3 engineers, with no line-management duties."
+          },
+          {
+            "fact": "PI-A-RESUME#F7",
+            "text": "He has been Senior Software Engineer and Tech Lead since April 2024."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Answers from the January 2024 CV: a member of a team of three who does not lead anyone.",
+            "kind": "stale",
+            "fact": "LFW-REF-A-OLD-RESUME#F2",
+            "answer_needles": [
+              "team of three",
+              "team of 3",
+              "of three engineers",
+              "a member of",
+              "don't lead",
+              "do not lead",
+              "Software Engineer II"
+            ]
+          },
+          {
+            "text": "Gives the size of the Ledger Core team (9) or of another project as the number he leads.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "lead nine",
+              "lead 9",
+              "nine engineers",
+              "9 engineers"
+            ]
+          },
+          {
+            "text": "Claims line management of the engineers he leads.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "PI-A-RESUME",
+          "PI-A-JD"
+        ],
+        "source_priority": [
+          "PI-A-RESUME",
+          "PI-A-JD",
+          "LFW-REF-A-OLD-RESUME"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "His team and whether he leads it",
+            "sources": [
+              "PI-A-RESUME",
+              "LFW-REF-A-OLD-RESUME"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Saying he also runs the weekly design review and owns the technical roadmap."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-LFW-005",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "How many people report to you directly at the moment?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "looking-for-work-none",
+      "pi_state": "B-RESUME",
+      "pi_condition": "resume_only",
+      "condition": "missing_evidence",
+      "category": "absent_direct_reports",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Her CV describes scope, not reporting lines: she leads the frontend chapter of 18 engineers across 5 product squads, works day to day in the booking squad of 6, and leads the Pebblekit working group of 3 engineers and 2 designers. It does not say anyone reports to her, and it does not say nobody does. The numbers are right there, which makes '18 direct reports' tempting. The reply describes what she leads and does not put a number of direct reports, or a denial, in her mouth; that part is hers to say.",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "PI-B-RESUME#F9",
+            "text": "She leads the frontend chapter of 18 engineers across 5 product squads and works day to day in the booking squad of 6."
+          },
+          {
+            "fact": "PI-B-RESUME#F14",
+            "text": "She leads the Pebblekit working group of 3 engineers and 2 designers."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "States a number of direct reports taken from the chapter, squad or working-group sizes.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "18 direct reports",
+              "eighteen direct reports",
+              "18 reports",
+              "eighteen reports",
+              "18 people report",
+              "eighteen people report",
+              "18 engineers report",
+              "eighteen engineers report",
+              "all 18 report",
+              "all eighteen report",
+              "6 direct reports",
+              "six direct reports",
+              "5 direct reports",
+              "five direct reports",
+              "3 direct reports",
+              "three direct reports",
+              "six people report",
+              "five people report",
+              "three people report"
+            ]
+          },
+          {
+            "text": "States that she has no direct reports.",
+            "kind": "false_denial",
+            "answer_needles": [
+              "no direct reports",
+              "nobody reports to me",
+              "no one reports to me",
+              "no-one reports to me",
+              "don't have direct reports",
+              "don't have any direct reports",
+              "do not have direct reports",
+              "zero direct reports",
+              "none report to me"
+            ]
+          },
+          {
+            "text": "Brings in facts from her private notes; only the CV is loaded.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "60%",
+              "sixty percent"
+            ]
+          },
+          {
+            "text": "Answers with the other candidate's facts (Advik Thorambath, Quillhaven, Ostrakel Payments).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Quillhaven",
+              "Skeinrouter",
+              "Marrowgate",
+              "Farecrest",
+              "Tessarine",
+              "Ostrakel",
+              "Thorambath",
+              "Ledger Core"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Catarina) answering the interviewer aloud, in the first person",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [
+          "PI-B-RESUME"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Describing the chapter of 18 engineers as technical leadership: standards, the architecture forum and the hiring loop.",
+          "Leaving the reporting line for her to state."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-LFW-006",
+      "mode": "looking-for-work",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Fair enough. Are you doing anything about that at the moment?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "A good share of this codebase is Java. Where are you with it?"
+        },
+        {
+          "speaker": "user",
+          "text": "Honestly, I've never shipped Java to production. I wrote Kotlin on the JVM for my years at Tessarine and I read Java comfortably."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "lfw-a-full",
+      "pi_state": "A",
+      "pi_condition": "resume_jd_relevant_ref",
+      "condition": "followup",
+      "category": "java_gap_followup",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "A follow-up: 'that' is the Java gap he has just admitted. His notes say that since mid-September 2026 he has been rewriting one job of his toy ledger in Java 21 with Spring Boot, in the evenings. He says so and calls it what it is, practice and not production experience. The posting's Java 21 on Spring Boot makes it tempting to overstate; the other candidate's learning project (a shared checklist on Yjs) is the wrong story.",
+        "required_facts": [
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F17",
+            "text": "He is rewriting one job of his toy ledger in Java 21 with Spring Boot.",
+            "answer_needles": [
+              "Java 21",
+              "Spring Boot",
+              "Spring"
+            ]
+          },
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F17",
+            "text": "He has been doing it since mid-September 2026, in the evenings, on his own ledger project.",
+            "answer_needles": [
+              "evening",
+              "September",
+              "ledger",
+              "side project",
+              "own time",
+              "spare time",
+              "weekend"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "LFW-REF-A-INTERVIEW-NOTES#F20",
+            "text": "The toy ledger is tallybook, a small double-entry ledger he built in Go over three weekends in August 2026."
+          },
+          {
+            "fact": "PI-A-JD#F14",
+            "text": "The settlement engine and reconciliation batch jobs are Java 21 on Spring Boot, roughly 40% of the team's code."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Presents the evening rewrite as professional or production Java experience.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "in production at",
+              "shipped Java at",
+              "Java in production for",
+              "at work we use Java",
+              "professionally in Java"
+            ]
+          },
+          {
+            "text": "Uses the other candidate's learning project.",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Yjs",
+              "checklist",
+              "four evenings"
+            ]
+          },
+          {
+            "text": "Does not recognise that the question is about the Java gap from the previous turn.",
+            "kind": "over_deferral"
+          },
+          {
+            "text": "Answers with the other candidate's facts (Catarina Velmonte, Lumenquay, Hollowpine Labs).",
+            "kind": "other_profile",
+            "answer_needles": [
+              "Lumenquay",
+              "Pebblekit",
+              "Fernlatch",
+              "Dialbench",
+              "Hollowpine",
+              "Inkwharf",
+              "Velmonte",
+              "Ondaverde"
+            ]
+          }
+        ],
+        "expected_role": "the candidate (Advik) answering the interviewer aloud, in the first person",
+        "expected_action": "continue_previous_answer",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "LFW-REF-A-INTERVIEW-NOTES",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "LFW-REF-A-INTERVIEW-NOTES",
+          "CONVERSATION"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Adding that he spent a fortnight reading Java in the Debezium connector source.",
+          "Saying it is practice, not production experience."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    }
+  ]
+}

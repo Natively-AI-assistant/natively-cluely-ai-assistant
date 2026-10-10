@@ -1,0 +1,927 @@
+{
+  "mode": "recruiting",
+  "items": [
+    {
+      "id": "ER-CV1-REC-001",
+      "mode": "recruiting",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "how much heavier is our peak load than the peak on her cv? give me the gap and the percent, it's going in the scorecard notes",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "experience_verification",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The team brief gives Kestrelwick's peak as around 52,000 messages per second. The resume gives her pipeline's peak throughput as 38,000 messages per second. The gap is 14,000 messages per second, and 14,000 / 38,000 is 36.8%, so Kestrelwick's peak is about 37% higher (1.37 times hers). The near-misses are the fleet sizes (61,000 trailers against 22,000 trucks and trailers, 2.8 times) and taking the percentage on the wrong base (14,000 / 52,000 is 27%).",
+        "required_facts": [
+          {
+            "fact": "REC-REF-TEAM-BRIEF-2026#F20",
+            "text": "Kestrelwick's peak is around 52,000 messages per second, 14,000 more than hers.",
+            "answer_needles": [
+              "14,000",
+              "14000",
+              "14k",
+              "14 k",
+              "14 thousand",
+              "fourteen thousand"
+            ]
+          },
+          {
+            "fact": "REC-REF-RESUME-VASKIRK#F11",
+            "text": "Her pipeline's peak is 38,000 messages per second, so Kestrelwick's is about 37% higher.",
+            "answer_needles": [
+              "37%",
+              "37 percent",
+              "37 per cent",
+              "36.8",
+              "1.37",
+              "~37",
+              "about 37",
+              "roughly 37",
+              "around 37",
+              "thirty-seven percent",
+              "thirty seven percent"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-TEAM-BRIEF-2026#F19",
+            "text": "On a normal weekday the platform takes in about 1.9 billion messages."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Compares the fleet sizes (61,000 against 22,000) instead of the peak rates.",
+            "kind": "fabrication",
+            "fact": "REC-REF-TEAM-BRIEF-2026#F4",
+            "answer_needles": [
+              "2.77",
+              "2.8x",
+              "2.8 times",
+              "177%",
+              "39,000",
+              "39000"
+            ]
+          },
+          {
+            "text": "Takes the percentage on Kestrelwick's peak instead of hers (27%), or gives her peak as a share of Kestrelwick's (73%).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "27%",
+              "26.9",
+              "27 percent",
+              "73%",
+              "73 percent"
+            ]
+          },
+          {
+            "text": "Says the two cannot be compared because the figures are missing.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "private assistant to the recruiter; the reply is for the recruiter's eyes, not words spoken to the candidate",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "REC-REF-TEAM-BRIEF-2026",
+          "REC-REF-RESUME-VASKIRK"
+        ],
+        "source_priority": [
+          "REC-REF-TEAM-BRIEF-2026",
+          "REC-REF-RESUME-VASKIRK"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying it is a step up but the same order of magnitude."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "(52000 - 38000) / 38000 * 100",
+          "result": 36.84,
+          "unit": "% by which Kestrelwick's peak message rate is above the peak on her resume (gap: 14,000 messages per second)",
+          "accepted_forms": [
+            "37%",
+            "37 percent",
+            "37 per cent",
+            "36.8",
+            "1.37",
+            "~37",
+            "about 37",
+            "roughly 37",
+            "around 37",
+            "thirty-seven percent",
+            "thirty seven percent"
+          ],
+          "inputs": {
+            "kestrelwick_peak_per_second": "REC-REF-TEAM-BRIEF-2026#F20",
+            "her_peak_per_second": "REC-REF-RESUME-VASKIRK#F11"
+          },
+          "wrong_results_common": [
+            "27%",
+            "26.9",
+            "27 percent",
+            "73%",
+            "73 percent",
+            "2.77",
+            "2.8x",
+            "2.8 times",
+            "177%",
+            "39,000",
+            "39000"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-REC-002",
+      "mode": "recruiting",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "her screen got moved to friday the 16th of october at 2pm. what are my deadlines after it, as actual dates: the scorecard, and getting back to her with a yes or no",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "recruiter_responsibility",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Two deadlines from the process guide, in two different units. The scorecard is due within 24 hours of the conversation: clock hours, so by 2pm on Saturday 17 October 2026 (in practice the same Friday). The outcome to the candidate is due within 2 business days of the recruiter screen: Monday 19 October is the first business day and Tuesday 20 October the second, so by Tuesday 20 October 2026. No US public holiday falls on those days. Counting the outcome in calendar days gives Sunday the 18th; treating the 24 hours as a business day pushes the scorecard to Monday.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F12",
+            "text": "The candidate gets an outcome within 2 business days of the screen: by Tuesday 20 October 2026.",
+            "answer_needles": [
+              "October 20 ",
+              "October 20,",
+              "October 20.",
+              "October 20;",
+              "October 20)",
+              "20 October",
+              "Oct 20 ",
+              "Oct 20,",
+              "Oct 20.",
+              "Oct 20;",
+              "Oct 20)",
+              "20 Oct",
+              "Oct. 20 ",
+              "Oct. 20,",
+              "Oct. 20.",
+              "Oct. 20;",
+              "Oct. 20)",
+              "October 20th",
+              "20th of October",
+              "20th October",
+              "twentieth of October",
+              "October twentieth",
+              "October the 20th",
+              "October the twentieth",
+              "the 20th",
+              "the twentieth",
+              "Tuesday"
+            ]
+          },
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F30",
+            "text": "The scorecard is due within 24 hours: by 2pm on Saturday 17 October 2026.",
+            "answer_needles": [
+              "October 17",
+              "17 October",
+              "Oct 17",
+              "17 Oct",
+              "Oct. 17",
+              "October 17th",
+              "17th of October",
+              "17th October",
+              "seventeenth of October",
+              "October seventeenth",
+              "October the 17th",
+              "October the seventeenth",
+              "the 17th",
+              "the seventeenth",
+              "Saturday",
+              "24 hours",
+              "24h",
+              "twenty-four hours",
+              "24-hour"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F29",
+            "text": "The follow-up email to the candidate goes out the same day (Friday 16 October)."
+          },
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F16",
+            "text": "Business days are Monday to Friday, excluding company holidays."
+          },
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F31",
+            "text": "The stage in Greenhollow is moved within 1 business day of an outcome."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Counts the outcome deadline in calendar days and gives Sunday 18 October.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "October 18",
+              "18 October",
+              "Oct 18",
+              "18 Oct",
+              "Oct. 18",
+              "October 18th",
+              "18th of October",
+              "18th October",
+              "eighteenth of October",
+              "October eighteenth",
+              "October the 18th",
+              "October the eighteenth",
+              "the 18th",
+              "the eighteenth",
+              "Sunday the 18",
+              "Sunday 18"
+            ]
+          },
+          {
+            "text": "Gives Wednesday 21 October as the outcome deadline.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "October 21",
+              "21 October",
+              "Oct 21",
+              "21 Oct",
+              "Oct. 21",
+              "October 21st",
+              "21st of October",
+              "21st October",
+              "twenty-first of October",
+              "October twenty-first",
+              "October the 21st",
+              "October the twenty-first",
+              "the 21st",
+              "the twenty-first",
+              "Wednesday the 21",
+              "Wednesday 21"
+            ]
+          },
+          {
+            "text": "Gives Monday 19 October as the outcome deadline, or as the scorecard deadline.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the scorecard has 2 business days.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "private assistant to the recruiter; the reply is for the recruiter's eyes, not words spoken to the candidate",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "REC-REF-PROCESS-GUIDE-2026"
+        ],
+        "source_priority": [
+          "REC-REF-PROCESS-GUIDE-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Advising her to file the scorecard on the Friday itself.",
+          "Adding the same-day follow-up email."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "2026-10-16 (Fri) + 2 business days = 2026-10-20 (Tue; Mon 19 is the first); scorecard: 2026-10-16 14:00 + 24 hours = 2026-10-17 14:00 (Sat)",
+          "result": "2026-10-20",
+          "unit": "date (latest day the candidate is given the outcome of the screen)",
+          "accepted_forms": [
+            "October 20 ",
+            "October 20,",
+            "October 20.",
+            "October 20;",
+            "October 20)",
+            "20 October",
+            "Oct 20 ",
+            "Oct 20,",
+            "Oct 20.",
+            "Oct 20;",
+            "Oct 20)",
+            "20 Oct",
+            "Oct. 20 ",
+            "Oct. 20,",
+            "Oct. 20.",
+            "Oct. 20;",
+            "Oct. 20)",
+            "October 20th",
+            "20th of October",
+            "20th October",
+            "twentieth of October",
+            "October twentieth",
+            "October the 20th",
+            "October the twentieth",
+            "the 20th",
+            "the twentieth",
+            "Tuesday"
+          ],
+          "inputs": {
+            "screen_date": "CONVERSATION (Friday 16 October 2026, 2pm)",
+            "outcome_within_business_days": "REC-REF-PROCESS-GUIDE-2026#F12",
+            "scorecard_within_hours": "REC-REF-PROCESS-GUIDE-2026#F30",
+            "business_day_rule": "REC-REF-PROCESS-GUIDE-2026#F16"
+          },
+          "wrong_results_common": [
+            "October 18",
+            "18 October",
+            "Oct 18",
+            "18 Oct",
+            "Oct. 18",
+            "October 18th",
+            "18th of October",
+            "18th October",
+            "eighteenth of October",
+            "October eighteenth",
+            "October the 18th",
+            "October the eighteenth",
+            "the 18th",
+            "the eighteenth",
+            "Sunday the 18",
+            "Sunday 18",
+            "October 21",
+            "21 October",
+            "Oct 21",
+            "21 Oct",
+            "Oct. 21",
+            "October 21st",
+            "21st of October",
+            "21st October",
+            "twenty-first of October",
+            "October twenty-first",
+            "October the 21st",
+            "October the twenty-first",
+            "the 21st",
+            "the twenty-first",
+            "Wednesday the 21",
+            "Wednesday 21"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-REC-003",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Is the bonus the same percentage for everybody, or does it step up as you go higher? What would mine be, and what's the next step up?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "salary_question",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The current overview (version 4.1) has two tiers: for lead and staff levels the annual bonus target is 12% of base salary, and for directors and above it is 18%. This role is a lead, so hers would be 12%, and the next step up is 18% at director level. The 2025 overview had 10% and 15%; those are out of date. A target is not a guaranteed payment.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-BENEFITS-2026#F15",
+            "text": "For lead and staff levels, which this role is, the bonus target is 12% of base salary.",
+            "answer_needles": [
+              "12%",
+              "12 percent",
+              "twelve percent",
+              "12 per cent",
+              "12 %",
+              "twelve per cent"
+            ]
+          },
+          {
+            "fact": "REC-REF-BENEFITS-2026#F16",
+            "text": "For directors and above the bonus target is 18% of base salary.",
+            "answer_needles": [
+              "18%",
+              "18 percent",
+              "eighteen percent",
+              "18 per cent",
+              "18 %",
+              "eighteen per cent",
+              "eighteen"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-BENEFITS-2026#F17",
+            "text": "Bonuses are paid in March for the previous calendar year and prorated for a partial first year."
+          },
+          {
+            "fact": "REC-REF-TEAM-BRIEF-2026#F26",
+            "text": "This role is an E6."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives the 2025 targets of 10% and 15%.",
+            "kind": "stale",
+            "fact": "REC-REF-BENEFITS-2025#F12",
+            "answer_needles": [
+              "10%",
+              "10 percent",
+              "ten percent",
+              "15%",
+              "15 percent",
+              "fifteen percent"
+            ]
+          },
+          {
+            "text": "Swaps the tiers (18% for the lead, 12% for directors).",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Presents the target as a guaranteed payment.",
+            "kind": "unauthorized_promise",
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F28"
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "answer_candidate_question",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "REC-REF-BENEFITS-2026"
+        ],
+        "source_priority": [
+          "REC-REF-BENEFITS-2026",
+          "REC-REF-BENEFITS-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Annual bonus targets by level",
+            "sources": [
+              "REC-REF-BENEFITS-2026",
+              "REC-REF-BENEFITS-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Saying the bonus is prorated for a partial first year."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-REC-004",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Suppose I started on the third Monday of November. How long would I be waiting before my salary first came up for a review?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "salary_question",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Version 4.1 (2026) says base pay is reviewed every April, so from a start on Monday 16 November 2026 the first review comes in April 2027, about four and a half to five months in. Version 3.2 (2025) said every January, which would be about six weeks; it is out of date, and only the version line and date show that. Whether someone that new is included in the first cycle is not stated, so the recruiter gives the April timing without promising a raise.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-BENEFITS-2026#F14",
+            "text": "Base pay is reviewed every April, so the first review after a mid-November start is April 2027.",
+            "answer_needles": [
+              "April"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F23",
+            "text": "New hires start on the first or third Monday of a month; the third Monday of November 2026 is the 16th."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses the 2025 review month of January, about six weeks to two months after her start.",
+            "kind": "stale",
+            "fact": "REC-REF-BENEFITS-2025#F11",
+            "answer_needles": [
+              "every January",
+              "in January",
+              "January 2027",
+              "this January",
+              "next January",
+              "January review",
+              "six weeks",
+              "6 weeks",
+              "seven weeks",
+              "two months",
+              "2 months"
+            ]
+          },
+          {
+            "text": "Says pay is reviewed on the anniversary of the start date, or after a year.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "a year in",
+              "after a year",
+              "twelve months",
+              "12 months",
+              "November 2027",
+              "anniversary"
+            ]
+          },
+          {
+            "text": "Promises a raise at the first review.",
+            "kind": "unauthorized_promise",
+            "fact": "REC-REF-PROCESS-GUIDE-2026#F28"
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "REC-REF-BENEFITS-2026"
+        ],
+        "source_priority": [
+          "REC-REF-BENEFITS-2026",
+          "REC-REF-BENEFITS-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Month of the base pay review",
+            "sources": [
+              "REC-REF-BENEFITS-2026",
+              "REC-REF-BENEFITS-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Saying it is roughly five months.",
+          "Saying she will confirm whether a hire that recent is included in the first April cycle."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-REC-005",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Is there a probation period when someone joins? Where I am now, nothing kicked in until I had been there three months.",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "candidate_question",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Nothing loaded mentions a probation period, in either direction. The neighbouring facts make an invention tempting: parental leave eligibility starts after 90 days of employment, which is not a probation period, and the 2025 overview had health coverage starting on the first of the month after the start date. What is known and current: dental, vision and health coverage start on the first day, and PTO accrues from the month she joins and can be used as it accrues. The recruiter says what starts on day one, neither invents a probation period nor denies one, and says she will confirm. Spoken wording stays human; it does not talk about files, documents or loaded context.",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-BENEFITS-2026#F21",
+            "text": "Coverage starts on the first day."
+          },
+          {
+            "fact": "REC-REF-BENEFITS-2026#F3",
+            "text": "PTO accrues from the month the employee joins and can be used as it accrues."
+          },
+          {
+            "fact": "REC-REF-BENEFITS-2026#F10",
+            "text": "Parental leave eligibility starts after 90 days of employment."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "States that there is a probation period, or gives its length.",
+            "kind": "fabrication",
+            "answer_needles": [
+              "90-day probation",
+              "90 day probation",
+              "ninety-day probation",
+              "ninety day probation",
+              "three-month probation",
+              "3-month probation",
+              "three month probation",
+              "six-month probation",
+              "6-month probation",
+              "six month probation",
+              "probationary period of",
+              "probation period of",
+              "probation of",
+              "probation lasts",
+              "probation runs",
+              "probation is 90",
+              "probation is three",
+              "probation is six"
+            ]
+          },
+          {
+            "text": "States that there is no probation period.",
+            "kind": "false_denial",
+            "answer_needles": [
+              "there is no probation",
+              "there's no probation",
+              "there isn't a probation",
+              "there is not a probation",
+              "we don't have a probation",
+              "we do not have a probation",
+              "we have no probation",
+              "we don't do probation"
+            ]
+          },
+          {
+            "text": "Says health coverage starts on the first of the month after the start date (2025 overview).",
+            "kind": "stale",
+            "answer_needles": [
+              "first of the month"
+            ]
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [
+          "REC-REF-BENEFITS-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying coverage and PTO accrual start right away.",
+          "Committing to confirm in the same-day follow-up email."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-CV1-REC-006",
+      "mode": "recruiting",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Okay. I'm doing one in four at the moment. Over a year, how many fewer weeks is that?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "And the pager. Does the lead carry it too, or just the team?"
+        },
+        {
+          "speaker": "user",
+          "text": "The lead is on the rotation like everyone else on the team. It comes round one week in five."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "rec-full",
+      "pi_state": "none",
+      "condition": "followup",
+      "category": "role_question",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "A follow-up: 'that' is the one-week-in-five rotation the recruiter has just described, which is what the job description says. One week in four is 52 / 4 = 13 weeks a year; one week in five is 52 / 5 = 10.4 weeks, so about two and a half to three weeks fewer (2.6). The hiring manager's notes float taking the lead off the pager altogether, but that is not approved and must not be told to candidates, so the answer stays with one week in five.",
+        "required_facts": [
+          {
+            "fact": "REC-REF-JD-2026#F8",
+            "text": "One week in five is about 10.4 weeks a year, 2.6 fewer than one week in four (13 weeks).",
+            "answer_needles": [
+              "2.6",
+              "two and a half",
+              "2.5",
+              "two or three",
+              "2 or 3",
+              "two to three",
+              "2 to 3",
+              "two and three",
+              "about three",
+              "roughly three",
+              "around three",
+              "nearly three",
+              "almost three",
+              "close to three",
+              "just under three",
+              "about 3",
+              "roughly 3",
+              "around 3",
+              "nearly 3",
+              "almost 3",
+              "10.4",
+              "about ten",
+              "about 10",
+              "roughly ten",
+              "roughly 10",
+              "around ten",
+              "around 10",
+              "ten or eleven",
+              "10 or 11",
+              "ten and a half",
+              "just over ten",
+              "ten weeks",
+              "10 weeks"
+            ]
+          },
+          {
+            "fact": "CONVERSATION",
+            "text": "She is on call one week in four now (13 weeks a year); the comparison is with one week in five.",
+            "answer_needles": [
+              "2.6",
+              "two and a half",
+              "2.5",
+              "two or three",
+              "2 or 3",
+              "two to three",
+              "2 to 3",
+              "two and three",
+              "about three",
+              "roughly three",
+              "around three",
+              "nearly three",
+              "almost three",
+              "close to three",
+              "just under three",
+              "about 3",
+              "roughly 3",
+              "around 3",
+              "nearly 3",
+              "almost 3",
+              "10.4",
+              "about ten",
+              "about 10",
+              "roughly ten",
+              "roughly 10",
+              "around ten",
+              "around 10",
+              "ten or eleven",
+              "10 or 11",
+              "ten and a half",
+              "just over ten",
+              "ten weeks",
+              "10 weeks",
+              "13",
+              "thirteen"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "REC-REF-RESUME-VASKIRK#F16",
+            "text": "Her resume lists an on-call rotation of one week in four at Halcyard."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Floats the hiring manager's unapproved idea of taking the lead off the pager rotation.",
+            "kind": "unauthorized_promise",
+            "fact": "REC-REF-HM-NOTES#F6",
+            "answer_needles": [
+              "off the pager",
+              "off the rota",
+              "off the rotation",
+              "escalation point",
+              "escalation only",
+              "off-call"
+            ]
+          },
+          {
+            "text": "Subtracts the rotation lengths instead of the weeks (one week fewer).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "one week fewer",
+              "one fewer week",
+              "1 week fewer",
+              "1 fewer",
+              "one week less",
+              "a week fewer",
+              "a week less",
+              "just one week"
+            ]
+          },
+          {
+            "text": "Does not recognise that the question compares with the rotation just described.",
+            "kind": "over_deferral"
+          },
+          {
+            "text": "Role inversion: treats the user as the job-seeker (coaches how to answer, or replies with an interview probe aimed at the recruiter) instead of answering the candidate as the recruiter.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "recruiter speaking to the candidate, first person, on behalf of Kestrelwick",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "REC-REF-JD-2026",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "REC-REF-JD-2026",
+          "CONVERSATION",
+          "REC-REF-HM-NOTES"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Whether the lead carries the pager",
+            "sources": [
+              "REC-REF-JD-2026",
+              "REC-REF-HM-NOTES"
+            ],
+            "resolution": "authoritative_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Rounding to about three weeks fewer.",
+          "Saying about ten weeks a year against thirteen."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "52 / 4 - 52 / 5",
+          "result": 2.6,
+          "unit": "fewer on-call weeks per year (13 now, about 10.4 at one week in five)",
+          "accepted_forms": [
+            "2.6",
+            "two and a half",
+            "2.5",
+            "two or three",
+            "2 or 3",
+            "two to three",
+            "2 to 3",
+            "two and three",
+            "about three",
+            "roughly three",
+            "around three",
+            "nearly three",
+            "almost three",
+            "close to three",
+            "just under three",
+            "about 3",
+            "roughly 3",
+            "around 3",
+            "nearly 3",
+            "almost 3",
+            "10.4",
+            "about ten",
+            "about 10",
+            "roughly ten",
+            "roughly 10",
+            "around ten",
+            "around 10",
+            "ten or eleven",
+            "10 or 11",
+            "ten and a half",
+            "just over ten",
+            "ten weeks",
+            "10 weeks"
+          ],
+          "inputs": {
+            "her_rotation": "CONVERSATION (one week in four)",
+            "kestrelwick_rotation": "REC-REF-JD-2026#F8"
+          },
+          "wrong_results_common": [
+            "one week fewer",
+            "one fewer week",
+            "1 week fewer",
+            "1 fewer",
+            "one week less",
+            "a week fewer",
+            "a week less",
+            "just one week"
+          ]
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    }
+  ]
+}

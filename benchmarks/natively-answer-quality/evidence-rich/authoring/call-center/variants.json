@@ -1,0 +1,74 @@
+[
+  {
+    "id": "CC-REF-REFUND-2026~window90",
+    "base": "CC-REF-REFUND-2026",
+    "replace": [
+      {
+        "find": "within 30 days of the charge date",
+        "with": "within 90 days of the charge date"
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F3",
+        "statement": "An annual plan charge (first purchase or renewal) is refunded in full if the customer asks within 90 days of the charge date.",
+        "doc_needles": [
+          "within 90 days of the charge"
+        ]
+      }
+    ],
+    "note": "Annual-plan refund window widened from 30 to 90 days; nothing else changes."
+  },
+  {
+    "id": "CC-REF-REFUND-2026~dormant",
+    "base": "CC-REF-REFUND-2026",
+    "replace": [
+      {
+        "find": "- A billing error on our side that Billing Operations has documented.",
+        "with": "- A billing error on our side that Billing Operations has documented.\n- Dormant account: nobody has signed in and no camera on the account has been online at any time since an annual renewal charge, and the customer asks within 120 days of that charge. That renewal is refunded in full."
+      },
+      {
+        "find": "Forgetting to cancel, not using the service, moving home or switching to another brand are not exceptions.",
+        "with": "Forgetting to cancel, moving home or switching to another brand are not exceptions."
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F27",
+        "statement": "Dormant-account exception: if nobody has signed in and no camera on the account has been online at any time since an annual renewal charge, and the customer asks within 120 days of that charge, that renewal is refunded in full; like every exception it needs a supervisor's approval.",
+        "doc_needles": [
+          "Dormant account",
+          "within 120 days of that charge"
+        ]
+      },
+      {
+        "fact": "F18",
+        "statement": "Forgetting to cancel, moving home or switching brand are not exceptions (not using the service is no longer on that list).",
+        "doc_needles": [
+          "Forgetting to cancel, moving home"
+        ]
+      }
+    ],
+    "note": "Adds a supervisor-approved dormant-account exception and removes 'not using the service' from the list of non-exceptions; the 30-day window is unchanged."
+  },
+  {
+    "id": "CC-REF-VERIFICATION-2026~helperreset",
+    "base": "CC-REF-VERIFICATION-2026",
+    "replace": [
+      {
+        "find": "An accommodation changes how we communicate, never where credentials go. Reset links, one-time codes and security notices are sent only to the contact details on file, including during an assisted call, and never to a helper's e-mail address or phone.",
+        "with": "One-time codes and security notices are sent only to the contact details on file. A password reset link is the one exception: on an assisted call where the account holder is present, has passed verification and has consented, the agent may send a single reset link to the helper's e-mail address, and records that address on the ticket."
+      }
+    ],
+    "facts_changed": [
+      {
+        "fact": "F22",
+        "statement": "One-time codes and security notices go only to the contact details on file, but on an assisted call where the account holder is present, has passed verification and has consented, the agent may send a single password reset link to the helper's e-mail address and records that address on the ticket.",
+        "doc_needles": [
+          "single reset link to the helper's"
+        ]
+      }
+    ],
+    "note": "The accommodation now allows one reset link to the helper's e-mail on a consented, verified assisted call."
+  }
+]

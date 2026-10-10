@@ -1,0 +1,35 @@
+date,item,category,amount_usd,paid_by,split,status,due_date,recurring,notes
+2026-10-01,Joint checking opening balance,balance,4310.00,,,as of 1 Oct,,,balance after the mortgage went out
+2026-10-01,Kitchen fund (savings),balance,9300.00,,,as of 1 Oct,,,for the Halvering & Stroud job only - do not dip into it for anything else
+2026-10-01,Trip fund (savings),balance,900.00,,,as of 1 Oct,,,what is left after the September bookings for Marrowby
+2026-10-01,Home improvement loan - Corvane Credit Union,loan,28000.00,,,approved,,,money can be drawn from 2026-10-26 and the first repayment is 412.00 on 2026-12-01
+2026-10-01,Perry rent,income,750.00,Perry,,received,2026-10-01,monthly,into joint checking
+2026-10-15,Ottilie pay,income,3480.00,,,expected,2026-10-15,monthly,
+2026-10-30,Jorrit pay,income,3120.00,,,expected,2026-10-30,monthly,
+2026-10-01,Mortgage,housing,1865.00,joint,O/J,paid,2026-10-01,monthly,
+2026-10-05,HOA dues - Fennimore Row,housing,285.00,joint,O/J,scheduled,2026-10-05,monthly,autopay from joint checking
+2026-10-02,Electricity (September usage),utilities,131.40,Jorrit,thirds O/J/Perry,paid,2026-10-02,monthly,Perry share still to settle
+2026-10-02,Gas (September usage),utilities,48.60,Ottilie,thirds O/J/Perry,paid,2026-10-02,monthly,Perry share still to settle
+2026-10-01,Internet,utilities,78.00,Ottilie,thirds O/J/Perry,paid,2026-10-01,monthly,Perry share still to settle
+2026-10-12,Water and sewer,utilities,64.25,joint,O/J,upcoming,2026-10-12,monthly,not split with Perry
+2026-10-08,Car insurance - Brackwater Mutual,car,118.00,joint,O/J,scheduled,2026-10-08,monthly,autopay
+2026-10-20,Home insurance annual premium - Brackwater Mutual,housing,1284.00,joint,O/J,upcoming,2026-10-20,yearly,renewal of policy HB-66201 - pay from joint checking
+2026-10-18,Phone plan (2 lines),utilities,92.00,Jorrit,halves O/J,upcoming,2026-10-18,monthly,Ottilie reimburses 46.00 once it has gone out
+2026-10-06,Lumenreel streaming,subscriptions,15.99,Ottilie,O/J,scheduled,2026-10-06,monthly,
+2026-10-11,Tunewarren music family plan,subscriptions,16.99,Jorrit,O/J,scheduled,2026-10-11,monthly,
+2026-10-03,Gym membership,personal,42.00,Ottilie,none,paid,2026-10-03,monthly,
+2026-10-25,Student loan,personal,240.00,Jorrit,none,upcoming,2026-10-25,monthly,
+2026-10-01,Groceries envelope,food,720.00,joint,O/J,in progress,,monthly,96.35 spent by 3 Oct
+2026-10-01,Household kitty for cleaning supplies,household,60.00,all three,20 each O/J/Perry,part paid,2026-10-01,monthly,Jorrit still to put his 20 in
+2026-10-06,Car service (brakes),car,350.00,Jorrit,O/J,guess,2026-10-06,,Jorrit's guess before the shop had looked at the car - replace with the real figure
+2026-10-09,Kitchen deposit - Halvering & Stroud,renovation,,joint,O/J,planned,2026-10-09,,amount as per the quote we accept - pay from the kitchen fund
+2026-11-01,Kitchen payment on cabinet delivery,renovation,,joint,O/J,planned,,,expected some time in November - to come mostly from the loan
+2026-10-22,Marrowby trip remaining costs,travel,,joint,O/J,planned,2026-10-22,,hotel balance and the rest are in the trip plan - pay from the trip fund
+2026-09-18,Plumber - Grindlewood Plumbing (upstairs tap),repairs,140.00,Perry,O/J,owed to Perry,,,carried over from September - set against his share of the utilities
+2026-10-10,Perry utilities share,reimbursement,,Perry,,to settle,2026-10-10,monthly,one third of electricity gas and internet
+2026-10-14,Vet - annual check for Biscuit,pets,85.00,Ottilie,O/J,upcoming,2026-10-14,yearly,
+2026-10-17,Birthday present for Jorrit's mother,gifts,60.00,Jorrit,O/J,upcoming,2026-10-17,,
+2026-10-31,Car registration renewal,car,96.00,joint,O/J,upcoming,2026-10-31,yearly,
+2026-11-04,Chimney sweep,housing,165.00,joint,O/J,booked,2026-11-04,yearly,November - listed here so it is not forgotten
+2026-11-15,Property tax installment,housing,1430.00,joint,O/J,upcoming,2026-11-15,twice a year,November - not an October cost
+2026-12-01,Loan repayment - Corvane Credit Union,loan,412.00,joint,O/J,upcoming,2026-12-01,monthly,starts in December

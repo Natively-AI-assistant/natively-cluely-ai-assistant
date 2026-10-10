@@ -1,0 +1,671 @@
+{
+ "mode": "general",
+ "items": [
+  {
+   "id": "ER-CV1-GEN-001",
+   "mode": "general",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Of course. That comes to a hundred and forty-six altogether. Is it card or cash tonight?",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "I hope everything was all right for you both this evening."
+    },
+    {
+     "speaker": "user",
+     "text": "It was lovely, thank you. Could we have the bill?"
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "general-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "arithmetic",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The bill is said aloud ($146); the trip plan says Saltmarrow Table took a deposit of $40 per person when the table for two was booked, $80, and that it comes off the bill. So there is $66 left to pay. The reply reminds the waiter of the deposit and gives the $66. Taking off only one $40 is the mistake.",
+    "required_facts": [
+     {
+      "fact": "GEN-REF-TRIP-PLAN#F19",
+      "text": "A deposit of $40 per person, $80 for the two of them, was paid at booking and comes off the bill.",
+      "answer_needles": [
+       "80",
+       "eighty"
+      ]
+     },
+     {
+      "fact": "CONVERSATION",
+      "text": "With the deposit off the $146 bill, $66 is left to pay.",
+      "answer_needles": [
+       "66",
+       "sixty-six"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "GEN-REF-TRIP-PLAN#F18",
+      "text": "The table is under Aldemere, reference SM-3306."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Takes off only one person's $40.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "106"
+      ]
+     },
+     {
+      "text": "Agrees to pay the full amount with no mention of the deposit.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Says the deposit was lost or is refunded separately.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "the user speaking aloud to the waiter at the restaurant, first person, as an ordinary person with no specialised role",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "GEN-REF-TRIP-PLAN",
+     "CONVERSATION"
+    ],
+    "source_priority": [
+     "GEN-REF-TRIP-PLAN",
+     "CONVERSATION"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Choosing card or cash either way.",
+     "Giving the booking reference if the waiter cannot see the deposit."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "146 - 2 * 40",
+     "result": 66,
+     "unit": "USD",
+     "accepted_forms": [
+      "66",
+      "$66",
+      "sixty-six"
+     ],
+     "inputs": {
+      "2": "GEN-REF-TRIP-PLAN#F18",
+      "40": "GEN-REF-TRIP-PLAN#F19",
+      "146": "CONVERSATION"
+     },
+     "wrong_results_common": [
+      "106",
+      "226",
+      "186"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-CV1-GEN-002",
+   "mode": "general",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "roughly what date should we have a working sink again, going by what dunmore told us",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "general-full",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "date_arithmetic",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Two sources. Dunmore's e-mail says that from demolition day there is no sink for about 3 weeks, until the countertops are in and the plumber has been back. The current quote starts on site on Monday 9 November 2026. Three weeks on is Monday 30 November 2026, so around the end of November. The June quote's 14 September start is replaced (it would give 5 October), and 15 December is the target for the whole job, not for the sink.",
+    "required_facts": [
+     {
+      "fact": "GEN-REF-CONTRACTOR-EMAILS#F4",
+      "text": "About three weeks after the Monday 9 November start: around Monday 30 November 2026.",
+      "answer_needles": [
+       "30 November",
+       "November 30",
+       "30th of November",
+       "30th November",
+       "November the 30th",
+       "November 30th",
+       "Nov 30",
+       "30 Nov",
+       "Nov. 30",
+       "30th of Nov",
+       "30th Nov",
+       "Nov 30th",
+       "end of November",
+       "last day of November",
+       "Monday the 30th",
+       "Monday 30th",
+       "around the 30th",
+       "about the 30th",
+       "by the 30th"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F22",
+      "text": "Work starts on site on Monday 9 November 2026."
+     },
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F24",
+      "text": "There is no work on 26 and 27 November, which could push it a day or two."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Counts from the June quote's 14 September start.",
+      "kind": "stale",
+      "fact": "GEN-REF-RENO-QUOTE-REVA#F8",
+      "answer_needles": [
+       "5 October",
+       "October 5",
+       "5th of October",
+       "5th October",
+       "October the 5th",
+       "October 5th",
+       "Oct 5",
+       "5 Oct",
+       "Oct. 5",
+       "5th of Oct",
+       "5th Oct",
+       "Oct 5th"
+      ]
+     },
+     {
+      "text": "Counts three weeks from the 9 October acceptance deadline.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "30 October",
+       "October 30",
+       "30th of October",
+       "30th October",
+       "October the 30th",
+       "October 30th",
+       "Oct 30",
+       "30 Oct",
+       "Oct. 30",
+       "30th of Oct",
+       "30th Oct",
+       "Oct 30th"
+      ]
+     },
+     {
+      "text": "Gives the 15 December target completion as the day the sink is back.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "GEN-REF-CONTRACTOR-EMAILS",
+     "GEN-REF-RENO-QUOTE-REVC"
+    ],
+    "source_priority": [
+     "GEN-REF-RENO-QUOTE-REVC",
+     "GEN-REF-CONTRACTOR-EMAILS",
+     "GEN-REF-RENO-QUOTE-REVA"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying it is an estimate that depends on the countertops going in on time."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "date(2026, 11, 9) + days(21)",
+     "result": "2026-11-30",
+     "unit": "date",
+     "accepted_forms": [
+      "30 November",
+      "November 30",
+      "30th of November",
+      "30th November",
+      "November the 30th",
+      "November 30th",
+      "Nov 30",
+      "30 Nov",
+      "Nov. 30",
+      "30th of Nov",
+      "30th Nov",
+      "Nov 30th",
+      "end of November",
+      "last day of November",
+      "Monday the 30th",
+      "Monday 30th",
+      "around the 30th",
+      "about the 30th",
+      "by the 30th"
+     ],
+     "inputs": {
+      "date(2026, 11, 9)": "GEN-REF-RENO-QUOTE-REVC#F22",
+      "days(21)": "GEN-REF-CONTRACTOR-EMAILS#F4"
+     },
+     "wrong_results_common": [
+      "5 October",
+      "October 5",
+      "5th of October",
+      "5th October",
+      "October the 5th",
+      "October 5th",
+      "Oct 5",
+      "5 Oct",
+      "Oct. 5",
+      "5th of Oct",
+      "5th Oct",
+      "Oct 5th",
+      "30 October",
+      "October 30",
+      "30th of October",
+      "30th October",
+      "October the 30th",
+      "October 30th",
+      "Oct 30",
+      "30 Oct",
+      "Oct. 30",
+      "30th of Oct",
+      "30th Oct",
+      "Oct 30th"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-CV1-GEN-003",
+   "mode": "general",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "of the bills we split three ways with perry, which ones went out of my pocket this month and what do they add up to",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "general-full",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "arithmetic",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The budget splits three bills in thirds with Perry and says who paid each. Ottilie (the user) paid the gas, $48.60, and the internet, $78.00: $126.60. The electricity, $131.40, was paid by Jorrit and does not belong in her total. The phone plan is split in halves with Jorrit, not with Perry.",
+    "required_facts": [
+     {
+      "fact": "GEN-REF-BUDGET-OCT#F8",
+      "text": "She paid the gas ($48.60) and the internet ($78.00), $126.60 together.",
+      "answer_needles": [
+       "126.60",
+       "126.6"
+      ]
+     },
+     {
+      "fact": "GEN-REF-BUDGET-OCT#F9",
+      "text": "The internet was $78.00, paid by her.",
+      "answer_needles": [
+       "78"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "GEN-REF-BUDGET-OCT#F7",
+      "text": "The electricity, $131.40, was paid by Jorrit."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Counts the electricity, which Jorrit paid, in her total.",
+      "kind": "fabrication",
+      "fact": "GEN-REF-BUDGET-OCT#F7",
+      "answer_needles": [
+       "258.00",
+       "$258",
+       "209.40",
+       "180.00"
+      ]
+     },
+     {
+      "text": "Counts the phone plan, which is not split with Perry and was paid by Jorrit.",
+      "kind": "fabrication",
+      "fact": "GEN-REF-BUDGET-OCT#F12",
+      "answer_needles": [
+       "218.60",
+       "172.60"
+      ]
+     }
+    ],
+    "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+    "expected_action": "answer_with_calculation",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "GEN-REF-BUDGET-OCT"
+    ],
+    "source_priority": [
+     "GEN-REF-BUDGET-OCT"
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Adding that Perry's third of those two bills is $42.20."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "48.60 + 78.00",
+     "result": 126.6,
+     "unit": "USD",
+     "accepted_forms": [
+      "126.60",
+      "$126.60",
+      "126.6"
+     ],
+     "inputs": {
+      "48.60": "GEN-REF-BUDGET-OCT#F8",
+      "78.00": "GEN-REF-BUDGET-OCT#F9"
+     },
+     "wrong_results_common": [
+      "258.00",
+      "$258",
+      "209.40",
+      "180.00",
+      "218.60",
+      "172.60"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-CV1-GEN-004",
+   "mode": "general",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "what are halvering charging for ripping the old kitchen out plus the permits, the two together",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "general-full",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "outdated_vs_current",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "Both lines differ between the two versions of the quote. In Revision C (22 September 2026, current) demolition and site protection is $1,900 and permit and inspection fees are $650: $2,550. Revision A (June) had $1,700 and $600, $2,300, and is replaced. Mixing one line from each version gives $2,500 or $2,350.",
+    "required_facts": [
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F3",
+      "text": "Demolition $1,900 plus permits $650 is $2,550 in the current quote.",
+      "answer_needles": [
+       "2,550",
+       "2550",
+       "twenty-five fifty",
+       "two thousand five hundred and fifty",
+       "2.55k"
+      ]
+     }
+    ],
+    "optional_facts": [
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F12",
+      "text": "Permit and inspection fees are $650."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives the June quote's figures.",
+      "kind": "stale",
+      "fact": "GEN-REF-RENO-QUOTE-REVA#F12",
+      "answer_needles": [
+       "2,300",
+       "2300",
+       "1,700",
+       "1700"
+      ]
+     },
+     {
+      "text": "Mixes one line from each version.",
+      "kind": "stale",
+      "fact": "GEN-REF-RENO-QUOTE-REVA#F18",
+      "answer_needles": [
+       "2,500",
+       "2,350"
+      ]
+     }
+    ],
+    "expected_role": "Natively answering the user privately in text; the user is an ordinary person running their own household",
+    "expected_action": "prefer_current_source",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "GEN-REF-RENO-QUOTE-REVC"
+    ],
+    "source_priority": [
+     "GEN-REF-RENO-QUOTE-REVC",
+     "GEN-REF-RENO-QUOTE-REVA"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "demolition price and permit fees",
+      "sources": [
+       "GEN-REF-RENO-QUOTE-REVC",
+       "GEN-REF-RENO-QUOTE-REVA"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "1900 + 650",
+     "result": 2550,
+     "unit": "USD",
+     "accepted_forms": [
+      "2,550",
+      "2550",
+      "$2,550",
+      "twenty-five fifty",
+      "two thousand five hundred and fifty"
+     ],
+     "inputs": {
+      "650": "GEN-REF-RENO-QUOTE-REVC#F12",
+      "1900": "GEN-REF-RENO-QUOTE-REVC#F3"
+     },
+     "wrong_results_common": [
+      "2,300",
+      "2300",
+      "2,500",
+      "2,350"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-CV1-GEN-005",
+   "mode": "general",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Not bad. What rate did they give you on it?",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "So you went with the credit union for the kitchen money in the end?"
+    },
+    {
+     "speaker": "user",
+     "text": "We did, Corvane. Twenty-eight thousand."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "general-full",
+   "pi_state": "none",
+   "condition": "missing_evidence",
+   "category": "missing_fact",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The budget sheet has the loan's amount ($28,000, approved), the date the money can be drawn (26 October) and the first repayment ($412 on 1 December). It gives no interest rate and no term, and nothing else loaded does. The right reply says she does not have the rate to hand and can say what she does know, the repayment. The pack is full of other percentages (card fee, lodging tax, change-order markup, reserve); none of them is a loan rate.",
+    "required_facts": [],
+    "optional_facts": [
+     {
+      "fact": "GEN-REF-BUDGET-OCT#F4",
+      "text": "The loan is $28,000, drawable from 26 October, with a first repayment of $412 on 1 December."
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "States an interest rate.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "%",
+       "per cent"
+      ]
+     },
+     {
+      "text": "States the length of the loan as a fact.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "-year",
+       "year term",
+       "years to pay"
+      ]
+     }
+    ],
+    "expected_role": "the user speaking aloud to a friend, first person, as an ordinary person with no specialised role",
+    "expected_action": "decline_to_invent_stay_useful",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [],
+    "source_priority": [],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying she would have to look at the loan paperwork.",
+     "Mentioning that the repayments start at $412 in December."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  },
+  {
+   "id": "ER-CV1-GEN-006",
+   "mode": "general",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Five three for the worktops? I've got four nine written down from somewhere.",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "Read me the two big lines again, the cabinets and the worktops."
+    },
+    {
+     "speaker": "user",
+     "text": "Cabinets are fourteen thousand six hundred and the worktops are five thousand three hundred."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "general-full",
+   "pi_state": "none",
+   "condition": "followup",
+   "category": "outdated_vs_current",
+   "difficulty": "hard",
+   "oracle": {
+    "expected_behavior_note": "The earlier turn gave the current figures. Jorrit's four nine is the countertop price in the June quote, Revision A: $4,900 for 2 cm quartz. Revision C of 22 September replaced it with 3 cm quartz at $5,300. The right reply stands by $5,300 and says where his number comes from. Giving way and agreeing to $4,900 is the failure.",
+    "required_facts": [
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVC#F6",
+      "text": "The countertops are $5,300 in the current quote, Revision C, for 3 cm quartz.",
+      "answer_needles": [
+       "5,300",
+       "5300",
+       "five three",
+       "five thousand three hundred",
+       "fifty-three hundred",
+       "5.3"
+      ]
+     },
+     {
+      "fact": "GEN-REF-RENO-QUOTE-REVA#F16",
+      "text": "His figure is from the June quote, Revision A, which priced 2 cm quartz.",
+      "answer_needles": [
+       "june",
+       "revision a",
+       "rev a",
+       "rev. a",
+       "old quote",
+       "older quote",
+       "earlier quote",
+       "first quote",
+       "original quote",
+       "previous quote",
+       "old version",
+       "older version",
+       "earlier version",
+       "first version",
+       "old one",
+       "earlier one",
+       "first one",
+       "2 cm",
+       "2cm",
+       "two centimet",
+       "thinner"
+      ]
+     }
+    ],
+    "optional_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Agrees that the countertops are $4,900 now.",
+      "kind": "stale",
+      "fact": "GEN-REF-RENO-QUOTE-REVA#F16"
+     },
+     {
+      "text": "Says it cannot tell which figure is right.",
+      "kind": "over_deferral"
+     },
+     {
+      "text": "Invents a reason for the change that is not in the quotes (a supplier price rise, a discount that lapsed).",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_role": "the user speaking aloud to their partner, Jorrit, first person, as an ordinary person with no specialised role",
+    "expected_action": "prefer_current_source",
+    "expected_response_type": "spoken_reply",
+    "source_ids": [
+     "GEN-REF-RENO-QUOTE-REVC",
+     "GEN-REF-RENO-QUOTE-REVA",
+     "CONVERSATION"
+    ],
+    "source_priority": [
+     "GEN-REF-RENO-QUOTE-REVC",
+     "GEN-REF-RENO-QUOTE-REVA"
+    ],
+    "known_conflicts": [
+     {
+      "topic": "countertop price and thickness",
+      "sources": [
+       "GEN-REF-RENO-QUOTE-REVC",
+       "GEN-REF-RENO-QUOTE-REVA"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Saying the difference is the thicker quartz."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null
+   }
+  }
+ ]
+}

@@ -1,0 +1,35 @@
+Brindlewatch Fit Service Areas,October 2026 issue,Issued 1 October 2026 by the Fit Programme desk,Supersedes the September 2026 issue,,,,,,,,,
+area_id,area,ring,partner,depot,status,live_since,appointment_days,earliest_slot_days,travel_fee_usd,radius_miles,high_mount,notes
+FA-01,Harrowmere,core,Thornapple Home Services,Harrowmere,Live,2025-11-24,Mon-Sat,3,0,25,yes,Original pilot area. Saturday slots are taken first; offer a weekday where the customer is flexible.
+FA-02,Dunmere Heights,core,Thornapple Home Services,Dunmere Heights,Live,2025-11-24,Mon-Sat,4,0,25,yes,Original pilot area. Steep drives: the van parks on the road and the customer should expect equipment to be carried up.
+FA-03,Northcaster,core,Thornapple Home Services,Northcaster,Live,2026-04-01,Mon-Fri,3,0,30,yes,Largest crew outside the pilot areas.
+FA-04,Osterbrook,outer,Thornapple Home Services,Northcaster,Live,2026-06-09,Tue-Sat,6,20,40,yes,Served from the Northcaster depot. Morning window is rarely free; offer the two later windows first.
+FA-05,Pellham Sound,outer,Kestrel & Vane Installations,Vantry,Planned,,,,,,,Partner contract signed. Do not take bookings.
+FA-06,Quillfeather,core,Kestrel & Vane Installations,Quillfeather,Live,2026-04-13,Mon-Fri,5,0,25,no,No ladder crew in this area: a high mount cannot be booked here.
+FA-07,Vantry,core,Kestrel & Vane Installations,Vantry,Live,2026-04-13,Mon-Sat,2,0,30,yes,Kestrel & Vane head depot. Also holds the spare ladder crew that covers Sablecrest on request.
+FA-08,Cinder Bluff,outer,Kestrel & Vane Installations,Vantry,Live,2026-07-08,Wed-Sat,8,30,45,no,Unsurfaced roads beyond the ridge; the partner may telephone the customer for directions.
+FA-09,Wrenfield,core,Thornapple Home Services,Wrenfield,Live,2026-05-04,Mon-Fri,4,0,25,yes,Friday slots close at noon on the Wednesday before.
+FA-10,Saltmarsh Landing,outer,Thornapple Home Services,Wrenfield,Live,2026-08-18,Tue-Fri,7,35,50,yes,Reached by the causeway; visits are not booked into the 8 am window.
+FA-11,Thistledown,core,Thornapple Home Services,Thistledown,Live,2026-05-04,Mon-Sat,3,0,30,yes,
+FA-12,Brackwater,outer,Kestrel & Vane Installations,Quillfeather,Paused,2026-06-22,,,25,40,,Paused while the partner is short of crew. Visits already booked go ahead; take no new bookings until the status returns to Live.
+FA-13,Elmhollow,core,Kestrel & Vane Installations,Elmhollow,Live,2026-07-20,Mon-Fri,4,0,25,yes,
+FA-14,Greyling Ford,outer,Kestrel & Vane Installations,Elmhollow,Live,2026-09-22,Tue-Sat,9,25,45,no,Newest live area; one crew. Tell the customer the first date the calendar shows and nothing earlier.
+FA-15,Halvergate,core,Thornapple Home Services,Halvergate,Live,2026-04-01,Mon-Sat,2,0,30,yes,Two crews; usually the shortest wait of any area.
+FA-16,Ironwick,core,Thornapple Home Services,Ironwick,Live,2026-06-08,Mon-Fri,5,0,25,yes,Many flats: ask whether the building allows fixings on outside walls before booking an Eave Cam.
+FA-17,Lowmoor,outer,Thornapple Home Services,Ironwick,Live,2026-08-03,Mon-Fri,6,40,55,yes,Longest drive of any live area.
+FA-18,Sablecrest,core,Kestrel & Vane Installations,Sablecrest,Live,2026-07-20,Mon-Sat,3,0,30,yes,
+FA-19,Yarrowby,outer,Kestrel & Vane Installations,Sablecrest,Live,2026-09-10,Thu-Sat,10,30,45,no,Crew shared with Sablecrest; a short working week.
+FA-20,Fennick Bay,outer,Thornapple Home Services,Halvergate,Planned,,,,,,,Target opening January 2027; not announced to customers.
+FA-21,Marrow Creek,core,Thornapple Home Services,Marrow Creek,Live,2026-05-18,Mon-Fri,4,0,25,yes,
+FA-22,Tolliver Falls,core,Thornapple Home Services,Tolliver Falls,Live,2026-04-01,Mon-Sat,2,0,30,yes,
+FA-23,Cobbleshaw,core,Kestrel & Vane Installations,Cobbleshaw,Live,2026-08-03,Mon-Fri,5,0,25,yes,Depot shares a yard with a builders' merchant; crews start at 8 am sharp.
+FA-24,Harth Crossing,outer,Kestrel & Vane Installations,Cobbleshaw,Live,2026-09-08,Tue-Fri,8,35,50,no,Level crossing closures can delay the crew; the arrival window still applies.
+FA-25,Pennywhistle Quay,core,Thornapple Home Services,Pennywhistle Quay,Live,2026-07-06,Mon-Sat,3,0,25,yes,Harbour-side terraces: no vehicle access after 10 am on market days so the partner prefers the first window.
+FA-26,Oldacre,outer,Thornapple Home Services,Marrow Creek,Planned,,,,,,,Crew recruitment under way.
+KEY,ring,core = no travel fee. outer = the travel fee in travel_fee_usd is added once for the visit however many cameras are fitted.,,,,,,,,,,
+KEY,status,Live = bookable. Paused = no new bookings for now. Planned = not open; no bookings and no visits.,,,,,,,,,,
+KEY,live_since,The day the first visits were carried out in the area (year-month-day).,,,,,,,,,,
+KEY,appointment_days,The days of the week on which the partner works in the area.,,,,,,,,,,
+KEY,earliest_slot_days,Calendar days between the day of booking and the first day the calendar can offer.,,,,,,,,,,
+KEY,radius_miles,Distance from the depot inside which an address belongs to the area. An address outside every radius cannot be booked.,,,,,,,,,,
+KEY,high_mount,yes = the area has a ladder crew and a camera can be fixed above the height given in the Installation Service Guide.,,,,,,,,,,

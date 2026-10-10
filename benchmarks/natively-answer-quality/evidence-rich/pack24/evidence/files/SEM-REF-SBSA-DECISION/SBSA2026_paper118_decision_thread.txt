@@ -1,0 +1,120 @@
+SBSA 2026: decision on paper 118, reviews and follow-up
+Saved from the laboratory mailbox. Four messages, oldest first.
+
+======================================================================
+From: SBSA 2026 Programme Chairs <programme@sbsa-symposium.example>
+To: Maelis Thornquist
+Cc: Juho Raskinen; Odalys Brennecke
+Date: Friday 17 July 2026, 16:40
+Subject: SBSA 2026 decision: paper 118
+
+Dear Dr Thornquist,
+
+We are pleased to tell you that paper 118, "TERN: Calibrated Fault Detection for School Air-Handling Units" (Thornquist, Raskinen and Brennecke), has been ACCEPTED for the proceedings and selected for ORAL presentation.
+
+HOW THE DECISION WAS REACHED
+The symposium received 152 full papers by the deadline. Each was read by three members of the programme committee. Reviews were completed on 3 July, the committee met on 8 July, and all corresponding authors are being notified today. SBSA has no rebuttal stage. Accepted papers that were not selected for oral presentation are presented as posters; their authors are being written to separately.
+
+SCORES FOR PAPER 118
+Each reviewer scores four criteria from 1 (poor) to 5 (excellent).
+
+  Reviewer   Relevance   Technical quality   Clarity   Overall
+  R1         5           4                   3         4
+  R2         4           4                   4         4
+  R3         5           3                   4         4
+
+SUMMARY BY THE AREA CHAIR
+All three reviewers recommend acceptance. They agree that the paper addresses a problem the symposium's audience meets every working day and that the evaluation is careful. The requests below concern presentation. Only the two marked REQUIRED are conditions of acceptance; the others are left to your judgement.
+
+REVIEWER 1
+(a) REQUIRED. The axis labels and the legend of Figure 3 cannot be read at print size. Please redraw the figure.
+(b) Several abbreviations are used before they are defined. Please define each at first use.
+(c) The symbols for the residuals are not the same in the method section and in the section on isolation. One notation throughout would help.
+
+REVIEWER 2
+(a) The introduction is long for a paper of this length. I would shorten it by half a page and give the space to the experiments.
+(b) A small table of notation would save the reader some page-turning.
+(c) A list of typographical errors is attached to this review in the submission system.
+
+REVIEWER 3
+(a) REQUIRED. The header of Table 1 must state the unit of the delay column.
+(b) The background section overlooks two earlier SBSA papers on rule-based diagnostics. References are given in the submission system.
+(c) The results by fault class are in the supplement only. One sentence in the main text pointing to them would be enough.
+
+FINAL VERSION
+- Due Monday 21 September 2026, 23:59 UTC, through the submission system. There are no extensions.
+- Length: 8 pages including figures and tables, plus up to one further page for references and acknowledgements.
+- Supplementary material: one PDF, not typeset by us, published alongside the paper.
+- Use the SBSA 2026 two-column template without changing margins or type size.
+- A copyright form signed by one author must be uploaded with the final version.
+
+REGISTRATION
+At least one author of each accepted paper must register at the full rate by Friday 2 October 2026. A paper without a full-rate author registration by that date is withdrawn from the proceedings.
+
+  Full rate                         £395
+  Student rate                      £210   (does not meet the author requirement)
+  Late rate, after 2 October        £460
+
+PRESENTATION
+The symposium takes place from 17 to 19 November 2026 at the Vennholm Conference Centre, Caldmouth. Paper 118 is in Session 5B, "Fault detection in practice", on Thursday 19 November 2026, 11:10 to 12:40. The session chair is Professor Ilmari Castellow.
+
+The length of each talk and the running order within a session have not been fixed. They will be in the final programme, which we expect to publish by the end of October. Please do not plan your talk around the length used in earlier years.
+
+Slides should be in 16:9 format. Presenters load their slides in the session room during the break before their session.
+
+With congratulations,
+Dr Sunniva Ackerley and Professor Teodoro Vance-Whitlow
+Programme Chairs, SBSA 2026
+
+======================================================================
+From: Maelis Thornquist
+To: SBSA 2026 Programme Chairs
+Date: Monday 20 July 2026, 09:20
+Subject: Re: SBSA 2026 decision: paper 118
+
+Dear Dr Ackerley, dear Professor Vance-Whitlow,
+
+Thank you, this is very welcome news. I confirm that I will present the paper myself and that we will meet both required changes.
+
+Two things, if I may. First, one of my co-authors is a doctoral student and may come for the Thursday only. Can he attend our session on a student registration, provided I hold the full-rate one? Second, is a poster board available to oral presenters who would like to stay by their work during the lunch break?
+
+Best wishes,
+Maelis Thornquist
+Halvard Laboratory for Building Analytics, Kestrelmoor Institute of Technology
+
+======================================================================
+From: Maelis Thornquist
+To: Juho Raskinen; Odalys Brennecke
+Date: Monday 20 July 2026, 10:05
+Subject: Fwd: SBSA 2026 decision: paper 118 -- who does what
+
+Both,
+
+We are in, and as a talk. Reviews are kind; nothing in them touches the substance. Here is how I suggest we split the changes.
+
+- Juho: redraw Figure 3 with readable axes and legend (R1a, required). By Friday 4 September, please.
+- Odalys: take half a page out of the introduction (R2a) and decide whether a notation table earns its space (R2b). By Tuesday 8 September.
+- Me: unit in the header of Table 1 (R3a, required), abbreviations (R1b), one notation for the residuals (R1c), the two SBSA references (R3b), the pointer to the per-class results (R3c), and R2's typo list.
+
+Please make every edit in the shared camera-ready folder and not in the submitted version, so that we have one copy to check against the reviews at the end.
+
+I do not want to upload on the night of the deadline. My aim is to send the final version at least a week early.
+
+Registration: I will register at the full rate as soon as the Trust's letter about carrying the travel line forward arrives. Juho, say by the end of August whether you are coming, and I will book you at the student rate.
+
+Maelis
+
+======================================================================
+From: SBSA 2026 Programme Chairs <programme@sbsa-symposium.example>
+To: Maelis Thornquist
+Date: Wednesday 22 July 2026, 14:10
+Subject: Re: Re: SBSA 2026 decision: paper 118
+
+Dear Dr Thornquist,
+
+Yes to the first: a co-author may attend on a student registration as long as the presenter holds a full-rate registration. The student rate covers all three days whether or not they are all attended; we do not offer a day rate.
+
+On the second, poster boards are allocated to poster papers first. If any are free on the Thursday we will let oral presenters know at the registration desk on the day. Please do not rely on one.
+
+Kind regards,
+Sunniva Ackerley

@@ -1,0 +1,63 @@
+{
+  "run_id": "er9-dev-e26",
+  "runner_version": "er-1.0.0",
+  "benchmark": "evidence-rich-v1",
+  "partition": "dev",
+  "dataset_sha256": "aca272a802a30260e8187c9cf637ebfda9ab4ab54cd69f107ad819dba63d3413",
+  "manifest_sha256": "8aa245098a930f64fc181bb8e30d6c851ef2fa93d89c3404f530b9277cf0cbf3",
+  "git_commit": "a0b3f0e0df15e6471d36814c5cb2a498fb323bef",
+  "git_branch": "cand/e26",
+  "git_dirty": false,
+  "git_dirty_paths": 0,
+  "app_version": "2.9.2",
+  "app_root": "/Users/evin/natively-cluely-ai-assistant/.claude/worktrees/er-e21",
+  "started_at": "2026-10-09T21:33:43.342Z",
+  "finished_at": "2026-10-09T21:44:44.444Z",
+  "provider_model_config": {
+    "provider": "gemini",
+    "model": "deepseek-flash",
+    "modelId": "deepseek-flash",
+    "displayName": "deepseek-flash",
+    "isOllama": false
+  },
+  "default_config_before_keys": {
+    "provider": "gemini",
+    "model": "gemini-3.1-flash-lite",
+    "modelId": "gemini-3.1-flash-lite",
+    "displayName": "gemini-3.1-flash-lite",
+    "isOllama": false
+  },
+  "pro_enabled_via_e2e_hook": {
+    "success": true,
+    "pro": true
+  },
+  "embedding": {
+    "requested": "default",
+    "status": "{\"active\":{\"configured\":true,\"provider\":\"local\",\"model\":\"Xenova/multilingual-e5-small\",\"catalogId\":\"multilingual-e5-small\",\"dimensions\":384,\"space\":\"local:xenova/multilingual-e5-small:384\",\"location\":\"on-device\",\"lightweight\":false},\"configured\":{\"mode\":\"auto\"},\"acknowledged\":false,\"scopeAllowsCloud\":true,\"shouldWarn\":false}"
+  },
+  "generator": {
+    "requested_first": "agentrouter/deepseek",
+    "used": "deepseek-direct",
+    "generator_fallback": true,
+    "fallback_reason": "direct DeepSeek for comparability: the baselines this run is compared with (er-dev-m1, er-dev-m1r) used direct DeepSeek; AgentRouter is available in this build and was not used"
+  },
+  "local_models": {
+    "embedder": true,
+    "reranker": true
+  },
+  "reference_root": null,
+  "app_log": "/Users/evin/natively-cluely-ai-assistant/.claude/worktrees/aq-fix/benchmarks/natively-answer-quality/evidence-rich/results/app-er-e21-1791581542747.log",
+  "os": "Darwin 27.0.0 arm64",
+  "node": "v25.9.0",
+  "warmup_requests": 3,
+  "request_timeout_ms": 90000,
+  "concurrency": 1,
+  "sessions": [
+    {
+      "started_at": "2026-10-09T21:33:43.343Z",
+      "resumed": false,
+      "app_log": "/Users/evin/natively-cluely-ai-assistant/.claude/worktrees/aq-fix/benchmarks/natively-answer-quality/evidence-rich/results/app-er-e21-1791581542747.log",
+      "finished_at": "2026-10-09T21:44:44.444Z"
+    }
+  ]
+}

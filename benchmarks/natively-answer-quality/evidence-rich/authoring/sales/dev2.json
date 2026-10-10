@@ -1,0 +1,3486 @@
+{
+  "mode": "sales",
+  "items": [
+    {
+      "id": "ER-D2-SALES-001",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "It's forty tractors and fifty-five trailers we'd want tracked. If we start on your entry-level plan and pay for the year, what does the subscription come to?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "quantity_arithmetic",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Launch is $29 per vehicle per month on annual billing, and trailers are unpowered assets billed at $11 per asset per month. Tractors 40 x $29 x 12 = $13,920; trailers 55 x $11 x 12 = $7,260; subscription for the year $21,180. The seller gives the total and ideally the two parts. Trailers must not be charged at the vehicle rate, and no volume discount applies at this size.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F1",
+            "text": "Launch is $29 per vehicle per month on annual billing.",
+            "answer_needles": []
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F10",
+            "text": "Trailers and other unpowered assets are billed at $11 per asset per month, not at the vehicle rate.",
+            "answer_needles": []
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F1",
+            "text": "The subscription for the year comes to $21,180.",
+            "answer_needles": [
+              "21,180",
+              "21180",
+              "21.2k",
+              "21.18k",
+              "21,200"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F25",
+            "text": "Launch has no onboarding fee; setup is self-serve."
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F29",
+            "text": "Each tractor needs a TrakNode unit at $89; hardware is outside the figure asked for."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Bills the trailers at the vehicle rate (95 x $29 x 12 = $33,060).",
+            "kind": "fabrication",
+            "answer_needles": [
+              "33,060"
+            ]
+          },
+          {
+            "text": "Uses the monthly-billing rate of $35 for the tractors ($24,060).",
+            "kind": "fabrication",
+            "fact": "SALES-REF-PRICING-2026#F2",
+            "answer_needles": [
+              "24,060"
+            ]
+          },
+          {
+            "text": "Applies a volume discount; the fleet is below 100 vehicles.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SALES-REF-PRICING-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-PRICING-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Rounding to about $21,200 when speaking.",
+          "Noting that hardware is separate."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "(40 * 29 + 55 * 11) * 12",
+          "result": 21180,
+          "unit": "USD",
+          "accepted_forms": [
+            "21,180",
+            "21180",
+            "$21.2k",
+            "21.2k",
+            "21.18k",
+            "21,200"
+          ],
+          "inputs": {
+            "launch_annual": "SALES-REF-PRICING-2026#F1",
+            "trailer_rate": "SALES-REF-PRICING-2026#F10"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-002",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "What if we sign for three years instead of one? Does the per-vehicle price come down any further?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "discount_request",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "A three-year commitment locks the contracted rate for the whole three years but does not add any further percentage discount. The seller says so plainly and does not invent a multi-year discount.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F47",
+            "text": "A three-year term adds no further percentage discount.",
+            "answer_needles": []
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F47",
+            "text": "It locks the rate for the whole term.",
+            "answer_needles": [
+              "lock",
+              "fixed",
+              "frozen",
+              "held",
+              "same rate",
+              "stays the same",
+              "doesn't change",
+              "won't change"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F14",
+            "text": "On annual contracts, renewal increases are capped at 6% a year."
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F37",
+            "text": "The volume discount by fleet size applies automatically on annual billing."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "States that a three-year term brings a percentage off, or names a multi-year discount.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Offers to work out a multi-year discount as if it were on the table.",
+            "kind": "unauthorized_promise"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SALES-REF-PRICING-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-PRICING-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Presenting the rate lock as the benefit of the longer term (protection from renewal increases)."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-003",
+      "mode": "sales",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "80 vehicles on operations. how much do they save over a year by paying annually instead of month to month?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "quantity_arithmetic",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Operations is $47 per vehicle per month on annual billing and $55 on monthly billing, a gap of $8. 80 x $8 x 12 = $7,680 saved per year ($45,120 against $52,800). No volume discount at 80 vehicles.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F4",
+            "text": "Operations is $47 per vehicle per month on annual billing.",
+            "answer_needles": []
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F5",
+            "text": "Operations is $55 per vehicle per month on monthly billing.",
+            "answer_needles": []
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F4",
+            "text": "The saving over a year is $7,680.",
+            "answer_needles": [
+              "7,680",
+              "7680",
+              "7.68k",
+              "7.7k",
+              "7,700"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F13",
+            "text": "Annual billing is invoiced upfront on Net 30 terms."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses the draft 2027 prices ($60 against $51, a saving of $8,640).",
+            "kind": "draft",
+            "fact": "SALES-REF-PRICING-2027-DRAFT#F2",
+            "answer_needles": [
+              "8,640"
+            ]
+          },
+          {
+            "text": "Adds a volume discount; 80 vehicles is below the first band.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "assistant advising the seller privately; an explanation for the seller, not a line addressed to the prospect",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "SALES-REF-PRICING-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-PRICING-2026",
+          "SALES-REF-PRICING-2025",
+          "SALES-REF-PRICING-2027-DRAFT"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Giving the two yearly totals ($45,120 and $52,800) alongside the difference."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "80 * (55 - 47) * 12",
+          "result": 7680,
+          "unit": "USD",
+          "accepted_forms": [
+            "7,680",
+            "7680",
+            "$7.7k",
+            "7.7k",
+            "7.68k",
+            "7,700"
+          ],
+          "inputs": {
+            "annual_rate": "SALES-REF-PRICING-2026#F4",
+            "monthly_rate": "SALES-REF-PRICING-2026#F5"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-004",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "We signed Operations in August at forty-seven a van, on the annual plan. If we put fifteen more vans on when there's six months left on the term, what do those fifteen cost us for the remainder?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "quantity_arithmetic",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Vehicles added during a term are prorated to the end of the term at the contracted rate. 15 x $47 x 6 months = $4,230 of subscription for the added vans. They are not charged a full year and not charged a new rate. Each added van also needs a TrakNode unit, which is separate.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F12",
+            "text": "Added vehicles are prorated to the end of the term at the contracted rate.",
+            "answer_needles": [
+              "prorat",
+              "pro-rat",
+              "pro rat",
+              "remaining months",
+              "months left",
+              "six months",
+              "6 months"
+            ]
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F12",
+            "text": "The fifteen vans cost $4,230 for the remaining six months.",
+            "answer_needles": [
+              "4,230",
+              "4230",
+              "4.23k"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F29",
+            "text": "Each added van needs a TrakNode T4 unit at $89, on top of the subscription."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Charges the added vans for a full twelve months ($8,460) as the answer.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the added vans are billed at a different rate from the contracted one.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SALES-REF-PRICING-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-PRICING-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Mentioning that the hardware for the fifteen vans is extra."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "15 * 47 * 6",
+          "result": 4230,
+          "unit": "USD",
+          "accepted_forms": [
+            "4,230",
+            "4230",
+            "$4.2k",
+            "4.23k"
+          ],
+          "inputs": {
+            "proration_rule": "SALES-REF-PRICING-2026#F12",
+            "contracted_rate": "stated in the question"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-005",
+      "mode": "sales",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "monthly billing - how much notice does a customer need to give to cancel? and is that paid by card or invoiced",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "current_pricing",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Monthly billing is charged to a card on the first of each month and can be cancelled with one full billing cycle of written notice. Nothing more is documented (no cancellation fee, no refund terms).",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F50",
+            "text": "Cancelling needs one full billing cycle of written notice.",
+            "answer_needles": [
+              "billing cycle",
+              "one full cycle",
+              "one cycle",
+              "month's notice",
+              "one month"
+            ]
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F50",
+            "text": "Monthly billing is charged to a card.",
+            "answer_needles": [
+              "card"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F8",
+            "text": "Enterprise is annual only; monthly billing exists on Launch and Operations."
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F13",
+            "text": "Annual billing, by contrast, is invoiced upfront on Net 30 terms."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says a monthly customer can cancel at any time with no notice.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Invents a cancellation fee, a refund rule or a minimum number of months.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "assistant advising the seller privately; an explanation for the seller, not a line addressed to the prospect",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "SALES-REF-PRICING-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-PRICING-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Pointing out that the notice has to be in writing."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-006",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "We've added a ton of our own fields on Account in Salesforce, plus a couple of objects we built ourselves. On Operations, does all of that come across?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "connector_capability",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Custom fields on the standard objects can be mapped, up to 40 mapped fields per object. Custom objects are a different matter: they can be mapped on Enterprise only (up to 5), so on Operations the home-built objects do not come across. The seller answers both halves and does not blur them.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-INTEGRATIONS-2026#F3",
+            "text": "Custom fields on the standard Salesforce objects can be mapped, up to 40 per object.",
+            "answer_needles": [
+              "40",
+              "forty"
+            ]
+          },
+          {
+            "fact": "SALES-REF-INTEGRATIONS-2026#F4",
+            "text": "Custom objects can be mapped on Enterprise only, not on Operations.",
+            "answer_needles": [
+              "enterprise"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-INTEGRATIONS-2026#F4",
+            "text": "On Enterprise the ceiling is 5 custom objects."
+          },
+          {
+            "fact": "SALES-REF-INTEGRATIONS-2026#F1",
+            "text": "The Salesforce connector itself is included on Operations at no additional charge."
+          },
+          {
+            "fact": "SALES-REF-INTEGRATIONS-2026#F22",
+            "text": "Field mappings are changed by the customer's own administrator."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says custom Salesforce objects sync on the Operations plan.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says there is no limit on mapped fields, or gives another limit.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Offers that Kestravane will map or build the custom objects for the customer on Operations.",
+            "kind": "unauthorized_promise"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SALES-REF-INTEGRATIONS-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-INTEGRATIONS-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Asking how many custom objects there are and whether they matter enough to look at Enterprise."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-007",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "We're a HubSpot shop. If one of my reps edits a company record in there, does that change show up on your side?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "connector_capability",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "No. The HubSpot connector is one-way, from Kestravane to HubSpot: it posts vehicle visits, completed jobs and delivery exceptions to the company timeline once an hour, and nothing written in HubSpot flows back. The two-way, 15-minute sync belongs to the Salesforce connector and must not be attributed to HubSpot.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-INTEGRATIONS-2026#F7",
+            "text": "The HubSpot connector is one-way, Kestravane to HubSpot; edits made in HubSpot do not come back into Kestravane.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-INTEGRATIONS-2026#F7",
+            "text": "It posts to HubSpot once an hour and carries no connector fee on Operations and Enterprise."
+          },
+          {
+            "fact": "SALES-REF-INTEGRATIONS-2026#F8",
+            "text": "HubSpot Professional or higher is required."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says edits made in HubSpot sync into Kestravane, or calls the connector two-way.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Gives the Salesforce figures (two-way, 15-minute cycle) as the HubSpot behaviour.",
+            "kind": "fabrication",
+            "fact": "SALES-REF-INTEGRATIONS-2026#F2"
+          },
+          {
+            "text": "Says two-way HubSpot sync is coming, or gives a date for it.",
+            "kind": "unauthorized_promise"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SALES-REF-INTEGRATIONS-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-INTEGRATIONS-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Mentioning that the REST API is the route if they need data to flow the other way."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-008",
+      "mode": "sales",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "rfp has a yes/no box for iso 27001. are we certified? if not, where are we in the process",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "security",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The answer for the box is no: Kestravane is not ISO 27001 certified. Stage 1 of the audit was completed in March 2026 and Stage 2 is scheduled for November 2026; certification is not expected before the first quarter of 2027 and no date is committed. The seller may point to the SOC 2 Type II report as what is held today, without presenting it as an equivalent.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-SECURITY-2026#F16",
+            "text": "Kestravane is not ISO 27001 certified.",
+            "answer_needles": []
+          },
+          {
+            "fact": "SALES-REF-SECURITY-2026#F16",
+            "text": "The audit is under way: Stage 1 done in March 2026, Stage 2 scheduled for November 2026.",
+            "answer_needles": [
+              "november",
+              "nov 2026",
+              "stage 2",
+              "stage two"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-SECURITY-2026#F16",
+            "text": "Certification is not expected before Q1 2027 and no date is committed."
+          },
+          {
+            "fact": "SALES-REF-SECURITY-2026#F14",
+            "text": "Kestravane does hold a SOC 2 Type II report."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says Kestravane is ISO 27001 certified, or tells the seller to tick yes.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Gives a firm certification date (for example \"certified by Q1 2027\").",
+            "kind": "unauthorized_promise"
+          },
+          {
+            "text": "Says the SOC 2 report counts as ISO 27001 certification.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "assistant advising the seller privately; an explanation for the seller, not a line addressed to the prospect",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "SALES-REF-SECURITY-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-SECURITY-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Suggesting the seller answer \"no, in progress\" and attach the SOC 2 report under NDA."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-009",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "How far back can we pull up where a truck has been? We get delivery disputes from well over a year ago.",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "security",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Vehicle location and engine data is kept for 25 months while the contract is active, then deleted (aggregated reports are kept). So a dispute from well over a year ago is covered, up to 25 months. The near misses are 36 months (temperature readings) and 24 months (the limit on migrating old trip history), neither of which answers this.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-SECURITY-2026#F18",
+            "text": "Vehicle location data is retained for 25 months, then deleted.",
+            "answer_needles": [
+              "25 months",
+              "25-month",
+              "twenty-five months"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-SECURITY-2026#F19",
+            "text": "Temperature sensor readings are kept longer, for 36 months."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives 36 months (the temperature-reading retention) as the location history period.",
+            "kind": "fabrication",
+            "fact": "SALES-REF-SECURITY-2026#F19"
+          },
+          {
+            "text": "Gives 24 months (the migration limit for old trip history) as the retention period.",
+            "kind": "fabrication",
+            "fact": "SALES-REF-IMPLEMENTATION-2026#F17"
+          },
+          {
+            "text": "Says location history is kept indefinitely.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SALES-REF-SECURITY-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-SECURITY-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying \"a little over two years\" alongside the 25-month figure."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-010",
+      "mode": "sales",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "prospect's security lead wants our pen test report. can we send the whole thing? also who ran the last one and when",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "security",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Only a summary letter is shared; the full report is not. The external assessment is carried out once a year, and the most recent one was completed in February 2026 by Corvane Labs. Harrowgate Assurance is the SOC 2 auditor, not the penetration tester.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-SECURITY-2026#F17",
+            "text": "Only a summary letter is available; the full report is not shared.",
+            "answer_needles": [
+              "summary"
+            ]
+          },
+          {
+            "fact": "SALES-REF-SECURITY-2026#F17",
+            "text": "The most recent assessment was carried out by Corvane Labs.",
+            "answer_needles": [
+              "corvane"
+            ]
+          },
+          {
+            "fact": "SALES-REF-SECURITY-2026#F17",
+            "text": "It was completed in February 2026.",
+            "answer_needles": [
+              "february",
+              "feb 2026",
+              "feb. 2026",
+              "feb 26"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-SECURITY-2026#F26",
+            "text": "Assurance reports are released under a non-disclosure agreement."
+          },
+          {
+            "fact": "SALES-REF-SECURITY-2026#F17",
+            "text": "The assessment is done once a year."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the full penetration test report can be sent to the prospect.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Names Harrowgate Assurance (the SOC 2 auditor) as the firm that ran the penetration test.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Gives another date for the last assessment.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "assistant advising the seller privately; an explanation for the seller, not a line addressed to the prospect",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "SALES-REF-SECURITY-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-SECURITY-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Suggesting the seller route the request through the trust address and an NDA."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-011",
+      "mode": "sales",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "customer on operations says we missed uptime in september. what's the last day they can put in for the credit, and do they get money back or what",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "sla",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "A credit must be claimed in writing within 45 days of the end of the affected month. September ends on 30 September 2026; 45 days later is 14 November 2026. The credit is applied to the next invoice; it is not paid out in cash. Whether a credit is due at all depends on the measured uptime (below 99.5% on Operations).",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-SUPPORT-SLA-2026#F14",
+            "text": "The claim has to be made by 14 November 2026 (45 days after 30 September).",
+            "answer_needles": [
+              "14 november",
+              "november 14",
+              "nov 14",
+              "14 nov",
+              "14th of november",
+              "14th november",
+              "11/14/2026",
+              "2026-11-14"
+            ]
+          },
+          {
+            "fact": "SALES-REF-SUPPORT-SLA-2026#F14",
+            "text": "The credit is applied to the next invoice, not paid out in cash.",
+            "answer_needles": [
+              "invoice"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-SUPPORT-SLA-2026#F14",
+            "text": "The claim must be in writing."
+          },
+          {
+            "fact": "SALES-REF-SUPPORT-SLA-2026#F11",
+            "text": "On Operations the credit is 5% of the monthly subscription fee below 99.5% uptime and 10% below 99.0%."
+          },
+          {
+            "fact": "SALES-REF-SUPPORT-SLA-2026#F15",
+            "text": "Service credits are the sole remedy for missed uptime."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Counts the 45 days from the day of the outage or from today instead of from the end of September.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the customer is refunded or paid in cash.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Uses the Enterprise credit percentages (10% / 25%) for an Operations customer.",
+            "kind": "fabrication",
+            "fact": "SALES-REF-SUPPORT-SLA-2026#F13"
+          }
+        ],
+        "expected_role": "assistant advising the seller privately; an explanation for the seller, not a line addressed to the prospect",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "SALES-REF-SUPPORT-SLA-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-SUPPORT-SLA-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying \"mid-November\" together with the exact date."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "date(2026, 9, 30) + timedelta(days=45)",
+          "result": "2026-11-14",
+          "unit": "date",
+          "accepted_forms": [
+            "14 November",
+            "November 14",
+            "Nov 14",
+            "14 Nov",
+            "14th of November",
+            "14th November",
+            "11/14/2026",
+            "2026-11-14"
+          ],
+          "inputs": {
+            "claim_window_days": "SALES-REF-SUPPORT-SLA-2026#F14"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-012",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Say we've got an outage ticket open and it's just sitting there. When does it get kicked upstairs on your end, and to whom?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "support_level",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "A Priority 1 ticket not resolved within 2 hours is escalated to the Duty Incident Manager; at 4 hours the VP Customer Operations is notified and joins the incident channel. The customer can also ask for an escalation at any time. These are escalation steps, not a promise of a fix within those times.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-SUPPORT-SLA-2026#F23",
+            "text": "After 2 hours unresolved it goes to the Duty Incident Manager.",
+            "answer_needles": [
+              "2 hours",
+              "two hours"
+            ]
+          },
+          {
+            "fact": "SALES-REF-SUPPORT-SLA-2026#F23",
+            "text": "At 4 hours the VP Customer Operations is notified.",
+            "answer_needles": [
+              "4 hours",
+              "four hours"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-SUPPORT-SLA-2026#F25",
+            "text": "Any customer can ask for an escalation at any time."
+          },
+          {
+            "fact": "SALES-REF-SUPPORT-SLA-2026#F24",
+            "text": "During a Priority 1 incident Enterprise customers get an update every hour, Operations customers every 4 hours."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Promises the outage will be resolved within 2 or 4 hours.",
+            "kind": "unauthorized_promise"
+          },
+          {
+            "text": "Invents other escalation steps, names or time limits.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SALES-REF-SUPPORT-SLA-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-SUPPORT-SLA-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Asking which plan they would be on, since the update frequency differs."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-013",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "What's your bar for calling a rollout done? I don't want somebody declaring victory while half my trucks are still dark.",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "implementation",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "A rollout is declared live only when 95% of the contracted vehicles have reported data for three consecutive days, the administrators have completed training, and the customer has signed the go-live checklist. So it cannot be called done with half the fleet silent, and the customer signs it off.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-IMPLEMENTATION-2026#F23",
+            "text": "95% of contracted vehicles must have reported data for three consecutive days.",
+            "answer_needles": [
+              "95"
+            ]
+          },
+          {
+            "fact": "SALES-REF-IMPLEMENTATION-2026#F23",
+            "text": "Training is complete and the customer signs the go-live checklist.",
+            "answer_needles": [
+              "checklist",
+              "sign"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-IMPLEMENTATION-2026#F24",
+            "text": "For 14 days after go-live the onboarding specialist or project manager stays assigned."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives another threshold (for example every vehicle, or 90%).",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Promises a go-live date or that every vehicle will be reporting.",
+            "kind": "unauthorized_promise"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SALES-REF-IMPLEMENTATION-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-IMPLEMENTATION-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Stressing that the sign-off is the customer's."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-014",
+      "mode": "sales",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "can service/repair records be carried over from the system they're leaving? how many years back",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "migration",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Maintenance history can be migrated for up to 5 years, loaded as service records. The 24-month limit applies to trip and location history, not to maintenance records.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-IMPLEMENTATION-2026#F18",
+            "text": "Maintenance history can be migrated for up to 5 years.",
+            "answer_needles": [
+              "5 years",
+              "five years",
+              "5 yrs",
+              "5-year"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-IMPLEMENTATION-2026#F17",
+            "text": "Trip and location history is limited to the most recent 24 months."
+          },
+          {
+            "fact": "SALES-REF-IMPLEMENTATION-2026#F20",
+            "text": "Files must be UTF-8 CSV in the Kestravane templates."
+          },
+          {
+            "fact": "SALES-REF-IMPLEMENTATION-2026#F21",
+            "text": "Assisted migration is a paid service on Operations and part of the onboarding fee on Enterprise."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives 24 months (the trip history limit) as the limit for maintenance records.",
+            "kind": "fabrication",
+            "fact": "SALES-REF-IMPLEMENTATION-2026#F17"
+          },
+          {
+            "text": "Says records older than 5 years can be loaded as an exception.",
+            "kind": "unauthorized_promise"
+          }
+        ],
+        "expected_role": "assistant advising the seller privately; an explanation for the seller, not a line addressed to the prospect",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "SALES-REF-IMPLEMENTATION-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-IMPLEMENTATION-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Asking which system they are leaving, since converters exist for two of them."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-015",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Does the temperature monitoring actually cut down on rejected loads? Have you got a real example with numbers?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "grounded_single",
+      "category": "roi_case_study",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Hollowmere Produce Logistics, a refrigerated carrier with 212 trucks, saw temperature-related load claims fall from 41 to 17 over the six months March to August 2025 against the same months of 2024. The seller cites it as one customer's own figures, not as a promise.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-CASESTUDY-HOLLOWMERE#F2",
+            "text": "The example is Hollowmere Produce Logistics.",
+            "answer_needles": [
+              "hollowmere"
+            ]
+          },
+          {
+            "fact": "SALES-REF-CASESTUDY-HOLLOWMERE#F9",
+            "text": "Temperature-related load claims fell from 41 ...",
+            "answer_needles": [
+              "41",
+              "forty-one"
+            ]
+          },
+          {
+            "fact": "SALES-REF-CASESTUDY-HOLLOWMERE#F9",
+            "text": "... to 17.",
+            "answer_needles": [
+              "17",
+              "seventeen"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-CASESTUDY-HOLLOWMERE#F10",
+            "text": "Claims accepted without dispute fell from 33 to 6."
+          },
+          {
+            "fact": "SALES-REF-CASESTUDY-HOLLOWMERE#F6",
+            "text": "The period was 1 March to 31 August 2025 against the same six months of 2024."
+          },
+          {
+            "fact": "SALES-REF-CASESTUDY-HOLLOWMERE#F13",
+            "text": "The figures are Hollowmere's own and have not been audited."
+          },
+          {
+            "fact": "SALES-REF-CASESTUDY-HOLLOWMERE#F16",
+            "text": "It is one fleet in one region, not a forecast."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Promises or forecasts a similar drop in claims for this prospect.",
+            "kind": "unauthorized_promise"
+          },
+          {
+            "text": "Cites other customers or figures that no document holds.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the figures were audited or independently verified.",
+            "kind": "fabrication",
+            "fact": "SALES-REF-CASESTUDY-HOLLOWMERE#F13"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SALES-REF-CASESTUDY-HOLLOWMERE"
+        ],
+        "source_priority": [
+          "SALES-REF-CASESTUDY-HOLLOWMERE"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying \"24 fewer\" or \"more than halved\"."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-016",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "If one of the trackers packs in a couple of years down the line, are we buying a new one? And how long are we waiting for it?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "support_level",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "No purchase: all hardware carries a 3-year warranty with advance replacement (price list), so a unit that fails two years in is covered. The replacement ships within 2 business days of the fault being confirmed (support guide). That is a shipping time, not a delivery guarantee.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F35",
+            "text": "Hardware carries a 3-year warranty with advance replacement.",
+            "answer_needles": [
+              "3-year",
+              "3 year",
+              "three-year",
+              "three year",
+              "3 yr"
+            ]
+          },
+          {
+            "fact": "SALES-REF-SUPPORT-SLA-2026#F26",
+            "text": "The replacement ships within 2 business days of the fault being confirmed.",
+            "answer_needles": [
+              "2 business days",
+              "two business days",
+              "2 working days",
+              "two working days"
+            ]
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Says the customer has to buy a replacement unit within the three years.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Guarantees the replacement arrives within 2 days.",
+            "kind": "unauthorized_promise"
+          },
+          {
+            "text": "Gives another warranty length.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SALES-REF-PRICING-2026",
+          "SALES-REF-SUPPORT-SLA-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-PRICING-2026",
+          "SALES-REF-SUPPORT-SLA-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Noting that damage such as a collision is a different case from a unit that fails."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-017",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "How long do you keep the footage, and if we want it held for longer, what does that add over a year?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "We'd put one of your cameras in each of our thirty-eight trucks."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "quantity_arithmetic",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Camera footage is kept 45 days as standard, or 180 days with the Extended Video Retention module (security overview). The module is $8 per camera per month (price list): 38 x $8 x 12 = $3,648 a year. Modules are never discounted.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-SECURITY-2026#F20",
+            "text": "Footage is kept for 45 days as standard.",
+            "answer_needles": [
+              "45 days",
+              "45-day",
+              "forty-five days"
+            ]
+          },
+          {
+            "fact": "SALES-REF-SECURITY-2026#F20",
+            "text": "With Extended Video Retention it is kept for 180 days.",
+            "answer_needles": [
+              "180",
+              "six months"
+            ]
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F19",
+            "text": "Extended Video Retention is $8 per camera per month, so $3,648 a year for 38 cameras.",
+            "answer_needles": [
+              "3,648",
+              "3648",
+              "3.65k",
+              "3,650"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F36",
+            "text": "Modules are never discounted."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives 25 months or another retention period for footage.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Applies a discount to the module.",
+            "kind": "fabrication",
+            "fact": "SALES-REF-PRICING-2026#F36"
+          },
+          {
+            "text": "Prices the module per vehicle at another module's rate.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SALES-REF-SECURITY-2026",
+          "SALES-REF-PRICING-2026",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "SALES-REF-SECURITY-2026",
+          "SALES-REF-PRICING-2026",
+          "CONVERSATION"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Giving the monthly figure ($304) as well.",
+          "Rounding to about $3,650 when speaking."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "38 * 8 * 12",
+          "result": 3648,
+          "unit": "USD",
+          "accepted_forms": [
+            "3,648",
+            "3648",
+            "$3.6k",
+            "3.65k",
+            "3,650"
+          ],
+          "inputs": {
+            "module_price": "SALES-REF-PRICING-2026#F19",
+            "cameras": "CONVERSATION"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-018",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "On the Operations tier, is there an actual person steering the rollout with us, or are we on our own? And what does the setup charge get us?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "implementation",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "On Operations a Kestravane onboarding specialist guides the customer through the stages (implementation guide); a named project manager is the Enterprise model. The Operations onboarding fee is $2,500, charged once, and covers the kickoff call, account configuration, two remote admin training sessions and support through go-live; it does not cover hardware installation (current price list). The 2025 list had $2,000 and the draft proposes $3,000.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-IMPLEMENTATION-2026#F1",
+            "text": "On Operations an onboarding specialist guides the rollout.",
+            "answer_needles": [
+              "specialist"
+            ]
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F26",
+            "text": "The Operations onboarding fee is $2,500, charged once.",
+            "answer_needles": [
+              "2,500",
+              "2500",
+              "2.5k",
+              "twenty-five hundred"
+            ]
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F28",
+            "text": "The fee covers the kickoff call, configuration, two remote admin training sessions and support through go-live, not hardware installation.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-IMPLEMENTATION-2026#F24",
+            "text": "The specialist stays assigned for 14 days after go-live."
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F32",
+            "text": "Professional installation is charged separately at $45 per vehicle."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Quotes the 2025 onboarding fee.",
+            "kind": "stale",
+            "fact": "SALES-REF-PRICING-2025#F8",
+            "answer_needles": [
+              "$2,000"
+            ]
+          },
+          {
+            "text": "Quotes the draft 2027 onboarding fee.",
+            "kind": "draft",
+            "fact": "SALES-REF-PRICING-2027-DRAFT#F10",
+            "answer_needles": [
+              "$3,000"
+            ]
+          },
+          {
+            "text": "Says Operations customers get a named project manager (that is Enterprise).",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the onboarding fee includes fitting the hardware.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SALES-REF-IMPLEMENTATION-2026",
+          "SALES-REF-PRICING-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-IMPLEMENTATION-2026",
+          "SALES-REF-PRICING-2026",
+          "SALES-REF-PRICING-2025",
+          "SALES-REF-PRICING-2027-DRAFT"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Operations onboarding fee",
+            "sources": [
+              "SALES-REF-PRICING-2026",
+              "SALES-REF-PRICING-2025",
+              "SALES-REF-PRICING-2027-DRAFT"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Mentioning that the fee is not discounted."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-019",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "So what date do I give my board for when we're up and running?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "We had the kickoff call with your onboarding specialist on Tuesday, the twenty-ninth of September. It's the hundred and fifty vans on Operations."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "implementation_promise",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "An Operations rollout of up to 200 vehicles typically takes 30 days, counted from the kickoff call. Kickoff on 29 September 2026 plus 30 days is 29 October 2026. The seller gives that as the planning estimate (around 29 October, the end of October) and says it is an estimate, not a commitment; a committed date needs a Statement of Work. The seller must not promise the date.",
+        "required_facts": [
+          {
+            "fact": "CONVERSATION",
+            "text": "The kickoff call was on 29 September and the fleet is 150 vans on Operations.",
+            "answer_needles": []
+          },
+          {
+            "fact": "SALES-REF-IMPLEMENTATION-2026#F4",
+            "text": "Typical duration is 30 days from kickoff, which lands on about 29 October 2026.",
+            "answer_needles": [
+              "29 october",
+              "october 29",
+              "oct 29",
+              "29 oct",
+              "29th of october",
+              "29th october",
+              "twenty-ninth of october",
+              "october twenty-ninth",
+              "end of october",
+              "late october",
+              "end of the month",
+              "end of this month"
+            ]
+          },
+          {
+            "fact": "SALES-REF-IMPLEMENTATION-2026#F7",
+            "text": "It is a planning estimate, not a commitment.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-IMPLEMENTATION-2026#F8",
+            "text": "The usual causes of delay: vehicles not released, a late vehicle list, single sign-on configuration."
+          },
+          {
+            "fact": "SALES-REF-IMPLEMENTATION-2026#F7",
+            "text": "A committed date is only given in a Statement of Work signed by the Director of Professional Services."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "States 29 October (or any date) as guaranteed or committed.",
+            "kind": "unauthorized_promise"
+          },
+          {
+            "text": "Uses the 45 to 75 day range for larger Operations fleets or the 60 to 90 day Enterprise range.",
+            "kind": "fabrication",
+            "fact": "SALES-REF-IMPLEMENTATION-2026#F5"
+          },
+          {
+            "text": "Counts the 30 days from contract signature instead of the kickoff call.",
+            "kind": "fabrication",
+            "fact": "SALES-REF-IMPLEMENTATION-2026#F2"
+          },
+          {
+            "text": "Refuses to give any date although the guide and the kickoff date give a planning estimate.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "answer_then_scope_authority",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SALES-REF-IMPLEMENTATION-2026",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "SALES-REF-IMPLEMENTATION-2026",
+          "CONVERSATION"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying \"the end of October\" and naming what the customer can do to hold it."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "date(2026, 9, 29) + timedelta(days=30)",
+          "result": "2026-10-29",
+          "unit": "date",
+          "accepted_forms": [
+            "29 October",
+            "October 29",
+            "Oct 29",
+            "29 Oct",
+            "29th of October",
+            "29th October",
+            "twenty-ninth of October",
+            "end of October",
+            "late October",
+            "end of this month"
+          ],
+          "inputs": {
+            "typical_duration_days": "SALES-REF-IMPLEMENTATION-2026#F4",
+            "kickoff_date": "CONVERSATION"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-020",
+      "mode": "sales",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "prospect wants a carbon copy of the hollowmere setup for themselves: same truck count, same plan, same two modules, two temp sensors a truck, billed annually. what's the yearly subscription at today's list? leave hardware out",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "quantity_arithmetic",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "From the customer story: 212 trucks, Operations plan, Fuel & Idle Analytics and Cold Chain Monitoring, two sensors per truck = 424 sensors. From the current price list: Operations $47 per vehicle per month on annual billing, with the 5% volume discount (100 to 249 vehicles) on the plan fee only; Fuel & Idle $4 per vehicle per month; Cold Chain $3 per sensor per month; modules are never discounted. Plan 212 x 47 x 12 x 0.95 = $113,589.60; Fuel & Idle 212 x 4 x 12 = $10,176; Cold Chain 424 x 3 x 12 = $15,264; total $139,029.60 a year. This is a quote for the prospect at today's list, not what Hollowmere pays (the story gives no price).",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-CASESTUDY-HOLLOWMERE#F2",
+            "text": "The fleet is 212 trucks.",
+            "answer_needles": [
+              "212"
+            ]
+          },
+          {
+            "fact": "SALES-REF-CASESTUDY-HOLLOWMERE#F4",
+            "text": "Two sensors per truck is 424 sensors.",
+            "answer_needles": [
+              "424"
+            ]
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F38",
+            "text": "A 5% volume discount applies at 100 to 249 vehicles, on the plan fee only.",
+            "answer_needles": [
+              "5%",
+              "5 percent",
+              "five percent"
+            ]
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F4",
+            "text": "The yearly subscription comes to about $139,030.",
+            "answer_needles": [
+              "139,029",
+              "139,030",
+              "139029",
+              "139030",
+              "139k",
+              "139,000",
+              "139.0k"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F16",
+            "text": "Fuel & Idle Analytics is $4 per vehicle per month ($10,176 a year)."
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F18",
+            "text": "Cold Chain Monitoring is $3 per sensor per month ($15,264 a year)."
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F36",
+            "text": "Modules are never discounted."
+          },
+          {
+            "fact": "SALES-REF-CASESTUDY-HOLLOWMERE#F3",
+            "text": "Hollowmere runs Operations with Fuel & Idle Analytics and Cold Chain Monitoring."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Applies the volume discount to the modules as well ($137,757.60).",
+            "kind": "fabrication",
+            "fact": "SALES-REF-PRICING-2026#F36",
+            "answer_needles": [
+              "137,757"
+            ]
+          },
+          {
+            "text": "Leaves the volume discount out and gives $145,008 as the answer.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Uses the 2025 Operations price of $42 ($126,945.60).",
+            "kind": "stale",
+            "fact": "SALES-REF-PRICING-2025#F3",
+            "answer_needles": [
+              "126,945"
+            ]
+          },
+          {
+            "text": "Uses the draft Operations price of $51 ($148,696.80).",
+            "kind": "draft",
+            "fact": "SALES-REF-PRICING-2027-DRAFT#F1",
+            "answer_needles": [
+              "148,696"
+            ]
+          },
+          {
+            "text": "Presents the figure as what Hollowmere actually pays.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "assistant advising the seller privately; an explanation for the seller, not a line addressed to the prospect",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "SALES-REF-CASESTUDY-HOLLOWMERE",
+          "SALES-REF-PRICING-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-CASESTUDY-HOLLOWMERE",
+          "SALES-REF-PRICING-2026",
+          "SALES-REF-PRICING-2025",
+          "SALES-REF-PRICING-2027-DRAFT"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Operations annual price per vehicle",
+            "sources": [
+              "SALES-REF-PRICING-2026",
+              "SALES-REF-PRICING-2025",
+              "SALES-REF-PRICING-2027-DRAFT"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Rounding to about $139,000.",
+          "Showing the three parts of the sum."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "212 * 47 * 12 * (1 - 0.05) + 212 * 4 * 12 + 424 * 3 * 12",
+          "result": 139029.6,
+          "unit": "USD",
+          "accepted_forms": [
+            "139,029.60",
+            "139,029.6",
+            "139,030",
+            "139,029",
+            "$139k",
+            "139k",
+            "139,000"
+          ],
+          "inputs": {
+            "trucks": "SALES-REF-CASESTUDY-HOLLOWMERE#F2",
+            "sensors": "SALES-REF-CASESTUDY-HOLLOWMERE#F4",
+            "plan_price": "SALES-REF-PRICING-2026#F4",
+            "volume_discount": "SALES-REF-PRICING-2026#F38",
+            "fuel_idle": "SALES-REF-PRICING-2026#F16",
+            "cold_chain": "SALES-REF-PRICING-2026#F18"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-021",
+      "mode": "sales",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "small prospect leaning toward launch. they want slack alerts, sso and api access. which of those can they have on launch, and which would push them up a plan?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "connector_capability",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Slack alerts: yes, the Slack app is available on all plans at no fee (integration matrix). Single sign-on: not available on Launch, included on Operations and Enterprise (security overview). REST API and webhooks: not available on Launch, included on Operations and Enterprise (integration matrix). So two of the three need Operations.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-INTEGRATIONS-2026#F12",
+            "text": "The Slack app is available on every plan, Launch included.",
+            "answer_needles": []
+          },
+          {
+            "fact": "SALES-REF-SECURITY-2026#F9",
+            "text": "Single sign-on is not available on Launch; it comes with Operations and Enterprise.",
+            "answer_needles": [
+              "operations"
+            ]
+          },
+          {
+            "fact": "SALES-REF-INTEGRATIONS-2026#F16",
+            "text": "The REST API is not available on Launch; it comes with Operations and Enterprise.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-SECURITY-2026#F27",
+            "text": "On Launch, multi-factor authentication is required for password logins."
+          },
+          {
+            "fact": "SALES-REF-INTEGRATIONS-2026#F21",
+            "text": "None of the native connectors is available on Launch."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says single sign-on or the API can be had on Launch, or as a paid extra on Launch.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says Slack alerts need Operations.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "assistant advising the seller privately; an explanation for the seller, not a line addressed to the prospect",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "SALES-REF-INTEGRATIONS-2026",
+          "SALES-REF-SECURITY-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-INTEGRATIONS-2026",
+          "SALES-REF-SECURITY-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Advising the seller to steer the prospect to Operations if SSO and API are firm requirements."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-022",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "We've got our own mechanics. If they fit the trackers in our fifty vans instead of your installers doing it, what does that save us, and how long is each van tied up?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "quantity_arithmetic",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Professional installation is $45 per vehicle and self-installation carries no charge (price list), so 50 vans saves 50 x $45 = $2,250. A self-installed TrakNode on a light vehicle takes about 20 minutes (implementation guide); the 40 minutes figure is for a professional installation and must not be given as the self-install time.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F32",
+            "text": "Professional installation is $45 per vehicle, so fifty vans is $2,250 saved.",
+            "answer_needles": [
+              "2,250",
+              "2250",
+              "2.25k",
+              "twenty-two fifty"
+            ]
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F33",
+            "text": "Self-installation carries no charge.",
+            "answer_needles": []
+          },
+          {
+            "fact": "SALES-REF-IMPLEMENTATION-2026#F11",
+            "text": "A self-installed TrakNode on a light vehicle takes about 20 minutes.",
+            "answer_needles": [
+              "20 minutes",
+              "20 min",
+              "twenty minutes"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-IMPLEMENTATION-2026#F11",
+            "text": "Heavy trucks need the 9-pin harness and are best left to an installer."
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F29",
+            "text": "The units themselves are $89 each either way."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Gives about 40 minutes (the professional installation figure) as the time for a self-install.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says self-installation carries a fee.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Uses another installation price.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SALES-REF-PRICING-2026",
+          "SALES-REF-IMPLEMENTATION-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-PRICING-2026",
+          "SALES-REF-IMPLEMENTATION-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Working out the total time for fifty vans."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "50 * 45",
+          "result": 2250,
+          "unit": "USD",
+          "accepted_forms": [
+            "2,250",
+            "2250",
+            "$2.25k",
+            "2.25k",
+            "twenty-two fifty"
+          ],
+          "inputs": {
+            "installation_price": "SALES-REF-PRICING-2026#F32"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-023",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "We're a Microsoft house, everything runs through Entra. Does your single sign-on work with that on Operations, and how much time should my IT people block out for it?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "multi_source",
+      "category": "security",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Yes: single sign-on (SAML 2.0 or OpenID Connect) is included on Operations and has been verified with Microsoft Entra ID (security overview). The implementation guide says to allow one week, and the customer's identity provider team has to supply the metadata and assign users. Automatic user provisioning (SCIM) is Enterprise only and must not be offered on Operations.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-SECURITY-2026#F11",
+            "text": "Single sign-on has been verified with Microsoft Entra ID.",
+            "answer_needles": []
+          },
+          {
+            "fact": "SALES-REF-SECURITY-2026#F9",
+            "text": "Single sign-on is included on Operations.",
+            "answer_needles": []
+          },
+          {
+            "fact": "SALES-REF-IMPLEMENTATION-2026#F13",
+            "text": "Allow one week for single sign-on setup.",
+            "answer_needles": [
+              "one week",
+              "a week",
+              "1 week"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-SECURITY-2026#F10",
+            "text": "SCIM user provisioning is Enterprise only."
+          },
+          {
+            "fact": "SALES-REF-IMPLEMENTATION-2026#F8",
+            "text": "Waiting for single sign-on configuration is one of the common causes of rollout delay."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says SCIM or automatic user provisioning comes with Operations.",
+            "kind": "fabrication",
+            "fact": "SALES-REF-SECURITY-2026#F10"
+          },
+          {
+            "text": "Says single sign-on costs extra on Operations.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Guarantees single sign-on will be working within a week.",
+            "kind": "unauthorized_promise"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SALES-REF-SECURITY-2026",
+          "SALES-REF-IMPLEMENTATION-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-SECURITY-2026",
+          "SALES-REF-IMPLEMENTATION-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying their identity team supplies the metadata and assigns users."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-024",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Before we commit to anything, could we trial it on a few of our trucks? How many, and for how long?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "stale_document",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The current price list allows a 21-day pilot of up to 5 vehicles with hardware on loan, and it needs sign-off from the Regional Sales Director. The 2025 list had a 14-day pilot of up to 10 vehicles at the Account Executive's own discretion; that no longer applies. The seller describes the 21-day, 5-vehicle pilot and says it needs approval, without confirming it on the spot.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F48",
+            "text": "The pilot runs 21 days.",
+            "answer_needles": [
+              "21",
+              "twenty-one",
+              "three weeks",
+              "three-week",
+              "3 weeks",
+              "3-week"
+            ]
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F48",
+            "text": "It covers up to 5 vehicles, with hardware on loan.",
+            "answer_needles": [
+              "5 vehicles",
+              "five vehicles",
+              "5 trucks",
+              "five trucks",
+              "up to 5",
+              "up to five",
+              "five of"
+            ]
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F48",
+            "text": "It needs the Regional Sales Director's sign-off; the seller cannot grant it alone.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Offers the 2025 pilot length.",
+            "kind": "stale",
+            "fact": "SALES-REF-PRICING-2025#F18",
+            "answer_needles": [
+              "14-day",
+              "14 day",
+              "two weeks",
+              "two-week",
+              "fourteen"
+            ]
+          },
+          {
+            "text": "Offers the 2025 pilot size.",
+            "kind": "stale",
+            "fact": "SALES-REF-PRICING-2025#F18",
+            "answer_needles": [
+              "10 vehicles",
+              "ten vehicles",
+              "10 trucks",
+              "ten trucks",
+              "up to 10",
+              "up to ten"
+            ]
+          },
+          {
+            "text": "Confirms the pilot outright, as if it were the seller's own call (the 2025 rule).",
+            "kind": "unauthorized_promise"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "answer_then_scope_authority",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SALES-REF-PRICING-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-PRICING-2026",
+          "SALES-REF-PRICING-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Pilot length, size and who approves it",
+            "sources": [
+              "SALES-REF-PRICING-2026",
+              "SALES-REF-PRICING-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Offering to put the request to the director today."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-025",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "We'd be bringing five hundred and twenty trucks onto Enterprise. What does the volume break do to the per-truck rate?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "current_pricing",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Current list: Enterprise is $72 per vehicle per month (annual only) and fleets of 500 or more get a 12% volume discount, so $72 x 0.88 = $63.36 per vehicle per month. The 2025 list had $66 and 14% ($56.76); the draft proposes $78 ($68.64). Because approval thresholds count the volume discount in, a 12% total is above what an Account Executive signs alone, so mentioning that the quote goes through the Regional Sales Director is correct, not an error.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F40",
+            "text": "Fleets of 500 or more vehicles get a 12% volume discount.",
+            "answer_needles": [
+              "12%",
+              "12 percent",
+              "twelve percent"
+            ]
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F7",
+            "text": "Enterprise list is $72 per vehicle per month.",
+            "answer_needles": []
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F7",
+            "text": "The effective rate is $63.36 per vehicle per month.",
+            "answer_needles": [
+              "63.36",
+              "63.4",
+              "sixty-three",
+              "$63",
+              "63 dollars"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F37",
+            "text": "The volume discount is applied automatically on annual billing."
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F41",
+            "text": "Approval thresholds count the volume discount in."
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F43",
+            "text": "A total discount above 10% and up to 18% needs the Regional Sales Director."
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F36",
+            "text": "The discount applies to the plan fee only."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses the 2025 band of 14% (with $66: $56.76; with $72: $61.92).",
+            "kind": "stale",
+            "fact": "SALES-REF-PRICING-2025#F14",
+            "answer_needles": [
+              "14%",
+              "56.76",
+              "61.92"
+            ]
+          },
+          {
+            "text": "Uses the 2025 Enterprise price of $66.",
+            "kind": "stale",
+            "fact": "SALES-REF-PRICING-2025#F6",
+            "answer_needles": [
+              "$66",
+              "58.08"
+            ]
+          },
+          {
+            "text": "Uses the draft Enterprise price of $78 ($68.64).",
+            "kind": "draft",
+            "fact": "SALES-REF-PRICING-2027-DRAFT#F4",
+            "answer_needles": [
+              "$78",
+              "68.64"
+            ]
+          },
+          {
+            "text": "Offers a further discount on top of the volume band as if the seller could grant it.",
+            "kind": "unauthorized_promise"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SALES-REF-PRICING-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-PRICING-2026",
+          "SALES-REF-PRICING-2025",
+          "SALES-REF-PRICING-2027-DRAFT"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Enterprise price and the 500+ volume band",
+            "sources": [
+              "SALES-REF-PRICING-2026",
+              "SALES-REF-PRICING-2025",
+              "SALES-REF-PRICING-2027-DRAFT"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Giving the yearly total (520 x 63.36 x 12 = $395,366.40).",
+          "Rounding to \"a little over sixty-three dollars\".",
+          "Saying the quote needs the director's approval because the total discount is above 10%."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "72 * (1 - 0.12)",
+          "result": 63.36,
+          "unit": "USD per vehicle per month",
+          "accepted_forms": [
+            "63.36",
+            "$63.36",
+            "63.4",
+            "sixty-three",
+            "$63",
+            "63 dollars"
+          ],
+          "inputs": {
+            "enterprise_price": "SALES-REF-PRICING-2026#F7",
+            "volume_discount": "SALES-REF-PRICING-2026#F40"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-026",
+      "mode": "sales",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "enterprise customer signed at $72 a vehicle, annual. renewal is next summer. worst case, what's the highest per-vehicle rate we could put in front of them?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "current_pricing",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "The current price list caps renewal increases on annual contracts at 6% per year, so the ceiling is $72 x 1.06 = $76.32 per vehicle per month. The draft 2027 list proposes a 7.5% cap ($77.40) and a new Enterprise price of $78; neither is approved and neither may be used. $76.32 is a ceiling, not a decided renewal price; during the term the rate is locked.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F14",
+            "text": "Renewal increases on annual contracts are capped at 6% per year.",
+            "answer_needles": [
+              "6%",
+              "6 percent",
+              "six percent"
+            ]
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F14",
+            "text": "The ceiling is $76.32 per vehicle per month.",
+            "answer_needles": [
+              "76.32"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F14",
+            "text": "The contracted rate is locked for the term."
+          },
+          {
+            "fact": "SALES-REF-PRICING-2027-DRAFT#F16",
+            "text": "The draft 2027 list is not approved and must not be quoted."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses the draft cap of 7.5% ($77.40).",
+            "kind": "draft",
+            "fact": "SALES-REF-PRICING-2027-DRAFT#F15",
+            "answer_needles": [
+              "77.40",
+              "77.4"
+            ]
+          },
+          {
+            "text": "Gives the draft Enterprise price of $78 as the renewal rate.",
+            "kind": "draft",
+            "fact": "SALES-REF-PRICING-2027-DRAFT#F4"
+          },
+          {
+            "text": "Says the price will rise to $76.32, as if the increase were decided.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "assistant advising the seller privately; an explanation for the seller, not a line addressed to the prospect",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "SALES-REF-PRICING-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-PRICING-2026",
+          "SALES-REF-PRICING-2027-DRAFT"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Cap on renewal increases",
+            "sources": [
+              "SALES-REF-PRICING-2026",
+              "SALES-REF-PRICING-2027-DRAFT"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Giving the increase in dollars ($4.32 per vehicle per month)."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "72 * 1.06",
+          "result": 76.32,
+          "unit": "USD per vehicle per month",
+          "accepted_forms": [
+            "76.32",
+            "$76.32"
+          ],
+          "inputs": {
+            "contracted_rate": "stated in the question",
+            "renewal_cap": "SALES-REF-PRICING-2026#F14"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-027",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "First order would be thirty of the trackers, sent to our yard in Boise, and our own guys will fit them. What's the bill for that, freight and all?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "current_vs_old_price",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Current list: the TrakNode T4 is $89 per unit, so 30 x $89 = $2,670. Shipping within the contiguous United States is free on orders of 20 units or more, and self-installation carries no charge, so the bill is $2,670. The 2025 list had the T3 at $99 and free shipping only from 50 units; the draft proposes $79. None of those may be used.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F29",
+            "text": "The TrakNode T4 is $89 per unit, so thirty units is $2,670.",
+            "answer_needles": [
+              "2,670",
+              "2670",
+              "2.67k"
+            ]
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F34",
+            "text": "Shipping is free on orders of 20 units or more within the contiguous United States.",
+            "answer_needles": [
+              "free",
+              "no charge",
+              "no shipping",
+              "no freight",
+              "nothing for shipping",
+              "nothing for freight",
+              "waived"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F33",
+            "text": "Self-installation carries no charge."
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F35",
+            "text": "The hardware carries a 3-year warranty."
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F36",
+            "text": "Hardware is never discounted."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses the 2025 unit price of $99 ($2,970).",
+            "kind": "stale",
+            "fact": "SALES-REF-PRICING-2025#F10",
+            "answer_needles": [
+              "$99",
+              "2,970"
+            ]
+          },
+          {
+            "text": "Uses the draft unit price of $79 ($2,370).",
+            "kind": "draft",
+            "fact": "SALES-REF-PRICING-2027-DRAFT#F8",
+            "answer_needles": [
+              "$79",
+              "2,370"
+            ]
+          },
+          {
+            "text": "Charges freight because the order is below the 2025 threshold of 50 units ($2,745).",
+            "kind": "stale",
+            "fact": "SALES-REF-PRICING-2025#F22",
+            "answer_needles": [
+              "2,745"
+            ]
+          },
+          {
+            "text": "Adds an installation charge although the customer fits the units itself.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SALES-REF-PRICING-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-PRICING-2026",
+          "SALES-REF-PRICING-2025",
+          "SALES-REF-PRICING-2027-DRAFT"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Telematics unit price",
+            "sources": [
+              "SALES-REF-PRICING-2026",
+              "SALES-REF-PRICING-2025",
+              "SALES-REF-PRICING-2027-DRAFT"
+            ],
+            "resolution": "current_wins"
+          },
+          {
+            "topic": "Free shipping threshold",
+            "sources": [
+              "SALES-REF-PRICING-2026",
+              "SALES-REF-PRICING-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Saying the units are invoiced on shipment."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "30 * 89",
+          "result": 2670,
+          "unit": "USD",
+          "accepted_forms": [
+            "2,670",
+            "2670",
+            "$2.67k",
+            "2.67k"
+          ],
+          "inputs": {
+            "unit_price": "SALES-REF-PRICING-2026#F29",
+            "shipping": "SALES-REF-PRICING-2026#F34"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-028",
+      "mode": "sales",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "buyer is holding out for 20% off list on the subscription. whose approval do i need to get that through?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "discount_request",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "Under the current list a total discount above 18% and up to 25% needs the VP Sales, after Deal Desk review, and the quote is not valid until the approval is recorded in the Deal Desk queue. The total counts any volume discount in. Under the 2025 list 20% sat inside the Regional Sales Director's band (up to 22%); that is superseded.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F44",
+            "text": "20% falls in the band above 18% and up to 25%, which the VP Sales approves.",
+            "answer_needles": [
+              "vp sales",
+              "vp of sales",
+              "vice president",
+              "sales vp"
+            ]
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F44",
+            "text": "It goes through Deal Desk review first.",
+            "answer_needles": [
+              "deal desk"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F46",
+            "text": "The quote is not valid until the approval is recorded in the Deal Desk queue."
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F41",
+            "text": "The 20% is the total discount, with any volume discount counted in."
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F36",
+            "text": "Only the plan subscription fee can be discounted."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says the Regional Sales Director can approve 20% (the 2025 band of up to 22%).",
+            "kind": "stale",
+            "fact": "SALES-REF-PRICING-2025#F16"
+          },
+          {
+            "text": "Tells the seller they can agree to 20% themselves or commit to it before approval.",
+            "kind": "unauthorized_promise"
+          },
+          {
+            "text": "Says 20% needs a CFO exception (that is above 25%).",
+            "kind": "fabrication",
+            "fact": "SALES-REF-PRICING-2026#F45"
+          },
+          {
+            "text": "Cites the draft thresholds (16% / 24%) as the rule in force.",
+            "kind": "draft",
+            "fact": "SALES-REF-PRICING-2027-DRAFT#F14"
+          }
+        ],
+        "expected_role": "assistant advising the seller privately; an explanation for the seller, not a line addressed to the prospect",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "private_explanation",
+        "source_ids": [
+          "SALES-REF-PRICING-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-PRICING-2026",
+          "SALES-REF-PRICING-2025",
+          "SALES-REF-PRICING-2027-DRAFT"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Discount approval bands",
+            "sources": [
+              "SALES-REF-PRICING-2026",
+              "SALES-REF-PRICING-2025",
+              "SALES-REF-PRICING-2027-DRAFT"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Suggesting the seller find out the fleet size, since a volume discount already uses part of the 20%."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-029",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "A friend of mine who's been with you a couple of years has her own success manager. Do we get one too?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "We'd be about a hundred and eighty trucks, and we're looking at Enterprise."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "stale_document",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "At 180 vehicles the answer under both current documents is the pooled Customer Success team: the price list assigns a named manager from 250 vehicles, the support guide from 300, and 180 is below both. The 2025 list gave every Enterprise customer a named manager whatever the fleet size, which explains the friend's experience but no longer applies. The seller says pooled team (with a business review twice a year) and may mention the paid Technical Account Manager; the seller does not promise a named manager.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-SUPPORT-SLA-2026#F20",
+            "text": "An Enterprise account of this size is served by the pooled Customer Success team.",
+            "answer_needles": [
+              "pool",
+              "shared"
+            ]
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F49",
+            "text": "A named Customer Success Manager is for larger Enterprise fleets (250 or more on the price list, 300 or more in the support guide).",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-SUPPORT-SLA-2026#F20",
+            "text": "The pooled team holds a business review twice a year."
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F21",
+            "text": "A Technical Account Manager can be added for $18,000 per year."
+          },
+          {
+            "fact": "SALES-REF-SUPPORT-SLA-2026#F22",
+            "text": "A Technical Account Manager is a paid add-on for any Enterprise account."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says every Enterprise customer gets a named Customer Success Manager, or that they will get one at 180 trucks.",
+            "kind": "stale",
+            "fact": "SALES-REF-PRICING-2025#F19"
+          },
+          {
+            "text": "Promises to arrange a named Customer Success Manager for them.",
+            "kind": "unauthorized_promise"
+          },
+          {
+            "text": "Presents the Technical Account Manager as free or included.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SALES-REF-SUPPORT-SLA-2026",
+          "SALES-REF-PRICING-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-SUPPORT-SLA-2026",
+          "SALES-REF-PRICING-2026",
+          "SALES-REF-PRICING-2025"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Who gets a named Customer Success Manager",
+            "sources": [
+              "SALES-REF-SUPPORT-SLA-2026",
+              "SALES-REF-PRICING-2026",
+              "SALES-REF-PRICING-2025"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Explaining that the rule changed since the friend signed.",
+          "Mentioning that the two current documents put the threshold at 250 and 300, both above 180."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-030",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "We're not ready to lock in for a whole year. What's Operations per vehicle if we just go month to month?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "conflict_stale",
+      "category": "current_vs_old_price",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Current list: Operations on monthly billing is $55 per vehicle per month. The 2025 list had $50 and the draft proposes $60. The seller quotes $55 and may add that annual billing is $47 and that monthly billing is not eligible for the volume discount.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F5",
+            "text": "Operations on monthly billing is $55 per vehicle per month.",
+            "answer_needles": [
+              "$55",
+              "55 dollars",
+              "fifty-five",
+              "55 per",
+              "55 a "
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F4",
+            "text": "On annual billing it is $47."
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F37",
+            "text": "Monthly billing is not eligible for the volume discount."
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F50",
+            "text": "Monthly billing can be cancelled with one full billing cycle of written notice."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Quotes the 2025 monthly price.",
+            "kind": "stale",
+            "fact": "SALES-REF-PRICING-2025#F4",
+            "answer_needles": [
+              "$50",
+              "fifty dollars"
+            ]
+          },
+          {
+            "text": "Quotes the draft 2027 monthly price.",
+            "kind": "draft",
+            "fact": "SALES-REF-PRICING-2027-DRAFT#F2",
+            "answer_needles": [
+              "$60",
+              "sixty dollars"
+            ]
+          },
+          {
+            "text": "Gives the annual rate of $47 as the month-to-month price.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "prefer_current_source",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SALES-REF-PRICING-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-PRICING-2026",
+          "SALES-REF-PRICING-2025",
+          "SALES-REF-PRICING-2027-DRAFT"
+        ],
+        "known_conflicts": [
+          {
+            "topic": "Operations monthly-billing price per vehicle",
+            "sources": [
+              "SALES-REF-PRICING-2026",
+              "SALES-REF-PRICING-2025",
+              "SALES-REF-PRICING-2027-DRAFT"
+            ],
+            "resolution": "current_wins"
+          }
+        ],
+        "acceptable_inference": [
+          "Pointing out the $8 gap to the annual rate."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-031",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Sorry, I'm not the finance person here - what does 'net thirty' actually mean?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "irrelevant_source",
+      "category": "general_knowledge",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "A plain general-knowledge explanation in a sentence or two: net thirty means the full invoice amount is due within 30 days of the invoice date. It does not need the documents and must not turn into a tour of the price list.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Says it cannot explain the term or needs to check.",
+            "kind": "over_deferral"
+          },
+          {
+            "text": "Invents early-payment discounts, late fees or other payment terms as Kestravane policy.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "explain",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "One short clause that annual invoices are on those terms is accurate and fine."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-032",
+      "mode": "sales",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "she just said \"we need to think about it\" and is about to wrap up. what do i say to find out what's really holding them back, without being pushy",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "irrelevant_source",
+      "category": "sales_coaching",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Private coaching for this moment: a short, calm line or question that invites the real concern (for example asking what in particular they want to think through, or what would need to be true to move ahead) and secures a next step. This is craft, not document content: no prices, no plan tour, no invented urgency, and no concession offered as bait.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Tells the seller to offer a discount, a free pilot or another concession to keep them on the call.",
+            "kind": "unauthorized_promise"
+          },
+          {
+            "text": "Uses the draft 2027 price rise as a reason to sign now.",
+            "kind": "draft",
+            "fact": "SALES-REF-PRICING-2027-DRAFT#F16"
+          },
+          {
+            "text": "Invents a deadline, a promotion or facts about this prospect.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "assistant advising the seller privately; an explanation for the seller, not a line addressed to the prospect",
+        "expected_action": "answer_directly",
+        "expected_response_type": "private_advice",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Giving one or two lines the seller can say out loud."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-033",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Before we go any further, can you play back what you've got on us so far, so I know we're on the same page?",
+      "prior_transcript": [
+        {
+          "speaker": "other",
+          "text": "So it's eighty-five box trucks, running out of two depots, Reno and Sparks."
+        },
+        {
+          "speaker": "other",
+          "text": "Dispatch runs on a system we built in-house, and Lorcan on my team owns that."
+        },
+        {
+          "speaker": "user",
+          "text": "Got it. And your current tracking contract, when does that run out?"
+        },
+        {
+          "speaker": "other",
+          "text": "End of January. So we'd want to be switched over before then."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "irrelevant_source",
+      "category": "conversation_recall",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "The answer is in the conversation, not in the documents: 85 box trucks, two depots (Reno and Sparks), dispatch on an in-house system owned by Lorcan, and the current tracking contract ends at the end of January so they want to switch before then. A short, accurate read-back. It must not add a plan, a price, or a promise to be live by January.",
+        "required_facts": [
+          {
+            "fact": "CONVERSATION",
+            "text": "The fleet is 85 box trucks.",
+            "answer_needles": [
+              "85",
+              "eighty-five"
+            ]
+          },
+          {
+            "fact": "CONVERSATION",
+            "text": "They run out of two depots, Reno and Sparks.",
+            "answer_needles": [
+              "reno"
+            ]
+          },
+          {
+            "fact": "CONVERSATION",
+            "text": "Their current contract ends at the end of January and they want to switch before then.",
+            "answer_needles": [
+              "january"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "CONVERSATION",
+            "text": "Dispatch runs on an in-house system owned by Lorcan."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Adds details the prospect did not give (a plan, a price, modules, a vehicle count other than 85).",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Promises they will be live before the end of January.",
+            "kind": "unauthorized_promise"
+          },
+          {
+            "text": "Says it does not have that information or would have to check.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "answer_directly",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Ending with a question about what else matters to them."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-034",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Sure, she'd be up for that. Would Thursday afternoon or Friday morning suit you better?",
+      "prior_transcript": [
+        {
+          "speaker": "user",
+          "text": "I'd like to get your operations lead onto a short demo so she can see the dispatch view for herself."
+        }
+      ],
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "irrelevant_source",
+      "category": "present_decision",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "A present decision, not a document fact: the seller simply picks one of the two slots (either is acceptable), proposes a time and offers to send the invite. No document content is needed and none should be pulled in.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Says it cannot know the calendar or refuses to choose a slot.",
+            "kind": "over_deferral"
+          },
+          {
+            "text": "Brings in prices, plans or document content nobody asked about.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "make_current_decision",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Choosing either slot.",
+          "Suggesting a specific time and a length for the demo."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-035",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Do the drivers get an app on their phones, or is it all just the box in the truck?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "missing_product_document",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Nothing loaded says whether there is a driver app: the documents cover the TrakNode unit, sensors, cameras, the web application, the Slack and Teams alert apps and the API, and the price list does not enumerate product features. The position is unknown. The seller neither claims an app nor denies one; says they will confirm and come back, in words a person would say.",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F29",
+            "text": "Each vehicle carries a TrakNode T4 unit."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Says there is a driver app (or describes its features, platforms or price).",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says there is no driver app.",
+            "kind": "false_denial"
+          },
+          {
+            "text": "Presents an app or feature from another loaded mode's material as Kestravane's.",
+            "kind": "other_mode"
+          },
+          {
+            "text": "Passes off the Slack or Teams alert apps as a driver app.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "defer_to_verify",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Asking what the drivers would need the app for."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-036",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Our marketing team lives in HubSpot. Does your system feed into that, and is there a charge for it?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-cf-sf-absent",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "connector_capability",
+      "difficulty": "hard",
+      "oracle": {
+        "expected_behavior_note": "With the integration matrix not loaded, nothing says whether a HubSpot connector exists, on which plans, or at what fee. The price list lists only the NetSuite connector and points to the Integration Matrix for the other connectors. The seller neither confirms nor denies; says they will check the integration matrix and come back.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "Says a HubSpot connector exists, is included, is one-way or two-way, or names a fee.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says there is no HubSpot integration.",
+            "kind": "false_denial"
+          },
+          {
+            "text": "Gives the NetSuite connector price ($400 per month) as the HubSpot fee.",
+            "kind": "fabrication",
+            "fact": "SALES-REF-PRICING-2026#F20"
+          },
+          {
+            "text": "Presents an integration fact from another loaded mode's material as Kestravane's.",
+            "kind": "other_mode"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "defer_to_verify",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Asking what they would want to see in HubSpot.",
+          "Saying the connector list is published separately and offering to send it."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-037",
+      "mode": "sales",
+      "surface": "typed",
+      "speaker": "user",
+      "question": "tempsense s2 - how long does the battery last and what temperature range is it rated for? prospect hauls frozen",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "missing_product_document",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "No loaded document gives a battery life or a rated temperature range for the TempSense S2. What is documented: it is wireless and pairs with a TrakNode, costs $64 per sensor, and carries the 3-year hardware warranty. The assistant says the spec is not in the material, gives what is known, and tells the seller to get the spec sheet before answering the prospect.",
+        "required_facts": [],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F30",
+            "text": "A TempSense S2 sensor costs $64."
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F35",
+            "text": "All hardware carries a 3-year warranty with advance replacement."
+          },
+          {
+            "fact": "SALES-REF-SECURITY-2026#F19",
+            "text": "Temperature sensor readings are retained for 36 months."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "States a battery life for the sensor.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "States a rated temperature range, or says it is rated for frozen loads.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Says the sensor is not suitable for frozen loads.",
+            "kind": "false_denial"
+          },
+          {
+            "text": "Presents the 3-year warranty or the 36-month data retention as the battery life.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "assistant advising the seller privately; an explanation for the seller, not a line addressed to the prospect",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "private_explanation",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Noting that Hollowmere, a refrigerated carrier, uses the sensors, without turning that into a spec."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-038",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "What availability number do you actually put in the contract?",
+      "prior_transcript": null,
+      "conversation_id": null,
+      "turn_index": 1,
+      "evidence_config": "sales-none",
+      "pi_state": "none",
+      "condition": "missing_evidence",
+      "category": "sla",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "No sales material is loaded, so there is no uptime figure to quote. The seller must not invent one; stays useful by saying they will send the service level terms and by asking what level the buyer needs, in words a seller would say.",
+        "required_facts": [],
+        "optional_facts": [],
+        "forbidden_claims": [
+          {
+            "text": "States any uptime percentage or service credit as the contractual figure.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Agrees to an availability figure the buyer names.",
+            "kind": "unauthorized_promise"
+          },
+          {
+            "text": "Presents an uptime figure or policy belonging to another loaded mode's material (another company or product) as Kestravane's.",
+            "kind": "other_mode"
+          },
+          {
+            "text": "Answers like a system ('I don't have that in my documents') instead of something a seller would say.",
+            "kind": "over_deferral"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "decline_to_invent_stay_useful",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [],
+        "source_priority": [],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Asking what availability their operation needs and offering to send the terms today."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-039",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "What does the maintenance planning piece run, and is there any wiggle room on that?",
+      "prior_transcript": null,
+      "conversation_id": "ER-D2-SALES-039-C",
+      "turn_index": 1,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "followup",
+      "category": "current_pricing",
+      "difficulty": "easy",
+      "oracle": {
+        "expected_behavior_note": "Maintenance Planner is $5 per vehicle per month. There is no room on it: modules are never discounted (discounts apply to plan subscription fees only). The near misses are Driver Safety Scoring at $6 and Fuel & Idle Analytics at $4.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F17",
+            "text": "Maintenance Planner is $5 per vehicle per month.",
+            "answer_needles": [
+              "$5",
+              "5 dollars",
+              "five dollars",
+              "five bucks",
+              "5 per",
+              "5 a "
+            ]
+          },
+          {
+            "fact": "SALES-REF-PRICING-2026#F36",
+            "text": "Modules are never discounted.",
+            "answer_needles": []
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2027-DRAFT#F18",
+            "text": "The draft 2027 list leaves module prices unchanged (not to be quoted)."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Offers a discount on the module or says one can be arranged.",
+            "kind": "unauthorized_promise"
+          },
+          {
+            "text": "Gives another module's price ($6 or $4) as the Maintenance Planner price.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "answer_then_scope_authority",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SALES-REF-PRICING-2026"
+        ],
+        "source_priority": [
+          "SALES-REF-PRICING-2026"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Saying that any room is on the plan fee, within the discount rules."
+        ],
+        "requires_calculation": false,
+        "calculation_oracle": null,
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    },
+    {
+      "id": "ER-D2-SALES-040",
+      "mode": "sales",
+      "surface": "hotkey",
+      "speaker": "other",
+      "question": "Okay, and across seventy vehicles, what's that for a full year?",
+      "prior_transcript": null,
+      "conversation_id": "ER-D2-SALES-039-C",
+      "turn_index": 2,
+      "evidence_config": "sales-full",
+      "pi_state": "none",
+      "condition": "followup",
+      "category": "quantity_arithmetic",
+      "difficulty": "medium",
+      "oracle": {
+        "expected_behavior_note": "Carries on from the previous turn: Maintenance Planner at $5 per vehicle per month, 70 x $5 x 12 = $4,200 for the year, with no discount applied.",
+        "required_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F17",
+            "text": "At $5 per vehicle per month, seventy vehicles is $4,200 for the year.",
+            "answer_needles": [
+              "4,200",
+              "4200",
+              "4.2k",
+              "forty-two hundred"
+            ]
+          }
+        ],
+        "optional_facts": [
+          {
+            "fact": "SALES-REF-PRICING-2026#F36",
+            "text": "Modules are never discounted."
+          }
+        ],
+        "forbidden_claims": [
+          {
+            "text": "Uses the Driver Safety Scoring price ($5,040).",
+            "kind": "fabrication",
+            "fact": "SALES-REF-PRICING-2026#F15",
+            "answer_needles": [
+              "5,040"
+            ]
+          },
+          {
+            "text": "Uses the Fuel & Idle Analytics price ($3,360).",
+            "kind": "fabrication",
+            "fact": "SALES-REF-PRICING-2026#F16",
+            "answer_needles": [
+              "3,360"
+            ]
+          },
+          {
+            "text": "Applies a discount to the module.",
+            "kind": "fabrication"
+          },
+          {
+            "text": "Loses the thread and prices the plan or another item instead of the module.",
+            "kind": "fabrication"
+          }
+        ],
+        "expected_role": "seller (account executive) speaking to the prospect, first person",
+        "expected_action": "answer_with_calculation",
+        "expected_response_type": "spoken_reply",
+        "source_ids": [
+          "SALES-REF-PRICING-2026",
+          "CONVERSATION"
+        ],
+        "source_priority": [
+          "SALES-REF-PRICING-2026",
+          "CONVERSATION"
+        ],
+        "known_conflicts": [],
+        "acceptable_inference": [
+          "Giving the monthly figure ($350) as well."
+        ],
+        "requires_calculation": true,
+        "calculation_oracle": {
+          "expression": "70 * 5 * 12",
+          "result": 4200,
+          "unit": "USD",
+          "accepted_forms": [
+            "4,200",
+            "4200",
+            "$4.2k",
+            "4.2k",
+            "forty-two hundred"
+          ],
+          "inputs": {
+            "module_price": "SALES-REF-PRICING-2026#F17",
+            "vehicles": "stated in the question"
+          }
+        },
+        "requires_code_validation": false,
+        "code_oracle": null
+      }
+    }
+  ]
+}

@@ -1,0 +1,1396 @@
+{
+ "mode": "call-center",
+ "items": [
+  {
+   "id": "ER-P24-CC-N-001",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "It's Sunday and that's the only camera I've got on that door. Can't you just post me a new one today and I'll send this one back once it turns up? What's the catch if you do it that way round?",
+   "prior_transcript": [
+    {
+     "speaker": "user",
+     "text": "Before we go any further, what's the light on the front of it doing?"
+    },
+    {
+     "speaker": "other",
+     "text": "It's red. Just red, not flashing, and it's been like that since Friday. It's the Eave cam by the front door, I only bought it from you in the spring."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-p24",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "repair",
+   "difficulty": "hard",
+   "oracle": {
+    "optional_facts": [
+     {
+      "fact": "CC-REF-REPAIR-2026#F8",
+      "text": "Only Device Diagnostics authorises an advance exchange; Tier 1 does not say it will be granted."
+     },
+     {
+      "fact": "CC-REF-REPAIR-2026#F12",
+      "text": "The hold is an authorisation, not a charge, and is released when the faulty unit is scanned in."
+     }
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying that standard exchange, with the faulty camera sent in first, involves no hold."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null,
+    "expected_behavior_note": "Three documents. The troubleshooting guide: a steady red light is a hardware fault, so the agent stops and escalates to Tier 2 Device Diagnostics instead of running the offline steps. The escalation matrix: Tier 2 takes warm transfers Monday to Saturday, so on a Sunday the agent opens a ticket and Tier 2 makes first contact within 1 business day. The repair terms: sending the new camera first is the advance exchange route; only Device Diagnostics authorises it, and Tier 1 may say the route exists but not that it will be granted. The catch: a temporary hold on a payment card, $115 for an Eave Cam, released when the faulty unit is scanned in at the service centre; the faulty unit must be scanned in within 20 calendar days of the day the replacement is dispatched, or the hold becomes a charge. So the honest reply is that the agent cannot post one today, says who decides and when the customer will hear, and explains the hold and the 20 days. The camera was bought in the spring, so it is inside the warranty and no repair fee applies.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-TROUBLESHOOTING-2026#F10",
+      "text": "A steady red light is a hardware fault and goes to Tier 2 Device Diagnostics, who decide.",
+      "answer_needles": [
+       "Device Diagnostics",
+       "Tier 2",
+       "tier two"
+      ]
+     },
+     {
+      "fact": "CC-REF-ESCALATION-2026#F6",
+      "text": "On a Sunday Tier 2 cannot take a warm transfer: a ticket is opened and Tier 2 makes first contact within 1 business day.",
+      "answer_needles": [
+       "1 business day",
+       "one business day",
+       "a business day",
+       "next business day",
+       "Monday"
+      ]
+     },
+     {
+      "fact": "CC-REF-REPAIR-2026#F10",
+      "text": "Sending the replacement first (advance exchange) needs a card hold of $115 for an Eave Cam.",
+      "answer_needles": [
+       "$115",
+       "115 dollars",
+       "hundred and fifteen",
+       "one fifteen"
+      ]
+     },
+     {
+      "fact": "CC-REF-REPAIR-2026#F5",
+      "text": "The faulty camera has to be scanned in within 20 calendar days of the replacement being dispatched, or the hold becomes a charge.",
+      "answer_needles": [
+       "20 calendar days",
+       "20 days",
+       "twenty calendar days",
+       "twenty days",
+       "20-day"
+      ]
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Promises that a replacement goes out today, or says the advance exchange is approved.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-REPAIR-2026#F8"
+     },
+     {
+      "text": "Quotes another camera's hold.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REPAIR-2026#F11",
+      "answer_needles": [
+       "$65",
+       "$185"
+      ]
+     },
+     {
+      "text": "Quotes the paid repair fee for a camera that is inside its warranty.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REPAIR-2026#F20",
+      "answer_needles": [
+       "$52"
+      ]
+     },
+     {
+      "text": "Walks the customer through the offline steps or a factory reset although the light shows a hardware fault.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Says the customer is being put through to Tier 2 now, on a Sunday.",
+      "kind": "fabrication",
+      "fact": "CC-REF-ESCALATION-2026#F6"
+     }
+    ],
+    "expected_action": "answer_then_scope_authority",
+    "source_ids": [
+     "CC-REF-TROUBLESHOOTING-2026",
+     "CC-REF-ESCALATION-2026",
+     "CC-REF-REPAIR-2026"
+    ],
+    "source_priority": [
+     "CC-REF-REPAIR-2026",
+     "CC-REF-ESCALATION-2026",
+     "CC-REF-TROUBLESHOOTING-2026"
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_response_type": "spoken_reply"
+   }
+  },
+  {
+   "id": "ER-P24-CC-N-002",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Right. So if I get your fitters round to put all three up, and I take the Plus plan and just pay for the year in one go, what am I handing over today altogether?",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "We're out in Osterbrook, and I've got three of the Eave cams sitting here still in their boxes."
+    },
+    {
+     "speaker": "user",
+     "text": "And are any of them going up high, above the ground floor?"
+    },
+    {
+     "speaker": "other",
+     "text": "No, all three at about door height."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-p24",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "fit",
+   "difficulty": "hard",
+   "oracle": {
+    "optional_facts": [
+     {
+      "fact": "CC-REF-FIT-2026#F6",
+      "text": "Every additional camera in the same visit is $55."
+     },
+     {
+      "fact": "CC-REF-FIT-AREAS-2026#F2",
+      "text": "Osterbrook carries a $20 travel fee, once for the visit."
+     },
+     {
+      "fact": "CC-REF-BILLING-TRAVEL-2026#F2",
+      "text": "Keep Plus is $130 a year."
+     },
+     {
+      "fact": "CC-REF-FIT-2026#F9",
+      "text": "The full amount for the visit is paid at booking."
+     }
+    ],
+    "known_conflicts": [
+     {
+      "topic": "Fit prices",
+      "sources": [
+       "CC-REF-FIT-2026",
+       "CC-REF-FIT-PILOT-2025"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Saying that sales tax comes on top.",
+     "Mentioning the cut-off for free changes and the late cancellation fee before taking payment."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "95 + 2 * 55 + 20 + 130",
+     "result": 355,
+     "unit": "USD before sales tax",
+     "accepted_forms": [
+      "355",
+      "$355",
+      "355.00",
+      "three hundred and fifty-five",
+      "three hundred fifty-five",
+      "three fifty-five"
+     ],
+     "inputs": {
+      "first_camera": "CC-REF-FIT-2026#F5",
+      "additional_camera": "CC-REF-FIT-2026#F6",
+      "travel_fee_osterbrook": "CC-REF-FIT-AREAS-2026#F2",
+      "keep_plus_annual": "CC-REF-BILLING-TRAVEL-2026#F2",
+      "cameras": "stated in the conversation (three, none high)"
+     },
+     "wrong_results_common": [
+      "335",
+      "435",
+      "415",
+      "381",
+      "238",
+      "297",
+      "277",
+      "395",
+      "445",
+      "285",
+      "427"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null,
+    "expected_behavior_note": "Three documents, one part of the total in each. The Fit guide: $95 for the first camera in a visit and $55 for every additional camera, so three cameras are 95 + 55 + 55 = $205; no high-mount amount, because all three go at door height. The Fit Service Areas sheet: Osterbrook is an outer-ring area with a travel fee of $20, added once for the visit. The billing guide: Keep Plus is $130 a year (it covers up to 5 cameras). Total today 205 + 20 + 130 = $355, before sales tax. The 2025 pilot briefing's $69 and $39 are outdated and Osterbrook was never a pilot area. Fit is paid at booking, so all of it is due today.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-FIT-2026#F5",
+      "text": "Fit for three cameras is $205, the Osterbrook travel fee is $20 and Keep Plus for the year is $130: $355 in all, before tax.",
+      "answer_needles": [
+       "355",
+       "three hundred and fifty-five",
+       "three hundred fifty-five",
+       "three fifty-five"
+      ]
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Leaves out the Osterbrook travel fee.",
+      "kind": "fabrication",
+      "fact": "CC-REF-FIT-AREAS-2026#F2",
+      "answer_needles": [
+       "335"
+      ]
+     },
+     {
+      "text": "Charges the first-camera price for all three cameras.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "435",
+       "415"
+      ]
+     },
+     {
+      "text": "Uses the monthly Plus price, once or twelve times, where the customer asked for the year.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "381",
+       "238"
+      ]
+     },
+     {
+      "text": "Uses the 2025 pilot prices.",
+      "kind": "stale",
+      "fact": "CC-REF-FIT-PILOT-2025#F4",
+      "answer_needles": [
+       "297",
+       "277",
+       "$69",
+       "$39"
+      ]
+     },
+     {
+      "text": "Charges the travel fee for each camera.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "395"
+      ]
+     },
+     {
+      "text": "Uses another plan's yearly price.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "445",
+       "285"
+      ]
+     },
+     {
+      "text": "Adds a high-mount amount although the cameras go at door height.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "427"
+      ]
+     }
+    ],
+    "expected_action": "answer_with_calculation",
+    "source_ids": [
+     "CC-REF-FIT-2026",
+     "CC-REF-FIT-AREAS-2026",
+     "CC-REF-BILLING-TRAVEL-2026",
+     "CONVERSATION"
+    ],
+    "source_priority": [
+     "CC-REF-FIT-2026",
+     "CC-REF-FIT-AREAS-2026",
+     "CC-REF-BILLING-TRAVEL-2026",
+     "CC-REF-FIT-PILOT-2025"
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_response_type": "spoken_reply"
+   }
+  },
+  {
+   "id": "ER-P24-CC-N-003",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "qa pulled one of my calls from last week and flagged 2 things. I added the caller's daughter as an authorised contact without sending the code first, and later on I told her it's $52 to fix an out of warranty trek cam. which one zeroes the whole call, what does the other one cost me in points, and what should the trek figure have been",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-p24",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "quality",
+   "difficulty": "hard",
+   "oracle": {
+    "optional_facts": [
+     {
+      "fact": "CC-REF-REPAIR-2026#F20",
+      "text": "$52 is the Eave Cam fee."
+     },
+     {
+      "fact": "CC-REF-QUALITY-2026#F16",
+      "text": "A dispute has to be raised within 8 calendar days of the scorecard being published."
+     }
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Pointing out that a dispute would need a document on its side and that none supports either point here."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null,
+    "expected_behavior_note": "Three documents. The verification standard: adding an Authorised Contact is one of the actions that needs step-up verification first. The quality guide: an account action taken without the verification the standard requires for it, including step-up verification that was needed and skipped, is an automatic fail, which sets the score for the entire contact to 0; a wrong price or fee stated to the customer is not an automatic fail, it takes 10 points off the Accuracy section. The repair terms: the flat fee for a Trek Cam is $68; $52 is the Eave Cam's. So the missing code is what zeroes the call, the wrong fee would have cost 10 points, and the figure should have been $68.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-VERIFICATION-2026#F6",
+      "text": "Adding an Authorised Contact needs step-up verification first.",
+      "answer_needles": [
+       "step-up",
+       "step up"
+      ]
+     },
+     {
+      "fact": "CC-REF-QUALITY-2026#F7",
+      "text": "Acting on the account without the required verification is an automatic fail: the contact scores 0.",
+      "answer_needles": [
+       "automatic fail",
+       "auto-fail",
+       "auto fail",
+       "autofail"
+      ]
+     },
+     {
+      "fact": "CC-REF-QUALITY-2026#F6",
+      "text": "A wrong fee stated to the customer takes 10 points off the Accuracy section.",
+      "answer_needles": [
+       "10 points",
+       "ten points",
+       "10-point",
+       "10 pts"
+      ]
+     },
+     {
+      "fact": "CC-REF-REPAIR-2026#F21",
+      "text": "The paid repair flat fee for a Trek Cam is $68.",
+      "answer_needles": [
+       "$68",
+       "68 dollars",
+       "sixty-eight"
+      ]
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says the wrong fee is what zeroes the call, or that both are automatic fails.",
+      "kind": "fabrication",
+      "fact": "CC-REF-QUALITY-2026#F6"
+     },
+     {
+      "text": "Gives the Lantern Cam fee or the Trek Cam card hold as the Trek Cam repair fee.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REPAIR-2026#F19",
+      "answer_needles": [
+       "$34",
+       "$185"
+      ]
+     },
+     {
+      "text": "Gives the deduction for a missing required statement as the cost of the wrong fee.",
+      "kind": "fabrication",
+      "fact": "CC-REF-QUALITY-2026#F9",
+      "answer_needles": [
+       "five points"
+      ]
+     },
+     {
+      "text": "Says the code was not needed for adding an Authorised Contact.",
+      "kind": "false_denial",
+      "fact": "CC-REF-VERIFICATION-2026#F6"
+     }
+    ],
+    "expected_action": "answer_directly",
+    "expected_response_type": "private_explanation",
+    "source_ids": [
+     "CC-REF-QUALITY-2026",
+     "CC-REF-VERIFICATION-2026",
+     "CC-REF-REPAIR-2026"
+    ],
+    "source_priority": [
+     "CC-REF-QUALITY-2026",
+     "CC-REF-VERIFICATION-2026",
+     "CC-REF-REPAIR-2026"
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say"
+   }
+  },
+  {
+   "id": "ER-P24-CC-N-004",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Fine. So what's the damage for the pair of them, if I pay for the quicker delivery to get them back?",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "I've got two Eave cams here that have both packed in. They're a good three years old, so I know they're well past the guarantee."
+    },
+    {
+     "speaker": "user",
+     "text": "Understood. If our diagnostics team confirms the faults, both would go through as paid repairs on the one return."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-p24",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "repair",
+   "difficulty": "hard",
+   "oracle": {
+    "optional_facts": [
+     {
+      "fact": "CC-REF-REPAIR-2026#F23",
+      "text": "The Expedited charge is taken once for each return parcel, not for each unit."
+     },
+     {
+      "fact": "CC-REF-SHIPPING-2026#F2",
+      "text": "Expedited delivery costs $14.95."
+     },
+     {
+      "fact": "CC-REF-REPAIR-2026#F22",
+      "text": "The flat fee is charged for each unit and already includes return by Standard delivery."
+     }
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying the quote comes after the bench inspection and nothing is charged until it is accepted.",
+     "Giving $104 as the repair part of the total."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "2 * 52 + 14.95",
+     "result": 118.95,
+     "unit": "USD before sales tax",
+     "accepted_forms": [
+      "118.95",
+      "$118.95",
+      "a hundred and eighteen ninety-five",
+      "one eighteen ninety-five",
+      "one hundred and eighteen dollars and ninety-five",
+      "118 dollars and 95"
+     ],
+     "inputs": {
+      "eave_cam_flat_fee": "CC-REF-REPAIR-2026#F20",
+      "expedited_charge": "CC-REF-SHIPPING-2026#F2",
+      "once_per_parcel_rule": "CC-REF-REPAIR-2026#F23",
+      "units": "stated in the conversation (two Eave Cams on one return)"
+     },
+     "wrong_results_common": [
+      "133.90",
+      "66.95",
+      "110.95",
+      "82.95",
+      "150.95",
+      "$133"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null,
+    "expected_behavior_note": "Two documents. The repair terms: the paid repair flat fee for an Eave Cam is $52 and is charged for each unit, so two are $104; the fee already includes return by Standard delivery; a customer who wants the units back sooner pays the Expedited charge from the shipping policy, once for each return parcel and not for each unit, and units on the same Return Authorisation travel back in one parcel. The shipping policy: Expedited is $14.95. Total 2 x 52 + 14.95 = $118.95, before tax. Near misses: the Lantern Cam fee ($34) and the Trek Cam fee ($68), the Standard charge ($6.95, already included) and Next Business Day ($29.00, not offered for service returns). The fee applies once Device Diagnostics and the bench confirm the route; the agent gives the figure without promising the outcome or a delivery day.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-REPAIR-2026#F20",
+      "text": "Two Eave Cam repairs at $52 each plus one Expedited charge of $14.95 for the return parcel: $118.95.",
+      "answer_needles": [
+       "118.95",
+       "a hundred and eighteen ninety-five",
+       "one eighteen ninety-five",
+       "one hundred and eighteen dollars and ninety-five",
+       "118 dollars and 95"
+      ]
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Charges the Expedited amount for each camera.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REPAIR-2026#F23",
+      "answer_needles": [
+       "133.90",
+       "133.9"
+      ]
+     },
+     {
+      "text": "Prices one camera only.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "66.95"
+      ]
+     },
+     {
+      "text": "Adds the Standard delivery charge, which the fee already includes.",
+      "kind": "fabrication",
+      "fact": "CC-REF-SHIPPING-2026#F1",
+      "answer_needles": [
+       "110.95"
+      ]
+     },
+     {
+      "text": "Uses the Lantern Cam or Trek Cam fee.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REPAIR-2026#F21",
+      "answer_needles": [
+       "82.95",
+       "150.95"
+      ]
+     },
+     {
+      "text": "Offers Next Business Day for the return.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REPAIR-2026#F23",
+      "answer_needles": [
+       "$133"
+      ]
+     },
+     {
+      "text": "Promises that the repairs will go ahead, or a day on which the cameras will be back.",
+      "kind": "unauthorized_promise"
+     }
+    ],
+    "expected_action": "answer_with_calculation",
+    "source_ids": [
+     "CC-REF-REPAIR-2026",
+     "CC-REF-SHIPPING-2026",
+     "CONVERSATION"
+    ],
+    "source_priority": [
+     "CC-REF-REPAIR-2026",
+     "CC-REF-SHIPPING-2026"
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_response_type": "spoken_reply"
+   }
+  },
+  {
+   "id": "ER-P24-CC-N-005",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "So what actually comes back to me, counting the fitting as well?",
+   "prior_transcript": [
+    {
+     "speaker": "other",
+     "text": "I'm sending the Lantern cam back. There's nothing wrong with it, I've just changed my mind. It only got here three weeks ago."
+    },
+    {
+     "speaker": "user",
+     "text": "I can see the order: one Lantern Cam at eighty-nine dollars, and a single-camera Fit visit with no travel fee, which was carried out on the first of the month."
+    },
+    {
+     "speaker": "other",
+     "text": "That's the one. Your fitter put it up in the hall."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-p24",
+   "pi_state": "none",
+   "condition": "multi_source",
+   "category": "fit",
+   "difficulty": "hard",
+   "oracle": {
+    "optional_facts": [
+     {
+      "fact": "CC-REF-REFUND-2026#F10",
+      "text": "For a camera that is not defective $8 is deducted for the return label."
+     },
+     {
+      "fact": "CC-REF-FIT-2026#F5",
+      "text": "The first camera in a Fit visit costs $95."
+     },
+     {
+      "fact": "CC-REF-FIT-2026#F28",
+      "text": "Fit does not offer a removal visit; the customer takes the camera down."
+     }
+    ],
+    "known_conflicts": [
+     {
+      "topic": "What happens to the Fit charge when a fitted camera is returned",
+      "sources": [
+       "CC-REF-FIT-2026",
+       "CC-REF-FIT-PILOT-2025"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Giving the two parts, $81 and $60, as well as the total.",
+     "Mentioning how long a card refund takes."
+    ],
+    "requires_calculation": true,
+    "calculation_oracle": {
+     "expression": "89 - 8 + 95 - 35",
+     "result": 141,
+     "unit": "USD",
+     "accepted_forms": [
+      "141",
+      "$141",
+      "141.00",
+      "one hundred and forty-one",
+      "a hundred and forty-one",
+      "hundred forty-one",
+      "one forty-one"
+     ],
+     "inputs": {
+      "camera_price": "stated in the conversation ($89)",
+      "label_deduction": "CC-REF-REFUND-2026#F10",
+      "fit_first_camera": "CC-REF-FIT-2026#F5",
+      "call_out_charge": "CC-REF-FIT-2026#F27"
+     },
+     "wrong_results_common": [
+      "176",
+      "149",
+      "184",
+      "150",
+      "115",
+      "136"
+     ]
+    },
+    "requires_code_validation": false,
+    "code_oracle": null,
+    "expected_behavior_note": "Two documents plus what was said. The refund policy: a camera bought directly can be returned for any reason inside the return period (three weeks is well inside it); the item price is refunded, and because the camera is not defective $8 is deducted for the return label: 89 - 8 = $81. The Fit guide: the first camera in a visit costs $95, and when a fitted camera is returned after the visit has taken place the Fit charge for that camera is refunded less a $35 call-out charge: 95 - 35 = $60. Total 81 + 60 = $141. The 2025 pilot briefing said the entire Fit charge went back; that rule ended with the pilot and would give $176. The customer takes the camera down; there is no removal visit.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-FIT-2026#F27",
+      "text": "Camera $89 less the $8 label, plus the $95 Fit charge less the $35 call-out charge: $141 comes back.",
+      "answer_needles": [
+       "141",
+       "one hundred and forty-one",
+       "a hundred and forty-one",
+       "hundred forty-one",
+       "one forty-one"
+      ]
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Applies the pilot rule and returns the entire Fit charge.",
+      "kind": "stale",
+      "fact": "CC-REF-FIT-PILOT-2025#F10",
+      "answer_needles": [
+       "176"
+      ]
+     },
+     {
+      "text": "Forgets the label deduction on the camera.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REFUND-2026#F10",
+      "answer_needles": [
+       "149"
+      ]
+     },
+     {
+      "text": "Returns everything that was paid.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "184"
+      ]
+     },
+     {
+      "text": "Uses the pilot price for the Fit visit.",
+      "kind": "stale",
+      "fact": "CC-REF-FIT-PILOT-2025#F4",
+      "answer_needles": [
+       "150",
+       "115"
+      ]
+     },
+     {
+      "text": "Deducts the late cancellation fee in place of the call-out charge.",
+      "kind": "fabrication",
+      "fact": "CC-REF-FIT-2026#F18",
+      "answer_needles": [
+       "136"
+      ]
+     },
+     {
+      "text": "Says none of the Fit charge comes back, or that a fitted camera cannot be returned.",
+      "kind": "false_denial",
+      "fact": "CC-REF-FIT-2026#F27"
+     }
+    ],
+    "expected_action": "answer_with_calculation",
+    "source_ids": [
+     "CC-REF-REFUND-2026",
+     "CC-REF-FIT-2026",
+     "CONVERSATION"
+    ],
+    "source_priority": [
+     "CC-REF-FIT-2026",
+     "CC-REF-REFUND-2026",
+     "CC-REF-FIT-PILOT-2025"
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_response_type": "spoken_reply"
+   }
+  },
+  {
+   "id": "ER-P24-CC-N-006",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "she paid for the out of warranty fix on her eave cam and had it back last month. now she's asking how long the fix itself is guaranteed for if the same thing goes again. what do I tell her",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-p24",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "repair",
+   "difficulty": "hard",
+   "oracle": {
+    "optional_facts": [
+     {
+      "fact": "CC-REF-REPAIR-2026#F36",
+      "text": "The cover applies to the repaired fault only and does not restart the limited warranty."
+     }
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Working out roughly when the 180 days end from the delivery date on the claim record."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null,
+    "expected_behavior_note": "Near the end of the repair terms: a paid repair is covered for 180 days from the day the repaired unit is delivered; if the same fault comes back in that time it is repaired again at no charge, with the label prepaid both ways. The cover is for the repaired fault only and does not restart or lengthen the limited warranty. The near miss sits early in the same document: a replacement unit under an exchange is covered for the remainder of the original warranty or 90 days. Other near misses: accessories (1 year) and the Fit workmanship guarantee (1 year).",
+    "required_facts": [
+     {
+      "fact": "CC-REF-REPAIR-2026#F36",
+      "text": "A paid repair is covered for 180 days from the day the repaired camera was delivered; the same fault is repaired again at no charge.",
+      "answer_needles": [
+       "180 days",
+       "180-day",
+       "180 calendar days",
+       "one hundred and eighty days",
+       "a hundred and eighty days",
+       "hundred eighty days"
+      ]
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives the cover on a replacement unit.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REPAIR-2026#F7",
+      "answer_needles": [
+       "90 days",
+       "ninety days",
+       "90-day"
+      ]
+     },
+     {
+      "text": "Gives the accessory cover or the Fit workmanship guarantee.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REPAIR-2026#F27",
+      "answer_needles": [
+       "1 year",
+       "one year",
+       "12 months",
+       "twelve months"
+      ]
+     },
+     {
+      "text": "Says the repair restarts or lengthens the warranty on the camera.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Says paid repairs carry no cover.",
+      "kind": "false_denial"
+     }
+    ],
+    "expected_action": "answer_directly",
+    "source_ids": [
+     "CC-REF-REPAIR-2026"
+    ],
+    "source_priority": [
+     "CC-REF-REPAIR-2026"
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say",
+    "expected_response_type": "private_advice"
+   }
+  },
+  {
+   "id": "ER-P24-CC-N-007",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "So is that it, your man's word against mine? Is there any way to get it looked at again, and how long have I got to ask?",
+   "prior_transcript": [
+    {
+     "speaker": "user",
+     "text": "The inspection report says the casing was cracked by an impact, so the claim has been moved over to a paid repair and a quote has gone out to you."
+    },
+    {
+     "speaker": "other",
+     "text": "I've read it. I never dropped that camera. It's been screwed to the same wall since the day it arrived."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-p24",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "repair",
+   "difficulty": "hard",
+   "oracle": {
+    "optional_facts": [
+     {
+      "fact": "CC-REF-REPAIR-2026#F34",
+      "text": "The quote is paused while the second inspection is pending, and its result is final."
+     }
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Offering to raise the request for her now through the claim record."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null,
+    "expected_behavior_note": "Late in the repair terms: when customer damage is found on a claim inside the warranty, a customer who disagrees with the inspection report may ask for a second inspection, and has to ask within 21 calendar days of the date on the report. It is carried out by a different technician, the quote is paused while it is pending, the result is final and there is one per claim. Near misses early in the same document: 20 calendar days to get a faulty unit scanned in under advance exchange, and 25 calendar days for which a Return Authorisation stays valid. The agent explains the option and the time limit and does not suggest how the second inspection will come out or offer to waive the fee.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-REPAIR-2026#F33",
+      "text": "She has to ask within 21 calendar days of the date on the inspection report.",
+      "answer_needles": [
+       "21 calendar days",
+       "21 days",
+       "twenty-one days",
+       "twenty-one calendar days",
+       "21-day",
+       "three weeks"
+      ]
+     },
+     {
+      "fact": "CC-REF-REPAIR-2026#F34",
+      "text": "She can ask for a second inspection, done by a different technician.",
+      "answer_needles": [
+       "second inspection",
+       "different technician",
+       "re-inspection",
+       "reinspection",
+       "inspected again",
+       "second look"
+      ]
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives the advance-exchange return time or the Return Authorisation validity as the time limit.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REPAIR-2026#F14",
+      "answer_needles": [
+       "20 calendar days",
+       "20 days",
+       "twenty days",
+       "25 calendar days",
+       "25 days",
+       "twenty-five days"
+      ]
+     },
+     {
+      "text": "Says or implies that the second inspection will overturn the report, or that the fee will be waived.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-REPAIR-2026#F37"
+     },
+     {
+      "text": "Says the report is final and nothing more can be done.",
+      "kind": "false_denial",
+      "fact": "CC-REF-REPAIR-2026#F33"
+     }
+    ],
+    "expected_action": "answer_then_scope_authority",
+    "source_ids": [
+     "CC-REF-REPAIR-2026"
+    ],
+    "source_priority": [
+     "CC-REF-REPAIR-2026"
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_response_type": "spoken_reply"
+   }
+  },
+  {
+   "id": "ER-P24-CC-N-008",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "Yeah, about that. Something's come up at work and I can't be in. If I call it off now, at four in the afternoon the day before, does that cost me anything?",
+   "prior_transcript": [
+    {
+     "speaker": "user",
+     "text": "I've got your Fit booking here: tomorrow, in the 8 to 11 window."
+    }
+   ],
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-p24",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "fit",
+   "difficulty": "hard",
+   "oracle": {
+    "optional_facts": [
+     {
+      "fact": "CC-REF-FIT-2026#F17",
+      "text": "Changes and cancellations are free only 36 hours or more before the start of the arrival window."
+     },
+     {
+      "fact": "CC-REF-FIT-2026#F23",
+      "text": "Tier 1 cannot waive the fee; a waiver request can go to the Fit Programme desk, which decides."
+     }
+    ],
+    "known_conflicts": [
+     {
+      "topic": "Fit cancellation cut-off and late fee",
+      "sources": [
+       "CC-REF-FIT-2026",
+       "CC-REF-FIT-PILOT-2025"
+      ],
+      "resolution": "current_wins"
+     }
+    ],
+    "acceptable_inference": [
+     "Pointing out that moving the visit this late is treated the same way as cancelling it."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null,
+    "expected_behavior_note": "Two documents disagree and the dates settle it. The current Fit Installation Service Guide (version 3.0, August 2026): cancelling less than 36 hours before the start of the arrival window means a $40 late cancellation fee is kept and the rest is refunded. Four in the afternoon on the day before an 8 am window is 16 hours before, so the $40 applies. The November 2025 pilot briefing allowed a free cancellation until 6 pm on the day before and had a $20 late fee; the pilot ended on 31 March 2026 and the guide's revision history says the pilot rules were withdrawn. The right reply gives the $40 and says the rest of what was paid comes back. A Tier 1 agent cannot waive the fee; the agent may offer to send a waiver request to the Fit Programme desk without saying what the desk will decide.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-FIT-2026#F18",
+      "text": "Cancelling now is inside 36 hours of the window, so a $40 late cancellation fee is kept and the rest is refunded.",
+      "answer_needles": [
+       "$40",
+       "40 dollars",
+       "forty dollars",
+       "forty-dollar",
+       "40-dollar"
+      ]
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Says the cancellation is free because it is before 6 pm on the day before.",
+      "kind": "stale",
+      "fact": "CC-REF-FIT-PILOT-2025#F8",
+      "answer_needles": [
+       "6 pm",
+       "6pm",
+       "six pm",
+       "6 p.m."
+      ]
+     },
+     {
+      "text": "Quotes the pilot late fee.",
+      "kind": "stale",
+      "fact": "CC-REF-FIT-PILOT-2025#F8",
+      "answer_needles": [
+       "$20",
+       "20 dollars",
+       "twenty dollars"
+      ]
+     },
+     {
+      "text": "Waives the fee, or says the Fit Programme desk will waive it.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-FIT-2026#F23"
+     },
+     {
+      "text": "Says the customer loses everything that was paid for the visit.",
+      "kind": "fabrication",
+      "fact": "CC-REF-FIT-2026#F18"
+     }
+    ],
+    "expected_action": "prefer_current_source",
+    "source_ids": [
+     "CC-REF-FIT-2026"
+    ],
+    "source_priority": [
+     "CC-REF-FIT-2026",
+     "CC-REF-FIT-PILOT-2025"
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_response_type": "spoken_reply"
+   }
+  },
+  {
+   "id": "ER-P24-CC-N-009",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "bench quote for her out of warranty lantern cam went out this morning and she wants to think it over. how long has she got before the quote runs out and the camera just gets posted back to her",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-p24",
+   "pi_state": "none",
+   "condition": "conflict_stale",
+   "category": "repair",
+   "difficulty": "hard",
+   "oracle": {
+    "optional_facts": [
+     {
+      "fact": "CC-REF-REPAIR-2026#F38",
+      "text": "Tier 1 can ask the Device Service desk by a note on the claim record."
+     }
+    ],
+    "known_conflicts": [
+     {
+      "topic": "How long a repair quote stays open",
+      "sources": [
+       "CC-REF-REPAIR-2026",
+       "CC-REF-QUALITY-2026"
+      ],
+      "resolution": "unresolved"
+     }
+    ],
+    "acceptable_inference": [
+     "Advising the agent to quote the shorter period so the customer is not caught out."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null,
+    "expected_behavior_note": "Two current documents disagree and neither says it replaces the other on this point. The Repair and Replacement Service Terms (version 2.2, 1 September 2026) say the quote stays open for 10 calendar days from the day it is sent, after which the unit is sent back unrepaired at no charge. The Quality Scorecard Guide (version 1.4, 28 September 2026) lists, among the things the customer must hear, that the quote stays open for 15 calendar days. Nothing loaded settles it. The right private advice names both figures, suggests giving the customer the shorter one as the safe date or checking with the Device Service desk through the claim record, and does not present either as certain.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-REPAIR-2026#F24",
+      "text": "The repair terms say the quote stays open for 10 calendar days from the day it is sent.",
+      "answer_needles": [
+       "10 calendar days",
+       "10 days",
+       "ten calendar days",
+       "ten days",
+       "10-day"
+      ]
+     },
+     {
+      "fact": "CC-REF-QUALITY-2026#F10",
+      "text": "The quality guide says the customer is told the quote stays open for 15 calendar days.",
+      "answer_needles": [
+       "15 calendar days",
+       "15 days",
+       "fifteen calendar days",
+       "fifteen days",
+       "15-day"
+      ]
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Tells the agent to promise the customer 15 days with no mention that the repair terms say 10.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-QUALITY-2026#F10"
+     },
+     {
+      "text": "Gives a period that belongs to something else in the repair terms.",
+      "kind": "fabrication",
+      "fact": "CC-REF-REPAIR-2026#F14",
+      "answer_needles": [
+       "25 calendar days",
+       "25 days",
+       "21 calendar days",
+       "21 days",
+       "20 calendar days",
+       "20 days"
+      ]
+     },
+     {
+      "text": "Invents a rule for which of the two documents wins.",
+      "kind": "fabrication"
+     }
+    ],
+    "expected_action": "surface_conflict",
+    "source_ids": [
+     "CC-REF-REPAIR-2026",
+     "CC-REF-QUALITY-2026"
+    ],
+    "source_priority": [
+     "CC-REF-REPAIR-2026",
+     "CC-REF-QUALITY-2026"
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say",
+    "expected_response_type": "private_advice"
+   }
+  },
+  {
+   "id": "ER-P24-CC-N-010",
+   "mode": "call-center",
+   "surface": "hotkey",
+   "speaker": "other",
+   "question": "My sister's over in Pellham Sound and she wants hers put up by your people as well. When do you start doing the fitting over there?",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-p24",
+   "pi_state": "none",
+   "condition": "missing_evidence",
+   "category": "fit",
+   "difficulty": "hard",
+   "oracle": {
+    "optional_facts": [
+     {
+      "fact": "CC-REF-FIT-AREAS-2026#F6",
+      "text": "Pellham Sound is a planned area; no bookings are taken."
+     },
+     {
+      "fact": "CC-REF-FIT-2026#F16",
+      "text": "An opening date is given only when the sheet shows one marked as announced."
+     }
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying the area is on the list of places being prepared.",
+     "Suggesting she ask again later."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null,
+    "expected_behavior_note": "Nothing loaded gives an opening date for Pellham Sound. The Fit Service Areas sheet lists it as Planned with the note that the partner contract is signed and no bookings are to be taken; its live date, appointment days and earliest slot are empty. The Fit guide says that for a planned area the agent says Fit is not available there yet and gives an opening date only when the sheet shows one marked as announced. A neighbouring row makes an invention tempting: Fennick Bay, another planned area, has a target of January 2027, which is not announced and is not Pellham Sound's. The right reply says Fit is not available in Pellham Sound yet and that there is no date to give, without offering a booking and without saying it will never come.",
+    "required_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Gives an opening date or month for Pellham Sound, including Fennick Bay's target.",
+      "kind": "fabrication",
+      "fact": "CC-REF-FIT-AREAS-2026#F7",
+      "answer_needles": [
+       "January",
+       "2027"
+      ]
+     },
+     {
+      "text": "Gives another area's live date, or another month, as the start.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "June",
+       "April",
+       "November",
+       "December"
+      ]
+     },
+     {
+      "text": "Offers to book a visit in Pellham Sound, or to put her on a list that nothing loaded mentions.",
+      "kind": "unauthorized_promise",
+      "fact": "CC-REF-FIT-AREAS-2026#F6"
+     },
+     {
+      "text": "Says Fit will not be offered in Pellham Sound.",
+      "kind": "false_denial"
+     }
+    ],
+    "expected_action": "decline_to_invent_stay_useful",
+    "source_ids": [],
+    "source_priority": [
+     "CC-REF-FIT-AREAS-2026",
+     "CC-REF-FIT-2026"
+    ],
+    "expected_role": "Tier 1 support agent speaking to the customer on the call, first person",
+    "expected_response_type": "spoken_reply"
+   }
+  },
+  {
+   "id": "ER-P24-CC-N-011",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "customer says she lives a short drive from the repair centre and would rather bring her trek cam in herself than post it. what's the address and what are the opening hours",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-p24",
+   "pi_state": "none",
+   "condition": "missing_evidence",
+   "category": "repair",
+   "difficulty": "hard",
+   "oracle": {
+    "optional_facts": [
+     {
+      "fact": "CC-REF-REPAIR-2026#F16",
+      "text": "Units travel under the label to the service centre in Marrow Creek."
+     },
+     {
+      "fact": "CC-REF-REPAIR-2026#F38",
+      "text": "Tier 1 reaches the Device Service desk by a note on the claim record; customers are not put through."
+     }
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Saying the service centre is in Marrow Creek.",
+     "Saying the terms provide for sending the unit under the label and for nothing else."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null,
+    "expected_behavior_note": "Nothing loaded gives a street address or opening hours for the service centre, and nothing says a unit can be handed in there. The repair terms say only that units travel under the Return Authorisation label to the service centre in Marrow Creek, that a parcel without a Return Authorisation number on its label goes back to the sender, and that customers are not put through to the Device Service desk. Tempting inventions: the warehouse in Tolliver Falls from the shipping policy, which is a different place, and the working hours of other desks (the Fit Programme desk, Tier 2). The right private advice says there is no address or opening time to give, that the documented route is the label e-mailed with the Return Authorisation, and that the agent can put the request to the Device Service desk in a note on the claim record, which is answered by the end of the next business day.",
+    "required_facts": [],
+    "forbidden_claims": [
+     {
+      "text": "Sends the customer to the warehouse in Tolliver Falls.",
+      "kind": "fabrication",
+      "answer_needles": [
+       "Tolliver Falls"
+      ]
+     },
+     {
+      "text": "Gives opening hours, including another desk's hours.",
+      "kind": "fabrication",
+      "fact": "CC-REF-FIT-2026#F30",
+      "answer_needles": [
+       "9 am to 6 pm",
+       "9am to 6pm",
+       "8:00 am",
+       "8 am to 8 pm"
+      ]
+     },
+     {
+      "text": "Gives a street address for the service centre.",
+      "kind": "fabrication"
+     },
+     {
+      "text": "Tells the agent the customer can simply turn up with the camera.",
+      "kind": "unauthorized_promise"
+     }
+    ],
+    "expected_action": "decline_to_invent_stay_useful",
+    "source_ids": [],
+    "source_priority": [
+     "CC-REF-REPAIR-2026"
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say",
+    "expected_response_type": "private_advice"
+   }
+  },
+  {
+   "id": "ER-P24-CC-N-012",
+   "mode": "call-center",
+   "surface": "typed",
+   "speaker": "user",
+   "question": "caller's in greyling ford and wants a fit visit as soon as we can manage. how many days out is the first slot the calendar will give her if I book it right now",
+   "prior_transcript": null,
+   "conversation_id": null,
+   "turn_index": 1,
+   "evidence_config": "call-center-p24",
+   "pi_state": "none",
+   "condition": "grounded_single",
+   "category": "fit",
+   "difficulty": "medium",
+   "oracle": {
+    "optional_facts": [
+     {
+      "fact": "CC-REF-FIT-AREAS-2026#F3",
+      "text": "Greyling Ford works Tuesday to Saturday, has a $25 travel fee and no high-mount crew."
+     },
+     {
+      "fact": "CC-REF-FIT-2026#F11",
+      "text": "The earliest-slot figure counts calendar days from the day of booking."
+     }
+    ],
+    "known_conflicts": [],
+    "acceptable_inference": [
+     "Adding that visits there run Tuesday to Saturday.",
+     "Mentioning the $25 travel fee."
+    ],
+    "requires_calculation": false,
+    "calculation_oracle": null,
+    "requires_code_validation": false,
+    "code_oracle": null,
+    "expected_behavior_note": "The Fit Service Areas sheet gives an earliest slot for every live area, and the rows look alike. Greyling Ford (FA-14): 9, meaning the first day the calendar can offer is 9 calendar days after the day of booking. The rows around it give other figures: Elmhollow 4, Halvergate 2; Osterbrook, with the same appointment days, 6; Yarrowby 10. Greyling Ford works Tuesday to Saturday, so the first slot is the first of those days from day 9 on. The agent gives the 9 days as what the calendar will show, not as a promise of a particular date.",
+    "required_facts": [
+     {
+      "fact": "CC-REF-FIT-AREAS-2026#F3",
+      "text": "Greyling Ford's earliest slot is 9 calendar days after the day of booking.",
+      "answer_needles": [
+       "9 days",
+       "nine days",
+       "9 calendar days",
+       "nine calendar days",
+       "9-day"
+      ]
+     }
+    ],
+    "forbidden_claims": [
+     {
+      "text": "Gives Elmhollow's figure.",
+      "kind": "fabrication",
+      "fact": "CC-REF-FIT-AREAS-2026#F4",
+      "answer_needles": [
+       "4 days",
+       "four days"
+      ]
+     },
+     {
+      "text": "Gives Halvergate's figure.",
+      "kind": "fabrication",
+      "fact": "CC-REF-FIT-AREAS-2026#F5",
+      "answer_needles": [
+       "2 days",
+       "two days"
+      ]
+     },
+     {
+      "text": "Gives Osterbrook's figure.",
+      "kind": "fabrication",
+      "fact": "CC-REF-FIT-AREAS-2026#F2",
+      "answer_needles": [
+       "6 days",
+       "six days"
+      ]
+     },
+     {
+      "text": "Gives Yarrowby's figure.",
+      "kind": "fabrication",
+      "fact": "CC-REF-FIT-AREAS-2026#F15",
+      "answer_needles": [
+       "10 days",
+       "ten days"
+      ]
+     },
+     {
+      "text": "Promises the customer a particular date or an earlier slot.",
+      "kind": "unauthorized_promise"
+     }
+    ],
+    "expected_action": "answer_directly",
+    "source_ids": [
+     "CC-REF-FIT-AREAS-2026"
+    ],
+    "source_priority": [
+     "CC-REF-FIT-AREAS-2026",
+     "CC-REF-FIT-2026"
+    ],
+    "expected_role": "Tier 1 support agent asking privately mid-call; the answer advises the agent and may give words to say",
+    "expected_response_type": "private_advice"
+   }
+  }
+ ]
+}

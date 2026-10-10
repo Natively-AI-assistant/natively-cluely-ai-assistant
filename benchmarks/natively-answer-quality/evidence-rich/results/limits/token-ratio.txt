@@ -1,0 +1,9 @@
+baseline prompt tokens for one char: 5
+zh prose               chars   3660 | chars/4   915 | provider  2039 | provider/estimate 2.23 | chars per token 1.79
+ja prose               chars   3960 | chars/4   990 | provider  2579 | provider/estimate 2.61 | chars per token 1.54
+ru prose               chars   5400 | chars/4  1350 | provider  1799 | provider/estimate 1.33 | chars per token 3.00
+es prose               chars   6480 | chars/4  1620 | provider  1799 | provider/estimate 1.11 | chars per token 3.60
+json (quote-heavy)     chars   9752 | chars/4  2438 | provider  3661 | provider/estimate 1.50 | chars per token 2.66
+csv (risk register)    chars   3127 | chars/4   782 | provider   844 | provider/estimate 1.08 | chars per token 3.70
+csv (budget)           chars   4041 | chars/4  1011 | provider  1472 | provider/estimate 1.46 | chars per token 2.75
+md (lecture notes)     chars   4291 | chars/4  1073 | provider  1041 | provider/estimate 0.97 | chars per token 4.12

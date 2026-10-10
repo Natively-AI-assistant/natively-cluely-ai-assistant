@@ -1,0 +1,1392 @@
+{
+  "mode": "seminar",
+  "world": "A fictional research project: TERN, a fault detection and isolation method for air-handling units in school buildings that combines a per-unit thermal-balance model with conformal change detection. The presenter is Maelis Thornquist, a researcher at the Halvard Laboratory for Building Analytics, Kestrelmoor Institute of Technology (co-authors Juho Raskinen and Odalys Brennecke). The data are 17 months of trend logs from 86 units in 14 schools of the Brackenfirth Borough Council estate; five whole buildings are held out. The final paper (camera-ready, 11 September 2026, SBSA 2026) reports F1 0.87 and a median detection delay of 34 minutes against a rule set (0.71, 126 minutes), an LSTM autoencoder and PCA; a March 2026 draft abstract and a March results export carry older figures (F1 0.82, 48 minutes). The pack also holds the seminar slides (8 October 2026), the supplementary material, the final results table and informal reading notes about other groups' systems (Corvane-Net and others), none of which was run on the study's data.",
+  "files": [
+    {
+      "id": "SEM-REF-PAPER-FINAL",
+      "mode": "seminar",
+      "filename": "TERN_SBSA2026_camera_ready.pdf",
+      "source": "src/SEM-REF-PAPER-FINAL.md",
+      "format": "pdf",
+      "document_type": "paper",
+      "title": "TERN: Calibrated Fault Detection for School Air-Handling Units (camera-ready paper)",
+      "status": "current",
+      "effective_date": "2026-09-11",
+      "authority": 100,
+      "supersedes": [
+        "SEM-REF-ABSTRACT-DRAFT"
+      ],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "TERN reached an F1 of 0.87 on the five held-out buildings.",
+          "doc_needles": [
+            "F1 of 0.87"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "TERN's precision was 0.91 and its recall 0.84 on the held-out buildings.",
+          "doc_needles": [
+            "precision of 0.91",
+            "recall of 0.84"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "TERN's median detection delay on the held-out buildings was 34 minutes (interquartile range 21 to 58).",
+          "doc_needles": [
+            "34 minutes",
+            "34 (21–58)"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "TERN detected 157 of the 187 labelled fault episodes in the held-out buildings.",
+          "doc_needles": [
+            "157 of the 187"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "TERN raised 16 false alarms on the held-out buildings, which is 3.2 per 100 unit-months.",
+          "doc_needles": [
+            "3.2 per 100 unit-months",
+            "16 false alarms"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "The incumbent rule set RB-28 detected 122 episodes, reached an F1 of 0.71 and had a median delay of 126 minutes, which reflects the timers built into many of its rules.",
+          "doc_needles": [
+            "F1 of 0.71",
+            "126 minutes",
+            "timers built into"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "The LSTM autoencoder baseline (LSTM-AE) detected 155 episodes, raised 49 false alarms, and reached an F1 of 0.79 with a median delay of 52 minutes.",
+          "doc_needles": [
+            "49 false alarms",
+            "52 minutes",
+            "F1 of 0.79"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "PCA-T2 was the weakest system, with an F1 of 0.66 and 77 false alarms.",
+          "doc_needles": [
+            "77 false alarms",
+            "F1 of 0.66"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "TERN assigned the correct fault class to 128 of the 157 detected episodes, an isolation accuracy of 81.5%.",
+          "doc_needles": [
+            "81.5%"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "Of TERN's 29 isolation errors, 19 were confusions between a leaking valve and sensor drift, which disturb the same residual.",
+          "doc_needles": [
+            "19 were confusions"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "TERN's recall is 0.93 for stuck dampers and 0.64 for sensor drift.",
+          "doc_needles": [
+            "0.64 for sensor drift",
+            "0.93 for stuck dampers"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "TERN's recall was 0.95 on injected faults against 0.81 on natural ones.",
+          "doc_needles": [
+            "0.95 on injected faults"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "Ablation: without the thermal-balance model the F1 falls to 0.74, the median delay grows to 61 minutes and false alarms rise to 38.",
+          "doc_needles": [
+            "falls to 0.74",
+            "61 minutes",
+            "rise to 38"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "Ablation: without the conformal stage the median delay is 29 minutes, but there are 44 false alarms and the F1 falls to 0.81.",
+          "doc_needles": [
+            "44 false alarms",
+            "29 minutes"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "Ablation: with the calibration set frozen (no rolling recalibration) the F1 is 0.84, the median delay 41 minutes, and there are 27 false alarms.",
+          "doc_needles": [
+            "27 false alarms",
+            "41 minutes"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "Resampling units with replacement 2,000 times gives a 95% interval for TERN's F1 of 0.83 to 0.90.",
+          "doc_needles": [
+            "0.83 to 0.90",
+            "2,000 times"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "The F1 gain over LSTM-AE is 0.08 (interval 0.03 to 0.13) and over RB-28 it is 0.16 (interval 0.10 to 0.22).",
+          "doc_needles": [
+            "0.03 to 0.13",
+            "0.10 to 0.22"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "Across the five held-out buildings TERN's F1 ranged from 0.80 to 0.93.",
+          "doc_needles": [
+            "0.80 to 0.93"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "The lead technician re-inspected all 16 of TERN's false alarms: 5 were real faults that had never been logged and 11 were genuine false alarms; all 16 are still counted as false alarms in the reported figures.",
+          "doc_needles": [
+            "judged 5 to be real",
+            "All 16 remain counted"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "The live pilot ran from 3 November 2025 to 9 January 2026 in four of the nine development buildings.",
+          "doc_needles": [
+            "3 November 2025",
+            "four of the nine development buildings"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "In the pilot TERN sent 63 alerts, of which 51 were acted on within two working days.",
+          "doc_needles": [
+            "63 alerts",
+            "51 were acted on"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "Heating energy per heating degree-day was 6.8% lower than a year earlier in the four pilot buildings, against 1.9% lower in the other ten buildings.",
+          "doc_needles": [
+            "6.8% lower",
+            "1.9% lower"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "All data come from a single estate in one temperate maritime climate and every building is a daytime-occupied school; TERN was not evaluated on a second estate or on any external dataset, so its transfer is unknown.",
+          "doc_needles": [
+            "any external dataset",
+            "single estate"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "The pilot's energy comparison is observational: the four pilot buildings were chosen by the facilities team (those with the newest controllers), not assigned at random, one had its boiler replaced in August 2025, and the paper makes no causal claim about energy savings.",
+          "doc_needles": [
+            "no causal claim",
+            "not assigned at random",
+            "newest controllers"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "The dataset covers 14 buildings (10 primary or infant schools and 4 secondary schools), from 2 September 2024 to 30 January 2026 (17 months), at one-minute intervals with 23 measured points per unit.",
+          "doc_needles": [
+            "2 September 2024",
+            "23 measured points"
+          ]
+        },
+        {
+          "id": "F26",
+          "statement": "The estate has 93 AHUs; 7 units with more than 20% of samples missing were removed, leaving 86 units (52 constant-air-volume, 34 variable-air-volume).",
+          "doc_needles": [
+            "We removed 7 units",
+            "93 AHUs",
+            "more than 20%"
+          ]
+        },
+        {
+          "id": "F27",
+          "statement": "Fault labels: 412 natural fault episodes from maintenance work orders, each confirmed by the estate's lead technician, plus 96 faults injected on 9 units during the Easter 2025 break and the October 2025 half-term.",
+          "doc_needles": [
+            "412 natural fault episodes",
+            "injected 96 faults"
+          ]
+        },
+        {
+          "id": "F28",
+          "statement": "From 560 candidate episodes, 41 lasting less than 10 minutes and 11 with overlapping faults were removed, leaving 508 episodes.",
+          "doc_needles": [
+            "560 candidate episodes",
+            "508 episodes"
+          ]
+        },
+        {
+          "id": "F29",
+          "statement": "The split is by building: nine development buildings (55 units, 321 episodes) are used to learn fault signatures and choose hyperparameters; five buildings (31 units, 187 episodes, 145 natural and 42 injected) are held out and used only for the final evaluation.",
+          "doc_needles": [
+            "55 units, 321 episodes",
+            "145 are natural",
+            "never by unit or by time"
+          ]
+        },
+        {
+          "id": "F30",
+          "statement": "The held-out buildings contribute 498 unit-months of monitoring.",
+          "doc_needles": [
+            "498 unit-months of monitoring"
+          ]
+        },
+        {
+          "id": "F31",
+          "statement": "In the 2023-24 school year the estate's rule engine raised 2,317 alarms, and staff closed 1,576 of them (68%) without taking any action.",
+          "doc_needles": [
+            "2,317 alarms",
+            "1,576"
+          ]
+        },
+        {
+          "id": "F32",
+          "statement": "Design reason 1: the detector had to work from a few weeks of ordinary operation per unit without labelled faults for that unit; the thermal-balance model absorbs the variation caused by weather and occupancy.",
+          "doc_needles": [
+            "absorbs the variation",
+            "without labelled faults for that unit"
+          ]
+        },
+        {
+          "id": "F33",
+          "statement": "Design reason 2: the false-alarm rate had to be settable in advance; the facilities team asked for at most one false alarm per unit per school term, and conformal change detection gives calibrated p-values.",
+          "doc_needles": [
+            "per unit per school term",
+            "calibrated p-values"
+          ]
+        },
+        {
+          "id": "F34",
+          "statement": "Design reason 3: an alarm had to point at a component; each residual belongs to one physical balance, so the pattern of residuals says which part to inspect.",
+          "doc_needles": [
+            "point at a component"
+          ]
+        },
+        {
+          "id": "F35",
+          "statement": "Alternatives fit poorly: data-driven detectors mistake cold snaps and evening events for anomalies and offer no principled threshold; supervised classifiers need more labelled faults than the 412 available; graph-based detectors need an equipment graph the estate's BMS cannot export.",
+          "doc_needles": [
+            "BMS cannot export",
+            "no principled alarm threshold"
+          ]
+        },
+        {
+          "id": "F36",
+          "statement": "The thermal-balance model has 7 free parameters per unit, fitted by nonlinear least squares on the first six weeks (42 days) of the unit's data, the commissioning window, which is assumed fault-free.",
+          "doc_needles": [
+            "7 free parameters per unit",
+            "(42 days)"
+          ]
+        },
+        {
+          "id": "F37",
+          "statement": "The calibration set is the unit's own most recent 14 days without alarms; TERN alarms when the martingale exceeds 100 (significance level 0.01) for at least 10 minutes.",
+          "doc_needles": [
+            "most recent 14 days",
+            "significance level of 0.01"
+          ]
+        },
+        {
+          "id": "F38",
+          "statement": "The conformal guarantee assumes exchangeable observations; building data are seasonal and not strictly exchangeable, so the rolling calibration window is a practical remedy, not a proof, and the false-alarm rate is checked empirically.",
+          "doc_needles": [
+            "a practical remedy, not a proof",
+            "not strictly exchangeable"
+          ]
+        },
+        {
+          "id": "F39",
+          "statement": "Three baselines were run on the same 23 points: RB-28 (the 28 rules in the estate's BMS), LSTM-AE (a recurrent autoencoder trained per unit) and PCA-T2.",
+          "doc_needles": [
+            "set of 28 rules",
+            "three systems"
+          ]
+        },
+        {
+          "id": "F40",
+          "statement": "Limitation: the commissioning window is assumed fault-free; a unit already faulty in its first six weeks would have the fault built into its model and TERN would not see it.",
+          "doc_needles": [
+            "built into its model"
+          ]
+        },
+        {
+          "id": "F41",
+          "statement": "Limitation: the evaluation covers five fault classes and single faults only; the 11 episodes with overlapping faults were excluded.",
+          "doc_needles": [
+            "five fault classes and single faults"
+          ]
+        },
+        {
+          "id": "F42",
+          "statement": "The work was funded by the Northmarch Energy Trust under grant NET-2291.",
+          "doc_needles": [
+            "NET-2291"
+          ]
+        },
+        {
+          "id": "F43",
+          "statement": "The paper is the camera-ready version of 11 September 2026, accepted for SBSA 2026.",
+          "doc_needles": [
+            "Camera-ready version, 11 September 2026"
+          ]
+        },
+        {
+          "id": "F44",
+          "statement": "Fault episodes by class: stuck damper 121, leaking valve 109, slipping fan belt 94, sensor drift 83, fouled filter 101.",
+          "doc_needles": [
+            "(121 episodes)"
+          ]
+        },
+        {
+          "id": "F45",
+          "statement": "Limitation: sensor drift remains hard, with roughly a third of drift episodes missed.",
+          "doc_needles": [
+            "roughly a third"
+          ]
+        },
+        {
+          "id": "F46",
+          "statement": "The model yields four residuals every minute, averaged over 15-minute windows before detection.",
+          "doc_needles": [
+            "15-minute windows"
+          ]
+        },
+        {
+          "id": "F47",
+          "statement": "Limitation: labels are imperfect; work orders miss faults and injected faults are easier to find than natural ones.",
+          "doc_needles": [
+            "the labels are imperfect"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F1",
+          "with_file": "SEM-REF-ABSTRACT-DRAFT",
+          "this_value": "F1 of 0.87",
+          "other_value": "F1 of 0.82",
+          "resolution": "final_wins"
+        },
+        {
+          "fact": "F3",
+          "with_file": "SEM-REF-ABSTRACT-DRAFT",
+          "this_value": "34 minutes",
+          "other_value": "48 minutes",
+          "resolution": "final_wins"
+        },
+        {
+          "fact": "F1",
+          "with_file": "SEM-REF-RESULTS-EXPORT-MARCH",
+          "this_value": "0.87",
+          "other_value": "0.82",
+          "resolution": "final_wins"
+        },
+        {
+          "fact": "F3",
+          "with_file": "SEM-REF-RESULTS-EXPORT-MARCH",
+          "this_value": "34 (21–58)",
+          "other_value": "48 (30-77)",
+          "resolution": "final_wins"
+        },
+        {
+          "fact": "F4",
+          "with_file": "SEM-REF-RESULTS-EXPORT-MARCH",
+          "this_value": "157 of the 187",
+          "other_value": "163 of 201",
+          "resolution": "final_wins"
+        },
+        {
+          "fact": "F11",
+          "with_file": "SEM-REF-RESULTS-EXPORT-MARCH",
+          "this_value": "0.64",
+          "other_value": "0.55",
+          "resolution": "final_wins"
+        },
+        {
+          "fact": "F39",
+          "with_file": "SEM-REF-ABSTRACT-DRAFT",
+          "this_value": "three baselines run (RB-28, LSTM-AE, PCA-T2)",
+          "other_value": "only the rule set has been run",
+          "resolution": "final_wins"
+        },
+        {
+          "fact": "F22",
+          "with_file": "SEM-REF-ABSTRACT-DRAFT",
+          "this_value": "6.8% lower against 1.9% lower",
+          "other_value": "energy results will follow",
+          "resolution": "final_wins"
+        }
+      ],
+      "must_not_infer": [
+        "Nothing here says TERN was run in any building that is not a school, or in any other climate.",
+        "Nothing here compares TERN with any system other than RB-28, LSTM-AE and PCA-T2.",
+        "The pilot's energy difference is an association; nothing here supports a causal claim.",
+        "Nothing here states hardware, runtime, deployment cost, or whether the data or code will be released.",
+        "The 95% interval is for the F1 on this estate's held-out buildings; it says nothing about other estates."
+      ]
+    },
+    {
+      "id": "SEM-REF-SLIDES",
+      "mode": "seminar",
+      "filename": "Thornquist_seminar_slides_8Oct.md",
+      "source": "src/SEM-REF-SLIDES.md",
+      "format": "md",
+      "document_type": "slides",
+      "title": "TERN seminar slide deck, Built Environment Research Seminar, 8 October 2026",
+      "status": "current",
+      "effective_date": "2026-10-08",
+      "authority": 80,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "The talk is at the Built Environment Research Seminar on Thursday 8 October 2026 in room G.14: a 25-minute talk followed by 15 minutes of discussion.",
+          "doc_needles": [
+            "Thursday 8 October 2026",
+            "25-minute talk"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "In 2023-24 the rule engine raised 2,317 alarms and 68% were closed with no action taken.",
+          "doc_needles": [
+            "68% closed"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "Headline slide: TERN F1 0.87, median delay 34 min, 16 false alarms.",
+          "doc_needles": [
+            "34 min"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "Headline slide baselines: LSTM autoencoder 0.79, 52 min, 49 false alarms; rule set RB-28 0.71, 126 min, 34; PCA-T2 0.66, 74 min, 77.",
+          "doc_needles": [
+            "126 min",
+            "52 min"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "TERN finds 157 of 187 faults and names the correct component for 81.5% of detected faults.",
+          "doc_needles": [
+            "157 of 187"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Ablation slide: without thermal balance F1 0.74 and 38 false alarms; without the conformal stage quicker (29 min) but 44 false alarms; without rolling calibration F1 0.84 and 27 false alarms.",
+          "doc_needles": [
+            "quicker (29 min)",
+            "physics buys detection"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "Trust slide: whole buildings held out with nothing tuned on them; 95% interval on F1 0.83 to 0.90; all 16 false alarms re-inspected and 5 were real unlogged faults; every held-out building at 0.80 or above.",
+          "doc_needles": [
+            "nothing tuned on them",
+            "5 were real"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "Pilot slide: four buildings, 63 alerts, 51 acted on within two working days, heating energy 6.8% lower (other ten buildings 1.9%); association, not cause.",
+          "doc_needles": [
+            "Association, not cause"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "Limits slide: daytime occupancy only, one mild climate; five fault classes, one fault at a time; sensor drift recall 0.64; incomplete work-order labels; commissioning weeks assumed fault-free.",
+          "doc_needles": [
+            "recall 0.64",
+            "one mild climate"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "Planned next: a stepped roll-out across 12 buildings in the 2026-27 heating season with the switch-on order drawn at random, so that the energy effect can be estimated properly.",
+          "doc_needles": [
+            "Stepped roll-out across 12 buildings",
+            "drawn at random"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "A journal version is planned for spring 2027.",
+          "doc_needles": [
+            "spring 2027"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "Data slide: 14 schools, 86 units, 17 months; 508 fault episodes (412 from work orders, 96 injected); 9 development buildings, 5 held out (31 units, 187 episodes).",
+          "doc_needles": [
+            "412 from work orders"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "TERN recall by fault class: stuck damper 0.93, leaking valve 0.88, fan belt 0.88, fouled filter 0.79, sensor drift 0.64.",
+          "doc_needles": [
+            "Fouled filter 0.79",
+            "Sensor drift 0.64"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "The facilities team's limit is one false alarm per unit per term.",
+          "doc_needles": [
+            "Facilities team's limit"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "Conformal caveat on the slides: the theory wants exchangeable data and buildings are seasonal; rolling calibration is a remedy, not a proof.",
+          "doc_needles": [
+            "a remedy, not a proof"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F3",
+          "with_file": "SEM-REF-ABSTRACT-DRAFT",
+          "this_value": "34 min",
+          "other_value": "48 minutes",
+          "resolution": "final_wins"
+        }
+      ],
+      "must_not_infer": [
+        "The stepped roll-out across 12 buildings is a plan for the 2026-27 heating season; nothing says it has started or produced results.",
+        "Nothing here says the method was run outside the 14 schools."
+      ]
+    },
+    {
+      "id": "SEM-REF-APPENDIX",
+      "mode": "seminar",
+      "filename": "TERN_supplementary_material.pdf",
+      "source": "src/SEM-REF-APPENDIX.md",
+      "format": "pdf",
+      "document_type": "appendix",
+      "title": "Supplementary material to the TERN paper (hyperparameters, exclusions, extra experiments)",
+      "status": "current",
+      "effective_date": "2026-09-11",
+      "authority": 100,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Thermal-balance fitting uses the 42-day commissioning window restricted to occupied hours, 07:00 to 17:30 on school days.",
+          "doc_needles": [
+            "07:00 to 17:30"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Median fit error on the commissioning window was 0.6 °C for the mixed-air balance and 0.9 °C for the coil outlet balance.",
+          "doc_needles": [
+            "0.6 °C",
+            "0.9 °C"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "All hyperparameters were chosen by grid search on the nine development buildings; the held-out buildings were not used for any of these choices.",
+          "doc_needles": [
+            "grid search",
+            "were not used for any"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "LSTM-AE configuration: 2 layers with 64 hidden units, a 120-minute input window, 40 epochs, learning rate 0.001, batch size 256, alarm at the 99th percentile of reconstruction error.",
+          "doc_needles": [
+            "2 layers, 64 hidden units",
+            "40 epochs",
+            "120 minutes"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "LSTM-AE was trained with 5 random seeds per unit and the paper reports the mean; the standard deviation of its F1 across seeds was 0.012.",
+          "doc_needles": [
+            "0.012",
+            "5 random seeds"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "PCA-T2 keeps 9 components (95% of variance).",
+          "doc_needles": [
+            "9 components (95% of variance)"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "RB-28 has 30-minute delay timers on 17 of its 28 rules.",
+          "doc_needles": [
+            "30-minute timers on 17"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "Of the 7 excluded units, 4 had failed trend loggers and 3 were decommissioned during the collection period.",
+          "doc_needles": [
+            "4 had failed trend loggers",
+            "3 were decommissioned"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "Of 560 candidate episodes, 41 lasted less than 10 minutes and were removed as likely logging artefacts, and 11 contained two overlapping faults.",
+          "doc_needles": [
+            "likely logging artefacts"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "The summer shutdown from 21 July to 29 August 2025 was removed for all units, as were logger outages longer than 6 hours; gaps of up to 5 minutes were interpolated.",
+          "doc_needles": [
+            "21 July to 29 August 2025"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "Injections were carried out by the lead technician on 9 units: 54 in development buildings and 42 in held-out buildings, each lasting 2 to 6 hours.",
+          "doc_needles": [
+            "54 in development buildings"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "At a significance level of 0.05, TERN's F1 is 0.85, the median delay drops to 26 minutes and false alarms rise to 31.",
+          "doc_needles": [
+            "drops to 26 minutes",
+            "rise to 31"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "At a significance level of 0.005, TERN's F1 is 0.86, false alarms fall to 11 and the median delay grows to 43 minutes.",
+          "doc_needles": [
+            "fall to 11",
+            "grows to 43 minutes"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "Commissioning window length: F1 is 0.77 with 2 weeks, 0.85 with 4 weeks, 0.87 with 6 weeks and 0.87 with 8 weeks; the gain flattens after six weeks, so six weeks was chosen as the least data that reaches it.",
+          "doc_needles": [
+            "flattens after six weeks",
+            "0.77"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "By held-out building, Marrowby Infants has the lowest F1, 0.80 (oldest controllers, fewest episodes), and Aldergate Primary the highest, 0.93.",
+          "doc_needles": [
+            "scored an F1 of 0.80",
+            "oldest controllers"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "On the 139 episodes detected by both TERN and LSTM-AE, TERN alarmed first in 104; the median paired difference was 15 minutes in TERN's favour (Wilcoxon signed-rank, p < 0.001).",
+          "doc_needles": [
+            "139 episodes",
+            "first in 104"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "The four pilot buildings were Hollin Bank Primary, Skerrow Secondary, Withenshaw Primary and Calder Yew Infants.",
+          "doc_needles": [
+            "Hollin Bank Primary",
+            "Calder Yew Infants"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "Of the 63 pilot alerts, 51 were acted on within two working days, 9 were acted on later, and 3 were dismissed by staff as not worth a visit.",
+          "doc_needles": [
+            "9 were acted on later",
+            "3 were dismissed"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "Heating energy came from the estate's gas meters and was normalised by heating degree-days to a base temperature of 15.5 °C.",
+          "doc_needles": [
+            "15.5 °C"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "Skerrow Secondary is the pilot building whose boiler was replaced; with it left out, the reduction in the three remaining pilot buildings was 5.2%.",
+          "doc_needles": [
+            "5.2%",
+            "With Skerrow Secondary left out"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "The facilities team's limit of one false alarm per unit per school term, taking a term as four months, equals 25 false alarms per 100 unit-months.",
+          "doc_needles": [
+            "25 false alarms per 100 unit-months"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "TERN settings: 15-minute aggregation window, 14-day rolling calibration window, 10-minute persistence, 60-minute merge gap.",
+          "doc_needles": [
+            "Merge gap between alarms",
+            "Rolling calibration window"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "Units whose fit error exceeded 2.0 °C were refitted after removing the first week of the window; this applied to 4 units.",
+          "doc_needles": [
+            "2.0 °C"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F15",
+          "with_file": "SEM-REF-RESULTS-EXPORT-MARCH",
+          "this_value": "0.80",
+          "other_value": "0.62",
+          "resolution": "final_wins"
+        }
+      ],
+      "must_not_infer": [
+        "Nothing here reports training time, inference time or hardware.",
+        "The 5.2% figure without Skerrow Secondary is still an observational before-and-after comparison.",
+        "Nothing here reports agreement between several annotators; the labels were confirmed by one lead technician."
+      ]
+    },
+    {
+      "id": "SEM-REF-RESULTS-TABLE",
+      "mode": "seminar",
+      "filename": "TERN_results_table.csv",
+      "source": "src/SEM-REF-RESULTS-TABLE.csv",
+      "format": "csv",
+      "document_type": "results_table",
+      "title": "TERN results table by system, fault class and held-out building (pipeline v1.2)",
+      "status": "current",
+      "effective_date": "2026-08-21",
+      "authority": 80,
+      "supersedes": [
+        "SEM-REF-RESULTS-EXPORT-MARCH"
+      ],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Every row of this table is from pipeline version v1.2, run on 2026-08-21.",
+          "doc_needles": [
+            "v1.2",
+            "2026-08-21"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "TERN, all fault classes, held-out buildings: 187 episodes, 157 detected, recall 0.84, precision 0.91, F1 0.87, median delay 34 minutes (IQR 21-58), 16 false alarms, 3.2 per 100 unit-months.",
+          "doc_needles": [
+            "34 (21-58)"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "TERN on sensor drift: 28 episodes, 18 detected, recall 0.64, median delay 142 minutes (IQR 85-260).",
+          "doc_needles": [
+            "142 (85-260)",
+            "0.64"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "TERN on fouled filters: 39 episodes, 31 detected, recall 0.79, median delay 71 minutes (IQR 44-118).",
+          "doc_needles": [
+            "71 (44-118)"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "TERN on stuck dampers: 46 episodes, 43 detected, recall 0.93, median delay 18 minutes (IQR 11-29).",
+          "doc_needles": [
+            "18 (11-29)"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "TERN on leaking valves: 41 episodes, 36 detected, recall 0.88, median delay 37 minutes (IQR 24-66).",
+          "doc_needles": [
+            "37 (24-66)"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "TERN on fan belts: 33 episodes, 29 detected, recall 0.88, median delay 29 minutes (IQR 19-47).",
+          "doc_needles": [
+            "29 (19-47)"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "LSTM-AE, all classes: 155 detected, recall 0.83, precision 0.76, F1 0.79, median delay 52 minutes (IQR 33-97), 49 false alarms, 9.8 per 100 unit-months.",
+          "doc_needles": [
+            "52 (33-97)",
+            "9.8"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "RB-28, all classes: 122 detected, recall 0.65, precision 0.78, F1 0.71, median delay 126 minutes (IQR 64-310), 34 false alarms, 6.8 per 100 unit-months.",
+          "doc_needles": [
+            "126 (64-310)"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "PCA-T2, all classes: 131 detected, recall 0.70, precision 0.63, F1 0.66, median delay 74 minutes (IQR 40-155), 77 false alarms, 15.5 per 100 unit-months.",
+          "doc_needles": [
+            "74 (40-155)",
+            "15.5"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "RB-28 on sensor drift: 9 of 28 episodes detected, recall 0.32, median delay 420 minutes; the vendor set has no dedicated drift rule.",
+          "doc_needles": [
+            "420 (230-900)",
+            "0.32"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "LSTM-AE on sensor drift: 19 of 28 detected, recall 0.68, median delay 165 minutes.",
+          "doc_needles": [
+            "165 (98-290)",
+            "0.68"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "PCA-T2 on sensor drift: 14 of 28 detected, recall 0.50, median delay 210 minutes.",
+          "doc_needles": [
+            "210 (120-405)"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "TERN on natural faults only: 145 episodes, 117 detected, recall 0.81, median delay 38 minutes.",
+          "doc_needles": [
+            "38 (23-64)"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "TERN on injected faults only: 42 episodes, 40 detected, recall 0.95, median delay 24 minutes.",
+          "doc_needles": [
+            "24 (15-37)"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "Ablation without thermal balance: 131 detected, F1 0.74, median delay 61 minutes, 38 false alarms.",
+          "doc_needles": [
+            "61 (37-120)",
+            "TERN-no-thermal-balance"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "Ablation without the conformal stage: 158 detected, F1 0.81, median delay 29 minutes, 44 false alarms.",
+          "doc_needles": [
+            "29 (17-50)",
+            "TERN-no-conformal"
+          ]
+        },
+        {
+          "id": "F18",
+          "statement": "Ablation without rolling calibration: 156 detected, F1 0.84, median delay 41 minutes, 27 false alarms.",
+          "doc_needles": [
+            "41 (25-72)",
+            "TERN-no-rolling-calibration"
+          ]
+        },
+        {
+          "id": "F19",
+          "statement": "Marrowby Infants (held-out building): 19 episodes, 14 detected, recall 0.74, F1 0.80, median delay 44 minutes, 2 false alarms.",
+          "doc_needles": [
+            "44 (27-80)",
+            "0.80"
+          ]
+        },
+        {
+          "id": "F20",
+          "statement": "Aldergate Primary (held-out building): 27 episodes, 25 detected, F1 0.93, median delay 28 minutes.",
+          "doc_needles": [
+            "28 (18-45)"
+          ]
+        },
+        {
+          "id": "F21",
+          "statement": "Fenwick Hollow Secondary (held-out building): 61 episodes, 52 detected, F1 0.87, median delay 31 minutes, 6 false alarms.",
+          "doc_needles": [
+            "31 (20-52)"
+          ]
+        },
+        {
+          "id": "F22",
+          "statement": "Quarrelton Academy (held-out building): 52 episodes, 42 detected, F1 0.86, median delay 36 minutes.",
+          "doc_needles": [
+            "36 (22-61)"
+          ]
+        },
+        {
+          "id": "F23",
+          "statement": "Tessel Lane Primary (held-out building): 28 episodes, 24 detected, F1 0.89, median delay 39 minutes.",
+          "doc_needles": [
+            "39 (24-63)"
+          ]
+        },
+        {
+          "id": "F24",
+          "statement": "RB-28 on fouled filters: 26 of 39 detected, recall 0.67, median delay 190 minutes.",
+          "doc_needles": [
+            "190 (105-410)"
+          ]
+        },
+        {
+          "id": "F25",
+          "statement": "LSTM-AE on fouled filters: 33 of 39 detected, recall 0.85, median delay 83 minutes.",
+          "doc_needles": [
+            "83 (50-140)"
+          ]
+        }
+      ],
+      "intentional_conflicts": [
+        {
+          "fact": "F2",
+          "with_file": "SEM-REF-RESULTS-EXPORT-MARCH",
+          "this_value": "34 (21-58)",
+          "other_value": "48 (30-77)",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F3",
+          "with_file": "SEM-REF-RESULTS-EXPORT-MARCH",
+          "this_value": "0.64",
+          "other_value": "0.55",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F4",
+          "with_file": "SEM-REF-RESULTS-EXPORT-MARCH",
+          "this_value": "71 (44-118)",
+          "other_value": "95 (58-170)",
+          "resolution": "current_wins"
+        },
+        {
+          "fact": "F19",
+          "with_file": "SEM-REF-RESULTS-EXPORT-MARCH",
+          "this_value": "0.80",
+          "other_value": "0.62",
+          "resolution": "current_wins"
+        }
+      ],
+      "must_not_infer": [
+        "Class rows carry no precision or false-alarm count; false alarms are not attributed to a fault class.",
+        "The per-building rows are for TERN only; baselines were not broken down by building."
+      ]
+    },
+    {
+      "id": "SEM-REF-RESULTS-EXPORT-MARCH",
+      "mode": "seminar",
+      "filename": "results_summary_export.csv",
+      "source": "src/SEM-REF-RESULTS-EXPORT-MARCH.csv",
+      "format": "csv",
+      "document_type": "results_table",
+      "title": "Earlier results export from the March 2026 run (pipeline v0.6)",
+      "status": "outdated",
+      "effective_date": "2026-03-09",
+      "authority": 40,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "Every row of this export is from pipeline version v0.6, run on 2026-03-09, with the calibration set fixed at the commissioning window.",
+          "doc_needles": [
+            "v0.6",
+            "2026-03-09"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "v0.6 run, all classes, held-out buildings: 201 episodes, 163 detected, recall 0.81, F1 0.82, median delay 48 minutes (IQR 30-77).",
+          "doc_needles": [
+            "48 (30-77)",
+            "0.82",
+            "201"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "v0.6 run, sensor drift: 31 episodes, 17 detected, recall 0.55, median delay 176 minutes.",
+          "doc_needles": [
+            "0.55",
+            "176 (102-305)"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "v0.6 run, fouled filters: 42 episodes, 34 detected, recall 0.81, median delay 95 minutes (IQR 58-170).",
+          "doc_needles": [
+            "95 (58-170)"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "v0.6 run, stuck dampers: 49 episodes, 45 detected, recall 0.92, median delay 24 minutes.",
+          "doc_needles": [
+            "24 (14-41)"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "v0.6 run, Marrowby Infants: 21 episodes, 13 detected, recall 0.62, F1 0.62, median delay 63 minutes.",
+          "doc_needles": [
+            "63 (38-110)",
+            "0.62"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "In the v0.6 run, episodes under 10 minutes were still included and the method was not yet named.",
+          "doc_needles": [
+            "episodes under 10 minutes still included",
+            "method not yet named"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "v0.6 run, Aldergate Primary: 29 episodes, 26 detected, F1 0.88, median delay 40 minutes.",
+          "doc_needles": [
+            "40 (26-62)"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "v0.6 run, leaking valves: 44 episodes, 38 detected, recall 0.86, median delay 52 minutes.",
+          "doc_needles": [
+            "52 (31-88)"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "v0.6 run, fan belts: 35 episodes, 29 detected, recall 0.83, median delay 39 minutes.",
+          "doc_needles": [
+            "39 (25-63)"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "v0.6 run, development buildings (fit check only): 348 episodes, 289 detected, median delay 44 minutes.",
+          "doc_needles": [
+            "44 (27-71)",
+            "348"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "v0.6 run: fixed calibration windows of 7 and 28 days were explored and dropped.",
+          "doc_needles": [
+            "7 days variant",
+            "28 days variant"
+          ]
+        }
+      ],
+      "intentional_conflicts": [],
+      "must_not_infer": [
+        "These figures predate the final pipeline; only the pipeline_version and run_date columns show that the table is older.",
+        "The export has no baseline rows and no false-alarm counts."
+      ]
+    },
+    {
+      "id": "SEM-REF-ABSTRACT-DRAFT",
+      "mode": "seminar",
+      "filename": "SBSA_abstract_v0.3.docx",
+      "source": "src/SEM-REF-ABSTRACT-DRAFT.md",
+      "format": "docx",
+      "document_type": "draft_abstract",
+      "title": "Draft abstract v0.3 for SBSA 2026 with notes to co-authors",
+      "status": "draft",
+      "effective_date": "2026-03-20",
+      "authority": 20,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "The document is DRAFT v0.3 of the abstract, dated 20 March 2026, not for circulation outside the group.",
+          "doc_needles": [
+            "DRAFT v0.3, 20 March 2026",
+            "Not for circulation"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "The draft abstract states an F1 of 0.82.",
+          "doc_needles": [
+            "F1 of 0.82"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "The draft abstract states a median detection delay of 48 minutes.",
+          "doc_needles": [
+            "48 minutes"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "The draft abstract describes 17 months of one-minute data from 86 AHUs in 14 school buildings.",
+          "doc_needles": [
+            "86 AHUs in 14 school buildings"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "The draft's figures are from the March run (pipeline 0.6), before the change to the calibration window and before the very short episodes were dropped; both figures were expected to move.",
+          "doc_needles": [
+            "pipeline 0.6",
+            "Expect both figures to move"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "At the time of the draft only the rule set had been run as a baseline; the autoencoder and PCA were still to do.",
+          "doc_needles": [
+            "only the rule set"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "At the time of the draft there were no energy results: gas meter data for the pilot buildings were due in April and energy results were to follow in the full paper.",
+          "doc_needles": [
+            "energy results will follow",
+            "arrive in April"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "At the time of the draft the method had no name; the candidates were TERN, KITE and ResiCon.",
+          "doc_needles": [
+            "KITE",
+            "no name yet"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "The abstract was due on 10 April 2026 with a 250-word limit and the full paper on 29 May 2026.",
+          "doc_needles": [
+            "10 April 2026",
+            "29 May 2026"
+          ]
+        }
+      ],
+      "intentional_conflicts": [],
+      "must_not_infer": [
+        "The draft's 0.82 and 48 minutes are preliminary figures from the March run, not the study's final results.",
+        "The draft's statements that baselines and energy results are still pending describe March 2026, not the final paper."
+      ]
+    },
+    {
+      "id": "SEM-REF-RELATED-NOTES",
+      "mode": "seminar",
+      "filename": "related_work_reading_notes.md",
+      "source": "src/SEM-REF-RELATED-NOTES.md",
+      "format": "md",
+      "document_type": "notes",
+      "title": "Related work reading notes (other groups' systems and results)",
+      "status": "informal",
+      "effective_date": "2026-08-14",
+      "authority": 10,
+      "supersedes": [],
+      "facts": [
+        {
+          "id": "F1",
+          "statement": "The notes contain only other groups' systems and other groups' numbers measured on their own data; none of it was run on the Brackenfirth data.",
+          "doc_needles": [
+            "OTHER groups' numbers",
+            "None of it was run"
+          ]
+        },
+        {
+          "id": "F2",
+          "statement": "Corvane-Net is a graph neural network over the BMS equipment graph from the Ostrander group at Pellworth University (2025).",
+          "doc_needles": [
+            "Corvane-Net (Ostrander group",
+            "Pellworth University"
+          ]
+        },
+        {
+          "id": "F3",
+          "statement": "Corvane-Net was evaluated on the Larkhill office campus: 22 office buildings, 140 AHUs, 11 months of trend logs.",
+          "doc_needles": [
+            "22 office buildings",
+            "Larkhill office campus"
+          ]
+        },
+        {
+          "id": "F4",
+          "statement": "The Corvane-Net authors report an F1 of 0.94 and a median detection delay of 19 minutes on their own data.",
+          "doc_needles": [
+            "F1 of 0.94",
+            "19 minutes"
+          ]
+        },
+        {
+          "id": "F5",
+          "statement": "All of Corvane-Net's faults are injected, with no naturally occurring faults, in six fault classes.",
+          "doc_needles": [
+            "All of their faults are injected"
+          ]
+        },
+        {
+          "id": "F6",
+          "statement": "Corvane-Net was not run on the study's data: there is no public code (an email to Dr Ostrander on 12 February 2026 got no reply) and it needs an equipment graph that the Brackenfirth BMS cannot export.",
+          "doc_needles": [
+            "12 February 2026",
+            "no public code",
+            "We did not run Corvane-Net"
+          ]
+        },
+        {
+          "id": "F7",
+          "statement": "No head-to-head comparison with Corvane-Net exists; its figure is on offices with injected faults and the study's is on schools with mostly natural faults, so the two are not comparable.",
+          "doc_needles": [
+            "no head-to-head exists",
+            "not comparable"
+          ]
+        },
+        {
+          "id": "F8",
+          "statement": "MineRule-V (Sable and Ilvesmaa, Dunmere Facilities Research Unit, 2024) mines association rules from alarm logs; it was evaluated on one university laboratory complex with 35 AHUs, reports an F1 of 0.58 and a median delay of 3.4 hours.",
+          "doc_needles": [
+            "MineRule-V",
+            "F1 of 0.58",
+            "3.4 hours"
+          ]
+        },
+        {
+          "id": "F9",
+          "statement": "AeroFormer (Vantongeren lab, 2025) is a transformer evaluated in simulation only (8 simulated units); it reports an F1 of 0.97 and has no real-building results.",
+          "doc_needles": [
+            "AeroFormer",
+            "F1 of 0.97",
+            "Simulation only"
+          ]
+        },
+        {
+          "id": "F10",
+          "statement": "The CrossEstate study (Hesketh-Mbeki consortium, 2025) validated another group's residual-based detector across three sites: F1 of 0.75 on the home site and 0.59 averaged over the two external sites.",
+          "doc_needles": [
+            "CrossEstate",
+            "0.75 on the home site",
+            "0.59 averaged"
+          ]
+        },
+        {
+          "id": "F11",
+          "statement": "The Tolland Open AHU Corpus is public data from 3 sites and 67 units; it is a candidate for an external check in a journal version, and the conversion script is not written.",
+          "doc_needles": [
+            "Tolland Open AHU Corpus",
+            "67 units",
+            "conversion script"
+          ]
+        },
+        {
+          "id": "F12",
+          "statement": "The Quillfeather drift monitor uses CUSUM on pairs of redundant temperature sensors and reports catching drift of 0.5 °C within 3 days on a laboratory rig.",
+          "doc_needles": [
+            "Quillfeather drift monitor",
+            "0.5 °C within 3 days"
+          ]
+        },
+        {
+          "id": "F13",
+          "statement": "Notes on conformal methods: validity needs exchangeability, which seasonal data break; for buildings it is a calibrated heuristic, not a guarantee, and the false-alarm rate has to be checked empirically.",
+          "doc_needles": [
+            "calibrated heuristic"
+          ]
+        },
+        {
+          "id": "F14",
+          "statement": "Corvane-Net's authors do not report false alarms per unit, only precision.",
+          "doc_needles": [
+            "Precision only"
+          ]
+        },
+        {
+          "id": "F15",
+          "statement": "A 2026 preprint says Corvane-Net v2 runs without the equipment graph; it has not been read and should not be cited.",
+          "doc_needles": [
+            "Corvane-Net v2"
+          ]
+        },
+        {
+          "id": "F16",
+          "statement": "The notes were last edited on 14 August 2026.",
+          "doc_needles": [
+            "Last edited 14 August 2026"
+          ]
+        },
+        {
+          "id": "F17",
+          "statement": "MineRule-V is judged useful for the alarm-fatigue argument but not a comparator.",
+          "doc_needles": [
+            "Not a comparator"
+          ]
+        }
+      ],
+      "intentional_conflicts": [],
+      "must_not_infer": [
+        "No figure in these notes is a result of the TERN study; all are other groups' numbers on other groups' data.",
+        "Nothing here says TERN was compared with Corvane-Net, MineRule-V, AeroFormer or the CrossEstate detector.",
+        "The Tolland corpus is described as a candidate for a future external check, not as something TERN was run on.",
+        "The CrossEstate three-site validation belongs to the Hesketh-Mbeki consortium's detector, not to TERN."
+      ]
+    }
+  ]
+}
