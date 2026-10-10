@@ -3415,3 +3415,62 @@ the candidate none), so nothing is said about them. Nothing lands: the candidate
 
 **Not judged:** E29 repetition 1 (57), the derived X2 rows (92 + 120), E26 on the profile sets (96) and its other
 rows (216), the other X2 arms (336), 140 holdout rows, the drafts. The window script judges only what is missing.
+
+### Evin's four answers, and the 24,000 threshold landed on local main (recorded 2026-10-10 19:58 UTC)
+To the four open points of the afternoon report he answered "1) yes ,2) nope try with the other key 3) scedhule it
+4) do it": (1) land the 24,000 threshold; (2) a 403 that carries the quota body goes on to the other key (the v2
+guard stands; every other 403 still stops everything); (3) schedule the next window; (4) build the documents-first
+layout.
+**(1)** `cand/e27` rebased onto main `95490839` (two commits from another session, neither on the answer path) =
+`cdaedfad`. On the rebased commit: type check clean; intelligence + context-intelligence 2,930 pass, 0 fail; llm
+5,937 pass, 1 fail, and that one test fails the same way on main `95490839` without this commit
+(`QuickActionTurnRequest2026_10_09`, another session's area); services: the same 167 failing names as main in
+this worktree (native modules not built there). Local main fast-forwarded `95490839` → `cdaedfad` at 19:58 UTC.
+The main checkout had another session's uncommitted edit in `claimVerifier.ts` (a different hunk): it is intact
+(same added and removed lines before and after), nothing was staged, nothing of theirs was touched. **Not pushed**
+(pushing main is his word). macOS: suites run. Windows: reviewed, not executed (two constants and tests; no
+platform branch). No packaged build.
+**(3)** `window-oct11.mjs` (copy of the 10 October script; `~/natively-er-backup/window-run-oct11-am/`) was started
+detached at 19:41 UTC; it waits until 02:00:30 UTC on 11 October, then probes, calibrates and judges only what is
+missing. A session job at 02:07 UTC reads and records.
+
+## E30 — the documents-first layout built in the app (E28b), rule written 2026-10-10 19:58 UTC, before any run of it
+**Candidate** `cand/e28b` `7067ab3c` (worktree `er-main`, one commit on main `cdaedfad`): in `composePrompt`, on a
+turn with an evidence block the "# Evidence" section is the first thing in the user message, and the question
+section is repeated word for word under "# The question again (answer this)" after the app's notices and before
+the user's own instructions, which stay last. A turn with no evidence block is byte-for-byte the old layout.
+Nothing downstream reads the section order (searched: the fix-up pass and the spoken repair take the user message
+whole; no code looks for "# Question" or "# Evidence"). One new test file (9 tests); type check clean;
+intelligence + context-intelligence 2,930 pass, 0 fail; llm the same single failure as main.
+**What the replays said (E28b, 1,210 prompts):** right answers +2.4 points on development prompts, +2.3 on unseen
+ones, −1.1 on the larger packs; prompt tokens read new −65 %, −36 %, −89 %. They replayed the answer call only.
+**Runs** (the app, direct DeepSeek deepseek-flash, fresh user data, one app at a time, no judge call beside them):
+the candidate on dev + dev2 (630), challenge + challenge-val (171), prov1 + prov1-val (48), runs `er11-*-e28b`;
+main `cdaedfad` on dev (270) in the same hour, `er11-dev-main`, for the first-word line only. Compared with
+main's recorded runs of the same questions: `er6` (dev, dev2; main with E19), `er7` (challenge sets), `er8`
+(prov1 sets). Between those and the candidate lie E23 and E26 (the two profile modes only) and E27 (packs over
+12,000 tokens only; none here), so the two profile modes are also shown apart. challenge-val and prov1-val are
+read as counts only.
+**Judge-free lines** (`report/e30-read.mjs`, checks obj-3):
+1. Built as replayed: every candidate row whose request has an evidence block has it first in the user message and
+   ends with the repeated question; every row without one has neither. 100 %.
+2. Every row answered: no error, no timeout, no empty answer.
+3. Right by the fixed checks, development 630: not more than 2.0 points below main's run; rows with a forbidden
+   string at most main + 5.
+4. The same on the 219 unseen rows: not more than 2.0 points below main; forbidden-string rows at most main + 3.
+5. The fix-up pass and the repair still work on the new request: rows the pass edited within 5 points of main's
+   share, rows with a second request (repair) at most main's share + 2 points.
+6. First word, candidate dev against main dev of the same hour: median not more than 150 ms later, spoken and
+   typed. (No gain is expected in this rig: it opens a new session for every question.)
+7. The purpose, by replay of the candidate's own recorded dev prompts in recorded order with the session id made
+   constant (`replay-generator.mjs`, nothing else changed): cached share of the prompt tokens at least 60 % at the
+   median.
+**Judged lines** (gpt-6-astra, window of 11 October; the candidate's 270 dev rows, paired by question with the
+judged rows of `er6-dev-main`; two app runs share almost no identical answers, so every row is a pair):
+J1. mean not more than 0.20 below main's on the same questions;
+J2. hard fails at most main's + 8, invention-flag rows at most main's + 5 (run-to-run turnover on 270 rows is
+    about 6 hard-fail rows either way);
+J3. no mode lower by more than 0.70 with an interval that excludes zero.
+If the pool lasts, dev2's 360 rows are judged next and read as the repeat with the same lines (hard fails + 10).
+**Decision.** Every line holding makes it a keep candidate; any line failing means it is not proposed. Landing is
+Evin's word either way; his "do it" was to build it.
