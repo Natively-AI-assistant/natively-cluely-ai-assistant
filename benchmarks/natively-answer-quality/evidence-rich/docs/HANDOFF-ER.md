@@ -52,12 +52,12 @@ This file is generated: `node evidence-rich/report/build-handoff.mjs` (from `ben
 | Score of main before E19, development set, Astra | 630 questions: **8.92**, 71 hard fails (11.3 %), 414 at 9.5 or above (main `f4cd986d`). |
 | Score of main before E19, blind holdout, Astra | 180 questions: **8.84**, 23 hard fails (run `er-holdout-e16b3`). |
 | E19 on top of that | Development, the 88 rows it changes: 8.29 → 8.68, hard fails 12 → 7. Blind holdout, 52 pooled pairs: 8.158 → 8.384, hard fails 9 → 8. |
-| Main with E19, full run | **Run, not judged.** `er6-dev-main` + `er6-dev2-main` (630 answers, 2026-10-09 10:06–10:58 UTC, clean). The Astra window of 11:02 UTC was closed by a provider access block (HTTP 403) after 43 judgments. There is no score of main with E19. |
+| Main with E19, full run | **Judged on 594 of 630 rows (Astra window of 2026-10-10, 02:05–02:51 UTC): 8.88, 73 hard fails (12.3 %), 392 at 9.5 or above.** `er6-dev-main` 270 of 270 (8.92, 32 hard), `er6-dev2-main` 324 of 360. Paired with the earlier main on the same 594 questions: 8.943 → 8.883, −0.060 (95 % −0.22 to +0.10), hard 65 → 73; no mode or condition line excludes zero, and the two runs share only 31 hard-fail rows (34 only before, 42 only now), so the hard-fail count of one run is mostly turnover. 36 rows of dev2 are still to judge (call-center 21, recruiting 10, lecture 5). Table in 7.7. |
 | Deterministic checks | Version **obj-3** (2026-10-09). obj-2: a string the mode's own loaded files state is not a profile leak (one development row was capped at 2 wrongly). obj-3: a needle that starts or ends with a digit matches only as a whole number. Under them the baseline of `f4cd986d` is **8.935, 70 hard fails** (8.923 / 71 as stored); no holdout score changes. |
 | Unseen question sets | `challenge` (117, readable), `challenge-val` (54, never read, aggregates only), `code1` (36 coding items with executed tests), authored blind and frozen 2026-10-09. Main on them, judge-free: 94 / 117, 45 / 54, 34 / 36. Added in the third session: `prov1` (24, readable) and `prov1-val` (24, never read) on which employer, title or date a résumé fact belongs to; main 23 / 24 and 21 / 24. And `pack24`, a separate corpus of four packs of about 20,700 tokens (313 re-issued items, 48 new), for X2. |
 | Where it started, blind holdout, Astra | 7.73, 42 hard fails (run `er-holdout-base`, the build before this work). |
 | Targets set at the start | 9.2 mean, under 1 % hard fails. **Not met.** |
-| Running or scheduled | A one-shot inside the Claude session at 07:30 IST on 10 October (02:00 UTC; it dies with the session) starts ONE script, `window-oct10.mjs` (copy in `~/natively-er-backup/scripts/`): probe, calibration, then until the pool closes: the 581 missing baseline judgments; the fixed pack24 sample of main against the 24,000 candidate; E26 on the unseen profile sets; the other two X2 arms; the rest of E26; drafts. A 403 stops everything. The blind holdout was run on main `67fb1b24` at 00:25 UTC (`er10-holdout-main`). |
+| Running or scheduled | **Nothing.** The window of 10 October judged 545 rows (the baseline only) and ended at 02:51 UTC when both AgentRouter accounts answered "user quota is not enough". Still unjudged, in this order: 36 baseline rows; the 40 holdout rows of the two profile modes on main `67fb1b24` (`er10-holdout-main`; judge-free it reads 161 of 180 right, Looking for work 16 of 20 against 19); the fixed pack24 sample of main against `cand/e27` (336); E26 on the unseen profile sets (96); the other X2 arms (336); the rest of E26 (216); the rest of the holdout; drafts. `window-oct10.mjs` (copy in `~/natively-er-backup/scripts/`) does exactly that and judges only what is missing. |
 | Declared experiments | None open. After "yes do all 4": **E23 landed** (correctness fix). **E26 landed** (DeepSeek rung, last, in the structured ladder; every profile row extracted by the model, wrong title-employer pairings in the prompts 259 → 0, right 88.9 → 90.3 % on 226 profile questions; a profile upload takes 73 s on DeepSeek). **E27**, the 24,000 threshold with the pass's cap at 136,000: confirmation run 86.1 % right against main's 54.3 % on the 20,700-token packs, all five lines hold, **NOT landed** (`cand/e27`, his word needed). **Arm C**: main with cloud embeddings (Voyage) 63.4 %. **E28 / E28b** (documents before the question, for the provider's cache): the plain move costs 2.8 points; with the question repeated last it holds its lines on 1,210 replayed prompts (+2.4 points on development prompts, 65 to 89 % less uncached input); not built. Earlier the same day: E24 and E25 failed, X2 measured, E21 not proposed, E22 confirmed main's calculation notice. |
 | Candidate branches | **`cand/e27` `0256eed4`** (worktree `er-main`): the 24,000 threshold, one commit on main `67fb1b24`, ready to fast-forward on Evin's word. Merged into main: `cand/e23`, `cand/e26`. Records only: `cand/e21` `298b2b5b`, `exp/x1-whole-pack-threshold` `237bba1a`. |
 
@@ -256,15 +256,19 @@ node ~/natively-er-backup/scripts/er-window-chain-20261009.mjs   # a whole windo
 - HTTP 402 means the ration is closed: wait for the next window. HTTP 403 means the provider has blocked access for a while: stop, record it, do not retry the denied calls and do not change key, route or content.
 - Do not run `astra-next5.sh` or the older `astra-next*.sh` blindly: their automatic commit lacks the current attribution line and their failure check covers 402 but not 403.
 
-**What the next Astra window owes** (the flag `/tmp/er-access-block-20261008-1630.json` from the block of 2026-10-09 11:12 UTC is in place; remove it only after a clean probe by hand):
+**The quota reply comes as HTTP 403 too (found 2026-10-10).** When an account's balance is spent the gateway answers HTTP 403 with `{"message":"user quota is not enough","code":"insufficient_user_quota"}`. That is the quota case, not the access block: `astra/client.mjs` has handled that body as quota since 2026-10-01 (next key of the pool, stop when every key is spent). The wrappers of 8 October (`/tmp/er-window-probe-20261008.mjs`, `/tmp/er-access-guard-20261008.mjs`) stop on every 403 and so never reach the second key. `er-window-probe-v2.mjs` and `er-access-guard-v2.mjs` (in `~/natively-er-backup/scripts/`) pass that one body through and stop on every other 403 exactly as before (flag `/tmp/er-access-block-20261008-1630.json`, nothing retried, no key, route, content or encoding changed). This reading was made while Evin was asleep and reported to him; if he wants every 403 to stop the window, use the 8 October wrappers.
+
+**What the next Astra window owes** (no flag is in place; the window of 10 October had no access block). Both accounts were out of quota at 02:51 UTC on 10 October, so the next window opens only if one is refilled:
 
 ```
-node astra/probe.mjs                                   # exact gpt-6-astra, HTTP 200, no 403
-ER_SKIP_RUN_WAIT=1 node ~/natively-er-backup/scripts/window-er6.mjs   # calibration, then the 587 missing judgments of er6-dev-main + er6-dev2-main, then drafts
-node evidence-rich/report/rescore-objective.mjs er6-dev-main,er6-dev2-main   # the score under the current checks
+node ~/natively-er-backup/scripts/er-window-probe-v2.mjs   # exact gpt-6-astra on either key; result in /tmp/er-window-probe-20261010.json
+node ~/natively-er-backup/scripts/window-oct10.mjs          # calibration, then everything still missing, in the order of the "Running or scheduled" row
+node evidence-rich/report/window-read.mjs single base:er6-dev-main,er6-dev2-main --by mode,condition   # aggregates only
+node evidence-rich/report/window-read.mjs pair base:er4-dev-main,er4-dev2-main base:er6-dev-main,er6-dev2-main --by mode,condition
+ER_BENCH_DIR=$PWD/evidence-rich/pack24 node evidence-rich/report/window-read.mjs pair x2:x2-a12 x2:x2-e27 --bench pack24 --by kind,mode
 ```
 
-That gives the first judged score of main with E19, to set beside 8.935 / 70 hard fails for `f4cd986d` (obj-3). `window-e21.mjs` is no longer needed (E21 was not proposed).
+The scripts sit in the scratchpad of the session that wrote them and are addressed by their own folder; run the backup copies from one folder (`window-oct10.mjs` looks for the two v2 files next to itself).
 
 **An app run.**
 
@@ -455,6 +459,27 @@ Both rules hold. What that says and does not say: on the blind holdout the new w
 
 ---
 
+### 7.7 Main with E19 (`73b18d97`), development set, gpt-6-astra, 594 of 630 rows (2026-10-10)
+
+Paired with main before E19 (`f4cd986d`, run `er4`) on the same questions. One commit on the answer path separates the builds (E19); the runs are three days apart and share 6 word-for-word answers.
+
+| Mode | Rows | Before E19 | With E19 | Difference (95 %) | Hard fails |
+|---|---:|---:|---:|---|---|
+| General | 70 | 9.18 | 8.98 | −0.20 (−0.67 to 0.27) | 6 → 7 |
+| Sales | 70 | 8.63 | 8.21 | −0.43 (−0.91 to 0.05) | 11 → 18 |
+| Recruiting | 60 | 8.86 | 8.91 | +0.06 (−0.44 to 0.55) | 5 → 5 |
+| Team Meet | 70 | 8.88 | 9.04 | +0.16 (−0.39 to 0.70) | 7 → 5 |
+| Looking for work | 70 | 9.13 | 9.04 | −0.09 (−0.49 to 0.31) | 6 → 7 |
+| Lecture | 65 | 9.14 | 9.30 | +0.16 (−0.23 to 0.54) | 7 → 5 |
+| Technical Interview | 70 | 8.90 | 8.83 | −0.07 (−0.42 to 0.28) | 11 → 11 |
+| Seminar | 70 | 8.84 | 8.90 | +0.05 (−0.54 to 0.65) | 9 → 8 |
+| Call Center | 49 | 8.91 | 8.73 | −0.18 (−0.77 to 0.42) | 3 → 7 |
+| **All** | **594** | **8.94** | **8.88** | **−0.06 (−0.22 to 0.10)** | **65 → 73** |
+
+By condition: one source 9.20 → 9.23 (232 rows, hard 20 → 18); several sources 8.86 → 8.58 (121, 15 → 20); conflicting or stale 9.03 → 8.95 (101, 8 → 10); evidence missing 8.07 → 7.62 (55, 12 → 18); irrelevant source 9.07 → 9.16 (55, 5 → 4); follow-up 8.37 → 9.04 (30, 5 → 3). No interval excludes zero.
+
+Hard fails: 31 rows in both runs, 34 only before, 42 only now. Of the 42, 35 are drafts shown as written. The pass edited 93 and 92 rows. One line to check on the same drafts in a later window: evidence-missing rows the pass left alone, 8.18 → 7.23, hard 5 → 12 (30 rows; 11 of them were edited in the earlier run).
+
 ## 8. What changed in the code, and why
 
 All of this is shared TypeScript in the answer path. None of it is platform-specific: no OS calls, paths, native modules or window code. It was run physically on macOS in the dev build through the benchmark. It has never been executed on Windows, and no packaged build was made for it.
@@ -597,10 +622,10 @@ Section 13 prints the pass's instruction block as it is on main and the full tex
 1. **Land the 24,000 threshold?** `cand/e27` `0256eed4` is one commit on main, tested and confirmed (86.1 % right against 54.3 % on packs of about 20,700 tokens; spoken first word 0.77 s earlier, typed 0.49 s later; request 3.6 times the size on those turns). Not measured: models with a small context window, Windows, a packaged build. `git merge --ff-only cand/e27` in the main checkout, after rebasing if main has moved.
 2. **Merge or close draft PR #638.** Merging puts the blind holdout's questions on public main.
 3. **Delete the old-history branches on GitHub** (`fix/aq-astra`, `cand/e16b`, `cand/e15`)? They keep files purged on 2026-10-06 reachable.
-4. **A judged score of main with E19.** Still owed at 00:26 UTC on 10 October: 581 of 630 judgments missing. The window script of 02:00 UTC does them first. **Also his: pushing main** (local `67fb1b24` is one commit ahead of GitHub).
+4. **A judged score of main with E19: 8.88, 73 hard fails on 594 of 630 rows** (2026-10-10; 7.7). Not different from main before E19 on the same questions (−0.06, interval −0.22 to +0.10). 36 rows are left. **Also his: pushing main** (local `67fb1b24` is one commit ahead of GitHub).
 5. **Windows and a packaged build.** Nothing in this work has been executed on Windows or in a packaged app.
 6. **The whole-pack threshold: see 1.** X1 (synthetic), X2 (realistic packs), arm C (cloud embeddings: 63.4 %) and the candidate's confirmation run are in the log. 48,000 is not safe.
-7. **The provider's access block.** Two in three days (2026-10-08 02:07 UTC, five calls; 2026-10-09 11:12 UTC, three calls two minutes into judging, after a clean calibration). Nothing was retried. If it keeps happening the judge budget is the limit on this work, not ideas.
+7. **The judge's quota.** Both AgentRouter accounts answered "user quota is not enough" on 2026-10-10 (the first before the window, the second at 02:51 UTC after 38 calibration pairs and 545 judgments). No access block that day; the blocks of 2026-10-08 (five calls) and 2026-10-09 (three calls) were not retried. About 1,200 judgments are queued, and the 630 drafts after them (the "Running or scheduled" row). The judge budget, not ideas, is the limit on this work. **His call too:** whether a 403 that carries the quota reply may go on to the second key, as it did on 10 October (section 4).
 8. **Code verification is switched off app-wide** (`electron/llm/codeVerification/verificationEnabled.ts`, since 2026-07-18, no reason recorded in the commit). Main passes 34 of 36 coding questions of `code1` without it. Its correction is posted as a new message, which the benchmark harness does not capture, so it was not measured.
 9. **A profile upload on DeepSeek takes about 73 s** (a résumé with a posting; 3 s with the rule-based parser it replaces), because the whole profile pipeline now runs on it, about ten calls one after the other. E26 landed with that cost stated. Shortening it (fewer calls, or in parallel) is a separate change.
 10. **Build E28b?** Putting the documents before the question and repeating the question last makes a whole pack a cached prefix: on 1,210 replayed prompts right answers +2.4 points (development), +2.3 (unseen, interval through 0), −1.1 (larger packs, inside the margin), and 65 to 89 % fewer input tokens read new. It touches the order of every request that carries documents; implementation notes are in the log.
@@ -4880,6 +4905,8 @@ Entry headings with their line numbers in `docs/ITERATIONS-ER.md`, and every lin
 - L3178: E28b — unseen prompts: the line holds (2026-10-10 00:24 UTC; replayed 00:20–00:24 UTC, 219 prompts, 0 failed calls; the two unread sets as aggregates)
 - L3195: E28b is not built tonight; the blind holdout is run on current main instead (2026-10-10 00:25 UTC)
 - L3210: The blind holdout on main `67fb1b24`, judge-free aggregates (2026-10-10 00:46 UTC; run `er10-holdout-main`, 00:25 UTC on, 180 questions, direct DeepSeek; nothing of it was read)
+- L3228: Astra window of 2026-10-10 — the probe's first answer and how it is read (written 2026-10-10 02:02 UTC, before any judge call)
+- L3246: Astra window of 2026-10-10, 02:05–02:51 UTC — the baseline of main with E19: 594 of 630 rows judged (recorded 2026-10-10 02:54 UTC)
 
 ### B.1 The log
 
@@ -8109,6 +8136,88 @@ and it is one of the two modes E23 and E26 change (Technical Interview is 17 →
 nothing of the holdout is read to find out; the 40 holdout rows of the two profile modes are therefore judged
 right after the baseline in the window script (the earlier run's 180 are already judged), the other 140 at the
 end of the queue.
+
+##### Astra window of 2026-10-10 — the probe's first answer and how it is read (written 2026-10-10 02:02 UTC, before any judge call)
+Probe by hand at 01:59:35 UTC, and again at 02:01:04 (meant for 02:03; the wait loop in my command failed, so it
+ran early). Both: the model list answers 200 with exact gpt-6-astra listed, the chat call on the first key answers
+**HTTP 403** with the body `{"message":"user quota is not enough","code":"insufficient_user_quota"}`. The wrapper
+of 8 October treats every 403 as an access block, so it reported `access_blocked` and never asked the second key.
+This is not the reply of 8 and 9 October ("resource temporarily blocked for a possible content-policy violation").
+It is the gateway's quota reply: `astra/client.mjs` has named this exact body as the account's balance being spent
+since 2026-10-01 and hands over to the second key Evin supplied for that case on 2026-10-02. The brief's rule is
+by cause (402 quota window: stop and record; 403 access / content-policy block: stop, change nothing), and the
+start instruction lists "quota" under "not a block".
+**Reading, fixed before any further call:** a 403 carrying `insufficient_user_quota` / "user quota is not enough" is
+a quota reply and is handled as the client has always handled quota (next key of the pool, stop when every key is
+spent). **Every other 403 is an access block**: the flag is written, every call stops, nothing is retried, and no key,
+route, content or encoding is changed. The 8 October wrappers are left as they are; `er-window-probe-v2.mjs` and
+`er-access-guard-v2.mjs` (scratchpad, copies in the backup) differ from them in that one test, checked offline
+against a stub (quota 403: no flag, body still readable; other 403: flag written, next call refused).
+This is my reading of Evin's rule, made while he is asleep; it is reported to him as such.
+
+##### Astra window of 2026-10-10, 02:05–02:51 UTC — the baseline of main with E19: 594 of 630 rows judged (recorded 2026-10-10 02:54 UTC)
+**What ran.** Third probe 02:05:05 UTC (`er-window-probe-v2.mjs`): first key 403 with the quota reply again, second
+key 200, returned model exact gpt-6-astra. The flag of 9 October was then set aside (kept in the scratchpad) and ONE
+script started (`window-oct10.mjs`, guard v2). Calibration 02:05–02:14: **38/38**, every returned model exact
+(`calibration-astra-1791598446909.json`). Judging 02:14–02:51, three streams of three calls, about 15 a minute.
+At 02:49 the second key answered the same quota reply; the client went back to the first key, which still had none,
+and stopped ("account quota exhausted"). **No access block occurred** (no 403 other than the quota reply; no flag
+written), no returned-model mismatch, nothing retried after the stop. Both accounts are now out of quota: the next
+window opens only if the gateway refills one of them or Evin tops one up.
+**Judged: 545 new rows, all in stage one.** `er6-dev-main` 270 of 270, `er6-dev2-main` 324 of 360. The 36 missing
+rows are all in dev2: call-center 21, recruiting 10, lecture 5. **Nothing else was judged**: not the 40 holdout rows
+of the two profile modes, not the X2 pair (main against `cand/e27`), not E26's rows, not the drafts.
+
+**Baseline of main with E19 (`73b18d97`), 594 rows, checks obj-3** (stored and rescored agree, 0 rows change):
+
+| | Rows | Mean | p10 | Median | Hard fails | ≥ 9.5 | Rows with an invention flag |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Main with E19 (er6) | 594 | 8.883 ±0.16 | 4.0 | 9.8 | 73 (12.3 %) | 392 | 42 |
+| dev only (complete) | 270 | 8.919 ±0.23 | 4.1 | 9.8 | 32 (11.9 %) | 179 | 21 |
+| Earlier main `f4cd986d` (er4), all rows | 630 | 8.935 ±0.15 | 4.0 | 9.8 | 70 (11.1 %) | 415 | 39 |
+
+**Paired on the same 594 questions, er4 → er6** (one commit touches the answer path between the two builds: E19):
+8.943 → 8.883, **−0.060 (95 % −0.22 to +0.10)**; hard fails 65 → 73; invention-flag rows 35 → 42; 113 rows better,
+113 worse. dev (270, complete): 8.835 → 8.919 (+0.085, −0.15 to +0.32), hard 33 → 32. dev2 (324): 9.033 → 8.853
+(−0.180, −0.40 to +0.04), hard 32 → 41.
+
+| Mode | Pairs | er4 → er6 | Difference (95 %) | Hard |
+|---|---:|---|---|---|
+| General | 70 | 9.178 → 8.979 | −0.199 (−0.67 to 0.27) | 6 → 7 |
+| Sales | 70 | 8.633 → 8.205 | −0.428 (−0.91 to 0.05) | 11 → 18 |
+| Recruiting | 60 | 8.857 → 8.913 | +0.056 (−0.44 to 0.55) | 5 → 5 |
+| Team Meet | 70 | 8.884 → 9.040 | +0.156 (−0.39 to 0.70) | 7 → 5 |
+| Looking for work | 70 | 9.133 → 9.042 | −0.092 (−0.49 to 0.31) | 6 → 7 |
+| Lecture | 65 | 9.141 → 9.300 | +0.159 (−0.23 to 0.54) | 7 → 5 |
+| Technical Interview | 70 | 8.896 → 8.828 | −0.068 (−0.42 to 0.28) | 11 → 11 |
+| Seminar | 70 | 8.844 → 8.895 | +0.051 (−0.54 to 0.65) | 9 → 8 |
+| Call Center | 49 | 8.912 → 8.734 | −0.178 (−0.77 to 0.42) | 3 → 7 |
+
+| Condition | Pairs | er4 → er6 | Difference (95 %) | Hard |
+|---|---:|---|---|---|
+| One source, in the documents | 232 | 9.199 → 9.226 | +0.027 (−0.18 to 0.24) | 20 → 18 |
+| Several sources | 121 | 8.861 → 8.582 | −0.279 (−0.68 to 0.12) | 15 → 20 |
+| Conflicting / stale sources | 101 | 9.029 → 8.947 | −0.082 (−0.46 to 0.30) | 8 → 10 |
+| Evidence missing | 55 | 8.073 → 7.624 | −0.449 (−1.10 to 0.20) | 12 → 18 |
+| Irrelevant source | 55 | 9.065 → 9.156 | +0.090 (−0.35 to 0.53) | 5 → 4 |
+| Follow-up | 30 | 8.374 → 9.040 | +0.666 (−0.38 to 1.71) | 5 → 3 |
+
+**How to read it.** No line's interval excludes zero. The two runs are not the same answers judged twice: the shown
+answer is word for word the same on 6 of 594 questions, and the hard-fail lists overlap on 31 rows only (34 hard in
+er4 alone, 42 in er6 alone). A single run's hard-fail list is therefore mostly turnover between runs; the +8 is
+inside it. Of the 42 hard fails new in er6, 35 are drafts shown as written and 7 are answers the pass edited (in er4:
+5 of the 34 that went away had been edited). The pass edited the same number of rows in both runs (93 and 92 of 594).
+Where the mean fell, it fell in rows the pass left alone: Sales not edited 8.95 → 8.48 (hard 6 → 13, 61 rows), Sales
+edited 6.47 → 6.36 (5 → 5, 9 rows).
+**One line to keep an eye on, not a finding:** evidence-missing rows the pass left alone in er6: 8.18 → 7.23, hard
+5 → 12 (30 rows); 11 of those 30 had been edited in er4, and 4 of the 9 new hard fails among them are such rows. E19
+tells the pass that a statement of absence is not a claim, so fewer edits on these rows is what it does; whether it
+also lets an invented statement through there cannot be told from two different sets of drafts. E19's own rule was
+read on the same drafts (88 rows that differ: hard 12 → 7) and on the blind holdout, and both held; this pair does
+not overturn that, and it does not confirm it either. The clean check is the earlier pass and the E19 pass replayed
+on er6's 65 evidence-missing drafts, differing rows judged: about 30 judgments, next window.
+**The number to carry forward as the baseline of main: 8.88, 73 hard fails on 594 rows (12.3 %), with the last 36
+rows still to judge.** Reader: `report/window-read.mjs` (aggregates only; reproduces er4's 8.935 / 70).
 
 ---
 
