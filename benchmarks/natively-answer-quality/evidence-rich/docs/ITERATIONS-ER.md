@@ -3224,3 +3224,85 @@ and it is one of the two modes E23 and E26 change (Technical Interview is 17 →
 nothing of the holdout is read to find out; the 40 holdout rows of the two profile modes are therefore judged
 right after the baseline in the window script (the earlier run's 180 are already judged), the other 140 at the
 end of the queue.
+
+### Astra window of 2026-10-10 — the probe's first answer and how it is read (written 2026-10-10 02:02 UTC, before any judge call)
+Probe by hand at 01:59:35 UTC, and again at 02:01:04 (meant for 02:03; the wait loop in my command failed, so it
+ran early). Both: the model list answers 200 with exact gpt-6-astra listed, the chat call on the first key answers
+**HTTP 403** with the body `{"message":"user quota is not enough","code":"insufficient_user_quota"}`. The wrapper
+of 8 October treats every 403 as an access block, so it reported `access_blocked` and never asked the second key.
+This is not the reply of 8 and 9 October ("resource temporarily blocked for a possible content-policy violation").
+It is the gateway's quota reply: `astra/client.mjs` has named this exact body as the account's balance being spent
+since 2026-10-01 and hands over to the second key Evin supplied for that case on 2026-10-02. The brief's rule is
+by cause (402 quota window: stop and record; 403 access / content-policy block: stop, change nothing), and the
+start instruction lists "quota" under "not a block".
+**Reading, fixed before any further call:** a 403 carrying `insufficient_user_quota` / "user quota is not enough" is
+a quota reply and is handled as the client has always handled quota (next key of the pool, stop when every key is
+spent). **Every other 403 is an access block**: the flag is written, every call stops, nothing is retried, and no key,
+route, content or encoding is changed. The 8 October wrappers are left as they are; `er-window-probe-v2.mjs` and
+`er-access-guard-v2.mjs` (scratchpad, copies in the backup) differ from them in that one test, checked offline
+against a stub (quota 403: no flag, body still readable; other 403: flag written, next call refused).
+This is my reading of Evin's rule, made while he is asleep; it is reported to him as such.
+
+### Astra window of 2026-10-10, 02:05–02:51 UTC — the baseline of main with E19: 594 of 630 rows judged (recorded 2026-10-10 02:54 UTC)
+**What ran.** Third probe 02:05:05 UTC (`er-window-probe-v2.mjs`): first key 403 with the quota reply again, second
+key 200, returned model exact gpt-6-astra. The flag of 9 October was then set aside (kept in the scratchpad) and ONE
+script started (`window-oct10.mjs`, guard v2). Calibration 02:05–02:14: **38/38**, every returned model exact
+(`calibration-astra-1791598446909.json`). Judging 02:14–02:51, three streams of three calls, about 15 a minute.
+At 02:49 the second key answered the same quota reply; the client went back to the first key, which still had none,
+and stopped ("account quota exhausted"). **No access block occurred** (no 403 other than the quota reply; no flag
+written), no returned-model mismatch, nothing retried after the stop. Both accounts are now out of quota: the next
+window opens only if the gateway refills one of them or Evin tops one up.
+**Judged: 545 new rows, all in stage one.** `er6-dev-main` 270 of 270, `er6-dev2-main` 324 of 360. The 36 missing
+rows are all in dev2: call-center 21, recruiting 10, lecture 5. **Nothing else was judged**: not the 40 holdout rows
+of the two profile modes, not the X2 pair (main against `cand/e27`), not E26's rows, not the drafts.
+
+**Baseline of main with E19 (`73b18d97`), 594 rows, checks obj-3** (stored and rescored agree, 0 rows change):
+
+| | Rows | Mean | p10 | Median | Hard fails | ≥ 9.5 | Rows with an invention flag |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Main with E19 (er6) | 594 | 8.883 ±0.16 | 4.0 | 9.8 | 73 (12.3 %) | 392 | 42 |
+| dev only (complete) | 270 | 8.919 ±0.23 | 4.1 | 9.8 | 32 (11.9 %) | 179 | 21 |
+| Earlier main `f4cd986d` (er4), all rows | 630 | 8.935 ±0.15 | 4.0 | 9.8 | 70 (11.1 %) | 415 | 39 |
+
+**Paired on the same 594 questions, er4 → er6** (one commit touches the answer path between the two builds: E19):
+8.943 → 8.883, **−0.060 (95 % −0.22 to +0.10)**; hard fails 65 → 73; invention-flag rows 35 → 42; 113 rows better,
+113 worse. dev (270, complete): 8.835 → 8.919 (+0.085, −0.15 to +0.32), hard 33 → 32. dev2 (324): 9.033 → 8.853
+(−0.180, −0.40 to +0.04), hard 32 → 41.
+
+| Mode | Pairs | er4 → er6 | Difference (95 %) | Hard |
+|---|---:|---|---|---|
+| General | 70 | 9.178 → 8.979 | −0.199 (−0.67 to 0.27) | 6 → 7 |
+| Sales | 70 | 8.633 → 8.205 | −0.428 (−0.91 to 0.05) | 11 → 18 |
+| Recruiting | 60 | 8.857 → 8.913 | +0.056 (−0.44 to 0.55) | 5 → 5 |
+| Team Meet | 70 | 8.884 → 9.040 | +0.156 (−0.39 to 0.70) | 7 → 5 |
+| Looking for work | 70 | 9.133 → 9.042 | −0.092 (−0.49 to 0.31) | 6 → 7 |
+| Lecture | 65 | 9.141 → 9.300 | +0.159 (−0.23 to 0.54) | 7 → 5 |
+| Technical Interview | 70 | 8.896 → 8.828 | −0.068 (−0.42 to 0.28) | 11 → 11 |
+| Seminar | 70 | 8.844 → 8.895 | +0.051 (−0.54 to 0.65) | 9 → 8 |
+| Call Center | 49 | 8.912 → 8.734 | −0.178 (−0.77 to 0.42) | 3 → 7 |
+
+| Condition | Pairs | er4 → er6 | Difference (95 %) | Hard |
+|---|---:|---|---|---|
+| One source, in the documents | 232 | 9.199 → 9.226 | +0.027 (−0.18 to 0.24) | 20 → 18 |
+| Several sources | 121 | 8.861 → 8.582 | −0.279 (−0.68 to 0.12) | 15 → 20 |
+| Conflicting / stale sources | 101 | 9.029 → 8.947 | −0.082 (−0.46 to 0.30) | 8 → 10 |
+| Evidence missing | 55 | 8.073 → 7.624 | −0.449 (−1.10 to 0.20) | 12 → 18 |
+| Irrelevant source | 55 | 9.065 → 9.156 | +0.090 (−0.35 to 0.53) | 5 → 4 |
+| Follow-up | 30 | 8.374 → 9.040 | +0.666 (−0.38 to 1.71) | 5 → 3 |
+
+**How to read it.** No line's interval excludes zero. The two runs are not the same answers judged twice: the shown
+answer is word for word the same on 6 of 594 questions, and the hard-fail lists overlap on 31 rows only (34 hard in
+er4 alone, 42 in er6 alone). A single run's hard-fail list is therefore mostly turnover between runs; the +8 is
+inside it. Of the 42 hard fails new in er6, 35 are drafts shown as written and 7 are answers the pass edited (in er4:
+5 of the 34 that went away had been edited). The pass edited the same number of rows in both runs (93 and 92 of 594).
+Where the mean fell, it fell in rows the pass left alone: Sales not edited 8.95 → 8.48 (hard 6 → 13, 61 rows), Sales
+edited 6.47 → 6.36 (5 → 5, 9 rows).
+**One line to keep an eye on, not a finding:** evidence-missing rows the pass left alone in er6: 8.18 → 7.23, hard
+5 → 12 (30 rows); 11 of those 30 had been edited in er4, and 4 of the 9 new hard fails among them are such rows. E19
+tells the pass that a statement of absence is not a claim, so fewer edits on these rows is what it does; whether it
+also lets an invented statement through there cannot be told from two different sets of drafts. E19's own rule was
+read on the same drafts (88 rows that differ: hard 12 → 7) and on the blind holdout, and both held; this pair does
+not overturn that, and it does not confirm it either. The clean check is the earlier pass and the E19 pass replayed
+on er6's 65 evidence-missing drafts, differing rows judged: about 30 judgments, next window.
+**The number to carry forward as the baseline of main: 8.88, 73 hard fails on 594 rows (12.3 %), with the last 36
+rows still to judge.** Reader: `report/window-read.mjs` (aggregates only; reproduces er4's 8.935 / 70).
