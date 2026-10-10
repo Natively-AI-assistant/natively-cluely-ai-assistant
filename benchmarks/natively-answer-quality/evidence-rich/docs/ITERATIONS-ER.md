@@ -3306,3 +3306,36 @@ not overturn that, and it does not confirm it either. The clean check is the ear
 on er6's 65 evidence-missing drafts, differing rows judged: about 30 judgments, next window.
 **The number to carry forward as the baseline of main: 8.88, 73 hard fails on 594 rows (12.3 %), with the last 36
 rows still to judge.** Reader: `report/window-read.mjs` (aggregates only; reproduces er4's 8.935 / 70).
+
+### E29 — a clean check of E19 on main's own evidence-missing drafts: plan and rule (written 2026-10-10 02:56 UTC, before the replay)
+**Why.** In the baseline pair above, evidence-missing rows the pass left alone went 8.18 → 7.23, hard 5 → 12 (30 rows).
+Two different sets of drafts cannot say whether E19 let an invented statement through there. The same drafts can.
+**What.** The 65 evidence-missing drafts of `er6-dev-main` + `er6-dev2-main` (development sets, readable), the pass
+replayed twice per arm (k = 2), cap 96,000 as the app that recorded them: arm `e29-e19` = the pass as on main
+(`cv-e19-73b18d97`; its rebuilt request must equal the recorded one), arm `e29-pre` = the pass before E19
+(`cv-main-f4cd986d`). No production change is proposed by this; E19 is landed, and undoing it would be Evin's call.
+**Judge-free, today:** how many rows each arm edits and on how many the shown text differs. These dev items carry no
+fixed forbidden strings, so there is no judge-free verdict.
+**Rule for the next Astra window (rows where the two arms differ, repetition 0; repetition 1 as the repeat):** E19 is
+confirmed on this slice when, on the differing rows, (1) hard fails with E19 ≤ hard fails without it, (2) rows with
+an unsupported_* or fabricated_* flag with E19 ≤ without it + 1, (3) mean with E19 ≥ mean without it − 0.20. Any
+line failing on both repetitions is reported to Evin as a regression of E19 on evidence-missing questions; failing
+on one repetition only is reported as unsettled. Nothing else is read into it.
+
+### E29 — judge-free part: the two arms on the same drafts (replayed 02:56–02:57 UTC, recorded 2026-10-10 02:58 UTC)
+Of the 65 evidence-missing rows, 50 ran the pass in the app; those 50 were replayed, twice per arm. The E19 arm's
+rebuilt request equals the recorded one on 100 of 100 (the control's prompt differs by the one sentence, as meant).
+
+| | Pass as on main (E19) | Pass before E19 |
+|---|---:|---:|
+| Replays that edited the draft, of 100 | 55 | 70 |
+| Repetition 0: rows edited by both / only this arm | 24 / 3 | 24 / 11 |
+| Repetition 1: rows edited by both / only this arm | 25 / 3 | 25 / 10 |
+| Pass time, median / p90 | 1,159 / 1,534 ms | 1,219 / 1,760 ms |
+
+The shown text differs on 34 rows (repetition 0) and 33 (repetition 1). So E19 does what it says on these rows: it
+edits about a fifth fewer of them. Whether the 10 or 11 drafts it now leaves alone are honest "that is not in what
+I have" answers (its purpose) or carry an invented statement is the judged part: 56 judgments for repetition 0, 57
+for repetition 1 (`results/replay/astra-plan-e29.json`, `astra-plan-e29-k1.json`; derived runs `rp-e29-*` are
+prepared). `window-oct10.mjs` now judges repetition 0 right after the 36 missing baseline rows and repetition 1
+after the X2 pair. Read with `report/pair-aggregate.mjs --plan …` against the rule above.
