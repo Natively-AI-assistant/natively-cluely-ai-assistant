@@ -11,6 +11,7 @@ import { resolveMacScreenStatus } from '../src/lib/permissionAttentionPolicy.mjs
 import { hasOwnAiKey, resolveExpiredTrial } from '../src/lib/trialPolicy.mjs';
 import { CARDS, OUTCOMES } from '../src/lib/cards/cardPolicy.mjs';
 import { TRIAL_CAMPAIGN, TRIAL_PROMO_ID, runTrialCampaignReset } from '../src/lib/trialCampaign.mjs';
+import { autoTrialFollowUp, runAutoTrial, shouldAutoStartTrial } from '../src/lib/trial/autoTrial.mjs';
 import { stripGistTrailer } from '../src/lib/displayMarkup';
 import { CardLedger } from './services/cards/CardLedger';
 import { funnelTelemetry } from './services/FunnelTelemetry';
@@ -376,7 +377,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // ── Funnel telemetry (electron/services/FunnelTelemetry.ts) ─────────────
   // The one place that answers "what can this install do right now" for a
   // funnel event. Booleans and enums only: no key, no email, no model name.
-  funnelTelemetry.setSnapshotResolver(() => {
+  const funnelSnapshot = () => {
     const { CredentialsManager } = require('./services/CredentialsManager');
     const cm = CredentialsManager.getInstance();
     const nativelyKey = cm.getNativelyApiKey();
@@ -399,7 +400,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       hasPro,
       meetingAi: resolveMeetingAi({ defaultModel, hasOwnAi }),
     };
-  });
+  };
+  funnelTelemetry.setSnapshotResolver(funnelSnapshot);
   // Who this is. The device id is the hardware id the app already sends for
   // trials and licences; the trial token and the key go out as headers, and the
   // server works the trial and the account out from them. The trial sentinel is
@@ -12127,7 +12129,10 @@ export function initializeIpcHandlers(appState: AppState): void {
   // ── Free Trial IPC ───────────────────────────────────────────────────────────
 
   // Start or resume a free trial. Fetches HWID, calls server, persists token locally.
-  safeHandle('trial:start', async (_event, surface?: unknown) => {
+  safeHandle('trial:start', async (_event, surface?: unknown) => startTrialFlow(surface));
+  // One body for both ways a trial starts: asked for (Settings, the overlay's
+  // fallback button) and by itself with a meeting (the hook further down).
+  async function startTrialFlow(surface?: unknown) {
     const startSurface = funnelSurface(surface);
     const reportStart = (r: Parameters<typeof mapTrialStartResult>[0]) =>
       funnelTelemetry.track('trial_start_result', { surface: startSurface, result: mapTrialStartResult(r) });
@@ -12200,6 +12205,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
         // Auto-configure natively as the model + STT provider during trial
         const prevSttProvider = cm.getSttProvider();
+        let sttProviderChanged = false;
         // Defence in depth: the sentinel must never clobber a real key. The UI
         // does not offer a trial to someone who already has one stored, but the
         // write is unconditional and the cost of being wrong is a paid key
@@ -12213,10 +12219,9 @@ export function initializeIpcHandlers(appState: AppState): void {
           console.warn('[IPC] trial:start: a real Natively key is stored — leaving it in place, not promoting the trial sentinel');
         } else {
           cm.setNativelyApiKey(TRIAL_SENTINEL_KEY); // sentinel — activates natively model routing
-          const newSttProvider = cm.getSttProvider();
-          if (newSttProvider !== prevSttProvider) {
-            await appState.reconfigureSttProvider();
-          }
+          // Transcription is rebuilt LAST, below: that waits for the meeting's
+          // audio start-up, and the model route and the announcement must not.
+          sttProviderChanged = cm.getSttProvider() !== prevSttProvider;
           const llmHelper = appState.processingHelper?.getLLMHelper?.();
           if (llmHelper) llmHelper.setNativelyKey(TRIAL_SENTINEL_KEY);
 
@@ -12242,7 +12247,18 @@ export function initializeIpcHandlers(appState: AppState): void {
             });
           }
         });
+
+        // Now transcription. The trial already answers and every window knows;
+        // this is still awaited so that a caller who waits for the start (the
+        // automatic one, before it tells the overlay it has settled) gets
+        // working transcription with it.
+        if (sttProviderChanged) await appState.reconfigureSttProvider();
       }
+
+      // The server says this device's trial has already run out. Remember it:
+      // the Home card used to record that answer, and with the card gone this
+      // flag is what lets the Natively API card take the trial's place.
+      if (data.ok && data.expired && cm.markTrialClaimed().changed) broadcastCredentialsChanged();
 
       // Reported here, after the token is stored, so the event carries the
       // entitlement the start produced rather than the one it began with.
@@ -12259,7 +12275,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       reportStart({ threw: true });
       return { ok: false, error: error.message || 'network_error' };
     }
-  });
+  }
 
   // Poll the server for live trial status (remaining time + usage counters).
   safeHandle('trial:status', async () => {
@@ -12415,6 +12431,76 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { hasToken: false, trialClaimed: false };
     }
   });
+
+  // ── The trial starts by itself with a meeting ──────────────────────────────
+  // A meeting that starts with no AI to answer it starts the free trial
+  // (src/lib/trial/autoTrial.mjs has the rule and why). AppState calls this
+  // from startMeetingTransition, the one place every meeting start goes
+  // through. It returns at once: a meeting never waits on the network.
+  let autoTrialInFlight = false;
+  // After a refusal that is not about this device (autoTrialFollowUp), the hook
+  // does not ask again for a while. In memory only: a new launch may ask.
+  let autoTrialQuietUntil = 0;
+  const autoStartTrialForMeeting = async (): Promise<void> => {
+    if (autoTrialInFlight) return;
+    autoTrialInFlight = true;
+    const tell = (data: { state: 'pending' | 'settled' } | { state: 'failed'; reason: 'unreachable' | 'rate_limited' }) => {
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send('trial-auto-start', data);
+      });
+    };
+    let told = false;
+    try {
+      // The one-time "everyone may try again" reset decides `trialClaimed`.
+      await applyTrialCampaignReset();
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      const snap = funnelSnapshot();
+      // The overlay's model picker is for the session only and is never
+      // stored, so the snapshot's stored default can say "nothing" for someone
+      // working on a local model right now. That is their own AI.
+      const sessionLocalModel = !!appState.processingHelper?.getLLMHelper?.()?.isUsingOllama?.();
+      const eligible = shouldAutoStartTrial({
+        meetingAi: sessionLocalModel ? 'own' : snap.meetingAi,
+        hasRealNativelyKey: snap.hasApiKey,
+        licensed: snap.hasPro,
+        trialClaimed: cm.getTrialClaimed(),
+        hasTrialToken: !!cm.getTrialToken(),
+        // An unread keychain looks like "nothing set up, never had a trial".
+        credentialsReadable: !cm.isCredentialStoreDegraded(),
+      });
+      if (!eligible) return;
+      if (Date.now() < autoTrialQuietUntil) return;
+
+      // 'pending' lets the overlay hold back "Transcription Not Configured",
+      // which is true for the second it takes the trial to arrive.
+      tell({ state: 'pending' });
+      told = true;
+      // A meeting that has already ended must not spend the device's one trial.
+      const meetingLive = () => appState.getIsMeetingActive?.() !== false;
+      let meetingEnded = false;
+      const outcome = await runAutoTrial(async () => {
+        if (!meetingLive()) { meetingEnded = true; return { ok: false, error: 'meeting_ended' }; }
+        return startTrialFlow('meeting_start');
+      });
+      const next = autoTrialFollowUp(outcome);
+      if (next.markClaimed && cm.markTrialClaimed().changed) broadcastCredentialsChanged();
+      if (next.quietMs > 0) autoTrialQuietUntil = Date.now() + next.quietMs;
+      if (next.notify && !meetingEnded && meetingLive()) {
+        tell({ state: 'failed', reason: next.notify });
+        told = false;
+      }
+    } catch (e: any) {
+      console.warn('[IPC] automatic trial start failed:', e?.message);
+    } finally {
+      // Every 'pending' is closed, whatever happened, so the overlay never
+      // waits on a start that is no longer running.
+      if (told) tell({ state: 'settled' });
+      autoTrialInFlight = false;
+    }
+  };
+  appState.autoStartTrialForMeeting = () => { void autoStartTrialForMeeting(); };
+  appState.autoTrialSettled = () => !autoTrialInFlight;
 
   // Record the user's post-trial choice in analytics and clean up local state.
   safeHandle('trial:convert', async (_, choice: string) => {
@@ -12678,7 +12764,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Events only the renderer can see: a card on screen, a locked feature opened.
   // The event name is checked against this list and its properties against the
   // catalogue, so the renderer cannot send anything the catalogue does not hold.
-  const RENDERER_FUNNEL_EVENTS = new Set(['trial_card', 'upgrade_prompt', 'paywall_hit', 'onboarding_stage', 'feature_used', 'answer_failed']);
+  const RENDERER_FUNNEL_EVENTS = new Set(['trial_card', 'trial_notice', 'upgrade_prompt', 'paywall_hit', 'onboarding_stage', 'feature_used', 'answer_failed']);
   safeHandle('funnel:track', async (_, eventType: unknown, props: unknown) => {
     if (typeof eventType !== 'string' || !RENDERER_FUNNEL_EVENTS.has(eventType)) return { ok: false, error: 'unknown_event' };
     const checked = checkFunnelProps(eventType, props);

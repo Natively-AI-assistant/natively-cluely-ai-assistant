@@ -364,6 +364,8 @@ export interface ElectronAPI {
   onTrialEnded:   (cb: (data: { choice: string }) => void) => () => void
   /** Emitted by `trial:start`, so a trial claimed mid-session unlocks Pro surfaces without a relaunch. */
   onTrialStarted: (cb: (data: { expiresAt: string; startedAt: string; usage?: { ai: number; ai_tokens?: number; stt_seconds: number; search: number }; limits?: { duration_ms: number; ai_requests: number; stt_minutes: number; search_requests: number } }) => void) => () => void
+  /** A meeting with no AI is starting the free trial by itself. `pending`: on its way. `failed`: it could not (offline, rate limited), so the overlay offers the manual start. `settled`: done, one way or the other. */
+  onTrialAutoStart: (cb: (data: { state: 'pending' | 'settled' } | { state: 'failed'; reason: 'unreachable' | 'rate_limited' }) => void) => () => void
 
   // STT Provider Management
   setSttProvider: (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech') => Promise<{ success: boolean; error?: string }>

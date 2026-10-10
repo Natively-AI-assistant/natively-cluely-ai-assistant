@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { classifyTrialStart, startTrialWithRetry, TRIAL_START_COPY } from '../trialStart.mjs';
+import { classifyTrialStart, startTrialWithRetry, trialRefusal } from '../trialStart.mjs';
 
 const rows = [
   ['a stored token', { ok: true, hasToken: true, persisted: true }, 'started'],
@@ -15,6 +15,8 @@ const rows = [
   ['the server says the trial is used up', { ok: true, expired: true, hasToken: false }, 'unavailable'],
   ['already used on this device', { ok: true, already_used: true, expired: true }, 'unavailable'],
   ['IP limit', { ok: false, error: 'trial_ip_limit', status: 403 }, 'unavailable'],
+  // Asked for by hand while the server's daily ceiling is reached: "try again later", never "already used".
+  ['the day\'s ceiling on new trials', { ok: false, error: 'trial_daily_limit', status: 403 }, 'rate_limited'],
   ['already_used code', { ok: false, error: 'already_used', status: 409 }, 'unavailable'],
   ['trial_already_used code', { ok: false, error: 'trial_already_used', status: 409 }, 'unavailable'],
   ['trial_expired code', { ok: false, error: 'trial_expired', status: 410 }, 'unavailable'],
@@ -75,10 +77,26 @@ for (const [kind, reply] of [['unavailable', { ok: true, expired: true }], ['rat
   });
 }
 
-test('the copy never shows a code', () => {
-  assert.deepEqual(Object.keys(TRIAL_START_COPY).sort(), ['failed', 'rate_limited', 'unavailable']);
-  for (const [kind, text] of Object.entries(TRIAL_START_COPY)) {
-    assert.ok(!/_|\bhttp\b|\d{3}/.test(text), `${kind}: ${text}`);
-    assert.ok(text.endsWith('.'), kind);
+// The card's sentences (TRIAL_START_COPY) left with the card on 2026-10-09: the
+// overlay's fallback banner says its own, translated, in src/i18n.trial.ts.
+
+test('a refusal is worded, and only "this device has had its trial" is remembered', () => {
+  // Settings used to file "too many trials from this network" and "too many
+  // attempts this hour" under a used-up trial: it wrote the local claim and
+  // showed a trial that had ended, for a device that had never had one and
+  // would get one at home the next day.
+  for (const code of ['trial_ip_limit', 'trial_start_rate_limited', 'trial_daily_limit', 'invalid_hwid', 'hardware_id_unavailable']) {
+    const r = trialRefusal(code);
+    assert.ok(r && r.message.length > 10, code);
+    assert.equal(r.deviceUsed, false, code);
+    assert.ok(!r.message.includes('_'), 'a sentence, never the code');
+  }
+  assert.equal(trialRefusal('trial_ip_limit').message, 'The free-trial limit for this network has been reached.');
+  assert.equal(trialRefusal('trial_start_rate_limited').message, 'Too many attempts. Try again later.');
+  assert.equal(trialRefusal('trial_daily_limit').message, 'Free trials are paused for the moment. Please try again later.');
+  assert.equal(trialRefusal('hardware_id_unavailable').message, trialRefusal('invalid_hwid').message);
+  // Anything else gets one plain sentence, not whatever the code was.
+  for (const other of ['ip_blocked', 'network_error', '', undefined, null, 42]) {
+    assert.deepEqual(trialRefusal(other), { message: 'Could not start trial. Try again.', deviceUsed: false });
   }
 });

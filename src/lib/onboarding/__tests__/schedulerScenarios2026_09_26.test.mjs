@@ -105,7 +105,11 @@ function launch(ledger, user = {}) {
 
 const NO_KEYS = { hasNativelyKey: false, hasOwnAiKey: false, isPremium: false, planTier: 'free' };
 
-test('1. new user, no keys: Permissions → trial promo on day 1; the extension on a later launch; no promo before 24 h', () => {
+// The free trial is not one of these cards: it starts by itself when a meeting
+// starts with no AI (src/lib/trial/autoTrial.mjs). So a new user with no keys
+// meets Permissions and then the extension, and the Natively API offer takes
+// the onboarding slot only once that trial has been used.
+test('1. new user, no keys: Permissions → the extension on day 1; nothing more that day; no promo before 24 h', () => {
   const first = launch(policy.emptyLedger(Date.now()), { ...NO_KEYS, permsShown: false });
   first.run(5_000);
   assert.equal(first.active(), 'permissions');
@@ -113,19 +117,29 @@ test('1. new user, no keys: Permissions → trial promo on day 1; the extension 
   first.run(55_000);
   assert.equal(first.active(), null, '60 s between cards');
   first.run(15_000);
-  assert.equal(first.active(), 'trial_promo');
+  assert.equal(first.active(), 'browser_extension');
   first.close('later').run(10 * 60_000).end();
-  assert.deepEqual(first.seen, ['permissions', 'trial_promo'], 'one onboarding card per launch, no promo on day 1');
+  assert.deepEqual(first.seen, ['permissions', 'browser_extension'], 'one onboarding card per launch, no promo on day 1, no trial card');
 
-  const second = launch(age(first.ledger, 2 * H), NO_KEYS).run(60_000);
-  assert.deepEqual(second.seen, ['browser_extension'], 'the extension on a later launch');
-  second.close('later').run(10 * 60_000);
-  assert.deepEqual(second.seen, ['browser_extension'], 'the slot is free, but no promo on day 1');
+  const second = launch(age(first.ledger, 2 * H), NO_KEYS).run(10 * 60_000);
+  assert.deepEqual(second.seen, [], 'the extension was put off, the trial is still ahead of them, and no promo on day 1');
   second.end();
 
   const third = launch(age(second.ledger, 23 * H), NO_KEYS).run(2 * 60_000);
   assert.deepEqual(third.seen, ['profile_ad'], 'the first promo once 24 h have passed');
   third.end();
+});
+
+test('1b. no keys, trial already used: the Natively API offer comes before the extension', () => {
+  const used = { ...NO_KEYS, trialClaimed: true };
+  const first = launch(policy.emptyLedger(Date.now()), used).run(60_000);
+  assert.deepEqual(first.seen, ['natively_api_new']);
+  first.close('later').run(10 * 60_000).end();
+  assert.deepEqual(first.seen, ['natively_api_new'], 'one onboarding card per launch');
+
+  const second = launch(age(first.ledger, 2 * H), used).run(60_000);
+  assert.deepEqual(second.seen, ['browser_extension'], 'the extension on a later launch');
+  second.end();
 });
 
 test('2. own keys on day 4: "Three services" shows; the next promo waits 72 h', () => {

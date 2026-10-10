@@ -5,7 +5,9 @@
 // these outcomes and, for our own errors, retries once by itself first.
 
 const UNAVAILABLE_CODES = new Set(['trial_ip_limit', 'already_used', 'trial_already_used', 'trial_expired']);
-const RATE_LIMITED_CODES = new Set(['trial_start_rate_limited']);
+// 'trial_daily_limit' is the server's ceiling on new trials per day: nothing
+// about this device, and gone tomorrow, so it is "try again later".
+const RATE_LIMITED_CODES = new Set(['trial_start_rate_limited', 'trial_daily_limit']);
 
 /**
  * @param {{ ok?: boolean, hasToken?: boolean, persisted?: boolean, expired?: boolean,
@@ -29,6 +31,30 @@ export function classifyTrialStart(res) {
   return 'failed';
 }
 
+const REFUSALS = {
+  trial_ip_limit: 'The free-trial limit for this network has been reached.',
+  trial_start_rate_limited: 'Too many attempts. Try again later.',
+  trial_daily_limit: 'Free trials are paused for the moment. Please try again later.',
+  invalid_hwid: 'Could not read device ID. Restart the app and try again.',
+  hardware_id_unavailable: 'Could not read device ID. Restart the app and try again.',
+};
+
+/**
+ * A failed trial:start, in words, for Settings. Never the code itself.
+ *
+ * `deviceUsed` is whether the answer means this DEVICE has had its trial, the
+ * only thing worth remembering locally. None of these do: a network at its
+ * cap, the hourly limit and the day's ceiling say nothing about the device,
+ * and a device that has had its trial is answered with ok:true, expired.
+ *
+ * @param {unknown} error
+ * @returns {{ message: string, deviceUsed: boolean }}
+ */
+export function trialRefusal(error) {
+  const known = typeof error === 'string' && Object.hasOwn(REFUSALS, error) ? REFUSALS[error] : null;
+  return { message: known ?? 'Could not start trial. Try again.', deviceUsed: false };
+}
+
 export const TRIAL_RETRY_DELAY_MS = 3000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -37,22 +63,21 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * Start the trial; on our own error (network, timeout, server) try once more
  * after 3 s. The server's answers (used up, rate limited) are final.
  *
+ * `classify` reads the reply. The automatic start at a meeting passes its own
+ * (autoTrial.mjs), which knows two answers the card did not need; anything but
+ * 'failed' is final.
+ *
+ * @template {string} [T='started' | 'unavailable' | 'rate_limited' | 'failed']
  * @param {() => Promise<unknown>} start
  * @param {(ms: number) => Promise<void>} [wait]
+ * @param {(res: any) => T | 'failed'} [classify]
  */
-export async function startTrialWithRetry(start, wait = sleep) {
+export async function startTrialWithRetry(start, wait = sleep, classify = classifyTrialStart) {
   const attempt = async () => {
-    try { return classifyTrialStart(await start()); } catch { return 'failed'; }
+    try { return classify(await start()); } catch { return 'failed'; }
   };
   const first = await attempt();
   if (first !== 'failed') return first;
   await wait(TRIAL_RETRY_DELAY_MS);
   return attempt();
 }
-
-/** What the card says for each outcome other than a started trial. */
-export const TRIAL_START_COPY = Object.freeze({
-  failed: "Couldn't reach Natively. Check your connection and try again.",
-  rate_limited: 'Too many attempts. Try again later.',
-  unavailable: 'The free trial has already been used on this device.',
-});

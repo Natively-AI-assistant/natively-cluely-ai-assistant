@@ -1,0 +1,69 @@
+/*
+  TrialNotice — the free-trial countdown chip.
+
+  It is the page chip (PageContextChip.css) without its two controls, so the
+  only thing of its own is the trailing space: the page chip leaves 5px for its
+  buttons, and a chip that ends in text needs the label to sit as far from the
+  rim as the icon does at the other end.
+
+  (0,5,0), one class above the page chip's own box rule.
+*/
+.lg-button.lg-clear.lg-sm.pc-chip.trial-chip {
+  padding: 0 9px 0 10px;
+}
+
+/* "Start free trial" and "Starting…" in one cell: the two hidden copies size
+   the button, the visible one swaps over them. */
+.trial-start-label {
+  display: inline-grid;
+  justify-items: center;
+}
+.trial-start-label > * {
+  grid-area: 1 / 1;
+}
+.trial-start-sizer {
+  visibility: hidden;
+}
+
+/* ── Motion ──────────────────────────────────────────────────────────────────
+   The pill arrives as an object: it pops up from small (badge pop open), its
+   timer and its words following. Leaving with its fold, it shrinks away.
+
+   On the HOST, which is a plain wrapper, and by transform alone: the chip
+   inside is glass and may not fade (see OverlayBanner.css). The delay lets a
+   banner that is closing into the pill get out of the way first. */
+.trial-chip-host {
+  transition: transform 500ms cubic-bezier(0.34, 1.36, 0.64, 1);   /* --duration-very-slow, --ease-bounce */
+  transition-delay: 80ms;                                          /* --duration-micro */
+}
+/* From nothing, not from small: glass cannot fade, so a pill waiting at 0.6
+   for its delay would be seen sitting there empty. */
+@starting-style {
+  .trial-chip-host {
+    transform: scale(0);
+  }
+}
+/* Its timer and words come in with the pill, so it is never seen empty. */
+.trial-chip-host .pc-chip-icon svg,
+.trial-chip-host .pc-chip-label {
+  transition-delay: 80ms;
+}
+[data-fold-state='out'] .trial-chip-host {
+  transform: scale(0);
+  transition: transform 250ms cubic-bezier(0.22, 1, 0.36, 1);      /* --duration-fast, --ease-smooth-out: never bounces shut */
+  transition-delay: 0ms;
+}
+[data-fold-state='out'] .trial-chip-host .pc-chip-icon svg,
+[data-fold-state='out'] .trial-chip-host .pc-chip-label {
+  opacity: 0;
+  transition: opacity 150ms ease-out;                              /* --duration-quick */
+  transition-delay: 0ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trial-chip-host,
+  .trial-chip-host .pc-chip-icon svg,
+  .trial-chip-host .pc-chip-label {
+    transition: none !important;
+  }
+}

@@ -45,6 +45,9 @@ export const SURFACES = Object.freeze([
   'max_ultra_toaster',
   'jd_toaster',
   'profile_toaster',
+  'meeting_start',         // the trial that starts by itself with a meeting
+  'overlay',               // the meeting overlay's trial notice
+  'trial_meter',           // the launcher's small card: trial clock, voice and AI used
   'other',
 ])
 
@@ -165,11 +168,17 @@ export const FUNNEL_CATALOG = Object.freeze({
   trial_start_result: {
     surface: SURFACES,
     result: [
-      'ok', 'already_used', 'already_used_expired', 'ip_limit', 'rate_limited',
+      'ok', 'already_used', 'already_used_expired', 'ip_limit', 'daily_limit', 'rate_limited',
       'hwid_unavailable', 'network', 'server_error',
     ],
   },
   trial_expired: {},
+  // The meeting overlay's trial notice: it started by itself, it is about to
+  // end, it has ended, or the automatic start failed and a manual one is offered.
+  trial_notice: {
+    state: ['started', 'ending', 'ended', 'failed'],
+    action: ['shown', 'own_keys', 'plans', 'start', 'dismissed'],
+  },
   trial_card: {
     mode: ['active', 'expired'],
     action: [

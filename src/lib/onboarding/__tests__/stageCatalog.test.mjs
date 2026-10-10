@@ -165,11 +165,13 @@ test('browser_extension: blocked by permissions prerequisite', () => {
   assert.equal(show('browser_extension', ctx), false);
 });
 
-test('browser_extension: fires after permissions + 5s homepage + connected=false', () => {
+test('browser_extension: waits for permissions + 6s homepage + connected=false', () => {
   const ctx = makeCtx({
     completed: { permissions: 1 },
-    homepageMountedFor: 6_000,
+    homepageMountedFor: 5_000,
   });
+  assert.equal(show('browser_extension', ctx), false);
+  ctx.homepageMountedFor = 6_000;
   assert.equal(show('browser_extension', ctx), true);
 });
 
@@ -229,33 +231,13 @@ test('modes_manager: skipped when activeModeSet', () => {
   assert.equal(show('modes_manager', ctx), false);
 });
 
-// ─── Trial promo ──────────────────────────────────────────────────
+// ─── Trial ────────────────────────────────────────────────────────
+// Not a card any more: it starts by itself with a meeting
+// (src/lib/trial/autoTrial.mjs). The catalog must not bring the card back.
 
-test('trial_promo: skipped when hasNativelyKey', () => {
-  const ctx = makeCtx({
-    userState: { ...DEFAULT_USER_STATE, hasNativelyKey: true },
-    completed: { permissions: 1, browser_extension: 2, profile_intelligence: 3, modes_manager: 4 },
-    homepageMountedFor: 7_000,
-  });
-  assert.equal(show('trial_promo', ctx), false);
-});
-
-test('trial_promo: skipped when hasTrialToken', () => {
-  const ctx = makeCtx({
-    userState: { ...DEFAULT_USER_STATE, hasTrialToken: true },
-    completed: { permissions: 1, browser_extension: 2, profile_intelligence: 3, modes_manager: 4 },
-    homepageMountedFor: 7_000,
-  });
-  assert.equal(show('trial_promo', ctx), false);
-});
-
-test('trial_promo: skipped when isPremium', () => {
-  const ctx = makeCtx({
-    userState: { ...DEFAULT_USER_STATE, isPremium: true },
-    completed: { permissions: 1, browser_extension: 2, profile_intelligence: 3, modes_manager: 4 },
-    homepageMountedFor: 7_000,
-  });
-  assert.equal(show('trial_promo', ctx), false);
+test('trial_promo is not a stage', () => {
+  assert.equal(STAGES.find((s) => s.id === 'trial_promo'), undefined);
+  assert.equal(STAGES_TS.find((s) => s.id === 'trial_promo'), undefined);
 });
 
 // ─── Support ──────────────────────────────────────────────────────

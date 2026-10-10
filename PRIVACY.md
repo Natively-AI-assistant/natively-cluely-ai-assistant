@@ -1,6 +1,6 @@
 # Privacy Policy
 
-_Last updated: October 7th 2026_
+_Last updated: October 10th 2026_
 
 This policy describes how **Natively** — the desktop application, the **Natively Pro** licensed features, and the **Natively API** managed service — handles your data. We've tried to write it like a person, not a lawyer.
 
@@ -28,7 +28,7 @@ We've designed Natively to keep as much of your data on your device as possible.
 - When **Apple Speech** is selected, microphone and system audio are transcribed by Apple's on-device speech framework. The audio is not sent to Natively or a cloud speech provider. macOS may contact Apple to download the selected language's speech asset.
 - When you use a cloud AI, speech-to-text, or search feature, **the relevant text or audio leaves your device only to be processed by the provider you've chosen** (e.g., OpenAI, Anthropic, Google, Groq, Deepgram, ElevenLabs, Azure, IBM, Soniox, Tavily). The result comes back to your device.
 - For **paid products** (Natively Pro, Natively API), we **do** store a small amount of operational data on our servers — your license key, hardware identifier, plan, billing email, and quota counters. We need this to make billing and licensing actually work. We do not store the content you generate.
-- For the **Free Trial**, we additionally store anti-abuse signals (rate-limited IP, trial tokens, basic usage counters).
+- For the **Free Trial**, we additionally store anti-abuse signals (rate-limited IP, trial tokens, basic usage counters). The trial **starts by itself** the first time you start a meeting with no AI of your own set up, and the meeting overlay tells you when it does. It then runs for 30 minutes on the clock, across meetings. While it runs, your meetings' audio and your questions are processed through the Natively API (§4.4).
 - **Every installation**, paid or not, reports **product-usage events** to our own servers: that the app was opened on a given day, that a meeting was held, which features were used, that a trial was started, that a plan page was opened, and the like. They are **linked to your device and, if you have one, your trial or account**. They cannot contain anything you say, see or type. You can turn them off. See §3.2.1.
 - We **do not sell** your data. We **do not use your content to train AI models**. The desktop app also sends anonymous usage events to **Google Analytics**: that the app was opened or closed, which feature or AI model was used, and how long a session lasted. These events never contain anything you say, see or type, and IP addresses are anonymised. We don't use advertising or marketing trackers inside the desktop app.
 
@@ -225,6 +225,8 @@ The search feature (where enabled) calls **Tavily** or, where you've configured 
 ### 4.4 Natively-managed services
 
 When you use the **Natively API** (instead of BYOK), your inputs flow through our infrastructure to one or more of the providers listed above, and the response flows back. We do **not** persist the content of these requests. We do log request metadata (timestamp, plan, quota usage, status) for billing, abuse prevention, and quality monitoring; that metadata is retained for up to 90 days.
+
+The **free trial** uses the Natively API in the same way. It starts by itself when you start a meeting and have no AI of your own set up (no provider key, no local model, no Natively key), and lasts 30 minutes from that moment, whether that is one meeting or several. The welcome screen says this before your first meeting, and the meeting overlay says it again at the moment the trial starts, with a button that opens AI Providers so you can use your own keys instead. If you have set up your own AI, no trial is started.
 
 ---
 

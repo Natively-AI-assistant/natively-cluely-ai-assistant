@@ -51,10 +51,11 @@ This spec defines one policy for all of them and one scheduler that enforces it.
 For a new user with no keys:
 
 1. Permissions (existing rule, unchanged)
-2. Free-trial promo, on the next launch or after the 60 s spacing
-3. Browser extension, on a later launch
+2. Browser extension, after the 60 s spacing or on a later launch
 
-Natively API "Skip the setup" appears only when the trial is unavailable (claimed or used, or the trial promo was retired). It solves the same problem as the trial promo, so the two are never both offered.
+**Changed 2026-10-09: the free trial is no longer a card.** It starts by itself when a meeting starts with no AI set up (`src/lib/trial/autoTrial.mjs`), the welcome screen says so beforehand, and the meeting overlay says so when it happens (`src/components/overlay/TrialNotice.tsx`). The card reached about 8% of new installs, while about half of them started their first meeting with nothing configured. Where the rest of this document says "Free-trial promo" or "trial promo" as a card (§6 rows 7 and 8, §8, §11), read it as history: the card id `trial_promo` is kept in the ledger and the funnel catalogue for installs that already hold an entry, and nothing shows it.
+
+Natively API "Skip the setup" appears only when the trial is unavailable (claimed or used, or the old trial promo was retired). It takes the onboarding slot ahead of the browser extension, and the two wait the same 6 s on Home so that order, not a head start, decides between them.
 
 ### 3.4 Promotional priority
 

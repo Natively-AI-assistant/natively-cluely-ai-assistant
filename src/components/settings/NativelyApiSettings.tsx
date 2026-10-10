@@ -28,6 +28,7 @@ import { Presence, SettingsMotionReady, SwapLabel } from './SettingsRow';
 // invisible. See `.natively-key-mark` in index.css.
 import nativelyLogo from '../../assets/logo.webp';
 import { isTrialClaimedLocally, markTrialClaimedLocally } from '../../lib/trialCampaign.mjs';
+import { trialRefusal } from '../../lib/trial/trialStart.mjs';
 import {
   formatCompact, formatMeter, formatUsd, normalizeQuota, TRIAL_FALLBACK_LIMITS,
   type NativelyQuota, type NativelyPlanLimits, type TrialUsage, type TrialLimits, type UsageMeter,
@@ -1049,26 +1050,12 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         );
       }
       if (!res?.ok) {
-        if (res?.error === 'trial_ip_limit' || res?.error === 'trial_start_rate_limited') {
-          markTrialClaimedLocally(localStorage);
-          setTrialState({
-            active: false,
-            expired: true,
-            expiresAt: '',
-            startedAt: '',
-            usage: { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 },
-          });
-          return;
-        }
-        // F-601 follow-up: `hardware_id_unavailable` had no mapping, so the raw
-        // snake_case code was shown to the user verbatim. It means the same thing
-        // to a user as invalid_hwid — the device ID could not be read — so it gets
-        // the same actionable message.
-        const msg =
-          res?.error === 'invalid_hwid' || res?.error === 'hardware_id_unavailable'
-            ? 'Could not read device ID. Restart the app and try again.'
-            : res?.error || 'Could not start trial. Try again.';
-        setTrialError(msg);
+        // Every refusal is a sentence, never the code (F-601 follow-up), and
+        // none of them is remembered against the device. "Too many trials from
+        // this network" and "too many attempts this hour" used to be recorded
+        // here as a used trial: the pane showed a trial that had ended for a
+        // device that never had one and would get one at home the next day.
+        setTrialError(trialRefusal(res?.error).message);
         return;
       }
 

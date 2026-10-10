@@ -1,0 +1,181 @@
+/* src/components/trial/TrialMeterToaster.css
+ *
+ * The two bars on the launcher's small free-trial card: the Liquid Glass body
+ * at bar scale, as on the usage rows in Settings (.natively-meter-*, index.css)
+ * - a groove with a lit lip, a fill with a sheen on its top face, a crisp top
+ * rim, a faint underside and, in dark, a bloom of its own hue.
+ *
+ * Not those classes themselves, for one reason: alignment. They draw the
+ * groove's lip INSIDE its bottom edge. In light that lip is white on a near
+ * white pane, so the groove is seen a pixel shorter than the fill sitting in
+ * it, and on a short bar the colour looks dropped off its track. Here the lip
+ * is drawn UNDER the strip, so the groove and the fill are seen at the same
+ * height, and in light the sheen is eased so the fill's top row is still its
+ * colour and not a second white line.
+ *
+ * 5px: under 4px the sheen can only be a line (the meter's own note).
+ */
+.trial-meter-track {
+    position: relative;
+    width: 100%;
+    height: 5px;
+    border-radius: 999px;
+    /* The bloom is an outer shadow of the fill: a clipped track deletes it. */
+    overflow: visible;
+    background: rgba(0, 0, 0, 0.42);
+    box-shadow:
+        inset 0 1px 1.5px rgba(0, 0, 0, 0.55),
+        0 1px 0 rgba(255, 255, 255, 0.07);
+}
+[data-theme='light'] .trial-meter-track {
+    background: rgba(16, 22, 43, 0.12);
+    box-shadow:
+        inset 0 1px 1.5px rgba(16, 22, 43, 0.16),
+        0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.trial-meter-fill {
+    --trial-meter-hue: var(--toggle-on);
+    height: 100%;
+    border-radius: 999px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.40) 0%, rgba(255, 255, 255, 0) 60%),
+        var(--trial-meter-hue);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.45),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.12),
+        0 0 6px -1px var(--trial-meter-hue);
+    /* A reading that moves: the bar resizes (--duration-very-slow, an emphasis
+       moment that happens at most every 30 s; --ease-smooth-out), and a bar
+       that turns amber or red crosses over instead of jumping (--duration-fast,
+       --ease-in-out: blue to amber passes through grey, so it is kept short). */
+    transition:
+        width 500ms cubic-bezier(0.22, 1, 0.36, 1),
+        --trial-meter-hue 250ms ease-in-out;
+    /* Arriving: the bars fill once the card has landed. Held empty through the
+       delay, which is the first 300ms of the card's 500ms slide. */
+    animation: trial-meter-fill-in 500ms cubic-bezier(0.22, 1, 0.36, 1) 300ms backwards;
+}
+@keyframes trial-meter-fill-in {
+    from { width: 0; }
+}
+/* Light: a coloured glow on a white pane reads as a blur, so the bloom goes,
+   and the sheen is eased (see the note at the top). */
+[data-theme='light'] .trial-meter-fill {
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0) 60%);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.22),
+        inset 0 -1px 0 rgba(16, 22, 43, 0.14);
+}
+/* Colour means one thing here, as on the usage rows: running low, then used up. */
+.trial-meter-fill[data-tone='low'] { --trial-meter-hue: #f59e0b; }
+.trial-meter-fill[data-tone='out'] { --trial-meter-hue: #ef4444; }
+
+/* ── Motion ──────────────────────────────────────────────────────────────────
+   On the transitions.dev motion-token scale. The tokens are not installed
+   globally, so the values are literals; the token each one stands for is named
+   beside it. The card's own arrival and exit are GenieModal's slide.
+
+   What plays:
+    - the card arriving ........ the bars fill (above); the timer pops
+    - a value changes .......... #04 text states swap (SwapText)
+    - running low / used up .... the bar, the value, the clock and the card's
+                                 hairline cross over to amber or red; the timer
+                                 pops again; "See plans" opens (#21 accordion)
+    - the ✕ .................... sinks a little while pressed
+
+   What does not: the clock's digits. They change every second, and a swap
+   that often would never be at rest. */
+
+/* The bar's hue, registered so it can be transitioned. Not inherited: each
+   fill sets its own. */
+@property --trial-meter-hue {
+    syntax: '<color>';
+    inherits: false;
+    initial-value: #6688f5;
+}
+
+/* #04 text states swap, for the two values. The rules are index.css's
+   (.t-text-swap); these are its variables, which the launcher does not set. */
+.trial-meter-card {
+    --text-swap-dur: 150ms;          /* --duration-quick */
+    --text-swap-translate-y: 4px;    /* --distance-micro */
+    --text-swap-blur: 2px;           /* --blur-small */
+    --text-swap-ease: ease-in-out;   /* --ease-in-out */
+    /* The hairline that says low (amber) or used up (red) crosses over. */
+    transition: box-shadow 500ms ease-in-out;
+}
+
+/* The timer: one pop when it is inserted, which is when the card arrives and
+   again when the clock turns amber (the icon is keyed on that). */
+.trial-meter-icon {
+    display: inline-flex;
+    flex: none;
+}
+.trial-meter-icon svg {
+    transition:
+        transform 500ms cubic-bezier(0.34, 1.36, 0.64, 1),   /* --duration-very-slow, --ease-bounce: badge pop open */
+        opacity   150ms ease-out;                            /* --duration-quick, --ease-out */
+    transition-delay: 80ms;                                  /* --duration-micro */
+}
+@starting-style {
+    .trial-meter-icon svg {
+        opacity: 0;
+        transform: scale(0.25);
+    }
+}
+
+/* "See plans": #21 accordion. The row grows from nothing, so the card gets
+   taller instead of jumping, and the link fades in with a cross-blur. The
+   spacing above the link is the link's own margin, INSIDE the clipped cell: on
+   the grid track it would leave a strip when closed. */
+.trial-meter-more {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 250ms cubic-bezier(0.22, 1, 0.36, 1);   /* --duration-fast, --ease-smooth-out */
+}
+.trial-meter-more[data-open='true'] {
+    grid-template-rows: 1fr;
+}
+.trial-meter-more-inner {
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    justify-content: flex-end;
+    opacity: 0;
+    filter: blur(2px);                                                     /* --blur-small */
+    transition:
+        opacity 250ms cubic-bezier(0.22, 1, 0.36, 1),
+        filter  250ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.trial-meter-more[data-open='true'] .trial-meter-more-inner {
+    opacity: 1;
+    filter: blur(0);
+}
+.trial-meter-more-inner > button {
+    margin-top: 10px;
+}
+
+/* The ✕ sinks while held: quick in, eased back on release. */
+.trial-meter-close svg {
+    transition: transform 150ms cubic-bezier(0.22, 1, 0.36, 1);            /* --duration-quick, --ease-smooth-out */
+}
+.trial-meter-close:active svg {
+    transform: scale(0.82);
+    transition-duration: 80ms;                                             /* --duration-micro */
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .trial-meter-card,
+    .trial-meter-fill,
+    .trial-meter-more,
+    .trial-meter-more-inner,
+    .trial-meter-icon svg,
+    .trial-meter-close svg,
+    .trial-meter-card .t-text-swap {
+        transition: none !important;
+    }
+    .trial-meter-fill {
+        animation: none !important;
+    }
+}

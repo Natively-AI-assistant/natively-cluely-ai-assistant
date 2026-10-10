@@ -290,7 +290,6 @@ const POPUPS = {
   'components/UpdateModal.tsx': 'Update',
   'components/ReviewModal.tsx': 'Review',
   'components/SupportToaster.tsx': 'Support',
-  'components/trial/TrialPromoToaster.tsx': 'Trial promo',
   'components/trial/FreeTrialModal.tsx': 'Trial ended',
   'components/NativelyQuotaBanner.tsx': 'Quota notice',
   'components/HindsightStatusBanner.tsx': 'Long-term memory notice',
@@ -326,13 +325,10 @@ test('onboarding toasters resume once a closing Settings / manager card has gone
 });
 
 test('popups the host unmounts on dismiss report from onClosed, not before the genie', () => {
-  for (const file of ['components/SupportToaster.tsx', 'components/trial/TrialPromoToaster.tsx',
+  for (const file of ['components/SupportToaster.tsx',
     'components/ReviewModal.tsx', 'components/trial/FreeTrialModal.tsx']) {
     assert.ok(code(file).includes('onClosed='), file);
   }
-  const host = code('components/onboarding/OrchestratedToasterHost.tsx');
-  const trial = host.slice(host.indexOf('<TrialPromoToaster'), host.indexOf("case 'quiet_window'"));
-  assert.ok(!trial.includes("onDismiss('trial_promo')()"), 'the trial toaster reports its own dismiss');
 });
 
 test('Update stays mounted so its close can play', () => {
@@ -543,9 +539,6 @@ test('pictures: a card showing one of several things is keyed by which', () => {
 
 test('pictures: a card that opens reset keeps only its untouched picture', () => {
   assert.ok(code('components/ReviewModal.tsx').includes('keepPictures={step === "review" && rating === 0 && hoverRating === 0 && !text}'));
-  // The trial promo is remounted fresh for every showing: a picture of it
-  // starting, or of a failed start's message, is never what the next one shows.
-  assert.ok(code('components/trial/TrialPromoToaster.tsx').includes('keepPictures={!starting && !message}'));
 });
 
 test('pictures (premium): the Natively API card has one picture per variant', { skip: !existsSync(resolve(SRC, '../premium/src/NativelyApiPromoToaster.tsx')) && 'premium not checked out' }, () => {

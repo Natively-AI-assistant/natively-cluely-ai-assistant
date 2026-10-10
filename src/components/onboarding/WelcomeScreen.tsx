@@ -56,6 +56,13 @@ export const WelcomeLeft: React.FC<Props> = ({ onGetStarted }) => {
               {tr('Get started')} <ArrowRight size={15} strokeWidth={2} aria-hidden />
             </LavenderButton>
           </motion.div>
+          {/* Said before any meeting: with no AI set up, the first meeting starts
+              the free trial by itself (src/lib/trial/autoTrial.mjs), and that
+              should not come as a surprise. -6 pulls it under the button it
+              belongs to; the column's own gap is for separate things. */}
+          <motion.div {...rise(0.3)} style={{ marginTop: -6, fontSize: 13, fontWeight: 500, letterSpacing: '-0.005em', color: t.quiet }}>
+            {tr('Your 30 free minutes start with your first meeting. No card needed.')}
+          </motion.div>
         </div>
         <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: t.faint }}>
           {fillText(tr('By continuing, you agree to our {terms} and {privacy}.'), {

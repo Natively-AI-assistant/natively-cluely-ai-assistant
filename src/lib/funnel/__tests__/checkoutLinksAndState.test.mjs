@@ -142,6 +142,7 @@ test('every way a trial start can end has its own word', () => {
   assert.equal(mapTrialStartResult({ hwidUnavailable: true }), 'hwid_unavailable');
   assert.equal(mapTrialStartResult({ threw: true }), 'network');
   assert.equal(mapTrialStartResult({ status: 403, error: 'trial_ip_limit' }), 'ip_limit');
+  assert.equal(mapTrialStartResult({ status: 403, error: 'trial_daily_limit' }), 'daily_limit');
   assert.equal(mapTrialStartResult({ status: 429, error: 'trial_start_rate_limited' }), 'rate_limited');
   assert.equal(mapTrialStartResult({ status: 429, error: 'ip_blocked' }), 'rate_limited');
   assert.equal(mapTrialStartResult({ status: 500, error: 'trial_creation_failed' }), 'server_error');

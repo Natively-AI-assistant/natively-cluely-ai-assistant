@@ -13,6 +13,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import UpdateBanner from "./components/UpdateBanner"
 import { NativelyQuotaBanner } from "./components/NativelyQuotaBanner"
 import { useTrialExpiry }       from "./components/trial/useTrialExpiry"
+import { TrialMeterToaster }    from "./components/trial/TrialMeterToaster"
 import type { TrialUsage, TrialLimits } from './types/nativelyUsage';
 import { FreeTrialModal }       from "./components/trial/FreeTrialModal"
 import { OrchestratorProvider, OrchestratedToasterHost, setUserState as setOrchestratorUserState, emitOrchestratorEvent } from "./components/onboarding/OrchestratedToasterHost"
@@ -462,7 +463,8 @@ const App: React.FC = () => {
     }).catch(() => {});
   }, []);
   // Launcher only, like the trial poll (toaster policy §7.5). Nothing is drawn
-  // here: the time left is on the trial card in Settings › Plans.
+  // here: the time left is on Home's small trial card (TrialMeterToaster) and
+  // on the trial card in Settings › Plans.
   useTrialExpiry(
     !isolateGlobalSurfaces && (isLauncherWindow || isDefault) && activeTrial ? activeTrial.expiresAt : null,
     handleTrialClockExpired,
@@ -1486,6 +1488,8 @@ const App: React.FC = () => {
       <div data-opacity-preview-surface="">
         {!isolateGlobalSurfaces && <UpdateBanner />}
         {!isolateGlobalSurfaces && <NativelyQuotaBanner />}
+        {/* The running trial's clock and its two allowances, on Home only. */}
+        {!isolateGlobalSurfaces && (isLauncherWindow || isDefault) && <TrialMeterToaster trial={activeTrial} ready={isAppReady && !showTrialExpiredModal} onSeePlans={() => openSettingsExclusive('plans')} />}
 
         {/* Orchestrated onboarding toasters (single-slot, controlled by OnboardingOrchestrator) */}
         {/* Not under the first-launch welcome: its cards follow Get started. */}

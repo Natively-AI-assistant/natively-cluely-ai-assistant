@@ -7,6 +7,7 @@ import { ES_GENERATED } from './i18n.es.generated';
 import { ONBOARDING_RU, ONBOARDING_ZH, ONBOARDING_JA, ONBOARDING_ES } from './i18n.onboarding';
 import { DIRECT_ASSIST_RU, DIRECT_ASSIST_ZH, DIRECT_ASSIST_JA, DIRECT_ASSIST_ES } from './i18n.directAssist';
 import { CREDENTIAL_STORES_RU, CREDENTIAL_STORES_ZH, CREDENTIAL_STORES_JA, CREDENTIAL_STORES_ES } from './i18n.credentialStores';
+import { TRIAL_NOTICE_RU, TRIAL_NOTICE_ZH, TRIAL_NOTICE_JA, TRIAL_NOTICE_ES } from './i18n.trial';
 
 // ─── Lightweight in-house i18n ────────────────────────────────────────────────
 // No external dependency. `t(englishText)` returns the translation for the
@@ -51,6 +52,7 @@ const RU: Record<string, string> = {
     ...ONBOARDING_RU,
     ...DIRECT_ASSIST_RU,
     ...CREDENTIAL_STORES_RU,
+    ...TRIAL_NOTICE_RU,
     // ── Settings sidebar / navigation ──
     'General': 'Основные',
     'AI Providers': 'AI-провайдеры',
@@ -283,6 +285,7 @@ const ZH: Record<string, string> = {
     ...ONBOARDING_ZH,
     ...DIRECT_ASSIST_ZH,
     ...CREDENTIAL_STORES_ZH,
+    ...TRIAL_NOTICE_ZH,
     'Language': '语言',
     'English': '英语',
     'Russian': '俄语',
@@ -302,6 +305,7 @@ const JA: Record<string, string> = {
     ...ONBOARDING_JA,
     ...DIRECT_ASSIST_JA,
     ...CREDENTIAL_STORES_JA,
+    ...TRIAL_NOTICE_JA,
     'Language': '言語',
     'English': '英語',
     'Russian': 'ロシア語',
@@ -320,6 +324,7 @@ const ES: Record<string, string> = {
     ...ONBOARDING_ES,
     ...DIRECT_ASSIST_ES,
     ...CREDENTIAL_STORES_ES,
+    ...TRIAL_NOTICE_ES,
     'Language': 'Idioma',
     'English': 'Inglés',
     'Russian': 'Ruso',

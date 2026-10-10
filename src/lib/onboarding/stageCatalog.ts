@@ -70,7 +70,6 @@ const promoAudience = (s: UserState) => !s.hasTrialToken && s.planTier !== 'max'
 
 export const STAGE_ORDER: ToasterId[] = [
   'permissions',
-  'trial_promo',
   'natively_api_new',
   'browser_extension',
   'profile_intelligence',
@@ -100,19 +99,15 @@ export const STAGES: StageConfig[] = [
   },
 
   // ── Onboarding (day 1 allowed, one per launch) ────────────────
-  // Free-trial promo: for someone with no way to get an answer yet.
-  {
-    id: 'trial_promo',
-    order: 2,
-    card: 'trial_promo',
-    triggers: home(6_000),
-    requiresStages: ['permissions'],
-    customPredicate: ({ userState: s }) =>
-      hasNoKeys(s) && !s.isPremium && !s.trialClaimed && !s.hasTrialToken,
-  },
-
-  // Natively API "Skip the setup": the same need, once the trial is not an
-  // option (used, or its promo retired), so the two are never both offered.
+  // There is no free-trial card: the trial starts by itself when a meeting
+  // starts with no AI (src/lib/trial/autoTrial.mjs), and the overlay says so.
+  // The card reached about one new install in twelve; half of them started
+  // their first meeting with nothing set up.
+  //
+  // Natively API "Skip the setup": for someone with no way to get an answer
+  // once the trial is not an option. `trialClaimed` is set by every way a trial
+  // can end up used; the ledger test keeps installs that turned the old trial
+  // card down for good, before it was removed.
   {
     id: 'natively_api_new',
     order: 3,
@@ -124,12 +119,14 @@ export const STAGES: StageConfig[] = [
       && (s.trialClaimed || (!!s.cardLedger && entryOf(s.cardLedger, 'trial_promo').retired)),
   },
 
-  // Browser extension: until it is connected (read live).
+  // Browser extension: until it is connected (read live). It waits as long as
+  // the API offer above: an earlier deadline would show it first and spend the
+  // launch's one onboarding card before `order` could rank them.
   {
     id: 'browser_extension',
     order: 4,
     card: 'browser_extension',
-    triggers: home(5_000),
+    triggers: home(6_000),
     requiresStages: ['permissions'],
     customPredicate: ({ userState: s }) => s.extensionSupported && !s.extensionConnected,
   },

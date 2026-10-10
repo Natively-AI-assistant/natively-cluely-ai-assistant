@@ -132,7 +132,7 @@ export const OverlayBannerButton: React.FC<OverlayBannerButtonProps> = ({
 
 // `title` is the banner HEADING, not the native tooltip attribute — hence the
 // Omit. The root div has no tooltip; the clamped body has one (messageTooltip).
-export type OverlayBannerTone = 'warning' | 'error';
+export type OverlayBannerTone = 'warning' | 'error' | 'ok';
 
 export interface OverlayBannerProps
   extends Omit<React.HTMLAttributes<HTMLDivElement>, 'title'> {
@@ -140,6 +140,8 @@ export interface OverlayBannerProps
    * `warning` = degraded, with a way round it (a silent mic, a hotkey another
    * app holds). `error` = not working, and it will not recover on its own (a
    * blocked permission, capture that gave up, no transcription provider).
+   * `ok` = good news that still needs saying (the free trial started by
+   * itself): green, and the caller brings the icon and no primary action.
    */
   tone?: OverlayBannerTone;
   /** Replaces the tone's own icon (triangle / circle). It takes the tone's
@@ -178,7 +180,12 @@ export const OverlayBanner: React.FC<OverlayBannerProps> = ({
   dismissButtonProps,
   className = '',
   ...rest
-}) => (
+}) => {
+  // The tone this banner arrived in. One that changes while it is up (a
+  // warning that becomes an error) sends a ring out from the mark; an arrival
+  // does not, it has its own entrance.
+  const toneAtMount = React.useRef(tone);
+  return (
   <div
     // An error is announced when it appears; a warning waits its turn.
     role={tone === 'error' ? 'alert' : 'status'}
@@ -198,6 +205,10 @@ export const OverlayBanner: React.FC<OverlayBannerProps> = ({
           transparent `lg-button`) as a disc, in the same tinted material as
           the primary button. Kit classes directly, because LiquidGlassBadge
           always renders a text label and this carries only an icon. */}
+      {/* The wrapper is what moves (transform only): the disc is glass and
+          may not fade. */}
+      <span className="ov-banner-pop">
+      {tone !== toneAtMount.current && <span className="ov-banner-ping" key={tone} aria-hidden="true" />}
       <span className="lg-button lg-lavender lg-badge ov-banner-mark" aria-hidden="true">
         <span className="lg-content">
           {/* Keyed on the tone: when a banner that is already up turns from
@@ -207,12 +218,13 @@ export const OverlayBanner: React.FC<OverlayBannerProps> = ({
           </span>
         </span>
       </span>
+      </span>
       <div className="flex flex-col gap-0.5 min-w-0">
         {/* Each line rises in one stagger step after the one above (--i).
             A string that changes while the banner is up swaps in place. */}
         {title ? (
           <span className="ov-banner-title ov-banner-line break-words" style={{ '--i': 0 } as React.CSSProperties}>
-            {typeof title === 'string' ? <SwapText swapKey={title}>{title}</SwapText> : title}
+            {typeof title === 'string' ? <SwapText overlap swapKey={title}>{title}</SwapText> : title}
           </span>
         ) : null}
         {message ? (
@@ -227,13 +239,13 @@ export const OverlayBanner: React.FC<OverlayBannerProps> = ({
             style={{ '--i': title ? 1 : 0 } as React.CSSProperties}
             title={messageTooltip}
           >
-            {typeof message === 'string' ? <SwapText swapKey={message}>{message}</SwapText> : message}
+            {typeof message === 'string' ? <SwapText overlap swapKey={message}>{message}</SwapText> : message}
           </p>
         ) : null}
       </div>
     </div>
     {(actions || onDismiss) && (
-      <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+      <div className="ov-banner-actions flex items-center gap-1.5 shrink-0 ml-auto">
         {actions}
         {onDismiss && (
           <button
@@ -258,6 +270,7 @@ export const OverlayBanner: React.FC<OverlayBannerProps> = ({
     )}
     </InsideBanner.Provider>
   </div>
-);
+  );
+};
 
 export default OverlayBanner;

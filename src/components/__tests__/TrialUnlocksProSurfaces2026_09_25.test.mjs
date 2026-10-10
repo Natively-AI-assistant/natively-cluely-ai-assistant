@@ -13,7 +13,7 @@
  *     stayed false — and the countdown banner never appeared either.
  *
  * Source-level (`node --test`, no JSX renderer in this repo — see
- * TrialPromoToaster.test.mjs for the same constraint). The main-process half of
+ * FreeTrialModal.test.mjs for the same constraint). The main-process half of
  * this fix is executed for real in
  * electron/services/__tests__/TrialActivationRuntimeSync2026_09_25.test.mjs.
  *

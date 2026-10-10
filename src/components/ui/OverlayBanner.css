@@ -336,7 +336,16 @@
       in the middle of a meeting.
 
    What plays:
-    - the banner arriving ...... #18 texts reveal: the title, then the message
+    - the banner arriving ...... the body scales up from 0.96 and its paint
+                                 fades in; the mark pops; #18 texts reveal for
+                                 the title, then the message; the buttons rise
+                                 in as one group and their labels follow
+    - the banner leaving ....... (its fold says so: data-fold-state='out') the
+                                 text goes first, the glass shrinks away, the
+                                 body lets go of its paint. Nothing bounces.
+    - the tone changing while the banner is up ... the tint of the mark and
+                                 the primary button crosses over, and the mark
+                                 sends out one ring
     - the icon in the mark ..... one pop (badge pop open); again when a banner
                                  already up changes tone
     - a title or message that changes while the banner is up ... #04 text
@@ -353,6 +362,116 @@
   --ovb-pop-ease: cubic-bezier(0.34, 1.36, 0.64, 1);      /* --ease-bounce: badge pop open */
   --ovb-pop-delay: 80ms;                                  /* --duration-micro */
   --ovb-pop-from: 0.25;                                   /* the icon swap's start scale */
+  --ovb-open-dur: 400ms;                                  /* --duration-slow: panel open */
+  --ovb-open-scale: 0.96;                                 /* --scale-large: a surface opening */
+  --ovb-paint-dur: 250ms;                                 /* --duration-fast */
+  --ovb-close-dur: 150ms;                                 /* --duration-quick: close */
+  --ovb-shrink-dur: 250ms;                                /* --duration-fast: as long as the fold takes to shut */
+}
+
+/* The tint triple, registered so a tone that changes in place crosses over
+   (an unregistered custom property flips in one frame). Same default as the
+   declaration above; inherited, as it was. */
+@property --ovb-cta-tone {
+  syntax: '<number>#';
+  inherits: true;
+  initial-value: 251, 191, 36;
+}
+
+/* ── The body ──
+   Arrives as an object: a little smaller and without its paint, then settles.
+   By background and border, never by opacity: the mark and the buttons inside
+   are glass, and an opacity here would make this box their backdrop root. */
+.ov-banner {
+  transform-origin: 50% 0;
+  transition:
+    transform        var(--ovb-open-dur)  var(--ovb-reveal-ease),
+    background-color var(--ovb-paint-dur) ease-out,
+    border-color     var(--ovb-paint-dur) ease-out,
+    --ovb-cta-tone 250ms ease-in-out;                     /* --duration-fast, --ease-in-out: a cross-over */
+}
+@starting-style {
+  .ov-banner {
+    transform: scale(0.96) translateY(-4px);
+    background-color: transparent;
+    border-color: transparent;
+  }
+}
+[data-fold-state='out'] .ov-banner {
+  transform: scale(0.98) translateY(-2px);
+  background-color: transparent;
+  border-color: transparent;
+  transition:
+    transform        var(--ovb-shrink-dur) var(--ovb-reveal-ease),
+    background-color var(--ovb-close-dur)  ease-out,
+    border-color     var(--ovb-close-dur)  ease-out;
+}
+
+/* ── The glass: the mark and the buttons ──
+   Each sits in a wrapper, and the wrapper moves by transform alone. The mark
+   pops (badge pop open); the buttons rise in as one group a beat later.
+   Leaving, both shrink to nothing while the fold shuts over them, on the same
+   curve as everything else here: most of the way in the first third, no bounce. */
+.ov-banner-pop {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  transition: transform var(--ovb-pop-dur) var(--ovb-pop-ease);
+  transition-delay: var(--ovb-stagger);
+}
+@starting-style {
+  .ov-banner-pop {
+    transform: scale(0.4);
+  }
+}
+.ov-banner-actions {
+  transform-origin: 100% 50%;
+  transition: transform var(--ovb-pop-dur) var(--ovb-reveal-ease);          /* no bounce: a group, not a badge */
+  transition-delay: var(--ovb-pop-delay);
+}
+@starting-style {
+  .ov-banner-actions {
+    transform: scale(0.9) translateY(6px);
+  }
+}
+[data-fold-state='out'] .ov-banner-pop {
+  transform: scale(0);
+  transition: transform var(--ovb-shrink-dur) var(--ovb-reveal-ease);
+}
+[data-fold-state='out'] .ov-banner-actions {
+  transform: scale(0);
+  transition: transform var(--ovb-shrink-dur) var(--ovb-reveal-ease);
+}
+/* What is written leaves first, quickly. */
+[data-fold-state='out'] .ov-banner-line,
+[data-fold-state='out'] .ov-banner-btn--primary .lg-label,
+[data-fold-state='out'] .ov-banner-btn--secondary .lg-label,
+[data-fold-state='out'] .ov-banner-mark-icon,
+[data-fold-state='out'] .ov-banner-dismiss svg {
+  opacity: 0;
+  transition: opacity var(--ovb-close-dur) ease-out;
+  transition-delay: 0ms;
+}
+
+/* One ring from the mark when the tone changes in place (a warning that has
+   become an error). Not on arrival: OverlayBanner renders it only then. */
+.ov-banner-ping {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  box-shadow: 0 0 0 1.5px rgba(var(--ovb-cta-tone), 0.7);
+  opacity: 0;
+  transform: scale(2);                                    /* 52px: inside the banner's own height */
+  transition:
+    transform 500ms cubic-bezier(0.22, 1, 0.36, 1),       /* --duration-very-slow, --ease-smooth-out */
+    opacity   500ms ease-out;
+}
+@starting-style {
+  .ov-banner-ping {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .ov-banner-line {
@@ -369,10 +488,66 @@
     filter: blur(var(--ovb-reveal-blur));
   }
 }
+/* The buttons' labels are the last step of the same reveal. On the label, not
+   the button: the pill is glass and must not fade (see the rules above). */
+.ov-banner-btn--primary .lg-label,
+.ov-banner-btn--secondary .lg-label {
+  transition:
+    opacity   var(--ovb-reveal-dur) var(--ovb-reveal-ease),
+    transform var(--ovb-reveal-dur) var(--ovb-reveal-ease),
+    filter    var(--ovb-reveal-dur) var(--ovb-reveal-ease);
+  transition-delay: 0ms;                                  /* with the title: the pill is on screen from the first frame and must not sit empty */
+}
+@starting-style {
+  .ov-banner-btn--primary .lg-label,
+  .ov-banner-btn--secondary .lg-label {
+    opacity: 0;
+    transform: translateY(var(--ovb-reveal-distance));
+    filter: blur(var(--ovb-reveal-blur));
+  }
+}
+/* A label that changes while the banner is up ("Start free trial" to
+   "Starting…") swaps in place; the swap span must not clip its own blur. */
+.ov-banner .lg-label > .t-text-swap {
+  display: block;
+}
+
 /* The swap span is inline-block in the snippet; a banner line is a block that
    wraps, so here it fills the line it sits in. */
-.ov-banner-line > .t-text-swap {
+.ov-banner-line > .t-text-swap,
+.ov-banner-line .t-text-swap-stack > .t-text-swap {
   display: block;
+}
+/* A title or message that changes in place crosses over (SwapText `overlap`):
+   the old words are laid over the new ones and leave upward while those rise
+   in, so the line is never empty. The old copy's resting state IS its exit;
+   @starting-style starts it where it was. Timed by the .ov-motion variables.
+   Not a .t-text-swap itself: the overlay's rule that keeps a resting swap from
+   being a stacking context would cancel the old copy's travel. */
+.t-text-swap-stack {
+  position: relative;
+  display: block;
+}
+.t-text-swap-leaving {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(calc(var(--text-swap-translate-y) * -1));
+  filter: blur(var(--text-swap-blur));
+  transition:
+    opacity   var(--text-swap-dur) var(--text-swap-ease),
+    transform var(--text-swap-dur) var(--text-swap-ease),
+    filter    var(--text-swap-dur) var(--text-swap-ease);
+}
+@starting-style {
+  .t-text-swap-leaving {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
 }
 
 .ov-banner-mark-icon {
@@ -408,7 +583,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .t-text-swap-leaving,
+  .ov-banner,
+  .ov-banner-pop,
+  .ov-banner-actions,
+  .ov-banner-ping,
   .ov-banner-line,
+  .ov-banner-btn--primary .lg-label,
+  .ov-banner-btn--secondary .lg-label,
   .ov-banner-mark-icon,
   .ov-banner-dismiss svg {
     transition: none !important;

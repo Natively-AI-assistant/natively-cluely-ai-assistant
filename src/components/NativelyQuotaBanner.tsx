@@ -47,6 +47,11 @@ export const NativelyQuotaBanner: React.FC = () => {
                     return;
                 }
 
+                // A trial has a card of its own, with these numbers beside its
+                // clock (TrialMeterToaster). This one would also promise a
+                // reset on a billing date a trial does not have.
+                if (result.plan === 'trial') return;
+
                 const quota = normalizeQuota(result.quota);
                 if (!quota) {
                     console.log('[NativelyQuotaBanner] unrecognised quota shape — skipping');

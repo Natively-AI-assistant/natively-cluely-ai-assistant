@@ -424,6 +424,8 @@ import RollingTranscript from './ui/RollingTranscript';
 import SwapText from './ui/SwapText';
 import ScreenshotTray from './overlay/ScreenshotTray';
 import ChromeFold from './overlay/ChromeFold';
+import { useOverlayTrial } from './overlay/useOverlayTrial';
+import { TrialChip, TrialNoticeBanner } from './overlay/TrialNotice';
 
 // PERF: hoisted plugin arrays. ReactMarkdown receives `remarkPlugins` and
 // `rehypePlugins` as new array literals if defined inline at the call site —
@@ -1410,6 +1412,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const shellRef = React.useRef<HTMLDivElement>(null);
   const t = useT();
   const [isExpanded, setIsExpanded] = useState(true);
+  // The free trial that starts by itself with a meeting: what to say about it.
+  const trial = useOverlayTrial();
   const [inputValue, setInputValue] = useState('');
   const [availableSkills, setAvailableSkills] = useState<SkillSummary[]>([]);
   const [skillPickerIndex, setSkillPickerIndex] = useState(0);
@@ -11073,6 +11077,13 @@ Provide only the answer, nothing else.`;
   // hard failure with the fix, so the STT failure banner stands down rather
   // than saying the same thing twice.
   const audioFailureBannerActive = systemAudioWarning?.kind === 'audio-capture-failure';
+  // With no keys the transcription provider is 'none', so "Transcription Not
+  // Configured" is true in three moments where saying it would be wrong: the
+  // second it takes the automatic trial to arrive; after the trial has run out
+  // (the expiry reverts the provider to 'none'); and when the trial could not
+  // start. In the last two the trial banner already says what happened and
+  // what to do, and "open Settings → Audio" beside it is the wrong advice.
+  const trialExplainsNoStt = trial.pending || trial.banner === 'ended' || trial.banner === 'failed';
   const sttFailed = sttUserStatus === 'failed' || sttInterviewerStatus === 'failed';
   const sttReconnecting = sttUserStatus === 'reconnecting' || sttInterviewerStatus === 'reconnecting';
   const shouldShowSttSummaryPill =
@@ -11294,8 +11305,10 @@ Provide only the answer, nothing else.`;
 
               {/* Chrome that comes and goes folds open and shut (ChromeFold)
                   instead of jumping the card and the window. */}
-              <ChromeFold show={hasStatusPill} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} testId="fold-status-pills">
+              <ChromeFold show={hasStatusPill || !!trial.chip} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} testId="fold-status-pills">
               <div className="relative no-drag flex flex-wrap items-center justify-center gap-1.5 px-4 pt-3 pb-1">
+                {/* The free trial's countdown, for as long as one is running. */}
+                {trial.chip && <TrialChip minutesLeft={trial.chip.minutesLeft} tone={trial.chip.tone} />}
                 {shouldShowSttSummaryPill && (
                   <div
                     className={`${statusPillBaseClass} ${getStatusToneClass(sttSummary.tone)}`}
@@ -11567,9 +11580,16 @@ Provide only the answer, nothing else.`;
               })()}
               </ChromeFold>
 
+              {/* The free trial that starts by itself with a meeting: it began,
+                  it is nearly over, it ran out, or it could not start
+                  (overlay/TrialNotice.tsx). Never blocks the overlay. */}
+              <ChromeFold show={!!trial.banner} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-trial-notice">
+              {trial.banner && <TrialNoticeBanner trial={trial} />}
+              </ChromeFold>
+
               {/* PR #173: STT Not Configured Warning Banner */}
-              <ChromeFold show={sttNotConfigured} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-stt-not-configured">
-              {sttNotConfigured && (
+              <ChromeFold show={sttNotConfigured && !trialExplainsNoStt} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-stt-not-configured">
+              {sttNotConfigured && !trialExplainsNoStt && (
                 /*
                   The shared banner, as an error: with no provider nothing is
                   transcribed at all. It was a hand-rolled orange box (orange

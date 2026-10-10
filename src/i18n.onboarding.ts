@@ -27,6 +27,14 @@ const ROWS: Record<string, Row> = {
     'Natively escucha la conversación, responde la pregunta que tienes delante y puede permanecer oculto al compartir pantalla.',
   ],
   'Get started': ['Начать', '开始使用', '始める', 'Empezar'],
+  // The clock starts with the first meeting and runs for 30 minutes, across
+  // meetings: "includes" read as if the minutes belonged to that one meeting.
+  'Your 30 free minutes start with your first meeting. No card needed.': [
+    'Ваши 30 бесплатных минут начнутся с первой встречи. Карта не нужна.',
+    '30 分钟免费时长从你的第一次会议开始计时，无需绑卡。',
+    '30 分の無料時間は、最初のミーティングの開始とともに始まります。カードは不要です。',
+    'Tus 30 minutos gratis empiezan con tu primera reunión. Sin tarjeta.',
+  ],
   'By continuing, you agree to our {terms} and {privacy}.': [
     'Продолжая, вы принимаете наши {terms} и {privacy}.',
     '继续即表示你同意我们的{terms}和{privacy}。',

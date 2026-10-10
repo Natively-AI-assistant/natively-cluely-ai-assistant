@@ -83,6 +83,7 @@ export function mapTrialStartResult(r = {}) {
   if (r.threw) return 'network';
   if (typeof r.status === 'number' && r.status >= 400) {
     if (r.error === 'trial_ip_limit') return 'ip_limit';
+    if (r.error === 'trial_daily_limit') return 'daily_limit';
     if (r.status === 429) return 'rate_limited';
     return 'server_error';
   }

@@ -2146,6 +2146,24 @@ export class CredentialsManager {
     }
 
     /**
+     * Remember that this device has had its free trial, without holding one.
+     * The automatic start (src/lib/trial/autoTrial.mjs) calls this when the
+     * server says the trial is already used: with no card left to record that
+     * answer, this flag is what stops the next meeting asking again and lets
+     * the Natively API card take the trial's place.
+     *
+     * Memory always, disk only on a healthy store, as setTrialToken does: a
+     * degraded session then still stops asking, and the next healthy launch
+     * asks once more and writes the answer.
+     */
+    public markTrialClaimed(): { changed: boolean; persisted: boolean } {
+        if (this.credentials.trialClaimed === true) return { changed: false, persisted: true };
+        this.credentials.trialClaimed = true;
+        if (this.refuseWriteWhileDegraded('persist trial claimed')) return { changed: true, persisted: false };
+        return { changed: true, persisted: this.saveCredentials() };
+    }
+
+    /**
      * Forget that this device ever took a free trial: token, expiry, start AND the
      * claimed flag that clearTrialToken deliberately keeps. Only the one-time trial
      * campaign (src/lib/trialCampaign.mjs) calls this; every other path must keep

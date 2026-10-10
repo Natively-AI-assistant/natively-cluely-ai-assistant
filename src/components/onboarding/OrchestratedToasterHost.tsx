@@ -17,7 +17,6 @@ import { getOrchestrator, type OrchestratorEvent, type UserState } from '../../l
 import type { ToasterId } from '../../lib/onboarding/orchestrator.ts';
 import { PermissionsToaster } from './PermissionsToaster';
 import { BrowserExtensionToaster } from './BrowserExtensionToaster';
-import { TrialPromoToaster } from '../trial/TrialPromoToaster';
 import { SupportToaster } from '../SupportToaster';
 import ReviewPromptHost from '../ReviewPromptHost';
 import {
@@ -28,7 +27,6 @@ import {
 } from '../../premium';
 import { CARDS, DAY_MS } from '../../lib/cards/cardPolicy.mjs';
 import { createShowingRecorder } from '../../lib/cards/outcomeLatch.mjs';
-import { startTrialWithRetry } from '../../lib/trial/trialStart.mjs';
 
 /** Why a card closed, as the card reports it: its primary action, an explicit "never", or a plain close. */
 // 'after_error': the trial promo closed after our own error (network, server);
@@ -187,35 +185,9 @@ export const OrchestratedToasterHost: React.FC<HostProps> = ({ onOpenSettings, o
       return null;
 
     case 'trial_promo':
-      // TrialPromoToaster needs additional props for start/manual setup,
-      // which it reads from window.electronAPI at runtime. The orchestrator
-      // hands it `isOpen` and onDismiss only.
-      return (
-        <TrialPromoToaster
-          isOpen={true}
-          hasNativelyKey={orch.getUserState().hasNativelyKey}
-          hasTrialToken={orch.getUserState().hasTrialToken}
-          onDismiss={closeWith('trial_promo')}
-          onStartTrial={async () => {
-            // Our own errors (network, server) are retried once; the server's
-            // answers are final (spec §6 row 8).
-            const kind = await startTrialWithRetry(() => window.electronAPI?.startTrial?.('trial_promo') ?? Promise.resolve(undefined));
-            if (kind === 'started') { orch.setUserState({ hasTrialToken: true, trialClaimed: true }); recorder.outcome('acted'); }
-            // Already used on this device: the promo retires and the card
-            // offers a key or the user's own keys instead.
-            if (kind === 'unavailable') { orch.setUserState({ trialClaimed: true }); recorder.outcome('never'); }
-            // The toaster reports the dismiss itself, once its close has
-            // played: dismissing here would unmount it mid-genie.
-            return kind;
-          }}
-          onGetKey={() => openSettings('plans')}
-          onManualSetup={() => {
-            // "I'll set up manually" is a decision: the trial promo retires.
-            recorder.outcome('acted');
-            openSettings('ai-providers');
-          }}
-        />
-      );
+      // No card any more: the trial starts by itself with a meeting
+      // (src/lib/trial/autoTrial.mjs). The id stays, for ledgers that hold it.
+      return null;
 
     case 'quiet_window':
       // Internal gate — never renders a visible component.

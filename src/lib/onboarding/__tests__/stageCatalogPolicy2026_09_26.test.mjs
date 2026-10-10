@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { STAGES } from '../stageCatalog.ts';
+import { STAGES, STAGE_ORDER } from '../stageCatalog.ts';
 import { DEFAULT_USER_STATE } from '../orchestrator.ts';
 import { emptyLedger, applyOutcome } from '../../cards/cardPolicy.mjs';
 
@@ -31,7 +31,6 @@ test('catalog order and card links', () => {
     [...STAGES].sort((a, b) => a.order - b.order).map((s) => [s.id, s.order, s.card ?? null]),
     [
       ['permissions', 1, null],
-      ['trial_promo', 2, 'trial_promo'],
       ['natively_api_new', 3, 'natively_api_new'],
       ['browser_extension', 4, 'browser_extension'],
       ['profile_intelligence', 5, null],
@@ -47,7 +46,7 @@ test('catalog order and card links', () => {
 });
 
 test('onboarding cards wait for permissions; promos wait for nothing', () => {
-  for (const id of ['trial_promo', 'natively_api_new', 'browser_extension']) {
+  for (const id of ['natively_api_new', 'browser_extension']) {
     assert.deepEqual(byId[id].requiresStages, ['permissions'], id);
   }
   for (const id of ['max_ultra', 'natively_api_existing', 'profile_ad', 'jd_ad', 'review_prompt', 'support']) {
@@ -71,20 +70,21 @@ const table = (id, rows) => {
   }
 };
 
-table('trial_promo', [
-  ['no keys, nothing claimed', {}, {}, true],
-  ['has a Natively key', { hasNativelyKey: true }, {}, false],
-  ['has an own AI key', { hasOwnAiKey: true }, {}, false],
-  ['paying', { isPremium: true }, {}, false],
-  ['trial already claimed', { trialClaimed: true }, {}, false],
-  ['trial running', { hasTrialToken: true }, {}, false],
-]);
+// The free trial is not a card (2026-10-09): it starts by itself when a meeting
+// starts with no AI (src/lib/trial/autoTrial.mjs holds that rule and its
+// table). The card id stays in the ledger and the funnel catalogue, for
+// installs that already hold an entry for it.
+test('there is no trial card stage: the trial starts with a meeting', () => {
+  assert.equal(byId.trial_promo, undefined);
+  assert.ok(!STAGE_ORDER.includes('trial_promo'));
+});
 
 const trialRetired = applyOutcome(emptyLedger(NOW), 'trial_promo', 'never', NOW);
 table('natively_api_new', [
   ['no keys, trial used', { trialClaimed: true }, {}, true],
   ['no keys, trial promo retired', { cardLedger: trialRetired }, {}, true],
-  ['no keys, trial still on offer', {}, {}, false],
+  // Never had a trial: their first meeting starts one, so no API offer yet.
+  ['no keys, trial still ahead of them', {}, {}, false],
   ['own AI key', { trialClaimed: true, hasOwnAiKey: true }, {}, false],
   ['Natively key', { trialClaimed: true, hasNativelyKey: true }, {}, false],
   ['paying', { trialClaimed: true, isPremium: true }, {}, false],
@@ -151,7 +151,6 @@ test('ad cards need the premium module; without it they never schedule', () => {
   assert.equal(eligible('jd_ad', { ...noPremium, hasProfile: true }), false);
   assert.equal(eligible('max_ultra', { ...noPremium, planTier: 'pro', nativelyQuotaPct: 95 }), false);
   // Cards that live in this repo are unaffected.
-  assert.equal(eligible('trial_promo', noPremium), true);
   assert.equal(eligible('browser_extension', noPremium), true);
 });
 

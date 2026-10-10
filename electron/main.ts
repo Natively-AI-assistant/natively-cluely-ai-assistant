@@ -1466,6 +1466,13 @@ export class AppState {
 
   private hasDebugged: boolean = false
   private isMeetingActive: boolean = false; // Guard for session state leaks
+  /**
+   * Set by initializeIpcHandlers. A meeting that starts with no AI to answer it
+   * starts the free trial by itself (src/lib/trial/autoTrial.mjs). Returns at
+   * once; `autoTrialSettled` says whether a start is still in flight.
+   */
+  public autoStartTrialForMeeting: (() => void) | null = null;
+  public autoTrialSettled: (() => boolean) | null = null;
   private _meetingGeneration = 0;
   // Serializes start/stop so two transitions can never interleave. This is the
   // ONLY mutual-exclusion layer: _meetingGeneration, the _audioInitPromise
@@ -4555,7 +4562,12 @@ export class AppState {
           console.error(`[Main] Interviewer STT init failed (${sttProv}):`, sttErr);
           this.googleSTT = null;
         }
-        if (!this.googleSTT) {
+        // 'none' is no transcription BY CHOICE (createSTTProvider returns null
+        // for it), not a provider that failed: the overlay says "Transcription
+        // Not Configured" for that. Reported as a failure, it left a red banner
+        // up that only a click removes, beside "Free trial started" once the
+        // trial that starts with the meeting had brought transcription up.
+        if (!this.googleSTT && sttProv !== 'none') {
           this.sendAudioCaptureFailed( {
             channel: 'system',
             message: `Speech-to-text provider "${sttProv}" could not start for system audio. Check its API key in Settings.`,
@@ -4575,7 +4587,7 @@ export class AppState {
           console.error(`[Main] User STT init failed (${sttProv}):`, sttErr);
           this.googleSTT_User = null;
         }
-        if (!this.googleSTT_User) {
+        if (!this.googleSTT_User && sttProv !== 'none') {
           this.sendAudioCaptureFailed( {
             channel: 'mic',
             message: `Speech-to-text provider "${sttProv}" could not start for your microphone. Check its API key in Settings.`,
@@ -5398,6 +5410,23 @@ export class AppState {
   private async _doReconfigureSttProvider(): Promise<void> {
     console.log('[Main] Reconfiguring STT Provider...');
 
+    // The meeting's own audio start-up may still be running: it takes seconds,
+    // and the trial that starts with a meeting asks for this rebuild in the
+    // first one. Stopping and rebuilding the captures under it is the hazard
+    // endMeeting() guards the same way, so wait for it. The start-up never
+    // waits on a rebuild, so this cannot deadlock; a meeting that ends
+    // meanwhile aborts the start-up, and the checks below then find no meeting.
+    if (this._audioInitPromise) {
+      try { await this._audioInitPromise; } catch { /* its own failure is already reported */ }
+    }
+
+    // Everything below that waits (the two capture stops, the pipeline setup,
+    // which on macOS asks the screen-capture permission) is a place where Stop
+    // can land. What is built after such a wait belongs to the meeting this
+    // rebuild began in, and to no other: see the checks around the setup.
+    const rebuildGeneration = this._meetingGeneration;
+    const isRebuildMeeting = () => this.isMeetingActive && this._meetingGeneration === rebuildGeneration;
+
     // RC-01 fix: pause audio captures FIRST so their EventEmitter queues drain
     // before we null-out the STT instances. Without this, buffered 'data' events
     // still in-flight call this.googleSTT?.write() while googleSTT is already null.
@@ -5437,10 +5466,20 @@ export class AppState {
     // Outside a meeting, defer pipeline creation to startMeeting() so we never
     // eagerly construct a MicrophoneCapture (which calls build_input_stream on
     // macOS and immediately triggers the orange mic indicator even without .play()).
-    if (this.isMeetingActive) {
+    if (isRebuildMeeting()) {
       await this.setupSystemAudioPipeline();
-      // Per-channel isolated start (F-105); mic first for HAL ordering.
-      this.startCaptureChannels('reconfigureSttProvider');
+      if (isRebuildMeeting()) {
+        // Per-channel isolated start (F-105); mic first for HAL ordering.
+        this.startCaptureChannels('reconfigureSttProvider');
+      } else if (!this.isMeetingActive) {
+        // Stop landed during the setup. endMeeting() had already dropped the
+        // captures, so the setup built new ones, for nobody. Starting them
+        // here opened the microphone and transcription with no meeting (and
+        // billed a trial's voice minutes) until the next one.
+        this.releaseOrphanedRebuild();
+      }
+      // Otherwise another meeting has started since: its own start-up owns the
+      // pipeline now, and starts it.
     }
 
     console.log('[Main] STT Provider reconfigured');
@@ -5449,6 +5488,46 @@ export class AppState {
     const { CredentialsManager: CM } = require('./services/CredentialsManager');
     const newProvider = CM.getInstance().getSttProvider();
     this.broadcast('stt-config-changed', { configured: newProvider !== 'none', provider: newProvider });
+  }
+
+  /**
+   * A transcription rebuild finished its setup after the meeting had ended:
+   * release what it built, back to the state a rebuild OUTSIDE a meeting
+   * leaves (no captures, no transcription clients; the next meeting builds
+   * its own). Nothing here was started, so this is the same destroy the
+   * meeting start-up runs on what it built for a meeting that was cancelled.
+   */
+  private releaseOrphanedRebuild(): void {
+    console.warn('[Main] Reconfigure STT: the meeting ended during the rebuild; releasing what was built.');
+    (this.systemAudioCapture as any)?.__disarmStuckWatchdog?.();
+    (this.microphoneCapture as any)?.__disarmStuckWatchdog?.();
+    const dyingSystemCapture = this.systemAudioCapture;
+    const dyingMicrophoneCapture = this.microphoneCapture;
+    this.systemAudioCapture = null;
+    this.microphoneCapture = null;
+    // destroy() releases the native handle on a later tick. The next meeting
+    // must not build a capture on the same device before that (the hazard
+    // endMeeting() describes), so this joins the teardown startMeeting awaits.
+    const priorTeardown = this._pendingTeardown;
+    this._pendingTeardown = Promise.all([
+      Promise.resolve(priorTeardown).catch((): void => undefined),
+      Promise.resolve(dyingSystemCapture?.destroy()).catch((e) => {
+        console.warn('[Main] Reconfigure STT: orphaned system capture teardown threw:', e);
+      }),
+      Promise.resolve(dyingMicrophoneCapture?.destroy()).catch((e) => {
+        console.warn('[Main] Reconfigure STT: orphaned mic capture teardown threw:', e);
+      }),
+    ]).then((): void => undefined);
+    if (this.googleSTT) {
+      this.googleSTT.stop();
+      this.googleSTT.removeAllListeners();
+      this.googleSTT = null;
+    }
+    if (this.googleSTT_User) {
+      this.googleSTT_User.stop();
+      this.googleSTT_User.removeAllListeners();
+      this.googleSTT_User = null;
+    }
   }
 
   /**
@@ -6578,6 +6657,10 @@ export class AppState {
     // The user's name as a transcription hint, before any STT connects (sttContextTerms.ts).
     try { setSttContextTerms(nameTerms(this.currentUserName())); } catch { /* a hint, never a blocker */ }
     try { require('./services/FunnelTelemetry').funnelTelemetry.meetingStarted(this.intelligenceManager.getAnswerCount()); } catch { /* analytics never blocks a meeting */ }
+    // No AI set up: the free trial starts by itself. Below the funnel line on
+    // purpose, so `meeting_started.ai` still says what the meeting began with.
+    // Fire and forget: the overlay is told when it starts or cannot.
+    try { this.autoStartTrialForMeeting?.(); } catch { /* a trial never blocks a meeting */ }
     this.broadcastMeetingState()
     if (metadata) {
       this.intelligenceManager.setMeetingMetadata(metadata);

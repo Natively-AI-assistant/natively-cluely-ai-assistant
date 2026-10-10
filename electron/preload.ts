@@ -335,6 +335,8 @@ interface ElectronAPI {
     usage?: { ai: number; ai_tokens?: number; stt_seconds: number; search: number };
     limits?: object;
   }) => void) => () => void;
+  /** A meeting with no AI is starting the free trial by itself: on its way, could not, or done. */
+  onTrialAutoStart: (cb: (data: { state: 'pending' | 'settled' } | { state: 'failed'; reason: 'unreachable' | 'rate_limited' }) => void) => () => void;
   onModesActiveCleared: (cb: () => void) => () => void;
 
   // STT Provider Management
@@ -1812,6 +1814,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const sub = (_: any, data: any) => cb(data);
     ipcRenderer.on('trial-started', sub);
     return () => ipcRenderer.removeListener('trial-started', sub);
+  },
+  onTrialAutoStart: (cb: (data: any) => void) => {
+    const sub = (_: any, data: any) => cb(data);
+    ipcRenderer.on('trial-auto-start', sub);
+    return () => ipcRenderer.removeListener('trial-auto-start', sub);
   },
 
   // STT Provider Management

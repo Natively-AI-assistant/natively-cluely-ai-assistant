@@ -32,7 +32,9 @@ const LOOPS = ['1400ms', '2000ms'];
 const EASINGS = ['cubic-bezier(0.22, 1, 0.36, 1)', 'cubic-bezier(0.34, 1.36, 0.64, 1)'];
 // A size here would feed the viewport ResizeObserver every frame and fight
 // the card's own height tween. Colour and the tick's stroke are paint only.
-const MAY_MOVE = ['opacity', 'transform', 'filter', 'background-color', 'color', 'stroke-dashoffset'];
+// border-color is the banner body's hairline, and --ovb-cta-tone the registered
+// colour triple its mark and primary button are tinted from: paint only, both.
+const MAY_MOVE = ['opacity', 'transform', 'filter', 'background-color', 'border-color', 'color', 'stroke-dashoffset', '--ovb-cta-tone'];
 
 for (const [rel, css] of Object.entries(sections)) {
   const name = path.basename(rel);

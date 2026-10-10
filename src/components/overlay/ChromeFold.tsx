@@ -9,6 +9,11 @@ const ENTER_S = 0.25;          // --duration-fast
 const FADE_S = 0.15;           // --duration-quick: the close is quicker than the open
 const COLLAPSE_DELAY_S = 0.06; // the contents are mostly gone before the room closes
 const COLLAPSE_S = 0.25;       // --duration-fast
+// A glass fold has no fade to lead with, so it waits one stagger step
+// (--duration-stagger) before it shuts: what is inside (a banner's mark and
+// buttons shrinking away) is seen leaving instead of only being clipped. No
+// longer than COLLAPSE_DELAY_S: the window hold, FOLD_EXIT_MS, is sized for that.
+const CLIP_COLLAPSE_DELAY_S = 0.04;
 const ENTER_MS = ENTER_S * 1000;
 const FADE_MS = FADE_S * 1000;
 export const FOLD_EXIT_MS = Math.round((COLLAPSE_DELAY_S + COLLAPSE_S) * 1000);
@@ -72,8 +77,8 @@ const clipVariants: Variants = {
     : {
         height: 0, y: -2, overflow: 'hidden',
         transition: {
-          height: { duration: COLLAPSE_S, ease: EASE_SMOOTH_OUT },
-          y: { duration: COLLAPSE_S, ease: EASE_SMOOTH_OUT },
+          height: { duration: COLLAPSE_S, delay: CLIP_COLLAPSE_DELAY_S, ease: EASE_SMOOTH_OUT },
+          y: { duration: COLLAPSE_S, delay: CLIP_COLLAPSE_DELAY_S, ease: EASE_SMOOTH_OUT },
         },
       },
 };
@@ -219,6 +224,9 @@ const FoldBody: React.FC<{
         onShown();
       }}
       style={{ pointerEvents: present ? undefined : 'none' }}
+      // What is inside can leave with the fold (the banner's and the trial
+      // pill's glass shrink away instead of only being clipped).
+      data-fold-state={present ? 'in' : 'out'}
       data-testid={testId}
     >
       {/* Spacing lives INSIDE the animated box as padding: a margin would
