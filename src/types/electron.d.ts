@@ -118,6 +118,17 @@ export interface VisionModelState {
   inconclusive?: boolean
 }
 
+export interface LiveRequirementPayload {
+  id: string
+  text: string
+  status: 'candidate' | 'accepted' | 'dismissed'
+  source: 'extracted' | 'manual'
+  evidence: { speaker: string; quote: string; timestamp: number }
+  confidence: number
+  createdAt: number
+  acceptedAt?: number
+}
+
 export interface ElectronAPI {
   updateContentDimensions: (dimensions: {
     width: number
@@ -181,7 +192,7 @@ export interface ElectronAPI {
     callback: (data: { path: string; preview: string }) => void
   ) => () => void
   onCaptureAndProcess: (
-    callback: (data: { path: string; preview: string }) => void
+    callback: (data: { path: string; preview: string; task?: 'answer-mcq' }) => void
   ) => () => void
   onSolutionsReady: (callback: (solutions: string) => void) => () => void
   onResetView: (callback: () => void) => () => void
@@ -195,6 +206,10 @@ export interface ElectronAPI {
   onUnauthorized: (callback: () => void) => () => void
   onDebugError: (callback: (error: string) => void) => () => void
   takeScreenshot: () => Promise<{ path: string; preview: string }>
+  /** Linux shared desktop (nested Xephyr display for screen sharing). */
+  sharedDesktopStatus: () => Promise<{ supported: boolean; unavailableReason?: string; running: boolean; display: string | null; extensionReady: boolean }>
+  sharedDesktopStart: () => Promise<{ supported: boolean; unavailableReason?: string; running: boolean; display: string | null; extensionReady: boolean }>
+  sharedDesktopStop: () => Promise<{ supported: boolean; unavailableReason?: string; running: boolean; display: string | null; extensionReady: boolean }>
   takeSelectiveScreenshot: () => Promise<{ path: string; preview: string; cancelled?: boolean }>
   moveWindowLeft: () => Promise<void>
   moveWindowRight: () => Promise<void>
@@ -457,6 +472,12 @@ export interface ElectronAPI {
   ) => Promise<{ success: boolean; cancelled: boolean; error?: string }>
   onDirectAssistEvent: (callback: (event: DirectAssistEvent) => void) => () => void
   generateClarify: () => Promise<{ clarification: string | null }>
+  generateRestate: () => Promise<{ restatement: string | null }>
+  generateLookup: (focusTerm?: string) => Promise<{ explanation: string | null }>
+  generateLateJoinBackfill: () => Promise<{ summary: string | null }>
+  getMeetingBrief: (eventId?: string) => Promise<{ brief: string; eventId?: string | null; error?: string }>
+  onIntelligenceRestate?: (callback: (data: { restatement: string }) => void) => () => void
+  onIntelligenceLookup?: (callback: (data: { explanation: string }) => void) => () => void
   generateCodeHint: (imagePaths?: string[], problemStatement?: string) => Promise<{ hint: string | null }>
   generateBrainstorm: (imagePaths?: string[], problemStatement?: string) => Promise<{ script: string | null }>
   generateFollowUp: (intent: string, userRequest?: string) => Promise<{ refined: string | null; intent: string }>
@@ -471,6 +492,7 @@ export interface ElectronAPI {
   setActionButtonMode: (mode: 'recap' | 'brainstorm') => Promise<{ success: boolean }>
   onActionButtonModeChanged: (callback: (mode: 'recap' | 'brainstorm') => void) => () => void
   onModeChanged: (callback: (data: { id: string | null; name: string | null; fileCount?: number; indexedCount?: number }) => void) => () => void
+  onModesActiveCleared: (callback: () => void) => () => void
 
   // Modes
   modesGetAll: () => Promise<Array<{ id: string; name: string; templateType: string; customContext: string; isActive: boolean; createdAt: string; referenceFileCount: number }>>
@@ -816,6 +838,12 @@ export interface ElectronAPI {
   dismissDynamicAction: (actionId: string) => Promise<{ success: boolean; error?: string }>
   listDynamicActions: () => Promise<{ success: boolean; actions: DynamicActionPayload[]; error?: string }>
 
+  // Live Requirements List — technical-interview overlay.
+  onRequirementsUpdated: (callback: (data: { requirements: LiveRequirementPayload[] }) => void) => () => void
+  acceptRequirement: (id: string) => Promise<{ success: boolean; requirement?: LiveRequirementPayload; requirements?: LiveRequirementPayload[]; error?: string }>
+  dismissRequirement: (id: string) => Promise<{ success: boolean; requirements?: LiveRequirementPayload[]; error?: string }>
+  listRequirements: () => Promise<{ success: boolean; requirements: LiveRequirementPayload[]; error?: string }>
+
   // Intelligence Mode Events
   onIntelligenceAssistUpdate: (callback: (data: { insight: string }) => void) => () => void
   onIntelligenceSuggestedAnswerToken: (callback: (data: { token: string; question: string; confidence: number }) => void) => () => void
@@ -873,6 +901,17 @@ export interface ElectronAPI {
   onVisionCapabilityChanged: (callback: () => void) => () => void;
   toggleModelSelector: (coords: { x: number; y: number; activate?: boolean }) => Promise<void>;
   modelSelectorCloseIfOpen: () => Promise<void>;
+  createStickyNote: (payload: {
+    id: string;
+    text: string;
+    intent?: string;
+    x: number;
+    y: number;
+  }) => Promise<{ success: boolean }>;
+  getStickyNoteContent: (
+    id: string,
+  ) => Promise<{ id: string; text: string; intent?: string } | null>;
+  closeStickyNote: (id: string) => Promise<{ success: boolean }>;
   // NOTE: this interface and the one in electron/preload.ts are maintained
   // separately and drift. That drift is what hid the Ollama bug: the settings
   // screen reached these through a generic `invoke` that neither file declares
@@ -1079,6 +1118,8 @@ export interface ElectronAPI {
   profileGenerateCoverLetter: (force?: boolean) => Promise<{ success: boolean; letter?: any; error?: string }>
   profileGetNegotiationState: () => Promise<{ success: boolean; state?: any; isActive?: boolean; error?: string }>
   profileResetNegotiation: () => Promise<{ success: boolean; error?: string }>
+  overlayGetContext: () => Promise<{ success: boolean; content: string; error?: string }>
+  overlaySaveContext: (content: string) => Promise<{ success: boolean; error?: string }>
 
   // Tavily Search API
   setTavilyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
@@ -1129,6 +1170,25 @@ export interface ElectronAPI {
   getMeetingRetention: () => Promise<'forever' | '7d' | '30d' | 'never'>;
   setMeetingRetention: (retention: 'forever' | '7d' | '30d' | 'never') => Promise<{ success: boolean; error?: string }>;
   onMeetingRetentionChanged: (callback: (retention: 'forever' | '7d' | '30d' | 'never') => void) => () => void;
+  getAudioSessionConfig: () => Promise<{
+    mode: 'video-call' | 'phone-call';
+    phoneCallCaptureSource: 'system' | 'mic';
+    phoneCallUserSpeakerTag: 0 | 1;
+  }>;
+  setAudioSessionConfig: (config: {
+    mode?: 'video-call' | 'phone-call';
+    phoneCallCaptureSource?: 'system' | 'mic';
+    phoneCallUserSpeakerTag?: 0 | 1;
+  }) => Promise<{ success: boolean; error?: string; config?: {
+    mode: 'video-call' | 'phone-call';
+    phoneCallCaptureSource: 'system' | 'mic';
+    phoneCallUserSpeakerTag: 0 | 1;
+  } }>;
+  onAudioSessionConfigChanged: (callback: (config: {
+    mode: 'video-call' | 'phone-call';
+    phoneCallCaptureSource: 'system' | 'mic';
+    phoneCallUserSpeakerTag: 0 | 1;
+  }) => void) => () => void;
   getProviderDataScopes: () => Promise<{ transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }>;
   setProviderDataScopes: (scopes: { transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }) => Promise<{ success: boolean; error?: string }>;
   onProviderDataScopesChanged: (callback: (scopes: { transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }) => void) => () => void;

@@ -20,6 +20,7 @@ import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { isMac } from '../utils/platformUtils';
 import { APP_FEATURE_VERSION } from '../utils/appVersion';
 import WindowControls from './WindowControls';
+import { SharedDesktopPill } from './SharedDesktopPill';
 import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
 import { emitOrchestratorEvent, setUserState as setOrchestratorUserState } from './onboarding/OrchestratedToasterHost';
 
@@ -1037,6 +1038,9 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                                     <span className="t-toggle-thumb" aria-hidden="true" />
                                                 </button>
                                              </div>
+
+                                             {/* Linux: shared desktop for screen sharing (renders nothing elsewhere) */}
+                                             <SharedDesktopPill isLight={isLight} />
 
                                              {/* What's New Pill */}
                                              {launchCount < 10 && (

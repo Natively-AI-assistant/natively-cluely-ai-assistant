@@ -7,6 +7,7 @@ export interface ShortcutConfig {
     whatToAnswer: string[];
     autoAnswerMode: string[];
     clarify: string[];
+    askClarify: string[];
     followUp: string[];
     dynamicAction4: string[];
     answer: string[];
@@ -30,6 +31,7 @@ export interface ShortcutConfig {
     toggleMousePassthrough: string[];
     processScreenshots: string[];
     captureAndProcess: string[];
+    answerScreenMcq: string[];
     capturePage: string[];
     resetCancel: string[];
     takeScreenshot: string[];
@@ -43,6 +45,7 @@ function buildDefaultShortcuts(): ShortcutConfig {
         whatToAnswer: [mod, '1'],
         autoAnswerMode: [mod, 'f'],
         clarify: [mod, '2'],
+        askClarify: [mod, shift, '2'],
         dynamicAction4: [mod, '3'],
         followUp: [mod, '4'],
         answer: [mod, '5'],
@@ -64,6 +67,7 @@ function buildDefaultShortcuts(): ShortcutConfig {
         toggleMousePassthrough: [mod, shift, 'B'],
         processScreenshots: [mod, 'Enter'],
         captureAndProcess: [mod, shift, 'Enter'],
+        answerScreenMcq: [mod, shift, 'M'],
         capturePage: [mod, 'Y'],
         resetCancel: [mod, 'R'],
         takeScreenshot: [mod, 'H'],
@@ -93,6 +97,7 @@ const BACKEND_ID_TO_ACTION: Partial<Record<string, keyof ShortcutConfig>> = {
     'chat:followUp': 'followUp',
     'chat:followup': 'followUp', // backwards compat
     'chat:clarify': 'clarify',
+    'chat:askClarify': 'askClarify',
     'chat:dynamicAction4': 'dynamicAction4',
     'chat:answer': 'answer',
     'chat:codeHint': 'codeHint',
@@ -116,6 +121,7 @@ const BACKEND_ID_TO_ACTION: Partial<Record<string, keyof ShortcutConfig>> = {
     'general:toggle-mouse-passthrough': 'toggleMousePassthrough',
     'general:process-screenshots': 'processScreenshots',
     'general:capture-and-process': 'captureAndProcess',
+    'general:answer-screen-mcq': 'answerScreenMcq',
     'general:capture-dom': 'capturePage',
     'general:reset-cancel': 'resetCancel',
     'general:take-screenshot': 'takeScreenshot',
@@ -291,6 +297,7 @@ export const useShortcuts = () => {
             case 'whatToAnswer': backendId = 'chat:whatToAnswer'; break;
             case 'autoAnswerMode': backendId = 'chat:auto-answer-mode'; break;
             case 'clarify': backendId = 'chat:clarify'; break;
+            case 'askClarify': backendId = 'chat:askClarify'; break;
             case 'followUp': backendId = 'chat:followUp'; break;
             case 'dynamicAction4': backendId = 'chat:dynamicAction4'; break;
             case 'answer': backendId = 'chat:answer'; break;
@@ -314,6 +321,7 @@ export const useShortcuts = () => {
             case 'toggleMousePassthrough': backendId = 'general:toggle-mouse-passthrough'; break;
             case 'processScreenshots': backendId = 'general:process-screenshots'; break;
             case 'captureAndProcess': backendId = 'general:capture-and-process'; break;
+            case 'answerScreenMcq': backendId = 'general:answer-screen-mcq'; break;
             case 'capturePage': backendId = 'general:capture-dom'; break;
             case 'resetCancel': backendId = 'general:reset-cancel'; break;
             case 'takeScreenshot': backendId = 'general:take-screenshot'; break;

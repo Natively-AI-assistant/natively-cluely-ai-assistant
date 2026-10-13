@@ -1,6 +1,10 @@
 import { EventEmitter } from 'events';
 import { loadNativeModule } from './nativeModuleLoader';
 import { normalizeSpeechEdge } from './speechEdge';
+import {
+    LINUX_SYSTEM_AUDIO_ERROR_CODES,
+    surfaceLinuxSystemAudioError,
+} from '../platform/permissionMessages';
 
 // RustAudioCapture is the native Rust class (napi-rs) that captures system audio.
 // May be null if the .node binary isn't available — constructor logs an error in that case.
@@ -107,6 +111,9 @@ export class SystemAudioCapture extends EventEmitter {
             // reported success with zero transcript. Throw instead: every
             // start() call site (startCaptureChannels, recovery, resume,
             // audio test) catches and surfaces a terminal channel banner.
+            if (process.platform === 'linux') {
+                throw surfaceLinuxSystemAudioError(LINUX_SYSTEM_AUDIO_ERROR_CODES.NATIVE_MODULE_NOT_LOADED);
+            }
             throw new Error('Native audio engine unavailable — the audio capture module failed to load. Reinstall the app (dev: npm run build:native).');
         }
 
@@ -117,8 +124,11 @@ export class SystemAudioCapture extends EventEmitter {
             try {
                 this.monitor = new RustAudioCapture(this.deviceId);
             } catch (e) {
-                console.error('[SystemAudioCapture] Failed to create native monitor:', e);
-                this.emit('error', e);
+                const surfaced = process.platform === 'linux'
+                    ? surfaceLinuxSystemAudioError(e)
+                    : (e instanceof Error ? e : new Error(String(e)));
+                console.error('[SystemAudioCapture] Failed to create native monitor:', surfaced.message);
+                this.emit('error', surfaced);
                 return;
             }
         }
@@ -132,6 +142,8 @@ export class SystemAudioCapture extends EventEmitter {
             this.monitor.start((err: Error | null, chunk: Buffer) => {
                 // napi v3 ThreadsafeFunction passes (err, arg) format
                 if (err) {
+                    // Linux: swap in the user-facing PipeWire/Pulse message.
+                    if (process.platform === 'linux') err = surfaceLinuxSystemAudioError(err);
                     console.error('[SystemAudioCapture] Callback error:', err);
                     this.isRecording = false; // Allow recovery via restart
                     // The Rust DSP thread has exited (a fatal init failure, or the
@@ -185,7 +197,11 @@ export class SystemAudioCapture extends EventEmitter {
                 // Speech-ended callback from Rust SilenceSuppressor.
                 // _ended is always `true` when fired (Rust only invokes on speech→silence transition).
                 if (err) {
-                    console.error('[SystemAudioCapture] Speech ended callback error:', err);
+                    const surfaced = process.platform === 'linux'
+                        ? surfaceLinuxSystemAudioError(err)
+                        : err;
+                    console.error('[SystemAudioCapture] Speech ended callback error:', surfaced.message);
+                    this.emit('error', surfaced);
                     return;
                 }
                 this.emit('speech_ended');
@@ -225,7 +241,10 @@ export class SystemAudioCapture extends EventEmitter {
 
             this.emit('start');
         } catch (error) {
-            console.error('[SystemAudioCapture] Failed to start:', error);
+            const surfaced = process.platform === 'linux'
+                ? surfaceLinuxSystemAudioError(error)
+                : (error instanceof Error ? error : new Error(String(error)));
+            console.error('[SystemAudioCapture] Failed to start:', surfaced.message);
             this.isRecording = false;
             // ORPHAN-HANDLE FIX: monitor.start() can throw AFTER the Rust
             // constructor has allocated CoreAudio Tap / aggregate-device /
@@ -257,7 +276,7 @@ export class SystemAudioCapture extends EventEmitter {
                     }
                 });
             }
-            this.emit('error', error);
+            this.emit('error', surfaced);
         }
     }
 
@@ -330,6 +349,23 @@ export class SystemAudioCapture extends EventEmitter {
      * Stops capture, removes all event listeners, and releases the native monitor.
      * After destroy(), do not reuse this instance.
      */
+    /**
+     * Quit path only. stop()/destroy() defer the native monitor.stop() via
+     * setImmediate, which may never run once the process starts exiting —
+     * leaving orphaned PipeWire/Pulse streams (system-wide HDMI silence on
+     * Linux). Release the native handle synchronously instead.
+     */
+    public releaseForQuit(): void {
+        for (const t of this.sampleRatePollTimers) clearTimeout(t);
+        this.sampleRatePollTimers = [];
+        this.isRecording = false;
+        const monitor = this.monitor;
+        this.emit('stop');
+        this.removeAllListeners();
+        this.monitor = null;
+        monitor?.stop();
+    }
+
     public async destroy(): Promise<void> {
         // Await teardown BEFORE removing listeners so in-flight Rust callbacks
         // (data / speech_ended) cannot fire on a wrapper the caller considers

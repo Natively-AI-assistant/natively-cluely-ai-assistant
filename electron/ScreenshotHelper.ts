@@ -2,11 +2,19 @@
 
 import path from "node:path"
 import fs from "node:fs"
+import { execFileSync } from "node:child_process"
 import { app, desktopCapturer, screen, systemPreferences } from "electron"
 import { v4 as uuidv4 } from "uuid"
 import util from "util"
 import sharp, { type OverlayOptions } from "sharp"
 import { exec as execShell } from "child_process"
+import {
+  assertScreenshotPathWithinUserData,
+  buildDisplayScreenshotCommand,
+  LINUX_SCREENSHOT_INSTALL_HINT,
+  resolveLinuxCaptureDisplay,
+  SHARED_DESKTOP_DISPLAY_MARKER,
+} from "./platform/linuxScreenshot"
 
 // Module-level: promisified shell exec created once per process lifetime.
 // Uses the shell-capable exec variant (not execFile) because Linux screenshot
@@ -650,18 +658,49 @@ export class ScreenshotHelper {
    * Platform-aware screenshot command builder.
    * Linux-only in practice. macOS and Windows use desktopCapturer APIs instead.
    */
+  private static readonly LINUX_INSTALL_HINT = LINUX_SCREENSHOT_INSTALL_HINT;
+
+  /** Returns which Linux screenshot CLI is available, if any. */
+  public static detectLinuxScreenshotTool(): 'gnome-screenshot' | 'scrot' | 'import' | null {
+    if (process.platform !== 'linux') return null;
+    for (const tool of ['gnome-screenshot', 'scrot', 'import'] as const) {
+      try {
+        execFileSync('which', [tool], { stdio: 'ignore' });
+        return tool;
+      } catch {
+        /* try next */
+      }
+    }
+    return null;
+  }
+
+  private assertLinuxScreenshotToolAvailable(): void {
+    if (process.platform !== 'linux') return;
+    if (ScreenshotHelper.detectLinuxScreenshotTool()) return;
+    throw new Error(
+      `[ScreenshotHelper] No screenshot tool found. ${ScreenshotHelper.LINUX_INSTALL_HINT}`
+    );
+  }
+
   private getScreenshotCommand(outputPath: string, interactive: boolean): string {
     // Safety: outputPath must be within our controlled directories.
     // Since we always construct paths using path.join(this.screenshotDir, uuidv4()),
     // this assertion guards against any future regression where external input could reach here.
     // This is a defense-in-depth measure against path traversal attacks.
     const userDataDir = app.getPath('userData');
-    if (!outputPath.startsWith(userDataDir)) {
-      throw new Error(`[ScreenshotHelper] Refusing shell command for path outside userData: ${outputPath}`);
-    }
+    assertScreenshotPathWithinUserData(outputPath, userDataDir);
     const safePath = outputPath.replace(/"/g, '\\"');
     const platform = process.platform;
     if (platform === 'linux') {
+      const captureDisplay = resolveLinuxCaptureDisplay({
+        env: process.env,
+        readMarker: () => (fs.existsSync(SHARED_DESKTOP_DISPLAY_MARKER) ? fs.readFileSync(SHARED_DESKTOP_DISPLAY_MARKER, 'utf8') : null),
+        displayIsUp: (d) => fs.existsSync(`/tmp/.X11-unix/X${d.slice(1)}`),
+      });
+      if (captureDisplay) {
+        console.log(`[ScreenshotHelper] Capturing shared display ${captureDisplay}`);
+        return buildDisplayScreenshotCommand(captureDisplay, safePath, interactive);
+      }
       return interactive
         ? `gnome-screenshot -a -f "${safePath}" 2>/dev/null || scrot -s "${safePath}" 2>/dev/null || import "${safePath}"`
         : `gnome-screenshot -f "${safePath}" 2>/dev/null || scrot "${safePath}" 2>/dev/null || import -window root "${safePath}"`;
@@ -689,6 +728,7 @@ export class ScreenshotHelper {
         if (process.platform === 'darwin' || process.platform === 'win32') {
           await this.captureWithDesktopCapturer(screenshotPath, undefined, preferredDisplay);
         } else {
+          this.assertLinuxScreenshotToolAvailable();
           await shellExecAsync(this.getScreenshotCommand(screenshotPath, false))
         }
 
@@ -707,6 +747,7 @@ export class ScreenshotHelper {
         if (process.platform === 'darwin' || process.platform === 'win32') {
           await this.captureWithDesktopCapturer(screenshotPath, undefined, preferredDisplay);
         } else {
+          this.assertLinuxScreenshotToolAvailable();
           await shellExecAsync(this.getScreenshotCommand(screenshotPath, false))
         }
 
@@ -740,13 +781,17 @@ export class ScreenshotHelper {
           await this.captureWithDesktopCapturer(screenshotPath, captureArea);
         }
       } else if (process.platform === 'linux') {
-        // Linux: use interactive selection command
         console.log('[ScreenshotHelper] Using interactive selection');
+        this.assertLinuxScreenshotToolAvailable();
         try {
           await shellExecAsync(this.getScreenshotCommand(screenshotPath, true))
-        } catch (e: any) {
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (/cancel/i.test(msg) || /Selection cancelled/i.test(msg)) {
+            throw new Error('Selection cancelled');
+          }
           console.warn('[ScreenshotHelper] User cancelled selection or error occurred:', e);
-          throw new Error("Selection cancelled")
+          throw new Error('Selection cancelled');
         }
       } else {
         throw new Error('Selection bounds are required for this platform');

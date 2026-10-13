@@ -1,5 +1,5 @@
 /**
- * Ensures all sqlite-vec platform packages are present in node_modules,
+ * Ensures sqlite-vec platform packages are present in node_modules,
  * even when the current CPU doesn't match (e.g. building x64 release on arm64).
  * npm skips optional deps with non-matching "cpu" constraints, so we force-install them.
  */
@@ -41,6 +41,11 @@ const packages = [
   'sqlite-vec-windows-x64',
 ];
 
+// Linux x64 native vec extension — optional; JS cosine fallback remains acceptable for v1.
+if (os.platform() === 'linux' && os.arch() === 'x64') {
+  packages.push('sqlite-vec-linux-x64');
+}
+
 for (const pkg of packages) {
   const pkgDir = path.join(__dirname, '..', 'node_modules', pkg);
   const present = installedVersion(pkgDir);
@@ -74,7 +79,14 @@ for (const pkg of packages) {
 
     console.log(`[ensure-sqlite-vec] ${pkg} installed successfully.`);
   } catch (e) {
-    console.warn(`[ensure-sqlite-vec] Warning: could not install ${pkg}:`, e.message);
+    if (pkg.startsWith('sqlite-vec-linux')) {
+      console.warn(
+        `[ensure-sqlite-vec] ${pkg} unavailable — meeting search will use JS cosine fallback (PRD Q3).`,
+        e.message
+      );
+    } else {
+      console.warn(`[ensure-sqlite-vec] Warning: could not install ${pkg}:`, e.message);
+    }
   }
 }
 
@@ -104,4 +116,8 @@ if (stillMissing.length > 0) {
   console.warn(
     `[ensure-sqlite-vec] Still missing (non-fatal on this host): ${stillMissing.join(', ')}`
   );
+}
+
+if (os.platform() === 'linux') {
+  console.log('[ensure-sqlite-vec] Linux: native vec0 optional; VectorStore JS fallback is acceptable for v1.');
 }

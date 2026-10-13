@@ -1150,6 +1150,8 @@ interface Meeting {
         keyPoints: string[];
         actionItemsTitle?: string;
         keyPointsTitle?: string;
+        /** Post-call debrief (technical-interview mode), see MeetingPersistence. */
+        debrief?: string;
         sections?: Array<{ title: string; bullets: string[] }>;
         sectionsV3?: Array<{ id: string; title: string; order?: number; bullets: Array<{ id?: string; text: string; confidence?: 'high' | 'medium' | 'low'; evidence?: Evidence[] }> }>;
         tldr?: string[];
@@ -1732,7 +1734,7 @@ const MeetingNotesSkeleton: React.FC<{
 };
 
 /** The tabs, in the order they sit in the tab row — the swap travels by it. */
-const NOTES_TABS = ['summary', 'transcript', 'usage'] as const;
+const NOTES_TABS = ['summary', 'debrief', 'transcript', 'usage'] as const;
 type NotesTab = typeof NOTES_TABS[number];
 
 /** How long a transcript line stays marked after an evidence jump lands on it,
@@ -2664,7 +2666,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                             surface it read as a raised container, but on the elevated grey it was
                             within ~3 levels of the page and the control lost its shape. */}
                         <div className={`p-1 rounded-xl inline-flex items-center gap-0.5 ${isLight ? 'bg-[#E5E5EA] border border-black/[0.04]' : 'bg-[#0D0D0F] border border-white/[0.08]'}`}>
-                            {NOTES_TABS.map((tab) => (
+                            {NOTES_TABS.filter((tab) => tab !== 'debrief' || Boolean(meeting.detailedSummary?.debrief)).map((tab) => (
                                 <button
                                     key={tab}
                                     onClick={() => switchTab(tab)}
@@ -2681,7 +2683,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                             transition={{ type: "spring", stiffness: 400, damping: 30 }}
                                         />
                                     )}
-                                    {tab === 'summary' ? t('Summary') : tab === 'transcript' ? t('Transcript') : t('Usage')}
+                                    {tab === 'summary' ? t('Summary') : tab === 'debrief' ? t('Debrief') : tab === 'transcript' ? t('Transcript') : t('Usage')}
                                 </button>
                             ))}
                         </div>
@@ -3369,6 +3371,16 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                         )}
                         </AnimatePresence>
                         </div>
+                        )}
+
+                        {activeTab === 'debrief' && meeting.detailedSummary?.debrief && (
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                <div className="prose prose-sm max-w-none">
+                                    <p className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">
+                                        {meeting.detailedSummary.debrief}
+                                    </p>
+                                </div>
+                            </motion.div>
                         )}
 
                         {activeTab === 'transcript' && (

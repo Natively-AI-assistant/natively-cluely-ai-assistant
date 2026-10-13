@@ -30,6 +30,7 @@ import { VisionProbe, VISION_PROBE_QUESTION, VISION_PROBE_SYSTEM } from "./llm/v
 import { parseOpenRouterVision } from "./llm/providerVisionData"
 import { trimUserContentToFit, userContentRoomChars } from "./llm/localContextTrim"
 import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, claudeAcceptsSamplingParams, claudeThinkingParam, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
+import { buildOverlayUserContextBlock } from "./services/context/overlayUserContext"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import { filterOllamaGenerationModels } from "./llm/ollamaGenerationModels"
 import {
@@ -857,6 +858,7 @@ export class LLMHelper {
   private codexCliConfig: CodexCliConfig = DEFAULT_CODEX_CLI_CONFIG;
   private knowledgeOrchestrator: any = null;
   private negotiationCoachingHandler: ((payload: unknown) => void) | null = null;
+  private overlayContext: string = '';
   private aiResponseLanguage: string = 'auto';
   private sttLanguage: string = 'english-us';
   private nativelyKey: string | null = null;
@@ -4265,6 +4267,12 @@ ${IMAGE_TRUST_TRAILER}`;
       console.warn('[LLMHelper] ModesManager load failed in generateSuggestion (non-fatal):', _modeErr?.message);
     }
 
+    // The overlay editor's user context leads the mode context block.
+    if (this.overlayContext?.trim()) {
+      const overlayBlock = buildOverlayUserContextBlock(this.overlayContext);
+      modeContextBlock = modeContextBlock ? `${overlayBlock}\n\n${modeContextBlock}` : overlayBlock;
+    }
+
     // Prepend mode context block (reference files, custom context) to the transcript context
     const enrichedContext = modeContextBlock
       ? `${modeContextBlock}\n\n${context}`
@@ -4370,6 +4378,14 @@ ANSWER DIRECTLY:`;
     } catch (_err) {
       return false;
     }
+  }
+
+  public setOverlayContext(context: string): void {
+    this.overlayContext = context;
+  }
+
+  public getOverlayContext(): string {
+    return this.overlayContext;
   }
 
   // Profile Intelligence eligibility (2026-09-30) for the knowledge intercept.
@@ -10498,6 +10514,11 @@ let isMultimodal = !!(imagePaths?.length);
       }
     }
 
+    const overlayBlock = buildOverlayUserContextBlock(this.overlayContext);
+    if (overlayBlock) {
+      context = context ? `${overlayBlock}\n\n${context}` : overlayBlock;
+    }
+
     // Preparation
     let isMultimodal = !!(imagePaths?.length);
     // `context` here is the legacy transcript/context blob — state that
@@ -15558,9 +15579,10 @@ let isMultimodal = !!(imagePaths?.length);
    * Strategy:
    * 0. Custom / cURL Provider (if user selected one — always takes priority)
    * 1. Natively API (if configured)
-   * 2. Groq (if context text < 100k tokens approx)
-   * 3. Gemini Flash (Retry 2x)
-   * 4. Gemini Pro (Retry 5x)
+   * 2. Codex CLI (if enabled)
+   * 3. OpenAI (if selected/configured)
+   * 4. Groq (if context text < 100k tokens approx)
+   * 5. Gemini Flash / Pro (only if Gemini is configured)
    */
   public async generateMeetingSummary(systemPrompt: string, context: string, groqSystemPrompt?: string, opts?: MeetingSummaryCallOpts): Promise<string> {
     console.log(`[LLMHelper] generateMeetingSummary called. Context length: ${context.length}`);
@@ -15713,6 +15735,32 @@ let isMultimodal = !!(imagePaths?.length);
       }
     }
 
+    let attemptedOpenAiSummary = false;
+    const tryOpenAiSummary = async (): Promise<string | null> => {
+      if (!this.openaiClient || attemptedOpenAiSummary) return null;
+      attemptedOpenAiSummary = true;
+      console.log(`[LLMHelper] Attempting OpenAI for summary...`);
+      try {
+        const text = await this.withTimeout(
+          this.generateWithOpenai(`Context:\n${context}`, systemPrompt),
+          60000,
+          'OpenAI Summary'
+        );
+        if (text.trim().length > 0) {
+          console.log(`[LLMHelper] ✅ OpenAI summary generated successfully.`);
+          return this.processResponse(text);
+        }
+      } catch (e: any) {
+        console.warn(`[LLMHelper] ⚠️ OpenAI summary failed: ${e.message}. Falling back...`);
+      }
+      return null;
+    };
+
+    if (this.isOpenAiModel(this.currentModelId)) {
+      const text = await tryOpenAiSummary();
+      if (text) return text;
+    }
+
     if (this.groqClient && tokenCount < 100000) {
       console.log(`[LLMHelper] Attempting Groq for summary...`);
       try {
@@ -15738,12 +15786,18 @@ let isMultimodal = !!(imagePaths?.length);
           return this.processResponse(text);
         }
       } catch (e: any) {
-        console.warn(`[LLMHelper] ⚠️ Groq summary failed: ${e.message}. Falling back to Gemini...`);
+        console.warn(`[LLMHelper] ⚠️ Groq summary failed: ${e.message}. Falling back...`);
       }
     } else {
       if (tokenCount >= 100000) {
-        console.log(`[LLMHelper] Context too large for Groq (${tokenCount} tokens). Skipping straight to Gemini.`);
+        console.log(`[LLMHelper] Context too large for Groq (${tokenCount} tokens). Skipping Groq.`);
       }
+    }
+
+    // OpenAI when configured but not the selected model (tried above if selected).
+    {
+      const text = await tryOpenAiSummary();
+      if (text) return text;
     }
 
     // ATTEMPT 3: Gemini Flash-Lite (cheapest/fastest — leads the Gemini cascade).

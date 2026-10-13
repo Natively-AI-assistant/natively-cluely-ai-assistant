@@ -122,6 +122,20 @@ describe('global shortcut scoping (#517)', () => {
     assert.ok(meetingChords.includes('general:capture-dom'));
   });
 
+  // 2026-10-12: Answer Multiple Choice on Screen screenshots and answers into
+  // the overlay, so like the other capture keys it must only hold its chord
+  // while a meeting (the overlay) is up — on both the globalShortcut and the
+  // Windows hook paths.
+  test('Answer Multiple Choice on Screen is registered only while a meeting is up', () => {
+    km.setMode('launcher');
+    assert.ok(!registered.has('CommandOrControl+Shift+M'), 'outside a meeting nothing would show the answer');
+    assert.ok(!km.getGlobalChordTable().some((c) => c.id === 'general:answer-screen-mcq'));
+
+    km.setMode('overlay');
+    assert.ok(registered.has('CommandOrControl+Shift+M'), 'default chord works in a meeting');
+    assert.ok(km.getGlobalChordTable().some((c) => c.id === 'general:answer-screen-mcq'));
+  });
+
   // Found in review, 2026-10-10. A conflict recorded in a meeting is kept while
   // the launcher is up (that is where Settings reads it). Rebinding the shortcut
   // there did not clear it: launcher mode does not attempt the id, so nothing

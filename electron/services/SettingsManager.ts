@@ -133,6 +133,12 @@ export interface AppSettings {
     localWhisperPerChannelEnabled?: boolean;
     localWhisperModelMic?: string;
     localWhisperModelSystem?: string;
+    /** Video call: mic=user, system=them. Phone call: single mixed stream with diarization. */
+    audioSessionMode?: 'video-call' | 'phone-call';
+    /** Which physical capture feeds the diarized STT in phone-call mode. */
+    phoneCallCaptureSource?: 'system' | 'mic';
+    /** Diarization tag (0 or 1) mapped to the local user in phone-call mode. */
+    phoneCallUserSpeakerTag?: 0 | 1;
     // Phase 6 — TelemetryService toggle. Defaults to true (local-only JSONL).
     // When false, no telemetry is written to disk and no sinks fire.
     telemetryEnabled?: boolean;

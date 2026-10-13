@@ -104,6 +104,40 @@ export function prepareIntelligenceStreamPlaceholderMessages(
  * Apply WTA null-invoke feedback to message rows (cooldown / empty answer path).
  * `extra` is merged into the feedback row (the overlay marks it as a note).
  */
+const MIN_DELIVERED_ANSWER_CHARS = 15;
+
+/**
+ * Apply null-invoke feedback only when no WTA answer was already delivered
+ * (streaming IPC can finish before the invoke promise resolves null).
+ */
+export function applyWhatToAnswerNullFeedbackMessagesUnlessAnswered(
+  prev,
+  feedback,
+  idFactory = _defaultIdFactory,
+) {
+  if (!Array.isArray(prev)) {
+    return applyWhatToAnswerNullFeedbackMessages(prev, feedback, idFactory);
+  }
+
+  const deliveredIdx = prev.findLastIndex(
+    (m) =>
+      m.role === 'system' &&
+      m.intent === 'what_to_answer' &&
+      typeof m.text === 'string' &&
+      m.text.trim().length >= MIN_DELIVERED_ANSWER_CHARS,
+  );
+  if (deliveredIdx !== -1) {
+    if (prev[deliveredIdx].isStreaming) {
+      const updated = [...prev];
+      updated[deliveredIdx] = { ...updated[deliveredIdx], isStreaming: false };
+      return updated;
+    }
+    return prev;
+  }
+
+  return applyWhatToAnswerNullFeedbackMessages(prev, feedback, idFactory);
+}
+
 export function applyWhatToAnswerNullFeedbackMessages(prev, feedback, idFactory = _defaultIdFactory, extra = {}) {
   if (!Array.isArray(prev)) {
     return [

@@ -9,7 +9,7 @@ import { LLMHelper } from './LLMHelper';
 import { SessionTracker, TranscriptSegment, SuggestionTrigger, ContextItem } from './SessionTracker';
 import {
     AnswerLLM, AssistLLM, BrainstormLLM, ClarifyLLM, CodeHintLLM, FollowUpLLM, RecapLLM,
-    FollowUpQuestionsLLM, WhatToAnswerLLM,
+    FollowUpQuestionsLLM, WhatToAnswerLLM, RestateLLM, LookupLLM,
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
     AssistantResponse as LLMAssistantResponse, classifyIntent, hasQuestionSignal, planNextAssistantAction, PlannerDecision,
     extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCompleteShortAnswer, detectExplicitCodingContract, isCodingContinuation, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, isScaffoldRegenerationEligible, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
@@ -49,6 +49,8 @@ import { CodingStreamGate } from './llm/codingStreamGate';
 import { isCodeVerificationEnabled } from './llm/codeVerification/verificationEnabled';
 import { DynamicActionEngine } from './services/dynamic-actions/DynamicActionEngine';
 import { DynamicAction } from './services/dynamic-actions/DynamicAction';
+import { RequirementsEngine } from './services/requirements/RequirementsEngine';
+import type { LiveRequirement } from './services/requirements/LiveRequirement';
 import { ScreenContext } from './services/screen/ScreenContextService';
 import { buildPreparedTranscriptContext as assemblePreparedTranscriptContext } from './utils/preparedTranscriptContext';
 import { PiLatencyTrace } from './services/telemetry/PiLatencyTracer';
@@ -86,9 +88,11 @@ function redactSecretsOnlyForTrace<T>(payload: T): unknown {
     try { return require('./utils/redactForLog').redactSecretsOnly(payload); } catch { return payload; }
 }
 
+import { buildInterviewContext } from './services/context/InterviewContextBuilder';
+import { classifyInterviewPhase } from './services/interview/InterviewPhaseClassifier';
 
 // Mode types
-export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'follow_up' | 'recap' | 'clarify' | 'manual' | 'follow_up_questions' | 'code_hint' | 'brainstorm';
+export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'follow_up' | 'recap' | 'clarify' | 'restate' | 'lookup' | 'manual' | 'follow_up_questions' | 'code_hint' | 'brainstorm';
 
 /**
  * Bound an optional-enrichment promise by a wall-clock budget. If the work
@@ -172,6 +176,10 @@ export interface IntelligenceModeEvents {
     'recap_token': (token: string) => void;
     'clarify': (clarification: string) => void;
     'clarify_token': (token: string) => void;
+    'restate': (restatement: string) => void;
+    'restate_token': (token: string) => void;
+    'lookup': (explanation: string) => void;
+    'lookup_token': (token: string) => void;
     'follow_up_questions_update': (questions: string) => void;
     'follow_up_questions_token': (token: string) => void;
     'manual_answer_started': () => void;
@@ -233,6 +241,8 @@ export class IntelligenceEngine extends EventEmitter {
     private answerLLM: AnswerLLM | null = null;
     private assistLLM: AssistLLM | null = null;
     private clarifyLLM: ClarifyLLM | null = null;
+    private restateLLM: RestateLLM | null = null;
+    private lookupLLM: LookupLLM | null = null;
     private followUpLLM: FollowUpLLM | null = null;
     private recapLLM: RecapLLM | null = null;
     private followUpQuestionsLLM: FollowUpQuestionsLLM | null = null;
@@ -656,6 +666,8 @@ export class IntelligenceEngine extends EventEmitter {
         }
     }
 
+    private requirementsEngine: RequirementsEngine;
+
     private static isNonAnswerSentinel(answer: string): boolean {
         // Prompt System v2 (2026-08-01): the machine sentinel [[NO_ACTION]]
         // replaces the visible "Nothing actionable right now." escape hatch
@@ -849,6 +861,11 @@ export class IntelligenceEngine extends EventEmitter {
         this.llmHelper.setNegotiationCoachingHandler((payload) => {
             this.emit('negotiation_coaching', payload);
         });
+
+        this.requirementsEngine = new RequirementsEngine(llmHelper, session);
+        this.requirementsEngine.on('requirements_updated', (requirements: LiveRequirement[]) => {
+            this.emit('requirements_updated', requirements);
+        });
     }
 
     getLLMHelper(): LLMHelper {
@@ -872,6 +889,8 @@ export class IntelligenceEngine extends EventEmitter {
         this.answerLLM = new AnswerLLM(this.llmHelper);
         this.assistLLM = new AssistLLM(this.llmHelper);
         this.clarifyLLM = new ClarifyLLM(this.llmHelper);
+        this.restateLLM = new RestateLLM(this.llmHelper);
+        this.lookupLLM = new LookupLLM(this.llmHelper);
         this.followUpLLM = new FollowUpLLM(this.llmHelper);
         this.recapLLM = new RecapLLM(this.llmHelper);
         this.followUpQuestionsLLM = new FollowUpQuestionsLLM(this.llmHelper);
@@ -998,6 +1017,11 @@ export class IntelligenceEngine extends EventEmitter {
                 // must never break the answer pipeline.
                 console.warn('[IntelligenceEngine] detectAndEmitDynamicActions failed', (err as Error)?.message);
             }
+            try {
+                this.requirementsEngine.onFinalSegment(segment);
+            } catch (err) {
+                console.warn('[IntelligenceEngine] requirements onFinalSegment failed', (err as Error)?.message);
+            }
         }
 
         // Check for follow-up intent if user is speaking
@@ -1061,6 +1085,31 @@ export class IntelligenceEngine extends EventEmitter {
     registerDynamicAction(action: DynamicAction): void {
         if (!this.dynamicActionEngine) this.dynamicActionEngine = new DynamicActionEngine();
         this.dynamicActionEngine.registerAction(action);
+    }
+
+    // Live Requirements List — technical-interview only =============================================
+
+    setRequirementsContext(enabled: boolean): void {
+        this.requirementsEngine.setEnabled(enabled);
+        if (!enabled) {
+            this.requirementsEngine.clear();
+        }
+    }
+
+    acceptRequirement(id: string): LiveRequirement | null {
+        return this.requirementsEngine.accept(id);
+    }
+
+    dismissRequirement(id: string): LiveRequirement | null {
+        return this.requirementsEngine.dismiss(id);
+    }
+
+    getVisibleRequirements(): LiveRequirement[] {
+        return this.requirementsEngine.getVisible();
+    }
+
+    _setRequirementsEngineForTest(engine: RequirementsEngine): void {
+        this.requirementsEngine = engine;
     }
 
     // For tests — injection seam.
@@ -4382,6 +4431,18 @@ export class IntelligenceEngine extends EventEmitter {
                 } catch { return undefined; }
             })();
 
+            // Technical-interview context (session spine, active problem, accepted
+            // requirements), frozen into the request snapshot for PromptAssembler.
+            const interviewCtx = buildInterviewContext(this.session);
+            // Phase classification is LLM-based and runs off the answer path.
+            void classifyInterviewPhase(this.llmHelper, interviewCtx.recencyTranscript || interviewCtx.spine)
+                .then(({ phase }) => {
+                    if (phase !== 'unknown') this.session.setInterviewPhase(phase);
+                })
+                .catch((err) => {
+                    console.warn('[IntelligenceEngine] interview phase classification failed', (err as Error)?.message);
+                });
+
             const requestSnapshot: WhatToAnswerRequestSnapshot = Object.freeze({
                 activeModeInfo: snapshotModeInfo,
                 modeId: snapshotModeId,
@@ -4394,6 +4455,7 @@ export class IntelligenceEngine extends EventEmitter {
                 ...(wtaContextOsGeneration ? { contextOsGeneration: wtaContextOsGeneration } : {}),
                 ...(wtaV3Prompt ? { v3Prompt: wtaV3Prompt } : {}),
                 ...(wtaDiagramTurn && (wtaDiagramTurn.signals || wtaDiagramTurn.turnBlock) ? { diagramTurn: wtaDiagramTurn } : {}),
+                interviewBundle: interviewCtx,
             });
 
             // T4 (2026-08-28): did V3 compose this turn's prompt? Every
@@ -7891,6 +7953,132 @@ export class IntelligenceEngine extends EventEmitter {
             this.setMode('idle');
             return null;
         }
+    }
+
+    /**
+     * MODE: Restate — interpret what the interviewer said (not a clarifying question)
+     */
+    async runRestate(): Promise<string | null> {
+        console.log('[IntelligenceEngine] runRestate called');
+        this.setMode('restate');
+
+        try {
+            if (!this.restateLLM) {
+                this.setMode('idle');
+                return null;
+            }
+
+            const interviewCtx = buildInterviewContext(this.session);
+            if (!interviewCtx.recencyTranscript.trim() && !interviewCtx.currentTurn?.trim()) {
+                this.setMode('idle');
+                return null;
+            }
+
+            const generationId = ++this.currentGenerationId;
+            let fullRestatement = '';
+            const stream = this.restateLLM.generateStream(interviewCtx);
+            let streamAborted = false;
+
+            for await (const token of stream) {
+                if (this.currentGenerationId !== generationId) {
+                    await stream.return(undefined);
+                    streamAborted = true;
+                    break;
+                }
+                this.emit('restate_token', token);
+                fullRestatement += token;
+            }
+
+            if (streamAborted) {
+                this.setMode('idle');
+                return null;
+            }
+
+            if (fullRestatement && this.currentGenerationId === generationId) {
+                this.emit('restate', fullRestatement);
+                this.session.addAssistantMessage(fullRestatement);
+                this.session.pushUsage({
+                    type: 'chat',
+                    timestamp: Date.now(),
+                    question: 'Restate',
+                    answer: fullRestatement,
+                });
+            }
+            if (this.currentGenerationId === generationId) {
+                this.setMode('idle');
+            }
+            return fullRestatement;
+
+        } catch (error) {
+            this.emit('error', error as Error, 'restate');
+            this.setMode('idle');
+            return null;
+        }
+    }
+
+    /**
+     * MODE: Lookup — quick concept explainer with optional live RAG
+     */
+    async runLookup(focusTerm?: string, retrievedContext?: string): Promise<string | null> {
+        console.log('[IntelligenceEngine] runLookup called');
+        this.setMode('lookup');
+
+        try {
+            if (!this.lookupLLM) {
+                this.setMode('idle');
+                return null;
+            }
+
+            const interviewCtx = buildInterviewContext(this.session);
+            const generationId = ++this.currentGenerationId;
+            let fullExplanation = '';
+            const stream = this.lookupLLM.generateStream(interviewCtx, retrievedContext, focusTerm);
+            let streamAborted = false;
+
+            for await (const token of stream) {
+                if (this.currentGenerationId !== generationId) {
+                    await stream.return(undefined);
+                    streamAborted = true;
+                    break;
+                }
+                this.emit('lookup_token', token);
+                fullExplanation += token;
+            }
+
+            if (streamAborted) {
+                this.setMode('idle');
+                return null;
+            }
+
+            if (fullExplanation && this.currentGenerationId === generationId) {
+                this.emit('lookup', fullExplanation);
+                this.session.addAssistantMessage(fullExplanation);
+                this.session.pushUsage({
+                    type: 'chat',
+                    timestamp: Date.now(),
+                    question: focusTerm || 'Lookup',
+                    answer: fullExplanation,
+                });
+            }
+            if (this.currentGenerationId === generationId) {
+                this.setMode('idle');
+            }
+            return fullExplanation;
+
+        } catch (error) {
+            this.emit('error', error as Error, 'lookup');
+            this.setMode('idle');
+            return null;
+        }
+    }
+
+    /**
+     * Late-join backfill — summarize what was missed before the candidate joined.
+     */
+    async runLateJoinBackfill(): Promise<string | null> {
+        const spine = this.session.getFullSessionContext();
+        if (!spine.trim()) return null;
+        return this.runRestate();
     }
 
     /**

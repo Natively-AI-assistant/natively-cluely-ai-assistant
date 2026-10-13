@@ -11,6 +11,7 @@ import {
 import { isRegisterableAccelerator, probeAccelerator } from './acceleratorValidation';
 import { buildChordTable, type Win32Chord } from './winChord';
 import { SettingsManager } from './SettingsManager';
+import { formatPermissionMessage } from '../platform/permissionMessages';
 
 export interface KeybindConfig {
     id: string;
@@ -33,11 +34,15 @@ export const DEFAULT_KEYBINDS: KeybindConfig[] = [
     // falls back to a screenshot when no extension/browser is reachable. Works
     // from any focused app (including the Natively overlay), which the old
     // Chrome-owned hotkey could not. See natively-browser/README.md.
+    // Screenshot -> answer every multiple-choice question on screen, one line
+    // each, in a single model call (src/lib/screenMcqInstruction.mjs).
+    { id: 'general:answer-screen-mcq', label: 'Answer Multiple Choice on Screen', accelerator: 'CommandOrControl+Shift+M', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+M' },
     { id: 'general:capture-dom', label: 'Capture Page / Screen (Browser)', accelerator: 'CommandOrControl+Y', isGlobal: true, defaultAccelerator: 'CommandOrControl+Y' },
 
     // Chat - Global shortcuts (work even when app is not focused - stealth mode)
     { id: 'chat:whatToAnswer', label: 'What to Answer', accelerator: 'CommandOrControl+1', isGlobal: true, defaultAccelerator: 'CommandOrControl+1' },
-    { id: 'chat:clarify', label: 'Clarify', accelerator: 'CommandOrControl+2', isGlobal: true, defaultAccelerator: 'CommandOrControl+2' },
+    { id: 'chat:clarify', label: 'Clarify / Restate', accelerator: 'CommandOrControl+2', isGlobal: true, defaultAccelerator: 'CommandOrControl+2' },
+    { id: 'chat:askClarify', label: 'Ask Clarifying Question', accelerator: 'CommandOrControl+Shift+2', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+2' },
     { id: 'chat:dynamicAction4', label: 'Recap / Brainstorm', accelerator: 'CommandOrControl+3', isGlobal: true, defaultAccelerator: 'CommandOrControl+3' },
     { id: 'chat:followUp', label: 'Follow Up', accelerator: 'CommandOrControl+4', isGlobal: true, defaultAccelerator: 'CommandOrControl+4' },
     { id: 'chat:answer', label: 'Answer / Record', accelerator: 'CommandOrControl+5', isGlobal: true, defaultAccelerator: 'CommandOrControl+5' },
@@ -74,6 +79,16 @@ export const DEFAULT_KEYBINDS: KeybindConfig[] = [
     { id: 'window:move-left', label: 'Move Window Left', accelerator: 'CommandOrControl+Shift+Left', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Left' },
     { id: 'window:move-right', label: 'Move Window Right', accelerator: 'CommandOrControl+Shift+Right', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Right' },
 ];
+
+function registrationFailureMessage(accelerator: string): string {
+    if (process.platform === 'linux') {
+        return formatPermissionMessage('linux-shortcut-conflict', { accelerator });
+    }
+    if (process.platform === 'darwin') {
+        return `Could not register ${accelerator}. Check System Settings → Privacy & Security → Accessibility.`;
+    }
+    return `Could not register ${accelerator}. Another application may be using this shortcut.`;
+}
 
 export class KeybindManager {
     private static instance: KeybindManager;
@@ -394,9 +409,12 @@ export class KeybindManager {
         if (this.registrationFailures === before) return;
 
         const channel = ok ? 'keybinds:registration-succeeded' : 'keybinds:registration-failed';
+        const payload = ok
+            ? { id, accelerator }
+            : { id, accelerator, message: registrationFailureMessage(accelerator) };
         BrowserWindow.getAllWindows().forEach(win => {
             if (!win.isDestroyed()) {
-                win.webContents.send(channel, { id, accelerator });
+                win.webContents.send(channel, payload);
             }
         });
     }

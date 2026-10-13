@@ -48,7 +48,7 @@ test('runWhatShouldISay gives an honest fallback for a manual nothing-actionable
   engine.on('suggested_answer_token', token => events.push(['token', token]));
   engine.on('suggested_answer', answer => events.push(['final', answer]));
 
-  const answer = await engine.runWhatShouldISay('anything actionable?', 0.9, undefined, { skipCooldown: true });
+  const answer = await engine.runWhatShouldISay('anything actionable?', 0.9, undefined, { skipCooldown: true, waitForSpeechMs: 0 });
 
   assert.equal(answer, LONGSESSION_NONANSWER_FALLBACK);
   assert.deepEqual(events, [['final', LONGSESSION_NONANSWER_FALLBACK]]);
@@ -63,7 +63,7 @@ test('runWhatShouldISay gives an honest fallback for a manual nothing-to-capture
   engine.on('suggested_answer_token', token => events.push(['token', token]));
   engine.on('suggested_answer', answer => events.push(['final', answer]));
 
-  const answer = await engine.runWhatShouldISay('anything to capture?', 0.9, undefined, { skipCooldown: true });
+  const answer = await engine.runWhatShouldISay('anything to capture?', 0.9, undefined, { skipCooldown: true, waitForSpeechMs: 0 });
 
   assert.equal(answer, LONGSESSION_NONANSWER_FALLBACK);
   assert.deepEqual(events, [['final', LONGSESSION_NONANSWER_FALLBACK]]);
@@ -78,7 +78,7 @@ test('runWhatShouldISay gives an honest fallback for normalized sentinel variant
   engine.on('suggested_answer_token', token => events.push(['token', token]));
   engine.on('suggested_answer', answer => events.push(['final', answer]));
 
-  const answer = await engine.runWhatShouldISay('anything actionable?', 0.9, undefined, { skipCooldown: true });
+  const answer = await engine.runWhatShouldISay('anything actionable?', 0.9, undefined, { skipCooldown: true, waitForSpeechMs: 0 });
 
   assert.equal(answer, LONGSESSION_NONANSWER_FALLBACK);
   assert.deepEqual(events, [['final', LONGSESSION_NONANSWER_FALLBACK]]);
@@ -91,7 +91,7 @@ test('runWhatShouldISay does not suppress near-match real answers', async () => 
   const finals = [];
   engine.on('suggested_answer', answer => finals.push(answer));
 
-  const answer = await engine.runWhatShouldISay('anything actionable?', 0.9, undefined, { skipCooldown: true });
+  const answer = await engine.runWhatShouldISay('anything actionable?', 0.9, undefined, { skipCooldown: true, waitForSpeechMs: 0 });
 
   assert.equal(answer, nearMatch);
   assert.deepEqual(finals, [nearMatch]);
@@ -154,7 +154,7 @@ test('runWhatShouldISay still emits and stores real answers', async () => {
   engine.on('suggested_answer_token', token => tokens.push(token));
   engine.on('suggested_answer', answer => finals.push(answer));
 
-  const answer = await engine.runWhatShouldISay('how should I answer?', 0.9, undefined, { skipCooldown: true });
+  const answer = await engine.runWhatShouldISay('how should I answer?', 0.9, undefined, { skipCooldown: true, waitForSpeechMs: 0 });
 
   assert.equal(answer, realAnswer);
   assert.deepEqual(tokens, [realAnswer]);

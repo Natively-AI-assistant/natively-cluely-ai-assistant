@@ -134,6 +134,7 @@ const App: React.FC = () => {
   const isolatePermissionsToaster = launcherIsolation === 'permissions-toaster';
   const isolateModals = launcherIsolation === 'no-modals' || launcherIsolation === 'global-surfaces';
   const isolateGlobalSurfaces = launcherIsolation === 'global-surfaces';
+  const isStickyNoteWindow = new URLSearchParams(window.location.search).get('window') === 'sticky-note';
 
   // Default to launcher if not specified (dev mode safety). The overlay aux
   // windows (pill/toggle) MUST be excluded: they early-return minimal JSX, but
@@ -146,7 +147,17 @@ const App: React.FC = () => {
     !isModelSelectorWindow &&
     !isCropperWindow &&
     !isOverlayPillWindow &&
-    !isOverlayToggleWindow;
+    !isOverlayToggleWindow &&
+    !isStickyNoteWindow;
+
+  if (isStickyNoteWindow) {
+    const StickyNoteWindow = React.lazy(() => import('./components/StickyNoteWindow'));
+    return (
+      <React.Suspense fallback={<div className="w-screen h-screen bg-transparent" />}>
+        <StickyNoteWindow />
+      </React.Suspense>
+    );
+  }
 
   // Initialize Analytics
   useEffect(() => {

@@ -4,6 +4,7 @@ import { TINY_WHAT_TO_ANSWER_PROMPT } from "./tinyPrompts";
 import { resolveV2SystemPrompt, v2TierForPromptTier } from "./promptSystemV2";
 import { composeWtaSystemPrompt } from "./wtaSystemPrompt";
 import { estimateTokens } from "./modelCapabilities";
+import { buildOverlayUserContextBlock } from "../services/context/overlayUserContext";
 import { TemporalContext } from "./TemporalContextBuilder";
 import type { IntentResult } from './PlannerDecision';
 import { ScreenContext } from "../services/screen/ScreenContextService";
@@ -757,7 +758,11 @@ The user triggered this action with a coding problem on screen and NO new questi
                     ? estimateTokens(INJECTION_REDACTION_MESSAGE) + 100
                     : estimateTokens(screenText) + 100)
                 : 0;
+            // The overlay context ranks above screen and transcript in the
+            // assembler's trust order, so it needs its own room or a long one
+            // squeezes out the question being answered.
             const assemblerBudget = 2000
+                + estimateTokens(buildOverlayUserContextBlock(requestSnapshot?.interviewBundle?.overlayContext))
                 + estimateTokens(intentContext || '')
                 + estimateTokens(modeContextBlock)
                 + estimateTokens(pinnedModeInstructions)
@@ -937,6 +942,13 @@ The user triggered this action with a coding problem on screen and NO new questi
                 retrievedModeContext: typedModeContext || undefined,
                 pinnedModeInstructions: pinnedModeInstructions || undefined,
                 candidateProfile: typedCandidateProfile || undefined,
+                sessionSpine: requestSnapshot?.interviewBundle?.spine,
+                currentTurn: requestSnapshot?.interviewBundle?.currentTurn ?? undefined,
+                activeProblem: requestSnapshot?.interviewBundle?.activeProblemStatement ?? undefined,
+                acceptedConstraints: requestSnapshot?.interviewBundle?.acceptedRequirements?.length
+                    ? requestSnapshot!.interviewBundle!.acceptedRequirements
+                    : undefined,
+                overlayContext: requestSnapshot?.interviewBundle?.overlayContext?.trim() || undefined,
                 tokenBudget: Math.max(1000, assemblerBudget),
                 systemPrompt: finalPromptOverride,
             });

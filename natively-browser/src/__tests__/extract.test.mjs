@@ -74,7 +74,8 @@ describe('extractPageContent', () => {
     const r = extractPageContent({
       document: doc,
       readabilityFactory: () => ({
-        parse: () => ({ title: 'Clean Article Title', textContent: 'The real article body text.' }),
+        // An article is >= 500 readable chars (classifyPage); shorter is app-like.
+        parse: () => ({ title: 'Clean Article Title', textContent: 'The real article body text. '.repeat(25) }),
       }),
       getSelection: () => '',
     });
@@ -82,6 +83,26 @@ describe('extractPageContent', () => {
     assert.match(r.text, /TITLE: Clean Article Title/);
     assert.match(r.text, /The real article body text\./);
     assert.equal(r.title, 'Clean Article Title');
+  });
+
+  // 2026-10-12, live on a funtrivia.com quiz: Readability returned only the
+  // page blurb (~100 chars) and dropped the question + radio options, so the
+  // capture carried 136 chars and the answer was about nothing. A short
+  // Readability result means an app-like page: send the visible text instead.
+  test('app-like page (short Readability result) uses innerText, keeping the question', () => {
+    const quiz = 'Which of the following is, in its base form, not a board game?\nLudo\nSnakes and Ladders\nMonopoly\nUNO\nHere\'s my answer!';
+    const doc = makeDoc({ title: 'Fun Trivia Quick Quiz', bodyText: `Home : Games : Quick Quiz\n${quiz}` });
+    const r = extractPageContent({
+      document: doc,
+      readabilityFactory: () => ({
+        parse: () => ({ title: 'Fun Trivia Quick Quiz', textContent: "For when you've just got a few minutes to kill..." }),
+      }),
+      getSelection: () => '',
+    });
+    assert.equal(r.pageType, 'app');
+    assert.equal(r.source, 'innertext');
+    assert.match(r.text, /not a board game\?/);
+    assert.match(r.text, /Monopoly/);
   });
 
   test('falls back to innerText when Readability returns null', () => {

@@ -26,6 +26,12 @@ import { clearStaleHover } from './utils/overlayAuxHover';
 import { resizeEnvelopeFor, OVERLAY_PANEL_INSET } from '../src/lib/overlayCustomSize.mjs';
 import { decideLauncherClose } from '../src/lib/launcherCloseDecision.mjs';
 import { DEV_SERVER_URL } from './devServerUrl';
+import {
+  detectX11Compositor,
+  maybeEmitCompositorWarning,
+  resolveLinuxWindowChrome,
+  type CompositorInfo,
+} from './platform/x11Compositor';
 
 const isEnvDev = process.env.NODE_ENV === 'development';
 const isPackaged = app.isPackaged;
@@ -296,6 +302,10 @@ export class WindowHelper {
     // for a few hundred ms. No-op when nothing actually changes.
     if (this.contentProtection === enable) return;
     this.contentProtection = enable;
+    // Linux: Electron content protection is a no-op vs macOS screen-share hiding.
+    if (process.platform === 'linux' && enable) {
+      console.log('[WindowHelper] setContentProtection: no-op on Linux X11 (documented parity gap vs macOS)');
+    }
     this.applyContentProtection(enable);
   }
 
@@ -420,7 +430,10 @@ export class WindowHelper {
     const maxAllowedWidth = Math.floor(workArea.width * 0.9);
     const maxAllowedHeight = Math.floor(workArea.height * 0.9);
     const newWidth = Math.min(Math.max(width, 300), maxAllowedWidth); // min 300, max 90%
-    const newHeight = Math.min(Math.max(height, 1), maxAllowedHeight); // min 1, max 90%
+    const newHeight = Math.min(
+      Math.max(height, WindowHelper.OVERLAY_MIN_HEIGHT),
+      maxAllowedHeight,
+    );
     const maxX = workArea.x + workArea.width - newWidth;
     const maxY = workArea.y + workArea.height - newHeight;
     const newX = Math.min(Math.max(currentX, workArea.x), maxX);
@@ -473,7 +486,10 @@ export class WindowHelper {
     const maxAllowedWidth = Math.floor(workArea.width * 0.9);
     const maxAllowedHeight = Math.floor(workArea.height * 0.9);
     const newWidth = Math.min(Math.max(width, 300), maxAllowedWidth);
-    const newHeight = Math.min(Math.max(height, 1), maxAllowedHeight);
+    const newHeight = Math.min(
+      Math.max(height, WindowHelper.OVERLAY_MIN_HEIGHT),
+      maxAllowedHeight,
+    );
     traceOverlayResize('setOverlayDimensionsAnchored:request', {
       requested: { width, height },
       currentBounds,
@@ -551,6 +567,30 @@ export class WindowHelper {
 
     // --- 1. Create Launcher Window ---
     const isMac = process.platform === 'darwin';
+    const isLinux = process.platform === 'linux';
+    const compositorInfo: CompositorInfo | null = isLinux ? detectX11Compositor() : null;
+    const linuxLauncherChrome = isLinux ? resolveLinuxWindowChrome('launcher', compositorInfo!) : null;
+    const linuxOverlayChrome = isLinux ? resolveLinuxWindowChrome('overlay', compositorInfo!) : null;
+
+    if (isLinux && compositorInfo && linuxLauncherChrome && linuxOverlayChrome) {
+      console.log(
+        `[WindowHelper] Linux X11 compositor detected: ${compositorInfo.isComposited}` +
+          (compositorInfo.compositorName ? ` (${compositorInfo.compositorName})` : ''),
+      );
+      console.log(
+        `[WindowHelper] launcher window chrome: transparent=false backgroundColor=${linuxLauncherChrome.backgroundColor}` +
+          (linuxLauncherChrome.useOpaqueFallback ? ' (no compositor — opaque fallback)' : ''),
+      );
+      console.log(
+        `[WindowHelper] overlay window chrome: transparent=${linuxOverlayChrome.transparent} backgroundColor=${linuxOverlayChrome.backgroundColor}` +
+          (linuxOverlayChrome.useOpaqueFallback ? ' (no compositor — opaque fallback)' : ''),
+      );
+      if (!compositorInfo.isComposited) {
+        console.warn(
+          '[WindowHelper] No X11 compositor — transparent windows render black; using opaque backgrounds. Install picom/compton or enable your DE compositor.',
+        );
+      }
+    }
 
     const launcherSettings: Electron.BrowserWindowConstructorOptions = {
       width: width,
@@ -620,7 +660,9 @@ export class WindowHelper {
       // (settings/model-selector/overlay/cropper all use #00000000); the
       // flash it guarded against can't occur anyway, since the launcher is
       // created `show: false` and only revealed after the renderer paints.
-      backgroundColor: isMac ? '#000000' : '#00000000',
+      backgroundColor: isMac
+        ? '#000000'
+        : linuxLauncherChrome?.backgroundColor ?? '#00000000',
       focusable: true,
       resizable: true,
       movable: true,
@@ -877,8 +919,10 @@ export class WindowHelper {
       },
       show: false,
       frame: false, // Frameless
-      transparent: true,
-      backgroundColor: '#00000000',
+      transparent: isMac ? true : (linuxOverlayChrome?.transparent ?? true),
+      backgroundColor: isMac
+        ? '#00000000'
+        : (linuxOverlayChrome?.backgroundColor ?? '#00000000'),
       alwaysOnTop: true,
       focusable: true,
       resizable: false, // Enforce automatic resizing only
@@ -984,6 +1028,9 @@ export class WindowHelper {
       // visibleOnFullScreen above; Windows has no equivalent flag, so the level
       // itself is what controls fullscreen visibility. See issue #167.
       this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
+    } else if (process.platform === 'linux') {
+      this.overlayWindow.setAlwaysOnTop(true, 'floating');
+      this.overlayWindow.setSkipTaskbar(true);
     }
 
     this.overlayWindow.loadURL(`${startUrl}?window=overlay`).catch((e) => {
@@ -997,9 +1044,30 @@ export class WindowHelper {
 
     // --- 3. Startup Sequence ---
     this.launcherWindow.once('ready-to-show', () => {
+      if (isLinux && compositorInfo) {
+        console.log('[WindowHelper] launcher ready-to-show — this is the visible window at startup');
+        maybeEmitCompositorWarning(compositorInfo);
+      }
       this.switchToLauncher();
       this.isWindowVisible = true;
     });
+
+    if (isLinux && compositorInfo) {
+      this.overlayWindow.once('ready-to-show', () => {
+        console.log(
+          `[WindowHelper] overlay ready-to-show (hidden until meeting; transparent=${linuxOverlayChrome?.transparent ?? true})`,
+        );
+      });
+      if (linuxOverlayChrome?.transparent) {
+        this.overlayWindow.webContents.once('did-finish-load', () => {
+          void this.overlayWindow?.webContents
+            .insertCSS('html, body, #root { background: transparent !important; }')
+            .catch((err) => {
+              console.warn('[WindowHelper] overlay transparent CSS injection failed:', err);
+            });
+        });
+      }
+    }
 
     this.setupWindowListeners();
   }
@@ -1941,7 +2009,11 @@ export class WindowHelper {
       // The overlay follows so the pill keeps its "centered, PILL_GAP above
       // the shell" relationship — from the user's hand the whole group moves.
       const targetX = Math.round(p.x + p.width / 2 - o.width / 2);
-      const targetY = p.y + p.height + WindowHelper.PILL_GAP;
+      // Exact inverse of positionPillWindow (which anchors on the PANEL top,
+      // o.y + OVERLAY_PANEL_INSET). Omitting the inset made every pill→overlay
+      // round trip shift the group by OVERLAY_PANEL_INSET; on X11, where our own
+      // move events arrive outside the auxSyncing guard, that ran away forever.
+      const targetY = p.y + p.height + WindowHelper.PILL_GAP - OVERLAY_PANEL_INSET;
       // 1px tolerance: centering rounds (odd width deltas), so the forward and
       // reverse computations can disagree by 1px. Without the tolerance that
       // disagreement could ping-pong pill↔overlay into a slow positional

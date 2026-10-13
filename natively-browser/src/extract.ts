@@ -307,14 +307,23 @@ export function extractPageContent(deps: ExtractDeps): ExtractResult {
     return { text, source: text ? 'selection' : 'empty', title, pageType, firstLine: firstContentLine(text) };
   }
 
+  // Readability only for real articles. On app-like pages (quizzes, forms,
+  // dashboards) a short Readability result is usually a blurb that drops the
+  // actual content — e.g. a quiz's question and its radio options — so send the
+  // visible text instead, keeping Readability's text only if that is empty.
   let body = '';
   let source: ExtractResult['source'] = 'empty';
-  if (readable && readable.textContent) {
+  if (pageType === 'article' && readable?.textContent) {
     body = collapseWhitespace(readable.textContent);
     source = 'readability';
   } else {
     body = innerTextFallback(doc);
-    if (body) source = 'innertext';
+    if (body) {
+      source = 'innertext';
+    } else if (readable?.textContent) {
+      body = collapseWhitespace(readable.textContent);
+      source = 'readability';
+    }
   }
 
   // Coding pages: cap the prose body so the verbatim code/signature dominates.

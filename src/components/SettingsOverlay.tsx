@@ -8,7 +8,7 @@ import {
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
     ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Download, Settings, Activity, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff, Folder,
-    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones, Boxes, Languages, Volume2, KeyRound, Loader2, CornerDownRight, PanelBottomClose, TriangleAlert
+    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones, Boxes, Languages, Volume2, KeyRound, Loader2, CornerDownRight, PanelBottomClose, TriangleAlert, ListChecks
 } from 'lucide-react';
 import { AutoAnswerIcon } from './AutoAnswerIcon';
 import { HiCreditCard } from 'react-icons/hi2';
@@ -1623,6 +1623,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         actual: string | null;
         reason?: string;
     } | null>(null);
+    const [audioSessionMode, setAudioSessionMode] = useState<'video-call' | 'phone-call'>('video-call');
+    const [phoneCallCaptureSource, setPhoneCallCaptureSource] = useState<'system' | 'mic'>('system');
+    const [phoneCallUserSpeakerTag, setPhoneCallUserSpeakerTag] = useState<0 | 1>(1);
 
     const [sttNvidiaNimKey, setSttNvidiaNimKey] = useState('');
     const [groqSttModel, setGroqSttModel] = useState('whisper-large-v3-turbo');
@@ -2269,6 +2272,41 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         setSystemAudioLevel(0);
         setSystemAudioError(null);
     }, [isOpen, activeTab, selectedInput]);
+
+    useEffect(() => {
+        if (!isOpen || activeTab !== 'audio') return;
+        window.electronAPI?.getAudioSessionConfig?.()
+            .then((cfg) => {
+                if (!cfg) return;
+                setAudioSessionMode(cfg.mode);
+                setPhoneCallCaptureSource(cfg.phoneCallCaptureSource);
+                setPhoneCallUserSpeakerTag(cfg.phoneCallUserSpeakerTag);
+            })
+            .catch(() => {});
+        const unsubscribe = window.electronAPI?.onAudioSessionConfigChanged?.((cfg) => {
+            setAudioSessionMode(cfg.mode);
+            setPhoneCallCaptureSource(cfg.phoneCallCaptureSource);
+            setPhoneCallUserSpeakerTag(cfg.phoneCallUserSpeakerTag);
+        });
+        return () => unsubscribe?.();
+    }, [isOpen, activeTab]);
+
+    const persistAudioSessionConfig = async (patch: {
+        mode?: 'video-call' | 'phone-call';
+        phoneCallCaptureSource?: 'system' | 'mic';
+        phoneCallUserSpeakerTag?: 0 | 1;
+    }) => {
+        try {
+            const result = await window.electronAPI?.setAudioSessionConfig?.(patch);
+            if (result?.config) {
+                setAudioSessionMode(result.config.mode);
+                setPhoneCallCaptureSource(result.config.phoneCallCaptureSource);
+                setPhoneCallUserSpeakerTag(result.config.phoneCallUserSpeakerTag);
+            }
+        } catch (err) {
+            console.error('[Settings] Failed to save audio session config:', err);
+        }
+    };
 
     return (
         <>
@@ -3483,6 +3521,19 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 </div>
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
+                                                        <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><ListChecks size={14} /></span>
+                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Answer Multiple Choice on Screen')}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        {renderShortcutConflictBadge('answerScreenMcq')}
+                                                        <KeyRecorder
+                                                            currentKeys={shortcuts.answerScreenMcq}
+                                                            onSave={(keys) => updateShortcut('answerScreenMcq', keys)}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center justify-between py-1.5 group">
+                                                    <div className="flex items-center gap-3">
                                                         <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Globe size={14} /></span>
                                                         <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Capture Page (Browser)')}</span>
                                                     </div>
@@ -4340,6 +4391,80 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 </SettingsMotionReady.Provider>
                                                 {t('Test Sound')}
                                             </button>
+                                        </div>
+
+                                        <div className="mb-5 p-4 rounded-xl bg-bg-item border border-border-subtle space-y-4">
+                                            <div>
+                                                <p className="text-sm font-medium text-text-primary mb-1">Call type</p>
+                                                <p className="text-xs text-text-secondary mb-3">
+                                                    Video calls use your mic for you and system audio for them. Phone or speaker calls mix both voices into one stream — Natively uses speaker detection to tell you apart.
+                                                </p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => persistAudioSessionConfig({ mode: 'video-call' })}
+                                                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${audioSessionMode === 'video-call' ? 'bg-accent-primary text-white' : 'bg-bg-input text-text-secondary hover:text-text-primary'}`}
+                                                    >
+                                                        Video call
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => persistAudioSessionConfig({ mode: 'phone-call' })}
+                                                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${audioSessionMode === 'phone-call' ? 'bg-accent-primary text-white' : 'bg-bg-input text-text-secondary hover:text-text-primary'}`}
+                                                    >
+                                                        Phone / speaker call
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {audioSessionMode === 'phone-call' && (
+                                                <>
+                                                    <div>
+                                                        <p className="text-sm font-medium text-text-primary mb-1">Capture from</p>
+                                                        <p className="text-xs text-text-secondary mb-3">
+                                                            Use system audio when the call plays through your computer (Bluetooth, USB, or a browser app). Use microphone when your phone is on speaker near the laptop.
+                                                        </p>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => persistAudioSessionConfig({ phoneCallCaptureSource: 'system' })}
+                                                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${phoneCallCaptureSource === 'system' ? 'bg-accent-primary text-white' : 'bg-bg-input text-text-secondary hover:text-text-primary'}`}
+                                                            >
+                                                                System audio
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => persistAudioSessionConfig({ phoneCallCaptureSource: 'mic' })}
+                                                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${phoneCallCaptureSource === 'mic' ? 'bg-accent-primary text-white' : 'bg-bg-input text-text-secondary hover:text-text-primary'}`}
+                                                            >
+                                                                Microphone
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-medium text-text-primary mb-1">Which speaker is you?</p>
+                                                        <p className="text-xs text-text-secondary mb-3">
+                                                            If your side and the other person&apos;s lines are swapped in the transcript, switch this. Requires Deepgram or Google STT. Restart the meeting after changing call type.
+                                                        </p>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => persistAudioSessionConfig({ phoneCallUserSpeakerTag: 0 })}
+                                                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${phoneCallUserSpeakerTag === 0 ? 'bg-accent-primary text-white' : 'bg-bg-input text-text-secondary hover:text-text-primary'}`}
+                                                            >
+                                                                Speaker 1 = Me
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => persistAudioSessionConfig({ phoneCallUserSpeakerTag: 1 })}
+                                                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${phoneCallUserSpeakerTag === 1 ? 'bg-accent-primary text-white' : 'bg-bg-input text-text-secondary hover:text-text-primary'}`}
+                                                            >
+                                                                Speaker 2 = Me
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            )}
                                         </div>
 
                                         {/* Device-fallback banner: shown when main process couldn't

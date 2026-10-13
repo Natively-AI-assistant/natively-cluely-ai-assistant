@@ -1004,6 +1004,30 @@ Return ONLY valid JSON (no markdown code blocks):
             } catch (memErr) {
                 console.warn('[MeetingMemoryV2] extraction skipped (non-fatal):', (memErr as any)?.message);
             }
+
+            // Post-call debrief for technical interviews
+            if (modeSnapshot?.templateType === 'technical-interview' && data.context.trim()) {
+                try {
+                    const { DebriefLLM } = require('./llm/DebriefLLM');
+                    const debriefLLM = new DebriefLLM(this.llmHelper);
+                    const usage = data.usage ?? [];
+                    const usageLog = usage
+                        .map((u: any) => `[${u.type}] ${u.question || ''}`)
+                        .join('\n');
+                    const debrief = await debriefLLM.generate({
+                        transcript: data.context,
+                        usageLog,
+                        missedOpportunities: usage
+                            .filter((u: any) => u.type === 'missed_opportunity')
+                            .map((u: any) => u.question || ''),
+                    });
+                    if (debrief) {
+                        summaryData = { ...summaryData, debrief };
+                    }
+                } catch (debriefErr: any) {
+                    console.warn('[MeetingPersistence] Debrief generation failed:', debriefErr?.message);
+                }
+            }
         } catch (e) {
             console.error("Error generating meeting metadata", e);
         }

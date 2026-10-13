@@ -12,6 +12,12 @@ export function prepareIntelligenceStreamPlaceholderMessages<T extends { id: str
   placeholderId: string,
 ): T[];
 
+export function applyWhatToAnswerNullFeedbackMessagesUnlessAnswered<T extends { id: string; role: string; text: string; intent?: string; isStreaming?: boolean }>(
+  prev: T[],
+  feedback: string,
+  idFactory?: () => string,
+): T[];
+
 export function applyWhatToAnswerNullFeedbackMessages<T extends { id: string; role: string; text: string; intent?: string; isStreaming?: boolean }>(
   prev: T[],
   feedback: string,

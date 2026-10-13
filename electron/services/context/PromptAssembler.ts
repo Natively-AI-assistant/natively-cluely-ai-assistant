@@ -151,6 +151,7 @@ export function escapeUserContent(text: string): string {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&apos;');
 }
+import { buildOverlayUserContextBlock } from './overlayUserContext';
 
 // Screen context delivered to PromptAssembler.
 //
@@ -237,6 +238,11 @@ export class PromptAssembler {
          * prompt — this only supplies facts, never a persona override.
          */
         candidateProfile?: string;
+        sessionSpine?: string;
+        currentTurn?: string | null;
+        activeProblem?: string | null;
+        acceptedConstraints?: string[];
+        overlayContext?: string;
         tokenBudget: number;
         systemPrompt: string;
         developerPrompt?: string;
@@ -265,6 +271,17 @@ export class PromptAssembler {
             this.addBlock(packet, this.buildIntentContextBlock(params.intentContext));
         }
 
+        // 1b. OVERLAY USER CONTEXT — pasted from the native UI context editor
+        if (params.overlayContext?.trim()) {
+            this.addBlock(packet, {
+                type: 'overlay_user_context',
+                trustLevel: TrustLevel.USER_PREFERENCES,
+                source: 'overlay_editor',
+                tokenBudget: 800,
+                content: buildOverlayUserContextBlock(params.overlayContext.trim()),
+            });
+        }
+
         // 2. ASSISTANT_HISTORY (anti-repetition) — must come early so later
         //    blocks can reference prior turns if needed.
         if (params.priorResponses && params.priorResponses.length > 0) {
@@ -287,6 +304,26 @@ export class PromptAssembler {
                 // candidate-node handling.
                 content: params.candidateProfile.trim(),
             });
+        }
+
+        // 2b. SESSION SPINE — compacted full-meeting history (never dropped)
+        if (params.sessionSpine?.trim()) {
+            this.addBlock(packet, this.buildSessionSpineBlock(params.sessionSpine));
+        }
+
+        // 2c. ACTIVE PROBLEM — current coding/system-design question
+        if (params.activeProblem?.trim()) {
+            this.addBlock(packet, this.buildActiveProblemBlock(params.activeProblem));
+        }
+
+        // 2c2. ACCEPTED CONSTRAINTS — user-pinned requirements (technical interview)
+        if (params.acceptedConstraints && params.acceptedConstraints.length > 0) {
+            this.addBlock(packet, this.buildAcceptedConstraintsBlock(params.acceptedConstraints));
+        }
+
+        // 2d. CURRENT TURN — newest interviewer utterance
+        if (params.currentTurn?.trim()) {
+            this.addBlock(packet, this.buildCurrentTurnBlock(params.currentTurn));
         }
 
         // 3. SCREEN CONTEXT — untrusted visual evidence from a vision LLM (legacy OCR also accepted).
@@ -726,6 +763,55 @@ ${sanitizedContent}
             content: `<transcript trust_level="untrusted">
 ${this.escapePromptInjection(this.escapeUserContent(transcript), false, 'transcript')}
 </transcript>`,
+        };
+    }
+
+    private buildSessionSpineBlock(spine: string): ContextBlock {
+        return {
+            type: 'session_spine',
+            trustLevel: TrustLevel.UNTRUSTED_TRANSCRIPT,
+            source: 'session_history',
+            tokenBudget: 3000,
+            content: `<session_spine trust_level="untrusted">
+${this.escapeUserContent(spine)}
+</session_spine>`,
+        };
+    }
+
+    private buildActiveProblemBlock(problem: string): ContextBlock {
+        return {
+            type: 'active_problem',
+            trustLevel: TrustLevel.UNTRUSTED_TRANSCRIPT,
+            source: 'detected_problem',
+            tokenBudget: 800,
+            content: `<active_problem>
+${this.escapeUserContent(problem)}
+</active_problem>`,
+        };
+    }
+
+    private buildAcceptedConstraintsBlock(constraints: string[]): ContextBlock {
+        const bullets = constraints.map((c) => `- ${this.escapeUserContent(c)}`).join('\n');
+        return {
+            type: 'accepted_constraints',
+            trustLevel: TrustLevel.UNTRUSTED_TRANSCRIPT,
+            source: 'user_accepted_requirements',
+            tokenBudget: 400,
+            content: `<accepted_constraints trust_level="user_confirmed">
+${bullets}
+</accepted_constraints>`,
+        };
+    }
+
+    private buildCurrentTurnBlock(turn: string): ContextBlock {
+        return {
+            type: 'current_turn',
+            trustLevel: TrustLevel.UNTRUSTED_TRANSCRIPT,
+            source: 'live_conversation',
+            tokenBudget: 600,
+            content: `<current_turn trust_level="untrusted">
+[INTERVIEWER – IMPORTANT]: ${this.escapeUserContent(turn)}
+</current_turn>`,
         };
     }
 

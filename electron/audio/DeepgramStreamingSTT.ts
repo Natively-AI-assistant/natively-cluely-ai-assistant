@@ -12,6 +12,7 @@ import { getSttContextTerms } from './sttContextTerms';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { RealtimeSilenceTail } from './realtimeSilenceTail';
 import { isEnglishOnlySttModel, resolveSttModel } from './sttModelCatalog';
+import { groupWordsBySpeaker } from './diarizedTranscript';
 
 const RECONNECT_BASE_DELAY_MS = 1000;
 const RECONNECT_MAX_DELAY_MS = 30000;
@@ -54,6 +55,9 @@ export class DeepgramStreamingSTT extends EventEmitter {
     // remote speakers can be distinguished. Default OFF — must never destabilize the
     // realtime path for users who don't enable it.
     private diarize = false;
+    // Phone-call mode (single mixed stream): split each result into per-speaker
+    // segments tagged with a 0-based speakerTag, mapped to user/interviewer in main.ts.
+    private diarizationEnabled = false;
     private readonly silenceTail = new RealtimeSilenceTail({
         tailMs: DEEPGRAM_SILENCE_TAIL_MS,
         format: () => ({ sampleRate: this.sampleRate, channels: this.numChannels }),
@@ -124,6 +128,13 @@ export class DeepgramStreamingSTT extends EventEmitter {
     }
 
     public setCredentials(_path: string): void { }
+
+    public setDiarizationEnabled(enabled: boolean): void {
+        if (this.diarizationEnabled === enabled) return;
+        this.diarizationEnabled = enabled;
+        console.log(`[DeepgramStreaming] Diarization ${enabled ? 'enabled' : 'disabled'}`);
+        if (this.isActive) this.restartStream();
+    }
 
     private restartStream(): void {
         console.log('[DeepgramStreaming] Restarting due to config change...');
@@ -233,7 +244,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
                 utterance_end_ms: 1000,
                 vad_events: true,
                 // Opt-in: ask Deepgram to tag each word with a speaker index.
-                ...(this.diarize ? { diarize: true } : {}),
+                ...(this.diarize || this.diarizationEnabled ? { diarize: true } : {}),
                 // The user's name (sttContextTerms.ts). Nova-3 takes keyterm and
                 // rejects keywords; Nova-2 takes keywords. The SDK repeats an array
                 // as one query parameter per term, as both expect.
@@ -264,6 +275,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
                         const alt = data.channel?.alternatives?.[0];
                         const transcript = alt?.transcript;
                         const isFinal = data.is_final ?? false;
+                        const words = alt?.words;
                         console.log(`[DeepgramStreaming] Transcript event`, { final: isFinal, length: transcript?.length ?? 0 });
                         // Auto Answer V3 endpoint normalization (additive):
                         // live-verified (2026-08-24) that Deepgram delivers
@@ -275,6 +287,18 @@ export class DeepgramStreamingSTT extends EventEmitter {
                         // endpoint-after-final ordering for consumers.
                         const speechFinal = isFinal && data.speech_final === true;
                         if (!transcript) {
+                            if (speechFinal) this.emit('endpoint', { type: 'speech_final' });
+                            return;
+                        }
+                        if (this.diarizationEnabled && Array.isArray(words) && words.length > 0) {
+                            for (const segment of groupWordsBySpeaker(words, 'speaker')) {
+                                this.emit('transcript', {
+                                    text: segment.text,
+                                    isFinal,
+                                    confidence: alt?.confidence ?? 1.0,
+                                    speakerTag: segment.speaker,
+                                });
+                            }
                             if (speechFinal) this.emit('endpoint', { type: 'speech_final' });
                             return;
                         }

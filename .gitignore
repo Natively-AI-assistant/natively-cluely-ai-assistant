@@ -720,3 +720,5 @@ agent-browser.json
 /spotlightArrowsHarness.html
 /thinkingDotHarness.html
 /trialCardHarness.html
+windowswork.md
+dist-electron-test-isolated/*

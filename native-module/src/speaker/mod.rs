@@ -3,6 +3,10 @@
 /// Shared by every backend — see stop_signal.rs for why a stopped stream must
 /// be surfaced instead of read as silence.
 pub mod stop_signal;
+pub mod error;
+pub use error::{
+    anyhow_to_napi, code_from_anyhow, se, SystemAudioErrorCode,
+};
 
 #[cfg(target_os = "macos")]
 mod core_audio;
@@ -32,7 +36,18 @@ pub use windows::SpeakerStream;
 #[cfg(target_os = "windows")]
 pub use windows::default_output_device_uid;
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(target_os = "linux")]
+pub mod linux;
+#[cfg(target_os = "linux")]
+pub use linux::list_output_devices;
+#[cfg(target_os = "linux")]
+pub use linux::SpeakerInput;
+#[cfg(target_os = "linux")]
+pub use linux::SpeakerStream;
+#[cfg(target_os = "linux")]
+pub use linux::default_output_device_uid;
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 pub mod fallback {
     // Stub implementation for Linux (and any other unsupported platform).
     // The system-audio capture pipeline is macOS/Windows only — `new()` always
@@ -46,10 +61,10 @@ pub mod fallback {
     pub struct SpeakerStream;
     impl SpeakerInput {
         pub fn new(_device_id: Option<String>) -> Result<Self> {
-            Err(anyhow::anyhow!("Unsupported platform: system audio capture is implemented for macOS and Windows only"))
+            Err(crate::speaker::se(crate::speaker::SystemAudioErrorCode::UnsupportedPlatform))
         }
         pub fn stream(self) -> Result<SpeakerStream> {
-            Err(anyhow::anyhow!("Unsupported platform"))
+            Err(crate::speaker::se(crate::speaker::SystemAudioErrorCode::UnsupportedPlatform))
         }
         pub fn sample_rate(&self) -> u32 {
             unreachable!("SpeakerInput::new() always errors on this platform")
@@ -90,11 +105,11 @@ pub mod fallback {
         String::new()
     }
 }
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 pub use fallback::list_output_devices;
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 pub use fallback::SpeakerInput;
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 pub use fallback::SpeakerStream;
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 pub use fallback::default_output_device_uid;

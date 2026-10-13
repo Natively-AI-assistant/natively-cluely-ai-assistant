@@ -108,6 +108,10 @@ export interface WhatToAnswerRequestSnapshot {
    *  block is suppressed. Opaque (`unknown`) to avoid a cross-module type cycle;
    *  WhatToAnswerLLM narrows it at the use site. Absent → legacy assembly. */
   readonly contextOsGeneration?: unknown;
+  /** Technical-interview context (session spine, current turn, active problem,
+   *  accepted requirements, overlay user context) from InterviewContextBuilder,
+   *  pinned into the legacy prompt packet by PromptAssembler. */
+  readonly interviewBundle?: import('../services/context/InterviewContextBuilder').InterviewContextBundle;
 }
 
 /** Minimal interface for the bits of ModesManager the snapshot reads. Keeps this

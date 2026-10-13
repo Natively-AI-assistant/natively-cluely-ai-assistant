@@ -17,6 +17,7 @@ const startUrl = isDev
 
 import type { WindowHelper } from "./WindowHelper"
 import { DEV_SERVER_URL } from './devServerUrl';
+import { detectX11Compositor, resolveLinuxWindowChrome } from "./platform/x11Compositor"
 
 type WindowActivationOptions = {
     activate?: boolean
@@ -258,6 +259,10 @@ export class ModelSelectorWindowHelper {
         showOptions: WindowActivationOptions = {},
     ): void {
         const isMac = process.platform === 'darwin';
+        const isLinux = process.platform === 'linux';
+        const linuxChrome = isLinux
+            ? resolveLinuxWindowChrome('overlay', detectX11Compositor())
+            : null;
         const windowSettings: Electron.BrowserWindowConstructorOptions = {
             // Starting size only; the renderer reports the panel's real size
             // (setContentSize) as soon as it lays out.
@@ -265,12 +270,14 @@ export class ModelSelectorWindowHelper {
             width: 141,
             height: 240,
             frame: false,
-            transparent: true,
+            transparent: isMac ? true : (linuxChrome?.transparent ?? true),
             resizable: false,
             fullscreenable: false,
             hasShadow: false,
             alwaysOnTop: true,
-            backgroundColor: "#00000000",
+            backgroundColor: isMac
+                ? "#00000000"
+                : (linuxChrome?.backgroundColor ?? "#00000000"),
             show: false,
             skipTaskbar: true,
             webPreferences: {

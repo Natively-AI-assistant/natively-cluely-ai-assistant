@@ -129,6 +129,21 @@ impl SilenceSuppressionConfig {
             vad_mode: VadMode::Quality,
         }
     }
+
+    /// Microphone picking up a phone on speaker — distant, muffled, often non-human to VAD.
+    pub fn for_phone_speaker() -> Self {
+        Self {
+            speech_threshold_rms: 25.0,
+            speech_hangover: Duration::from_millis(700),
+            silence_keepalive_interval: Duration::from_millis(100),
+            adaptive_multiplier: 2.5,
+            adaptive_min_floor: 8.0,
+            ema_alpha: 0.03,
+            native_sample_rate: 48000,
+            use_vad: false,
+            vad_mode: VadMode::Quality,
+        }
+    }
 }
 
 /// How much continuous above-threshold audio an RMS-only gate (use_vad = false:

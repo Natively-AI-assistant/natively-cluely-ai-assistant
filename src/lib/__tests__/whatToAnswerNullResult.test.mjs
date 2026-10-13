@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   applyWhatToAnswerNullFeedbackMessages,
+  applyWhatToAnswerNullFeedbackMessagesUnlessAnswered,
   prepareIntelligenceStreamPlaceholderMessages,
 } from '../overlayMessagePersistence.mjs';
 
@@ -39,4 +40,37 @@ test('null invoke ignores sealed what_to_answer rows (negative: no duplicate)', 
   assert.equal(next.length, 2);
   assert.equal(next.find((m) => m.id === 'w1')?.text, 'prior');
   assert.equal(next.find((m) => m.id === 'w2')?.text, 'cooldown');
+});
+
+test('null invoke does not overwrite an answer already delivered via streaming IPC', () => {
+  const prior = [
+    {
+      id: 'ph-wta',
+      role: 'system',
+      intent: 'what_to_answer',
+      text: 'Yes. The platform replaces five separate live ops tools with one integrated system.',
+      isStreaming: false,
+    },
+  ];
+  const next = applyWhatToAnswerNullFeedbackMessagesUnlessAnswered(
+    prior,
+    'Could not generate an answer yet.',
+    () => 'err-1',
+  );
+  assert.equal(next.length, 1);
+  assert.equal(next[0].id, 'ph-wta');
+  assert.match(next[0].text, /integrated system/);
+});
+
+test('null invoke seals an in-flight streaming row that already has answer text', () => {
+  const prior = prepareIntelligenceStreamPlaceholderMessages([], 'what_to_answer', 'ph-wta');
+  prior[0].text =
+    'Yes. The gist is that indie studios patch together many tools after launch.';
+  const next = applyWhatToAnswerNullFeedbackMessagesUnlessAnswered(
+    prior,
+    'Could not generate an answer yet.',
+  );
+  assert.equal(next.length, 1);
+  assert.equal(next[0].isStreaming, false);
+  assert.match(next[0].text, /indie studios/);
 });

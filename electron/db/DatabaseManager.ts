@@ -48,6 +48,8 @@ export interface Meeting {
         speakerLabels?: SpeakerLabelMap;
         crossMeeting?: { carriedOpenQuestions?: Array<{ text: string; fromMeetingId: string; fromTitle: string }>; recurringRisks?: Array<{ text: string; fromMeetingId: string; fromTitle: string }>; stillOpen?: string[] };
         coachingInsights?: Array<{ id: string; type: string; title: string; detail: string; severity: 'info' | 'opportunity' | 'warning'; evidence?: string }>;
+        debrief?: string;
+        archivedProblems?: string[];
     };
     transcript?: Array<{
         speaker: string;
@@ -1844,6 +1846,26 @@ export class DatabaseManager {
             }
         }
 
+        if (version < 32) {
+            console.log('[DatabaseManager] Applying migration v31 → v32: overlay context editor');
+            try {
+                // Single-row paste buffer for the overlay context editor; its
+                // content is pinned into prompts as user-provided context.
+                this.db.exec(`
+                    CREATE TABLE IF NOT EXISTS overlay_context (
+                        id INTEGER PRIMARY KEY CHECK (id = 1),
+                        content TEXT NOT NULL DEFAULT '',
+                        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                    );
+                    INSERT OR IGNORE INTO overlay_context (id, content) VALUES (1, '');
+                `);
+                this.db.pragma('user_version = 32');
+            } catch (e) {
+                console.error('[DatabaseManager] v32 overlay context failed (leaving version at 31 to retry next launch):', e);
+                return;
+            }
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
@@ -1950,6 +1972,29 @@ export class DatabaseManager {
             console.warn('[DatabaseManager] claimUsageOutboxBatch failed:', e?.message || e);
             return [];
         }
+    }
+
+    // ============================================
+    // Overlay Context Editor
+    // ============================================
+
+    public getOverlayContext(): string {
+        if (!this.db) return '';
+        try {
+            const row = this.db.prepare('SELECT content FROM overlay_context WHERE id = 1').get() as { content: string } | undefined;
+            return row?.content ?? '';
+        } catch (e) {
+            console.error('[DatabaseManager] getOverlayContext failed:', e);
+            return '';
+        }
+    }
+
+    public saveOverlayContext(content: string): void {
+        if (!this.db) return;
+        // Throws on failure so the IPC caller reports it instead of a false success.
+        this.db.prepare(
+            'INSERT INTO overlay_context (id, content, updated_at) VALUES (1, ?, datetime(\'now\')) ON CONFLICT(id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at'
+        ).run(content);
     }
 
     /** Mark delivered. Rows linger until compaction so a duplicate enqueue is caught. */

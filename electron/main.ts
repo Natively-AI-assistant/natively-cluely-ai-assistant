@@ -15,7 +15,7 @@ import './llm/promptDebug';
 import './utils/pinUserData';
 
 import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences, screen, desktopCapturer } from "electron"
+import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences, screen, desktopCapturer, dialog } from "electron"
 import * as crypto from "crypto"
 import path from "path"
 import fs from "fs"
@@ -1035,11 +1035,16 @@ type PermissionReason =
   | 'mic-denied'
   | 'mic-zero-fill'
   | 'mac-same-device-input-output'
-  | 'system-audio-stuck';
+  | 'system-audio-stuck'
+  | 'linux-session-unsupported';
 function formatPermissionMessage(reason: PermissionReason, extra?: { device?: string }): string {
   const isMac = process.platform === 'darwin';
+  const isLinux = process.platform === 'linux';
   switch (reason) {
     case 'screen-recording-denied':
+      if (isLinux) {
+        return "Interviewer audio won't be captured. Make sure PulseAudio or PipeWire (pipewire-pulse) is running, then restart the meeting.";
+      }
       if (!isMac) {
         return "Interviewer audio won't be captured. Check your output device routing in Settings, then restart the meeting.";
       }
@@ -1067,10 +1072,12 @@ function formatPermissionMessage(reason: PermissionReason, extra?: { device?: st
       if (!isMac) return formatPermissionMessage('system-audio-stuck');
       return 'System audio is arriving silent. Toggle Natively off and on under Privacy & Security → Screen Recording, then restart.';
     case 'mic-denied':
+      if (isLinux) return 'Allow microphone access in your desktop sound settings, then restart.';
       return isMac
         ? 'Enable Natively under Privacy & Security → Microphone, then restart.'
         : 'Enable Natively under Settings → Privacy → Microphone, then restart.';
     case 'mic-zero-fill':
+      if (isLinux) return "Check the device isn't muted, and that it is the selected input in your desktop sound settings.";
       return isMac
         ? "Check the device isn't muted, and that Natively is enabled under Privacy & Security → Microphone."
         : "Check the device isn't muted, and that Natively is enabled under Settings → Privacy → Microphone.";
@@ -1081,7 +1088,12 @@ function formatPermissionMessage(reason: PermissionReason, extra?: { device?: st
       if (!isMac) return formatPermissionMessage('system-audio-stuck');
       return `macOS can't tap ${extra?.device ?? 'this device'} while it's also the active mic. Switch input to the built-in mic, or output to the built-in speakers.`;
     case 'system-audio-stuck':
+      if (isLinux) {
+        return 'Confirm media is playing on your default output and that PulseAudio/PipeWire is running, then restart the meeting.';
+      }
       return 'If your meeting app outputs to a different device (headset, virtual cable, second display), switch it to your default output.';
+    case 'linux-session-unsupported':
+      return 'Wayland sessions are unsupported. Log out and choose an X11 (Xorg) session, then restart Natively.';
   }
 }
 
@@ -1123,6 +1135,8 @@ function permissionTitleKey(reason: PermissionReason): string {
       return 'Input and Output Are the Same Device';
     case 'system-audio-stuck':
       return 'No System Audio for 8s';
+    case 'linux-session-unsupported':
+      return 'Unsupported Linux Session';
   }
 }
 
@@ -1214,8 +1228,14 @@ console.error = (...args: any[]) => {
 
 import { initializeIpcHandlers } from "./ipcHandlers"
 import { WindowHelper } from "./WindowHelper"
+import { surfaceLinuxSystemAudioError } from './platform/permissionMessages';
+import { isNonRecoverableLinuxSystemAudioError } from './platform/linuxSystemAudioErrors';
+import { detectDisplaySession } from './platform/linuxSessionGate';
+import { shouldBlockLinuxSystemAudioAtMeetingStart } from './platform/linuxMeetingGate';
+import { setCompositorWarningCallback } from './platform/x11Compositor';
 import { SettingsWindowHelper } from "./SettingsWindowHelper"
 import { ModelSelectorWindowHelper } from "./ModelSelectorWindowHelper"
+import { StickyNoteWindowHelper } from "./StickyNoteWindowHelper"
 import { CropperWindowHelper } from "./CropperWindowHelper"
 import { ScreenshotHelper } from "./ScreenshotHelper"
 import { KeybindManager } from "./services/KeybindManager"
@@ -1257,6 +1277,7 @@ type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreaming
   finalize?: () => void | boolean;
   setAudioChannelCount?: (count: number) => void;
   notifySpeechEnded?: () => void;
+  setDiarizationEnabled?: (enabled: boolean) => void;
 };
 
 type ScreenshotWindowMode = 'launcher' | 'overlay';
@@ -1413,6 +1434,7 @@ export class AppState {
   private windowHelper: WindowHelper
   public settingsWindowHelper: SettingsWindowHelper
   public modelSelectorWindowHelper: ModelSelectorWindowHelper
+  public stickyNoteWindowHelper: StickyNoteWindowHelper
   public cropperWindowHelper: CropperWindowHelper
   private screenshotHelper: ScreenshotHelper
   public processingHelper: ProcessingHelper
@@ -1608,6 +1630,11 @@ export class AppState {
   } as const
 
   constructor() {
+    // Phone-call mode with the mic as source opens every meeting mic in
+    // phone-speaker suppression mode (see MicrophoneCapture).
+    MicrophoneCapture.setPhoneSpeakerModeResolver(
+      () => this.isPhoneCallMode() && this.getPhoneCallCaptureSource() === 'mic',
+    );
     // 1. Load boot-critical settings first (used by WindowHelpers)
     const settingsManager = SettingsManager.getInstance();
     this.isUndetectable = settingsManager.get('isUndetectable') ?? false;
@@ -1671,6 +1698,7 @@ export class AppState {
     this.windowHelper = new WindowHelper(this)
     this.settingsWindowHelper = new SettingsWindowHelper()
     this.modelSelectorWindowHelper = new ModelSelectorWindowHelper()
+    this.stickyNoteWindowHelper = new StickyNoteWindowHelper()
     this.cropperWindowHelper = new CropperWindowHelper()
 
     // 3. Initialize other helpers
@@ -1684,6 +1712,7 @@ export class AppState {
     this.windowHelper.setContentProtection(this.isUndetectable);
     this.settingsWindowHelper.setContentProtection(this.isUndetectable);
     this.modelSelectorWindowHelper.setContentProtection(this.isUndetectable);
+    this.stickyNoteWindowHelper.setContentProtection(this.isUndetectable);
     this.cropperWindowHelper.setContentProtection(this.isUndetectable);
 
     if (process.platform === 'win32' || process.platform === 'darwin') {
@@ -1972,6 +2001,9 @@ export class AppState {
           // Single-trigger: capture current screen then immediately request AI analysis
           await this.captureScreenAndProcess();
 
+        } else if (actionId === 'general:answer-screen-mcq') {
+          await this.captureScreenAndProcess('answer-mcq');
+
         } else if (actionId === 'general:capture-dom') {
           // One hotkey, the right capture: if the companion browser extension is
           // connected, ask it to grab the active tab's page context (delivered to
@@ -2114,6 +2146,7 @@ export class AppState {
         } else if (
           actionId === 'chat:whatToAnswer' ||
           actionId === 'chat:clarify' ||
+          actionId === 'chat:askClarify' ||
           actionId === 'chat:followUp' ||
           actionId === 'chat:answer' ||
           actionId === 'chat:codeHint' ||
@@ -2128,6 +2161,7 @@ export class AppState {
           const actionMap: Record<string, string> = {
             'chat:whatToAnswer': 'whatToAnswer',
             'chat:clarify': 'clarify',
+            'chat:askClarify': 'askClarify',
             'chat:followUp': 'followUp',
             'chat:answer': 'answer',
             'chat:codeHint': 'codeHint',
@@ -2168,6 +2202,7 @@ export class AppState {
     // Inject WindowHelper into other helpers
     this.settingsWindowHelper.setWindowHelper(this.windowHelper);
     this.modelSelectorWindowHelper.setWindowHelper(this.windowHelper);
+    this.stickyNoteWindowHelper.setWindowHelper(this.windowHelper);
 
 
 
@@ -2202,6 +2237,14 @@ export class AppState {
         serviceTier: settingsManager.get('codexCliServiceTier'),
         modelReasoningEffort: settingsManager.get('codexCliModelReasoningEffort'),
       });
+      // Restore overlay context editor content
+      try {
+        const savedOverlayContext = DatabaseManager.getInstance().getOverlayContext();
+        if (savedOverlayContext) {
+          llmHelper.setOverlayContext(savedOverlayContext);
+          this.intelligenceManager.setOverlayContext(savedOverlayContext);
+        }
+      } catch (_) {}
     }
 
     // Initialize RAGManager (requires database to be ready)
@@ -2511,12 +2554,39 @@ export class AppState {
     return this.isMeetingActive;
   }
 
+  public setLinuxCaptureDisabled(disabled: boolean): void {
+    this._linuxCaptureDisabled = disabled;
+  }
+
+  public isLinuxCaptureDisabled(): boolean {
+    return this._linuxCaptureDisabled;
+  }
+
   public isQuitting(): boolean {
     return this._isQuitting;
   }
 
   public setQuitting(value: boolean): void {
     this._isQuitting = value;
+  }
+
+  /** Synchronous Pulse/CoreAudio release on app exit (before V8 teardown). */
+  public releaseAudioCapturesForQuit(): void {
+    try {
+      this.systemAudioCapture?.releaseForQuit();
+    } catch (e) {
+      console.error('[Main] systemAudioCapture release on quit failed:', e);
+    }
+    this.systemAudioCapture = null;
+
+    try {
+      this.microphoneCapture?.releaseForQuit();
+    } catch (e) {
+      console.error('[Main] microphoneCapture release on quit failed:', e);
+    }
+    this.microphoneCapture = null;
+
+    this.stopDefaultOutputWatcher();
   }
 
   private broadcastMeetingState(): void {
@@ -3359,6 +3429,8 @@ export class AppState {
   // New Property for System Audio & Microphone
   private systemAudioCapture: SystemAudioCapture | null = null;
   private microphoneCapture: MicrophoneCapture | null = null;
+  /** Set when Linux session gate blocks capture (unsupported Wayland / no DISPLAY). */
+  private _linuxCaptureDisabled = false;
   private audioTestCapture: MicrophoneCapture | null = null; // For audio settings test
   private _audioTestStarting = false;               // P2-12: in-flight guard against concurrent calls
   private googleSTT: STTProvider | null = null; // Interviewer
@@ -3547,7 +3619,72 @@ export class AppState {
   public disposeAutoAnswerForShutdown(): void {
   }
 
-  private createSTTProvider(speaker: 'interviewer' | 'user'): STTProvider | null {
+  /** Tracks which audio session mode the current STT instances were built for. */
+  private _sttBuiltForMode: 'video-call' | 'phone-call' | null = null;
+
+  /** Tracks whether the live mic capture was opened in phone-speaker suppression mode. */
+  private _micPhoneSpeakerMode: boolean | null = null;
+
+  private isPhoneCallMode(): boolean {
+    return SettingsManager.getInstance().get('audioSessionMode') === 'phone-call';
+  }
+
+  private getPhoneCallCaptureSource(): 'system' | 'mic' {
+    const source = SettingsManager.getInstance().get('phoneCallCaptureSource');
+    return source === 'mic' ? 'mic' : 'system';
+  }
+
+  /** Map a diarization tag to user vs interviewer based on user settings. Tags are 0-based (both providers normalize before emit). */
+  private mapDiarizedSpeakerTag(tag: number): 'user' | 'interviewer' {
+    const userTag = SettingsManager.getInstance().get('phoneCallUserSpeakerTag') ?? 1;
+    return tag === userTag ? 'user' : 'interviewer';
+  }
+
+  private sttSupportsDiarization(stt: STTProvider): boolean {
+    return typeof stt.setDiarizationEnabled === 'function';
+  }
+
+  /** Tear down STT when audio session mode changed (e.g. video-call ↔ phone-call). */
+  private resetSttForAudioSessionChange(): void {
+    const targetMode = this.isPhoneCallMode() ? 'phone-call' : 'video-call';
+    const phoneOk = targetMode === 'phone-call' && this.googleSTT && !this.googleSTT_User;
+    const videoOk = targetMode === 'video-call' && this.googleSTT && this.googleSTT_User;
+    if (this._sttBuiltForMode === targetMode && (phoneOk || videoOk)) {
+      return;
+    }
+
+    console.log(
+      `[Main] Resetting STT for audio session change (was=${this._sttBuiltForMode ?? 'none'}, want=${targetMode})`,
+    );
+
+    if (this.googleSTT) {
+      this.googleSTT.stop();
+      this.googleSTT.removeAllListeners();
+      this.googleSTT = null;
+    }
+    if (this.googleSTT_User) {
+      this.googleSTT_User.stop();
+      this.googleSTT_User.removeAllListeners();
+      this.googleSTT_User = null;
+    }
+    this._sttBuiltForMode = null;
+    this._sysSttRateApplied = false;
+    this._micSttRateApplied = false;
+  }
+
+  public async reconfigureSttForAudioSession(): Promise<void> {
+    this.resetSttForAudioSessionChange();
+    if (!this.isMeetingActive) return;
+    await this.setupSystemAudioPipeline();
+    // Captures/STT a phone-call source does not need are never built, so the
+    // shared per-channel start covers both modes.
+    this.startCaptureChannels('reconfigureSttForAudioSession');
+  }
+
+  private createSTTProvider(
+    speaker: 'interviewer' | 'user',
+    options?: { diarize?: boolean },
+  ): STTProvider | null {
     const { CredentialsManager } = require('./services/CredentialsManager');
     const sttProvider = CredentialsManager.getInstance().getSttProvider();
     const sttLanguage = CredentialsManager.getInstance().getSttLanguage();
@@ -3696,6 +3833,18 @@ export class AppState {
       stt = new GoogleSTT(speaker);
     }
 
+    // Phone-call mode: the interviewer channel is the single diarized stream.
+    const wantsDiarization = options?.diarize ?? (speaker === 'interviewer' && this.isPhoneCallMode());
+    if (wantsDiarization && !this.sttSupportsDiarization(stt)) {
+      console.warn(
+        `[Main] STT provider "${sttProvider}" does not support speaker diarization — falling back to Google STT for phone call mode`,
+      );
+      stt = new GoogleSTT('phone-diarized');
+    }
+    if (wantsDiarization) {
+      stt.setDiarizationEnabled?.(true);
+    }
+
     stt.setRecognitionLanguage(sttLanguage);
 
     // WTA audit F9 (2026-08-18): effective provider id for punctuation
@@ -3742,7 +3891,7 @@ export class AppState {
     }
 
     // Wire Transcript Events
-    stt.on('transcript', (segment: { text: string, isFinal: boolean, confidence: number, speakerId?: string }) => {
+    stt.on('transcript', (segment: { text: string, isFinal: boolean, confidence: number, speakerId?: string, speakerTag?: number }) => {
       // Accept transcripts while a meeting is active OR while we're draining
       // trailing finals after Stop. `_isDraining` covers the ~250 ms grace
       // window between Stop click and STT socket close so the user's last
@@ -3751,8 +3900,20 @@ export class AppState {
         return;
       }
 
+      const effectiveSpeaker =
+        segment.speakerTag !== undefined
+          ? this.mapDiarizedSpeakerTag(segment.speakerTag)
+          : (this.isPhoneCallMode() ? 'interviewer' : speaker);
+
+      if (this.isPhoneCallMode() && segment.speakerTag === undefined && segment.isFinal) {
+        console.warn(
+          `[Main] Phone-call mode transcript without speaker tag — labeled as interviewer. ` +
+          `Enable Deepgram/Google diarization or swap the "Which speaker is you" setting.`,
+        );
+      }
+
       this.intelligenceManager.handleTranscript({
-        speaker: speaker,
+        speaker: effectiveSpeaker,
         ...(segment.speakerId ? { speakerId: segment.speakerId } : {}),
         text: segment.text,
         timestamp: Date.now(),
@@ -3794,14 +3955,14 @@ export class AppState {
       // Feed final transcript to JIT RAG indexer
       if (segment.isFinal && this.ragManager) {
         this.ragManager.feedLiveTranscript([{
-          speaker: speaker,
+          speaker: effectiveSpeaker,
           text: segment.text,
           timestamp: Date.now()
         }]);
       }
 
       const payload = {
-        speaker: speaker,
+        speaker: effectiveSpeaker,
         ...(segment.speakerId ? { speakerId: segment.speakerId } : {}),
         text: segment.text,
         timestamp: Date.now(),
@@ -3819,7 +3980,7 @@ export class AppState {
       // in LLMHelper is the primary defense; gating at the source stops state
       // from carrying over to any future read site. Fails open if ModesManager
       // is unavailable.
-      if (segment.isFinal && speaker === 'interviewer') {
+      if (segment.isFinal && effectiveSpeaker === 'interviewer') {
         let trackerFeedAllowed = true;
         try {
           const { ModesManager } = require('./services/ModesManager');
@@ -4183,6 +4344,9 @@ export class AppState {
     (capture as any).__disarmStuckWatchdog = disarmStuckWatchdog;
     capture.on('start', armStuckWatchdog);
     capture.on('stop', disarmStuckWatchdog);
+    capture.on('error', () => {
+      if (stuckTimer) { clearTimeout(stuckTimer); stuckTimer = null; }
+    });
     capture.on('data', (chunk: Buffer) => {
       const now = Date.now();
       handleSystemAudioHealthDecision(systemAudioHealth.handle({ kind: 'chunk', nowMs: now, chunk }));
@@ -4192,11 +4356,13 @@ export class AppState {
         stuckTimer = null;
       }
       if (!this._sysSttRateApplied && this.googleSTT && this.systemAudioCapture === capture) {
-        const rate = capture.getSampleRate();
-        this.googleSTT.setSampleRate(rate);
-        this.googleSTT.setAudioChannelCount?.(1);
-        this._sysSttRateApplied = true;
-        console.log(`${prefix}Interviewer STT rate locked from first chunk: ${rate}Hz`);
+        if (!(this.isPhoneCallMode() && this.getPhoneCallCaptureSource() !== 'system')) {
+          const rate = capture.getSampleRate();
+          this.googleSTT.setSampleRate(rate);
+          this.googleSTT.setAudioChannelCount?.(1);
+          this._sysSttRateApplied = true;
+          console.log(`${prefix}Interviewer STT rate locked from first chunk: ${rate}Hz`);
+        }
       }
       if (chunkCount <= 3 || chunkCount % 500 === 0) {
         console.log(`${prefix}SystemAudio->STT: chunk #${chunkCount}, ${chunk.length}B, googleSTT=${this.googleSTT ? 'active' : 'NULL'}`);
@@ -4210,7 +4376,10 @@ export class AppState {
       // interleaved with the owner's audio it garbles the interviewer
       // transcript (F-102).
       if (this.systemAudioCapture === capture) {
-        this.googleSTT?.write(chunk);
+        // Phone call with mic as the source: system audio is not transcribed.
+        if (!(this.isPhoneCallMode() && this.getPhoneCallCaptureSource() !== 'system')) {
+          this.googleSTT?.write(chunk);
+        }
         // Smart Turn ring buffer (256 KB, interviewer channel only). Cheap
         // int16 copy; skipped entirely while Auto Answer is off.
       }
@@ -4218,12 +4387,16 @@ export class AppState {
     capture.on('sample_rate_changed', (rate: number) => {
       console.log(`${prefix}SystemAudioCapture rate updated dynamically to ${rate}Hz`);
       if (this.systemAudioCapture === capture) {
-        this.googleSTT?.setSampleRate(rate);
+        if (!(this.isPhoneCallMode() && this.getPhoneCallCaptureSource() !== 'system')) {
+          this.googleSTT?.setSampleRate(rate);
+        }
       }
     });
     capture.on('speech_ended', () => {
       if (this.systemAudioCapture === capture) {
-        this.googleSTT?.notifySpeechEnded?.();
+        if (!(this.isPhoneCallMode() && this.getPhoneCallCaptureSource() !== 'system')) {
+          this.googleSTT?.notifySpeechEnded?.();
+        }
         // Auto Answer: the local VAD saw the interviewer stop. For a provider
         // with no end-of-turn event of its own this is the only early signal;
         // the controller guards against a half-transcribed turn by ignoring the
@@ -4296,6 +4469,9 @@ export class AppState {
     (capture as any).__disarmStuckWatchdog = disarmStuckWatchdog;
     capture.on('start', armStuckWatchdog);
     capture.on('stop', disarmStuckWatchdog);
+    capture.on('error', () => {
+      if (stuckTimer) { clearTimeout(stuckTimer); stuckTimer = null; }
+    });
     // Inter-chunk gap tracking — see wireSystemCapture for rationale.
     let lastChunkAt = 0;
     // Mic TCC / muted-input zero-fill detector. cpal will happily open a mic
@@ -4327,12 +4503,21 @@ export class AppState {
         clearTimeout(stuckTimer);
         stuckTimer = null;
       }
-      if (!this._micSttRateApplied && this.googleSTT_User && this.microphoneCapture === capture) {
+      if (!this._micSttRateApplied && this.microphoneCapture === capture) {
         const rate = capture.getSampleRate();
-        this.googleSTT_User.setSampleRate(rate);
-        this.googleSTT_User.setAudioChannelCount?.(1);
-        this._micSttRateApplied = true;
-        console.log(`${prefix}User STT rate locked from first mic chunk: ${rate}Hz`);
+        if (this.isPhoneCallMode()) {
+          if (this.getPhoneCallCaptureSource() === 'mic' && this.googleSTT) {
+            this.googleSTT.setSampleRate(rate);
+            this.googleSTT.setAudioChannelCount?.(1);
+            this._micSttRateApplied = true;
+            console.log(`${prefix}Phone-call STT rate locked from first mic chunk: ${rate}Hz`);
+          }
+        } else if (this.googleSTT_User) {
+          this.googleSTT_User.setSampleRate(rate);
+          this.googleSTT_User.setAudioChannelCount?.(1);
+          this._micSttRateApplied = true;
+          console.log(`${prefix}User STT rate locked from first mic chunk: ${rate}Hz`);
+        }
       }
 
       // HFP-degradation backstop. The proactive reconfigureAudio check handles
@@ -4426,18 +4611,30 @@ export class AppState {
       // path (F-102): only the capture that owns this.microphoneCapture may
       // feed the user STT socket.
       if (this.microphoneCapture === capture) {
-        this.googleSTT_User?.write(chunk);
+        if (this.isPhoneCallMode()) {
+          if (this.getPhoneCallCaptureSource() === 'mic') this.googleSTT?.write(chunk);
+        } else {
+          this.googleSTT_User?.write(chunk);
+        }
       }
     });
     capture.on('sample_rate_changed', (rate: number) => {
       console.log(`${prefix}MicrophoneCapture rate updated dynamically to ${rate}Hz`);
       if (this.microphoneCapture === capture) {
-        this.googleSTT_User?.setSampleRate(rate);
+        if (this.isPhoneCallMode()) {
+          if (this.getPhoneCallCaptureSource() === 'mic') this.googleSTT?.setSampleRate(rate);
+        } else {
+          this.googleSTT_User?.setSampleRate(rate);
+        }
       }
     });
     capture.on('speech_ended', () => {
       if (this.microphoneCapture === capture) {
-        this.googleSTT_User?.notifySpeechEnded?.();
+        if (this.isPhoneCallMode()) {
+          if (this.getPhoneCallCaptureSource() === 'mic') this.googleSTT?.notifySpeechEnded?.();
+        } else {
+          this.googleSTT_User?.notifySpeechEnded?.();
+        }
       }
     });
     capture.on('speech_edge', (edge: SpeechEdge) => {
@@ -4448,6 +4645,13 @@ export class AppState {
 
   private async setupSystemAudioPipeline(): Promise<void> {
     // REMOVED EARLY RETURN: if (this.systemAudioCapture && this.microphoneCapture) return; // Already initialized
+
+    this.resetSttForAudioSessionChange();
+
+    const phoneMode = this.isPhoneCallMode();
+    const phoneSource = this.getPhoneCallCaptureSource();
+    const needsSystemCapture = !phoneMode || phoneSource === 'system';
+    const needsMicCapture = !phoneMode || phoneSource === 'mic';
 
     try {
       // 1. Initialize Captures if missing
@@ -4463,7 +4667,26 @@ export class AppState {
       // identified for "permissions granted (then revoked), no transcription."
       const screenCapability = await resolveMacScreenCaptureCapability('system audio pipeline setup');
 
-      if (screenCapability.effectiveDenied) {
+      const linuxSession =
+        process.platform === 'linux' ? detectDisplaySession() : null;
+      const blockLinuxSystemAudio =
+        linuxSession !== null &&
+        shouldBlockLinuxSystemAudioAtMeetingStart(this._linuxCaptureDisabled, linuxSession);
+
+      if (blockLinuxSystemAudio) {
+        console.warn('[Main] Skipping SystemAudioCapture init — unsupported Linux session (capture disabled). Meeting will run mic-only.');
+        this.sendSystemAudioPermissionDenied(
+          formatPermissionMessage('linux-session-unsupported'),
+          permissionTitleKey('linux-session-unsupported'),
+        );
+        this.broadcastDeviceSelection({
+          kind: 'output',
+          requested: null,
+          actual: null,
+          fellBack: true,
+          reason: 'linux-session-unsupported',
+        });
+      } else if (screenCapability.effectiveDenied) {
         const message = screenCapability.message ?? formatPermissionMessage('screen-recording-denied');
         console.warn('[Main] Screen Recording permission denied at pipeline setup. Tearing down any stale system audio capture; meeting will run mic-only.');
         this.sendSystemAudioPermissionDenied(message, screenCapability.titleKey ?? permissionTitleKey('screen-recording-denied'));
@@ -4486,7 +4709,7 @@ export class AppState {
           this.systemAudioCapture = null;
           this._sysSttRateApplied = false;
         }
-      } else if (!this.systemAudioCapture) {
+      } else if (needsSystemCapture && !this.systemAudioCapture) {
         // B3: wrap construction + wiring in its own try/catch so a native-module
         // failure (NAPI throw, HAL/WASAPI resource exhaustion, internal error
         // from SystemAudioCapture ctor) doesn't silently leave systemAudioCapture
@@ -4526,24 +4749,44 @@ export class AppState {
       // existing wrapper is assumed correct (its watchdogs will detect any
       // zero-fill or stuck state and surface via audio-capture-failed).
 
-      if (!this.microphoneCapture) {
-        // B3: same defense for mic ctor throws (USB device disappears on open,
-        // exclusive-mode steal). Outer try/catch only logged; user got no banner.
-        try {
-          this.microphoneCapture = new MicrophoneCapture();
-          this.wireMicCapture(this.microphoneCapture);
-        } catch (capErr) {
-          console.error('[Main] MicrophoneCapture construction failed:', capErr);
+      if (needsMicCapture) {
+        const wantPhoneSpeaker = phoneMode && phoneSource === 'mic';
+        if (
+          this.microphoneCapture &&
+          this._micPhoneSpeakerMode !== null &&
+          this._micPhoneSpeakerMode !== wantPhoneSpeaker
+        ) {
+          console.log(
+            `[Main] Recreating MicrophoneCapture — phone-speaker mode changed (${this._micPhoneSpeakerMode} → ${wantPhoneSpeaker})`,
+          );
+          await this.microphoneCapture.destroy();
           this.microphoneCapture = null;
-          this.sendAudioCaptureFailed({
-            channel: 'mic',
-            message: 'The microphone could not be opened. Check it is connected and free, then restart Natively.',
-            attempt: 0,
-            maxAttempts: 0,
-            terminal: true,
-            stuck: false,
-          });
+          this._micPhoneSpeakerMode = null;
         }
+        if (!this.microphoneCapture) {
+          // B3: same defense for mic ctor throws (USB device disappears on open,
+          // exclusive-mode steal). Outer try/catch only logged; user got no banner.
+          try {
+            this.microphoneCapture = new MicrophoneCapture();
+            this._micPhoneSpeakerMode = wantPhoneSpeaker;
+            this.wireMicCapture(this.microphoneCapture);
+          } catch (capErr) {
+            console.error('[Main] MicrophoneCapture construction failed:', capErr);
+            this.microphoneCapture = null;
+            this.sendAudioCaptureFailed({
+              channel: 'mic',
+              message: 'The microphone could not be opened. Check it is connected and free, then restart Natively.',
+              attempt: 0,
+              maxAttempts: 0,
+              terminal: true,
+              stuck: false,
+            });
+          }
+        }
+      } else if (this.microphoneCapture) {
+        await this.microphoneCapture.destroy();
+        this.microphoneCapture = null;
+        this._micPhoneSpeakerMode = null;
       }
 
       // 2. Initialize STT Services if missing
@@ -4554,10 +4797,13 @@ export class AppState {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const sttProv = CredentialsManager.getInstance().getSttProvider();
 
-      if (!this.googleSTT) {
-        console.log(`[Main] Creating interviewer STT provider: ${sttProv}`);
+        if (!this.googleSTT) {
+        console.log(`[Main] Creating ${phoneMode ? 'diarized phone-call' : 'interviewer'} STT provider: ${sttProv}`);
         try {
-          this.googleSTT = this.createSTTProvider('interviewer');
+          this.googleSTT = this.createSTTProvider('interviewer', phoneMode ? { diarize: true } : undefined);
+          if (this.googleSTT) {
+            this._sttBuiltForMode = phoneMode ? 'phone-call' : 'video-call';
+          }
         } catch (sttErr) {
           console.error(`[Main] Interviewer STT init failed (${sttProv}):`, sttErr);
           this.googleSTT = null;
@@ -4570,19 +4816,30 @@ export class AppState {
         if (!this.googleSTT && sttProv !== 'none') {
           this.sendAudioCaptureFailed( {
             channel: 'system',
-            message: `Speech-to-text provider "${sttProv}" could not start for system audio. Check its API key in Settings.`,
+            message: phoneMode
+              ? `Phone call mode requires Deepgram or Google STT with speaker diarization. Provider "${sttProv}" could not start. Check its API key in Settings.`
+              : `Speech-to-text provider "${sttProv}" could not start for system audio. Check its API key in Settings.`,
             attempt: 0,
             maxAttempts: 0,
             terminal: true,
             stuck: false,
           });
+        } else if (phoneMode) {
+          this.broadcast('audio-session-mode', {
+            mode: 'phone-call',
+            captureSource: phoneSource,
+            userSpeakerTag: SettingsManager.getInstance().get('phoneCallUserSpeakerTag') ?? 1,
+          });
         }
       }
 
-      if (!this.googleSTT_User) {
+      if (!phoneMode && !this.googleSTT_User) {
         console.log(`[Main] Creating user STT provider: ${sttProv}`);
         try {
           this.googleSTT_User = this.createSTTProvider('user');
+          if (this.googleSTT_User) {
+            this._sttBuiltForMode = 'video-call';
+          }
         } catch (sttErr) {
           console.error(`[Main] User STT init failed (${sttProv}):`, sttErr);
           this.googleSTT_User = null;
@@ -4630,6 +4887,19 @@ export class AppState {
    * prevent duplicate construction.
    */
   public prewarmSttProviders(): void {
+    const phoneMode = this.isPhoneCallMode();
+    this.resetSttForAudioSessionChange();
+    if (phoneMode) {
+      if (this.googleSTT) return;
+      try {
+        console.log('[Main] Pre-warming diarized phone-call STT provider...');
+        this.googleSTT = this.createSTTProvider('interviewer', { diarize: true });
+        if (this.googleSTT) this._sttBuiltForMode = 'phone-call';
+      } catch (err) {
+        console.warn('[Main] Phone-call STT pre-warm failed (will retry on meeting start):', err);
+      }
+      return;
+    }
     if (this.googleSTT && this.googleSTT_User) return;
     try {
       if (!this.googleSTT) {
@@ -4639,6 +4909,9 @@ export class AppState {
       if (!this.googleSTT_User) {
         console.log('[Main] Pre-warming user STT provider...');
         this.googleSTT_User = this.createSTTProvider('user');
+      }
+      if (this.googleSTT && this.googleSTT_User) {
+        this._sttBuiltForMode = 'video-call';
       }
     } catch (err) {
       // Pre-warm failure is non-fatal; setupSystemAudioPipeline will retry on
@@ -4804,6 +5077,9 @@ export class AppState {
     // failed createSTTProvider leaves the field null and the capture's `?.write`
     // becomes a no-op rather than throwing. We only recreate ones we nulled, so
     // there is no risk of double-starting an existing provider.
+    // Phone-call mode runs one diarized STT for both speakers and no user STT
+    // (createSTTProvider diarizes the interviewer channel in that mode).
+    const phoneMode = this.isPhoneCallMode();
     if (!this.googleSTT) {
       try {
         this.googleSTT = this.createSTTProvider('interviewer');
@@ -4813,7 +5089,7 @@ export class AppState {
         this.googleSTT = null;
       }
     }
-    if (!this.googleSTT_User) {
+    if (!phoneMode && !this.googleSTT_User) {
       try {
         this.googleSTT_User = this.createSTTProvider('user');
         this.googleSTT_User?.start();
@@ -5461,6 +5737,7 @@ export class AppState {
       this.googleSTT_User.removeAllListeners();
       this.googleSTT_User = null;
     }
+    this._sttBuiltForMode = null;
 
     // Only reinitialize the pipeline when a meeting is already active.
     // Outside a meeting, defer pipeline creation to startMeeting() so we never
@@ -5567,6 +5844,23 @@ export class AppState {
         return;
       }
 
+      if (process.platform === 'linux' && isNonRecoverableLinuxSystemAudioError(err)) {
+        const userMessage = surfaceLinuxSystemAudioError(err).message;
+        console.warn(
+          `[AudioRecovery] Non-recoverable Linux system audio error — skipping recovery: ${userMessage}`,
+        );
+        this.sendAudioCaptureFailed({
+          channel: 'system',
+          message: userMessage,
+          attempt: 0,
+          maxAttempts: 0,
+          terminal: true,
+          stuck: false,
+        });
+        this.sendSystemAudioPermissionDenied(userMessage, permissionTitleKey('system-audio-stuck'));
+        return;
+      }
+
       const now = Date.now();
       this._systemAudioLastFailureAt = now;
       this._systemAudioConsecutiveFailures++;
@@ -5589,9 +5883,12 @@ export class AppState {
       // "ScreenCaptureKit access denied", "No displays found") instead of just
       // a generic STT 'reconnecting' indicator. This event is non-fatal — the
       // recovery attempt may still succeed.
+      const userMessage = process.platform === 'linux'
+        ? surfaceLinuxSystemAudioError(err).message
+        : err.message;
       this.sendAudioCaptureFailed( {
         channel: 'system',
-        message: err.message,
+        message: userMessage,
         attempt: this._systemAudioRecoveryAttempts,
         maxAttempts: 3,
       });
@@ -5668,13 +5965,19 @@ export class AppState {
         // for this meeting so it can stop showing "reconnecting" and surface a
         // mic-only banner instead.
         if (this._systemAudioRecoveryAttempts >= 3 && isRecoveryCurrentMeeting()) {
+          const terminalMessage = process.platform === 'linux'
+            ? surfaceLinuxSystemAudioError(recoveryErr ?? err).message
+            : `System audio capture gave up after 3 attempts. Last error: ${recoveryErr?.message || err.message}`;
           this.sendAudioCaptureFailed( {
             channel: 'system',
-            message: `System audio capture gave up after 3 attempts. Last error: ${recoveryErr?.message || err.message}`,
+            message: terminalMessage,
             attempt: this._systemAudioRecoveryAttempts,
             maxAttempts: 3,
             terminal: true,
           });
+          if (process.platform === 'linux') {
+            this.sendSystemAudioPermissionDenied(formatPermissionMessage('screen-recording-denied'), permissionTitleKey('screen-recording-denied'));
+          }
         }
       } finally {
         this._systemAudioRecoveryInProgress = false;
@@ -6633,6 +6936,19 @@ export class AppState {
         }
         // 'not-determined': Handled at startup. SCK/CoreAudio will trigger the TCC
         // dialog itself when it first attempts to access screen content.
+      } else if (process.platform === 'linux') {
+        const session = detectDisplaySession();
+        console.log(`[Main] Linux display session at meeting start: type=${session.sessionType}, supported=${session.isSupported}`);
+        // Clear stale "limited features" flag when the session is actually supported
+        // (e.g. false Wayland detection at startup, or env fixed after first launch).
+        if (session.isSupported) {
+          this.setLinuxCaptureDisabled(false);
+        }
+        if (shouldBlockLinuxSystemAudioAtMeetingStart(this._linuxCaptureDisabled, session)) {
+          const message = formatPermissionMessage('linux-session-unsupported');
+          console.warn('[Main]', message);
+          this.sendSystemAudioPermissionDenied(message, permissionTitleKey('linux-session-unsupported'));
+        }
       }
     }
 
@@ -6691,10 +7007,12 @@ export class AppState {
           modeTemplateType: activeMode.templateType,
         });
         this.applyAutoAnswerThresholds(activeMode.templateType);
+        this.intelligenceManager.setRequirementsContext(activeMode.templateType === 'technical-interview');
       } else {
         // No active mode: the registry's no-mode default (meeting bar), not
         // whatever the previous mode left behind (review#10).
         this.applyAutoAnswerThresholds(null);
+        this.intelligenceManager.setRequirementsContext(false);
       }
     } catch (err) {
       // Auxiliary feature — never block meeting start.
@@ -6943,6 +7261,10 @@ export class AppState {
     // the proctored test continues, and an activating show would blur the
     // test page. Normal mode is unchanged (active show + focus).
     this.windowHelper.setWindowMode('launcher', this.isUndetectable ? true : undefined);
+    this.stickyNoteWindowHelper.closeAll();
+    // Abort in-flight intelligence streams now — the background stopMeeting()
+    // (250 ms STT grace + persistence) would otherwise let them keep emitting.
+    this.intelligenceManager.resetEngine();
 
     // ─── CLEAR THE OVERLAY TREE WHILE IT IS HIDDEN ─────────────────────────
     // The overlay BrowserWindow is PERSISTENT — created once with show:false
@@ -7214,7 +7536,7 @@ export class AppState {
     // are NO LONGER USED for these 5 streams. The single
     // 'intelligence-token-batch' channel replaces them. The old channel
     // names + preload bridges are kept (defense-in-depth, no callers).
-    type BatchKind = 'suggested_answer' | 'refined_answer' | 'recap' | 'clarify' | 'follow_up_questions';
+    type BatchKind = 'suggested_answer' | 'refined_answer' | 'recap' | 'clarify' | 'restate' | 'lookup' | 'follow_up_questions';
     const tokenBatches = new Map<BatchKind, any[]>();
     let batchFlushScheduled = false;
     // The queued flush must be CANCELLABLE, and a manual flush must re-open the
@@ -7296,6 +7618,19 @@ export class AppState {
             confidence: action?.confidence,
             priority: action?.priority,
           },
+        });
+      } catch { /* non-fatal */ }
+    })
+
+    this.intelligenceManager.on('requirements_updated', (requirements: any[]) => {
+      const helper = this.getWindowHelper();
+      helper.getLauncherWindow()?.webContents.send('requirements-updated', { requirements });
+      helper.getOverlayWindow()?.webContents.send('requirements-updated', { requirements });
+      try {
+        const { telemetryService } = require('./services/telemetry/TelemetryService');
+        telemetryService.track({
+          name: 'requirement_extracted',
+          properties: { count: requirements?.length ?? 0 },
         });
       } catch { /* non-fatal */ }
     })
@@ -7398,6 +7733,30 @@ export class AppState {
     this.intelligenceManager.on('clarify_token', (token: string) => {
       // Sprint 9: batch.
       queueBatch('clarify', { token });
+    })
+
+    this.intelligenceManager.on('restate', (restatement: string) => {
+      flushBatchesBeforeFinal();
+      const win = mainWindow()
+      if (win) {
+        win.webContents.send('intelligence-restate', { restatement })
+      }
+    })
+
+    this.intelligenceManager.on('restate_token', (token: string) => {
+      queueBatch('restate', { token });
+    })
+
+    this.intelligenceManager.on('lookup', (explanation: string) => {
+      flushBatchesBeforeFinal();
+      const win = mainWindow()
+      if (win) {
+        win.webContents.send('intelligence-lookup', { explanation })
+      }
+    })
+
+    this.intelligenceManager.on('lookup_token', (token: string) => {
+      queueBatch('lookup', { token });
     })
 
     this.intelligenceManager.on('follow_up_questions_update', (questions: string) => {
@@ -7859,7 +8218,7 @@ export class AppState {
    * `general:capture-and-process` hotkey and the `general:capture-dom`
    * screenshot fallback share one path.
    */
-  private async captureScreenAndProcess(): Promise<void> {
+  private async captureScreenAndProcess(task?: 'answer-mcq'): Promise<void> {
     const screenshotPath = await this.takeScreenshot(false);
     const preview = await this.getImagePreview(screenshotPath);
     // Ensure the window is visible so the user can see the response without stealing focus
@@ -7873,6 +8232,7 @@ export class AppState {
     this.sendToWindow(mainWindow, 'capture-and-process', {
       path: screenshotPath,
       preview,
+      ...(task ? { task } : {}),
     });
   }
 
@@ -8144,6 +8504,7 @@ export class AppState {
     this.windowHelper.setContentProtection(state)
     this.settingsWindowHelper.setContentProtection(state)
     this.modelSelectorWindowHelper.setContentProtection(state)
+    this.stickyNoteWindowHelper.setContentProtection(state)
     this.cropperWindowHelper.setContentProtection(state)
     foreignWindowCaptureGuard?.sync(state)
 
@@ -9460,6 +9821,49 @@ if (process.env.THINKING_MATRIX === '1') {
     return;
   }
 
+  // Linux X11 session gate (ADR 0001 / F0.1) and compositor warning wiring.
+  if (process.platform === 'linux') {
+    setCompositorWarningCallback(() => {
+      try {
+        dialog.showMessageBoxSync({
+          type: 'warning',
+          title: 'Compositor not detected',
+          message: 'Transparent overlay may not work correctly.',
+          detail:
+            'No X11 compositor was detected. Enable your desktop compositor (e.g. picom) or use a composited X11 session for transparent overlay backgrounds.',
+          buttons: ['OK'],
+        });
+      } catch (e: unknown) {
+        console.warn('[Init] Compositor warning dialog failed:', e);
+      }
+    });
+
+    const session = detectDisplaySession();
+    console.log(
+      `[Init] Linux display session: type=${session.sessionType}, supported=${session.isSupported}, reason=${session.reason}`,
+    );
+
+    if (session.isSupported) {
+      appState.setLinuxCaptureDisabled(false);
+    } else {
+      const response = dialog.showMessageBoxSync({
+        type: 'warning',
+        title: 'X11 session required',
+        message: 'This Linux session is not supported for Natively v1.',
+        detail:
+          `${session.reason}\n\nNatively requires an X11 (Xorg) login session. Wayland-native sessions are unsupported. See docs/adr/0001-linux-x11-only.md.`,
+        buttons: ['Quit', 'Continue with limited features'],
+        defaultId: 0,
+        cancelId: 0,
+      });
+      if (response === 0) {
+        app.quit();
+        return;
+      }
+      appState.setLinuxCaptureDisabled(true);
+    }
+  }
+
   // PERF: pre-construct STT provider objects so the meeting-start critical
   // path doesn't pay for class init + listener wiring. Runs after all
   // credentials are loaded (so the provider can read its API key) and is
@@ -10400,6 +10804,13 @@ if (process.env.THINKING_MATRIX === '1') {
       const { LocalModelDownloadService } = require('./services/LocalModelDownloadService');
       LocalModelDownloadService.getInstance().pauseForShutdown();
     } catch { /* optional */ }
+
+    // Release system/mic Pulse streams before V8 teardown (Linux HDMI stuck-audio fix).
+    try {
+      appState.releaseAudioCapturesForQuit();
+    } catch (e) {
+      console.error('[Main] releaseAudioCapturesForQuit failed:', e);
+    }
 
     // ROUND 2 FIX (#9): synchronously stop the CGEventTap worker thread
     // BEFORE V8 starts tearing down. The tap callback holds an

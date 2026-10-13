@@ -17,6 +17,7 @@ import {
   MicOff,
   Pencil,
   PointerOff,
+  StickyNote,
   RefreshCw,
   SlidersHorizontal,
   X,
@@ -374,6 +375,8 @@ import DOMPurify from 'dompurify';
 import { normalizeFinalizedMarkdownMath, renderStreamingMarkdown } from '../lib/streamingMarkdown';
 import ReactMarkdown from 'react-markdown';
 import { useT } from '../i18n';
+import { OverlayContextEditor } from './OverlayContextEditor';
+import { SCREEN_MCQ_INSTRUCTION } from '../lib/screenMcqInstruction.mjs';
 // System-design diagram artifacts: a ```mermaid block in an answer is drawn as
 // a diagram card. Mermaid itself is loaded on demand inside mermaidRenderer —
 // none of these imports pull it into this chunk.
@@ -1440,6 +1443,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [sttInterviewerProvider, setSttInterviewerProvider] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  // Saved overlay context (injected into every prompt as <user_context>).
+  const [overlayContext, setOverlayContext] = useState('');
+  const [overlayContextError, setOverlayContextError] = useState<string | null>(null);
+  const [isContextEditorOpen, setIsContextEditorOpen] = useState(false);
   const [conversationContext, setConversationContext] = useState<string>('');
   const [isManualRecording, setIsManualRecording] = useState(false);
   const isRecordingRef = useRef(false); // Ref to track recording state (avoids stale closure)
@@ -2358,6 +2365,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // theme drops the header row in favor of a floating hover-reveal language
   // tag + copy button (see HighlightedCode / StreamingHighlightedCode).
   const showCodeHeader = !useDarkCodeTheme || isModernTheme || isGlassTheme;
+  useEffect(() => {
+    window.electronAPI.overlayGetContext().then(
+      (res) => {
+        if (res.success) setOverlayContext(res.content);
+        else setOverlayContextError(res.error ?? 'Could not load context');
+      },
+      (e) => setOverlayContextError(e instanceof Error ? e.message : String(e)),
+    );
+  }, []);
+
   const appearance = useMemo(
     () =>
       isGlassTheme
@@ -10572,7 +10589,7 @@ Provide only the answer, nothing else.`;
       // whether the state update has flushed yet.
       requestAnimationFrame(() => {
         try {
-          handlersRef.current.handleWhatToSay();
+          handlersRef.current.handleWhatToSay(data.task === 'answer-mcq' ? SCREEN_MCQ_INSTRUCTION : undefined);
         } finally {
           pendingCaptureRef.current = null;
         }
@@ -12249,6 +12266,10 @@ Provide only the answer, nothing else.`;
                         <HelpCircle className="w-3 h-3 opacity-70" />
                         {ghost(t('Follow Up Question'))}
                       </span>
+                      <span className={chipClass} style={appearance.chipStyle}>
+                        <StickyNote className="w-3 h-3 opacity-70" />
+                        {ghost(t('Context'))}
+                      </span>
                       <span className={answerChipClass(false)} style={appearance.chipStyle}>
                         <span className="ov-chip-stack">{answerSizers}</span>
                       </span>
@@ -12279,6 +12300,21 @@ Provide only the answer, nothing else.`;
                           <HelpCircle className="w-3 h-3 opacity-70" /> {t('Follow Up Question')}
                         </button>
                         <button
+                          onClick={() => setIsContextEditorOpen((open) => !open)}
+                          className={`relative ${chipClass}${overlayContextError ? ' text-red-400' : ''}`}
+                          style={appearance.chipStyle}
+                          title={overlayContextError
+                            ? `${t('Could not load context:')} ${overlayContextError}`
+                            : overlayContext.trim()
+                              ? t('Context is on: included with every prompt. Click to view or clear.')
+                              : t('Add background context included with every prompt')}
+                        >
+                          <StickyNote className="w-3 h-3 opacity-70" /> {t('Context')}
+                          {overlayContext.trim().length > 0 && (
+                            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-sky-400 ring-2 ring-black/20" />
+                          )}
+                        </button>
+                        <button
                           onClick={handleAnswerNow}
                           className={answerChipClass(isManualRecording)}
                           style={isManualRecording ? undefined : appearance.chipStyle}
@@ -12299,6 +12335,20 @@ Provide only the answer, nothing else.`;
                   );
                 })()}
               </div>
+
+              {isContextEditorOpen && (
+                <OverlayContextEditor
+                  savedContext={overlayContext}
+                  onClose={() => setIsContextEditorOpen(false)}
+                  onSaved={(content) => { setOverlayContext(content); setOverlayContextError(null); }}
+                  chipClass={`px-3 py-1.5 rounded-full text-[11px] font-medium border ${quickActionClass}`}
+                  inputClass={inputClass}
+                  surfaceClass={subtleSurfaceClass}
+                  chipStyle={appearance.chipStyle}
+                  surfaceStyle={appearance.subtleStyle}
+                  inputStyle={appearance.inputStyle}
+                />
+              )}
 
               {/* Input Area */}
               <div className="p-3 pt-0">

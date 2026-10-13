@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { RECOGNITION_LANGUAGES, EnglishVariant } from '../config/languages';
+import { groupWordsBySpeaker } from './diarizedTranscript';
 
 /**
  * GoogleSTT
@@ -126,6 +127,7 @@ export class GoogleSTT extends EventEmitter {
     private audioChannelCount = 1; // Default to Mono
     private languageCode = 'en-US';
     private alternativeLanguageCodes: string[] = ['en-IN', 'en-GB']; // Default fallbacks
+    private diarizationEnabled = false;
 
     constructor(label?: string) {
         super();
@@ -195,6 +197,16 @@ export class GoogleSTT extends EventEmitter {
         this.audioChannelCount = count;
         if (this.isStreaming || this.isActive) {
             console.warn(`[GoogleSTT/${this.label}] Config changed while active. Restarting stream...`);
+            this.stop();
+            this.start();
+        }
+    }
+
+    public setDiarizationEnabled(enabled: boolean): void {
+        if (this.diarizationEnabled === enabled) return;
+        this.diarizationEnabled = enabled;
+        console.log(`[GoogleSTT/${this.label}] Diarization ${enabled ? 'enabled' : 'disabled'}`);
+        if (this.isStreaming || this.isActive) {
             this.stop();
             this.start();
         }
@@ -590,7 +602,33 @@ export class GoogleSTT extends EventEmitter {
         this.isStreaming = true;
         this.isConnecting = true;
 
-        console.log(`[GoogleSTT/${this.label}] Creating gRPC stream (rate=${this.sampleRateHertz}Hz, ch=${this.audioChannelCount}, lang=${this.languageCode})...`);
+        console.log(`[GoogleSTT/${this.label}] Creating gRPC stream (rate=${this.sampleRateHertz}Hz, ch=${this.audioChannelCount}, lang=${this.languageCode}, diarize=${this.diarizationEnabled})...`);
+
+        const recognitionConfig: Record<string, unknown> = {
+            encoding: this.encoding,
+            sampleRateHertz: this.sampleRateHertz,
+            audioChannelCount: this.audioChannelCount,
+            languageCode: this.languageCode,
+            enableAutomaticPunctuation: true,
+            model: this.resolveModel(),
+            useEnhanced: !this.diarizationEnabled,
+        };
+        // phone_call (used for diarization) rejects alternative_language_codes.
+        if (!this.diarizationEnabled && this.alternativeLanguageCodes.length > 0) {
+            recognitionConfig.alternativeLanguageCodes = this.alternativeLanguageCodes;
+        }
+        if (this.diarizationEnabled) {
+            // Phone-call diarization needs the phone_call model.
+            recognitionConfig.model = 'phone_call';
+            recognitionConfig.enableSpeakerDiarization = true;
+            recognitionConfig.diarizationConfig = {
+                enableSpeakerDiarization: true,
+                minSpeakerCount: 2,
+                maxSpeakerCount: 2,
+            };
+            // Word-level timing is required for speakerTag on each word in streaming diarization.
+            recognitionConfig.enableWordTimeOffsets = true;
+        }
 
         // F-203: bind the instance to a local so every STATE-MUTATING handler
         // can verify it still owns `this.stream` before touching shared state.
@@ -605,16 +643,7 @@ export class GoogleSTT extends EventEmitter {
         // scripts/audit/F-203-repro.mjs.
         const stream: any = this.client
             .streamingRecognize({
-                config: {
-                    encoding: this.encoding,
-                    sampleRateHertz: this.sampleRateHertz,
-                    audioChannelCount: this.audioChannelCount,
-                    languageCode: this.languageCode,
-                    enableAutomaticPunctuation: true,
-                    model: this.resolveModel(),
-                    useEnhanced: true,
-                    alternativeLanguageCodes: this.alternativeLanguageCodes,
-                },
+                config: recognitionConfig,
                 interimResults: true,
             })
             .on('error', (err: Error) => {
@@ -728,6 +757,26 @@ export class GoogleSTT extends EventEmitter {
                     const alt = result.alternatives[0];
                     const transcript = alt.transcript;
                     const isFinal = result.isFinal;
+                    const words = alt.words;
+
+                    if (this.diarizationEnabled && Array.isArray(words) && words.length > 0) {
+                        for (const segment of groupWordsBySpeaker(words, 'speakerTag')) {
+                            // Google returns 1-based speaker tags; normalize to 0-based for UI mapping.
+                            const zeroBasedTag = segment.speaker >= 1 ? segment.speaker - 1 : segment.speaker;
+                            console.log(`[GoogleSTT/${this.label}] Diarized transcript`, { final: isFinal, speaker: zeroBasedTag, length: segment.text.length });
+                            this.emit('transcript', {
+                                text: segment.text,
+                                isFinal,
+                                confidence: alt.confidence,
+                                speakerTag: zeroBasedTag,
+                            });
+                        }
+                        return;
+                    }
+
+                    if (this.diarizationEnabled && transcript) {
+                        console.warn(`[GoogleSTT/${this.label}] Diarization enabled but no word tags — emitting undifferentiated transcript`);
+                    }
 
                     if (transcript) {
                         console.log(`[GoogleSTT/${this.label}] Transcript received`, { final: isFinal, length: transcript.length });
