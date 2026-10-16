@@ -25,6 +25,7 @@ import { FatalMainProcessCoordinator } from "./utils/fatalMainProcess"
 import { installResilientDnsLookup } from "./utils/resilientDnsLookup"
 import { resolveDebugLogPath } from "./utils/debugLogPath.mjs"
 import { MeetingLifecycleQueue, type MeetingLifecycleState } from "./audio/meetingLifecycleQueue"
+import { fixMangledTechTerms } from "./llm/transcriptTermFix"
 import { autoUpdater } from "electron-updater"
 import { summarizeUpdateDownload } from "./update/updateDownloadSummary"
 
@@ -3937,14 +3938,21 @@ export class AppState {
         return;
       }
 
-      if (this.isMeetingActive) this.meetingAutoStop.noteTranscript(speaker, segment.text, segment.isFinal);
+      // Finals only: restore English tech terms that the primary-language
+      // model spelled phonetically ("стейтлес виджет" → "Stateless Widget").
+      // Applied here, before ANY consumer, so intelligence, RAG, the renderer,
+      // the auto-stop/gap trackers, and the knowledge tracker all see the
+      // same corrected text.
+      const text = segment.isFinal ? fixMangledTechTerms(segment.text) : segment.text;
+
+      if (this.isMeetingActive) this.meetingAutoStop.noteTranscript(speaker, text, segment.isFinal);
       // Any text proves the connection works: closes an open outage (sttGapRecovery.ts).
-      this.sttGap.onTranscript(gapSource, segment.text, segment.isFinal);
+      this.sttGap.onTranscript(gapSource, text, segment.isFinal);
 
       this.intelligenceManager.handleTranscript({
         speaker: speaker,
         ...(segment.speakerId ? { speakerId: segment.speakerId } : {}),
-        text: segment.text,
+        text,
         timestamp: Date.now(),
         final: segment.isFinal,
         confidence: segment.confidence,
@@ -3971,7 +3979,7 @@ export class AppState {
       if (this._autoAnswerEnabled) {
         this.simpleAutoAnswer.ingest({
           speaker,
-          text: segment.text,
+          text,
           timestamp: Date.now(),
           final: segment.isFinal,
           confidence: segment.confidence,
@@ -3985,7 +3993,7 @@ export class AppState {
       if (segment.isFinal && this.ragManager) {
         this.ragManager.feedLiveTranscript([{
           speaker: speaker,
-          text: segment.text,
+          text,
           timestamp: Date.now()
         }]);
       }
@@ -3993,7 +4001,7 @@ export class AppState {
       const payload = {
         speaker: speaker,
         ...(segment.speakerId ? { speakerId: segment.speakerId } : {}),
-        text: segment.text,
+        text,
         timestamp: Date.now(),
         final: segment.isFinal,
         confidence: segment.confidence
@@ -4018,7 +4026,7 @@ export class AppState {
           // fail open — preserve existing behaviour for modes that need the tracker
         }
         if (trackerFeedAllowed) {
-          this.knowledgeOrchestrator?.feedInterviewerUtterance?.(segment.text);
+          this.knowledgeOrchestrator?.feedInterviewerUtterance?.(text);
         }
       }
     };
