@@ -188,3 +188,97 @@ export function readEmbeddedJson(doc: Document, ids: string[]): unknown {
   }
   return null;
 }
+
+/**
+ * Collect textual equivalents of mathematical expressions rendered on the page.
+ * Looks for MathML, TeX/LaTeX annotations, and accessible labels on SVGs or
+ * math containers. Returns a de-duplicated, whitespace-collapsed string (or '').
+ */
+export function extractMathText(doc: ParentNode, cap = 2000): string {
+  const parts: string[] = [];
+  const seen = new Set<string>();
+  const push = (raw: string | null | undefined) => {
+    if (!raw) return;
+    const v = collapseWhitespace(raw);
+    if (v && !seen.has(v)) {
+      seen.add(v);
+      parts.push(v);
+    }
+  };
+
+  const safeQuery = (sel: string): Element[] => {
+    try {
+      return Array.from(doc.querySelectorAll(sel));
+    } catch {
+      return [];
+    }
+  };
+
+  // MathML content.
+  for (const el of safeQuery('math, [data-math], [data-tex], [data-latex]')) {
+    push(el.textContent);
+    try { push(el.getAttribute('data-tex') || el.getAttribute('data-latex') || el.getAttribute('data-math')); } catch { /* no-op */ }
+  }
+  // TeX annotations embedded in MathML.
+  for (const el of safeQuery('annotation, annotation-xml')) {
+    const enc = (el.getAttribute?.('encoding') || '').toLowerCase();
+    if (!enc || enc.includes('tex') || enc.includes('mathml')) push(el.textContent);
+  }
+  // SVGs that carry an accessible label or title/desc.
+  for (const svg of safeQuery('svg')) {
+    try {
+      push(svg.querySelector('title')?.textContent);
+      push(svg.querySelector('desc')?.textContent);
+      push(svg.getAttribute('aria-label'));
+      const labelledBy = svg.getAttribute('aria-labelledby');
+      if (labelledBy) {
+        for (const id of labelledBy.split(/\s+/)) {
+          try {
+            const ref = (doc as Document).getElementById?.(id);
+            if (ref) push(ref.textContent);
+          } catch { /* no-op */ }
+        }
+      }
+    } catch { /* no-op */ }
+  }
+  // Rendered math containers (KaTeX/MathJax) often expose the source via aria-label.
+  for (const el of safeQuery('.katex, .MathJax, .math, [role="math"]')) {
+    try {
+      push(el.getAttribute('aria-label'));
+      // KaTeX keeps the TeX source in a .katex-mathml sibling; textContent covers it.
+      push(el.textContent);
+    } catch { /* no-op */ }
+  }
+
+  const joined = parts.join(' ; ');
+  return joined.length > cap ? joined.slice(0, cap) : joined;
+}
+
+/**
+ * True when the page contains SVG graphics that look like math (paths) but carry
+ * no accessible text equivalent — i.e. the capture cannot recover the formula.
+ */
+export function hasInaccessibleMath(doc: ParentNode): boolean {
+  let svgs: Element[] = [];
+  try {
+    svgs = Array.from(doc.querySelectorAll('svg'));
+  } catch {
+    return false;
+  }
+  for (const svg of svgs) {
+    let hasPath = false;
+    try { hasPath = !!svg.querySelector('path'); } catch { hasPath = false; }
+    if (!hasPath) continue;
+    let hasText = false;
+    try {
+      hasText = !!(
+        svg.querySelector('title')?.textContent?.trim() ||
+        svg.querySelector('desc')?.textContent?.trim() ||
+        svg.getAttribute('aria-label')?.trim() ||
+        svg.getAttribute('aria-labelledby')?.trim()
+      );
+    } catch { hasText = false; }
+    if (!hasText) return true;
+  }
+  return false;
+}

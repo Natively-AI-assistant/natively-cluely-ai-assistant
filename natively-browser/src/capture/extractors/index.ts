@@ -31,7 +31,9 @@ import {
   bodyInnerText,
   collapseWhitespace,
   extractEditorCode,
+  extractMathText,
   extractPreBlocks,
+  hasInaccessibleMath,
   firstText,
   sliceSection,
 } from './dom-helpers';
@@ -113,9 +115,24 @@ function extractCodingProblem(input: ExtractInput): ExtractOutput {
   const problemTitle =
     firstText(doc, hints?.titleSelectors) || readable.title || (doc.title || '').trim();
   const statementFromSelectors = allText(doc, hints?.statementSelectors, MAX_PAYLOAD_FIELD);
-  const problemStatement = statementFromSelectors || readable.text || bodyInnerText(doc);
+  const mathText = extractMathText(doc);
+  const inaccessibleMath = hasInaccessibleMath(doc);
+  let problemStatement = statementFromSelectors || readable.text || bodyInnerText(doc);
+  if (mathText) {
+    problemStatement = problemStatement
+      ? `${problemStatement}\n\nMATHEMATICAL EXPRESSIONS: ${mathText}`
+      : `MATHEMATICAL EXPRESSIONS: ${mathText}`;
+  }
+  if (inaccessibleMath) {
+    problemStatement = problemStatement
+      ? `${problemStatement}\n\nNOTE: Some mathematical expressions in this problem are rendered as images/SVG and could not be extracted as text. Consider capturing a screenshot for full context.`
+      : 'NOTE: Some mathematical expressions in this problem are rendered as images/SVG and could not be extracted as text. Consider capturing a screenshot for full context.';
+  }
   const examples = sliceSection(problemStatement, hints?.examplesSignals || ['Example', 'Sample Input', 'Sample Output']);
-  const constraints = sliceSection(problemStatement, hints?.constraintsSignals || ['Constraints', 'Constraint']);
+  const constraintsRaw = sliceSection(problemStatement, hints?.constraintsSignals || ['Constraints', 'Constraint']);
+  const constraints: string = constraintsRaw
+    ? (mathText ? `${constraintsRaw}\n${mathText}` : constraintsRaw)
+    : (mathText || '');
   const visibleCode = extractEditorCode(doc, hints?.codeSelectors);
   const preBlocks = extractPreBlocks(doc);
 
@@ -144,7 +161,14 @@ function extractCodingProblem(input: ExtractInput): ExtractOutput {
     selectedText: cap(selection, 4000),
   };
 
-  return finishEnvelope(input, payload, extractionSource, problemTitle, buildCodingDom(payload));
+  const out = finishEnvelope(input, payload, extractionSource, problemTitle, buildCodingDom(payload));
+  if (inaccessibleMath && out.envelope) {
+    out.envelope.meta.partial = true;
+    const missing = out.envelope.meta.missing || [];
+    if (!missing.includes('mathematical expressions')) missing.push('mathematical expressions');
+    out.envelope.meta.missing = missing;
+  }
+  return out;
 }
 
 function extractCodingEditor(input: ExtractInput): ExtractOutput {
