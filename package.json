@@ -155,7 +155,8 @@
       "!**/*.log",
       "!**/*.pdf",
       "!**/.git",
-      "!**/node_modules/@typescript/**"
+      "!**/node_modules/@typescript/**",
+      "!**/*.map"
     ],
     "asarUnpack": [
       "**/*.node",
