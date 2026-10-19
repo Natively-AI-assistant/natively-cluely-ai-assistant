@@ -101,8 +101,12 @@ const RollingTranscript = forwardRef<RollingTranscriptHandle, RollingTranscriptP
     }, []);
 
     useEffect(() => {
+        if (!showTranscriptText || !text) {
+            lastAutoScrolledTextRef.current = null;
+            return;
+        }
         const el = containerRef.current;
-        if (!el || !showTranscriptText || !text || !autoScroll) return;
+        if (!el || !autoScroll) return;
         if (lastAutoScrolledTextRef.current === text) return;
 
         lastAutoScrolledTextRef.current = text;
@@ -243,11 +247,22 @@ const RollingTranscript = forwardRef<RollingTranscriptHandle, RollingTranscriptP
         isScrollable,
     }), [isScrollable, scrollByLines, scrollToBottom]);
 
+    const interruptTranscriptScroll = useCallback(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        stopTranscriptMomentum();
+        setProgrammaticAutoScroll(false);
+        // Cancel a pending smooth animation before native wheel/touch scrolling.
+        el.scrollTop = el.scrollTop;
+        setAutoScroll(isNearBottom(el));
+    }, [setProgrammaticAutoScroll, stopTranscriptMomentum]);
+
     const handleScroll = useCallback(() => {
         const el = containerRef.current;
         if (!el) return;
         if (programmaticAutoScrollRef.current) {
             if (isNearBottom(el)) setProgrammaticAutoScroll(false);
+            else setProgrammaticAutoScroll(true);
             setAutoScroll(true);
             return;
         }
@@ -267,7 +282,9 @@ const RollingTranscript = forwardRef<RollingTranscriptHandle, RollingTranscriptP
                     <div
                         ref={containerRef}
                         onScroll={handleScroll}
-                        className="max-h-[84px] overflow-y-auto overscroll-contain whitespace-pre-wrap break-words scroll-smooth overlay-transcript-surface transition-all duration-500 text-left"
+                        onWheel={interruptTranscriptScroll}
+                        onTouchMove={interruptTranscriptScroll}
+                        className="max-h-[84px] overflow-y-auto overscroll-contain whitespace-pre-wrap break-words overlay-transcript-surface transition-all duration-500 text-left"
                         style={{
                             ...surfaceStyle,
                             scrollbarWidth: 'none',

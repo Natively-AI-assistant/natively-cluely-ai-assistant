@@ -24,6 +24,7 @@ describe('RollingTranscript vertical scrolling', () => {
     assert.match(transcriptSource, /overflow-y-auto/, 'transcript must be vertically scrollable');
     assert.match(transcriptSource, /whitespace-pre-wrap/, 'transcript text should wrap vertically');
     assert.match(transcriptSource, /break-words/, 'long transcript words should not force horizontal scroll');
+    assert.doesNotMatch(transcriptSource, /scroll-smooth/, 'CSS smoothing must not animate manual scrollTop writes');
     assert.doesNotMatch(transcriptSource, /whitespace-nowrap/, 'must not regress to horizontal ticker wrapping');
     assert.doesNotMatch(transcriptSource, /scrollLeft/, 'auto-scroll should be vertical, not horizontal');
     assert.match(transcriptSource, /transparent 0px, black 8px, black 100%/, 'mask should fade only the top edge so newest bottom text remains readable');
@@ -50,6 +51,10 @@ describe('RollingTranscript vertical scrolling', () => {
     assert.match(transcriptSource, /if \(programmaticAutoScrollRef\.current\) \{[\s\S]*setAutoScroll\(true\);[\s\S]*return;/, 'intermediate programmatic scroll events should not disable auto-scroll');
     assert.match(transcriptSource, /window\.setTimeout\(\(\) => \{[\s\S]*programmaticAutoScrollRef\.current = false;[\s\S]*\}, 500\);/, 'programmatic scroll state should time out');
     assert.match(transcriptSource, /window\.clearTimeout\(programmaticAutoScrollTimerRef\.current\);/, 'programmatic scroll timeout should be cleaned up');
+    assert.match(transcriptSource, /if \(isNearBottom\(el\)\) setProgrammaticAutoScroll\(false\);\s*else setProgrammaticAutoScroll\(true\);/, 'ongoing smooth scroll events should refresh the guard');
+    assert.match(transcriptSource, /onWheel=\{interruptTranscriptScroll\}/, 'wheel input must interrupt programmatic scrolling');
+    assert.match(transcriptSource, /onTouchMove=\{interruptTranscriptScroll\}/, 'touch input must interrupt programmatic scrolling');
+    assert.match(transcriptSource, /if \(!showTranscriptText \|\| !text\) \{\s*lastAutoScrolledTextRef\.current = null;/, 'restored or cleared channel content must be pinned even when text is unchanged');
   });
 
   test('held transcript scroll shortcuts use momentum, not repeated smooth animations', () => {
