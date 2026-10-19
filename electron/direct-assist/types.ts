@@ -16,6 +16,7 @@ export const DIRECT_ASSIST_PROVIDERS = [
   'fluxion',
   'agentrouter',
   'litellm',
+  'compat',
   'ninerouter',
   'ollama',
   'codex-cli',

@@ -33,6 +33,7 @@ import { trimUserContentToFit, userContentRoomChars } from "./llm/localContextTr
 import { ProviderRegistry } from "./llm/providers/ProviderRegistry"
 import { OpenAICompatProvider, type OpenAICompatConfig } from "./llm/providers/OpenAICompatProvider"
 import { OPENAI_COMPAT_PREFIX, parseCompatModelId } from "./llm/providers/compatModelId.mjs"
+import type { LLMProvider } from "./llm/providers/types"
 import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, claudeAcceptsSamplingParams, claudeThinkingParam, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import { filterOllamaGenerationModels } from "./llm/ollamaGenerationModels"
@@ -702,7 +703,13 @@ export class LLMHelper {
   // Registry-lane providers: integrations that implement LLMProvider and are
   // routed by model-id ownership instead of a client field + switch arms per
   // call site. Today only OpenAI-compatible endpoints; see llm/providers/.
-  private readonly providerRegistry = new ProviderRegistry()
+  // Lazy so prototype-driven unit tests (Object.create(LLMHelper.prototype),
+  // the pattern every Direct Assist / route-table test uses) reach the lane
+  // without running the constructor.
+  private _providerRegistry: ProviderRegistry | null = null
+  private get providerRegistry(): ProviderRegistry {
+    return this._providerRegistry ??= new ProviderRegistry()
+  }
 
   private get client(): GoogleGenAI | null { return this.isProviderDisabled('gemini') ? null : this._client }
   private set client(v: GoogleGenAI | null) { this._client = v }
@@ -2577,6 +2584,13 @@ export class LLMHelper {
     // today, but includes("openai") would claim any id that ever carries the
     // word, so exclude it here like the others rather than rely on luck.
     if (this.isAgentRouterModel(modelId)) return false;
+    // Registry lane, and the literal worst case of the includes("openai")
+    // catch-all below: a compat endpoint serves ANY upstream catalogue under
+    // its own prefix, so `compat:work/openai/gpt-4o` satisfies it. Without
+    // this line the request goes to api.openai.com on the user's own key and
+    // may even answer — 9Router's bug, one gateway further. Excluded HERE so
+    // every dispatch site is fixed at once, independent of branch order.
+    if (this.isCompatModel(modelId)) return false;
     // isOpenAiModelId covers bare o-series ids (`o3`, `o4-mini`) and `chatgpt-*`,
     // which the fetcher admits and the old `gpt- | o1- | o3-` list did not route.
     return isOpenAiModelId(modelId) || modelId.includes("openai");
@@ -2598,6 +2612,12 @@ export class LLMHelper {
 
   private isLiteLLMModel(modelId: string): boolean {
     return !!modelId && modelId.startsWith("litellm/");
+  }
+
+  /** A registry-lane id: `compat:<instanceId>/<model>` — the codec lives in
+   *  llm/providers/compatModelId.mjs (shared with the renderer's pickers). */
+  private isCompatModel(modelId: string): boolean {
+    return !!modelId && modelId.startsWith(OPENAI_COMPAT_PREFIX);
   }
 
   /**
@@ -5265,6 +5285,12 @@ let isMultimodal = !!(imagePaths?.length);
         // so pass images through when present and let the upstream model handle it.
         return await this.generateWithLiteLLM(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined);
       }
+      const cascadeRegistryProvider = this.providerRegistry.forModel(this.currentModelId);
+      if (cascadeRegistryProvider) {
+        // Text-only lane: a registry provider is never recruited for images
+        // (the vision chain does not know it; Direct Assist refuses it).
+        return await this.generateWithRegistryProvider(cascadeRegistryProvider, cloudUserContent, openaiSystemPrompt);
+      }
       if (this.isNvidiaNimModel(this.currentModelId) && this.nvidiaNimClient) {
         return await this.generateWithNvidiaNim(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined);
       }
@@ -7107,6 +7133,28 @@ let isMultimodal = !!(imagePaths?.length);
     );
 
     return stripLeadingReasoningBlock(response.choices[0]?.message?.content || "");
+  }
+
+  /**
+   * Non-streaming registry-lane call. The 60s ceiling is generateWithLiteLLM's;
+   * no withRetry — an unknown user endpoint that stalls should surface once and
+   * let the caller's failover decide, not double the latency blind. The
+   * reasoning-block strip is the same as every OpenAI-shaped gateway's: a
+   * compat endpoint can front a reasoning model.
+   */
+  private async generateWithRegistryProvider(p: LLMProvider, userMessage: string, systemPrompt?: string, modelId?: string): Promise<string> {
+    if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
+    // ponytail: family hardcoded to 'compat' — the registry only holds compat
+    // providers today; derive per-provider families if another kind registers.
+    if (this.isProviderDisabled('compat')) throw new Error(`${p.name} is disabled in Settings › AI Providers`);
+    this.assertOutboundScopes(p.id, userMessage);
+    const full = modelId || this.currentModelId;
+    const response = await this.withTimeout(
+      p.generate({ userMessage, systemPrompt, modelId: full }),
+      60000,
+      `${p.name} (${parseCompatModelId(full)?.model ?? full})`
+    );
+    return stripLeadingReasoningBlock(response || "");
   }
 
   /**
@@ -11591,6 +11639,24 @@ let isMultimodal = !!(imagePaths?.length);
       return;
     }
 
+    // Registry lane (OpenAI-compatible endpoints). Same treatment as the
+    // LiteLLM rung: an address we have not measured, fronting an upstream we
+    // cannot see, so it gets the failover wrapper and the stall exception.
+    // Text-only by design — images carried into a text turn are not forwarded
+    // (DEVELOPMENT.md, "Adding a provider").
+    const streamRegistryProvider = this.providerRegistry.forModel(this.currentModelId);
+    if (streamRegistryProvider) {
+      const registrySystem = this.injectLanguageInstruction(systemPromptOverride || OPENAI_SYSTEM_PROMPT);
+      yield* this.streamSelectedProviderWithFailover({
+        id: streamRegistryProvider.id,
+        name: `${streamRegistryProvider.name} (${parseCompatModelId(this.currentModelId)?.model ?? this.currentModelId})`,
+        open: (sig) => this.streamWithRegistryProvider(streamRegistryProvider, userContent, registrySystem, sig, this.currentModelId),
+        userContent, finalSystemPrompt: registrySystem, thinkingBudget, abortSignal,
+        hasImages: false,
+      });
+      return;
+    }
+
     // 9Router (self-hosted OpenAI-compatible fallback proxy). It picks its
     // upstream AFTER accepting the request, so images are forwarded through and
     // the chosen upstream decides whether it can read them — same contract as
@@ -12763,6 +12829,19 @@ let isMultimodal = !!(imagePaths?.length);
     } finally {
       if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort();
     }
+  }
+
+  /**
+   * Streaming registry-lane call — streamWithLiteLLM's shape minus images and
+   * the rate limiter (a compat endpoint is the user's own address; there is no
+   * shared quota to protect). Abort handling lives inside the provider.
+   */
+  private async * streamWithRegistryProvider(p: LLMProvider, userMessage: string, systemPrompt?: string, abortSignal?: AbortSignal, modelId?: string): AsyncGenerator<string, void, unknown> {
+    if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
+    // ponytail: family hardcoded to 'compat' — see generateWithRegistryProvider.
+    if (this.isProviderDisabled('compat')) throw new Error(`${p.name} is disabled in Settings › AI Providers`);
+    this.assertOutboundScopes(p.id, userMessage);
+    yield* p.stream({ userMessage, systemPrompt, modelId: modelId || this.currentModelId, signal: abortSignal });
   }
 
   private async * streamWithNinerouter(userMessage: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal, modelId?: string): AsyncGenerator<string, void, unknown> {
@@ -13957,7 +14036,9 @@ let isMultimodal = !!(imagePaths?.length);
     // AgentRouter joins for the reason Fluxion does: a reseller that picks its
     // upstream channel after accepting the request, whose Claude/GPT pool can
     // be cold or exhausted, so it takes the user-endpoint budget.
-    return this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId) || this.isAgentRouterModel(this.currentModelId);
+    // A registry-lane endpoint is the user's own address most literally of
+    // all — it takes the user-endpoint budget for the same reason 9Router does.
+    return this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId) || this.isAgentRouterModel(this.currentModelId) || !!this.providerRegistry.forModel(this.currentModelId);
   }
 
   /**
@@ -14388,6 +14469,10 @@ let isMultimodal = !!(imagePaths?.length);
     // AgentRouter ids, so every vendor predicate below would claim one.
     if (this.isAgentRouterModel(selected)) return { provider: 'agentrouter', model: selected };
     if (this.isLiteLLMModel(selected)) return { provider: 'litellm', model: selected };
+    // Registry lane before every vendor predicate: a compat endpoint fronts
+    // arbitrary catalogues, so its ids can look like any vendor's (the
+    // isOpenAiModel exclusion backs this up at the predicate level).
+    if (this.providerRegistry.forModel(selected)) return { provider: 'compat', model: selected };
     // Same rule, same reason as Fluxion above: 9Router's ids carry a real
     // vendor segment (`ninerouter/openai/gpt-5`,
     // `ninerouter/gemini/gemini-3.6-flash`), so every predicate below would
@@ -14556,6 +14641,7 @@ let isMultimodal = !!(imagePaths?.length);
       case 'fluxion': return this.hasFluxionCredential();
       case 'agentrouter': return this.hasAgentRouterCredential();
       case 'litellm': return !!this.litellmClient;
+      case 'compat': return this.providerRegistry.list().length > 0;
       case 'ninerouter': return !!this.ninerouterClient;
       case 'ollama': return this.useOllama;
       case 'antigravity': return !!this.antigravityFallbackModel();
@@ -14916,6 +15002,12 @@ let isMultimodal = !!(imagePaths?.length);
         if (!reads) void this.refreshOpenRouterVisionData();
         return reads;
       }
+      // Registry providers are text-only (OpenAICompatProvider's ponytail
+      // note). Direct Assist has no other rung — the user picked THIS model —
+      // so refusing beats forwarding into an endpoint that may not accept
+      // images and answering blind without a word about the dropped image.
+      case 'compat':
+        return false;
       case 'litellm':
       case 'nvidia_nim':
       case 'fluxion':
@@ -15143,6 +15235,11 @@ let isMultimodal = !!(imagePaths?.length);
       ? this.getAntigravityModelId(model)
       : provider === 'litellm'
       ? model.replace(/^litellm\//, '')
+      : provider === 'compat'
+      // The wire model behind the endpoint: capability tables know `gpt-4o`,
+      // not `compat:work/gpt-4o`. Same reason litellm strips its prefix —
+      // requestBuilder sizes the prompt against this id.
+      ? (parseCompatModelId(model)?.model ?? model)
       // 'ninerouter' falls through on purpose, for the same reason 'openrouter'
       // does below — and an earlier version of this had it exactly backwards.
       // Pre-stripping `ninerouter/` is what makes ROUTING_PREFIX_RE STOP
@@ -15238,6 +15335,12 @@ let isMultimodal = !!(imagePaths?.length);
       case 'litellm':
         yield* this.streamWithLiteLLM(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);
         return;
+      case 'compat': {
+        const dispatchRegistryProvider = this.providerRegistry.forModel(model);
+        if (!dispatchRegistryProvider) throw new Error('OpenAI-compatible endpoint for this model was removed');
+        yield* this.streamWithRegistryProvider(dispatchRegistryProvider, directUserPrompt, request.systemPrompt, abortSignal, model);
+        return;
+      }
       case 'ninerouter':
         // `model` is still prefixed; streamWithNinerouter strips the one
         // `ninerouter/` segment to get the instance's own wire id.
