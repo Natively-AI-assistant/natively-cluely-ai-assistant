@@ -811,6 +811,12 @@ interface ElectronAPI {
   getCustomProviders: () => Promise<any[]>;
   deleteCustomProvider: (id: string) => Promise<{ success: boolean; error?: string }>;
 
+  // OpenAI-compatible endpoints (Settings › AI Providers). Keys never come
+  // back to the renderer — list() reports hasApiKey only.
+  openaiCompatList: () => Promise<Array<{ id: string; name: string; baseURL: string; models: string[]; hasApiKey: boolean }>>;
+  openaiCompatSave: (cfg: { id?: string; name: string; baseURL: string; apiKey?: string; models: string[] }) => Promise<{ success: boolean; id?: string; error?: string }>;
+  openaiCompatDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
+
   // Follow-up Email
   generateFollowupEmail: (input: any) => Promise<string>;
   extractEmailsFromTranscript: (transcript: Array<{ text: string }>) => Promise<string[]>;
@@ -2804,6 +2810,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveCustomProvider: (provider: any) => ipcRenderer.invoke('save-custom-provider', provider),
   getCustomProviders: () => ipcRenderer.invoke('get-custom-providers'),
   deleteCustomProvider: (id: string) => ipcRenderer.invoke('delete-custom-provider', id),
+
+  // OpenAI-compatible endpoints
+  openaiCompatList: () => ipcRenderer.invoke('openai-compat:list'),
+  openaiCompatSave: (cfg: { id?: string; name: string; baseURL: string; apiKey?: string; models: string[] }) => ipcRenderer.invoke('openai-compat:save', cfg),
+  openaiCompatDelete: (id: string) => ipcRenderer.invoke('openai-compat:delete', id),
 
   // Follow-up Email
   generateFollowupEmail: (input: any) => ipcRenderer.invoke('generate-followup-email', input),

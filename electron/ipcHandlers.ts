@@ -10,6 +10,8 @@ import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import { resolveMacScreenStatus } from '../src/lib/permissionAttentionPolicy.mjs';
 import { hasOwnAiKey, resolveExpiredTrial } from '../src/lib/trialPolicy.mjs';
 import { CARDS, OUTCOMES } from '../src/lib/cards/cardPolicy.mjs';
+import { OPENAI_COMPAT_PREFIX, parseCompatModelId } from './llm/providers/compatModelId.mjs';
+import type { OpenAICompatConfig } from './llm/providers/OpenAICompatProvider';
 import { TRIAL_CAMPAIGN, TRIAL_PROMO_ID, runTrialCampaignReset } from '../src/lib/trialCampaign.mjs';
 import { autoTrialFollowUp, runAutoTrial, shouldAutoStartTrial } from '../src/lib/trial/autoTrial.mjs';
 import { stripGistTrailer } from '../src/lib/displayMarkup';
@@ -760,6 +762,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         // branch. Classified late, a 9Router model is gated by — and billed to —
         // the user's own vendor key, and nothing about the answer looks wrong.
         if (modelId.startsWith('ninerouter/')) return 'ninerouter';
+        // MUST stay above every vendor check below — the gateways' reason
+        // exactly: a compat endpoint can serve ANY upstream catalogue, so
+        // `compat:work/openai/gpt-4o` is an includes('openai') match and
+        // `compat:home/gemini-2.5-flash` starts with 'gemini-'. Classified
+        // late, a compat model would be gated by (and its family toggles
+        // wired to) the wrong vendor.
+        if (modelId.startsWith(OPENAI_COMPAT_PREFIX)) return 'compat';
         if (modelId.startsWith('ollama-')) return 'ollama';
         if (modelId.startsWith('gemini-') || modelId.startsWith('models/')) return 'gemini';
         if (isKnownGroqModel(modelId)) return 'groq';
@@ -818,6 +827,14 @@ export function initializeIpcHandlers(appState: AppState): void {
         if (modelId.startsWith('antigravity:')) return AntigravityService.getInstance().getStatus().signedIn
           && (antigravityCatalog === null || antigravityCatalog.some(({ id }) => modelId === `antigravity:${id}`));
         if (modelId.startsWith('litellm/')) return has(cm.getLitellmBaseURL());
+        // A compat model is available exactly while its endpoint is stored and
+        // lists that wire model. Not an opt-in family above: an empty
+        // allow-list must not hide endpoints the user just configured.
+        if (modelId.startsWith(OPENAI_COMPAT_PREFIX)) {
+          const parsed = parseCompatModelId(modelId);
+          return !!parsed
+            && cm.getOpenAICompatProviders().some((c: OpenAICompatConfig) => c.id === parsed.instanceId && c.models.includes(parsed.model));
+        }
         if (modelId.startsWith('nvidia_nim/')) return has(cm.getNvidiaNimApiKey());
         // Above the groq/openai lines for the reason providerFamily() gives.
         if (modelId.startsWith('openrouter/')) return has(cm.getOpenrouterApiKey());
@@ -13016,6 +13033,55 @@ export function initializeIpcHandlers(appState: AppState): void {
       console.error('Error deleting custom provider:', error);
       return { success: false, error: error.message };
     }
+  });
+
+  // OpenAI-compatible endpoints (Settings › AI Providers). Stored in the
+  // safeStorage blob; list() returns hasApiKey and NEVER the key itself, and
+  // save() treats a blank key as "keep the stored one".
+  safeHandle('openai-compat:list', async () => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    return CredentialsManager.getInstance().getOpenAICompatProviders()
+      .map(({ apiKey, ...rest }: { apiKey?: string; id: string; name: string; baseURL: string; models: string[] }) => ({ ...rest, hasApiKey: !!apiKey }));
+  });
+  safeHandle('openai-compat:save', async (_, payload: unknown) => {
+    if (typeof payload !== 'object' || payload === null) return { success: false, error: 'invalid' };
+    const p = payload as { id?: unknown; name?: unknown; baseURL?: unknown; apiKey?: unknown; models?: unknown };
+    const name = typeof p.name === 'string' ? p.name.trim() : '';
+    if (!name || name.length > 60) return { success: false, error: 'invalid' };
+    const baseURL = typeof p.baseURL === 'string' ? p.baseURL.trim() : '';
+    try {
+      const u = new URL(baseURL);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') return { success: false, error: 'invalid' };
+    } catch {
+      return { success: false, error: 'invalid' };
+    }
+    const models = Array.isArray(p.models)
+      ? p.models.filter((m): m is string => typeof m === 'string').map(m => m.trim()).filter(m => m.length > 0)
+      : [];
+    if (models.length === 0 || models.length > 20) return { success: false, error: 'invalid' };
+    if (p.apiKey !== undefined && typeof p.apiKey !== 'string') return { success: false, error: 'invalid' };
+    const id = typeof p.id === 'string' && /^[a-z0-9-]{1,40}$/.test(p.id)
+      ? p.id
+      : crypto.randomUUID().slice(0, 8);
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const cm = CredentialsManager.getInstance();
+    if (!cm.saveOpenAICompatProvider({ id, name, baseURL, apiKey: typeof p.apiKey === 'string' ? p.apiKey : undefined, models })) {
+      return { success: false, error: 'settings_store_degraded' };
+    }
+    appState.processingHelper?.getLLMHelper?.()?.setOpenAICompatProviders(cm.getOpenAICompatProviders());
+    await refreshRuntimeDefaultIfUnavailable();
+    broadcastCredentialsChanged();
+    return { success: true, id };
+  });
+  safeHandle('openai-compat:delete', async (_, id: unknown) => {
+    if (typeof id !== 'string' || !id) return { success: false, error: 'invalid' };
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const cm = CredentialsManager.getInstance();
+    if (!cm.deleteOpenAICompatProvider(id)) return { success: false, error: 'settings_store_degraded' };
+    appState.processingHelper?.getLLMHelper?.()?.setOpenAICompatProviders(cm.getOpenAICompatProviders());
+    await refreshRuntimeDefaultIfUnavailable();
+    broadcastCredentialsChanged();
+    return { success: true };
   });
 
   safeHandle('switch-to-custom-provider', async (_, providerId: string) => {

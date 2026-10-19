@@ -122,6 +122,15 @@ export class ProcessingHelper {
       this.llmHelper.setLitellmConfig(credManager.getLitellmApiKey() || '', litellmBaseURL, credManager.getLitellmMaxTokens());
     }
 
+    // Same reason as the 9Router block below: endpoints saved in a previous
+    // session must register at boot, or a selected compat model dispatches
+    // to nothing until the user re-saves the card.
+    const openaiCompatProviders = credManager.getOpenAICompatProviders();
+    if (openaiCompatProviders.length > 0) {
+      console.log(`[ProcessingHelper] Loading ${openaiCompatProviders.length} OpenAI-compatible endpoint(s) from CredentialsManager`);
+      this.llmHelper.setOpenAICompatProviders(openaiCompatProviders);
+    }
+
     // Without this the client is never constructed at startup, so a user who
     // configured 9Router in a previous session has a selected model that
     // dispatches to nothing until they re-save the card.

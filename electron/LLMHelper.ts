@@ -30,6 +30,9 @@ import { getVisionCapabilityStore, normalizeVisionBaseURL, storedVisionAnswer, s
 import { VisionProbe, VISION_PROBE_QUESTION, VISION_PROBE_SYSTEM } from "./llm/visionProbe"
 import { parseOpenRouterVision } from "./llm/providerVisionData"
 import { trimUserContentToFit, userContentRoomChars } from "./llm/localContextTrim"
+import { ProviderRegistry } from "./llm/providers/ProviderRegistry"
+import { OpenAICompatProvider, type OpenAICompatConfig } from "./llm/providers/OpenAICompatProvider"
+import { OPENAI_COMPAT_PREFIX, parseCompatModelId } from "./llm/providers/compatModelId.mjs"
 import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, claudeAcceptsSamplingParams, claudeThinkingParam, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import { filterOllamaGenerationModels } from "./llm/ollamaGenerationModels"
@@ -696,6 +699,10 @@ export class LLMHelper {
   // separate client for the same reason: credentials, outbound scopes and
   // telemetry stay provider-specific.
   private _ninerouterClient: OpenAI | null = null
+  // Registry-lane providers: integrations that implement LLMProvider and are
+  // routed by model-id ownership instead of a client field + switch arms per
+  // call site. Today only OpenAI-compatible endpoints; see llm/providers/.
+  private readonly providerRegistry = new ProviderRegistry()
 
   private get client(): GoogleGenAI | null { return this.isProviderDisabled('gemini') ? null : this._client }
   private set client(v: GoogleGenAI | null) { this._client = v }
@@ -1922,6 +1929,20 @@ export class LLMHelper {
     this.litellmModelBudgetsFetchedAt = 0;
     this.litellmClient = new OpenAI({ apiKey: this.litellmApiKey || "dummy", baseURL: trimmedURL });
     console.log(`[LLMHelper] LiteLLM client initialized with base URL: ${trimmedURL}, max_tokens: ${this.litellmMaxTokens ?? 'auto'}`);
+  }
+
+  /**
+   * Rebuild the compat lane from storage: drop every registered compat
+   * instance, then register the list. Called at boot
+   * (ProcessingHelper.loadStoredCredentials) and after every endpoint
+   * save/delete IPC, so the registry always mirrors CredentialsManager.
+   */
+  public setOpenAICompatProviders(list: OpenAICompatConfig[]): void {
+    this.providerRegistry.unregisterWhere(p => p.id.startsWith(OPENAI_COMPAT_PREFIX))
+    for (const cfg of list || []) {
+      this.providerRegistry.register(new OpenAICompatProvider(cfg))
+    }
+    if (list?.length) console.log(`[LLMHelper] ${list.length} OpenAI-compatible endpoint(s) registered`)
   }
 
   /**

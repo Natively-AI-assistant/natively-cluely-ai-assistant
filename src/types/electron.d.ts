@@ -948,6 +948,11 @@ export interface ElectronAPI {
   getCustomProviders: () => Promise<any[]>;
   deleteCustomProvider: (id: string) => Promise<{ success: boolean; error?: string }>;
 
+  /** OpenAI-compatible endpoints. Keys never reach the renderer — list() reports hasApiKey only. */
+  openaiCompatList: () => Promise<Array<{ id: string; name: string; baseURL: string; models: string[]; hasApiKey: boolean }>>;
+  openaiCompatSave: (cfg: { id?: string; name: string; baseURL: string; apiKey?: string; models: string[] }) => Promise<{ success: boolean; id?: string; error?: string }>;
+  openaiCompatDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
+
   // Follow-up Email
   generateFollowupEmail: (input: any) => Promise<string>;
   extractEmailsFromTranscript: (transcript: Array<{ text: string }>) => Promise<string[]>;

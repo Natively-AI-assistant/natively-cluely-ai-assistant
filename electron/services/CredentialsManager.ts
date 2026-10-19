@@ -13,6 +13,7 @@ import { deriveFallbackKey, encryptCredentialBlob, decryptCredentialBlob } from 
 // rather than re-implemented: the duplicated `multimodal === true` test that
 // used to live here is exactly how the two answers drifted apart.
 import { customProviderSupportsVision, customProviderIsLocal } from '../llm/visionCapability';
+import type { OpenAICompatConfig } from '../llm/providers/OpenAICompatProvider';
 import { readActiveCustomProvider } from '../llm/activeCustomProvider';
 import { normalizeSttLanguageKey } from '../config/languages';
 import { resolveSttModel, type SttModelProvider } from '../audio/sttModelCatalog';
@@ -136,6 +137,9 @@ export interface StoredCredentials {
     ninerouterModelMeta?: Record<string, { reasoning?: boolean; thinkingCanDisable?: boolean; thinkingFormat?: string }>;
     googleServiceAccountPath?: string;
     customProviders?: CustomProvider[];
+    /** User-configured OpenAI-compatible endpoints (Settings › AI Providers).
+     *  Keys live only inside this safeStorage-encrypted blob. */
+    openaiCompatProviders?: OpenAICompatConfig[];
     curlProviders?: CurlProvider[];
     defaultModel?: string;
     /** Model for cheap internal calls (Auto Answer judge, query rewrite, classification). */
@@ -2018,6 +2022,45 @@ export class CredentialsManager {
         this.credentials.customProviders = this.credentials.customProviders.filter(p => p.id !== id);
         this.saveCredentials();
         console.log(`[CredentialsManager] Custom Provider '${id}' deleted`);
+    }
+
+    public getOpenAICompatProviders(): OpenAICompatConfig[] {
+        return this.credentials.openaiCompatProviders || [];
+    }
+
+    /** Upsert by id. A blank/absent apiKey keeps the stored one — the settings
+     *  UI never receives keys, so "unchanged" arrives as empty. False only when
+     *  the store is degraded (refuseWriteWhileDegraded). */
+    public saveOpenAICompatProvider(cfg: OpenAICompatConfig): boolean {
+        if (this.refuseWriteWhileDegraded('save openai-compat provider')) return false;
+        if (!this.credentials.openaiCompatProviders) {
+            this.credentials.openaiCompatProviders = [];
+        }
+        const index = this.credentials.openaiCompatProviders.findIndex(p => p.id === cfg.id);
+        if (index !== -1) {
+            const incoming = { ...cfg };
+            if (!incoming.apiKey) incoming.apiKey = this.credentials.openaiCompatProviders[index].apiKey;
+            this.credentials.openaiCompatProviders[index] = incoming;
+        } else {
+            this.credentials.openaiCompatProviders.push({ ...cfg });
+        }
+        this.saveCredentials();
+        console.log(`[CredentialsManager] OpenAI-compatible endpoint '${cfg.name}' saved`);
+        return true;
+    }
+
+    /** Idempotent: deleting an unknown id is success (the end state holds).
+     *  False only when the store is degraded. */
+    public deleteOpenAICompatProvider(id: string): boolean {
+        if (this.refuseWriteWhileDegraded('delete openai-compat provider')) return false;
+        if (!this.credentials.openaiCompatProviders) return true;
+        const before = this.credentials.openaiCompatProviders.length;
+        this.credentials.openaiCompatProviders = this.credentials.openaiCompatProviders.filter(p => p.id !== id);
+        if (this.credentials.openaiCompatProviders.length !== before) {
+            this.saveCredentials();
+            console.log(`[CredentialsManager] OpenAI-compatible endpoint '${id}' deleted`);
+        }
+        return true;
     }
 
     public getCurlProviders(): CurlProvider[] {
