@@ -1,0 +1,84 @@
+# Manual build of the Rust native module for both mac arches, for development
+# hosts that cannot compile it locally: on macOS 12 cidre's build.rs needs full
+# Xcode (xcodebuild), and no SDK installable there satisfies it. Download the
+# artifact into native-module/ (gh run download … -n native-module-darwin) and
+# package with `npm run app:build:mac-x64-local`, which deliberately skips
+# build:native.
+#
+# No secrets and no premium submodule: the native module is core-only.
+name: Native module (macOS)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+
+      # --ignore-scripts: no electron download, no native rebuilds. build:native
+      # only needs @napi-rs/cli and the Rust toolchain.
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build native module (both mac arches)
+        run: NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native
+
+      - name: Verify the x64 artifact loads on macOS 12
+        run: |
+          set -euo pipefail
+          BIN=native-module/index.darwin-x64.node
+
+          # 1. Deployment target 12.0 (MACOS_DEPLOYMENT_TARGET in
+          #    scripts/build-native.js) — a higher minos will not load on Monterey.
+          otool -l "$BIN" | grep -A3 LC_BUILD_VERSION
+          otool -l "$BIN" | grep -A3 LC_BUILD_VERSION | grep -q 'minos 12\.0' \
+            || { echo "FAIL: LC_BUILD_VERSION minos is not 12.0"; exit 1; }
+          echo "OK: minos 12.0"
+
+          echo '--- otool -L ---'
+          otool -L "$BIN"
+
+          # 2. ScreenCaptureKit (exists 12.3+) and CoreAudio (ProcessTap API
+          #    14.2+) must be LC_LOAD_WEAK_DYLIB, never LC_LOAD_DYLIB, or dyld
+          #    refuses the load on 12.x.
+          STRONG=$(otool -l "$BIN" | awk '
+            /^ *cmd / { cmd = $2 }
+            /^ *name / { if ($2 ~ /(ScreenCaptureKit|CoreAudio)\.framework/) print cmd, $2 }
+          ' | grep -c '^LC_LOAD_DYLIB' || true)
+          if [ "$STRONG" != "0" ]; then
+            echo "FAIL: ScreenCaptureKit/CoreAudio linked strongly (need -weak_framework):"
+            otool -l "$BIN" | awk '
+              /^ *cmd / { cmd = $2 }
+              /^ *name / { if ($2 ~ /(ScreenCaptureKit|CoreAudio)\.framework/) print cmd, $2 }
+            '
+            exit 1
+          fi
+          echo "OK: no strong ScreenCaptureKit/CoreAudio load commands"
+
+          # 3. Every undefined symbol from those frameworks must be a weak
+          #    reference, so lazy binds cannot fail at load time on macOS 12.
+          if nm -m "$BIN" | grep '(undefined)' | grep -E 'from (CoreAudio|ScreenCaptureKit)' | grep -v weak | grep -q .; then
+            echo "FAIL: non-weak undefined symbols:"
+            nm -m "$BIN" | grep '(undefined)' | grep -E 'from (CoreAudio|ScreenCaptureKit)' | grep -v weak
+            exit 1
+          fi
+          echo "OK: all CoreAudio/ScreenCaptureKit symbol binds are weak"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-module-darwin
+          path: |
+            native-module/index.darwin-x64.node
+            native-module/index.darwin-arm64.node
+          if-no-files-found: error

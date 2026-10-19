@@ -299,8 +299,8 @@ impl SystemAudioCapture {
                         Ok(i) => i,
                         Err(e2) => {
                             let msg = format!(
-                                "[SystemAudioCapture] FATAL: All init attempts failed: {}",
-                                e2
+                                "[SystemAudioCapture] FATAL: All init attempts failed: {} (requested device: {})",
+                                e2, e
                             );
                             eprintln!("{}", msg);
                             // Notify JS so it can emit 'error' and reset isRecording

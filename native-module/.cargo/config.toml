@@ -1,5 +1,9 @@
 [target.x86_64-apple-darwin]
-rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+# Symbols newer than the 12.0 deployment target — AudioHardwareCreateProcessTap
+# (CoreAudio, 14.2) and everything in ScreenCaptureKit (12.3) — must be weak,
+# or dyld refuses to load the module on macOS 12. The calls stay behind the
+# runtime gates in speaker/core_audio.rs (14.4) and speaker/sck.rs (13.0).
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup", "-C", "link-arg=-weak_framework", "-C", "link-arg=CoreAudio", "-C", "link-arg=-weak_framework", "-C", "link-arg=ScreenCaptureKit"]
 
 [target.aarch64-apple-darwin]
-rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup", "-C", "link-arg=-weak_framework", "-C", "link-arg=CoreAudio", "-C", "link-arg=-weak_framework", "-C", "link-arg=ScreenCaptureKit"]

@@ -78,7 +78,7 @@ export class SystemAudioCapture extends EventEmitter {
 
     /**
      * Which native backend is actually capturing: 'sck' | 'coreaudio' |
-     * 'wasapi', or '' while the background init is still running (and after
+     * 'input-device' | 'wasapi', or '' while the background init is still running (and after
      * the monitor has been retired). main.ts compares it with the backend the
      * user asked for to notice a silent fallback (see startSckReprobeWatcher).
      */
