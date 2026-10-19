@@ -5,6 +5,7 @@ import { ProviderStatusRegistry } from './ProviderStatusRegistry';
 import type { ProviderHealth, ProviderKind, ProviderStatus } from './providerStatus';
 import { canImportPackage, verifyRequiredModelAssets } from './LocalFallbackAssets';
 import { OllamaManager } from './OllamaManager';
+import { classifyLocalModelLoadFailure } from '../audio/whisper/loadFailure';
 
 export interface LocalFallbackPreflightCheck {
   id: string;
@@ -243,6 +244,14 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
     checks.push(await timedCheck('onnxruntime-common import', () => canImportPackage('onnxruntime-common')));
     checks.push(await timedCheck('onnxruntime-node import', () => canImportPackage('onnxruntime-node')));
 
+    // macOS 12: the ONNX dylib cannot dlopen at all — its libc++ needs
+    // std::to_chars(double), which arrives in 13.3. That is an environment
+    // limit, not a damaged install, so it must not be reported as
+    // "missing assets, please reinstall" (the reinstall cannot fix it).
+    const unsupportedMacos = checks
+      .filter(c => c.id.includes('import') && !c.ok)
+      .some(c => classifyLocalModelLoadFailure(c.message, { platform: process.platform }) === 'unsupported-macos');
+
     // 2. Required bundled model assets. In dev the models live under the repo's
     // resources/models/ and resolveModelPath() finds them; in packaged builds
     // they live under process.resourcesPath/models. Either is fine.
@@ -376,10 +385,12 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
     ProviderStatusRegistry.getInstance().setStatus(statusFor(
       'local-embedding',
       'packaged_local',
-      localEmbeddingOk ? 'ready' : 'missing_required_asset',
+      localEmbeddingOk ? 'ready' : (unsupportedMacos ? 'unavailable' : 'missing_required_asset'),
       localEmbeddingOk
         ? 'Packaged local embedding fallback assets are ready'
-        : 'Natively local embedding fallback assets are missing or corrupted. Please reinstall Natively.',
+        : unsupportedMacos
+          ? 'Local (offline) embeddings need macOS 13.3 or later; they are not available on this Mac.'
+          : 'Natively local embedding fallback assets are missing or corrupted. Please reinstall Natively.',
       {
         checks: checks.filter(c => c.id.includes('minilm') || c.id.includes('import') || c.id.startsWith('rust') || c.id.includes('sharp') || c.id.includes('sqlite-vec') || c.id.includes('better-sqlite3')),
       },
