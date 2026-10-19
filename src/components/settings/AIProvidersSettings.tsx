@@ -10,6 +10,8 @@ import { PICKER_MENU_WIDTH, Presence, SettingsMenu, SettingsMotionReady, SwapLab
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useToggleInit } from './useToggleInit';
 import { motion, useReducedMotion } from 'framer-motion';
+import { OpenAICompatSettings, type CompatEndpointRow } from './OpenAICompatSettings';
+import { compatModelId } from '../../../electron/llm/providers/compatModelId.mjs';
 
 // Official provider marks, vendored from @lobehub/icons-static-svg v1.94.0 (MIT).
 // See src/assets/provider-logos/README.md for provenance and why these are local
@@ -3431,6 +3433,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // proxy's /model/info (standard registry value), falling back to 8192.
     const [litellmMaxTokens, setLitellmMaxTokens] = useState('');
     const [litellmModels, setLitellmModels] = useState<string[]>([]);
+    // OpenAI-compatible endpoints (Gateways tab). Keys never arrive — the list
+    // carries hasApiKey only. Reloaded by loadCredentials on every
+    // credentials-changed broadcast, which the save/delete IPCs fire.
+    const [compatEndpoints, setCompatEndpoints] = useState<CompatEndpointRow[]>([]);
     const [isRefreshingLitellm, setIsRefreshingLitellm] = useState(false);
     // --- 9Router (self-hosted OpenAI-compatible fallback proxy: baseURL + optional key) ---
     const [ninerouterBaseURL, setNinerouterBaseURL] = useState('');
@@ -3919,6 +3925,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 // Check Ollama
                 checkOllama();
 
+                window.electronAPI?.openaiCompatList?.()
+                    .then((list) => setCompatEndpoints(Array.isArray(list) ? list : []))
+                    .catch(() => setCompatEndpoints([]));
+
                 // Mark credentials as fully loaded only after custom/default model
                 // state is refreshed, so the stale-default guard doesn't reset a
                 // still-loading custom/LiteLLM/Codex selection.
@@ -4001,6 +4011,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         // `ninerouterModels`, so the prefix is added here and the allow-list
         // stores the same `ninerouter/<id>` ids modelAvailable() compares.
         if (provider === 'ninerouter') ninerouterModels.forEach(m => push(`ninerouter/${m}`, gatewayModelLabel(m)));
+        // Compat endpoints: one allow-list family ('compat') covering every
+        // endpoint; ids are `compat:<instanceId>/<model>` — exactly what
+        // modelAvailable() in ipcHandlers.ts parses and compares.
+        if (provider === 'compat') compatEndpoints.forEach(ep => ep.models.forEach(m => push(compatModelId(ep.id, m), `${m} (${ep.name})`)));
         // Antigravity is the same shape of problem as LiteLLM: no preset table, and
         // `cloudFetchedModels` is written only from getCloudFetchedModels(), which
         // covers the key-backed providers and never the OAuth ones. Without this the
@@ -4031,9 +4045,9 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         // prettifyModelId — which would render `litellm/openai/gpt-4o` as
         // "Litellm/Openai/Gpt 4o".
         (cloudEnabledModels[provider] || []).forEach(id =>
-            push(id, (provider === 'litellm' || provider === 'ninerouter') ? gatewayModelLabel(id) : prettifyModelId(id)));
+            push(id, (provider === 'litellm' || provider === 'ninerouter' || provider === 'compat') ? gatewayModelLabel(id) : prettifyModelId(id)));
         return out;
-    }, [cloudFetchedModels, cloudEnabledModels, litellmModels, ninerouterModels, antigravityModels, codexModelCatalog, codexCliConfig.model, t]);
+    }, [cloudFetchedModels, cloudEnabledModels, litellmModels, ninerouterModels, compatEndpoints, antigravityModels, codexModelCatalog, codexCliConfig.model, t]);
 
     /**
      * The Background Model picker's options: Auto, plus only the models the fast
@@ -4112,6 +4126,16 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 opts.push({ id, name: `${gatewayModelLabel(model)} (9Router)` });
             });
         }
+        if (isProviderEnabled('compat')) {
+            // Same allow-list gate as the gateways above; 'compat' is NOT an
+            // opt-in family (isOptInModelProvider), so an empty list means
+            // "no filter" — modelAvailable() in ipcHandlers.ts agrees.
+            compatEndpoints.forEach(ep => ep.models.forEach(model => {
+                const id = compatModelId(ep.id, model);
+                if (!isModelEnabled('compat', id)) return;
+                opts.push({ id, name: `${model} (${ep.name})` });
+            }));
+        }
         if (isProviderEnabled('custom')) {
             customProviders.forEach(p => opts.push({ id: p.id, name: p.name }));
         }
@@ -4165,7 +4189,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             || opts[0].id;
         setDefaultModel(next);
         window.electronAPI?.setDefaultModel?.(next).catch(console.error);
-    }, [credentialsLoaded, defaultModel, hasStoredKey, preferredModels, isCodexReady, codexCliConfig.model, codexModelCatalog, customProviders, ollamaModels, litellmModels, ninerouterModels, disabledProviders, cloudEnabledModels, antigravityStatus.signedIn, antigravityModels, antigravityError]);
+    }, [credentialsLoaded, defaultModel, hasStoredKey, preferredModels, isCodexReady, codexCliConfig.model, codexModelCatalog, customProviders, ollamaModels, litellmModels, ninerouterModels, compatEndpoints, disabledProviders, cloudEnabledModels, antigravityStatus.signedIn, antigravityModels, antigravityError]);
 
     // Load LiteLLM model IDs only when the proxy is configured. The active-model
     // selector should not expose stale `litellm/...` choices after the proxy is
@@ -6248,6 +6272,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     </div>
                 </div>
             </div>
+
+            {/* OpenAI-compatible endpoints — the shape of the two gateways
+                around it (an address the user pastes, not a vendor key), but
+                there can be many, and the models are what the user lists:
+                no discovery round-trip. */}
+            <OpenAICompatSettings endpoints={compatEndpoints} />
 
 
             {/* 9Router — self-hosted fallback proxy. Grouped with LiteLLM rather

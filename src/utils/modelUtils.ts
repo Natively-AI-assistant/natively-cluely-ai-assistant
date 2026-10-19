@@ -1,3 +1,5 @@
+import { OPENAI_COMPAT_PREFIX, parseCompatModelId } from '../../electron/llm/providers/compatModelId.mjs';
+
 export const STANDARD_CLOUD_MODELS: Record<string, {
     hasKeyCheck: (creds: any) => boolean;
     ids: string[];
@@ -435,6 +437,10 @@ export const NINEROUTER_THINKING_LEVELS = [
 
 export const gatewayModelLabel = (id: string): string => {
     if (!id) return '';
+    // compat:<instanceId>/<model>: the wire model is everything after the
+    // FIRST slash, so provider-prefixed names (openai/gpt-4o) stay intact —
+    // the last-segment rule below would halve them.
+    if (id.startsWith(OPENAI_COMPAT_PREFIX)) return parseCompatModelId(id)?.model ?? id;
     const segments = id.replace(/^(?:litellm|ninerouter|openrouter|nvidia_nim|fluxion|agentrouter)\//, '').split('/').filter(Boolean);
     return segments.length ? segments[segments.length - 1] : id;
 };

@@ -3,6 +3,7 @@ import { Check, ImageOff, Loader2 } from 'lucide-react';
 import { groupModelOptions, type ModelSelectorOption } from './ui/modelSelectorGroups';
 import { MODEL_SELECTOR_WIDTH } from './ui/modelSelectorLabelText';
 import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, gatewayModelLabel, isModelAllowed, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
+import { compatModelId } from '../../electron/llm/providers/compatModelId.mjs';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import {
@@ -233,6 +234,20 @@ const ModelSelectorWindow = () => {
                     });
                 } catch {
                     // 9Router may not be running — ignore.
+                }
+
+                // OpenAI-compatible endpoints — whatever the user listed in
+                // Settings › AI Providers. No discovery round-trip: the models
+                // come from storage, so this cannot block on a server being up.
+                try {
+                    const compatEndpoints = await window.electronAPI?.openaiCompatList?.() || [];
+                    compatEndpoints.forEach((ep) => {
+                        ep.models.forEach((m: string) => {
+                            models.push({ id: compatModelId(ep.id, m), name: `${m} (${ep.name})`, type: 'cloud', provider: 'compat' });
+                        });
+                    });
+                } catch {
+                    // Endpoint list unavailable — never blocks the rest of the list.
                 }
 
                 if (cancelled || myToken !== runToken) return;
