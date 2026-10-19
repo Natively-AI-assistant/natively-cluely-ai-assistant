@@ -65,6 +65,19 @@ const MODULES = ['better-sqlite3', 'keytar'];
  * `areNodeModulesHandledExternally`, so node_modules still gets packed.
  */
 module.exports = async function beforePack(context) {
+  // Local-packaging opt-out for hosts where better-sqlite3/keytar cannot be
+  // compiled at all — macOS 12: Electron 43's V8 headers need C++20 libc++
+  // (<source_location>, std::three_way_comparable_with) that no SDK installable
+  // there provides, so --build-from-source can never succeed. The tree must
+  // already hold correct arch + Electron-ABI binaries: the
+  // app:build:mac-x64-local chain runs scripts/verify-native-arch.js before
+  // packaging, and the afterPack arch guard (scripts/ad-hoc-sign.js) still
+  // verifies the binaries INSIDE the packed app, so a wrong arch fails loudly.
+  // Opt-in: CI and release builds never set this and keep rebuilding.
+  if (process.env.NATIVELY_SKIP_NATIVE_REBUILD === '1') {
+    console.log('[beforePack] NATIVELY_SKIP_NATIVE_REBUILD=1 — packing the better-sqlite3/keytar binaries already in node_modules (local build without a usable C++20 toolchain).');
+    return;
+  }
   const archName = archToName(context.arch);
   if (archName !== 'x64' && archName !== 'arm64' && archName !== 'ia32') {
     console.warn(`[beforePack] unexpected arch "${archName}" (raw=${context.arch}); skipping custom native rebuild.`);

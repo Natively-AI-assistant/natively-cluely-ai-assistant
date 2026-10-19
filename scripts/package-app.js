@@ -221,14 +221,23 @@ if (builderCode !== 0) {
   console.error(`[package-app] electron-builder exited with code ${builderCode}`);
 }
 
-console.log('[package-app] Restoring native addons to the Electron ABI...');
-const rebuildCode = run(path.join(__dirname, 'rebuild-native-electron.js'), []);
+if (process.env.NATIVELY_SKIP_NATIVE_REBUILD === '1') {
+  // Nothing to restore: beforePack's rebuild was skipped and npmRebuild:false
+  // means electron-builder never touched the working-tree addons. On hosts
+  // that need this flag the rebuild could not run anyway (see
+  // rebuild-native-for-target.cjs) — attempting it would just clobber the
+  // good Electron-ABI binaries the packaged app was built from.
+  console.log('[package-app] NATIVELY_SKIP_NATIVE_REBUILD=1 — native addons untouched; skipping the restore rebuild.');
+} else {
+  console.log('[package-app] Restoring native addons to the Electron ABI...');
+  const rebuildCode = run(path.join(__dirname, 'rebuild-native-electron.js'), []);
 
-if (rebuildCode !== 0) {
-  console.error(
-    `[package-app] rebuild-native-electron.js exited with code ${rebuildCode} — ` +
-      'run "npm run rebuild:native" before starting the app in development.'
-  );
+  if (rebuildCode !== 0) {
+    console.error(
+      `[package-app] rebuild-native-electron.js exited with code ${rebuildCode} — ` +
+        'run "npm run rebuild:native" before starting the app in development.'
+    );
+  }
 }
 
 process.exit(builderCode);
