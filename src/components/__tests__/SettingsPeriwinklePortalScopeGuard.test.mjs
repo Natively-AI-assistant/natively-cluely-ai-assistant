@@ -52,6 +52,7 @@ const GUARDED_FILES = [
   'src/components/settings/connectors/parts.tsx',
   'src/components/settings/FollowMicDeviceSettings.tsx',
   'src/components/settings/EmbeddingSettings.tsx',
+  'src/components/settings/GpuAccelerationSettings.tsx',
   'src/components/settings/HelpSettings.tsx',
   'src/components/settings/help/HelpGraphics.tsx',
   'src/components/settings/help/HelpParts.tsx',
