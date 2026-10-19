@@ -458,7 +458,13 @@ function verifyPackaged(appArg, platformArg) {
   // only at runtime as a spawn ENOENT the moment a user picks Apple Speech.
   if (platform === 'darwin') {
     const helper = path.join(resources, 'apple-speech', APPLE_SPEECH_HELPER);
-    if (!exists(helper)) {
+    if (process.env.NATIVELY_SKIP_APPLE_SPEECH === '1') {
+      // Local-packaging opt-out (scripts/build-apple-speech.js buildForAfterPack):
+      // the helper is deliberately not built without the macOS 26 SDK. Apple
+      // Speech STT stays unavailable in that build — runtime-gated to macOS 26
+      // anyway (AppleSpeechSTT.ts), so this is a note, not an error.
+      notes.push('Apple Speech helper not built (NATIVELY_SKIP_APPLE_SPEECH=1); Apple Speech STT unavailable in this build.');
+    } else if (!exists(helper)) {
       errors.push(
         `Missing Apple Speech helper: Resources/apple-speech/${APPLE_SPEECH_HELPER} ` +
         '(scripts/after-pack.cjs should have compiled it during afterPack).',

@@ -184,6 +184,17 @@ function buildForAfterPack(context) {
     return buildAppleSpeech({ platform: electronPlatform });
   }
 
+  // Explicit opt-out for local packaging on hosts without the macOS 26 SDK —
+  // e.g. a macOS 12 dev machine, where Xcode caps out at 14.2 and the
+  // MINIMUM_SDK_MAJOR check below can never pass. Apple Speech needs macOS 26
+  // at RUNTIME too (gated in electron/audio/AppleSpeechSTT.ts), so a local
+  // build without the helper loses nothing. Opt-in: CI and release builds
+  // never set this and stay strict.
+  if (process.env.NATIVELY_SKIP_APPLE_SPEECH === '1') {
+    console.log('[apple-speech] NATIVELY_SKIP_APPLE_SPEECH=1 — helper not built (local build without the macOS 26 SDK; Apple Speech needs macOS 26 at runtime anyway).');
+    return;
+  }
+
   const arch = archToName(context.arch);
   if (arch !== 'x64' && arch !== 'arm64') {
     throw new Error(`[apple-speech] electron-builder supplied unsupported macOS arch "${arch}".`);
