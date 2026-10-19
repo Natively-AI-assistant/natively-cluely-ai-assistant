@@ -24,6 +24,7 @@ import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier
 import { FatalMainProcessCoordinator } from "./utils/fatalMainProcess"
 import { installResilientDnsLookup } from "./utils/resilientDnsLookup"
 import { resolveDebugLogPath } from "./utils/debugLogPath.mjs"
+import { shouldDisableGpu, readSettingsTextSync } from "./utils/gpuAcceleration"
 import { MeetingLifecycleQueue, type MeetingLifecycleState } from "./audio/meetingLifecycleQueue"
 import { autoUpdater } from "electron-updater"
 import { summarizeUpdateDownload } from "./update/updateDownloadSummary"
@@ -9534,6 +9535,23 @@ if (!gotSingleInstanceLock) {
 }
 
 ensureNativeModuleAbi();
+
+// GPU-acceleration kill switch. Must run before app.whenReady(): Chromium
+// latches hardware acceleration when the GPU process starts. Patched or legacy
+// GPUs (OpenCore Legacy Patcher on macOS 12, old drivers) can render a blank
+// or white window or drop the transparent overlay; disabling acceleration is
+// the remedy, on macOS and Windows alike. The setting takes effect on the NEXT
+// launch (this block reads settings.json once at startup); NATIVELY_DISABLE_GPU
+// overrides it for this launch. SettingsManager throws before ready, so this
+// reads the file directly. Never breaks boot: any failure keeps the default.
+try {
+  if (shouldDisableGpu(process.env, readSettingsTextSync(app.getPath('userData')))) {
+    app.disableHardwareAcceleration();
+    console.log('[GPU] hardware acceleration disabled (setting or NATIVELY_DISABLE_GPU=1)');
+  }
+} catch (err) {
+  console.warn('[GPU] acceleration check failed, keeping defaults:', err);
+}
 
 async function initializeApp() {
   logStartupPhase('initializeApp:start');

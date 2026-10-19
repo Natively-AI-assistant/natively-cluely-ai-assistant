@@ -22,6 +22,7 @@ import { AIProvidersSettings, AIP_CSS, AipModelList, AipPassedCheck } from './se
 import { SpeechDictionarySettings } from './settings/SpeechDictionarySettings';
 import { RoomSpeakersSettings } from './settings/RoomSpeakersSettings';
 import { FollowMicDeviceSettings } from './settings/FollowMicDeviceSettings';
+import { GpuAccelerationSettings } from './settings/GpuAccelerationSettings';
 import { AboutYouSettings } from './settings/AboutYouSettings';
 import { PlansSettings } from './settings/PlansSettings';
 import { PhoneMirrorSettings } from './settings/PhoneMirrorSettings';
@@ -3397,7 +3398,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             })}
                                         </div>
                                     </div>
-
+                                    <GpuAccelerationSettings />
                                 </div>
                                 </SettingsMotionReady.Provider>
                             )}

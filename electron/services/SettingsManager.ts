@@ -182,6 +182,9 @@ export interface AppSettings {
      *  the browser is using, when the user has not pinned one. Off by default;
      *  macOS 14+ only (the OS names the app's device there). */
     followMeetingAppMicDevice?: boolean;
+    /** Turn off Chromium GPU acceleration from the next launch (blank window /
+     *  missing overlay on patched or old GPUs). */
+    disableGpuAcceleration?: boolean;
     /** "About you": a few lines in the user's own words (role, team, what they
      *  care about) that the meeting notes prompt reads, like Granola's bio.
      *  At most 600 characters; empty = not used. */

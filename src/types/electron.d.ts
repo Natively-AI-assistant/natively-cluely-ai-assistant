@@ -176,6 +176,9 @@ export interface ElectronAPI {
   /** Follow the meeting app's microphone (capture from the device Zoom/Teams/the browser uses). */
   followMicDeviceGet?: () => Promise<{ enabled: boolean }>
   followMicDeviceSet?: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
+  /** GPU-acceleration kill switch (blank window / missing overlay on patched or old GPUs); next launch. */
+  gpuAccelerationGet?: () => Promise<{ disabled: boolean }>
+  gpuAccelerationSet?: (disabled: boolean) => Promise<{ success: boolean; error?: string }>
   roomSpeakersGet?: () => Promise<{ enabled: boolean }>
   roomSpeakersSet?: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
   localWhisperGetChannelConfig?: () => Promise<{
