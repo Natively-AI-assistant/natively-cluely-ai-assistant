@@ -23,10 +23,12 @@ import { fileURLToPath } from 'node:url';
 
 import {
   INTERNAL_CAPTURE_DEVICE_NAMES,
+  SYSTEM_AUDIO_INPUT_PREFIX,
   filterSelectableDevices,
   isInternalCaptureDevice,
   normalizeDeviceName,
   resolveRequestedInputDevice,
+  systemAudioOutputDeviceId,
 } from '../audioDeviceSelection.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -199,5 +201,47 @@ test('the internal-device name matches the aggregate Rust actually creates', () 
     `BUG: core_audio.rs creates an aggregate named "${match[1]}" but ` +
     `INTERNAL_CAPTURE_DEVICE_NAMES is ${JSON.stringify(INTERNAL_CAPTURE_DEVICE_NAMES)}. ` +
     'The mic picker will offer it again.',
+  );
+});
+
+// ── systemAudioOutputDeviceId (macOS 12 compat, 2026-10-19) ──────────────
+// The system-audio source picker App.tsx runs at meeting start. Virtual input
+// device (BlackHole) outranks SCK; both are macOS-only, and Windows must
+// always get the preferred output device id even with stale mac keys present
+// (cross-OS sync / restored backup, issue #252 F-003 defense-in-depth).
+
+test('darwin: a virtual input device routes to the input: backend', () => {
+  assert.equal(
+    systemAudioOutputDeviceId({ isMac: true, preferredOutput: 'Speakers', useSck: false, virtualInputDevice: 'BlackHole 2ch' }),
+    SYSTEM_AUDIO_INPUT_PREFIX + 'BlackHole 2ch',
+  );
+});
+
+test('darwin: the virtual device outranks SCK when both are set', () => {
+  assert.equal(
+    systemAudioOutputDeviceId({ isMac: true, preferredOutput: null, useSck: true, virtualInputDevice: 'BlackHole 2ch' }),
+    'input:BlackHole 2ch',
+  );
+});
+
+test('darwin: SCK alone routes to the sck backend', () => {
+  assert.equal(
+    systemAudioOutputDeviceId({ isMac: true, preferredOutput: 'Speakers', useSck: true, virtualInputDevice: '' }),
+    'sck',
+  );
+});
+
+test('darwin: neither flag routes to the preferred output device', () => {
+  assert.equal(
+    systemAudioOutputDeviceId({ isMac: true, preferredOutput: 'Speakers', useSck: false, virtualInputDevice: null }),
+    'Speakers',
+  );
+  assert.equal(systemAudioOutputDeviceId({ isMac: true, preferredOutput: null, useSck: false, virtualInputDevice: '' }), null);
+});
+
+test('win32: mac-only backends never leak into the WASAPI device id', () => {
+  assert.equal(
+    systemAudioOutputDeviceId({ isMac: false, preferredOutput: 'Speakers (Realtek)', useSck: true, virtualInputDevice: 'BlackHole 2ch' }),
+    'Speakers (Realtek)',
   );
 });

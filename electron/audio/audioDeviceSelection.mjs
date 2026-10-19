@@ -155,3 +155,27 @@ export function resolveRequestedInputDevice(requestedId, devices) {
   if (candidates.length === 0) return { status: 'unverifiable' };
   return { status: 'missing', available: candidates.map((d) => d.name) };
 }
+
+/**
+ * Prefix of a system-audio source that is a virtual INPUT device (BlackHole
+ * and friends) the user routes the system sound into via a Multi-Output
+ * Device. Mirrors INPUT_DEVICE_PREFIX in native-module/src/speaker/macos.rs.
+ * This is the only system-audio path on macOS < 13: the CoreAudio process tap
+ * needs 14.4 and ScreenCaptureKit audio needs 13.0.
+ */
+export const SYSTEM_AUDIO_INPUT_PREFIX = 'input:';
+
+/**
+ * Pick the system-audio source id for a meeting start. macOS has three
+ * backends, in precedence order: a virtual input device (works on every
+ * macOS), ScreenCaptureKit ('sck', 13+), and the CoreAudio process tap keyed
+ * by the output-device id (14.4+). Windows always gets the preferred output
+ * device id — WASAPI loopback keys off the OUTPUT device and the other two
+ * backends do not exist there. `isMac` arrives as an argument so this module
+ * stays platform-branch-free; the caller owns the check.
+ */
+export function systemAudioOutputDeviceId({ isMac, preferredOutput, useSck, virtualInputDevice }) {
+  if (isMac && virtualInputDevice) return SYSTEM_AUDIO_INPUT_PREFIX + virtualInputDevice;
+  if (isMac && useSck) return 'sck';
+  return preferredOutput ?? null;
+}

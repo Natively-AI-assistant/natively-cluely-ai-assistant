@@ -31,7 +31,7 @@ import { OrchestratorProvider, OrchestratedToasterHost, setUserState as setOrche
 // unmounting the whole tree — the black-screen root cause. Do not remove
 // the extension.
 import { getOrchestrator } from "./lib/onboarding/orchestrator.ts"
-import { isInternalCaptureDevice } from "../electron/audio/audioDeviceSelection.mjs"
+import { isInternalCaptureDevice, systemAudioOutputDeviceId } from "../electron/audio/audioDeviceSelection.mjs"
 import { ProviderChangeNotice, type EmbeddingDegradedNotice } from "./components/ProviderChangeNotice"
 import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
@@ -1135,24 +1135,30 @@ const App: React.FC = () => {
         localStorage.removeItem('preferredInputDeviceId');
         inputDeviceId = null;
       }
-      let outputDeviceId = localStorage.getItem('preferredOutputDeviceId');
-      // SCK is a macOS-only backend (ScreenCaptureKit + CoreAudio Process Tap
-      // live in the Rust speaker module under #[cfg(target_os = "macos")]).
-      // F-003 hid the toggle UI on Windows, but the localStorage key can be
-      // present on a Windows machine via cross-OS sync or restored backup —
-      // routing "sck" as an outputDeviceId then hands the Windows speaker
+      // System-audio source selection lives in the shared helper (the same
+      // module the Settings picker writes its choices from). SCK and the
+      // virtual input device are macOS-only backends (they live in the Rust
+      // speaker module under #[cfg(target_os = "macos")]). F-003 hid the
+      // toggle UI on Windows, but the localStorage keys can be present on a
+      // Windows machine via cross-OS sync or restored backup — routing "sck"
+      // or "input:…" as an outputDeviceId then hands the Windows speaker
       // module an unknown WASAPI device id and silently breaks system audio.
-      // Defense-in-depth: also require isMac at the consumer.
-      const useExperimentalSck = isMac && localStorage.getItem('useExperimentalSckBackend') === 'true';
-
-      // Override output device ID to force SCK if experimental mode is enabled
-      // Default to CoreAudio unless experimental is enabled
-      if (useExperimentalSck) {
+      // Defense-in-depth: the helper takes isMac and ignores both on Windows.
+      const virtualInputDevice = localStorage.getItem('macSystemAudioInputDevice');
+      const useExperimentalSck = localStorage.getItem('useExperimentalSckBackend') === 'true';
+      if (isMac && virtualInputDevice) {
+        console.log(`[App] Using virtual input device for system audio: ${virtualInputDevice}`);
+      } else if (isMac && useExperimentalSck) {
         console.log("[App] Using ScreenCaptureKit backend (Experimental).");
-        outputDeviceId = "sck";
       } else if (isMac) {
         console.log("[App] Using CoreAudio backend (Default).");
       }
+      const outputDeviceId = systemAudioOutputDeviceId({
+        isMac,
+        preferredOutput: localStorage.getItem('preferredOutputDeviceId'),
+        useSck: useExperimentalSck,
+        virtualInputDevice,
+      });
 
       const meetingRetention = await window.electronAPI.getMeetingRetention?.().catch(() => 'forever');
       const result = await window.electronAPI.startMeeting({

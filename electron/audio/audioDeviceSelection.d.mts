@@ -23,3 +23,12 @@ export function resolveRequestedInputDevice(
   requestedId: string | null | undefined,
   devices: EnumeratedInputDevice[] | null | undefined,
 ): InputDeviceResolution;
+
+export const SYSTEM_AUDIO_INPUT_PREFIX: string;
+
+export function systemAudioOutputDeviceId(opts: {
+  isMac: boolean;
+  preferredOutput?: string | null;
+  useSck?: boolean;
+  virtualInputDevice?: string | null;
+}): string | null;
