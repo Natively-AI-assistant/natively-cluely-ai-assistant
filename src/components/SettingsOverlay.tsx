@@ -4139,19 +4139,62 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                        Backend" — the internal name — with a two-line description; a
                                                        picker names both choices and shows which is on. App reads the
                                                        flag when a meeting starts, so a change applies from the next one. */
-                                                    <CustomSelect
-                                                        label={t('System Audio Capture')}
-                                                        value={useExperimentalSck ? 'sck' : 'coreaudio'}
-                                                        options={[
-                                                            { deviceId: 'coreaudio', label: t('Core Audio (default)') },
-                                                            { deviceId: 'sck', label: 'ScreenCaptureKit' },
-                                                        ].map((o) => ({ ...o, kind: 'audiooutput' as MediaDeviceKind, groupId: '', toJSON: () => ({}) }))}
-                                                        onChange={(id) => {
-                                                            const useSck = id === 'sck';
-                                                            setUseExperimentalSck(useSck);
-                                                            window.localStorage.setItem('useExperimentalSckBackend', useSck ? 'true' : 'false');
-                                                        }}
-                                                    />
+                                                    <div>
+                                                        <CustomSelect
+                                                            label={t('System Audio Capture')}
+                                                            value={virtualSystemInput ? 'input-device' : (useExperimentalSck ? 'sck' : 'coreaudio')}
+                                                            options={[
+                                                                { deviceId: 'coreaudio', label: t('Core Audio (default)') },
+                                                                { deviceId: 'sck', label: 'ScreenCaptureKit' },
+                                                                { deviceId: 'input-device', label: t('Virtual input device (BlackHole)') },
+                                                            ].map((o) => ({ ...o, kind: 'audiooutput' as MediaDeviceKind, groupId: '', toJSON: () => ({}) }))}
+                                                            onChange={(id) => {
+                                                                if (id === 'input-device') {
+                                                                    // Prefer BlackHole when present, else the first real
+                                                                    // input device. deviceId === device name on macOS
+                                                                    // (microphone.rs list_input_devices), which is what
+                                                                    // the native 'input:' backend resolves by.
+                                                                    const candidates = inputDevices.filter((d) => d.deviceId !== 'default');
+                                                                    const pick = candidates.find((d) => /blackhole/i.test(d.label)) ?? candidates[0];
+                                                                    if (!pick) return; // nothing to route into; keep the current backend
+                                                                    setVirtualSystemInput(pick.deviceId);
+                                                                    window.localStorage.setItem('macSystemAudioInputDevice', pick.deviceId);
+                                                                    // Virtual input outranks SCK at meeting start — keep
+                                                                    // the flags honest so the picker and App.tsx agree.
+                                                                    setUseExperimentalSck(false);
+                                                                    window.localStorage.setItem('useExperimentalSckBackend', 'false');
+                                                                    return;
+                                                                }
+                                                                window.localStorage.removeItem('macSystemAudioInputDevice');
+                                                                setVirtualSystemInput('');
+                                                                const useSck = id === 'sck';
+                                                                setUseExperimentalSck(useSck);
+                                                                window.localStorage.setItem('useExperimentalSckBackend', useSck ? 'true' : 'false');
+                                                            }}
+                                                        />
+                                                        {virtualSystemInput ? (
+                                                            <div className="mt-3">
+                                                                <CustomSelect
+                                                                    label={t('Virtual Device')}
+                                                                    value={virtualSystemInput}
+                                                                    options={inputDevices.filter((d) => d.deviceId !== 'default')}
+                                                                    onChange={(id) => {
+                                                                        setVirtualSystemInput(id);
+                                                                        window.localStorage.setItem('macSystemAudioInputDevice', id);
+                                                                    }}
+                                                                />
+                                                                <div className="flex gap-2 items-center mt-2 px-1">
+                                                                    <Info size={14} className="text-text-secondary shrink-0" />
+                                                                    <p className="text-xs text-text-secondary">
+                                                                        {t("Play your Mac's sound into this device: in Audio MIDI Setup create a Multi-Output Device with your speakers + BlackHole 2ch and choose it as the output. Needed on macOS 12, where Core Audio and ScreenCaptureKit capture are unavailable.")}
+                                                                        {!inputDevices.some((d) => /blackhole/i.test(d.label)) && (
+                                                                            <> {t('BlackHole not found — install it with `brew install blackhole-2ch`.')}</>
+                                                                        )}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        ) : null}
+                                                    </div>
                                                 )}
 
                                                 {/* Variant/Accent Selector (Conditional) — greyed out when the
@@ -4533,84 +4576,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 />
                                             </div>
 
-                                            {/* System Audio Capture (the SCK backend) — macOS only. The ScreenCaptureKit
-                                                backend is a CoreAudio alternative implemented in the
-                                                Rust speaker module under #[cfg(target_os="macos")];
-                                                Windows audio runs via WASAPI loopback so the toggle
-                                                has no meaning there and routing "sck" as a device id
-                                                silently breaks system audio (issue #252 audit / F-003). */}
-                                            {isMac && (
-                                                /* A card like its neighbours: Input Device and Output Device are
-                                                   CustomSelect cards (uppercase label, one control), so the capture
-                                                   method is one too, and the hint under it is the Language card's.
-                                                   It was a tile/title/switch card titled "SCK Backend" — the
-                                                   internal name — with a two-line description; a picker names both
-                                                   choices and shows which is on. App reads the flag when a meeting
-                                                   starts, so a change applies from the next one. */
-                                                <div>
-                                                    <CustomSelect
-                                                        label={t('System Audio Capture')}
-                                                        value={virtualSystemInput ? 'input-device' : (useExperimentalSck ? 'sck' : 'coreaudio')}
-                                                        options={[
-                                                            { deviceId: 'coreaudio', label: t('Core Audio (default)') },
-                                                            { deviceId: 'sck', label: 'ScreenCaptureKit' },
-                                                            { deviceId: 'input-device', label: t('Virtual input device (BlackHole)') },
-                                                        ].map((o) => ({ ...o, kind: 'audiooutput' as MediaDeviceKind, groupId: '', toJSON: () => ({}) }))}
-                                                        onChange={(id) => {
-                                                            if (id === 'input-device') {
-                                                                // Prefer BlackHole when present, else the first real
-                                                                // input device. deviceId === device name on macOS
-                                                                // (microphone.rs list_input_devices), which is what
-                                                                // the native 'input:' backend resolves by.
-                                                                const candidates = inputDevices.filter((d) => d.deviceId !== 'default');
-                                                                const pick = candidates.find((d) => /blackhole/i.test(d.label)) ?? candidates[0];
-                                                                if (!pick) return; // nothing to route into; keep the current backend
-                                                                setVirtualSystemInput(pick.deviceId);
-                                                                window.localStorage.setItem('macSystemAudioInputDevice', pick.deviceId);
-                                                                // Virtual input outranks SCK at meeting start — keep
-                                                                // the flags honest so the picker and App.tsx agree.
-                                                                setUseExperimentalSck(false);
-                                                                window.localStorage.setItem('useExperimentalSckBackend', 'false');
-                                                                return;
-                                                            }
-                                                            window.localStorage.removeItem('macSystemAudioInputDevice');
-                                                            setVirtualSystemInput('');
-                                                            const useSck = id === 'sck';
-                                                            setUseExperimentalSck(useSck);
-                                                            window.localStorage.setItem('useExperimentalSckBackend', useSck ? 'true' : 'false');
-                                                        }}
-                                                    />
-                                                    {virtualSystemInput ? (
-                                                        <div className="mt-3">
-                                                            <CustomSelect
-                                                                label={t('Virtual Device')}
-                                                                value={virtualSystemInput}
-                                                                options={inputDevices.filter((d) => d.deviceId !== 'default')}
-                                                                onChange={(id) => {
-                                                                    setVirtualSystemInput(id);
-                                                                    window.localStorage.setItem('macSystemAudioInputDevice', id);
-                                                                }}
-                                                            />
-                                                            <div className="flex gap-2 items-center mt-2 px-1">
-                                                                <Info size={14} className="text-text-secondary shrink-0" />
-                                                                <p className="text-xs text-text-secondary">
-                                                                    {t("Play your Mac's sound into this device: in Audio MIDI Setup create a Multi-Output Device with your speakers + BlackHole 2ch and choose it as the output. Needed on macOS 12, where Core Audio and ScreenCaptureKit capture are unavailable.")}
-                                                                    {!inputDevices.some((d) => /blackhole/i.test(d.label)) && (
-                                                                        <> {t('BlackHole not found — install it with `brew install blackhole-2ch`.')}</>
-                                                                    )}
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="flex gap-2 items-center mt-2 px-1">
-                                                            <Info size={14} className="text-text-secondary shrink-0" />
-                                                            <p className="text-xs text-text-secondary">
-                                                                {t("Try ScreenCaptureKit if the other side isn't transcribed.")}
-                                                            </p>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
                                             {/* ── Dictionary ── under the devices, above the mute row. */}
                                             <SpeechDictionarySettings sttProvider={sttProvider} />
 
