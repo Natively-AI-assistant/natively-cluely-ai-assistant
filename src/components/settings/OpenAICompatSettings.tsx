@@ -22,14 +22,43 @@ export interface CompatEndpointRow {
 
 // Official OpenAI-compatibility endpoints, verified against each vendor's own
 // docs (docs.anthropic.com/en/api/openai-sdk, ai.google.dev/gemini-api/docs/openai).
+// QwenCloud URLs per docs.qwencloud.com/api-reference/preparation/api-key and
+// /token-plan/personal/token-plan-personal-quickstart; Coding Plan is a legacy
+// host missing from the current docs (its /coding-plan/faq 404s) but live, with
+// a keyless GET /models that answers 200 (verified 2026-10-20).
 // Choosing a preset only fills Base URL — the fields stay freely editable.
-const PRESETS: Array<{ label: string; baseURL: string }> = [
+const norm = (u: string) => u.trim().replace(/\/+$/, '');
+// Fallback = model ids the docs list for the plan, offered when Fetch fails:
+// QwenCloud's compat endpoints do not publish GET /models (401/404 is the
+// documented answer). Coding Plan needs none — its /models works keyless.
+// NON_TEXT ids can appear on a live /models list but this app's compat lane is
+// text-only, so the checklist groups them instead of offering them.
+const NON_TEXT = /audio|image|video|tts|asr|wan|happyhorse/i;
+const PRESETS: Array<{ label: string; baseURL: string; qwen?: { keyPrefix: 'sk-sp-' | 'sk-'; fallback?: string[] } }> = [
     { label: 'OpenAI', baseURL: 'https://api.openai.com/v1' },
     { label: 'Anthropic', baseURL: 'https://api.anthropic.com/v1/' },
     { label: 'Google Gemini', baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/' },
     { label: 'OpenRouter', baseURL: 'https://openrouter.ai/api/v1' },
     { label: 'Ollama', baseURL: 'http://localhost:11434/v1' },
     { label: 'LM Studio', baseURL: 'http://localhost:1234/v1' },
+    {
+        label: 'QwenCloud Token Plan (Global)',
+        baseURL: 'https://token-plan.maas.qwencloudapi.com/compatible-mode/v1',
+        qwen: {
+            keyPrefix: 'sk-sp-',
+            fallback: ['qwen3.8-max', 'qwen3.8-flash', 'qwen3.7-plus', 'qwen3.7-max', 'qwen3.6-flash', 'deepseek-v4.1-flash', 'deepseek-v4-pro', 'deepseek-v4-flash-0731', 'glm-5.3', 'glm-5.2', 'auto'],
+        },
+    },
+    {
+        label: 'QwenCloud Pay-as-you-go (Global)',
+        baseURL: 'https://maas.qwencloudapi.com/compatible-mode/v1',
+        qwen: { keyPrefix: 'sk-', fallback: ['qwen-max', 'qwen-plus', 'qwen-flash'] },
+    },
+    {
+        label: 'QwenCloud Coding Plan (Global)',
+        baseURL: 'https://coding-intl.dashscope.aliyuncs.com/v1',
+        qwen: { keyPrefix: 'sk-sp-' },
+    },
 ];
 
 export const OpenAICompatSettings: React.FC<{ endpoints: CompatEndpointRow[] }> = ({ endpoints }) => {
@@ -41,12 +70,79 @@ export const OpenAICompatSettings: React.FC<{ endpoints: CompatEndpointRow[] }> 
     const [modelsText, setModelsText] = useState('');
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
+    const [fetched, setFetched] = useState<string[] | null>(null);
+    const [fetchedIsFallback, setFetchedIsFallback] = useState(false);
+    const [fetchError, setFetchError] = useState('');
+    // True after any fetch failure except 'invalid' — gates the fallback offer.
+    const [fetchFailed, setFetchFailed] = useState(false);
+    const [fetching, setFetching] = useState(false);
+    const [filter, setFilter] = useState('');
 
+    const resetFetchState = () => {
+        setFetched(null); setFetchedIsFallback(false); setFetchError(''); setFetchFailed(false); setFetching(false); setFilter('');
+    };
     const startNew = () => {
-        setEditingId('new'); setName(''); setBaseURL(''); setApiKey(''); setModelsText(''); setError('');
+        setEditingId('new'); setName(''); setBaseURL(''); setApiKey(''); setModelsText(''); setError(''); resetFetchState();
     };
     const startEdit = (ep: CompatEndpointRow) => {
-        setEditingId(ep.id); setName(ep.name); setBaseURL(ep.baseURL); setApiKey(''); setModelsText(ep.models.join(', ')); setError('');
+        setEditingId(ep.id); setName(ep.name); setBaseURL(ep.baseURL); setApiKey(''); setModelsText(ep.models.join(', ')); setError(''); resetFetchState();
+    };
+
+    const preset = PRESETS.find(p => norm(p.baseURL) === norm(baseURL));
+    const qw = preset?.qwen;
+    const fallbackList = qw?.fallback;
+    const typedKey = apiKey.trim();
+    // Advisory only — never blocks Save. A blank key on edit can't be checked:
+    // the stored key never reaches the renderer.
+    const keyMismatch = !!qw && !!typedKey
+        && (qw.keyPrefix === 'sk-sp-' ? !typedKey.startsWith('sk-sp-') : (!typedKey.startsWith('sk-') || typedKey.startsWith('sk-sp-')));
+    const selected = modelsText.split(',').map(m => m.trim()).filter(Boolean);
+    const matches = (fetched ?? []).filter(id => id.toLowerCase().includes(filter.trim().toLowerCase()));
+    const chatModels = matches.filter(id => !NON_TEXT.test(id));
+    const nonTextModels = matches.filter(id => NON_TEXT.test(id));
+
+    const toggleModel = (id: string) => {
+        const next = selected.includes(id)
+            ? selected.filter(m => m !== id)
+            : selected.length < 20 ? [...selected, id] : selected;
+        setModelsText(next.join(', '));
+    };
+
+    const fetchModels = async () => {
+        setFetching(true); setFetchError('');
+        const res = await window.electronAPI?.openaiCompatFetchModels?.({
+            baseURL: baseURL.trim(),
+            ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+            ...(editingId && editingId !== 'new' ? { id: editingId } : {}),
+        }).catch(() => undefined);
+        setFetching(false);
+        if (res?.success) {
+            if ((res.models ?? []).length > 0) {
+                setFetched(res.models ?? []); setFetchedIsFallback(false); setFetchError(''); setFetchFailed(false);
+            } else {
+                setFetchError(t('The endpoint returned no models. Type model names below.'));
+                setFetchFailed(true);
+            }
+            return;
+        }
+        const err = res?.error;
+        let msg: string;
+        switch (err) {
+            case 'invalid': msg = t('Enter an http(s) base URL first.'); break;
+            case 'unauthorized': msg = t('The endpoint rejected the API key (HTTP {status}). Check the key.').replace('{status}', String(res?.status ?? '?')); break;
+            case 'not_found': msg = t('This endpoint has no /models list (HTTP 404). Type model names below.'); break;
+            case 'timeout': msg = t('The endpoint did not answer within 10 seconds.'); break;
+            case 'network': msg = t('Could not reach the endpoint. Check the base URL and your connection.'); break;
+            case 'http': msg = t('The endpoint answered HTTP {status}.').replace('{status}', String(res?.status ?? '?')); break;
+            case 'bad_response': msg = t('The endpoint answered, but not with an OpenAI-style model list.'); break;
+            // undefined result — the IPC binding is missing or threw.
+            default: msg = t('Could not reach the endpoint. Check the base URL and your connection.'); break;
+        }
+        if (qw && (err === 'unauthorized' || err === 'not_found')) {
+            msg += ` ${t('QwenCloud does not publish a /models list on this endpoint, so 401/404 here is expected.')}`;
+        }
+        setFetchError(msg);
+        setFetchFailed(err !== 'invalid');
     };
 
     const save = async () => {
@@ -132,7 +228,7 @@ export const OpenAICompatSettings: React.FC<{ endpoints: CompatEndpointRow[] }> 
                                 <span className={SETTINGS_FIELD_LABEL}>{t('Preset')}</span>
                                 <div className="flex flex-wrap gap-1.5 mt-1.5">
                                     {PRESETS.map(p => (
-                                        <button key={p.label} type="button" className={SETTINGS_BTN} onClick={() => setBaseURL(p.baseURL)}>
+                                        <button key={p.label} type="button" className={SETTINGS_BTN} onClick={() => { setBaseURL(p.baseURL); resetFetchState(); }}>
                                             {t(p.label)}
                                         </button>
                                     ))}
@@ -156,10 +252,54 @@ export const OpenAICompatSettings: React.FC<{ endpoints: CompatEndpointRow[] }> 
                                     onChange={e => setApiKey(e.target.value)}
                                     placeholder={editingId !== 'new' ? t('Saved — leave blank to keep') : t('Optional for local servers')}
                                 />
+                                {qw && <p className="text-[10px] aip-muted mt-1">{t('Create a key at home.qwencloud.com/api-keys')}</p>}
+                                {keyMismatch && <p className="text-[10px] text-amber-500 mt-1">{t('This key belongs to a different QwenCloud plan')}</p>}
                             </div>
                             <div>
-                                <label className={SETTINGS_FIELD_LABEL} htmlFor="compat-models">{t('Models (comma-separated)')}</label>
+                                <div className="flex items-center justify-between">
+                                    <label className={SETTINGS_FIELD_LABEL} htmlFor="compat-models">{t('Models (comma-separated)')}</label>
+                                    <button type="button" className={SETTINGS_BTN} disabled={fetching || !baseURL.trim()} onClick={() => void fetchModels()}>
+                                        {fetching ? t('Fetching…') : t('Fetch models')}
+                                    </button>
+                                </div>
                                 <input id="compat-models" className={`${SETTINGS_INPUT} mt-1.5`} value={modelsText} onChange={e => setModelsText(e.target.value)} placeholder="llama3.2, qwen2.5:14b" />
+                                <p className={`text-[10px] mt-1 ${selected.length > 20 ? 'text-red-500' : 'aip-muted'}`}>{selected.length} / 20</p>
+                                {fetchError && <p className="text-[10px] text-red-500 mt-1">{fetchError}</p>}
+                                {fetchFailed && fallbackList && !fetched && (
+                                    <button type="button" className={`${SETTINGS_BTN} mt-1.5`} onClick={() => { setFetched(fallbackList); setFetchedIsFallback(true); }}>
+                                        {t('Use QwenCloud fallback list')}
+                                    </button>
+                                )}
+                                {fetched && (
+                                    <div className="rounded-lg border border-border-subtle p-2 space-y-1.5 mt-1.5">
+                                        {fetchedIsFallback && (
+                                            <p className="text-[10px] text-amber-500">{t('Fallback list: built-in suggestions, not fetched from your account.')}</p>
+                                        )}
+                                        <input className={SETTINGS_INPUT} placeholder={t('Search models')} value={filter} onChange={e => setFilter(e.target.value)} />
+                                        {matches.length === 0 && <p className="text-[10px] aip-muted">{t('No models match.')}</p>}
+                                        {chatModels.length > 0 && (
+                                            <div className="max-h-48 overflow-auto space-y-1">
+                                                {chatModels.map(id => (
+                                                    <label key={id} className="flex items-center gap-2 cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={selected.includes(id)}
+                                                            disabled={!selected.includes(id) && selected.length >= 20}
+                                                            onChange={() => toggleModel(id)}
+                                                        />
+                                                        <span className="text-xs text-text-primary">{id}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {nonTextModels.length > 0 && (
+                                            <details>
+                                                <summary className="text-[10px] aip-muted">{t('Not supported (non-text)')} ({nonTextModels.length})</summary>
+                                                <p className="text-[10px] aip-muted mt-1 break-all">{nonTextModels.join(', ')}</p>
+                                            </details>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                             {error && <p className="text-xs text-red-500">{error}</p>}
                             <div className="flex gap-2 justify-end">
