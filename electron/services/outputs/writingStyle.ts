@@ -393,6 +393,11 @@ export class WritingStyleService {
         const profile = this.currentProfile() || (await this.derive(call));
         return profile ? renderStyleGuide(profile) : null;
     }
+
+    /** The sender's usual sign-off ("Cheers,") from the current profile, for the draft's signature. */
+    signOffForFollowUp(): string | undefined {
+        return this.currentProfile()?.signOff || undefined;
+    }
 }
 
 /**

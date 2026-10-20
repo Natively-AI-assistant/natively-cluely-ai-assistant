@@ -2121,6 +2121,7 @@ export class MeetingPersistence {
                 tone: voice.tone,
                 senderName: followUpSenderFirstName(),
                 styleGuide: voice.styleGuide,
+                styleSignOff: voice.styleSignOff,
                 // NATIVELY_FOLLOWUP_DRAFT_V2=0 kill switch: the template draft, no LLM call.
                 deterministicOnly: !llmDraft,
             });
@@ -2175,20 +2176,26 @@ export function followUpSourceFromLegacyNotes(detailed: any, meetingTitle?: stri
 export async function followUpVoice(
     modeId: string | undefined,
     asked: FollowUpToneArg | undefined,
-    guideFor: (modeId: string) => Promise<string | undefined>,
-): Promise<{ tone?: FollowUpToneArg; styleGuide?: string }> {
+    guideFor: (modeId: string) => Promise<StyleVoice | undefined>,
+): Promise<{ tone?: FollowUpToneArg; styleGuide?: string; styleSignOff?: string }> {
     if (asked && asked !== 'your_style') return { tone: asked };
-    let styleGuide: string | undefined;
-    try { styleGuide = modeId ? await guideFor(modeId) : undefined; } catch { styleGuide = undefined; }
-    return styleGuide ? { tone: 'your_style', styleGuide } : {};
+    let voice: StyleVoice | undefined;
+    try { voice = modeId ? await guideFor(modeId) : undefined; } catch { voice = undefined; }
+    if (!voice?.guide) return {};
+    return { tone: 'your_style', styleGuide: voice.guide, ...(voice.signOff ? { styleSignOff: voice.signOff } : {}) };
 }
 
-/** The style guide of one mode's samples, for followUpVoice (outputs/writingStyle.ts). */
-function styleGuideReader(llmDraft: boolean, llmHelper: any): (modeId: string) => Promise<string | undefined> {
+/** One mode's writing style for a draft: the prompt block and the usual sign-off. */
+type StyleVoice = { guide: string; signOff?: string };
+
+/** The style of one mode's samples, for followUpVoice (outputs/writingStyle.ts). */
+function styleGuideReader(llmDraft: boolean, llmHelper: any): (modeId: string) => Promise<StyleVoice | undefined> {
     return async (modeId) => {
         const { getWritingStyleService, styleModelCall } = require('./services/outputs/outputsIpc');
         const { styleGuideForDraft } = require('./services/outputs/writingStyle');
-        return await styleGuideForDraft(getWritingStyleService(modeId), llmDraft, styleModelCall(llmHelper)) || undefined;
+        const svc = getWritingStyleService(modeId);
+        const guide = await styleGuideForDraft(svc, llmDraft, styleModelCall(llmHelper));
+        return guide ? { guide, signOff: svc.signOffForFollowUp() } : undefined;
     };
 }
 type FollowUpToneArg = 'professional' | 'warm' | 'concise' | 'friendly' | 'your_style';

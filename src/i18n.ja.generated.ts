@@ -140,6 +140,7 @@ export const JA_GENERATED: Record<string, string> = {
     'Calendar': 'カレンダー',
     'Calendar Connected': 'カレンダー連携済み',
     'Calendar linked': 'カレンダー連携済み',
+    'Calendar settings': 'カレンダー設定',
     'Cancel': 'キャンセル',
     'Cancel (Escape)': 'キャンセル（Escape）',
     'Cancel download': 'ダウンロードをキャンセル',

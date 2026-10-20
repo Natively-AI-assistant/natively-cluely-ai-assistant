@@ -1,7 +1,9 @@
 // The Integrations list on Settings › Connectors, in the order rows appear,
 // with what each one does. Order follows Granola's Connectors page (email
-// first, then where notes go, then the CRMs, then webhooks last); Clearbit,
-// which Granola does not have, sits with the CRMs it complements.
+// first, then where notes go, then the CRMs, then webhooks last), split into
+// Settings-style groups by what each is for; Clearbit, which Granola does not
+// have, sits with the CRMs it complements, and Zapier moves down beside
+// Webhooks, which it is built on.
 
 import type { ConnectorId } from '../ConnectorMark';
 
@@ -10,8 +12,18 @@ export type ConnectorKey =
     | 'affinity' | 'hubspot' | 'salesforce' | 'attio' | 'pipedrive' | 'clearbit'
     | 'webhooks';
 
+export type ConnectorGroup = 'workspace' | 'crm' | 'automation';
+
+/** The list's groups, in order, each under a small-capitals label. */
+export const CONNECTOR_GROUPS: readonly { id: ConnectorGroup; label: string }[] = [
+    { id: 'workspace', label: 'Email and workspace' },
+    { id: 'crm', label: 'CRM' },
+    { id: 'automation', label: 'Automation' },
+];
+
 export interface ConnectorEntry {
     key: ConnectorKey;
+    group: ConnectorGroup;
     title: string;
     description: string;
     mark: ConnectorId;
@@ -21,7 +33,7 @@ export interface ConnectorEntry {
 
 export const CONNECTOR_CATALOG: readonly ConnectorEntry[] = [
     {
-        key: 'gmail', title: 'Gmail', mark: 'gmail',
+        key: 'gmail', group: 'workspace', title: 'Gmail', mark: 'gmail',
         description: 'Enrich meeting briefs and send follow-up emails',
         howItWorks: [
             'Before a meeting, its brief can mention recent email threads with the people you are meeting.',
@@ -30,7 +42,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorEntry[] = [
         ],
     },
     {
-        key: 'slack', title: 'Slack', mark: 'slack',
+        key: 'slack', group: 'workspace', title: 'Slack', mark: 'slack',
         description: 'Post notes to channels',
         howItWorks: [
             'Connecting adds a channel: Slack asks which one.',
@@ -39,7 +51,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorEntry[] = [
         ],
     },
     {
-        key: 'notion', title: 'Notion', mark: 'notion',
+        key: 'notion', group: 'workspace', title: 'Notion', mark: 'notion',
         description: 'Export meeting notes to Notion pages',
         howItWorks: [
             'Pick the page or database new notes go under.',
@@ -48,7 +60,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorEntry[] = [
         ],
     },
     {
-        key: 'zapier', title: 'Zapier', mark: 'zapier',
+        key: 'zapier', group: 'automation', title: 'Zapier', mark: 'zapier',
         description: 'Connect Natively to thousands of apps',
         howItWorks: [
             'Make a Zap that starts with Webhooks by Zapier, Catch Hook.',
@@ -57,7 +69,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorEntry[] = [
         ],
     },
     {
-        key: 'affinity', title: 'Affinity', mark: 'affinity',
+        key: 'affinity', group: 'crm', title: 'Affinity', mark: 'affinity',
         description: 'Sync meeting notes to Affinity',
         howItWorks: [
             'Natively finds the people you met in Affinity by their email.',
@@ -65,7 +77,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorEntry[] = [
         ],
     },
     {
-        key: 'hubspot', title: 'HubSpot', mark: 'hubspot',
+        key: 'hubspot', group: 'crm', title: 'HubSpot', mark: 'hubspot',
         description: 'Add meeting notes to the contacts you met',
         howItWorks: [
             'Natively finds the contacts you met in HubSpot by their email.',
@@ -73,7 +85,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorEntry[] = [
         ],
     },
     {
-        key: 'salesforce', title: 'Salesforce', mark: 'salesforce',
+        key: 'salesforce', group: 'crm', title: 'Salesforce', mark: 'salesforce',
         description: 'Log meetings on the contacts you met',
         howItWorks: [
             'Natively finds the contacts you met in Salesforce by their email.',
@@ -81,7 +93,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorEntry[] = [
         ],
     },
     {
-        key: 'attio', title: 'Attio', mark: 'attio',
+        key: 'attio', group: 'crm', title: 'Attio', mark: 'attio',
         description: 'Add meeting notes to the people you met',
         howItWorks: [
             'Natively finds the people you met in Attio by their email.',
@@ -89,7 +101,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorEntry[] = [
         ],
     },
     {
-        key: 'pipedrive', title: 'Pipedrive', mark: 'pipedrive',
+        key: 'pipedrive', group: 'crm', title: 'Pipedrive', mark: 'pipedrive',
         description: 'Add meeting notes to the people you met',
         howItWorks: [
             'Natively finds the people you met in Pipedrive by their email.',
@@ -97,7 +109,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorEntry[] = [
         ],
     },
     {
-        key: 'clearbit', title: 'Clearbit', mark: 'clearbit',
+        key: 'clearbit', group: 'crm', title: 'Clearbit', mark: 'clearbit',
         description: 'Look up attendees’ title and company',
         howItWorks: [
             'From a meeting, press Look up attendees to find their title and company by email.',
@@ -105,7 +117,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorEntry[] = [
         ],
     },
     {
-        key: 'webhooks', title: 'Webhooks', mark: 'webhooks',
+        key: 'webhooks', group: 'automation', title: 'Webhooks', mark: 'webhooks',
         description: 'Automatically send notes to other tools',
         howItWorks: [
             'Natively sends a signed request to your address when a meeting’s notes are ready, or when you edit them.',

@@ -70,29 +70,23 @@ near-black — the same glyph idea with a second letter and no brand colour. The
 favicon is taken because the wash needs a brand hex, and because one character
 reads better than two at the 16px the tile actually renders.
 
-### Fluxion AI
+### Sidrune AI (formerly Fluxion AI)
 
-The one mark here that is not from lobehub — Fluxion is a small aggregator
-gateway with no entry in any icon set. `fluxion.png` is the **F monogram** taken
-from their own wordmark logo (`https://fluxionai.world/logo.png`), cropped away
-from the "FluxionAPI" lettering with the white plate unpremultiplied to alpha.
+Fluxion AI renamed itself Sidrune AI in October 2026; the provider id, stored
+key and API host stay `fluxion`. `sidrune.svg` is the **logomark** from the
+logo pack Sidrune sent Natively (`Sidrune_logo_black_logomark.svg`): one path,
+its black fill swapped for `currentColor` like the lobehub marks, so it is an
+inlined SVG in `AI_PROVIDER_MARKS` rather than a raster. The brand ships in
+black and white only, so the tile wash is a neutral grey.
 
-**Why not their orbital-galaxy brand mark** (`docs.fluxionai.world/brand-logo-mark.png`),
-which is the image Fluxion themselves lead with: the tile renders a **16px**
-glyph, and the galaxy is an illustration, not an icon. Rendered at true size it
-is a faint smudge on the dark tile and an unrecognisable grey blob in the light
-one — measured, not assumed. Every other mark here is a simple glyph (a star, an
-asterisk, a monogram) for exactly this reason. The only published copy is also
-flattened onto white, and since the artwork's highlights are white, unflattening
-it to alpha cannot recover the glow that carries the design.
-
-**A third asset to avoid:** `https://fluxionai.world/logo.svg` is an
-interlocking-S glyph whose own `<title>` reads **"Sub2API"** — artwork predating
-the Fluxion branding. It shipped here briefly by mistake.
-
-If Fluxion ever publishes a simplified icon-sized mark, prefer it over the
-monogram. No licence statement accompanies any of these assets, so the mark is
-used purely nominatively, as stated at the top of this file.
+**History, kept so the old mistakes are not repeated:** Fluxion never published an icon-sized
+mark. The card first shipped an F monogram cropped from their
+wordmark (`fluxion.png`, now deleted). Their orbital-galaxy brand mark was
+rejected because the tile renders a **16px** glyph and the galaxy was an
+illegible smudge at that size, measured in both themes. And
+`https://fluxionai.world/logo.svg` was an interlocking-S glyph titled
+**"Sub2API"**, artwork predating the Fluxion branding, which shipped here
+briefly by mistake.
 
 ### AgentRouter
 
@@ -106,7 +100,7 @@ sits at the same visual size as the other raster marks.
 Full-colour, so it is NOT in `WHITE_ON_TRANSPARENT_MARKS`. The tile wash
 (`#F868B8`) is the dominant saturated pixel of the disc's pink half. Checked at
 the tile's true 16 px on both themes: a simple disc stays recognisable where
-Fluxion's galaxy did not. No licence statement accompanies it, so it is used
+Fluxion's old galaxy mark did not. No licence statement accompanies it, so it is used
 nominatively, as stated at the top of this file.
 
 ### Jina
@@ -237,7 +231,7 @@ Affinity here is the relationship-intelligence CRM (affinity.co), not Serif's
 Affinity design apps. The icon sets carry only Serif's mark, so the CRM's own
 site icon is used, the knot on its purple tile, as it publishes it. Clearbit
 publishes only a raster icon too. Neither comes with a licence statement, so
-both are used nominatively, like AgentRouter and Fluxion above.
+both are used nominatively, like AgentRouter and Sidrune above.
 
 `ConnectorMarkCoverage.test.mjs` fails if a connector row has no mark.
 

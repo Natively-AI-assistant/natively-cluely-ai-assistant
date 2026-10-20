@@ -115,7 +115,7 @@ describe('4. template draft makes no style call', () => {
     test('MeetingPersistence reads the flag once and uses it for both the profile and the draft', () => {
         const src = read('electron/MeetingPersistence.ts');
         assert.match(src, /const llmDraft = isIntelligenceFlagEnabled\('followUpDraftV2'\);/);
-        assert.match(src, /styleGuideForDraft\(getWritingStyleService\(modeId\), llmDraft, styleModelCall\(llmHelper\)\)/);
+        assert.match(src, /const svc = getWritingStyleService\(modeId\);\s*const guide = await styleGuideForDraft\(svc, llmDraft, styleModelCall\(llmHelper\)\);/);
         assert.match(src, /followUpVoice\(styleModeId, tone, styleGuideReader\(llmDraft, this\.llmHelper\)\)/);
         assert.match(src, /deterministicOnly: !llmDraft,/);
     });

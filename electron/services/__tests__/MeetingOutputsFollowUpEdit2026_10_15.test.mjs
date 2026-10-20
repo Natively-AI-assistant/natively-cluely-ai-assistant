@@ -119,7 +119,7 @@ describe('saved with the meeting, through the IPC handler', () => {
             detailedSummary: { schemaVersion: 3, title: 'Pricing', tldr: ['Held list price'], sectionsV3: [], actionItems: [], keyPoints: [], followUpDraft: DRAFT, mode: { selectedModeId: 'mode-sales' } },
             transcript: [], usage: [], isProcessed: true, summaryStatus: 'completed',
         }, start, 600_000);
-        // Ran under no recorded mode: its edits teach no mode's style.
+        // Ran under no recorded mode: it counts as General (2026-10-19).
         DatabaseManager.getInstance().saveMeeting({
             id: 'fu-2', title: 'No mode', date: new Date(start).toISOString(), duration: '10:00', summary: '',
             detailedSummary: { schemaVersion: 3, title: 'No mode', tldr: [], sectionsV3: [], actionItems: [], keyPoints: [], followUpDraft: DRAFT },
@@ -160,10 +160,19 @@ describe('saved with the meeting, through the IPC handler', () => {
         assert.ok(ipc.getWritingStyleService('mode-sales').listSamples()[0].preview.startsWith('Hey Sam,'));
         assert.equal(ipc.getWritingStyleService('mode-other').status().sampleCount, 0, 'only the mode the meeting ran under learns');
     });
-    test('a meeting with no recorded mode saves the edit but teaches no style', async () => {
+    test('a meeting with no recorded mode counts as General: its edits teach General, and the page asks General (2026-10-19)', async () => {
+        const general = ipc.meetingStyleModeId({});
+        assert.ok(general, 'the built-in General mode');
+        assert.equal(ipc.meetingStyleModeId({ mode: { selectedModeId: 'mode-sales' } }), 'mode-sales', 'a recorded mode wins');
         const res = await save({ meetingId: 'fu-2', body: EDITED, used: true });
         assert.equal(res.ok, true);
-        assert.equal(res.recorded, false);
+        assert.equal(res.recorded, true);
+        assert.equal(ipc.getWritingStyleService(general).status().learnedCount, 1);
+        const forMeeting = (id) => handlers.get('outputs:style-get-for-meeting')({ sender: SENDER }, id);
+        assert.equal((await forMeeting('fu-2')).learnedCount, 1, "General's samples");
+        assert.equal((await forMeeting('fu-1')).learnedCount, 1, "Sales' samples, not General's");
+        assert.equal(await forMeeting('no-such-meeting'), null);
+        assert.equal(await handlers.get('outputs:style-get-for-meeting')({ sender: { id: 99 } }, 'fu-2'), null, 'launcher only');
     });
     test('the style calls are per mode: each names its mode, none answers without one', async () => {
         const call = (ch, ...args) => handlers.get(ch)({ sender: SENDER }, ...args);

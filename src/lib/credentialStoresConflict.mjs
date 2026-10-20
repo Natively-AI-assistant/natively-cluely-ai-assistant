@@ -60,7 +60,7 @@ export const CREDENTIAL_KEY_LABELS = {
   deepseekApiKey: 'DeepSeek',
   nvidiaNimApiKey: 'Nvidia Nim',
   openrouterApiKey: 'OpenRouter',
-  fluxionApiKey: 'Fluxion AI',
+  fluxionApiKey: 'Sidrune AI',
   agentrouterApiKey: 'AgentRouter',
   litellmApiKey: 'LiteLLM',
   ninerouterApiKey: '9Router',

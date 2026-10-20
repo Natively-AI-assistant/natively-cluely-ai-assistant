@@ -117,6 +117,50 @@ test('tidySubject strips a label before a separator and nothing else', () => {
   assert.equal(tidySubject('thanks for sharing your billing rebuild experience'), 'Thanks for sharing your billing rebuild experience');
 });
 
+test('finishSignature leaves one sign-off, on its own line (2026-10-20)', () => {
+  // Seen live on a "Your style" draft: the sender's "Cheers," glued to the last
+  // sentence, then the mode's "Best," with the name. One stays: the sender's.
+  assert.equal(
+    finishSignature('Hey, thanks for the chat. Does everyone agree on the storage strategy? Cheers,\n\nBest,\nNatively', 'Natively', 'general', 'Cheers,'),
+    'Hey, thanks for the chat. Does everyone agree on the storage strategy?\n\nCheers,\nNatively');
+  // The same with no style (a preset tone): the mode's, nearest the name, stays.
+  assert.equal(
+    finishSignature('Done. Cheers,\n\nBest,\nEvin', 'Evin', 'general'),
+    'Done.\n\nBest,\nEvin');
+  // Each sign-off with the name under it: one sign-off, one name, no stray name line.
+  assert.equal(finishSignature('Hi Sam,\n\nDone.\n\nCheers,\nEvin\n\nBest,\nEvin', 'Evin', 'general', 'Cheers,'), 'Hi Sam,\n\nDone.\n\nCheers,\nEvin');
+  assert.equal(finishSignature('Hi Sam,\n\nDone.\n\nCheers,\nEvin\n\nBest,\nEvin', 'Evin', 'general'), 'Hi Sam,\n\nDone.\n\nBest,\nEvin');
+  // A preset tone's prescribed sign-off is not swapped for a casual one.
+  assert.equal(finishSignature('Thank you for today.\n\nThanks,\n\nBest regards,\nEvin John', 'Evin John', 'looking-for-work'), 'Thank you for today.\n\nBest regards,\nEvin John');
+  // Glued and nothing after it: moved to its own line, the name under it.
+  assert.equal(finishSignature('We are holding the price. Cheers,', 'Evin', 'general'), 'We are holding the price.\n\nCheers,\nEvin');
+  // No name: still one sign-off.
+  assert.equal(finishSignature('Done. Cheers,\n\nBest,', undefined, 'general', 'Cheers,'), 'Done.\n\nCheers,');
+});
+
+test('finishSignature knows the sender\'s own sign-off without a comma (2026-10-20)', () => {
+  // "Thanks!" on its own line: signed under it, not a second sign-off added.
+  assert.equal(finishSignature('Hi Sam,\n\nDone.\n\nThanks!', 'Evin', 'general', 'Thanks!'), 'Hi Sam,\n\nDone.\n\nThanks!\nEvin');
+  // Glued to the last sentence: its own line.
+  assert.equal(finishSignature('Hi Sam,\n\nDone. Thanks!', 'Evin', 'general', 'Thanks!'), 'Hi Sam,\n\nDone.\n\nThanks!\nEvin');
+  // With the mode's under it: the sender's stays.
+  assert.equal(finishSignature('Done.\n\nThanks!\n\nBest,\nEvin', 'Evin', 'general', 'Thanks!'), 'Done.\n\nThanks!\nEvin');
+  // The name a blank line below the sign-off (seen live): pulled up under it.
+  assert.equal(finishSignature('Done.\n\nThanks!\n\nNatively', 'Natively', 'general', 'Thanks!'), 'Done.\n\nThanks!\nNatively');
+  assert.equal(finishSignature('Done.\n\nBest,\n\n\nEvin', 'Evin', 'general'), 'Done.\n\nBest,\nEvin');
+  // None written: the sender's own is added, not the mode's.
+  assert.equal(finishSignature('We are holding the price.', 'Evin', 'general', 'Cheers'), 'We are holding the price.\n\nCheers\nEvin');
+});
+
+test('finishSignature leaves body lines and closing sentences alone (2026-10-20)', () => {
+  // A closing sentence is not a sign-off: "Thanks again!" stays above "Best,".
+  assert.equal(finishSignature('Done.\n\nThanks again!\n\nBest,\nEvin', 'Evin', 'general'), 'Done.\n\nThanks again!\n\nBest,\nEvin');
+  // A body line that is just "Thanks," is not half of a closing pair.
+  assert.equal(finishSignature('Hi Sam,\n\nThanks,\nthe deck is attached.\n\nBest,\nEvin', 'Evin', 'general'), 'Hi Sam,\n\nThanks,\nthe deck is attached.\n\nBest,\nEvin');
+  // A comma inside a sentence is not a glued sign-off.
+  assert.equal(finishSignature('Thank you, Dana, for the conversation today.', 'Evin John', 'looking-for-work'), 'Thank you, Dana, for the conversation today.\n\nBest regards,\nEvin John');
+});
+
 test('finishSignature always signs a known name, and clears placeholder lines', () => {
   // Under the sign-off the model wrote.
   assert.equal(finishSignature('Hi Dana,\n\nThanks for today.\n\nBest regards,', 'Evin John', 'looking-for-work'), 'Hi Dana,\n\nThanks for today.\n\nBest regards,\nEvin John');

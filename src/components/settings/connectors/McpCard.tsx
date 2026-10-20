@@ -1,6 +1,7 @@
-// The MCP section, laid out like Granola's card: who it connects (Natively's
-// app icon, then the AI apps), a display heading, three plain steps
-// with the address as an accent chip, and one pill to act. Granola's address is
+// The MCP section, laid out like Granola's card in Settings' own parts: who it
+// connects (Natively's app icon, then the AI apps), a bold heading, three
+// numbered steps with the address as an accent chip, and Liquid Glass pills to
+// act ("Turn on" in the lavender glass, "Turn off" and "New token" clear). Granola's address is
 // public and signs in through the browser; Natively's server is local
 // (127.0.0.1 with a token), so turning it on reveals the setup for each app,
 // token included, in a quiet code block under the steps.
@@ -11,7 +12,7 @@ import { Check, Code2, Copy, Loader2, Plus } from 'lucide-react';
 import { useT } from '../../../i18n';
 import { LiquidGlassButton } from '../../../ui-components/LiquidGlassButton';
 import { Collapse, SETTINGS_CARD, useSettingsTones } from '../SettingsRow';
-import { GLASS_PILL_CLASS, GLASS_PILL_STYLE } from './parts';
+import { GlassPill, LAVENDER_PILL, StepList } from './parts';
 import claudeMark from '../../../assets/provider-logos/claude.svg?raw';
 import openaiMark from '../../../assets/provider-logos/openai.svg?raw';
 // The app's own icon, as About shows it: the Liquid Glass render macOS puts in
@@ -167,7 +168,7 @@ const AppSetup: React.FC<{ snippets: Snippets }> = ({ snippets }) => {
                     </button>
                 ))}
             </motion.div>
-            <motion.div variants={reduce ? FADE : RISE} className="relative mt-2.5 overflow-hidden rounded-xl border border-border-muted bg-bg-input">
+            <motion.div variants={reduce ? FADE : RISE} className="relative mt-2.5 overflow-hidden rounded-xl border border-border-subtle bg-bg-input">
                 {/* Three lines tall whatever the app, so switching tabs never moves the
                     card; longer setups scroll inside. Keyed per app: the new setup fades in
                     from the top instead of keeping the last one's scroll. */}
@@ -254,7 +255,7 @@ export const McpCard: React.FC<{ mcp: McpServerStatus; onStatus: (s: McpServerSt
 
     return (
         <div className={`${SETTINGS_CARD} group p-5`}>
-            <div className="mb-10 flex items-center gap-3" aria-hidden>
+            <div className="mb-6 flex items-center gap-3" aria-hidden>
                 {/* The macOS render carries the Dock's transparent margin (168 of 192px is
                     icon), so it is drawn larger and pulled in to sit level with the 40px tiles. */}
                 <img src={isMac ? appIconMac : appIconWin} alt="" draggable={false} className={isMac ? '-m-[3px] h-[46px] w-[46px]' : 'h-10 w-10'} />
@@ -266,38 +267,51 @@ export const McpCard: React.FC<{ mcp: McpServerStatus; onStatus: (s: McpServerSt
                 </span>
             </div>
 
-            <h4 className="font-plex-serif text-2xl leading-8 text-text-primary">{t('Bring your meeting notes to your AI tools')}</h4>
+            <h4 className="text-base font-bold text-text-primary">{t('Bring your meeting notes to your AI tools')}</h4>
+            <p className="mt-0.5 text-xs text-text-secondary">{t('AI apps on this computer can read and search your meetings. Nothing leaves it.')}</p>
 
-            <ol className="mt-6 list-decimal space-y-2 pl-5 text-[14px] leading-relaxed text-text-secondary">
-                <li>
-                    {/* One sentence, on or off: the address is kept, so it is there to
-                        copy before the server is on, as Granola's public URL is. */}
-                    {t('Add Natively using its local address')}
-                    {mcp.url ? <AddressChip url={mcp.url} /> : '.'}
-                </li>
-                <li>{t('Sign in with your token. The setup for each app already carries it.')}</li>
-                <li>{t('Chat, search and work with your meetings from Claude, Codex or Cursor.')}</li>
-            </ol>
+            <div className="mt-5">
+                <StepList steps={[
+                    // One sentence, on or off: the address is kept, so it is there to
+                    // copy before the server is on, as Granola's public URL is.
+                    <>
+                        {t('Add Natively using its local address')}
+                        {mcp.url ? <AddressChip url={mcp.url} /> : '.'}
+                    </>,
+                    t('Sign in with your token. The setup for each app already carries it.'),
+                    t('Chat, search and work with your meetings from Claude, Codex or Cursor.'),
+                ]} />
+            </div>
 
             <Collapse open={mcp.enabled && !!mcp.snippets}>
                 {mcp.snippets ? <AppSetup snippets={mcp.snippets} /> : <span />}
             </Collapse>
 
-            <div className="mt-7 flex flex-wrap items-center gap-x-3 gap-y-2">
-                {/* Dark grey Liquid Glass: the kit's neutral material taken a step darker
-                    (#555 → #3a3a3c, hover #4a4a4d), at UI scale but stretched into a 34px
-                    pill with long caps, the same width on and off. */}
-                <LiquidGlassButton
-                    variant="neutral"
-                    className={GLASS_PILL_CLASS}
-                    style={GLASS_PILL_STYLE}
-                    onClick={() => void toggle()}
-                    disabled={busy}
-                    aria-pressed={mcp.enabled}
-                    icon={busy && slow ? <Loader2 size={14} className="animate-spin" /> : undefined}
-                >
-                    <Swap k={mcp.enabled ? 'off' : 'on'}>{mcp.enabled ? t('Turn off') : t('Turn on')}</Swap>
-                </LiquidGlassButton>
+            <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2">
+                {/* Off, the card's one action wears the lavender glass; on, turning it
+                    off steps back to the clear pill. */}
+                {mcp.enabled ? (
+                    <GlassPill
+                        className="min-w-[84px]"
+                        onClick={() => void toggle()}
+                        disabled={busy}
+                        aria-pressed
+                        icon={busy && slow ? <Loader2 size={14} className="animate-spin" /> : undefined}
+                    >
+                        {t('Turn off')}
+                    </GlassPill>
+                ) : (
+                    <LiquidGlassButton
+                        variant="lavender"
+                        className={`${LAVENDER_PILL} min-w-[84px]`}
+                        onClick={() => void toggle()}
+                        disabled={busy}
+                        aria-pressed={false}
+                        icon={busy && slow ? <Loader2 size={14} className="animate-spin" /> : undefined}
+                    >
+                        {t('Turn on')}
+                    </LiquidGlassButton>
+                )}
                 <p
                     key={shakeKey ?? undefined}
                     className={`min-w-0 flex-1 text-xs transition-colors duration-150 ${failed ? tones.text.danger : 'text-text-tertiary'}${shakeKey && failed ? ' t-notice-shake' : ''}`}
@@ -312,13 +326,9 @@ export const McpCard: React.FC<{ mcp: McpServerStatus; onStatus: (s: McpServerSt
                     </Swap>
                 </p>
                 {mcp.enabled && mcp.token && (
-                    <button
-                        type="button"
-                        onClick={() => void reset()}
-                        className={`rounded-full px-3 py-1.5 text-xs transition-[color,background-color,transform] duration-150 ${EASE} active:scale-[0.97] ${confirmReset ? `${tones.text.danger} bg-bg-item-surface` : 'text-text-tertiary hover:text-text-primary'}`}
-                    >
+                    <GlassPill onClick={() => void reset()} tone={confirmReset ? 'danger' : undefined}>
                         <Swap k={confirmReset ? 'confirm' : 'idle'}>{confirmReset ? t('Disconnect every app?') : t('New token')}</Swap>
-                    </button>
+                    </GlassPill>
                 )}
             </div>
         </div>

@@ -5,13 +5,14 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertCircle, Check, Copy, Loader2 } from 'lucide-react';
 import { useT } from '../../../i18n';
 import {
-    Collapse, SETTINGS_BTN_BASE, SETTINGS_BTN_NEUTRAL, SETTINGS_FIELD_LABEL, SettingsNotice, useSettingsTones,
+    Collapse, SETTINGS_FIELD_LABEL, SettingsNotice, useSettingsTones,
 } from '../SettingsRow';
 import type { OutputResult } from '../../../types/meetingOutputs';
+import { GlassPill } from './parts';
 
 export type Flash = { tone: 'ok' | 'danger' | 'warn'; text: string } | null;
 
-/** A result as a notice under the row: the plain sentence main wrote, or a default. */
+/** A result as a notice under the card's footer: the plain sentence main wrote, or a default. */
 export function flashOf(res: OutputResult | undefined, okText?: string): Flash {
     if (!res) return { tone: 'danger', text: 'Something went wrong. Try again.' };
     if (res.ok) return res.message ? { tone: res.kind === 'storage_unavailable' ? 'warn' : 'ok', text: res.message } : okText ? { tone: 'ok', text: okText } : null;
@@ -22,7 +23,7 @@ export const FlashNotice: React.FC<{ flash: Flash }> = ({ flash }) => {
     const tones = useSettingsTones();
     return (
         <Collapse open={!!flash}>
-            <div className="pb-3">
+            <div className="pt-3">
                 {flash && (
                     <SettingsNotice
                         tone={tones[flash.tone]}
@@ -42,7 +43,6 @@ export const FlashNotice: React.FC<{ flash: Flash }> = ({ flash }) => {
 /** A copyable value, in the Intelligence pane's copy-field look; `multiline` for config snippets. */
 export const CopyField: React.FC<{ text: string; label?: string; multiline?: boolean }> = ({ text, label, multiline }) => {
     const t = useT();
-    const tones = useSettingsTones();
     const [copied, setCopied] = useState(false);
     const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     useEffect(() => () => clearTimeout(timer.current), []);
@@ -63,15 +63,15 @@ export const CopyField: React.FC<{ text: string; label?: string; multiline?: boo
                 ) : (
                     <code className="flex-1 min-w-0 truncate rounded-lg border border-border-subtle bg-bg-input px-3 py-2 font-mono text-xs text-text-primary" title={text}>{text}</code>
                 )}
-                <button
-                    type="button"
+                <GlassPill
                     onClick={() => void copy()}
                     aria-label={`${t('Copy')} ${label || ''}`.trim()}
-                    className={`${SETTINGS_BTN_BASE} min-w-[92px] ${copied ? tones.ok : SETTINGS_BTN_NEUTRAL}`}
+                    className="min-w-[92px]"
+                    tone={copied ? 'ok' : undefined}
+                    icon={copied ? <Check size={14} /> : <Copy size={14} />}
                 >
-                    {copied ? <Check size={14} /> : <Copy size={14} />}
                     {copied ? t('Copied') : t('Copy')}
-                </button>
+                </GlassPill>
             </div>
         </div>
     );

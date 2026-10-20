@@ -111,13 +111,14 @@
 /* The snippet's depth tuning, adjusted for this card. At the defaults (12px
    peek, 40% fade, 1-2px blur) dark banners over the indigo backdrop blur
    into one soft shadow, and the stack reads as a single card. These keep
-   the three edges visible. Scoped to the stack, not :root. */
+   the three edges visible, stacked close: each card behind shows ~7px of
+   its top (10 - 44 * 0.06). Scoped to the stack, not :root. */
 /* The rise matches the Transitions.dev toast the pills are shaped after:
    16px, not the snippet's 60px, which is sized for toasts entering from the
    bottom of a screen rather than inside a 198px card. Open/close timing,
    blur, scale and curve already equal the toast's. */
 .cal-stack {
-  --stack-peek: 14px;
+  --stack-peek: 10px;
   --stack-depth-fade: 0.22;
   --stack-depth1-blur: 0.5px;
   --stack-depth2-blur: 1px;
@@ -127,50 +128,75 @@
 /* The snippet pins banners to the left edge only; here they span the stack. */
 .cal-stack .t-stack-banner { right: 0; height: 100%; }
 
-/* The banner is Liquid Glass 2.0 (src/ui-components/liquidglas2.0): a
-   tinted, translucent lens (BannerGlass: GlassSurface refracting the curtain
-   behind the card) with the 2.0 CTA's bevel, sheen and directional edge,
-   which read the tokens below. The tint is a deep indigo at 30%. */
+/* Midnight violet, for the banners and the sample card alike (Evin's pick of
+   eight, 2026-10-20): solid deep violet in the curtain's own hue, a lavender
+   glow rising from the bottom, white text, lilac times, a lighter lilac for
+   "Today" / "Tomorrow". The tiles keep the cyan leaf and ring, amber in the
+   last 15 minutes. Measured at the card's lightest point (the glow, bottom
+   centre): white 10.4:1, muted 5.9:1, accent 5.4:1, lead 7.1:1, amber 8.3:1. */
+.cal-banner,
+.cal-classic {
+  --cal-ink: #fff;
+  --cal-muted: rgba(255, 255, 255, 0.7);
+  --cal-accent: #b9b2ff;
+  --cal-lead: #d6d1ff;
+  --cal-soon: #fde68a;
+  --cal-card: radial-gradient(60% 150% at 50% 130%, rgba(124, 92, 255, 0.55), rgba(124, 92, 255, 0) 80%), linear-gradient(180deg, rgb(44, 34, 116) 0%, rgb(30, 22, 86) 55%, rgb(22, 16, 64) 100%);
+  --cal-ring: rgb(30, 22, 86);
+  --cal-rim: inset 0 1px 0 rgba(196, 186, 255, 0.5), inset 1px 0 0 rgba(196, 186, 255, 0.14), inset -1px 0 0 rgba(196, 186, 255, 0.14);
+  --cal-shadow: 0 10px 24px -12px rgba(10, 4, 50, 0.85);
+}
+.cal-ink { color: var(--cal-ink); }
+.cal-muted { color: var(--cal-muted); }
+.cal-accent { color: var(--cal-accent); }
+.cal-lead { color: var(--cal-lead); }
+.cal-soon { color: var(--cal-soon); }
 .cal-banner {
   position: relative;
   isolation: isolate;
-  /* Thin, so the frosted, bent curtain reads through it. Measured with the
-     text hidden, at rest: title 6.3:1, the 70% time line 5.3:1, or better. */
-  --cal-glass-tint: rgba(30, 24, 112, 0.30);
-  /* The rim, well under the CTA's (.95 / .55): a 44px pill in a stack of
-     three, where the CTA's full-strength edge outlined every card. */
-  --cta-edge-hi: rgba(255, 255, 255, 0.22);
-  --cta-edge-mid: rgba(255, 255, 255, 0.08);
-  --cta-edge-lo: rgba(255, 255, 255, 0.03);
-  --cta-bevel-a: rgba(255, 255, 255, 0.12);
-  --cta-bevel-b: rgba(255, 255, 255, 0.07);
-  box-shadow: 0 10px 24px -12px rgba(6, 3, 40, 0.75);
+  /* The Liquid Glass 2.0 edge (BannerGlass) in lilac, its top the brightest. */
+  --cta-edge-hi: rgba(196, 186, 255, 0.5);
+  --cta-edge-mid: rgba(196, 186, 255, 0.14);
+  --cta-edge-lo: transparent;
+  box-shadow: var(--cal-shadow);
 }
 /* GlassSurface brings a drop shadow and a themed rim of its own; the banner
-   has both, so they go, and it takes the banner's tint. */
+   has both, so they go, and it takes the card's violet. */
 .cal-banner .cal-glass.glass-surface--svg,
 [data-theme='light'] .cal-banner .cal-glass.glass-surface--svg,
 .cal-banner .cal-glass.glass-surface--fallback {
   position: absolute;
   inset: 0;
-  background: var(--cal-glass-tint);
+  background: var(--cal-card);
   border: 0;
   box-shadow: none;
-  /* A card pushed back by an arrival changes tint as it moves (the stack's
-     own 350ms curve); while picking, the pop's quick 180ms. */
-  transition: background-color var(--stack-open) var(--stack-ease);
 }
-.cal-stack.is-picking .t-stack-banner .cal-banner .cal-glass { transition-duration: 180ms; transition-timing-function: ease-out; }
+/* The cards behind are lighter violets, one step at a time
+   (as the sample's peeks do). A layer that fades, since a gradient can't: a
+   card pushed back by an arrival changes as it moves (the stack's own 350ms
+   curve); while picking, the pop's quick 180ms. */
+.cal-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  background-color: var(--cal-peek, rgb(50, 40, 128));
+  box-shadow: var(--cal-rim);
+  opacity: var(--cal-peek-o, 0);
+  transition: opacity var(--stack-open) var(--stack-ease), background-color var(--stack-open) var(--stack-ease);
+  pointer-events: none;
+}
+.cal-stack.is-picking .t-stack-banner .cal-banner::before { transition-duration: 180ms; transition-timing-function: ease-out; }
 /* Above the glass layers. */
 .cal-banner-body {
   position: relative;
   z-index: 2;
-  text-shadow: 0 1px 2px rgba(20, 10, 70, 0.35);
 }
 /* The edge ring, a touch quieter at rest; a popped card catches the light. */
 .cal-banner .glass-cta__edge { opacity: 0.8; }
-/* The corner sheen, softer than the CTA's too. */
-.cal-banner .glass-cta__sheen { opacity: 0.6; }
+/* The violet is solid, so the glass's corner sheen goes; its bevel stays. */
+.cal-banner .glass-cta__sheen { opacity: 0; }
 /* Every card is whole: the ones behind show faintly through the glass of the
    ones in front, as stacked glass does. (They were once clipped to the part
    left uncovered; Evin wanted the full banners.) */
@@ -205,16 +231,14 @@
    lens seeing nothing behind its own card. */
 .cal-stack .t-stack-banner { will-change: transform; }
 .cal-stack .t-stack-banner:not(.is-enter):not(.is-leaving) { filter: none; opacity: 1; }
-/* Without the fade, the cards behind step back by a denser tint and a
-   quieter rim. A popped back card's tint is a step denser than the front's
-   resting glass: its text sits over the brighter curtain higher up (the time
-   line measured 4.4:1 at .30, 4.5:1 is the floor). The front card keeps its
-   own glass when hovered: it lifts, it doesn't darken. */
-.cal-stack .t-stack-banner[data-depth="1"] .cal-banner { --cal-glass-tint: rgba(30, 24, 112, 0.40); }
-.cal-stack .t-stack-banner[data-depth="2"] .cal-banner { --cal-glass-tint: rgba(30, 24, 112, 0.50); }
+/* Without the fade, the cards behind step back to lighter violets and a
+   quieter rim. A popped back card shows the full card, like the front one:
+   its text reads on the same ground. */
+.cal-stack .t-stack-banner[data-depth="1"] .cal-banner { --cal-peek: rgb(50, 40, 128); --cal-peek-o: 1; }
+.cal-stack .t-stack-banner[data-depth="2"] .cal-banner { --cal-peek: rgb(60, 48, 146); --cal-peek-o: 1; }
 .cal-stack .t-stack-banner[data-depth="1"]:not(.is-popped) .cal-banner .glass-cta__edge { opacity: 0.6; }
 .cal-stack .t-stack-banner[data-depth="2"]:not(.is-popped) .cal-banner .glass-cta__edge { opacity: 0.45; }
-.cal-stack .t-stack-banner.is-popped:not([data-depth="0"]) .cal-banner { --cal-glass-tint: rgba(30, 24, 112, 0.38); }
+.cal-stack .t-stack-banner.is-popped:not([data-depth="0"]) .cal-banner { --cal-peek-o: 0; }
 
 /* ─── Tile, the deck's left column (MeetingTile, UpcomingCalendarCard.tsx) ──
    28px, 8px in from the pill's top, bottom and left, so it shares a centre
@@ -231,9 +255,7 @@
   align-items: center;
   justify-content: center;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.04));
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.10),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.12);
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
@@ -250,7 +272,7 @@
   font-size: 12px;
   font-weight: 650;
   letter-spacing: -0.02em;
-  color: #fff;
+  color: var(--cal-ink);
 }
 /* The countdown: minutes left over the unit, in a ring that runs out as the
    start comes (the ring is drawn full at an hour out, empty at the start).
@@ -273,7 +295,7 @@
   font-size: 11px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: #fff;
+  color: var(--cal-ink);
 }
 .cal-tile-unit {
   margin-top: 1px;
@@ -281,17 +303,17 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgb(255 255 255 / 0.7);
+  color: var(--cal-muted);
 }
 .cal-tile-now {
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  color: #fde68a;
+  color: var(--cal-soon);
 }
 .cal-tile.is-soon .cal-tile-arc { stroke: #fcd34d; }
 .cal-tile.is-soon .cal-tile-num,
-.cal-tile.is-soon .cal-tile-unit { color: #fde68a; }
+.cal-tile.is-soon .cal-tile-unit { color: var(--cal-soon); }
 /* A free slot: an open, dashed tile. */
 .cal-tile.is-open {
   background: none;
@@ -327,7 +349,7 @@
    the bottom, a bluer right end, the time in steel blue, light cyan faces
    ringed in white, and the tops of two more cards stacked behind it, each
    with a light rim. Colours and proportions measured from that picture. A
-   linked calendar's meetings keep the deck of indigo pills. */
+   linked calendar's meetings are pills in these same colours (.cal-banner). */
 /* The stack sits on the card's bottom edge: no gap under it, and the front
    card's lower corners square against the edge, like the cards behind. */
 .cal-classic {
@@ -346,43 +368,30 @@
   gap: 8px;
   padding: 9px 10px 15px 14px;
   border-radius: 12px 12px 0 0;
-  background:
-    radial-gradient(52% 165% at 67% 118%, rgba(14, 98, 114, 0.98), rgba(14, 98, 114, 0) 80%),
-    radial-gradient(20% 75% at 74% 52%, rgba(28, 82, 122, 0.60), rgba(28, 82, 122, 0) 100%),
-    radial-gradient(40% 120% at 28% 130%, rgba(16, 50, 72, 0.60), rgba(16, 50, 72, 0) 100%),
-    radial-gradient(34% 130% at 100% 55%, rgba(44, 60, 124, 0.97), rgba(44, 60, 124, 0) 85%),
-    linear-gradient(180deg, rgb(35, 52, 82) 0%, rgb(24, 40, 68) 50%, rgb(16, 22, 50) 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(150, 160, 195, 0.55),
-    inset 1px 0 0 rgba(150, 165, 205, 0.16),
-    inset -1px 0 0 rgba(150, 165, 205, 0.16),
-    0 10px 24px -12px rgba(4, 8, 30, 0.8);
-  text-shadow: 0 1px 2px rgba(8, 14, 40, 0.35);
+  background: var(--cal-card);
+  box-shadow: var(--cal-rim), var(--cal-shadow);
 }
 /* The cards behind: only their tops show, each narrower, with its own rim. */
 .cal-classic-peek {
   position: absolute;
   height: 24px;
   border-radius: 12px 12px 0 0;
-  box-shadow:
-    inset 0 1px 0 rgba(150, 160, 200, 0.55),
-    inset 1px 0 0 rgba(150, 160, 200, 0.14),
-    inset -1px 0 0 rgba(150, 160, 200, 0.14);
+  box-shadow: var(--cal-rim);
 }
-.cal-classic-peek--mid { z-index: 1; top: -4px; left: 10px; right: 10px; background: rgb(41, 48, 88); }
-.cal-classic-peek--back { z-index: 0; top: -8px; left: 19px; right: 19px; background: rgb(45, 49, 100); }
+.cal-classic-peek--mid { z-index: 1; top: -4px; left: 10px; right: 10px; background: rgb(50, 40, 128); }
+.cal-classic-peek--back { z-index: 0; top: -8px; left: 19px; right: 19px; background: rgb(60, 48, 146); }
 .cal-classic-title {
   font-size: 13px;
   font-weight: 500;
   line-height: 1.15;
   letter-spacing: -0.01em;
-  color: rgb(242, 246, 249);
+  color: var(--cal-ink);
 }
 .cal-classic-when {
   font-size: 11.5px;
   font-weight: 400;
   line-height: 1;
-  color: #6fb6dc;
+  color: var(--cal-accent);
 }
 .cal-classic-dot { margin: 0 1px; opacity: 0.6; }
 /* The people, at the right end: three photos over a "+2" for the rest. */
@@ -397,13 +406,13 @@
   font-size: 10px;
   font-weight: 500;
   line-height: 1;
-  color: rgba(214, 228, 245, 0.7);
+  color: rgba(225, 225, 255, 0.7);
 }
 .cal-classic .cal-face {
   width: 20px;
   height: 20px;
   font-size: 7.5px;
-  box-shadow: 0 0 0 1.5px rgba(244, 251, 255, 0.9);
+  box-shadow: 0 0 0 1.5px var(--cal-ring);
   background: linear-gradient(160deg, #96dcf2, #78c6e4);
 }
 
@@ -420,7 +429,7 @@
   width: 20px;
   height: 20px;
   border-radius: 9999px;
-  box-shadow: 0 0 0 1.5px #211c6c;
+  box-shadow: 0 0 0 1.5px var(--cal-ring);
   font-size: 8px;
   font-weight: 650;
   letter-spacing: 0.02em;
@@ -435,7 +444,7 @@
 .cal-face-5 { background: linear-gradient(160deg, #9044bd, #70309a); }
 .cal-face-more {
   background: rgba(255, 255, 255, 0.12);
-  color: rgb(255 255 255 / 0.85);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 /* A peeking banner shows only its top edge. Its text would read through the
@@ -482,15 +491,16 @@
    behind follows 35ms later, so the deck moves in layers, not as one block;
    the text resolves 40ms behind the card. Letting go is a critically damped
    settle, no bounce, no delay. The front card, hovered, lifts 2px. */
-/* Per depth: the second meeting lifts 20px, the third 17.5px. Each then shows
-   its whole tile and both lines, centred in the pill, 2px clear of the card in
-   front of it. The third waits 2.8px lower when raised behind a popped second
-   meeting (20 - 44 * 0.12 = 14.7), so moving the pointer up onto it lifts it
+/* Per depth: the second meeting lifts 24px, the third 25.5px, from the closer
+   peek, to where they rose from the old 14px one (34px and 45.5px over the
+   deck). Each then shows its whole tile and both lines, centred in the pill,
+   clear of the card in front of it. The third waits 6.8px lower when raised
+   behind a popped second meeting, so moving the pointer up onto it lifts it
    the last bit; it never sinks. Cards behind a popped card rise by its lift
    (--raise, set per popped depth). */
 .cal-stack {
-  --pop-lift-1: 20px;
-  --pop-lift-2: 17.5px;
+  --pop-lift-1: 24px;
+  --pop-lift-2: 25.5px;
   --pop-sink: 4px;
   /* Damped springs (zeta 0.72 and 1, omega 21 and 24 rad/s), sampled. */
   --pop-spring: linear(0, 0.043, 0.147, 0.281, 0.423, 0.559, 0.681, 0.783, 0.866, 0.929, 0.974, 1.005, 1.024, 1.035, 1.038, 1.038, 1.034, 1.029, 1.024, 1.018, 1.014, 1.009, 1.006, 1.003, 1);
@@ -541,8 +551,10 @@
    current sizes it doesn't (the highest a card goes, the popped third meeting,
    is ~32px below the heading's last line); the component still checks, so a
    size change can't bury it. */
-.cal-stack-header { transition: opacity 200ms ease; }
-.cal-stack-header.is-covered { opacity: 0; }
+.cal-stack-header,
+.cal-settings { transition: opacity 200ms ease; }
+.cal-stack-header.is-covered,
+.cal-settings.is-covered { opacity: 0; pointer-events: none; }
 .cal-stack .t-stack-banner.is-popped[data-depth] .cal-banner-body {
   opacity: 1;
   transform: translateY(0);
@@ -582,8 +594,9 @@
     transform: translateY(calc(var(--stack-peek) * -1 + var(--pop-sink))) scale(calc(1 - var(--stack-depth-scale))) !important;
   }
   .cal-stack .t-stack-banner { transition-delay: 0ms !important; }
-  .cal-stack-header { transition: none; }
+  .cal-stack-header,
+  .cal-settings { transition: none; }
   .cal-stack .t-stack-banner .cal-banner-body { transition: none !important; transform: none !important; filter: none !important; }
-  .cal-banner > .glass-cta__edge, .cal-banner::after, .cal-banner .cal-glass { transition: none !important; }
+  .cal-banner > .glass-cta__edge, .cal-banner::after, .cal-banner::before { transition: none !important; }
   .cal-tile-arc { transition: none !important; }
 }

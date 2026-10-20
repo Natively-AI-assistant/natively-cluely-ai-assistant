@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../../i18n';
 import { NativelyApiSettings } from './NativelyApiSettings';
 import { NativelyProSettings } from './NativelyProSettings';
-import { HowItWorksRefund } from './HowItWorksRefund';
+import { HowItWorksRefund, PartnerPrograms } from './HowItWorksRefund';
 import { getLicenseSnapshot, setLicenseSnapshot } from '../../lib/licenseCache';
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'framer-motion';
 import { BEAT, EASE_ENTER, EASE_LEAVE, INK, SETTLE } from '../../lib/plansMotion';
@@ -317,7 +317,11 @@ export const PlansSettings: React.FC<PlansSettingsProps> = ({
                 // happening. Without this prop it would simply jump.
                 layout="position"
                 transition={{ layout: reduceMotion ? { duration: 0 } : { duration: SETTLE.remove, ease: EASE_ENTER } }}
+                className="space-y-6"
             >
+                {/* The affiliate and creator programs ride in the same region:
+                    they shift with it and never appear on their own. */}
+                <PartnerPrograms />
                 <HowItWorksRefund />
             </motion.div>
         </div>

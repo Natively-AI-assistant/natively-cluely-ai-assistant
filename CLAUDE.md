@@ -548,7 +548,7 @@ launcher rather than opening the settings window. To reach a settings tab:
   agent-browser tab <launcher target>
   agent-browser eval "window.electronAPI.openSettingsTab('ai-providers')"
 Tab ids are SETTINGS_NAV_ORDER in src/components/SettingsOverlay.tsx (general,
-plans, ai-providers, retrieval, audio, calendar, connections, skills, keybinds, phone-mirror,
+plans, ai-providers, retrieval, audio, skills, calendar, keybinds, phone-mirror, connections,
 intelligence, help, about).
 Confirm which document you are on with `agent-browser eval "location.search"`
 before trusting a snapshot. A snapshot of the wrong window looks like a broken

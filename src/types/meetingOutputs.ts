@@ -173,6 +173,8 @@ export interface MeetingOutputsApi {
     // Follow-ups in your style are PER MODE: each call names the mode. Null
     // (or an empty list) when no mode id is given.
     getWritingStyle: (modeId: string) => Promise<WritingStyleStatus | null>;
+    /** The style a meeting's follow-up uses: its mode's, or General's when none is recorded. */
+    getWritingStyleForMeeting: (meetingId: string) => Promise<WritingStyleStatus | null>;
     listWritingSamples: (modeId: string) => Promise<WritingSampleInfo[]>;
     addWritingSample: (modeId: string, text: string) => Promise<OutputResult & { status?: WritingStyleStatus }>;
     removeWritingSample: (modeId: string, id: string) => Promise<WritingStyleStatus | null>;

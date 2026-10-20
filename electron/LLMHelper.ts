@@ -7363,8 +7363,8 @@ let isMultimodal = !!(imagePaths?.length);
     const status = err?.status ?? err?.response?.status;
     const body = err?.error?.message ?? err?.response?.data?.message ?? err?.message ?? '';
     if (status === 403 && /does not allow \/v1\/messages dispatch/i.test(String(body))) {
-      return 'Fluxion rejected the Anthropic API format for this key\'s group. '
-        + 'Open Settings > AI Providers > Fluxion AI and switch API format to OpenAI.';
+      return 'Sidrune rejected the Anthropic API format for this key\'s group. '
+        + 'Open Settings > AI Providers > Sidrune AI and switch API format to OpenAI.';
     }
     return null;
   }
@@ -7373,10 +7373,10 @@ let isMultimodal = !!(imagePaths?.length);
     const err = chunk?.error;
     if (err) {
       const code = err.code ?? err.type ?? 'error';
-      throw new Error(`Fluxion (${model}) stream error [${code}]: ${err.message || 'gateway failed mid-stream'}`);
+      throw new Error(`Sidrune (${model}) stream error [${code}]: ${err.message || 'gateway failed mid-stream'}`);
     }
     if (chunk?.choices?.[0]?.finish_reason === 'error') {
-      throw new Error(`Fluxion (${model}) ended the stream with finish_reason=error`);
+      throw new Error(`Sidrune (${model}) ended the stream with finish_reason=error`);
     }
   }
 
@@ -7437,7 +7437,7 @@ let isMultimodal = !!(imagePaths?.length);
 
     if (this.fluxionProtocol === 'anthropic') {
       const client = this.fluxionAnthropicClient;
-      if (!client) throw new Error('Fluxion client not initialized');
+      if (!client) throw new Error('Sidrune client not initialized');
       const content = await this.buildFluxionAnthropicContent(userMessage, imagePaths);
       const request = this.buildFluxionAnthropicRequest(model, userMessage, systemPrompt, content);
       let response;
@@ -7445,7 +7445,7 @@ let isMultimodal = !!(imagePaths?.length);
         response = await this.withTimeout(
           this.withRetry(async () => await client.messages.stream(request).finalMessage()),
           120000,
-          `Fluxion (${model})`
+          `Sidrune (${model})`
         );
       } catch (e: any) {
         const hint = this.explainFluxionProtocolMismatch(e);
@@ -7456,7 +7456,7 @@ let isMultimodal = !!(imagePaths?.length);
     }
 
     const client = this.fluxionOpenAIClient;
-    if (!client) throw new Error('Fluxion client not initialized');
+    if (!client) throw new Error('Sidrune client not initialized');
     const messages = await this.buildOpenRouterMessages(userMessage, systemPrompt, imagePaths);
     // STREAMS AND ACCUMULATES rather than calling the non-streaming endpoint —
     // the same trick generateWithClaude uses, for a different reason. Measured
@@ -7483,7 +7483,7 @@ let isMultimodal = !!(imagePaths?.length);
         return acc;
       }),
       60000,
-      `Fluxion (${model})`
+      `Sidrune (${model})`
     );
     return stripLeadingReasoningBlock(text || '');
   }
@@ -7497,7 +7497,7 @@ let isMultimodal = !!(imagePaths?.length);
 
     if (this.fluxionProtocol === 'anthropic') {
       const client = this.fluxionAnthropicClient;
-      if (!client) throw new Error('Fluxion client not initialized');
+      if (!client) throw new Error('Sidrune client not initialized');
       const content = await this.buildFluxionAnthropicContent(userMessage, imagePaths);
       const request = this.buildFluxionAnthropicRequest(model, userMessage, systemPrompt, content);
       const stream = client.messages.stream(request);
@@ -7520,7 +7520,7 @@ let isMultimodal = !!(imagePaths?.length);
     }
 
     const client = this.fluxionOpenAIClient;
-    if (!client) throw new Error('Fluxion client not initialized');
+    if (!client) throw new Error('Sidrune client not initialized');
     const messages = await this.buildOpenRouterMessages(userMessage, systemPrompt, imagePaths);
     const stream = await client.chat.completions.create({ model, messages, stream: true }, { signal: abortSignal }) as any;
     try {
@@ -9285,7 +9285,7 @@ let isMultimodal = !!(imagePaths?.length);
       // look entirely plausible in the logs while billing the wrong account.
       if (this.isFluxionModel(this.currentModelId) && this.hasFluxionCredential()
         && gatewaySeatReadsImages('fluxion', this.currentModelId, this.visionFacts({ provider: 'fluxion', model: this.currentModelId }))) {
-        cloud.push({ id: 'fluxion', name: `Fluxion (${this.fluxionWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+        cloud.push({ id: 'fluxion', name: `Sidrune (${this.fluxionWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithFluxion(userContent, systemPrompt, imagePaths, sig) });
       }
       // Fluxion's rule — only the model the user picked — plus 9Router's
@@ -9510,7 +9510,7 @@ let isMultimodal = !!(imagePaths?.length);
       const gateway = this.isLiteLLMModel(this.currentModelId) ? 'LiteLLM proxy'
         : this.isNvidiaNimModel(this.currentModelId) ? 'NVIDIA NIM endpoint'
         : this.isOpenRouterModel(this.currentModelId) ? 'OpenRouter gateway'
-        : this.isFluxionModel(this.currentModelId) ? 'Fluxion AI gateway'
+        : this.isFluxionModel(this.currentModelId) ? 'Sidrune AI gateway'
         : this.isAgentRouterModel(this.currentModelId) ? 'AgentRouter gateway'
         : null;
       // …unless that id is left over from before a local selection (see
@@ -11578,7 +11578,7 @@ let isMultimodal = !!(imagePaths?.length);
       // exhausted channel is a normal outcome rather than an exceptional one.
       yield* this.streamSelectedProviderWithFailover({
         id: 'fluxion',
-        name: `Fluxion (${this.fluxionWireModel(this.currentModelId)})`,
+        name: `Sidrune (${this.fluxionWireModel(this.currentModelId)})`,
         open: (sig) => this.streamWithFluxion(userContent, fxSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, sig),
         userContent, finalSystemPrompt: fxSystem, thinkingBudget, abortSignal,
         hasImages: Boolean(isMultimodal && imagePaths?.length),
@@ -15769,7 +15769,7 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.isNvidiaNimModel(m) && this.nvidiaNimClient) return { name: 'NVIDIA NIM', run: (u, sys) => this.generateWithNvidiaNim(u, sys) };
     if (this.isNinerouterModel(m) && this.ninerouterClient) return { name: '9Router', run: (u, sys) => this.generateWithNinerouter(u, sys) };
     if (this.isOpenRouterModel(m) && this.openrouterClient) return { name: 'OpenRouter', run: (u, sys) => this.generateWithOpenRouter(u, sys) };
-    if (this.isFluxionModel(m) && this.hasFluxionCredential()) return { name: 'Fluxion', run: (u, sys) => this.generateWithFluxion(u, sys) };
+    if (this.isFluxionModel(m) && this.hasFluxionCredential()) return { name: 'Sidrune', run: (u, sys) => this.generateWithFluxion(u, sys) };
     if (this.isAgentRouterModel(m) && this.hasAgentRouterCredential()) return { name: 'AgentRouter', run: (u, sys) => this.generateWithAgentRouter(u, sys) };
     return null;
   }

@@ -4586,6 +4586,20 @@ export class DatabaseManager {
         });
     }
 
+    /** One meeting's saved notes alone, without its transcript or usage rows; null
+     *  when there is no such meeting. For lookups that need only the notes (which
+     *  mode a meeting ran under). */
+    public getMeetingDetailedSummary(id: string): { detailedSummary: unknown } | null {
+        if (!this.db) return null;
+        const row = this.db.prepare('SELECT summary_json FROM meetings WHERE id = ?').get(id) as { summary_json?: string } | undefined;
+        if (!row) return null;
+        try {
+            return { detailedSummary: JSON.parse(row.summary_json || '{}')?.detailedSummary };
+        } catch {
+            return { detailedSummary: undefined };
+        }
+    }
+
     public getMeetingDetails(id: string): Meeting | null {
         if (!this.db) return null;
 

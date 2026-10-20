@@ -243,6 +243,9 @@ export interface FollowUpGenerateParams {
   // renderStyleGuide). Absent when the mode has no samples. Used only for the
   // 'your_style' tone (the default when it is given): a preset tone drafts alone.
   styleGuide?: string;
+  // The user's usual sign-off from the same samples ("Cheers,"), for 'your_style'
+  // only: the prompt names it alone, and finishSignature keeps or adds it.
+  styleSignOff?: string;
 }
 
 /**
@@ -289,23 +292,99 @@ export function tidySubject(raw: string): string {
 // "[Candidate Name]", "<Your Title>". Models write these despite the rule against it.
 const PLACEHOLDER_LINE = /^\s*[\[{<][^\]}>\n]{1,40}[\]}>]\s*$/;
 
+// The sign-off words a closing line is made of ("Cheers,", "Best regards,"). Without
+// its comma such a line is only taken for a sign-off when it is the sender's own
+// ("Thanks!"): "Thanks again!" above "Best," is a closing sentence.
+const SIGN_OFF_WORDS = '(?:thanks(?: again| so much)?|thank you|many thanks|best(?: regards| wishes)?|kind regards|warm regards|warmly|regards|cheers|talk soon|speak soon|all the best|sincerely|take care)';
+const SIGN_OFF_LINE = new RegExp(`^\\s*${SIGN_OFF_WORDS}\\s*,\\s*$`, 'i');
+// A sign-off glued to the end of the last paragraph: "…these requests? Cheers,".
+const GLUED_SIGN_OFF = new RegExp(`^(.*[.!?)])\\s+(${SIGN_OFF_WORDS}\\s*,)\\s*$`, 'i');
+const bareWords = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}\s]+/gu, '').replace(/\s+/g, ' ').trim();
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** The sender's own sign-off from their writing style, if it is a usable line. */
+function cleanOwnSignOff(raw: unknown): string | undefined {
+  const s = typeof raw === 'string' ? raw.trim() : '';
+  return s && s.length <= 40 && !/[\n"]/.test(s) && /\p{L}/u.test(s) ? s : undefined;
+}
+
+// A name line under a sign-off: "Evin", "Evin John". Not a sentence.
+function isNameLine(line: string, signName: string | undefined): boolean {
+  const t = line.trim();
+  if (signName && t.toLowerCase() === signName.toLowerCase()) return true;
+  return /^\p{L}[\p{L} .'-]{0,38}$/u.test(t) && !/[.!?]$/.test(t) && t.split(/\s+/).length <= 4;
+}
+
 /**
- * The end of a model-written draft, made right: trailing placeholder lines go, and
- * when the sender's name is known it is always signed — under the sign-off the model
- * wrote, or under the mode's own sign-off when the model wrote none. The prompt asks
- * for the name, but models drop sign-offs, so it is guaranteed here. Without a name,
- * nothing is added.
+ * One sign-off, on its own line. A sign-off glued to the last sentence moves to its
+ * own line. When the model closed twice (the sender's "Cheers," and the mode's
+ * "Best,", each perhaps with the name under it) the pair becomes one: the sender's
+ * own when it is one of the two, else the last (the mode's, where the name sits).
+ * Only a closing pair counts: nothing but blank lines and one name line between
+ * them, so a body line that happens to be "Thanks," stays. Seen live on a
+ * "Your style" draft, 2026-10-20.
  */
-export function finishSignature(body: string, signName: string | undefined, mode?: string | null): string {
-  const lines = body.replace(/\s+$/, '').split('\n');
+function oneSignOff(lines: string[], own: string | undefined, signName: string | undefined): string[] {
+  const out = closingPair(lines, own, signName);
+  // The name directly under the sign-off, not a paragraph below it.
+  const n = out.length;
+  if (n >= 3 && isNameLine(out[n - 1], signName) && !out[n - 2].trim()) {
+    let i = n - 2;
+    while (i > 0 && !out[i].trim()) i--;
+    if (signOffTest(own)(out[i])) out.splice(i + 1, n - 2 - i);
+  }
+  return out;
+}
+
+const signOffTest = (own: string | undefined) => {
+  const ownBare = own ? bareWords(own) : '';
+  return (l: string) => SIGN_OFF_LINE.test(l) || (!!ownBare && bareWords(l) === ownBare);
+};
+
+function closingPair(lines: string[], own: string | undefined, signName: string | undefined): string[] {
+  const out = [...lines];
+  const ownBare = own ? bareWords(own) : '';
+  const isSignOff = signOffTest(own);
+  const glued = [GLUED_SIGN_OFF, ...(own ? [new RegExp(`^(.*[.!?)])\\s+(${escapeRe(own)})\\s*$`, 'i')] : [])];
+  for (let i = out.length - 1; i >= Math.max(0, out.length - 5); i--) {
+    const m = glued.map((re) => re.exec(out[i])).find(Boolean);
+    if (m) { out.splice(i, 1, m[1].trimEnd(), '', m[2].trim()); break; }
+  }
+  for (;;) {
+    const at: number[] = [];
+    for (let i = Math.max(0, out.length - 6); i < out.length; i++) if (isSignOff(out[i])) at.push(i);
+    if (at.length < 2) return out;
+    const first = at[at.length - 2];
+    const last = at[at.length - 1];
+    const between = out.slice(first + 1, last).filter((l) => l.trim());
+    if (between.length > 1 || (between.length === 1 && !isNameLine(between[0], signName))) return out;
+    const keep = ownBare && bareWords(out[first]) === ownBare ? out[first].trim() : out[last].trim();
+    out.splice(first, last - first + 1, keep);
+  }
+}
+
+/**
+ * The end of a model-written draft, made right: trailing placeholder lines go, one
+ * sign-off stays (oneSignOff), and when the sender's name is known it is always
+ * signed — under the sign-off the model wrote, or under `ownSignOff` (the sender's
+ * own, from their writing style) or else the mode's sign-off when the model wrote
+ * none. The prompt asks for the name, but models drop sign-offs, so it is guaranteed
+ * here. Without a name, nothing is added.
+ */
+export function finishSignature(body: string, signName: string | undefined, mode?: string | null, ownSignOff?: string): string {
+  let lines = body.replace(/\s+$/, '').split('\n');
   while (lines.length > 1 && (PLACEHOLDER_LINE.test(lines[lines.length - 1]) || !lines[lines.length - 1].trim())) lines.pop();
+  const own = cleanOwnSignOff(ownSignOff);
+  lines = oneSignOff(lines, own, signName);
   const profile = mailProfileForMode(mode);
   if (!signName || profile.signAs === 'none') return lines.join('\n');
   const tail = lines.slice(-3).join('\n').toLowerCase();
   if (tail.includes(signName.toLowerCase())) return lines.join('\n');
   const last = lines[lines.length - 1] || '';
-  if (/,\s*$/.test(last) && last.trim().length <= 40) return [...lines, signName].join('\n');
-  return profile.signOff ? [...lines, '', profile.signOff, signName].join('\n') : lines.join('\n');
+  const endsSignedOff = (/,\s*$/.test(last) || (!!own && bareWords(last) === bareWords(own))) && last.trim().length <= 40;
+  if (endsSignedOff) return [...lines, signName].join('\n');
+  const signOff = own || profile.signOff;
+  return signOff ? [...lines, '', signOff, signName].join('\n') : lines.join('\n');
 }
 
 /** Sign a template body under its sign-off line ("Best,"), if it has one. */
@@ -383,6 +462,12 @@ export class FollowUpDraftGenerator {
     const inputs = this.buildInputs(params.summary);
     // One voice per draft: the style guide only under 'your_style', never beside a preset tone.
     const styleGuide = tone === 'your_style' ? givenStyle : '';
+    // In the sender's voice the sign-off is theirs alone: the mode's own ("Best,") is
+    // not offered beside it, or the model writes both.
+    const ownSignOff = styleGuide ? cleanOwnSignOff(params.styleSignOff) : undefined;
+    const signOffRule = ownSignOff
+      ? `Sign off with "${ownSignOff}" (the sender's own) on its own line after the last paragraph. One sign-off only.`
+      : styleGuide ? `${profile.closing} One sign-off only, on its own line.` : profile.closing;
     // The next-steps rule is the ONLY part of STRICT RULES that legitimately differs
     // between the two INCLUDE_NEXT_STEPS branches. Every other rule — including the
     // plain-text and no-absence-statements rules below — is assembled OUTSIDE this
@@ -419,7 +504,7 @@ ${followUpMeaning}
 AUDIENCE & VOICE:
 - Addressed to: ${profile.recipient}
 - Salutation: ${profile.salutation}
-- Sign-off: ${profile.closing}${signName ? `
+- Sign-off: ${signOffRule}${signName ? `
 - Sender: ${signName}. Put exactly this name on its own line directly under the sign-off.` : ''}
 - Register: ${profile.register}
 - Cover, in order: ${structure}
@@ -515,7 +600,7 @@ ${inputs}`;
     return {
       type,
       ...(validatedSubject ? { subject: validatedSubject } : (hasSubject ? { subject: subjectFromContent(params.summary) } : {})),
-      body: finishSignature(result.data.body.slice(0, 4000), signName, params.mode),
+      body: finishSignature(result.data.body.slice(0, 4000), signName, params.mode, ownSignOff),
       tone,
       ...(styleGuide ? { styled: true } : {}),
       ...(actionItems.length ? { basedOnActionItemIds: actionItems.map(a => a.id).filter(Boolean) as string[] } : {}),

@@ -6,9 +6,9 @@
 import React, { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { useT } from '../../../i18n';
-import { SETTINGS_BTN, SettingsSwitch, useSettingsTones } from '../SettingsRow';
+import { SettingsSwitch, useSettingsTones } from '../SettingsRow';
 import type { AutoSendDestination, AutoSendRuleInfo, ConnectorsApi, FolderOption } from '../../../types/connectors';
-import { ConnectorSelect, DeliveryLine, DetailSection, FolderSelect, ListCard, folderName } from './parts';
+import { ConnectorSelect, DeliveryLine, DetailSection, FolderSelect, GlassPill, ListCard, folderName } from './parts';
 
 const capi = (): ConnectorsApi | undefined => window.electronAPI?.connectors;
 
@@ -52,14 +52,14 @@ export const AutoSendSection: React.FC<{
         <DetailSection
             title="Send automatically"
             subtitle={t('When a meeting’s notes are ready, Natively sends them here by itself, once per meeting. It runs while Natively is open.')}
+            after={error ? <p className={`mt-1.5 px-1 text-xs ${tones.text.danger}`}>{error}</p> : null}
         >
             {mine.length > 0 && (
-                <div className="mb-3">
                     <ListCard>
                         {mine.map((r) => (
-                            <div key={r.id} className="flex items-center gap-3 px-4 py-3">
+                            <div key={r.id} className="flex items-center gap-4 px-4 py-3">
                                 <div className="min-w-0 flex-1">
-                                    <div className="truncate text-sm text-text-primary">
+                                    <div className="truncate text-sm font-bold text-text-primary">
                                         {folderName(folders, r.folderId, all)}
                                         {destinations.length > 1 ? <span className="text-text-secondary"> {t('to')} {labelOf(r)}</span> : null}
                                     </div>
@@ -70,16 +70,14 @@ export const AutoSendSection: React.FC<{
                                     label={t('Send automatically')}
                                     onChange={() => void capi()?.updateAutoSendRule(r.id, { enabled: !r.enabled }).then(onChanged)}
                                 />
-                                <button type="button" className={SETTINGS_BTN} aria-label={t('Remove')} onClick={() => void capi()?.deleteAutoSendRule(r.id).then(onChanged)}>
-                                    <Trash2 size={14} />
-                                </button>
+                                <GlassPill aria-label={t('Remove')} onClick={() => void capi()?.deleteAutoSendRule(r.id).then(onChanged)} icon={<Trash2 size={14} />} />
                             </div>
                         ))}
                     </ListCard>
-                </div>
             )}
             {connected ? (
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 px-4 py-3">
+                    <span className="mr-auto text-sm font-bold text-text-primary">{t('Add a rule')}</span>
                     <div className="w-44"><FolderSelect folders={folders} value={folderId} onChange={setFolderId} /></div>
                     {destinations.length > 1 && (
                         <div className="w-44">
@@ -91,15 +89,13 @@ export const AutoSendSection: React.FC<{
                             />
                         </div>
                     )}
-                    <button type="button" className={SETTINGS_BTN} onClick={() => void add()} disabled={busy || !destinations.length}>
-                        <Plus size={14} />
+                    <GlassPill onClick={() => void add()} disabled={busy || !destinations.length} icon={<Plus size={14} />}>
                         {t('Add')}
-                    </button>
+                    </GlassPill>
                 </div>
             ) : (
-                <p className="text-xs text-text-tertiary">{t('Connect first, then choose which meetings are sent here by themselves.')}</p>
+                <p className="px-4 py-3 text-xs text-text-secondary">{t('Connect first, then choose which meetings are sent here by themselves.')}</p>
             )}
-            {error ? <p className={`mt-2 text-xs ${tones.text.danger}`}>{error}</p> : null}
         </DetailSection>
     );
 };

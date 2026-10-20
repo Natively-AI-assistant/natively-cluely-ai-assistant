@@ -50,7 +50,7 @@ import { useConfirmDialog } from './ui/ConfirmDialog';
 import { ModelSelectorLabel } from './ui/ModelSelectorLabel';
 import { MODEL_SELECTOR_WIDTH } from './ui/modelSelectorLabelText';
 import { Disclosure, DisclosureChevron } from './ui/AccordionSection';
-import { Presence, SettingsMenu, SettingsMotionReady } from './settings/SettingsRow';
+import { Presence, SETTINGS_CARD, SettingsMenu, SettingsMotionReady } from './settings/SettingsRow';
 import { ProfileVisualizer } from '../premium';
 import GlassEffectLayer from './ui/GlassEffectLayer';
 import { GenieModal } from './ui/GenieModal';
@@ -572,11 +572,11 @@ const SETTINGS_NAV_ORDER = [
     'ai-providers',
     'retrieval',
     'audio',
-    'calendar',
-    'connections',
     'skills',
+    'calendar',
     'keybinds',
     'phone-mirror',
+    'connections',
     'intelligence',
     'help',
     'about',
@@ -2364,15 +2364,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                         <div className="w-64 bg-bg-sidebar flex flex-col border-r border-border-subtle">
                             <button
                                 onClick={onClose}
-                                className="self-start ml-2 mt-2 mb-1 p-1.5 rounded-md text-text-tertiary hover:text-text-primary transition-colors"
+                                className="self-start ml-2 mt-2 p-1.5 rounded-md text-text-tertiary hover:text-text-primary transition-colors"
                                 title={t('Close')}
                                 aria-label={t('Close')}
                             >
                                 <X size={15} />
                             </button>
-                            <div className="px-5 pt-2 pb-3 overflow-y-auto flex-1 min-h-0">
-                                <h2 className="mb-0 text-[13px] font-bold uppercase tracking-[0.01em] text-text-primary">{t('Settings')}</h2>
-                                <nav className="mt-2 space-y-1">
+                            <div className="px-5 pt-0 pb-3 overflow-y-auto flex-1 min-h-0">
+                                <nav className="space-y-1" aria-label={t('Settings')}>
                                     <button
                                         onClick={() => setActiveTab('general')}
                                         className={navItemClass(activeTab === 'general')}
@@ -2415,11 +2414,32 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         <Mic size={16} /> {t('Audio')}
                                     </button>
                                     <button
+                                        onClick={() => setActiveTab('skills')}
+                                        className={navItemClass(activeTab === 'skills')}
+                                    >
+                                        {activeTab === 'skills' && navActivePill}
+                                        <Folder size={16} /> {t('Skills')}
+                                    </button>
+                                    <button
                                         onClick={() => setActiveTab('calendar')}
                                         className={navItemClass(activeTab === 'calendar')}
                                     >
                                         {activeTab === 'calendar' && navActivePill}
                                         <Calendar size={16} /> {t('Calendar')}
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('keybinds')}
+                                        className={navItemClass(activeTab === 'keybinds')}
+                                    >
+                                        {activeTab === 'keybinds' && navActivePill}
+                                        <Keyboard size={16} /> {t('Keybinds')}
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('phone-mirror')}
+                                        className={navItemClass(activeTab === 'phone-mirror')}
+                                    >
+                                        {activeTab === 'phone-mirror' && navActivePill}
+                                        <Smartphone size={16} /> {t('Companion')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('connections')}
@@ -2429,37 +2449,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         <Plug size={16} /> {t('Connectors')}
                                     </button>
                                     <button
-                                        onClick={() => setActiveTab('skills')}
-                                        className={navItemClass(activeTab === 'skills')}
-                                    >
-                                        {activeTab === 'skills' && navActivePill}
-                                        <Folder size={16} /> {t('Skills')}
-                                    </button>
-                                    <button
-                                        onClick={() => setActiveTab('keybinds')}
-                                        className={navItemClass(activeTab === 'keybinds')}
-                                    >
-                                        {activeTab === 'keybinds' && navActivePill}
-                                        <Keyboard size={16} /> {t('Keybinds')}
-                                    </button>
-
-                                    <button
-                                        onClick={() => setActiveTab('phone-mirror')}
-                                        className={navItemClass(activeTab === 'phone-mirror')}
-                                    >
-                                        {activeTab === 'phone-mirror' && navActivePill}
-                                        <Smartphone size={16} /> {t('Companion')}
-                                    </button>
-
-                                    <button
                                         onClick={() => setActiveTab('intelligence')}
                                         className={navItemClass(activeTab === 'intelligence')}
                                     >
                                         {activeTab === 'intelligence' && navActivePill}
                                         <Cpu size={16} /> {t('Intelligence')}
                                     </button>
-
-
                                     <button
                                         onClick={() => setActiveTab('help')}
                                         className={navItemClass(activeTab === 'help', 'text-[13px]')}
@@ -2467,7 +2462,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         {activeTab === 'help' && navActivePill}
                                         <HelpCircle size={16} /> {t('Setup & Help')}
                                     </button>
-
                                     <button
                                         onClick={() => setActiveTab('about')}
                                         className={navItemClass(activeTab === 'about')}
@@ -2478,7 +2472,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                 </nav>
                             </div>
 
-                            <div className="mt-auto py-4 px-6 border-t border-border-subtle">
+                            <div className="mt-auto py-4 px-6">
                                 <button
                                     onClick={() => window.electronAPI.quitApp()}
                                     className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-3"
@@ -4114,7 +4108,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             {/* Language and its Accent share one row: the accent
                                                 is a refinement of the language beside it, and two short
                                                 selects stacked full-width left most of each card empty. */}
-                                            <div className={currentGroupVariants.length > 1 ? 'grid grid-cols-2 gap-4' : ''}>
+                                            {/* On macOS, System Audio Capture sits beside Language, paired
+                                                like Input and Output Device; Accent then drops under Language. */}
+                                            <div className={isMac || currentGroupVariants.length > 1 ? 'grid grid-cols-2 gap-4 items-start' : ''}>
                                                 <CustomSelect
                                                     label={t("Language")}
                                                     value={displayedSttGroup}
@@ -4130,6 +4126,33 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     disabled={languageLocked}
                                                     badges={appleLanguageBadges?.group}
                                                 />
+
+                                                {/* System Audio Capture (the SCK backend) — macOS only. The ScreenCaptureKit
+                                                    backend is a CoreAudio alternative implemented in the
+                                                    Rust speaker module under #[cfg(target_os="macos")];
+                                                    Windows audio runs via WASAPI loopback so the toggle
+                                                    has no meaning there and routing "sck" as a device id
+                                                    silently breaks system audio (issue #252 audit / F-003). */}
+                                                {isMac && (
+                                                    /* A CustomSelect card like Language beside it (uppercase label,
+                                                       one control). It was a tile/title/switch card titled "SCK
+                                                       Backend" — the internal name — with a two-line description; a
+                                                       picker names both choices and shows which is on. App reads the
+                                                       flag when a meeting starts, so a change applies from the next one. */
+                                                    <CustomSelect
+                                                        label={t('System Audio Capture')}
+                                                        value={useExperimentalSck ? 'sck' : 'coreaudio'}
+                                                        options={[
+                                                            { deviceId: 'coreaudio', label: t('Core Audio (default)') },
+                                                            { deviceId: 'sck', label: 'ScreenCaptureKit' },
+                                                        ].map((o) => ({ ...o, kind: 'audiooutput' as MediaDeviceKind, groupId: '', toJSON: () => ({}) }))}
+                                                        onChange={(id) => {
+                                                            const useSck = id === 'sck';
+                                                            setUseExperimentalSck(useSck);
+                                                            window.localStorage.setItem('useExperimentalSckBackend', useSck ? 'true' : 'false');
+                                                        }}
+                                                    />
+                                                )}
 
                                                 {/* Variant/Accent Selector (Conditional) — greyed out when the
                                                     active local model's language conditioning is region-neutral
@@ -4320,30 +4343,24 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     <p className="text-xs text-text-secondary">{t('This model transcribes English only.')}</p>
                                                 </div>
                                             )}
-                                            {/* Not while English is fixed: "detected" would be untrue. */}
-                                            {recognitionLanguage === 'auto' && !showsEnglishFallback && (
+                                            {/* Not while English is fixed: "detected" would be untrue. Only
+                                                once a language was actually detected; no placeholder before. */}
+                                            {recognitionLanguage === 'auto' && !showsEnglishFallback && autoDetectedLanguage && (
                                                 <div className="flex gap-2 items-center mt-2 px-1 settings-swap-in">
                                                     <Info size={14} className="text-text-secondary shrink-0" />
                                                     <p className="text-xs text-text-secondary">
-                                                        {autoDetectedLanguage
-                                                            ? (() => {
-                                                                const label = Object.values(availableLanguages).find((l: any) =>
-                                                                    l.bcp47 === autoDetectedLanguage || l.iso639 === autoDetectedLanguage
-                                                                )?.label as string | undefined;
-                                                                return `${t('Auto mode — detected:')} ${label ?? autoDetectedLanguage}`;
-                                                              })()
-                                                            : t('Detected from the first few seconds of audio.')
-                                                        }
+                                                        {(() => {
+                                                            const label = Object.values(availableLanguages).find((l: any) =>
+                                                                l.bcp47 === autoDetectedLanguage || l.iso639 === autoDetectedLanguage
+                                                            )?.label as string | undefined;
+                                                            return `${t('Auto mode — detected:')} ${label ?? autoDetectedLanguage}`;
+                                                        })()}
                                                     </p>
                                                 </div>
                                             )}
                                         </div>
                                     </div>
 
-                                    {/* ── Dictionary Section ── */}
-                                    <SpeechDictionarySettings sttProvider={sttProvider} />
-                                    <RoomSpeakersSettings sttProvider={sttProvider} />
-                                    <FollowMicDeviceSettings />
 
                                     {/* ── Audio Configuration Section ── */}
                                     <div>
@@ -4594,6 +4611,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     )}
                                                 </div>
                                             )}
+                                            {/* ── Dictionary ── under the devices, above the mute row. */}
+                                            <SpeechDictionarySettings sttProvider={sttProvider} />
 
                                             {/* Follow the meeting app's mute: while Zoom, Teams or Meet shows
                                                 you muted, your mic is transcribed as silence. Natively only
@@ -4659,6 +4678,20 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     />
                                                 </div>
                                             </div>
+
+                                            {/* Room speakers and the meeting app's mic close the page, each in
+                                                its own card like the mute and Dictation rows above. */}
+                                            <div className={SETTINGS_CARD}>
+                                                <RoomSpeakersSettings sttProvider={sttProvider} />
+                                            </div>
+                                            {/* macOS only: macOS 14+ names the device a call app is using.
+                                                Windows reports no device name, so the setting could never take
+                                                effect there (followMicDevice.ts; FollowMicDevice2026_10_16 test). */}
+                                            {isMac && (
+                                                <div className={SETTINGS_CARD}>
+                                                    <FollowMicDeviceSettings />
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

@@ -1560,7 +1560,9 @@ export const CLOUD_PROVIDERS = [
     // scoped to the key's group. The one provider here with a second required
     // setting — see the protocol selector passed as `extraControls` below.
     // Natively's partner link (sponsor): new sign-ups get $3 in API credit.
-    { id: 'fluxion' as const, name: 'Fluxion AI', placeholder: 'sk-...', url: FLUXION_REFERRAL_URL },
+    // Shown as Sidrune AI, Fluxion AI's name since Oct 2026. The id, the stored
+    // key and the API host are unchanged, so existing keys keep working.
+    { id: 'fluxion' as const, name: 'Sidrune AI', placeholder: 'sk-...', url: FLUXION_REFERRAL_URL },
     // A gateway like Fluxion: four models, key-scoped catalogue, NOT opt-in.
     // Nothing extra to configure — its protocol is chosen per model. "Get API
     // key" is Natively's own AgentRouter referral link.
@@ -1716,7 +1718,7 @@ export const AipProviderMark: React.FC<AipProviderMarkProps> = ({ provider, name
                 {/* 20px inside the 26px tile, where the inlined SVG marks get 16
                     (`.aip-tile--mark > svg`). Deliberately different: those are
                     two-colour vector glyphs that stay crisp small, while these are
-                    detailed raster artwork — Fluxion's monogram and LiteLLM's
+                    detailed raster artwork, like LiteLLM's
                     favicon — which need the extra pixels to be readable at all.
                     20 leaves 3px of breathing room per side.
 
@@ -2361,7 +2363,9 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                             onFocus={() => setActiveIndex(i)}
                                             title={inert
                                                 ? t('At least one model must stay on. Turn the provider off to hide it entirely.')
-                                                : m.id}
+                                                // Sidrune's ids carry the internal `fluxion/` routing prefix
+                                                // from before the rebrand; show the id Sidrune itself uses.
+                                                : m.id.replace(/^fluxion\//, '')}
                                             className="aip-model-toggle"
                                         >
                                             <Check size={11} strokeWidth={2.5} className="aip-model-check" aria-hidden="true" />

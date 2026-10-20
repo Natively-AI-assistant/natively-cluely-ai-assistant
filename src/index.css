@@ -10101,14 +10101,16 @@ html[data-platform="linux"][data-window="launcher"] body {
 }
 /* The pill's own hover tint, which the re-tint's background shorthand would otherwise tie with. */
 @media (hover: hover) {
-  .lg-button.lg-lavender.mn-fu-send:not([aria-disabled='true']):hover { background-color: var(--lg-lav-hover); }
+  .lg-button.lg-lavender:is(.mn-fu-send, .lg-lav-tinted):not([aria-disabled='true']):not(:disabled):hover { background-color: var(--lg-lav-hover); }
 }
 .mn-fu-send-main:disabled,
 .mn-fu-send-more:disabled { cursor: default; }
 .mn-fu-send-main:disabled > * { opacity: .5; }
 .mn-fu-send[aria-disabled='true'] { opacity: .5; }
 .mn-fu-send[aria-disabled='true']:active { transform: none; }
-.lg-button.lg-lavender.mn-fu-send {
+/* The same re-tint for any other lavender pill that sits on a Settings or
+   meeting-notes canvas: Settings › Connectors' one action (.lg-lav-tinted). */
+.lg-button.lg-lavender:is(.mn-fu-send, .lg-lav-tinted) {
   --lg-lav-fg: #E6DDFD;
   --lg-lav-hover: rgba(156, 111, 243, .40);
   --lg-lav-rim: rgba(255, 255, 255, .22);
@@ -10119,7 +10121,7 @@ html[data-platform="linux"][data-window="launcher"] body {
     linear-gradient(180deg, rgba(255, 255, 255, .12) 0, rgba(255, 255, 255, .03) 6px, rgba(255, 255, 255, 0) 100%),
     rgba(156, 111, 243, .30);
 }
-[data-theme='light'] .lg-button.lg-lavender.mn-fu-send {
+[data-theme='light'] .lg-button.lg-lavender:is(.mn-fu-send, .lg-lav-tinted) {
   --lg-lav-fg: #3F2593;
   --lg-lav-hover: rgba(156, 111, 243, .36);
   --lg-lav-rim: rgba(255, 255, 255, .78);
@@ -10130,6 +10132,14 @@ html[data-platform="linux"][data-window="launcher"] body {
     linear-gradient(180deg, rgba(255, 255, 255, .42) 0%, rgba(255, 255, 255, .10) 18%, rgba(255, 255, 255, 0) 100%),
     rgba(156, 111, 243, .24);
 }
+
+/* Settings › Connectors: a connector row in a settings card lights faintly
+   under the pointer (a 4% wash of the ink, so it shows on the card in both
+   themes, where bg-elevated would vanish into the light card) and the press
+   lands at once. */
+.cx-row { transition: background-color 150ms ease-out; }
+@media (hover: hover) { .cx-row:hover { background-color: color-mix(in srgb, var(--text-primary) 4%, transparent); } }
+.cx-row:active { background-color: color-mix(in srgb, var(--text-primary) 7%, transparent); transition-duration: 0ms; }
 /* The toolbar's left side moves its glyphs, never a fill. The tone's ^ flips
    to "v" while its menu is open and, hovered, lifts toward the menu (open:
    dips toward closing it), as the send's ^; Regenerate's arrows turn half a

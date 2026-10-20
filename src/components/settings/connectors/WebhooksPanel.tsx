@@ -7,10 +7,10 @@
 import React, { useState } from 'react';
 import { AlertCircle, ArrowUpRight, Plus, RefreshCw, Send, Trash2 } from 'lucide-react';
 import { useT } from '../../../i18n';
-import { Collapse, SETTINGS_BTN, SETTINGS_CARD, SETTINGS_FIELD_LABEL, SETTINGS_INPUT, SettingsNotice, SettingsSwitch, useSettingsTones } from '../SettingsRow';
+import { Collapse, SETTINGS_FIELD_LABEL, SETTINGS_INPUT, SettingsNotice, SettingsSwitch, useSettingsTones } from '../SettingsRow';
 import type { ConnectorsApi, FolderOption, WebhookEndpointInfo, WebhookEvent } from '../../../types/connectors';
 import { BusyIcon, CopyField, FlashNotice, flashOf, type Flash } from './common';
-import { ActionArea, ConnectPill, DeliveryLine, DetailSection, FolderSelect, ListCard, QUIET_BTN, folderName } from './parts';
+import { ActionArea, ConnectPill, DeliveryLine, DetailSection, FOLD, FolderSelect, GlassPill, ListCard, folderName } from './parts';
 
 const capi = (): ConnectorsApi | undefined => window.electronAPI?.connectors;
 
@@ -41,9 +41,9 @@ const EndpointRow: React.FC<{ endpoint: WebhookEndpointInfo; folders: FolderOpti
     const events = endpoint.events.map((e) => t(EVENT_LABEL[e])).join(', ');
     return (
         <div className="px-4 py-3">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
                 <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm text-text-primary">{endpoint.label || endpoint.urlHost}</div>
+                    <div className="truncate text-sm font-bold text-text-primary">{endpoint.label || endpoint.urlHost}</div>
                     <div className="truncate text-xs text-text-secondary">
                         {endpoint.urlHost} · {folderName(folders, endpoint.folderId, t('All meetings'))}{endpoint.kind === 'webhook' ? ` · ${events}` : ''}
                     </div>
@@ -56,19 +56,15 @@ const EndpointRow: React.FC<{ endpoint: WebhookEndpointInfo; folders: FolderOpti
                 />
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-                <button type="button" className={SETTINGS_BTN} onClick={() => void test()} disabled={!!busy}>
-                    <BusyIcon busy={busy === 'test'} icon={<Send size={14} />} />
+                <GlassPill onClick={() => void test()} disabled={!!busy} icon={<BusyIcon busy={busy === 'test'} icon={<Send size={14} />} />}>
                     {t('Send test event')}
-                </button>
+                </GlassPill>
                 {endpoint.kind === 'webhook' && (
-                    <button type="button" className={SETTINGS_BTN} onClick={() => void rotate()} disabled={!!busy}>
-                        <BusyIcon busy={busy === 'rotate'} icon={<RefreshCw size={14} />} />
+                    <GlassPill onClick={() => void rotate()} disabled={!!busy} icon={<BusyIcon busy={busy === 'rotate'} icon={<RefreshCw size={14} />} />}>
                         {t('New signing secret')}
-                    </button>
+                    </GlassPill>
                 )}
-                <button type="button" className={SETTINGS_BTN} aria-label={t('Remove')} onClick={() => void capi()?.deleteWebhook(endpoint.id).then(onChanged)}>
-                    <Trash2 size={14} />
-                </button>
+                <GlassPill aria-label={t('Remove')} onClick={() => void capi()?.deleteWebhook(endpoint.id).then(onChanged)} icon={<Trash2 size={14} />} />
             </div>
             {secret && (
                 <div className="mt-3">
@@ -102,7 +98,7 @@ const AddEndpointForm: React.FC<{ kind: 'webhook' | 'zapier'; folders: FolderOpt
         onDone(kind === 'webhook' ? res.secret : undefined);
     };
     return (
-        <div className={`${SETTINGS_CARD} space-y-3 p-4`}>
+        <div className="space-y-3">
             <label className="block">
                 <span className={SETTINGS_FIELD_LABEL}>{kind === 'zapier' ? t('Zap address') : t('Endpoint URL')}</span>
                 <input
@@ -142,21 +138,20 @@ const AddEndpointForm: React.FC<{ kind: 'webhook' | 'zapier'; folders: FolderOpt
             </div>
             <FlashNotice flash={flash} />
             <div className="flex justify-end gap-2">
-                <button type="button" className={SETTINGS_BTN} onClick={onCancel}>{t('Cancel')}</button>
-                <button type="button" className={SETTINGS_BTN} onClick={() => void save()} disabled={!canSave}>
-                    <BusyIcon busy={busy} icon={<Plus size={14} />} />
+                <GlassPill onClick={onCancel}>{t('Cancel')}</GlassPill>
+                <GlassPill onClick={() => void save()} disabled={!canSave} icon={<BusyIcon busy={busy} icon={<Plus size={14} />} />}>
                     {kind === 'zapier' ? t('Add Zap') : t('Add webhook')}
-                </button>
+                </GlassPill>
             </div>
         </div>
     );
 };
 
 /**
- * Zapier and Webhooks, on Granola's page: the pill adds an address (Zapier also
- * gets a quiet way into Zapier's editor, where the Catch Hook is made), the form
- * or the one-time secret opens under it, then the addresses and, for webhooks,
- * what each request carries.
+ * Zapier and Webhooks: the page's card adds an address (Zapier also gets a
+ * quiet way into Zapier's editor, where the Catch Hook is made), the form or
+ * the one-time secret opens inside it, then a card of the addresses and, for
+ * webhooks, one of what each request carries.
  */
 export const WebhooksPanel: React.FC<{ kind: 'webhook' | 'zapier'; endpoints: WebhookEndpointInfo[]; folders: FolderOption[]; available: boolean; onChanged: () => void }> = ({ kind, endpoints, folders, available, onChanged }) => {
     const t = useT();
@@ -176,16 +171,22 @@ export const WebhooksPanel: React.FC<{ kind: 'webhook' | 'zapier'; endpoints: We
                 </SettingsNotice>
             )}
             <ActionArea
-                note={mine.length ? count : undefined}
+                state={mine.length ? 'on' : 'off'}
+                title={mine.length ? count : zapier ? t('No Zaps yet') : t('No endpoints yet')}
+                titleKey={mine.length ? count : 'none'}
+                detail={mine.length
+                    ? t('Sent as soon as a meeting’s notes are ready.')
+                    : zapier
+                        ? t('Start a Zap with Webhooks by Zapier, Catch Hook, and add its address.')
+                        : t('Add an https address. Each request is signed with your secret.')}
                 secondary={zapier ? (
-                    <button type="button" className={QUIET_BTN} onClick={() => void window.electronAPI?.openExternal?.('https://zapier.com/editor')}>
-                        {t('Open Zapier')}
-                        <ArrowUpRight size={12} />
-                    </button>
+                    <GlassPill onClick={() => void window.electronAPI?.openExternal?.('https://zapier.com/editor')}>
+                        <span className="inline-flex items-center gap-1">{t('Open Zapier')}<ArrowUpRight size={14} /></span>
+                    </GlassPill>
                 ) : undefined}
                 below={
                     <Collapse open={adding || !!secret}>
-                        <div className="pb-1">
+                        <div className={FOLD}>
                             {adding ? (
                                 <AddEndpointForm
                                     kind={kind}
@@ -194,13 +195,13 @@ export const WebhooksPanel: React.FC<{ kind: 'webhook' | 'zapier'; endpoints: We
                                     onDone={(s) => { setAdding(false); if (s) setSecret(s); onChanged(); }}
                                 />
                             ) : secret ? (
-                                <div className={`${SETTINGS_CARD} p-4`}>
+                                <div>
                                     <CopyField label={t('Signing secret')} text={secret} />
                                     <p className="mt-1.5 text-xs text-text-secondary">
                                         {t('Copy this now. You won’t be able to see it again. Check each request’s webhook-signature header with it.')}
                                     </p>
                                     <div className="mt-3 flex justify-end">
-                                        <button type="button" className={SETTINGS_BTN} onClick={() => setSecret(null)}>{t('Done')}</button>
+                                        <GlassPill onClick={() => setSecret(null)}>{t('Done')}</GlassPill>
                                     </div>
                                 </div>
                             ) : <span />}
@@ -229,7 +230,7 @@ export const WebhooksPanel: React.FC<{ kind: 'webhook' | 'zapier'; endpoints: We
             )}
             {!zapier && (
                 <DetailSection title="What is sent" subtitle={t('A JSON body like this, signed with your secret.')}>
-                    <pre className="overflow-x-auto rounded-xl border border-border-muted bg-bg-input px-3.5 py-3 font-mono text-[11.5px] leading-relaxed text-text-primary">{`{
+                    <pre className="overflow-x-auto px-4 py-3.5 font-mono text-[11.5px] leading-relaxed text-text-primary">{`{
   "type": "note.generated",
   "timestamp": "2026-10-17T15:02:11Z",
   "data": {

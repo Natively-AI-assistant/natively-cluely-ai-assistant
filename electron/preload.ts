@@ -2328,6 +2328,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setMcpEnabled: (enabled) => ipcRenderer.invoke('outputs:mcp-set-enabled', enabled),
     resetMcpToken: () => ipcRenderer.invoke('outputs:mcp-reset-token'),
     getWritingStyle: (modeId) => ipcRenderer.invoke('outputs:style-get', modeId),
+    getWritingStyleForMeeting: (meetingId) => ipcRenderer.invoke('outputs:style-get-for-meeting', meetingId),
     listWritingSamples: (modeId) => ipcRenderer.invoke('outputs:style-list', modeId),
     addWritingSample: (modeId, text) => ipcRenderer.invoke('outputs:style-add', modeId, text),
     removeWritingSample: (modeId, id) => ipcRenderer.invoke('outputs:style-remove', modeId, id),

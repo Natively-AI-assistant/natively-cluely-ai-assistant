@@ -138,7 +138,7 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
             'fluxion/gpt-5.6-terra',
             'fluxion/gemini-3.7-flash',
         ],
-        names: ['Claude Sonnet 5 (Fluxion)', 'GPT-5.6 Terra (Fluxion)', 'Gemini 3.7 Flash (Fluxion)'],
+        names: ['Claude Sonnet 5 (Sidrune)', 'GPT-5.6 Terra (Sidrune)', 'Gemini 3.7 Flash (Sidrune)'],
         descs: ['Balanced • Multimodal', 'Reasoning • Multimodal', 'Fastest • Multimodal'],
         pmKey: 'fluxionPreferredModel'
     },
