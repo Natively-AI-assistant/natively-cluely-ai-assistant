@@ -952,6 +952,7 @@ export interface ElectronAPI {
   openaiCompatList: () => Promise<Array<{ id: string; name: string; baseURL: string; models: string[]; hasApiKey: boolean }>>;
   openaiCompatSave: (cfg: { id?: string; name: string; baseURL: string; apiKey?: string; models: string[] }) => Promise<{ success: boolean; id?: string; error?: string }>;
   openaiCompatDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
+  openaiCompatFetchModels: (req: { id?: string; baseURL: string; apiKey?: string }) => Promise<{ success: boolean; models?: string[]; error?: string; status?: number }>;
 
   // Follow-up Email
   generateFollowupEmail: (input: any) => Promise<string>;

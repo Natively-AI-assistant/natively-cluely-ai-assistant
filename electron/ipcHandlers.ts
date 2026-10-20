@@ -11,6 +11,7 @@ import { resolveMacScreenStatus } from '../src/lib/permissionAttentionPolicy.mjs
 import { hasOwnAiKey, resolveExpiredTrial } from '../src/lib/trialPolicy.mjs';
 import { CARDS, OUTCOMES } from '../src/lib/cards/cardPolicy.mjs';
 import { OPENAI_COMPAT_PREFIX, parseCompatModelId } from './llm/providers/compatModelId.mjs';
+import { fetchCompatModels, isValidCompatBaseURL } from './llm/providers/openaiCompatModels';
 import type { OpenAICompatConfig } from './llm/providers/OpenAICompatProvider';
 import { TRIAL_CAMPAIGN, TRIAL_PROMO_ID, runTrialCampaignReset } from '../src/lib/trialCampaign.mjs';
 import { autoTrialFollowUp, runAutoTrial, shouldAutoStartTrial } from '../src/lib/trial/autoTrial.mjs';
@@ -13049,12 +13050,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     const name = typeof p.name === 'string' ? p.name.trim() : '';
     if (!name || name.length > 60) return { success: false, error: 'invalid' };
     const baseURL = typeof p.baseURL === 'string' ? p.baseURL.trim() : '';
-    try {
-      const u = new URL(baseURL);
-      if (u.protocol !== 'http:' && u.protocol !== 'https:') return { success: false, error: 'invalid' };
-    } catch {
-      return { success: false, error: 'invalid' };
-    }
+    if (!isValidCompatBaseURL(baseURL)) return { success: false, error: 'invalid' };
     const models = Array.isArray(p.models)
       ? p.models.filter((m): m is string => typeof m === 'string').map(m => m.trim()).filter(m => m.length > 0)
       : [];
@@ -13082,6 +13078,19 @@ export function initializeIpcHandlers(appState: AppState): void {
     await refreshRuntimeDefaultIfUnavailable();
     broadcastCredentialsChanged();
     return { success: true };
+  });
+  // "Fetch models" in the compat-endpoint editor. GET {baseURL}/models runs
+  // here, not in the renderer, so the stored API key never crosses the IPC
+  // boundary — and fetchCompatModels never returns or logs the raw cause.
+  safeHandle('openai-compat:fetch-models', async (_, payload: unknown) => {
+    if (typeof payload !== 'object' || payload === null) return { success: false, error: 'invalid' };
+    const p = payload as { id?: unknown; baseURL?: unknown; apiKey?: unknown };
+    if (typeof p.baseURL !== 'string' || (p.apiKey !== undefined && typeof p.apiKey !== 'string') || (p.id !== undefined && typeof p.id !== 'string')) return { success: false, error: 'invalid' };
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const stored = typeof p.id === 'string'
+      ? CredentialsManager.getInstance().getOpenAICompatProviders().find((c: OpenAICompatConfig) => c.id === p.id)
+      : undefined;
+    return fetchCompatModels({ baseURL: p.baseURL, apiKey: p.apiKey as string | undefined, stored: stored && { baseURL: stored.baseURL, apiKey: stored.apiKey } });
   });
 
   safeHandle('switch-to-custom-provider', async (_, providerId: string) => {

@@ -158,6 +158,27 @@ official OpenAI-compat docs); models are whatever wire names you list. They
 join the model picker as `compat:<instanceId>/<model>`, keyed by the endpoint
 name. The API key lives in the safeStorage blob (Keychain on macOS, DPAPI on
 Windows) and never returns to the renderer.
+- **QwenCloud presets**: Token Plan
+  `https://token-plan.maas.qwencloudapi.com/compatible-mode/v1` (keys
+  `sk-sp-…`), Pay-as-you-go `https://maas.qwencloudapi.com/compatible-mode/v1`
+  (keys `sk-…`, never `sk-sp-…`), Coding Plan
+  `https://coding-intl.dashscope.aliyuncs.com/v1` (keys `sk-sp-…`). Keys come
+  from `home.qwencloud.com/api-keys`; the editor warns — advisory only, Save
+  still works — when the typed key's prefix belongs to a different plan.
+  Coding Plan is a legacy host missing from docs.qwencloud.com but live
+  (verified 2026-10-20). QwenCloud's compat endpoints do not publish
+  `GET /models` (Token Plan and Pay-as-you-go answer 401/404), so the editor
+  offers a labelled fallback list instead: Token Plan's 11 documented ids, and
+  qwen-max / qwen-plus / qwen-flash for Pay-as-you-go.
+- **Fetch models**: the editor button calls the main-process IPC
+  `openai-compat:fetch-models` (`electron/llm/providers/openaiCompatModels.ts`)
+  — `GET {baseURL}/models` with a 10 s timeout. It sends the typed key, or the
+  stored key only when the request origin matches the origin it was saved for;
+  the key never reaches the renderer or logs. Result: sorted deduped ids, or
+  `invalid | unauthorized | not_found | timeout | network | http | bad_response`.
+  In the checklist, ids matching `audio|image|video|tts|asr|wan|happyhorse` are
+  grouped as "Not supported (non-text)". Ticking rows writes the Models field
+  (max 20); typing it manually still works.
 
 **(b) It speaks a new protocol:** implement `LLMProvider`
 (`electron/llm/providers/types.ts`) — `id`, `name`, `ownsModel`, `stream`,

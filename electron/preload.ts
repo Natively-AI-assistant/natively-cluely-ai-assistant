@@ -816,6 +816,7 @@ interface ElectronAPI {
   openaiCompatList: () => Promise<Array<{ id: string; name: string; baseURL: string; models: string[]; hasApiKey: boolean }>>;
   openaiCompatSave: (cfg: { id?: string; name: string; baseURL: string; apiKey?: string; models: string[] }) => Promise<{ success: boolean; id?: string; error?: string }>;
   openaiCompatDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
+  openaiCompatFetchModels: (req: { id?: string; baseURL: string; apiKey?: string }) => Promise<{ success: boolean; models?: string[]; error?: string; status?: number }>;
 
   // Follow-up Email
   generateFollowupEmail: (input: any) => Promise<string>;
@@ -2816,6 +2817,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openaiCompatList: () => ipcRenderer.invoke('openai-compat:list'),
   openaiCompatSave: (cfg: { id?: string; name: string; baseURL: string; apiKey?: string; models: string[] }) => ipcRenderer.invoke('openai-compat:save', cfg),
   openaiCompatDelete: (id: string) => ipcRenderer.invoke('openai-compat:delete', id),
+  openaiCompatFetchModels: (req: { id?: string; baseURL: string; apiKey?: string }) => ipcRenderer.invoke('openai-compat:fetch-models', req),
 
   // Follow-up Email
   generateFollowupEmail: (input: any) => ipcRenderer.invoke('generate-followup-email', input),
