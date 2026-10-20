@@ -11,6 +11,8 @@ import assert from 'node:assert/strict';
 import {
   FLUXION_REFERRAL_URL,
   AGENTROUTER_REFERRAL_URL,
+  CREATORS_PROGRAM_URL,
+  AFFILIATE_PROGRAM_URL,
   SPONSORSHIP_EMAIL,
   SPONSORSHIP_GMAIL_COMPOSE_URL,
 } from '../partnerLinks.ts';
@@ -22,6 +24,10 @@ describe('FLUXION_REFERRAL_URL', () => {
     assert.equal(u.protocol, 'https:');
     assert.equal(u.hostname, 'fluxionai.world');
     assert.equal(u.pathname, '/register');
+  });
+
+  test('is unchanged by the Sidrune AI rebrand, character for character', () => {
+    assert.equal(FLUXION_REFERRAL_URL, 'https://fluxionai.world/register?source=github&campaign=natively&promo=NATIVELY');
   });
 
   test("carries Natively's attribution parameters", () => {
@@ -45,6 +51,17 @@ describe('AGENTROUTER_REFERRAL_URL', () => {
   test("uses Natively's own referral code, not the docs-navigation one", () => {
     assert.deepEqual(Object.fromEntries(u.searchParams), { aff: '9ZCx' });
     assert.notEqual(u.searchParams.get('aff'), 'IPN5');
+  });
+});
+
+describe('program pages on heynatively.com', () => {
+  test('creators and affiliate links point at their own pages', () => {
+    for (const [link, pathname] of [[CREATORS_PROGRAM_URL, '/creators'], [AFFILIATE_PROGRAM_URL, '/affiliate']]) {
+      const u = new URL(link);
+      assert.equal(u.hostname, 'heynatively.com', link);
+      assert.equal(u.pathname, pathname, link);
+      assert.equal(u.search, '', link);
+    }
   });
 });
 
@@ -92,7 +109,7 @@ describe('SPONSORSHIP_GMAIL_COMPOSE_URL', () => {
 
 describe('partner links — shared invariants', () => {
   test('every outbound link is https with no credentials or fragment', () => {
-    for (const link of [FLUXION_REFERRAL_URL, AGENTROUTER_REFERRAL_URL, SPONSORSHIP_GMAIL_COMPOSE_URL]) {
+    for (const link of [FLUXION_REFERRAL_URL, AGENTROUTER_REFERRAL_URL, CREATORS_PROGRAM_URL, AFFILIATE_PROGRAM_URL, SPONSORSHIP_GMAIL_COMPOSE_URL]) {
       const u = new URL(link);
       assert.equal(u.protocol, 'https:', link);
       assert.equal(u.username, '', link);

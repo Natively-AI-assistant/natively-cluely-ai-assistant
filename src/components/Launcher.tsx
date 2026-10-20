@@ -1201,6 +1201,7 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                             meetings={visibleMeetings}
                                             totalCount={upcomingMeetings.length}
                                             loading={!eventsLoaded}
+                                            onOpenSettings={() => onOpenSettings('calendar')}
                                         />
                                     </div>
                                 </div>

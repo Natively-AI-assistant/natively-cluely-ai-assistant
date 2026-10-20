@@ -1,111 +1,166 @@
-// Shared pieces of the Connectors page: the list card (Granola's grouped card
-// with dashed separators), and Granola's connector page: the header with its
-// way back, the action row (glass Connect pill or Connected pill) and its rule,
-// titled sections, "How it works", the folder picker and the line that says
-// what was last sent.
+// Shared pieces of the Connectors page, built from Settings' own parts so the
+// tab reads like General and Audio: Audio's card (bg-card, 12px corners) holding
+// General's rows (a 40px tile, a bold 14px title over a 12px grey line, the
+// control on the right), Audio's bold section heading with its grey line over
+// each card, and General's small-capitals label over each group of the list.
+// Buttons stay Natively's Liquid Glass pills: the one action in the lavender
+// glass of the meeting notes' Usage question, every other in the clear glass.
+// The MCP card sits in the same card.
 
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowUpRight, Check, ChevronLeft, ChevronRight, Loader2, Unplug } from 'lucide-react';
+import { ArrowUpRight, ChevronLeft, ChevronRight, Loader2, Unplug } from 'lucide-react';
 import { useT } from '../../../i18n';
-import { LiquidGlassButton } from '../../../ui-components/LiquidGlassButton';
-import { SETTINGS_CARD, useSettingsTones } from '../SettingsRow';
+import { LiquidGlassButton, type LiquidGlassButtonProps } from '../../../ui-components/LiquidGlassButton';
+import { Presence, SETTINGS_CARD, useSettingsTones, type SettingsTone } from '../SettingsRow';
 import { AIP_CSS, AipSelect, type AipSelectOption } from '../AIProvidersSettings';
 import { useResolvedTheme } from '../../../hooks/useResolvedTheme';
 import type { DeliveryInfo, FolderOption } from '../../../types/connectors';
 
-/** A small label over a group of rows, like Granola's "Integrations". */
-export const GroupLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <h4 className="mb-2 px-1 text-sm font-medium text-text-secondary">{children}</h4>
+/** A row inside a card: General's padding. */
+export const ROW = 'flex items-center gap-4 px-4 py-3';
+
+/** A fold that opens under a row (a form, a secret, a search), on its own line. */
+export const FOLD = 'border-t border-border-subtle px-4 py-4';
+
+/**
+ * Audio's card, its rows split by the settings line (border-subtle: a hairline
+ * in light, none in dark, as General's rows have none). No overflow clip: a
+ * folder picker's menu opens out of it.
+ */
+export const Group: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
+    <div className={`${SETTINGS_CARD} divide-y divide-border-subtle ${className}`}>{children}</div>
 );
 
-/** Rows in one rounded card, split by dashed rules that stop short of the edges. */
-export const ListCard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const rows = React.Children.toArray(children).filter(Boolean);
-    return (
-        <div className={`${SETTINGS_CARD} overflow-hidden`}>
-            {rows.map((row, i) => (
-                <React.Fragment key={i}>
-                    {/* Granola's dashed rule: drawn in the tertiary ink at low opacity so it reads in both themes. */}
-                    {i > 0 && <div aria-hidden className="mx-4 border-t border-dashed text-text-tertiary opacity-40" style={{ borderColor: 'currentColor' }} />}
-                    {row}
-                </React.Fragment>
-            ))}
-        </div>
-    );
-};
+/** The small-capitals label over a group of the list, as General labels its groups. */
+export const GroupLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <h4 className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">{children}</h4>
+);
 
-/** One row of a ListCard: logo, title, description, "Connected", chevron. The whole row opens the page. */
-export const ListRow: React.FC<{
-    icon: React.ReactNode;
-    title: React.ReactNode;
-    badge?: React.ReactNode;
-    description?: React.ReactNode;
-    status?: React.ReactNode;
-    onOpen: () => void;
-}> = ({ icon, title, badge, description, status, onOpen }) => (
-    <button
-        type="button"
-        onClick={onOpen}
-        className="group flex w-full items-center gap-4 px-4 py-3.5 text-left text-text-primary transition-colors hover:bg-bg-elevated/60"
-    >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center">{icon}</span>
+/** Audio's section heading: bold 18px over one grey line, then the card. */
+export const SectionHeading: React.FC<{ title: React.ReactNode; subtitle?: React.ReactNode }> = ({ title, subtitle }) => (
+    <div className="mb-3">
+        <h3 className="text-lg font-bold text-text-primary">{title}</h3>
+        {subtitle ? <p className="mt-1 text-xs text-text-secondary">{subtitle}</p> : null}
+    </div>
+);
+
+/** General's 40px tile, holding a brand mark or a glyph; `sm` is 32px for a row inside a list. */
+export const Tile: React.FC<{ children: React.ReactNode; size?: 'sm' | 'md'; className?: string }> = ({ children, size = 'md', className = '' }) => (
+    <span className={`${size === 'sm' ? 'h-8 w-8' : 'h-10 w-10'} flex shrink-0 items-center justify-center rounded-lg border border-border-subtle bg-bg-item-surface text-text-primary ${className}`}>
+        {children}
+    </span>
+);
+
+/** The status dot: green while a connection is live. */
+export const LiveDot: React.FC = () => <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />;
+
+/**
+ * One connector in the list, as General's row: its mark in the tile, the name,
+ * what is connected (with the dot) or what it does, and a chevron. The whole
+ * row opens the page.
+ */
+export const NavRow: React.FC<{ icon: React.ReactNode; title: React.ReactNode; description?: React.ReactNode; value?: React.ReactNode; onOpen: () => void }> = ({ icon, title, description, value, onOpen }) => (
+    <button type="button" onClick={onOpen} className={`cx-row ${ROW} w-full text-left first:rounded-t-xl last:rounded-b-xl`}>
+        <Tile>{icon}</Tile>
         <span className="min-w-0 flex-1">
-            <span className="flex items-center gap-2">
-                <span className="text-sm font-medium text-text-primary">{title}</span>
-                {badge}
-            </span>
-            {description ? <span className="mt-0.5 block text-xs text-text-secondary">{description}</span> : null}
+            <span className="block truncate text-sm font-bold text-text-primary">{title}</span>
+            {value ? (
+                <span className="mt-0.5 flex items-center gap-1.5 text-xs text-text-secondary">
+                    <LiveDot />
+                    <span className="min-w-0 truncate">{value}</span>
+                </span>
+            ) : description ? (
+                <span className="mt-0.5 block truncate text-xs text-text-secondary">{description}</span>
+            ) : null}
         </span>
-        {status ? <span className="shrink-0 text-xs text-text-secondary">{status}</span> : null}
-        <ChevronRight size={16} className="shrink-0 text-text-tertiary transition-transform group-hover:translate-x-0.5" />
+        <ChevronRight size={16} className="shrink-0 text-text-tertiary" />
     </button>
 );
 
-/**
- * The top of a detail page, on Granola's: back to the list, then the logo in a
- * 56px tile beside the name in the display serif (24/28) and what it does.
- */
-export const DetailHeader: React.FC<{ icon: React.ReactNode; title: string; description: string; onBack: () => void }> = ({ icon, title, description, onBack }) => {
+/** Rows inside a card: each its own row, so the card draws the lines. */
+export const ListCard: React.FC<{ children: React.ReactNode; inset?: 'tile' | 'small' }> = ({ children }) => <>{children}</>;
+
+/** The way back to the list, over a connector's page. */
+export const BackLink: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const t = useT();
     return (
-        <div className="mb-6">
-            <button
-                type="button"
-                onClick={onBack}
-                className="-ml-1 mb-4 flex items-center gap-1 rounded-md px-1 py-0.5 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
-            >
-                <ChevronLeft size={14} />
-                {t('Connectors')}
-            </button>
-            <div className="flex items-start gap-4">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-border-muted bg-bg-item-surface text-text-primary">{icon}</div>
-                <div className="flex min-w-0 flex-col gap-1.5 pt-1">
-                    <h3 className="font-plex-serif text-2xl leading-7 text-text-primary">{t(title)}</h3>
-                    <p className="text-sm text-text-secondary">{t(description)}</p>
-                </div>
-            </div>
-        </div>
+        <button
+            type="button"
+            onClick={onBack}
+            className="-ml-1 mb-4 flex items-center gap-1 rounded-md px-1 py-0.5 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+        >
+            <ChevronLeft size={14} />
+            {t('Connectors')}
+        </button>
+    );
+};
+
+/** What the page's first group says about the connector: its mark, name and line. */
+export type ConnectorPageInfo = { mark: React.ReactNode; title: string; description: string; steps?: string[] };
+export const ConnectorPageContext = React.createContext<ConnectorPageInfo | null>(null);
+
+/**
+ * Every button but the page's one action: the clear Liquid Glass pill, which
+ * has no body of its own, so it sits on the canvas and on a card alike and
+ * takes its label colour from `tone` (danger for a second-press confirm, ok
+ * for Copied) or the primary ink.
+ */
+export const GlassPill: React.FC<Omit<LiquidGlassButtonProps, 'variant'> & { tone?: SettingsTone }> = ({ tone, className = '', ...rest }) => {
+    const tones = useSettingsTones();
+    // An icon alone (Remove) gets a round 30px pill rather than 16px of padding either side.
+    const iconOnly = rest.children == null || rest.children === false;
+    // .lg-clear takes `color: inherit` at a specificity a text utility cannot beat, so
+    // the ink goes on a box-less wrapper it inherits from.
+    return (
+        <span className={`contents ${tone ? tones.text[tone] : 'text-text-primary'}`}>
+            <LiquidGlassButton variant="clear" className={`lg-sm shrink-0 ${iconOnly ? '!w-[30px] !px-0' : ''} ${className}`} {...rest} />
+        </span>
+    );
+};
+
+/** The one action's material: the Usage question's lavender glass, re-tinted for dark (`.lg-lav-tinted`, index.css). */
+export const LAVENDER_PILL = 'lg-sm lg-lav-tinted shrink-0';
+
+/**
+ * The page's one action, in the lavender glass. "Connect Notion" carries an
+ * arrow when the step happens in the browser, and reads "Connecting…" while
+ * it does (the status carries the spinner). Once it has opened a form
+ * (`expanded`) it steps back to the clear pill, so a lavender Cancel never
+ * competes with the form's own Save.
+ */
+export const ConnectPill: React.FC<{
+    label: string;
+    external?: boolean;
+    waiting?: boolean;
+    disabled?: boolean;
+    expanded?: boolean;
+    onClick: () => void;
+}> = ({ label, external, waiting, disabled, expanded, onClick }) => {
+    const t = useT();
+    if (expanded) {
+        return <GlassPill aria-expanded onClick={onClick} disabled={disabled}>{label}</GlassPill>;
+    }
+    return (
+        <LiquidGlassButton
+            variant="lavender"
+            className={LAVENDER_PILL}
+            onClick={onClick}
+            disabled={disabled || waiting}
+            aria-expanded={expanded}
+        >
+            {waiting ? t('Connecting…') : external ? (
+                <span className="inline-flex items-center gap-1">{label}<ArrowUpRight size={14} /></span>
+            ) : label}
+        </LiquidGlassButton>
     );
 };
 
 /**
- * The page's one action as a dark grey Liquid Glass pill (the kit's neutral
- * material a step darker), the same as the MCP card's Turn on: 34px tall with
- * long caps, one width whatever the label.
+ * Disconnect, in the clear pill. The first press asks ("Disconnect
+ * Gmail?") in the danger tone; a second press within 4 seconds disconnects.
  */
-export const GLASS_PILL_CLASS = 'lg-sm lg-wide min-w-[124px] !px-7 ![background-color:#3a3a3c] hover:![background-color:#4a4a4d]';
-export const GLASS_PILL_STYLE = { '--lg-pill-h': '34px', '--lg-label-size': '13px' } as React.CSSProperties;
-
-/**
- * "Connected", Granola's way: a quiet pill that opens on hover (or focus) to
- * show a disconnect button beside it, its column easing from 0fr to 1fr. The
- * first press asks ("Disconnect Gmail?") and holds the pill open; a second
- * press within 4 seconds disconnects. Without onDisconnect it is just the pill
- * (Slack, where each channel is removed on its own).
- */
-export const ConnectedPill: React.FC<{ label?: React.ReactNode; confirmLabel?: string; onDisconnect?: () => void }> = ({ label, confirmLabel, onDisconnect }) => {
+export const DisconnectButton: React.FC<{ confirmLabel?: string; onDisconnect: () => void }> = ({ confirmLabel, onDisconnect }) => {
     const t = useT();
-    const tones = useSettingsTones();
     const [confirm, setConfirm] = useState(false);
     const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     useEffect(() => () => clearTimeout(timer.current), []);
@@ -117,144 +172,176 @@ export const ConnectedPill: React.FC<{ label?: React.ReactNode; confirmLabel?: s
             return;
         }
         setConfirm(false);
-        onDisconnect?.();
+        onDisconnect();
     };
-    const ask = confirmLabel ?? t('Disconnect?');
-    const open = confirm ? 'grid-cols-[max-content_1fr]' : 'grid-cols-[max-content_0fr] hover:grid-cols-[max-content_1fr] focus-within:grid-cols-[max-content_1fr]';
     return (
-        <div className={`inline-grid h-[34px] max-w-full overflow-hidden rounded-full border border-border-muted bg-bg-item-surface text-[13px] transition-[grid-template-columns] duration-[280ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${onDisconnect ? open : 'grid-cols-[max-content]'}`}>
-            <span className="flex min-w-0 items-center gap-1.5 pl-3.5 pr-3 text-text-secondary">
-                <Check size={14} className="shrink-0" />
-                <span className="max-w-[280px] truncate">{label ?? t('Connected')}</span>
-            </span>
-            {onDisconnect && (
-                <span className="flex min-w-0 overflow-hidden">
-                    <button
-                        type="button"
-                        onClick={press}
-                        aria-label={confirm ? ask : t('Disconnect')}
-                        title={confirm ? undefined : t('Disconnect')}
-                        className={`flex h-full items-center gap-1.5 whitespace-nowrap border-l border-border-muted px-3 transition-colors duration-150 ${confirm ? tones.text.danger : 'text-text-tertiary hover:text-text-primary'}`}
-                    >
-                        <Unplug size={14} />
-                        {confirm && <span>{ask}</span>}
-                    </button>
-                </span>
-            )}
-        </div>
+        <GlassPill onClick={press} tone={confirm ? 'danger' : undefined} icon={<Unplug size={14} />}>
+            {confirm ? (confirmLabel ?? t('Disconnect?')) : t('Disconnect')}
+        </GlassPill>
+    );
+};
+
+export type ActionState = 'off' | 'busy' | 'on';
+
+/**
+ * The top of every connector page, as Audio opens a section: the connector's
+ * name in the section heading with what it does under it, then a card whose
+ * row is the connection (the mark in the tile, a dot or a spinner with what
+ * is connected, one grey line, the pills on the right). Whatever opens from
+ * those pills (a form, a one-time secret) folds open under the row, inside
+ * the card. A result of pressing one (`flash`) lands under the card.
+ */
+export const ActionArea: React.FC<{
+    state: ActionState;
+    title: React.ReactNode;
+    /** Names the title's state, so a change swaps the words rather than snapping them. */
+    titleKey: string;
+    detail?: React.ReactNode;
+    secondary?: React.ReactNode;
+    below?: React.ReactNode;
+    flash?: React.ReactNode;
+    children?: React.ReactNode;
+}> = ({ state, title, titleKey, detail, secondary, below, flash, children }) => {
+    const t = useT();
+    const page = React.useContext(ConnectorPageContext);
+    return (
+        <section className="mb-6">
+            {page && <SectionHeading title={t(page.title)} subtitle={t(page.description)} />}
+            <div className={SETTINGS_CARD}>
+                <div className={`${ROW} flex-wrap gap-y-3`}>
+                    <div className="flex min-w-[200px] flex-1 items-center gap-4">
+                        {page && <Tile>{page.mark}</Tile>}
+                        <div className="min-w-0">
+                            <h4 className="flex items-center gap-2 text-sm font-bold text-text-primary">
+                                {state === 'on' ? <LiveDot /> : state === 'busy' ? <Loader2 size={12} className="shrink-0 animate-spin text-text-secondary" /> : null}
+                                <Presence kind="text" id={titleKey}>{title}</Presence>
+                            </h4>
+                            {detail ? <div className="mt-0.5 text-xs text-text-secondary">{detail}</div> : null}
+                        </div>
+                    </div>
+                    <div className="ml-auto flex shrink-0 items-center gap-2">
+                        {secondary}
+                        {children}
+                    </div>
+                </div>
+                {below}
+            </div>
+            {flash}
+        </section>
     );
 };
 
 /**
- * The page's one action in the glass pill: "Connect Notion", with the arrow
- * Granola draws when the step happens in the browser, or "Connecting…" with a
- * spinner while it does.
+ * A section that is read rather than worked in (Includes, How Gmail is used,
+ * How it works): the heading, then its lines straight on the page, no card,
+ * set in 4px so they line up with the footnote.
  */
-export const ConnectPill: React.FC<{
-    label: string;
-    external?: boolean;
-    waiting?: boolean;
-    disabled?: boolean;
-    expanded?: boolean;
-    onClick: () => void;
-}> = ({ label, external, waiting, disabled, expanded, onClick }) => {
+export const PlainSection: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => {
     const t = useT();
     return (
-        <LiquidGlassButton
-            variant="neutral"
-            className={GLASS_PILL_CLASS}
-            style={GLASS_PILL_STYLE}
-            onClick={onClick}
-            disabled={disabled || waiting}
-            aria-expanded={expanded}
-            icon={waiting ? <Loader2 size={14} className="animate-spin" /> : undefined}
-        >
-            {waiting ? t('Connecting…') : external ? (
-                <span className="inline-flex items-center gap-1.5">{label}<ArrowUpRight size={14} /></span>
-            ) : label}
-        </LiquidGlassButton>
+        <section className="mb-6">
+            <SectionHeading title={t(title)} />
+            <div className="px-1">{children}</div>
+        </section>
     );
 };
 
-/** A quiet text button beside the pill: Cancel, Test connection, Add channel. */
-export const QUIET_BTN = 'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-text-tertiary transition-[color,transform] duration-150 hover:text-text-primary active:scale-[0.97] disabled:opacity-50';
-
-/**
- * The top of every connector page under the header, as Granola's: the pill, a
- * short status beside it, quiet buttons at the end, whatever opens under them
- * (a result, a form), then a rule before the page's sections.
- */
-export const ActionArea: React.FC<{ note?: React.ReactNode; secondary?: React.ReactNode; below?: React.ReactNode; children: React.ReactNode }> = ({ note, secondary, below, children }) => (
-    <>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            {children}
-            {note ? <p className="min-w-0 flex-1 truncate text-xs text-text-tertiary">{note}</p> : <span className="flex-1" />}
-            {secondary}
-        </div>
-        <div className="mt-3">{below}</div>
-        <div aria-hidden className="mb-6 mt-3 h-px w-full bg-border-muted" />
-    </>
+/** The MCP card's small tile (its step numbers), holding a glyph. */
+const SmallTile: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <span aria-hidden className="mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md border border-border-subtle bg-bg-item-surface text-text-secondary">{children}</span>
 );
 
-/** One thing a connector adds, as Granola's "Includes" cards: a serif title, a line, and room for a switch. */
-export const FeatureCard: React.FC<{ title: string; description: string; control?: React.ReactNode }> = ({ title, description, control }) => {
+/**
+ * One thing a connector adds (Granola's "Includes"), as a line on the page:
+ * its glyph in the small tile, the name over one grey line, and room for a
+ * switch on the right. Stack them in a PlainSection with space-y-4.
+ */
+export const FeatureCard: React.FC<{ icon?: React.ReactNode; title: string; description: string; control?: React.ReactNode }> = ({ icon, title, description, control }) => {
     const t = useT();
     return (
-        <div className={`${SETTINGS_CARD} flex items-center gap-4 px-4 py-3.5`}>
+        <div className="flex items-start gap-3">
+            {icon ? <SmallTile>{icon}</SmallTile> : null}
             <div className="min-w-0 flex-1">
-                <h5 className="font-plex-serif text-base leading-6 text-text-primary">{t(title)}</h5>
-                <p className="mt-0.5 text-sm text-text-secondary">{t(description)}</p>
+                <h5 className="text-xs font-semibold leading-5 text-text-primary">{t(title)}</h5>
+                <p className="text-xs leading-5 text-text-secondary">{t(description)}</p>
             </div>
-            {control ? <div className="shrink-0">{control}</div> : null}
+            {control ? <div className="shrink-0 self-center">{control}</div> : null}
         </div>
     );
 };
 
-/** Granola's "How Gmail is used": plain promises, one per row, each with its icon in a small tile. */
+/** Granola's "How Gmail is used": plain promises straight on the page, no card, each with its glyph in the MCP card's small tile. */
 export const UsageList: React.FC<{ title: string; rows: { icon: React.ReactNode; text: string }[] }> = ({ title, rows }) => {
     const t = useT();
     return (
-        <section>
-            <GroupLabel>{t(title)}</GroupLabel>
-            <div className="overflow-hidden rounded-2xl border border-border-muted">
+        <section className="mb-6">
+            <SectionHeading title={t(title)} />
+            <ul className="space-y-2.5 px-1">
                 {rows.map((row, i) => (
-                    <React.Fragment key={i}>
-                        {i > 0 && <div aria-hidden className="h-px bg-border-muted" />}
-                        <div className="flex items-center gap-4 p-4">
-                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border-muted bg-bg-item-surface text-text-secondary">{row.icon}</span>
-                            <p className="text-sm text-text-primary">{t(row.text)}</p>
-                        </div>
-                    </React.Fragment>
+                    <li key={i} className="flex items-start gap-3 text-xs leading-5 text-text-primary">
+                        <SmallTile>{row.icon}</SmallTile>
+                        <span className="min-w-0">{t(row.text)}</span>
+                    </li>
                 ))}
-            </div>
+            </ul>
         </section>
     );
 };
 
-/** A titled block on a detail page, under the same quiet label as Granola's "Includes". */
-export const DetailSection: React.FC<{ title: string; subtitle?: React.ReactNode; children: React.ReactNode }> = ({ title, subtitle, children }) => {
+/**
+ * One setting on a connector's page, as Audio's sections: the bold heading
+ * with its grey line (`subtitle`), then a card of rows. `after` (an error)
+ * lands under the card.
+ */
+export const DetailSection: React.FC<{ title: string; subtitle?: React.ReactNode; after?: React.ReactNode; children: React.ReactNode }> = ({ title, subtitle, after, children }) => {
     const t = useT();
     return (
-        <section className="mb-8">
-            <h4 className="px-1 text-sm font-medium text-text-secondary">{t(title)}</h4>
-            {subtitle ? <p className="mt-0.5 px-1 text-xs text-text-tertiary">{subtitle}</p> : null}
-            <div className="mt-2">{children}</div>
+        <section className="mb-6">
+            <SectionHeading title={t(title)} subtitle={subtitle} />
+            <Group>{children}</Group>
+            {after}
         </section>
     );
 };
 
-/** Granola's "How it works": plain numbered steps, the numbers in the faint ink. */
+/**
+ * "How it works", built as Plans builds its own How it works
+ * (HowItWorksRefund's StepRow): Audio's section heading, then one row per
+ * step on SettingsRow's columns (px-4, a 40px leading column, gap-4),
+ * the number standing on its own in that column with no tile (a boxed "1"
+ * read as a button in light mode). A step is one sentence, not a title and a
+ * line, so rows are not padded out to the tile's 40px: they sit 12px apart.
+ * No card around it and nothing staggers in. The text starts on the same
+ * line as the account card's text above.
+ */
 export const HowItWorks: React.FC<{ lines: string[] }> = ({ lines }) => {
     const t = useT();
     return (
-        <section className="mb-8">
-            <h4 className="mb-2 px-1 text-sm font-medium text-text-secondary">{t('How it works')}</h4>
-            <ol className="list-decimal space-y-1.5 pl-6 text-sm leading-relaxed text-text-primary marker:text-text-tertiary">
-                {lines.map((line, i) => <li key={i} className="pl-1">{t(line)}</li>)}
+        <section className="mb-6">
+            <SectionHeading title={t('How it works')} />
+            <ol>
+                {lines.map((line, i) => (
+                    <li key={i} className="flex items-start gap-4 border-x border-transparent px-4 py-1.5">
+                        <span className="w-10 shrink-0 text-center text-sm font-semibold leading-5 tabular-nums text-text-primary">{i + 1}</span>
+                        <span className="min-w-0 text-sm leading-5 text-text-primary">{t(line)}</span>
+                    </li>
+                ))}
             </ol>
         </section>
     );
 };
+
+/** Numbered steps, as the MCP card's: each number in a small tile. */
+export const StepList: React.FC<{ steps: React.ReactNode[] }> = ({ steps }) => (
+    <ol className="space-y-2.5">
+        {steps.map((step, i) => (
+            <li key={i} className="flex items-start gap-3 text-xs leading-5 text-text-primary">
+                <span aria-hidden className="mt-px flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md border border-border-subtle bg-bg-item-surface text-[10px] font-bold tabular-nums text-text-secondary">{i + 1}</span>
+                <span className="min-w-0">{step}</span>
+            </li>
+        ))}
+    </ol>
+);
 
 /** The app's in-flow select. Never a native <select>: its popup leaks into
  *  screen shares (NoNativePopups2026_09_27). AipSelect reads its tokens from an

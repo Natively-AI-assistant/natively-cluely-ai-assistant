@@ -14,10 +14,11 @@ import { dirname, resolve } from 'node:path';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
 
-test('Settings: connections sits after calendar in SETTINGS_NAV_ORDER, with a nav button and a panel', () => {
+test('Settings: connections sits between audio and help in SETTINGS_NAV_ORDER, with a nav button and a panel', () => {
     const src = read('src/components/SettingsOverlay.tsx');
     const order = src.match(/const SETTINGS_NAV_ORDER = \[([\s\S]*?)\];/)[1].match(/'([^']+)'/g).map((s) => s.slice(1, -1));
-    assert.equal(order[order.indexOf('calendar') + 1], 'connections');
+    assert.ok(order.indexOf('connections') > order.indexOf('audio'));
+    assert.ok(order.indexOf('connections') < order.indexOf('help'));
     assert.match(src, /onClick=\{\(\) => setActiveTab\('connections'\)\}/);
     assert.match(src, /\{activeTab === 'connections' && <ConnectionsSettings \/>\}/);
 });
@@ -95,49 +96,92 @@ test('Connectors: the MCP card is Granola\'s layout, with a setup for every app 
     assert.match(card, /Disconnect every app\?/);
 });
 
-test('Connectors: the MCP heading\'s IBM Plex Serif ships with the app, with its licence', () => {
+test("Connectors: built from Settings' own cards and rows, no display serif", () => {
+    const parts = read('src/components/settings/connectors/parts.tsx');
+    const pane = read('src/components/settings/ConnectionsSettings.tsx');
+    const gmail = read('src/components/settings/connectors/GmailPanel.tsx');
+    const mcp = read('src/components/settings/connectors/McpCard.tsx');
     const css = read('src/index.css');
-    const files = [...css.matchAll(/url\('\.\/(font\/IBMPlexSerif\/[^']+\.woff2)'\)/g)].map((m) => m[1]);
-    assert.equal(files.length, 2);
-    for (const f of files) assert.ok(existsSync(resolve(ROOT, 'src', f)), `${f} missing`);
-    assert.ok(existsSync(resolve(ROOT, 'src/font/IBMPlexSerif/LICENSE-OFL.txt')));
-    assert.match(read('tailwind.config.js'), /"plex-serif": \['"IBM Plex Serif"'/);
-    assert.match(read('src/components/settings/connectors/McpCard.tsx'), /font-plex-serif text-2xl/);
+    for (const [name, src] of [['parts', parts], ['pane', pane], ['gmail', gmail], ['mcp', mcp]]) {
+        assert.doesNotMatch(src, /font-plex-serif/, `${name} still uses the display serif`);
+    }
+    // The list: General's small-capitals label over each group, one Audio card of
+    // rows per category; a row is General's 40px tile, the bold name, what is
+    // connected (with the dot) or what it does, a chevron.
+    assert.match(pane, /CONNECTOR_GROUPS\.map\(\(g\) =>/);
+    assert.match(pane, /<GroupLabel>\{t\(g\.label\)\}<\/GroupLabel>\s*<Group>\s*\{CONNECTOR_CATALOG\.filter\(\(e\) => e\.group === g\.id\)\.map\(\(e\) => \(\s*<NavRow/);
+    assert.match(pane, /value=\{rowStatus\(e\.key\)\}/);
+    assert.match(pane, /description=\{t\(e\.description\)\}/);
+    assert.match(parts, /export const NavRow[\s\S]*?<Tile>\{icon\}<\/Tile>[\s\S]*?text-sm font-bold text-text-primary[\s\S]*?<ChevronRight/);
+    // Settings' own material: Audio's card, General's tile, no System Settings group.
+    assert.match(parts, /export const Group[\s\S]*?\$\{SETTINGS_CARD\} divide-y divide-border-subtle/);
+    assert.match(parts, /export const Tile[\s\S]*?'h-10 w-10'[\s\S]*?rounded-lg border border-border-subtle bg-bg-item-surface/);
+    assert.match(parts, /export const SectionHeading[\s\S]*?text-lg font-bold text-text-primary/);
+    assert.doesNotMatch(css, /\.cx-group|\.cx-app-icon|\.cx-glyph-icon/);
+    assert.match(css, /\.cx-row \{ transition: background-color 150ms ease-out; \}/);
+    assert.match(parts, /export const LiveDot[^\n]*rounded-full bg-emerald-500/);
+    assert.doesNotMatch(parts, /LiquidGlassBadge/);
+    // Every button is a Liquid Glass pill: the one action in the Usage question's
+    // lavender (re-tinted for dark beside the meeting notes' send), the rest clear.
+    assert.match(parts, /variant="lavender"\s+className=\{LAVENDER_PILL\}/);
+    assert.match(parts, /export const LAVENDER_PILL = 'lg-sm lg-lav-tinted shrink-0';/);
+    assert.match(css, /\.lg-button\.lg-lavender:is\(\.mn-fu-send, \.lg-lav-tinted\) \{/);
+    assert.match(parts, /<LiquidGlassButton variant="clear" className=\{`lg-sm/);
+    // .lg-clear inherits its ink, so the colour sits on a display:contents wrapper.
+    assert.match(parts, /<span className=\{`contents \$\{tone \? tones\.text\[tone\] : 'text-text-primary'\}`\}>/);
+    assert.match(parts, /iconOnly \? '!w-\[30px\] !px-0'/);
+    assert.match(mcp, /variant="lavender"/);
+    for (const f of ['ConnectionsSettings.tsx', 'connectors/GmailPanel.tsx', 'connectors/WebhooksPanel.tsx', 'connectors/AutoSendSection.tsx', 'connectors/McpCard.tsx', 'connectors/common.tsx']) {
+        assert.doesNotMatch(read(`src/components/settings/${f}`), /SETTINGS_BTN|QUIET_BTN|variant="action"/, `${f} still has a non-glass button`);
+    }
+    assert.doesNotMatch(parts + mcp, /GLASS_PILL/);
+    // A page's setting, as Audio's sections: the bold heading and its grey line, then the card.
+    assert.match(parts, /<SectionHeading title=\{t\(title\)\} subtitle=\{subtitle\} \/>\s*<Group>\{children\}<\/Group>/);
+    // The MCP card sits in the same filled card as the rest of the page.
+    assert.match(mcp, /<div className=\{`\$\{SETTINGS_CARD\} group p-5`\}>/);
+    assert.doesNotMatch(parts + mcp, /CONNECTOR_CARD/);
+    assert.match(read('src/components/settings/connectors/catalog.ts'), /\{ id: 'workspace', label: 'Email and workspace' \}/);
 });
 
-test("Connectors: the Gmail page is Granola's layout (action, rule, Includes cards, How Gmail is used)", () => {
-    const parts = read('src/components/settings/connectors/parts.tsx');
+test("Connectors: the Gmail page keeps Granola's sections (account card, Includes, How Gmail is used)", () => {
     const gmail = read('src/components/settings/connectors/GmailPanel.tsx');
     const pane = read('src/components/settings/ConnectionsSettings.tsx');
-    // Header: logo in a 56px tile, name in the display serif.
-    assert.match(parts, /h-14 w-14 shrink-0 items-center justify-center rounded-xl/);
-    assert.match(parts, /<h3 className="font-plex-serif text-2xl leading-7/);
-    // Connected opens on hover to a disconnect that asks once.
-    assert.match(parts, /grid-cols-\[max-content_0fr\] hover:grid-cols-\[max-content_1fr\]/);
-    assert.match(gmail, /<ConnectedPill confirmLabel=\{t\('Disconnect Gmail\?'\)\}/);
+    assert.match(gmail, /<DisconnectButton confirmLabel=\{t\('Disconnect Gmail\?'\)\}/);
     assert.match(gmail, /<ConnectPill label=\{t\('Connect Gmail'\)\} external/);
     assert.equal((gmail.match(/<FeatureCard\b/g) || []).length, 2);
+    // Includes is read, not worked in: its lines sit on the page, no card, no 40px tiles.
+    assert.match(gmail, /<PlainSection title="Includes">/);
+    assert.doesNotMatch(gmail, /<DetailSection title="Includes">/);
     assert.match(gmail, /<UsageList title="How Gmail is used"/);
-    // The briefs switch lives on its card; the generic How it works is not repeated.
+    // The briefs switch lives on its row; Gmail's page has no How it works group.
     assert.match(gmail, /setGmailBriefsEnabled\(!status\.briefsEnabled\)/);
-    assert.match(pane, /\{page !== 'gmail' && <HowItWorks lines=\{entry\.howItWorks\} \/>\}/);
-    // The MCP card and Gmail share one glass pill.
-    assert.match(read('src/components/settings/connectors/McpCard.tsx'), /className=\{GLASS_PILL_CLASS\}/);
+    assert.match(pane, /steps: page === 'gmail' \? undefined : entry\.howItWorks/);
+    assert.match(pane, /\{pageInfo\.steps && <HowItWorks lines=\{pageInfo\.steps\} \/>\}/);
 });
 
-test("Connectors: every other page is Granola's too (pill, rule, sections, How it works)", () => {
+test('Connectors: every page opens on the same heading and account card', () => {
     const parts = read('src/components/settings/connectors/parts.tsx');
+    const css = read('src/index.css');
     const pane = read('src/components/settings/ConnectionsSettings.tsx');
     const hooks = read('src/components/settings/connectors/WebhooksPanel.tsx');
-    // One action row: the pill, a quiet status, quiet buttons, what opens under, then the rule.
+    // The connector's name and line as the section heading, then a card whose row is the connection: mark, dot, words, pills.
     assert.match(parts, /export const ActionArea/);
-    assert.match(parts, /mb-6 mt-3 h-px w-full bg-border-muted/);
+    assert.match(parts, /\{page && <SectionHeading title=\{t\(page\.title\)\} subtitle=\{t\(page\.description\)\} \/>\}/);
+    assert.match(parts, /\{page && <Tile>\{page\.mark\}<\/Tile>\}/);
+    // How it works is Plans' own (HowItWorksRefund's StepRow): the number alone in the 40px column, no tile, no card, no stagger.
+    assert.match(parts, /<SectionHeading title=\{t\('How it works'\)\} \/>\s*<ol>/);
+    assert.match(parts, /<span className="w-10 shrink-0 text-center text-sm font-semibold leading-5 tabular-nums text-text-primary">\{i \+ 1\}<\/span>/);
+    assert.doesNotMatch(css, /\.cx-step/);
+    assert.match(parts, /<SectionHeading title=\{t\(title\)\} \/>\s*<ul className="space-y-2\.5 px-1">/);
+    assert.match(parts, /export const FOLD = 'border-t border-border-subtle px-4 py-4';/);
+    assert.match(parts, /state === 'on' \? <LiveDot \/> : state === 'busy' \? <Loader2/);
+    assert.match(pane, /<ConnectorPageContext\.Provider value=\{pageInfo\}>/);
     // Token services and Slack sit on it; Connect says the service's name, with the browser arrow when it signs in there.
     assert.match(pane, /<ConnectPill label=\{t\(`Connect \$\{meta\.title\}`\)\} external/);
     assert.match(pane, /confirmLabel=\{t\(`Disconnect \$\{meta\.title\}\?`\)\}/);
     assert.match(pane, /<ConnectPill label=\{t\('Connect Slack'\)\} external/);
     assert.match(pane, /<DetailSection title="Where pages go">/);
-    // Zapier and Webhooks add from the pill; Zapier also opens Zapier's editor in the browser.
+    // Zapier and Webhooks add from the row; Zapier also opens Zapier's editor in the browser.
     assert.match(hooks, /<ConnectPill\s+label=\{zapier \? t\('Add a Zap'\) : t\('Add webhook'\)\}/);
     assert.match(hooks, /openExternal\?\.\('https:\/\/zapier\.com\/editor'\)/);
     // Automation shows only once there is something to send to.
@@ -147,7 +191,7 @@ test("Connectors: every other page is Granola's too (pill, rule, sections, How i
 test('Connectors: Salesforce, HubSpot and Pipedrive always offer the pasted token beside browser sign-in', () => {
     const pane = read('src/components/settings/ConnectionsSettings.tsx');
     assert.match(pane, /TOKEN_ALWAYS_OFFERED: ReadonlySet<string> = new Set\(\['salesforce', 'hubspot', 'pipedrive'\]\)/);
-    // A quiet button beside Connect opens the token form; the after-failure link is for the others only.
-    assert.match(pane, /useBrowser && !open && TOKEN_ALWAYS_OFFERED\.has\(service\) \?/);
-    assert.match(pane, /signIn\.failed && !open && !TOKEN_ALWAYS_OFFERED\.has\(service\)/);
+    // A clear "Paste a token" pill opens the token form: always for these three, after a failed sign-in for the rest.
+    assert.match(pane, /const offerToken = useBrowser && !open && \(TOKEN_ALWAYS_OFFERED\.has\(service\) \|\| signIn\.failed\);/);
+    assert.match(pane, /\) : offerToken \? \(\s*<GlassPill onClick=\{\(\) => \{ signIn\.clearFlash\(\); setOpen\(true\); \}\}[^\n]*>\s*\{t\('Paste a token'\)\}\s*<\/GlassPill>/);
 });

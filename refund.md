@@ -76,7 +76,7 @@ Anything bought with a coupon, voucher, referral credit, or limited-time offer i
 
 You can cancel any time from your account dashboard or by emailing us. Your plan will simply stop renewing at the end of the current period, and you'll keep access until then.
 
-We don't refund the unused portion of a cycle that's already started, and a renewal you didn't cancel in time isn't refundable (see section 3.6). If you think a charge was a mistake on our side — a duplicate, or a renewal after you'd already cancelled — please reach out.
+We don't refund the unused portion of a cycle that's already started, and a renewal you didn't cancel in time isn't refundable (see section 3.6). A courtesy credit, partial refund, or goodwill adjustment on an earlier invoice does not constitute a subscription cancellation; cancellations must be completed directly via the self-service portal or written notice. If you think a charge was a mistake on our side — a duplicate, or a renewal after you'd already cancelled — please reach out.
 
 ### 2.4 Mid-cycle plan changes
 
@@ -114,7 +114,8 @@ Refunds will not be issued where, in our reasonable view, the request shows sign
 - Use of Pro or API features for the task the customer wanted to accomplish, followed by a refund request;
 - License sharing, key resale, or activation beyond the allowed device count;
 - Violations of our Terms &amp; Conditions or Acceptable Use policy;
-- Purchases that we reasonably believe were made fraudulently or with a stolen / unauthorised payment instrument (in which case the cardholder, not us, is the right party to dispute the charge).
+- Purchases that we reasonably believe were made fraudulently or with a stolen / unauthorised payment instrument (in which case the cardholder, not us, is the right party to dispute the charge);
+- Renewal charges disputed under "fraud" or "unauthorized" reason codes when the customer authorized the initial recurring mandate and simply forgot or neglected to cancel in time via the self-service portal.
 
 ### 3.4 Please email us before opening a dispute
 
@@ -147,7 +148,8 @@ If you don't cancel before the renewal date, the renewal charge is **final and w
 - You forgot to cancel;
 - You didn't use Natively during the new period, or had stopped using it before the renewal;
 - You didn't see, open, or receive the reminder email (for example, it went to spam, or the order email is an inbox you no longer check);
-- You meant to cancel but didn't get to it before the renewal date.
+- You meant to cancel but didn't get to it before the renewal date;
+- You received a prior partial, courtesy, or goodwill refund on an earlier invoice and assumed it cancelled future recurring cycles without completing cancellation.
 
 The reminder is a courtesy — cancelling in time is your responsibility, and this rule applies whether or not the reminder reached you. The quickest way to cancel is the [customer portal](https://customer.dodopayments.com/), since it doesn't wait on a reply from us. If you'd rather cancel by email, please write in at least **3 business days before the renewal date**, since our replies can take 24–72 hours on weekdays.
 
@@ -163,7 +165,7 @@ A **$2.50 refund processing fee** is deducted when a refund is requested. This f
 
 A few more details:
 
-- **A refund ends your access immediately.** When a refund is issued, the Natively API key and any Pro license on that order are deactivated and the subscription is cancelled, even though the fee and any usage cost were deducted. (Refunds for our own mistakes, below, are the exception: you keep access.)
+- **Complete cancellation refunds end access immediately; partial or goodwill refunds do not cancel subscriptions.** When an order is refunded in full pursuant to an explicit cancellation request, the Natively API key and any Pro license on that order are deactivated and the subscription is cancelled, even though the fee and any usage cost were deducted. However, partial, courtesy, or discretionary refunds (such as goodwill billing adjustments under section 3.5) on an individual invoice do not automatically terminate recurring subscription mandates; active subscriptions continue to renew per schedule until explicitly cancelled by the customer via the [customer portal](https://customer.dodopayments.com/) or by written notice per section 3.6. (Refunds for our own mistakes, below, are the exception: you keep access.)
 - Ask us and we'll send you a breakdown of any usage deduction.
 - Yearly and Lifetime Pro licenses run on your own AI keys, so there's no Natively usage to deduct — only the $2.50 fee applies.
 - If the deductions equal or exceed what you paid, no refund is due. You'll never owe us anything extra.

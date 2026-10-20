@@ -103,7 +103,9 @@ export function forgetWritingStyleForMode(modeId: string): void {
 /** The mode a saved meeting ran under, from its notes; its follow-ups use that mode's style. */
 export function meetingStyleModeId(detailedSummary: unknown): string | undefined {
     const id = (detailedSummary as any)?.mode?.selectedModeId;
-    return typeof id === 'string' && id ? id : undefined;
+    // A meeting with no recorded mode (older meetings, chat sessions) counts as
+    // General, the mode its notes were written in (the owner's call, 2026-10-19).
+    return typeof id === 'string' && id ? id : generalModeId();
 }
 
 const isModeId = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 200;
@@ -896,6 +898,14 @@ export function registerOutputsIpc(appState: AppState, safeHandle: SafeHandle): 
     const ws = (modeId: string) => getWritingStyleService(modeId);
     const NO_MODE = { ok: false, kind: 'invalid_input', message: 'Pick a mode first.' };
     safeHandle('outputs:style-get', guard(null, async (_e, modeId: unknown) => (isModeId(modeId) ? ws(modeId).status() : null)));
+    // The style a meeting's follow-up would use: its mode's, or General's when it has
+    // none recorded. The meeting page asks this, so it and the draft never disagree.
+    safeHandle('outputs:style-get-for-meeting', guard(null, async (_e, meetingId: unknown) => {
+        const m = typeof meetingId === 'string' && meetingId ? db().getMeetingDetailedSummary(meetingId) : null;
+        if (!m) return null;
+        const modeId = meetingStyleModeId(m.detailedSummary);
+        return modeId ? ws(modeId).status() : null;
+    }));
     safeHandle('outputs:style-list', guard([], async (_e, modeId: unknown) => (isModeId(modeId) ? ws(modeId).listSamples() : [])));
     safeHandle('outputs:style-add', guard(FORBIDDEN, async (_e, modeId: unknown, text: unknown) => {
         if (!isModeId(modeId)) return NO_MODE;

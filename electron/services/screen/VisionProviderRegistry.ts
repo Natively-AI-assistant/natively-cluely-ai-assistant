@@ -488,7 +488,7 @@ function fluxion(creds: CredentialsManager, _inputs: VisionProviderBuildInputs):
   const modelId = isSelected ? activeModelId : '';
   return {
     id: 'fluxion',
-    displayName: modelId ? `Fluxion (${modelId.replace(/^fluxion\//, '')})` : 'Fluxion',
+    displayName: modelId ? `Sidrune (${modelId.replace(/^fluxion\//, '')})` : 'Sidrune',
     modelId,
     isLocal: false,
     isConfigured: !!apiKey && isSelected,

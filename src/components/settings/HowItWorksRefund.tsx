@@ -1,8 +1,9 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { animate, motion, useMotionValue, useReducedMotion } from 'framer-motion';
-import { CalendarClock, CalendarX, CirclePlay, Clock3, FileText, Gauge, Heart, KeyRound, Mail, Power, Receipt, Ticket } from 'lucide-react';
+import { CalendarClock, CalendarX, CirclePlay, Clock3, FileText, Gauge, HandCoins, Heart, KeyRound, Mail, Megaphone, Power, Receipt, Ticket } from 'lucide-react';
 import { AccordionSection } from '../ui/AccordionSection';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
+import { AFFILIATE_PROGRAM_URL, CREATORS_PROGRAM_URL } from '../../lib/partnerLinks';
 import './HowItWorksRefund.css';
 
 // Extracted from NativelyApiSettings so PlansSettings can order this AFTER the
@@ -488,5 +489,53 @@ export const HowItWorksRefund: React.FC = () => {
         <PartPanels part={part} dir={dir} content={content} />
       </div>
     </AccordionSection>
+  );
+};
+
+/**
+ * The two programs on heynatively.com, above How it works in Plans & Billing.
+ * Always open: two rows don't need a disclosure. The header takes the
+ * accordion header's type and padding so the two cards read as a pair, and
+ * the rows are this file's IconRow, so text sits on the same column as the
+ * card below. Join and Open are Manage's button: Liquid Glass in the
+ * periwinkle toggle colour (--hiw-indigo). Copy stays inside what the pages promise (the affiliate page
+ * shows no rate, so neither does this), as on the launcher's program cards.
+ */
+export const PartnerPrograms: React.FC = () => {
+  const openExternal = (url: string) => {
+    (window.electronAPI as any)?.openExternal?.(url);
+  };
+
+  return (
+    <section className="bg-bg-item-surface rounded-2xl border border-border-subtle shadow-sm overflow-hidden">
+      <div className="p-4 pb-1">
+        <span className="block font-semibold text-sm text-text-primary">Earn with Natively</span>
+        <span className="block text-[11.5px] text-text-secondary leading-relaxed mt-1">
+          Share Natively and get paid, or get Ultra free.
+        </span>
+      </div>
+      <div className="pb-1">
+        <IconRow
+          icon={<HandCoins size={20} />}
+          title="Affiliate program"
+          description="A commission on every sale you refer. Each click counts for 30 days."
+          control={(
+            <LiquidGlassButton variant="sky" className="lg-sm" style={INDIGO_BUTTON_STYLE} onClick={() => openExternal(AFFILIATE_PROGRAM_URL)}>
+              Join
+            </LiquidGlassButton>
+          )}
+        />
+        <IconRow
+          icon={<Megaphone size={20} />}
+          title="Creator program"
+          description="Post about Natively in your own words. At 5,000 views, a month of Ultra is yours."
+          control={(
+            <LiquidGlassButton variant="sky" className="lg-sm" style={INDIGO_BUTTON_STYLE} onClick={() => openExternal(CREATORS_PROGRAM_URL)}>
+              Open
+            </LiquidGlassButton>
+          )}
+        />
+      </div>
+    </section>
   );
 };

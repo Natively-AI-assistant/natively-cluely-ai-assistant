@@ -141,5 +141,9 @@ test('Settings: the IPC pair saves through the cleaner and refreshes the live te
     const overlay = read('src/components/SettingsOverlay.tsx');
     const audio = overlay.indexOf("{activeTab === 'audio' && (");
     const dictAt = overlay.indexOf('<SpeechDictionarySettings sttProvider={sttProvider} />');
-    assert.ok(audio > 0 && dictAt > audio && dictAt < overlay.indexOf('Audio Configuration Section'));
+    // Under the input and output devices, above the meeting app's mute row (2026-10-20).
+    // Anchored on markup (the section heading, the mute row's icon), not comments.
+    const heading = overlay.indexOf("{t('Audio Configuration')}");
+    const muteRow = overlay.indexOf('<MicOff size={20} />');
+    assert.ok(audio > 0 && heading > audio && dictAt > heading && muteRow > dictAt);
 });

@@ -90,7 +90,7 @@ describe('a follow-up uses its meeting\'s mode', () => {
     test('MeetingPersistence asks for the style of the mode the meeting ran under, and none without one', () => {
         const src = read('electron/MeetingPersistence.ts');
         assert.match(src, /styleModeId = require\('\.\/services\/outputs\/outputsIpc'\)\.meetingStyleModeId\(detailed\)/);
-        assert.match(src, /styleGuide = modeId \? await guideFor\(modeId\) : undefined/);
+        assert.match(src, /voice = modeId \? await guideFor\(modeId\) : undefined/);
     });
     test('no on/off anywhere: the meeting page says it is in your style, with nothing to turn off', () => {
         const details = read('src/components/MeetingDetails.tsx');

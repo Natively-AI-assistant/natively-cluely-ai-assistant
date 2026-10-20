@@ -2,25 +2,26 @@
 // with the people you are meeting, and follow-ups can be sent from your own
 // Gmail. Tokens stay on this computer; Natively calls Google directly.
 //
-// Laid out as Granola's Gmail page: the one action under the header, a rule,
-// what connecting includes, then how Gmail is used. Granola's copy promises a
-// server that drafts and sends; these lines say what Natively does instead.
+// Laid out as Granola's Gmail page in Settings' own parts: the account row
+// under the header, what connecting includes, then how Gmail is used.
+// Granola's copy promises a server that drafts and sends; these lines say what
+// Natively does instead.
 
 import React, { useState } from 'react';
-import { AlertCircle, ExternalLink, Lock, Mail, Send } from 'lucide-react';
+import { AlertCircle, ExternalLink, FileText, Lock, Mail, Send } from 'lucide-react';
 import { useT } from '../../../i18n';
 import { SettingsNotice, SettingsSwitch, useSettingsTones } from '../SettingsRow';
 import type { ConnectorsApi, GmailStatus } from '../../../types/connectors';
 import { FlashNotice, flashOf, type Flash } from './common';
-import { ActionArea, ConnectPill, ConnectedPill, FeatureCard, GroupLabel, QUIET_BTN, UsageList } from './parts';
+import { ActionArea, ConnectPill, DisconnectButton, FeatureCard, GlassPill, PlainSection, UsageList } from './parts';
 
 const capi = (): ConnectorsApi | undefined => window.electronAPI?.connectors;
 
 const USAGE = [
-    { icon: <Mail size={16} />, text: 'Natively reads only your threads with the people in your meetings, to write their briefs.' },
-    { icon: <Send size={16} />, text: 'Nothing is sent until you press Send with Gmail and confirm.' },
-    { icon: <Lock size={16} />, text: 'Your Google sign-in stays on this computer. Natively talks to Google directly, never through our servers.' },
-    { icon: <ExternalLink size={16} />, text: 'Pressing Connect opens Google in your browser to confirm permissions.' },
+    { icon: <Mail size={11} />, text: 'Natively reads only your threads with the people in your meetings, to write their briefs.' },
+    { icon: <Send size={11} />, text: 'Nothing is sent until you press Send with Gmail and confirm.' },
+    { icon: <Lock size={11} />, text: 'Your Google sign-in stays on this computer. Natively talks to Google directly, never through our servers.' },
+    { icon: <ExternalLink size={11} />, text: 'Pressing Connect opens Google in your browser to confirm permissions.' },
 ];
 
 export const GmailPanel: React.FC<{ status: GmailStatus | null; onStatus: (s: GmailStatus) => void; onChanged: () => void }> = ({ status, onStatus, onChanged }) => {
@@ -46,9 +47,13 @@ export const GmailPanel: React.FC<{ status: GmailStatus | null; onStatus: (s: Gm
 
     if (!status) return null;
     const available = status.available;
-    const note = waiting
-        ? t('Finish signing in to Google in your browser.')
-        : status.connected ? (status.account || t('your Google account')) : '';
+    const state = status.connected ? 'on' : waiting ? 'busy' : 'off';
+    const title = status.connected
+        ? (status.account || t('your Google account'))
+        : waiting ? t('Waiting for Google…') : t('Not connected');
+    const detail = status.connected
+        ? t('Connected. Natively talks to Google directly.')
+        : waiting ? t('Finish signing in to Google in your browser.') : t('Sign in with Google in your browser.');
 
     return (
         <>
@@ -59,27 +64,31 @@ export const GmailPanel: React.FC<{ status: GmailStatus | null; onStatus: (s: Gm
             )}
 
             <ActionArea
-                note={note || undefined}
+                state={state}
+                title={title}
+                titleKey={state}
+                detail={detail}
                 secondary={waiting ? (
-                    <button type="button" className={QUIET_BTN} onClick={() => void capi()?.cancelGmailConnect()}>{t('Cancel')}</button>
+                    <GlassPill onClick={() => void capi()?.cancelGmailConnect()}>{t('Cancel')}</GlassPill>
                 ) : undefined}
-                below={<FlashNotice flash={flash} />}
+                flash={<FlashNotice flash={flash} />}
             >
                 {status.connected ? (
-                    <ConnectedPill confirmLabel={t('Disconnect Gmail?')} onDisconnect={() => void disconnect()} />
+                    <DisconnectButton confirmLabel={t('Disconnect Gmail?')} onDisconnect={() => void disconnect()} />
                 ) : (
                     <ConnectPill label={t('Connect Gmail')} external waiting={waiting} disabled={!available} onClick={() => void connect()} />
                 )}
             </ActionArea>
 
-            <section className="mb-8">
-                <GroupLabel>{t('Includes')}</GroupLabel>
-                <div className="flex flex-col gap-3">
+            <PlainSection title="Includes">
+                <div className="space-y-4">
                     <FeatureCard
+                        icon={<Send size={11} />}
                         title="Follow-up emails"
                         description="Send a meeting's follow-up email from your own Gmail, once you have read it over."
                     />
                     <FeatureCard
+                        icon={<FileText size={11} />}
                         title="Meeting briefs"
                         description="Before a meeting, its brief can mention your recent threads with the people you are meeting."
                         control={status.connected ? (
@@ -91,7 +100,7 @@ export const GmailPanel: React.FC<{ status: GmailStatus | null; onStatus: (s: Gm
                         ) : undefined}
                     />
                 </div>
-            </section>
+            </PlainSection>
 
             <UsageList title="How Gmail is used" rows={USAGE} />
         </>

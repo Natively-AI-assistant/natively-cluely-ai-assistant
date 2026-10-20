@@ -27,7 +27,7 @@ for (const [, id, ident] of markSrc.matchAll(/^\s{4}(\w+): (\w+),$/gm)) registry
 
 test('every connector on the list has a real mark, in Granola\'s order', () => {
     const catalog = read('src/components/settings/connectors/catalog.ts');
-    const marks = [...catalog.matchAll(/key: '(\w+)', title: '[^']+', mark: '(\w+)'/g)].map((m) => [m[1], m[2]]);
+    const marks = [...catalog.matchAll(/key: '(\w+)', group: '\w+', title: '[^']+', mark: '(\w+)'/g)].map((m) => [m[1], m[2]]);
     assert.deepEqual(marks.map(([k]) => k), ['gmail', 'slack', 'notion', 'zapier', 'affinity', 'hubspot', 'salesforce', 'attio', 'pipedrive', 'clearbit', 'webhooks']);
     for (const [, mark] of marks) assert.ok(registry[mark], `${mark} has no entry in ConnectorMark.tsx`);
     // The list draws each row's mark from the catalog, and the pages' rows use marks too.

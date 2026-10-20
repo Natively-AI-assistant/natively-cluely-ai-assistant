@@ -2,15 +2,24 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight, Bell, Rocket } from 'lucide-react';
 import mainui from "../UI_comp/mainui.png";
-import { FLUXION_REFERRAL_URL, SPONSORSHIP_EMAIL, SPONSORSHIP_GMAIL_COMPOSE_URL } from '../lib/partnerLinks';
+import sidruneLogo from '../assets/sponsors/sidrune-logo-white.svg';
+import {
+    AFFILIATE_PROGRAM_URL,
+    CREATORS_PROGRAM_URL,
+    FLUXION_REFERRAL_URL,
+    SPONSORSHIP_EMAIL,
+    SPONSORSHIP_GMAIL_COMPOSE_URL,
+} from '../lib/partnerLinks';
 
 // --- Types ---
 
 interface FeatureSlide {
     id: string;
     headline: string;
+    /** Drawn in place of the headline text; the headline becomes its alt text. */
+    logo?: string;
     subtitle: string;
-    type?: 'feature' | 'support' | 'premium' | 'sponsor' | 'advertise';
+    type?: 'feature' | 'support' | 'premium' | 'sponsor' | 'advertise' | 'program';
     actionLabel?: string;
     url?: string;
     eyebrow?: string;
@@ -22,13 +31,13 @@ interface FeatureSlide {
 
 const FEATURES: FeatureSlide[] = [
     {
-        id: 'sponsor_fluxion',
-        headline: 'Fluxion AI',
-        subtitle: 'GPT, Claude and more through one API',
-        bullets: [
-            'Up to 70% below official API pricing',
-            '$3 in free credit when you join through Natively',
-        ],
+        // Fluxion AI renamed itself Sidrune AI (Oct 2026). The sign-up link is
+        // unchanged on purpose: the sponsor asked to keep it and its parameters.
+        id: 'sponsor_sidrune',
+        headline: 'Sidrune AI',
+        logo: sidruneLogo,
+        subtitle: 'One API for GPT, Claude, and other leading AI models',
+        bullets: ['Get $3 in API credit through Natively'],
         type: 'sponsor',
         actionLabel: 'Claim $3 credit',
         url: FLUXION_REFERRAL_URL,
@@ -40,6 +49,32 @@ const FEATURES: FeatureSlide[] = [
         bullets: ['Repo aware explanations', 'System design interview specialization'],
         footer: 'Designed to work silently during live interviews.',
         type: 'premium',
+    },
+    // The two programs on heynatively.com. Copy stays inside what those pages
+    // promise: the affiliate page shows no rate, so neither does this card.
+    {
+        id: 'program_creators',
+        headline: 'Post about Natively',
+        subtitle: 'Get a month of Ultra, free',
+        bullets: [
+            'A public post in your own words',
+            'Yours once it reaches 5,000 views',
+        ],
+        type: 'program',
+        actionLabel: 'See how it works',
+        url: CREATORS_PROGRAM_URL,
+    },
+    {
+        id: 'program_affiliate',
+        headline: 'Earn with Natively',
+        subtitle: 'Share what you use, earn when they buy',
+        bullets: [
+            'A commission on every sale you refer',
+            'Each click counts for 30 days',
+        ],
+        type: 'program',
+        actionLabel: 'Join the affiliate program',
+        url: AFFILIATE_PROGRAM_URL,
     },
 
     {
@@ -152,8 +187,9 @@ export const FeatureSpotlight: React.FC = () => {
     const isPremium = currentFeature.type === 'premium';
     const isSponsor = currentFeature.type === 'sponsor';
     const isAdvertise = currentFeature.type === 'advertise';
+    const isProgram = currentFeature.type === 'program';
     // Slides whose button leaves the app (a link or an email) rather than toggling interest.
-    const isCallout = isSupport || isSponsor || isAdvertise;
+    const isCallout = isSupport || isSponsor || isAdvertise || isProgram;
 
     // --- Auto-Advance Logic ---
 
@@ -331,7 +367,14 @@ export const FeatureSpotlight: React.FC = () => {
                                         textShadow: (isPremium || isCallout) ? '0px 1px 1px rgba(0, 0, 0, 0.1)' : 'none',
                                     }}
                                 >
-                                    {currentFeature.headline}
+                                    {currentFeature.logo ? (
+                                        <img
+                                            src={currentFeature.logo}
+                                            alt={currentFeature.headline}
+                                            draggable={false}
+                                            className="block h-[30px] w-auto mb-2"
+                                        />
+                                    ) : currentFeature.headline}
                                 </h2>
 
                                 {/* Subtitle */}
@@ -344,7 +387,7 @@ export const FeatureSpotlight: React.FC = () => {
                                         lineHeight: 1.4,
                                         color: '#F5F7FA',
                                         opacity: 0.9,
-                                        maxWidth: isCallout ? '380px' : '360px'
+                                        maxWidth: isCallout ? '420px' : '360px'
                                     }}
                                 >
                                     {currentFeature.subtitle}

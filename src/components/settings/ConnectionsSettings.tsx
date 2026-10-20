@@ -5,9 +5,11 @@
 // Follow-ups in the user's own style live in each mode's editor ("Follow-ups in
 // your style", above Notes template), not here.
 //
-// Built from General's parts, as Intelligence is (SettingsRow, section heading,
-// secondary button, Audio's card for anything that opens under a row, the
-// Liquid Glass action button for the one primary action). Tokens are sent to
+// Built from Settings' own parts, so it reads like General and Audio: each
+// group of the list is a card of General's rows (the mark in a 40px tile, the
+// name, what is connected or what it does, a chevron), and each connector's
+// page is Audio's sections, a bold heading over a card (connectors/parts.tsx).
+// Tokens are sent to
 // the main process once, to be checked and saved in the system keychain; this
 // pane only ever reads back whether one is saved.
 
@@ -18,15 +20,15 @@ import {
 import { useT } from '../../i18n';
 import { ConnectorMark } from './ConnectorMark';
 import { BusyIcon, FlashNotice, flashOf, type Flash } from './connectors/common';
-import { CONNECTOR_CATALOG, catalogEntry, type ConnectorKey } from './connectors/catalog';
-import { ActionArea, ConnectPill, ConnectedPill, DetailHeader, DetailSection, GroupLabel, HowItWorks, ListCard, ListRow, QUIET_BTN } from './connectors/parts';
+import { CONNECTOR_CATALOG, CONNECTOR_GROUPS, catalogEntry, type ConnectorKey } from './connectors/catalog';
+import { ActionArea, BackLink, ConnectPill, ConnectorPageContext, DetailSection, DisconnectButton, FOLD, Group, GroupLabel, GlassPill, HowItWorks, ListCard, NavRow, ROW, Tile } from './connectors/parts';
 import { AutoSendSection } from './connectors/AutoSendSection';
 import { WebhooksPanel } from './connectors/WebhooksPanel';
 import { GmailPanel } from './connectors/GmailPanel';
 import { McpCard } from './connectors/McpCard';
 import type { AutoSendDestination, AutoSendRuleInfo, ConnectorsApi, FolderOption, GmailStatus, WebhookEndpointInfo } from '../../types/connectors';
 import {
-    Collapse, SETTINGS_BTN, SETTINGS_CARD, SETTINGS_FIELD_LABEL, SETTINGS_INPUT,
+    Collapse, SETTINGS_FIELD_LABEL, SETTINGS_INPUT,
     SettingsFootnote, SettingsMotionReady, SettingsNotice, SettingsSectionHeading,
     useMotionReadyAfter, useSettingsTones,
 } from './SettingsRow';
@@ -61,16 +63,6 @@ function useBrowserConnect(service: OAuthConnectorService, onConnected: () => vo
     const cancel = () => { void api()?.cancelBrowserConnect(); };
     return { waiting, failed, flash, start, cancel, clearFlash: () => { setFlash(null); setFailed(false); } };
 }
-
-/** "Use a token instead": shown under a row only after a browser sign-in did not work. */
-const TokenFallbackLink: React.FC<{ label: string; open: boolean; onToggle: () => void }> = ({ label, open, onToggle }) => (
-    <div className="pb-3">
-        <button type="button" className="text-xs text-text-secondary underline-offset-2 hover:text-text-primary hover:underline" aria-expanded={open} onClick={onToggle}>
-            {label}
-        </button>
-    </div>
-);
-
 
 // ── Token services: Notion and the CRMs ──────────────────────────────────
 
@@ -135,11 +127,13 @@ const TOKEN_META: Record<'notion' | CrmService | EnrichmentService, { title: str
 };
 
 /**
- * A token service's page top (Notion, the CRMs, Clearbit), on Granola's: the
- * glass "Connect HubSpot" pill (with the browser arrow when it signs in there),
- * or "Connected to Acme" that opens to disconnect, with Test connection beside
- * it. The pasted-token form opens under the pill when there is no browser
- * sign-in, or after one did not work. `children` are the page's sections.
+ * A token service's page top (Notion, the CRMs, Clearbit): the page's card,
+ * with "Connect HubSpot" (and the browser arrow when it signs in there), or
+ * "Connected to Acme" with Disconnect and Test connection. The pasted-token
+ * form opens inside the card when there is no browser sign-in; with one, a
+ * "Paste a token" pill on the right offers it, always for the CRMs in
+ * TOKEN_ALWAYS_OFFERED and after a sign-in did not work for the rest.
+ * `children` are the page's sections.
  */
 const TokenServicePanel: React.FC<{
     service: 'notion' | CrmService | EnrichmentService;
@@ -180,7 +174,6 @@ const TokenServicePanel: React.FC<{
         setBusy(null);
         setFlash(flashOf(res));
     };
-    const tokenInstead = t(`Use ${/^[aeiou]/i.test(meta.tokenLabel) ? 'an' : 'a'} ${meta.tokenLabel.replace(/^[A-Z](?=[a-z])/, (c) => c.toLowerCase())} instead`);
     const disconnect = async () => {
         await api()?.disconnect(service).catch(() => undefined);
         setFlash(null);
@@ -188,46 +181,50 @@ const TokenServicePanel: React.FC<{
         onChanged();
     };
 
-    const pill = connected ? (
-        <ConnectedPill
-            label={account ? `${t('Connected to')} ${account}` : t('Connected')}
-            confirmLabel={t(`Disconnect ${meta.title}?`)}
-            onDisconnect={() => void disconnect()}
-        />
+    const offerToken = useBrowser && !open && (TOKEN_ALWAYS_OFFERED.has(service) || signIn.failed);
+    const state = connected ? 'on' : signIn.waiting ? 'busy' : 'off';
+    const title = connected
+        ? (account ? `${t('Connected to')} ${account}` : t('Connected'))
+        : signIn.waiting ? t(`Waiting for ${meta.title}…`) : t('Not connected');
+    const detail = connected ? t('Checked before every send.')
+        : signIn.waiting ? t(`Finish signing in to ${meta.title} in your browser.`)
+        : useBrowser && !open ? (signIn.failed ? t('Sign-in did not finish.') : t(`Sign in with ${meta.title} in your browser.`))
+        : t(`Paste your ${meta.tokenLabel.replace(/^[A-Z](?=[a-z])/, (c) => c.toLowerCase())} to connect.`);
+
+    const primary = connected ? (
+        <DisconnectButton confirmLabel={t(`Disconnect ${meta.title}?`)} onDisconnect={() => void disconnect()} />
     ) : useBrowser && !open ? (
         <ConnectPill label={t(`Connect ${meta.title}`)} external waiting={signIn.waiting} onClick={() => void signIn.start()} />
     ) : (
         <ConnectPill label={open ? t('Cancel') : t(`Connect ${meta.title}`)} expanded={open} onClick={() => setOpen((v) => !v)} />
     );
     const secondary = signIn.waiting ? (
-        <button type="button" className={QUIET_BTN} onClick={signIn.cancel}>{t('Cancel')}</button>
+        <GlassPill onClick={signIn.cancel}>{t('Cancel')}</GlassPill>
     ) : connected ? (
-        <button type="button" className={QUIET_BTN} onClick={() => void test()} disabled={!!busy}>
-            <BusyIcon busy={busy === 'test'} icon={<RefreshCw size={12} />} />
+        <GlassPill onClick={() => void test()} disabled={!!busy} icon={<BusyIcon busy={busy === 'test'} icon={<RefreshCw size={14} />} />}>
             {t('Test connection')}
-        </button>
-    ) : useBrowser && !open && TOKEN_ALWAYS_OFFERED.has(service) ? (
-        <button type="button" className={QUIET_BTN} aria-expanded={false} onClick={() => { signIn.clearFlash(); setOpen(true); }}>
-            <KeyRound size={12} />
-            {tokenInstead}
-        </button>
+        </GlassPill>
+    ) : offerToken ? (
+        <GlassPill onClick={() => { signIn.clearFlash(); setOpen(true); }} aria-expanded={false} icon={<KeyRound size={14} />}>
+            {t('Paste a token')}
+        </GlassPill>
     ) : undefined;
 
     return (
         <>
             {notice}
             <ActionArea
-                note={signIn.waiting ? t(`Finish signing in to ${meta.title} in your browser.`) : undefined}
+                state={state}
+                title={title}
+                titleKey={`${state}:${account ?? ''}`}
+                detail={detail}
                 secondary={secondary}
+                flash={<FlashNotice flash={flash ?? signIn.flash} />}
                 below={
                     <>
-                        <FlashNotice flash={flash ?? signIn.flash} />
-                        {useBrowser && signIn.failed && !open && !TOKEN_ALWAYS_OFFERED.has(service) && (
-                            <TokenFallbackLink label={tokenInstead} open={open} onToggle={() => setOpen(true)} />
-                        )}
                         <Collapse open={open && !connected}>
-                            <div className="pb-1">
-                                <div className={`${SETTINGS_CARD} p-4 space-y-3`}>
+                            <div className={FOLD}>
+                                <div className="space-y-3">
                                     <p className="text-xs leading-relaxed text-text-secondary">{t(meta.howTo)}</p>
                                     {needsUrl && (
                                         <label className="block">
@@ -256,10 +253,9 @@ const TokenServicePanel: React.FC<{
                                                 onChange={(e) => setToken(e.target.value)}
                                                 onKeyDown={(e) => { if (e.key === 'Enter' && canSave) void save(); }}
                                             />
-                                            <button type="button" className={SETTINGS_BTN} onClick={() => void save()} disabled={!canSave}>
-                                                <BusyIcon busy={busy === 'save'} icon={<KeyRound size={14} />} />
+                                            <GlassPill onClick={() => void save()} disabled={!canSave} icon={<BusyIcon busy={busy === 'save'} icon={<KeyRound size={14} />} />}>
                                                 {t('Save')}
-                                            </button>
+                                            </GlassPill>
                                         </div>
                                     </label>
                                     <p className="text-xs text-text-tertiary">{t('Natively checks the token before saving it, and keeps it in your system keychain.')}</p>
@@ -269,7 +265,7 @@ const TokenServicePanel: React.FC<{
                     </>
                 }
             >
-                {pill}
+                {primary}
             </ActionArea>
             {children}
         </>
@@ -305,20 +301,22 @@ const NotionParentPicker: React.FC<{ current?: { title: string; type: string }; 
     };
 
     return (
-        <div>
-            <div className={`${SETTINGS_CARD} flex items-center gap-3 px-4 py-3`}>
-                <ConnectorMark id="notion" size={18} />
-                <span className="min-w-0 flex-1 truncate text-sm text-text-primary">
-                    {current ? current.title : <span className="text-text-secondary">{t('Pick where new pages go.')}</span>}
+        <div className="px-4 py-3">
+            <div className="flex items-center gap-4">
+                <Tile><ConnectorMark id="notion" size={20} /></Tile>
+                <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-bold text-text-primary">{current ? current.title : t('Nothing picked yet')}</span>
+                    <span className="mt-0.5 block text-xs text-text-secondary">
+                        {current ? (current.type === 'database' ? t('Database') : t('Page')) : t('Pick where new pages go.')}
+                    </span>
                 </span>
-                {current && <span className="shrink-0 text-xs text-text-tertiary">{current.type === 'database' ? t('Database') : t('Page')}</span>}
-                <button type="button" className={QUIET_BTN} onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+                <GlassPill onClick={() => setOpen((v) => !v)} aria-expanded={open}>
                     {open ? t('Done') : current ? t('Change') : t('Pick')}
-                </button>
+                </GlassPill>
             </div>
             <Collapse open={open}>
                 <div className="pt-3">
-                    <div className={`${SETTINGS_CARD} p-3 space-y-2`}>
+                    <div className="space-y-2">
                         <div className="flex items-center gap-2">
                             <input
                                 className={SETTINGS_INPUT}
@@ -327,10 +325,9 @@ const NotionParentPicker: React.FC<{ current?: { title: string; type: string }; 
                                 onChange={(e) => setQuery(e.target.value)}
                                 onKeyDown={(e) => { if (e.key === 'Enter') void search(); }}
                             />
-                            <button type="button" className={SETTINGS_BTN} onClick={() => void search()} disabled={busy}>
-                                <BusyIcon busy={busy} icon={<Search size={14} />} />
+                            <GlassPill onClick={() => void search()} disabled={busy} icon={<BusyIcon busy={busy} icon={<Search size={14} />} />}>
                                 {t('Search')}
-                            </button>
+                            </GlassPill>
                         </div>
                         <FlashNotice flash={flash} />
                         {results && results.length > 0 && (
@@ -355,10 +352,11 @@ const NotionParentPicker: React.FC<{ current?: { title: string; type: string }; 
 // ── Slack ────────────────────────────────────────────────────────────────
 
 /**
- * Slack's page top: "Connect Slack" (Slack asks for the channel on its own
- * screen), then, once a channel is in, "Connected" with Add channel beside it.
- * The webhook form opens under the pill when there is no browser sign-in, or
- * after one did not work. The channels are their own section below the rule.
+ * Slack's page top: the page's card with "Connect Slack" (Slack asks for the
+ * channel on its own screen), then, once a channel is in, "Connected" with Add
+ * channel. The webhook form opens inside the card when there is no browser
+ * sign-in, or from "Paste a webhook" after one did not work. The channels are
+ * their own card below.
  */
 const SlackPanel: React.FC<{ webhooks: ConnectionsStatus['slack']['webhooks']; browser?: boolean; notice?: React.ReactNode; onChanged: () => void; children?: React.ReactNode }> = ({ webhooks, browser, notice, onChanged, children }) => {
     const t = useT();
@@ -394,37 +392,45 @@ const SlackPanel: React.FC<{ webhooks: ConnectionsStatus['slack']['webhooks']; b
     };
     const addChannel = () => (useBrowser ? void signIn.start() : setOpen((v) => !v));
 
-    const pill = n ? (
-        <ConnectedPill label={n === 1 ? t('Connected · 1 channel') : `${t('Connected')} · ${n} ${t('channels')}`} />
+    const state = n ? 'on' : signIn.waiting ? 'busy' : 'off';
+    const title = n
+        ? (n === 1 ? t('Connected · 1 channel') : `${t('Connected')} · ${n} ${t('channels')}`)
+        : signIn.waiting ? t('Waiting for Slack…') : t('Not connected');
+    const detail = signIn.waiting ? t('Pick a channel in your browser to finish.')
+        : n ? t('Notes are posted as a message, after you review it.')
+        : useBrowser ? (signIn.failed ? t('Sign-in did not finish.') : t('Sign in with Slack and pick a channel.'))
+        : t('Paste an incoming webhook address for a channel.');
+
+    const primary = n ? (
+        <GlassPill onClick={addChannel} aria-expanded={useBrowser ? undefined : open} icon={useBrowser || !open ? <Plus size={14} /> : undefined}>
+            {!useBrowser && open ? t('Cancel') : t('Add channel')}
+        </GlassPill>
     ) : useBrowser ? (
         <ConnectPill label={t('Connect Slack')} external waiting={signIn.waiting} onClick={() => void signIn.start()} />
     ) : (
         <ConnectPill label={open ? t('Cancel') : t('Connect Slack')} expanded={open} onClick={() => setOpen((v) => !v)} />
     );
     const secondary = signIn.waiting ? (
-        <button type="button" className={QUIET_BTN} onClick={signIn.cancel}>{t('Cancel')}</button>
-    ) : n ? (
-        <button type="button" className={QUIET_BTN} onClick={addChannel} aria-expanded={useBrowser ? undefined : open}>
-            {useBrowser || !open ? <Plus size={12} /> : null}
-            {!useBrowser && open ? t('Cancel') : t('Add channel')}
-        </button>
+        <GlassPill onClick={signIn.cancel}>{t('Cancel')}</GlassPill>
+    ) : !n && useBrowser && signIn.failed ? (
+        <GlassPill onClick={() => setOpen(true)} aria-expanded={false} icon={<KeyRound size={14} />}>{t('Paste a webhook')}</GlassPill>
     ) : undefined;
 
     return (
         <>
             {notice}
             <ActionArea
-                note={signIn.waiting ? t('Pick a channel in your browser to finish.') : undefined}
+                state={state}
+                title={title}
+                titleKey={n ? `on:${n}` : state}
+                detail={detail}
                 secondary={secondary}
+                flash={<FlashNotice flash={flash ?? signIn.flash} />}
                 below={
                     <>
-                        <FlashNotice flash={flash ?? signIn.flash} />
-                        {useBrowser && signIn.failed && (
-                            <TokenFallbackLink label={t('Paste a webhook address instead')} open={open} onToggle={() => setOpen(true)} />
-                        )}
                         <Collapse open={open}>
-                            <div className="pb-1">
-                                <div className={`${SETTINGS_CARD} p-4 space-y-3`}>
+                            <div className={FOLD}>
+                                <div className="space-y-3">
                                     <p className="text-xs leading-relaxed text-text-secondary">
                                         {t('In Slack, create an app for your workspace, turn on Incoming Webhooks, and add a webhook for the channel. Paste its address here. Add one per channel.')}
                                     </p>
@@ -445,10 +451,9 @@ const SlackPanel: React.FC<{ webhooks: ConnectionsStatus['slack']['webhooks']; b
                                         />
                                     </label>
                                     <div className="flex justify-end">
-                                        <button type="button" className={SETTINGS_BTN} onClick={() => void add()} disabled={!url.trim() || !label.trim() || !!busy}>
-                                            <BusyIcon busy={busy === 'add'} icon={<Plus size={14} />} />
+                                        <GlassPill onClick={() => void add()} disabled={!url.trim() || !label.trim() || !!busy} icon={<BusyIcon busy={busy === 'add'} icon={<Plus size={14} />} />}>
                                             {t('Add channel')}
-                                        </button>
+                                        </GlassPill>
                                     </div>
                                     <p className="text-xs text-text-tertiary">{t('Natively checks the webhook without posting anything, and keeps it in your system keychain.')}</p>
                                 </div>
@@ -457,22 +462,19 @@ const SlackPanel: React.FC<{ webhooks: ConnectionsStatus['slack']['webhooks']; b
                     </>
                 }
             >
-                {pill}
+                {primary}
             </ActionArea>
             {n > 0 && (
                 <DetailSection title="Channels">
-                    <ListCard>
+                    <ListCard inset="tile">
                         {webhooks.map((w) => (
-                            <div key={w.id} className="flex items-center gap-3 px-4 py-3">
-                                <ConnectorMark id="slack" size={18} />
-                                <span className="min-w-0 flex-1 truncate text-sm text-text-primary">{w.label}</span>
-                                <button type="button" className={QUIET_BTN} onClick={() => void test(w.id)} disabled={!!busy}>
-                                    <BusyIcon busy={busy === w.id} icon={<RefreshCw size={12} />} />
+                            <div key={w.id} className={ROW}>
+                                <Tile><ConnectorMark id="slack" size={20} /></Tile>
+                                <span className="min-w-0 flex-1 truncate text-sm font-bold text-text-primary">{w.label}</span>
+                                <GlassPill onClick={() => void test(w.id)} disabled={!!busy} icon={<BusyIcon busy={busy === w.id} icon={<RefreshCw size={14} />} />}>
                                     {t('Test')}
-                                </button>
-                                <button type="button" className={QUIET_BTN} onClick={() => void remove(w.id)} aria-label={`${t('Remove')} ${w.label}`}>
-                                    <Trash2 size={14} />
-                                </button>
+                                </GlassPill>
+                                <GlassPill onClick={() => void remove(w.id)} aria-label={`${t('Remove')} ${w.label}`} icon={<Trash2 size={14} />} />
                             </div>
                         ))}
                     </ListCard>
@@ -485,10 +487,8 @@ const SlackPanel: React.FC<{ webhooks: ConnectionsStatus['slack']['webhooks']; b
 
 // ── Pane ─────────────────────────────────────────────────────────────────
 //
-// Laid out like Granola's Connectors: Integrations and MCP, each a rounded
-// card of rows (logo, name, what it does, "Connected", chevron). A row opens its
-// page, with the way back at the top; the list is where everything is found,
-// the page is where it is set up.
+// Laid out like Granola's Connectors (the integrations grouped by what they are
+// for, then MCP; each opens its own page), drawn in Settings' own cards and rows.
 
 const capi = (): ConnectorsApi | undefined => window.electronAPI?.connectors;
 
@@ -555,7 +555,9 @@ export const ConnectionsSettings: React.FC = () => {
             const n = data.webhooks.filter((w) => w.kind === (key === 'zapier' ? 'zapier' : 'webhook')).length;
             return key === 'zapier' ? (n === 1 ? t('1 Zap') : `${n} ${t('Zaps')}`) : (n === 1 ? t('1 endpoint') : `${n} ${t('endpoints')}`);
         }
-        return t('Connected');
+        if (key === 'gmail') return data.gmail?.account || t('Connected');
+        const s = status[key] as { account?: string } | undefined;
+        return s?.account || t('Connected');
     };
 
     const storageNotice = !status.secureStorage && (
@@ -619,19 +621,22 @@ export const ConnectionsSettings: React.FC = () => {
                 </TokenServicePanel>
             );
         }
+        // Gmail says how it is used in its own group, so its page has no How it works.
+        const pageInfo = { mark: <ConnectorMark id={entry.mark} size={20} />, title: entry.title, description: entry.description, steps: page === 'gmail' ? undefined : entry.howItWorks };
         return (
             <SettingsMotionReady.Provider value={motionReady}>
-                <div className="animated fadeIn" key={page}>
-                    <DetailHeader icon={<ConnectorMark id={entry.mark} size={28} />} title={entry.title} description={entry.description} onBack={back} />
-                    {body}
-                    {/* Gmail says how it is used in its own section, as Granola's page does. */}
-                    {page !== 'gmail' && <HowItWorks lines={entry.howItWorks} />}
-                    {page !== 'gmail' && page !== 'zapier' && page !== 'webhooks' && (
-                        <SettingsFootnote icon={<KeyRound size={14} />}>
-                            {t('Tokens and webhook addresses are kept in your system keychain and never shown again.')}
-                        </SettingsFootnote>
-                    )}
-                </div>
+                <ConnectorPageContext.Provider value={pageInfo}>
+                    <div className="animated fadeIn" key={page}>
+                        <BackLink onBack={back} />
+                        {body}
+                        {pageInfo.steps && <HowItWorks lines={pageInfo.steps} />}
+                        {page !== 'gmail' && page !== 'zapier' && page !== 'webhooks' && (
+                            <SettingsFootnote icon={<KeyRound size={14} />}>
+                                {t('Tokens and webhook addresses are kept in your system keychain and never shown again.')}
+                            </SettingsFootnote>
+                        )}
+                    </div>
+                </ConnectorPageContext.Provider>
             </SettingsMotionReady.Provider>
         );
     }
@@ -639,27 +644,32 @@ export const ConnectionsSettings: React.FC = () => {
     // ── The list ──
     return (
         <SettingsMotionReady.Provider value={motionReady}>
-            <div className="space-y-8 animated fadeIn" data-settings-stagger>
+            <div className="space-y-6 animated fadeIn" data-settings-stagger>
                 <section>
                     <SettingsSectionHeading
                         title={t('Connectors')}
                         subtitle={t('Connect Natively to the tools you use. Meeting notes stay on this computer until you send them, or until a rule you made sends them.')}
                     />
                     {storageNotice}
-                    <GroupLabel>{t('Integrations')}</GroupLabel>
-                    <ListCard>
-                        {CONNECTOR_CATALOG.map((e) => (
-                            <ListRow
-                                key={e.key}
-                                icon={<ConnectorMark id={e.mark} size={28} />}
-                                title={t(e.title)}
-                                description={t(e.description)}
-                                status={rowStatus(e.key)}
-                                onOpen={() => setPage(e.key)}
-                            />
-                        ))}
-                    </ListCard>
                 </section>
+
+                {CONNECTOR_GROUPS.map((g) => (
+                    <section key={g.id}>
+                        <GroupLabel>{t(g.label)}</GroupLabel>
+                        <Group>
+                            {CONNECTOR_CATALOG.filter((e) => e.group === g.id).map((e) => (
+                                <NavRow
+                                    key={e.key}
+                                    icon={<ConnectorMark id={e.mark} size={20} />}
+                                    title={t(e.title)}
+                                    description={t(e.description)}
+                                    value={rowStatus(e.key)}
+                                    onOpen={() => setPage(e.key)}
+                                />
+                            ))}
+                        </Group>
+                    </section>
+                ))}
 
                 <section>
                     <GroupLabel>{t('MCP')}</GroupLabel>

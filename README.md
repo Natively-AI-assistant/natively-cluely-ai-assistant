@@ -661,7 +661,7 @@ Connect Natively to **any** leading model or local inference engine.
 | **NVIDIA NIM**               | NVIDIA-hosted open models, plus Riva streaming speech.      |
 | **LiteLLM Gateway**          | Route through your own proxy with a built-in model picker.  |
 | **Google Antigravity**       | Sign in with your Google account instead of pasting a key.  |
-| **OpenRouter / Fluxion**     | Hosted gateways to many models.                             |
+| **OpenRouter / Sidrune**     | Hosted gateways to many models.                             |
 | **9Router / AgentRouter**    | More gateways, alongside LiteLLM.                           |
 | **Ollama / LocalAI**         | 100% Offline & Private (No API keys needed).                |
 | **OpenAI-Compatible**        | Connect to _any_ custom endpoint (vLLM, LM Studio, etc.)    |
@@ -784,7 +784,7 @@ This runs: Vite build → TypeScript compile → native module build → electro
 - **Anthropic:** Claude 4.6 series support with corrected max_tokens.
 - **Groq:** Ultra-fast text inference with Qwen 3.8, and screenshot analysis using Llama 4 Scout.
 - **Google Antigravity:** Sign in with your Google account to use Gemini models without an API key.
-- **Gateways:** OpenRouter, Fluxion, 9Router and AgentRouter are supported as providers.
+- **Gateways:** OpenRouter, Sidrune (formerly Fluxion), 9Router and AgentRouter are supported as providers.
 - **Codex:** Uses your `codex login` session, with GPT-6 Astra and GPT-5.6 Sol as built-in models.
 - **Background Model:** A second, faster model for Auto Answer, quick decisions and Fast Response Mode.
 - **Provider fallback:** When your model fails or stalls, Natively retries it, moves to your next provider, and tells you which one answered.
@@ -1032,7 +1032,7 @@ No raw audio, screenshots, or transcripts are stored or transmitted unless expli
 - **Groq** (Qwen 3.8 for text, Llama 4 Scout for OCR)
 - **LiteLLM** (any model behind your own gateway)
 - **Google Antigravity** (sign in with Google)
-- **OpenRouter, Fluxion, 9Router, AgentRouter** (gateways)
+- **OpenRouter, Sidrune, 9Router, AgentRouter** (gateways)
 - **Codex** (GPT-6 Astra, GPT-5.6 Sol)
 
 ### System Requirements

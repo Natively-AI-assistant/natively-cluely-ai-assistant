@@ -1231,17 +1231,21 @@ const ToneDropdown: React.FC<{
     followUpTone: FollowUpTone;
     isRegeneratingFollowUp: boolean;
     onSelect: (tone: FollowUpTone) => void;
-    /** The meeting's mode has writing samples: "Your style" leads the list. */
+    /** The meeting's mode has writing samples (Modes Manager): "Your style" is
+        offered, last, under a hairline. Only then: with none, it is not offered,
+        even for a draft once written in it (the trigger then says "Tone"). */
     offerYourStyle: boolean;
 }> = ({ followUpTone, isRegeneratingFollowUp, onSelect, offerYourStyle }) => {
     const t = useT();
     const isLight = useResolvedTheme() === 'light';
+    // The menu grows upward, so the last row sits next to the trigger: the presets
+    // run formal to casual, and "Your style" (the default) ends the list, set apart.
     const toneOptions: { value: FollowUpTone; label: string }[] = [
-        ...(offerYourStyle || followUpTone === 'your_style' ? [{ value: 'your_style' as const, label: t('Your style') }] : []),
         { value: 'professional', label: t('Professional') },
-        { value: 'warm',         label: t('Warm')         },
         { value: 'concise',      label: t('Concise')      },
+        { value: 'warm',         label: t('Warm')         },
         { value: 'friendly',     label: t('Friendly')     },
+        ...(offerYourStyle ? [{ value: 'your_style' as const, label: t('Your style') }] : []),
     ];
     const [open, setOpen] = useState(false);
     const [closing, setClosing] = useState(false);
@@ -1340,8 +1344,11 @@ const ToneDropdown: React.FC<{
                 {toneOptions.map((opt, i) => {
                     const selected = followUpTone === opt.value;
                     return (
+                        <React.Fragment key={opt.value}>
+                        {opt.value === 'your_style' && (
+                            <div role="separator" className={`mx-[7px] my-[3px] h-px ${isLight ? 'bg-black/[0.08]' : 'bg-white/[0.08]'}`} />
+                        )}
                         <button
-                            key={opt.value}
                             ref={(el) => { itemRefs.current[i] = el; }}
                             type="button"
                             role="menuitemradio"
@@ -1357,6 +1364,7 @@ const ToneDropdown: React.FC<{
                             <span>{opt.label}</span>
                             {selected && <Check className="ml-auto w-3.5 h-3.5 shrink-0" strokeWidth={2.5} aria-hidden="true" />}
                         </button>
+                        </React.Fragment>
                     );
                 })}
             </div>
@@ -2002,20 +2010,11 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const [isRegeneratingFollowUp, setIsRegeneratingFollowUp] = useState(false);
     // Selected follow-up tone, shown in the selector. Seeded from the saved draft's tone.
     const [followUpTone, setFollowUpTone] = useState<FollowUpTone>(followUpDraftTone || 'professional');
-    // Whether the mode this meeting ran under has writing samples (Modes Manager):
-    // then "Your style" is in the tone list, and the first draft is written in it.
+    // Whether the mode this meeting ran under (General when none is recorded) has
+    // writing samples (Modes Manager): then "Your style" is in the tone list, and
+    // the first draft is written in it. Main resolves the mode, as the draft does.
     const followUpStyleModeId: string | undefined = (meeting.detailedSummary as any)?.mode?.selectedModeId;
     const [modeHasStyle, setModeHasStyle] = useState(false);
-    useEffect(() => {
-        let live = true;
-        setModeHasStyle(false);
-        const api = (window.electronAPI as any)?.meetingOutputs;
-        if (!followUpStyleModeId || !api?.getWritingStyle) return;
-        api.getWritingStyle(followUpStyleModeId)
-            .then((st: { sampleCount?: number } | null) => { if (live) setModeHasStyle(!!st && (st.sampleCount || 0) > 0); })
-            .catch(() => { /* no style: the preset tones only */ });
-        return () => { live = false; };
-    }, [followUpStyleModeId]);
     // The last Generate / Regenerate of the draft came back without one.
     const [followUpFailed, setFollowUpFailed] = useState(false);
     // The first draft's entrance. 'armed' when the first draft is asked for: once
@@ -2589,6 +2588,20 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     // yet it opens the dialog and starts writing one (in "Your style" or the mode's
     // tone, as Generate did), and the dialog shows it being written.
     const [followUpOpen, setFollowUpOpen] = useState(false);
+    // Another meeting: no "Your style" until its own mode answers, never the last one's.
+    useEffect(() => { setModeHasStyle(false); }, [meeting.id]);
+    // Asked each time the sheet opens (the only place the picker is), so samples
+    // added or removed in the Modes Manager since then show (or drop) "Your style".
+    useEffect(() => {
+        if (!followUpOpen) return;
+        let live = true;
+        const api = (window.electronAPI as any)?.meetingOutputs;
+        if (!api?.getWritingStyleForMeeting) { setModeHasStyle(false); return; }
+        api.getWritingStyleForMeeting(meeting.id)
+            .then((st: { sampleCount?: number } | null) => { if (live) setModeHasStyle(!!st && (st.sampleCount || 0) > 0); })
+            .catch(() => { if (live) setModeHasStyle(false); });
+        return () => { live = false; };
+    }, [meeting.id, followUpStyleModeId, followUpOpen]);
     // Settings › Advanced › Genie animation: the sheet opens with the genie, or its own scale-up.
     const genieOn = useGenieAnimationEnabled();
     // The computer's own mail app by name and icon, for the send menu; read once,
