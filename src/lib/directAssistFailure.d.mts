@@ -81,7 +81,7 @@ export function directAssistFailureText(
   t?: (text: string) => string,
 ): string;
 
-export function ownStopFailure(reason: string | undefined | null): { partial: true; code: 'OUTPUT_LIMIT' | 'OUTPUT_REPETITION'; provider: '' } | null;
+export function ownStopFailure(reason: string | undefined | null): { partial: true; code: 'OUTPUT_LIMIT' | 'OUTPUT_REPETITION' | 'OUTPUT_STALLED'; provider: '' } | null;
 
 export type ChatNoteKind = 'late' | 'stopped' | 'superseded' | 'noneYet';
 /** A quiet note about an answer. `question` is the late answer's own question. */

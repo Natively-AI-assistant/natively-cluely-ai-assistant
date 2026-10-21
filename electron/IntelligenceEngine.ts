@@ -4834,6 +4834,14 @@ export class IntelligenceEngine extends EventEmitter {
             if (streamAborted) {
                 console.log('[IntelligenceEngine] _what_to_say stream aborted by new generation');
             }
+            // The stall deadline only fires once the answer is useful, so the
+            // user has already seen part of it. The generator never drained and
+            // so never wrote wtaTruncation itself: mark it here, or the partial
+            // answer is stored as history and shown with no cut-off notice (#644).
+            if (raceOutcome === 'stall_timeout' && !wtaTruncation.truncated) {
+                wtaTruncation.truncated = true;
+                wtaTruncation.reason = 'stall_timeout';
+            }
             trace.mark('response_completed', { chars: fullAnswer.length, coding: isCoding });
 
             // LIVE LATENCY FALLBACK: the deadline fired before any useful token.
