@@ -1671,8 +1671,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             at: Date.now(),
             category: envelope?.category,
             platform: envelope?.meta?.platform,
-            partial: envelope?.meta?.partial,
-            missing: envelope?.meta?.missing,
+            partial: envelope?.meta?.partial ?? (meta as any)?.partial,
+            missing: envelope?.meta?.missing ?? (meta as any)?.missing,
           });
         }
       });
@@ -11481,7 +11481,11 @@ Provide only the answer, nothing else.`;
                       pageContext.partial
                         ? `Only part of this page could be read automatically${
                             pageContext.missing?.length ? ` (missing: ${pageContext.missing.join(', ')})` : ''
-                          }. Highlight the relevant text or press the capture hotkey to capture it manually.`
+                          }. ${
+                            pageContext.missing?.includes('SVG mathematical expressions')
+                              ? 'Capture with screenshot (Ctrl+H) for formulas rendered as SVG.'
+                              : 'Highlight the relevant text or press the capture hotkey to capture it manually.'
+                          }`
                         : pageContext.url
                           ? `${pageContext.url} · ${pageContext.chars.toLocaleString()} chars · used on your next answer`
                           : `${pageContext.chars.toLocaleString()} chars · used on your next answer`

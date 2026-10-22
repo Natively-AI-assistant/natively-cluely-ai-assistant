@@ -151,6 +151,7 @@ export interface CodingProblemPayload {
   visibleCode?: string;
   language?: string;
   selectedText?: string;
+  omittedSvgMathCount?: number;
 }
 
 export interface NotesPayload {

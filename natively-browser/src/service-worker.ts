@@ -59,6 +59,8 @@ export interface CaptureMeta {
   source?: string;
   pageType?: string;
   firstLine?: string;
+  partial?: boolean;
+  missing?: string[];
 }
 
 /**
@@ -317,6 +319,9 @@ interface ExtractedTab {
   title?: string;
   pageType?: string;
   firstLine?: string;
+  omittedSvgMathCount?: number;
+  partial?: boolean;
+  missing?: string[];
 }
 
 /** Run the content script in a tab and ask it to extract clean text + meta. */
@@ -326,7 +331,19 @@ async function extractFromTab(tabId: number): Promise<ExtractedTab> {
     files: ['content-script.js'],
   });
   const response = (await chrome.tabs.sendMessage(tabId, { type: 'natively:extract' })) as
-    | { ok: true; result: { text: string; source?: string; title?: string; pageType?: string; firstLine?: string } }
+    | {
+        ok: true;
+        result: {
+          text: string;
+          source?: string;
+          title?: string;
+          pageType?: string;
+          firstLine?: string;
+          omittedSvgMathCount?: number;
+          partial?: boolean;
+          missing?: string[];
+        };
+      }
     | { ok: false; error: string }
     | undefined;
   if (!response) throw new Error('No response from page');
@@ -497,6 +514,8 @@ async function captureActiveTab(opts?: { reqId?: string; tabId?: number }): Prom
     source: extracted.source,
     pageType: extracted.pageType,
     firstLine: extracted.firstLine,
+    partial: extracted.partial,
+    missing: extracted.missing,
   };
   const outcome = await sendDom(pairing.token, pairing.port, extracted.text, { reqId: opts?.reqId, meta });
   return { outcome, chars: extracted.text.length };

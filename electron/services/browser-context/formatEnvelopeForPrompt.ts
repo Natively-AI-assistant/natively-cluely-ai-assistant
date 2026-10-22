@@ -33,6 +33,14 @@ export function formatEnvelopeForPrompt(envelope: ContextEnvelope | null | undef
 
   const p = (envelope.payload || {}) as CodingProblemPayload;
   const lines: string[] = [];
+  if (
+    envelope.meta?.missing?.includes('SVG mathematical expressions') ||
+    (typeof p.omittedSvgMathCount === 'number' && p.omittedSvgMathCount > 0)
+  ) {
+    lines.push(
+      'NOTE: Mathematical formulas on this page are rendered as SVG paths without text. For complete math and constraints, capture with screenshot (Ctrl+H).',
+    );
+  }
   lines.push(`BROWSER_CONTEXT_KIND: ${envelope.category}`);
   if (envelope.meta?.platform || p.platform) lines.push(`PLATFORM: ${envelope.meta?.platform || p.platform}`);
   lines.push(`CONFIDENCE: ${envelope.confidence}`);

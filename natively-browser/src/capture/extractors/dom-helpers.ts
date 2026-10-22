@@ -188,3 +188,11 @@ export function readEmbeddedJson(doc: Document, ids: string[]): unknown {
   }
   return null;
 }
+
+export {
+  normalizeMathDom,
+  replaceWithText,
+  SVG_MATH_OMITTED_NOTICE,
+  SVG_MATH_PLACEHOLDER,
+  type MathNormalizationResult,
+} from '../../math-helpers';
