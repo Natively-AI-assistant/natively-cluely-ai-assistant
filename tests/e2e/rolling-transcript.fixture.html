@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Rolling transcript resize regression</title>
+    <style>
+      body { padding: 24px; background: #18212d; color: #f2f4f8; }
+      button { margin: 4px; padding: 8px 12px; border: 1px solid #738197; border-radius: 5px; }
+      #transcript-panel { margin-top: 24px; border: 1px solid #738197; }
+    </style>
+  </head>
+  <body style="background: #18212d !important; color: #f2f4f8 !important; padding: 24px">
+    <h1 style="font-size: 20px; margin-bottom: 12px">Rolling transcript resize regression</h1>
+    <p>Synthetic transcript; no Electron bridge, account or provider calls.</p>
+    <div id="root"></div>
+    <script type="module">
+      import React, { createElement as h, useRef, useState } from 'react';
+      import { createRoot } from 'react-dom/client';
+      import RollingTranscript from '/src/components/ui/RollingTranscript.tsx';
+      import '/src/index.css';
+
+      const transcript = Array.from({ length: 18 }, (_, n) =>
+        `Sentence ${n + 1}: the team reviews the design and verifies the behavior before release.`
+      ).join(' ') + ' END OF TRANSCRIPT';
+      const shortTranscript = 'The team reviews the design, checks the transcript layout, and verifies that the final words stay visible when the window becomes narrower. END OF TRANSCRIPT';
+
+      function Fixture() {
+        const ref = useRef(null);
+        const [width, setWidth] = useState(760);
+        const [height, setHeight] = useState(84);
+        const [text, setText] = useState(transcript);
+        const [failed, setFailed] = useState(false);
+        const [mounted, setMounted] = useState(true);
+        const button = (label, action) => h('button', {
+          onClick: action, key: label,
+          style: { margin: 4, padding: '8px 12px', border: '1px solid #738197', borderRadius: 5 },
+        }, label);
+        return h(React.Fragment, null,
+          h('div', null,
+            button('Narrow', () => setWidth(280)),
+            button('Wide', () => setWidth(760)),
+            button('Short viewport', () => setHeight(42)),
+            button('Large text', () => {
+              const node = document.querySelector('.overlay-transcript-surface > div');
+              node.style.fontSize = '20px';
+              node.style.lineHeight = '42px';
+            }),
+            button('Scroll up', () => ref.current?.scrollByLines(-1)),
+            button('Bottom', () => ref.current?.scrollToBottom()),
+            button('Short transcript', () => setText(shortTranscript)),
+            button('Append', () => setText(t => t + ' New words after the pause.')),
+            button('Clear', () => setText('')),
+            button('Restore', () => setText(transcript)),
+            button('Fail channel', () => setFailed(true)),
+            button('Recover channel', () => setFailed(false)),
+            button('Unmount', () => setMounted(false))),
+          h('div', { id: 'transcript-panel', style: { width, '--overlay-text-muted': '#e5e7eb' } },
+            mounted && h(RollingTranscript, {
+              ref, text, isActive: false,
+              surfaceStyle: { maxHeight: height },
+              interviewerChannel: { status: failed ? 'failed' : 'connected' },
+            })));
+      }
+      createRoot(document.getElementById('root')).render(h(Fixture));
+    </script>
+  </body>
+</html>

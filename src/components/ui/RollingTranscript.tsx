@@ -114,6 +114,23 @@ const RollingTranscript = forwardRef<RollingTranscriptHandle, RollingTranscriptP
         el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
     }, [text, showTranscriptText, autoScroll, setProgrammaticAutoScroll]);
 
+    useEffect(() => {
+        const el = containerRef.current;
+        const content = el?.firstElementChild;
+        if (!el || !content || !autoScroll || !showTranscriptText) return;
+
+        // Reflow can move the bottom without changing the transcript text.
+        // Observe both the capped viewport and the text that wraps inside it.
+        const observer = new ResizeObserver(() => {
+            if (isNearBottom(el)) return;
+            setProgrammaticAutoScroll(true);
+            el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+        });
+        observer.observe(el);
+        observer.observe(content);
+        return () => observer.disconnect();
+    }, [autoScroll, showTranscriptText, setProgrammaticAutoScroll]);
+
     const scrollToBottom = useCallback(() => {
         const el = containerRef.current;
         if (!el) return;
