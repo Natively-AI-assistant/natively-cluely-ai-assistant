@@ -194,7 +194,7 @@ export interface StoredCredentials {
     /** Voyage AI key, used for EMBEDDINGS (Voyage is embeddings-only here). */
     voyageApiKey?: string;
     // STT Provider settings
-    sttProvider?: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech';
+    sttProvider?: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech';
     nvidiaNimSttModel?: string;
     /** Model per provider where the model is only a value on the app's own
         endpoint (sttModelCatalog.ts). Absent = the provider's default. */
@@ -212,6 +212,7 @@ export interface StoredCredentials {
     ibmWatsonApiKey?: string;
     ibmWatsonRegion?: string;
     sonioxApiKey?: string;
+    qwenAsrApiKey?: string;
     sttLanguage?: string;
     aiResponseLanguage?: string;
     // Tavily Search
@@ -1039,7 +1040,7 @@ export class CredentialsManager {
         return this.credentials.customProviders || [];
     }
 
-    public getSttProvider(): 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech' {
+    public getSttProvider(): 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech' {
         const provider = this.credentials.sttProvider || 'none';
         // Self-heal: if provider is 'none' but a Natively key exists, the user is in a
         // broken state (key cleared then re-entered via a path that skipped auto-promote,
@@ -1122,6 +1123,10 @@ export class CredentialsManager {
 
     public getSonioxApiKey(): string | undefined {
         return this.credentials.sonioxApiKey;
+    }
+
+    public getQwenAsrApiKey(): string | undefined {
+        return this.credentials.qwenAsrApiKey;
     }
 
     public getTavilyApiKey(): string | undefined {
@@ -1639,7 +1644,7 @@ export class CredentialsManager {
         return persisted;
     }
 
-    public setSttProvider(provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech'): boolean {
+    public setSttProvider(provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech'): boolean {
         if (this.refuseWriteWhileDegraded('set stt provider')) return false;
         this.credentials.sttProvider = provider;
         const persisted = this.saveCredentials();
@@ -1749,6 +1754,12 @@ export class CredentialsManager {
         return persisted;
     }
 
+    public setQwenAsrApiKey(key: string): boolean {
+        if (this.refuseWriteWhileDegraded('set qwen asr api key')) return false;
+        this.credentials.qwenAsrApiKey = (key || '').trim() || undefined;
+        return this.saveCredentials();
+    }
+
     public setTavilyApiKey(key: string): void {
         if (this.refuseWriteWhileDegraded('set tavily api key')) return;
         // Store undefined (not empty string) when removing, so hasKey() checks stay consistent
@@ -1776,7 +1787,7 @@ export class CredentialsManager {
      * renderer state — the masked pre-population regression from #318 was
      * caused by exactly that pattern. This getter is test-time only.
      */
-    public getStoredSttKeyForProvider(provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim'): string | undefined {
+    public getStoredSttKeyForProvider(provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen' | 'nvidia_nim'): string | undefined {
         switch (provider) {
             case 'groq':       return this.credentials.groqSttApiKey;
             case 'openai':     return this.credentials.openAiSttApiKey;
@@ -1785,6 +1796,7 @@ export class CredentialsManager {
             case 'azure':      return this.credentials.azureApiKey;
             case 'ibmwatson':  return this.credentials.ibmWatsonApiKey;
             case 'soniox':     return this.credentials.sonioxApiKey;
+            case 'qwen':       return this.credentials.qwenAsrApiKey;
             case 'nvidia_nim': return this.credentials.nvidiaNimApiKey;
         }
     }
@@ -3020,7 +3032,7 @@ export const USE_STORED_KEY_SENTINEL = '__USE_STORED__';
  * resolution contract independently verifiable (M-1 from the pre-release review).
  */
 export function resolveSttTestKey(
-    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox',
+    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen',
     apiKey: string | undefined | null,
 ): { ok: true; apiKey: string } | { ok: false; error: string } {
     if (apiKey === USE_STORED_KEY_SENTINEL) {

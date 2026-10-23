@@ -1305,6 +1305,7 @@ import { SttFailover, failoverNotice, type FailoverStatus } from "./audio/sttFai
 import { resolveAutoAnswerThresholds } from "./context-intelligence/policies/mode-policy-registry"
 import type { SpeechEdge } from "./audio/speechEdge"
 import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
+import { QwenRealtimeSTT } from "./audio/QwenRealtimeSTT"
 import { ElevenLabsStreamingSTT } from "./audio/ElevenLabsStreamingSTT"
 import { OpenAIStreamingSTT } from "./audio/OpenAIStreamingSTT"
 import { NativelyProSTT } from "./audio/NativelyProSTT"
@@ -1319,7 +1320,7 @@ import { isSpokenSavedLine } from "./intelligence/savedTranscriptOrigin"
 import { buildSummaryTextForSearch } from "./rag/summaryTextForSearch"
 
 /** Unified type for all STT providers with optional extended capabilities */
-type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | ElevenLabsStreamingSTT | OpenAIStreamingSTT | NativelyProSTT | NvidiaNimStreamingSTT | AppleSpeechSTT) & {
+type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | QwenRealtimeSTT | ElevenLabsStreamingSTT | OpenAIStreamingSTT | NativelyProSTT | NvidiaNimStreamingSTT | AppleSpeechSTT) & {
   /** Local models return whether a trailing final is now in flight; cloud providers return void. */
   finalize?: () => void | boolean;
   setAudioChannelCount?: (count: number) => void;
@@ -3928,6 +3929,15 @@ export class AppState {
         console.warn(`[Main] No API key for Soniox STT, falling back to GoogleSTT`);
         stt = new GoogleSTT(speaker);
       }
+    } else if (sttProvider === 'qwen') {
+      const apiKey = CredentialsManager.getInstance().getQwenAsrApiKey();
+      if (apiKey) {
+        console.log(`[Main] Using QwenRealtimeSTT for ${speaker}`);
+        stt = new QwenRealtimeSTT(apiKey);
+      } else {
+        console.warn('[Main] No Qwen ASR API key, falling back to GoogleSTT');
+        stt = new GoogleSTT(speaker);
+      }
     } else if (sttProvider === 'elevenlabs') {
       const apiKey = CredentialsManager.getInstance().getElevenLabsApiKey();
       if (apiKey) {
@@ -4020,6 +4030,7 @@ export class AppState {
     const effectiveSttId: string =
       stt instanceof DeepgramStreamingSTT ? 'deepgram'
       : stt instanceof SonioxStreamingSTT ? 'soniox'
+      : stt instanceof QwenRealtimeSTT ? 'qwen'
       : stt instanceof OpenAIStreamingSTT ? 'openai'
       : stt instanceof ElevenLabsStreamingSTT ? 'elevenlabs'
       : stt instanceof NativelyProSTT ? 'natively'
@@ -4033,7 +4044,7 @@ export class AppState {
     const gapSource: SttSource = speaker === 'interviewer' ? 'system' : 'mic';
     this._sttGapProvider[gapSource] = {
       effective: effectiveSttId,
-      streaming: ['deepgram', 'soniox', 'elevenlabs', 'natively', 'nvidia_nim', 'google'].includes(effectiveSttId)
+      streaming: ['deepgram', 'soniox', 'qwen', 'elevenlabs', 'natively', 'nvidia_nim', 'google'].includes(effectiveSttId)
         || (effectiveSttId === 'openai' && !CredentialsManager.getInstance().getOpenAiSttBaseUrl()),
     };
     // Local Whisper: the user's dictionary as its prompt (sttContextTerms.ts).

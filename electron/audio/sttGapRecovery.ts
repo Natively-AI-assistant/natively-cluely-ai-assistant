@@ -478,11 +478,11 @@ export const LOCAL_STT_PROVIDERS: ReadonlySet<string> = new Set(['local-whisper'
  * the live one (concurrent_session_blocked).
  */
 export const REPLAY_CAPABLE_PROVIDERS: ReadonlySet<string> = new Set([
-    'deepgram', 'soniox', 'elevenlabs', 'openai', 'nvidia_nim', 'google', 'groq', 'azure', 'ibmwatson',
+    'deepgram', 'soniox', 'qwen', 'elevenlabs', 'openai', 'nvidia_nim', 'google', 'groq', 'azure', 'ibmwatson',
 ]);
 
 /** Order tried for another configured provider (fast batch first). */
-const CLOUD_FALLBACK_ORDER = ['groq', 'openai', 'deepgram', 'soniox', 'elevenlabs'];
+const CLOUD_FALLBACK_ORDER = ['groq', 'openai', 'deepgram', 'soniox', 'qwen', 'elevenlabs'];
 
 /**
  * Which transcribers may hear the missed audio, in order. Privacy first: a

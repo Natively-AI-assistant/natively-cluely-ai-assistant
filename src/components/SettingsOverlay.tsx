@@ -634,6 +634,7 @@ const STT_KEY_URLS: Record<string, string> = {
     azure: 'https://portal.azure.com/#create/Microsoft.CognitiveServicesSpeech',
     ibmwatson: 'https://cloud.ibm.com/catalog/services/speech-to-text',
     soniox: 'https://console.soniox.com/api-keys',
+    qwen: 'https://bailian.console.aliyun.com/cn-beijing/',
     nvidia_nim: 'https://build.nvidia.com/explore/speech',
 };
 
@@ -979,7 +980,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     // Active STT provider — declared here (not with the rest of the STT
     // settings below) because the local-model language-capability effect and
     // memo that follow depend on it.
-    const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech'>('none');
+    const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech'>('none');
 
     // Declared here for the same reason sttProvider is: the NVIDIA
     // language-capability memo below reads it, and which languages that model
@@ -1705,6 +1706,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [hasStoredIbmWatsonKey, setHasStoredIbmWatsonKey] = useState(false);
     const [sttSonioxKey, setSttSonioxKey] = useState('');
     const [hasStoredSonioxKey, setHasStoredSonioxKey] = useState(false);
+    const [sttQwenAsrKey, setSttQwenAsrKey] = useState('');
+    const [hasStoredQwenAsrKey, setHasStoredQwenAsrKey] = useState(false);
     const [isSttDropdownOpen, setIsSttDropdownOpen] = useState(false);
     const sttDropdownRef = React.useRef<HTMLDivElement>(null);
 
@@ -1742,6 +1745,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                     if (creds.azureRegion) { setSttAzureRegion(creds.azureRegion); setSavedAzureRegion(creds.azureRegion); }
                     setHasStoredIbmWatsonKey(creds.hasIbmWatsonKey);
                     setHasStoredSonioxKey(creds.hasSonioxKey || false);
+                    setHasStoredQwenAsrKey(creds.hasQwenAsrKey || false);
 
                     setHasNativelyKey(creds.hasNativelyKey || false);
                     // Do NOT pre-populate STT key fields from stored credentials.
@@ -1781,13 +1785,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                     setHasStoredAzureKey(creds.hasAzureKey);
                     setHasStoredIbmWatsonKey(creds.hasIbmWatsonKey);
                     setHasStoredSonioxKey(creds.hasSonioxKey || false);
+                    setHasStoredQwenAsrKey(creds.hasQwenAsrKey || false);
                 }).catch(() => { /* silently ignore */ });
             }
         });
         return () => unsubscribe();
     }, []); // mount-once: isOpen is checked inside the callback
 
-    const handleSttProviderChange = async (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech') => {
+    const handleSttProviderChange = async (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech') => {
         setSttProvider(provider);
         setIsSttDropdownOpen(false);
         setSttTestStatus('idle');
@@ -1852,7 +1857,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         }
     };
 
-    const handleSttKeySubmit = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim', key: string) => {
+    const handleSttKeySubmit = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen' | 'nvidia_nim', key: string) => {
         if (!key.trim()) return;
         // Reject masked values returned by getStoredCredentials ("sk-...XXXX").
         // These are never valid API keys and every provider rejects them.
@@ -1907,6 +1912,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             } else if (provider === 'soniox') {
                 // @ts-ignore
                 saveResult = await window.electronAPI?.setSonioxApiKey?.(key.trim());
+            } else if (provider === 'qwen') {
+                saveResult = await window.electronAPI?.setQwenAsrApiKey?.(key.trim());
             } else {
                 // @ts-ignore
                 saveResult = await window.electronAPI?.setDeepgramApiKey?.(key.trim());
@@ -1930,6 +1937,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             else if (provider === 'azure') setHasStoredAzureKey(true);
             else if (provider === 'ibmwatson') setHasStoredIbmWatsonKey(true);
             else if (provider === 'soniox') setHasStoredSonioxKey(true);
+            else if (provider === 'qwen') setHasStoredQwenAsrKey(true);
             else setHasStoredDeepgramKey(true);
 
             setSttSaved(true);
@@ -1943,7 +1951,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         }
     };
 
-    const handleRemoveSttKey = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox') => {
+    const handleRemoveSttKey = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen') => {
         if (!(await askConfirm({ title: `Are you sure you want to remove the ${provider === 'ibmwatson' ? 'IBM Watson' : provider.charAt(0).toUpperCase() + provider.slice(1)} API key?` }))) return;
 
         try {
@@ -1977,6 +1985,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                 await window.electronAPI?.setSonioxApiKey?.('');
                 setSttSonioxKey('');
                 setHasStoredSonioxKey(false);
+            } else if (provider === 'qwen') {
+                await window.electronAPI?.setQwenAsrApiKey?.('');
+                setSttQwenAsrKey('');
+                setHasStoredQwenAsrKey(false);
             } else {
                 // @ts-ignore
                 await window.electronAPI?.setDeepgramApiKey?.('');
@@ -2006,6 +2018,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             groq: sttGroqKey, openai: sttOpenaiKey, deepgram: sttDeepgramKey,
             elevenlabs: sttElevenLabsKey, azure: sttAzureKey, ibmwatson: sttIbmKey,
             soniox: sttSonioxKey,
+            qwen: sttQwenAsrKey,
         };
         const keyToTest = keyMap[sttProvider]?.trim() || '';
 
@@ -2025,6 +2038,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                 case 'azure':      return hasStoredAzureKey;
                 case 'ibmwatson':  return hasStoredIbmWatsonKey;
                 case 'soniox':     return hasStoredSonioxKey;
+                case 'qwen':       return hasStoredQwenAsrKey;
                 default:           return false;
             }
         })();
@@ -3699,6 +3713,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                own treatment instead of a generic tint: white letterform on black. Fixed in
                                                                both themes — it is a brand colour pair, not a themed surface. */
                                                             { id: 'soniox', label: 'Soniox', badge: hasStoredSonioxKey ? 'Saved' : null, desc: t('60+ languages, multilingual, domain context'), color: 'cyan', icon: <BrandMonogram name="Soniox" />, tileClassName: 'bg-black text-white' },
+                                                            { id: 'qwen', label: 'Qwen ASR', badge: hasStoredQwenAsrKey ? 'Saved' : null, desc: t('Real-time transcription via Alibaba Cloud (Beijing)'), color: 'blue', icon: <BrandMonogram name="Qwen" />, tileClassName: 'bg-indigo-600 text-white' },
                                                             /* Label only — the `local-whisper` id stays as-is. It is the persisted
                                                                sttProvider value and is matched across the main process, IPC and
                                                                CredentialsManager, so renaming it would strand every existing user
@@ -3766,7 +3781,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 provider: every key-backed provider shares this card, so
                                                 without a key it would never remount — and never swap. */}
                                             {sttProvider !== 'google' && sttProvider !== 'local-whisper' && sttProvider !== 'apple-speech' && sttProvider !== 'natively' && sttProvider !== 'none' && (() => {
-                                                const providerName = sttProvider === 'nvidia_nim' ? 'Nvidia Nim' : sttProvider === 'groq' ? 'Groq' : sttProvider === 'openai' ? 'OpenAI STT' : sttProvider === 'elevenlabs' ? 'ElevenLabs' : sttProvider === 'azure' ? 'Azure' : sttProvider === 'ibmwatson' ? 'IBM Watson' : sttProvider === 'soniox' ? 'Soniox' : 'Deepgram';
+                                                const providerName = sttProvider === 'nvidia_nim' ? 'Nvidia Nim' : sttProvider === 'groq' ? 'Groq' : sttProvider === 'openai' ? 'OpenAI STT' : sttProvider === 'elevenlabs' ? 'ElevenLabs' : sttProvider === 'azure' ? 'Azure' : sttProvider === 'ibmwatson' ? 'IBM Watson' : sttProvider === 'soniox' ? 'Soniox' : sttProvider === 'qwen' ? 'Qwen ASR' : 'Deepgram';
                                                 const keyValue = sttProvider === 'nvidia_nim' ? sttNvidiaNimKey
                                                     : sttProvider === 'groq' ? sttGroqKey
                                                     : sttProvider === 'openai' ? sttOpenaiKey
@@ -3774,6 +3789,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     : sttProvider === 'azure' ? sttAzureKey
                                                     : sttProvider === 'ibmwatson' ? sttIbmKey
                                                     : sttProvider === 'soniox' ? sttSonioxKey
+                                                    : sttProvider === 'qwen' ? sttQwenAsrKey
                                                     : sttDeepgramKey;
                                                 const hasStoredKey = sttProvider === 'nvidia_nim' ? hasStoredNvidiaNimKey
                                                     : sttProvider === 'groq' ? hasStoredSttGroqKey
@@ -3782,6 +3798,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     : sttProvider === 'azure' ? hasStoredAzureKey
                                                     : sttProvider === 'ibmwatson' ? hasStoredIbmWatsonKey
                                                     : sttProvider === 'soniox' ? hasStoredSonioxKey
+                                                    : sttProvider === 'qwen' ? hasStoredQwenAsrKey
                                                     : hasStoredDeepgramKey;
                                                 // handleRemoveSttKey has no NVIDIA branch (the key is shared
                                                 // with AI Providers), so the card never offered one.
@@ -3798,8 +3815,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             {/* The provider's official mark, as AI Providers draws it.
                                                                 Soniox publishes no licence-clean mark: its monogram in
                                                                 the brand's own white-on-black. */}
-                                                            {sttProvider === 'soniox' ? (
-                                                                <span className="aip-tile" style={{ background: '#000', color: '#fff', borderColor: 'transparent' }} aria-hidden="true">SO</span>
+                                                            {sttProvider === 'soniox' || sttProvider === 'qwen' ? (
+                                                                <span className="aip-tile" style={{ background: sttProvider === 'qwen' ? '#4f46e5' : '#000', color: '#fff', borderColor: 'transparent' }} aria-hidden="true">{sttProvider === 'qwen' ? 'QW' : 'SO'}</span>
                                                             ) : (
                                                                 <span className="aip-tile aip-tile--mark" aria-hidden="true">
                                                                     <BrandMark provider={sttProvider} />
@@ -3843,6 +3860,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                             else if (sttProvider === 'azure') setSttAzureKey(e.target.value);
                                                                             else if (sttProvider === 'ibmwatson') setSttIbmKey(e.target.value);
                                                                             else if (sttProvider === 'soniox') setSttSonioxKey(e.target.value);
+                                                                            else if (sttProvider === 'qwen') setSttQwenAsrKey(e.target.value);
                                                                             else setSttDeepgramKey(e.target.value);
                                                                         }}
                                                                         autoComplete="off"
@@ -3864,6 +3882,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                                                 ? (hasStoredIbmWatsonKey ? '••••••••••••' : t('Enter IBM Watson API key'))
                                                                                                 : sttProvider === 'soniox'
                                                                                                     ? (hasStoredSonioxKey ? '••••••••••••' : t('Enter Soniox API key'))
+                                                                                                    : sttProvider === 'qwen'
+                                                                                                        ? (hasStoredQwenAsrKey ? '••••••••••••' : t('Enter Qwen ASR API key'))
                                                                                                     : (hasStoredDeepgramKey ? '••••••••••••' : t('Enter Deepgram API key'))
                                                                         }
                                                                         className="aip-input"

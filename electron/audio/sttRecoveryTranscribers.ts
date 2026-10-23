@@ -24,7 +24,7 @@ import {
 
 /** How fast each kind of provider is fed (times real time). */
 const SPEED: Record<string, number> = {
-    deepgram: 2, soniox: 2, openai: 2, google: 1.5, elevenlabs: 1.5, nvidia_nim: 1,
+    deepgram: 2, soniox: 2, qwen: 2, openai: 2, google: 1.5, elevenlabs: 1.5, nvidia_nim: 1,
     groq: 8, azure: 8, ibmwatson: 8, 'local-whisper': 4,
 };
 
@@ -41,6 +41,7 @@ const CLOUD_KEYS: Array<[string, (cm: any) => string | undefined]> = [
     ['openai', (cm) => cm.getOpenAiSttApiKey?.()],
     ['deepgram', (cm) => cm.getDeepgramApiKey?.()],
     ['soniox', (cm) => cm.getSonioxApiKey?.()],
+    ['qwen', (cm) => cm.getQwenAsrApiKey?.()],
     ['elevenlabs', (cm) => cm.getElevenLabsApiKey?.()],
 ];
 
@@ -61,6 +62,11 @@ function createInstance(id: string, source: SttSource, cm: any, sm: any): Replay
         case 'soniox': {
             const key = cm.getSonioxApiKey?.();
             if (key) { const { SonioxStreamingSTT } = require('./SonioxStreamingSTT'); stt = new SonioxStreamingSTT(key); }
+            break;
+        }
+        case 'qwen': {
+            const key = cm.getQwenAsrApiKey?.();
+            if (key) { const { QwenRealtimeSTT } = require('./QwenRealtimeSTT'); stt = new QwenRealtimeSTT(key); }
             break;
         }
         case 'elevenlabs': {

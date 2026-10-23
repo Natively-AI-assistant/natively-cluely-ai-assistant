@@ -13209,6 +13209,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasIbmWatsonKey: hasKey(creds.ibmWatsonApiKey),
         ibmWatsonRegion: creds.ibmWatsonRegion || 'us-south',
         hasSonioxKey: hasKey(creds.sonioxApiKey),
+        hasQwenAsrKey: hasKey(creds.qwenAsrApiKey),
         // STT key values — returned so the settings UI can pre-populate input fields.
         // SECURITY FIX (P0): Return masked keys only, never raw API keys.
         // The hasSttGroqKey boolean tells UI if key exists — no raw key needed.
@@ -13219,6 +13220,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         sttAzureKey: creds.azureApiKey ? `sk-...${creds.azureApiKey.slice(-4)}` : '',
         sttIbmKey: creds.ibmWatsonApiKey ? `sk-...${creds.ibmWatsonApiKey.slice(-4)}` : '',
         sttSonioxKey: creds.sonioxApiKey ? `sk-...${creds.sonioxApiKey.slice(-4)}` : '',
+        sttQwenAsrKey: creds.qwenAsrApiKey ? `...${creds.qwenAsrApiKey.slice(-4)}` : '',
         openAiSttBaseUrl: creds.openAiSttBaseUrl || '',
         hasTavilyKey: hasKey(creds.tavilyApiKey),
         // Dynamic Model Discovery - preferred models
@@ -13286,6 +13288,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasIbmWatsonKey: false,
         ibmWatsonRegion: 'us-south',
         hasSonioxKey: false,
+        hasQwenAsrKey: false,
         hasTavilyKey: false,
         sttGroqKey: '',
         sttOpenaiKey: '',
@@ -13294,6 +13297,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         sttAzureKey: '',
         sttIbmKey: '',
         sttSonioxKey: '',
+        sttQwenAsrKey: '',
       };
     }
   });
@@ -13405,6 +13409,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         | 'azure'
         | 'ibmwatson'
         | 'soniox'
+        | 'qwen'
         | 'nvidia_nim'
         | 'natively'
         | 'local-whisper'
@@ -13725,6 +13730,21 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle('set-qwen-asr-api-key', async (_, apiKey: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const persisted = CredentialsManager.getInstance().setQwenAsrApiKey(apiKey);
+      await appState.reconfigureSttProvider();
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send('credentials-changed');
+      });
+      return sttKeyPersistenceWarning(apiKey, persisted) ?? { success: true };
+    } catch (error: any) {
+      console.error('Error saving Qwen ASR API key:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   safeHandle('set-ibmwatson-region', async (_, region: string) => {
     try {
       // SSRF guard: region is interpolated into the IBM Watson STT hostname
@@ -13764,7 +13784,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     'test-stt-connection',
     async (
       _,
-      provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim',
+      provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen' | 'nvidia_nim',
       apiKey: string,
       region?: string,
     ) => {
@@ -13843,6 +13863,46 @@ export function initializeIpcHandlers(appState: AppState): void {
               clearTimeout(timeout);
               console.error(`[IPC] Deepgram test error: ${err.message}`);
               resolve({ success: false, error: err.message || 'Connection failed' });
+            });
+          });
+        }
+
+        if (provider === 'qwen') {
+          const WebSocket = require('ws');
+          return await new Promise<{ success: boolean; error?: string }>((resolve) => {
+            let settled = false;
+            const ws = new WebSocket(
+              'wss://dashscope.aliyuncs.com/api-ws/v1/realtime?model=qwen3-asr-flash-realtime',
+              { headers: { Authorization: `Bearer ${apiKey}` }, handshakeTimeout: 10000 },
+            );
+            const timeout = setTimeout(() => done({ success: false, error: 'Qwen ASR connection timed out' }), 12000);
+            const done = (result: { success: boolean; error?: string }) => {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timeout);
+              ws.terminate();
+              resolve(result);
+            };
+            ws.on('message', (data: Buffer) => {
+              try {
+                const event = JSON.parse(data.toString());
+                if (event.type === 'session.created') {
+                  ws.send(JSON.stringify({ event_id: `natively_qwen_test_${Date.now()}`, type: 'session.finish' }));
+                } else if (event.type === 'session.finished') {
+                  done({ success: true });
+                } else if (event.type === 'error') {
+                  done({ success: false, error: event.error?.message || 'Qwen ASR rejected the connection' });
+                }
+              } catch {
+                done({ success: false, error: 'Invalid Qwen ASR response' });
+              }
+            });
+            ws.on('unexpected-response', (_request: unknown, response: { statusCode?: number }) => {
+              done({ success: false, error: `Qwen ASR returned HTTP ${response.statusCode ?? 'error'}` });
+            });
+            ws.on('error', (error: Error) => done({ success: false, error: error.message }));
+            ws.on('close', () => {
+              if (!settled) done({ success: false, error: 'Qwen ASR closed the connection' });
             });
           });
         }
