@@ -155,6 +155,12 @@ const ROWS: Record<string, Row> = {
     '回答が同じ内容を繰り返し始めました',
     'Empezó a repetirse',
   ],
+  'The answer stopped arriving': [
+    'Ответ перестал приходить',
+    '回答停止传输了',
+    '回答の受信が止まりました',
+    'La respuesta dejó de llegar',
+  ],
   'Natively lost track of this answer. Ask again.': [
     'Natively потерял этот ответ. Спросите ещё раз.',
     'Natively 丢失了这次回答。请再问一次。',
