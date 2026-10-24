@@ -1,9 +1,15 @@
 # Natively Page Context — companion browser extension
 
 A minimal, privacy-correct Manifest V3 extension that sends the **active tab's
-readable content** to your local Natively desktop app, **once, on demand**. It
-never runs in the background, never auto-captures, and only ever talks to your
-own machine over loopback.
+readable content** to your local Natively desktop app, only when the desktop app
+asks for it. It never streams page content, never sends it on navigation, and
+only ever talks to your own machine over loopback.
+
+The desktop asks in two cases: when you capture explicitly (hotkey or the popup's
+Capture button), and, with **Auto-attach coding context** on (the default), each
+time you ask Natively for an answer while a coding problem page is the active tab.
+See [Automatic context](#automatic-context) for what that reads and how to turn it
+off.
 
 It is part of the [Natively](../) monorepo and is licensed under the
 **Natively Personal Use Source License v1.0**, same as the desktop app. Source
@@ -31,6 +37,25 @@ back to a **screenshot + vision** automatically — one hotkey, the right captur
 
 You can also capture manually from the popup ("Capture this page") while Chrome is
 focused.
+
+### Automatic context
+
+When you ask Natively for an answer (typed, or a quick action such as What to
+answer), the desktop also asks the extension for context from the active tab,
+without a hotkey or a click. The extension classifies the page inside the tab and
+only extracts and sends its content when the page is eligible:
+
+- a coding problem page it recognises with high confidence (**Auto-detect coding
+  problems** and **Auto-attach coding context**, both on by default);
+- a job description or developer docs page, if you turned those categories on
+  (off by default);
+- a page the optional AI page classifier approves from its title and URL metadata
+  (off by default).
+
+Pages classified as sensitive are never read in any of these paths. To stop
+automatic capture, turn off **Auto-attach coding context** (or **Auto-detect
+coding problems**) in Natively **Settings → Companion**. Explicit captures keep
+working either way.
 
 The **service worker is the only component that holds the pairing token** and the
 only one that touches the network. The content script (which runs inside an
