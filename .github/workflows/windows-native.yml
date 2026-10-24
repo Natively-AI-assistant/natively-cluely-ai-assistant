@@ -1,0 +1,60 @@
+# Builds the three Windows binaries that need a C++/Rust compiler, so your own
+# laptop doesn't need Visual Studio. Put this file in your fork at:
+#   .github/workflows/windows-native.yml
+#
+# Output: an artifact named "natively-windows-native" containing
+#   index.win32-x64-msvc.node  -> native-module\
+#   better_sqlite3.node        -> node_modules\better-sqlite3\build\Release\
+#   keytar.node                -> node_modules\keytar\build\Release\
+
+name: Build Windows native binaries
+
+on:
+  workflow_dispatch: # "Run workflow" button in the Actions tab
+  push:
+    paths: # also rebuild automatically when native code or dependencies change
+      - 'native-module/**'
+      - 'package-lock.json'
+      - '.github/workflows/windows-native.yml'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4 # no submodules: "premium" is private and not needed
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      # Runs the normal postinstall, which compiles better-sqlite3 and keytar
+      # for this repo's exact Electron version using the runner's Visual Studio.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Rust audio module (WASAPI capture etc.)
+        run: npm run build:native
+
+      - name: Collect binaries
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item native-module/index.win32-x64-msvc.node out/
+          Copy-Item node_modules/better-sqlite3/build/Release/better_sqlite3.node out/
+          Copy-Item node_modules/keytar/build/Release/keytar.node out/
+          Get-ChildItem out
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: natively-windows-native
+          path: out/
+          retention-days: 30
