@@ -22,6 +22,8 @@
 
 // Mirror of DOM_CONTEXT_MAX_CHARS in electron/config/constants.ts and
 // src/constants/domCapture.ts. This is a separate package so we cannot import
+import { normalizeMathDom, SVG_MATH_OMITTED_NOTICE } from './math-helpers';
+
 // the desktop constant; keep this value in sync with those two.
 export const DOM_CONTEXT_MAX_CHARS = 25000;
 
@@ -59,6 +61,11 @@ export interface ExtractResult {
   pageType: PageType;
   /** First non-empty content line, for the desktop preview chip. */
   firstLine: string;
+  /** Number of mathematical expressions that could only be rendered as SVG paths without text. */
+  omittedSvgMathCount?: number;
+  /** True when math formulas were omitted or capture is incomplete. */
+  partial?: boolean;
+  missing?: string[];
 }
 
 function collapseWhitespace(s: string): string {
@@ -73,12 +80,12 @@ function collapseWhitespace(s: string): string {
 }
 
 /** `body.innerText` with script/style/noscript subtrees removed first. */
-function innerTextFallback(doc: Document): string {
-  const body = doc.body;
+function innerTextFallback(doc: Document | HTMLElement): string {
+  const body = (doc as Document).body || (doc as HTMLElement);
   if (!body) return '';
   // Clone so we can strip non-content nodes without touching the live page.
-  const clone = body.cloneNode(true) as HTMLElement;
-  const drop = clone.querySelectorAll('script, style, noscript, template');
+  const clone = body.cloneNode ? (body.cloneNode(true) as HTMLElement) : body;
+  const drop = clone.querySelectorAll ? clone.querySelectorAll('script, style, noscript, template') : [];
   drop.forEach((n) => n.parentNode?.removeChild(n));
   // innerText respects visibility/line-breaks; textContent does not. Prefer
   // innerText when available (jsdom/real browser), else fall back to textContent.
@@ -194,7 +201,7 @@ function firstContentLine(text: string): string {
     const line = raw.trim();
     if (!line) continue;
     // Skip our own front-matter labels.
-    if (/^(TITLE|SELECTED TEXT|CODE ON PAGE|HEADINGS)\b/.test(line)) continue;
+    if (/^(TITLE|SELECTED TEXT|CODE ON PAGE|HEADINGS|NOTE)\b/.test(line)) continue;
     if (line === '---') continue;
     return line.slice(0, 160);
   }
@@ -235,8 +242,10 @@ function assemble(
   limit: number,
   /** Optional hard cap on the body portion (coding pages demote prose body). */
   bodyCap?: number,
+  mathNotice?: string,
 ): string {
   const parts: string[] = [];
+  if (mathNotice) parts.push(mathNotice);
   if (title) parts.push(`TITLE: ${title}`);
   if (selection) parts.push(`SELECTED TEXT:\n${selection}`);
   // Code goes in front matter (never trimmed) and is explicitly marked verbatim so
@@ -285,7 +294,18 @@ export function extractPageContent(deps: ExtractDeps): ExtractResult {
   // doc here so editor DOM is intact).
   const code = extractCodeBlocks(doc);
 
-  const readable = tryReadability(doc, deps.readabilityFactory);
+  // Normalize math on a cloned DOM so live page DOM is not mutated, accessible
+  // formulas (KaTeX/MathML/MathJax/SVGs) become readable text, and unconvertible
+  // SVG paths are replaced with placeholders rather than silently dropped.
+  let docClone: Document;
+  try {
+    docClone = doc.cloneNode(true) as Document;
+  } catch {
+    docClone = doc;
+  }
+  const mathResult = normalizeMathDom(docClone);
+
+  const readable = tryReadability(docClone, deps.readabilityFactory);
   const readableLen = readable?.textContent ? readable.textContent.trim().length : 0;
   const pageType = classifyPage(doc, readableLen, code.length > 0);
 
@@ -313,12 +333,22 @@ export function extractPageContent(deps: ExtractDeps): ExtractResult {
     body = collapseWhitespace(readable.textContent);
     source = 'readability';
   } else {
-    body = innerTextFallback(doc);
+    body = innerTextFallback(docClone);
     if (body) source = 'innertext';
   }
 
   // Coding pages: cap the prose body so the verbatim code/signature dominates.
   const bodyCap = pageType === 'coding' ? CODING_BODY_CAP : undefined;
-  const text = assemble(title, selection, outline, code, body, limit, bodyCap);
-  return { text, source: text ? source : 'empty', title, pageType, firstLine: firstContentLine(text) };
+  const mathNotice = mathResult.omittedSvgMathCount > 0 ? SVG_MATH_OMITTED_NOTICE : undefined;
+  const text = assemble(title, selection, outline, code, body, limit, bodyCap, mathNotice);
+  return {
+    text,
+    source: text ? source : 'empty',
+    title,
+    pageType,
+    firstLine: firstContentLine(text),
+    omittedSvgMathCount: mathResult.omittedSvgMathCount,
+    partial: mathResult.omittedSvgMathCount > 0 ? true : undefined,
+    missing: mathResult.omittedSvgMathCount > 0 ? ['SVG mathematical expressions'] : undefined,
+  };
 }

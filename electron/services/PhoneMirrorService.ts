@@ -124,6 +124,8 @@ export interface DomCaptureMeta {
   source?: string;
   pageType?: string;
   firstLine?: string;
+  partial?: boolean;
+  missing?: string[];
 }
 
 /** A single open tab reported by the extension for the multi-tab picker. */
@@ -2285,6 +2287,10 @@ function sanitizeCaptureMeta(raw: unknown): DomCaptureMeta | undefined {
     source: str(m.source, 64),
     pageType: str(m.pageType, 64),
     firstLine: str(m.firstLine, 300),
+    partial: m.partial === true ? true : undefined,
+    missing: Array.isArray(m.missing)
+      ? m.missing.filter((x): x is string => typeof x === 'string').slice(0, 8)
+      : undefined,
   };
   // Drop the object entirely if nothing useful survived.
   return Object.values(out).some((v) => v !== undefined) ? out : undefined;

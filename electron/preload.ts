@@ -16,6 +16,8 @@ interface DomCaptureMeta {
   source?: string;
   pageType?: string;
   firstLine?: string;
+  partial?: boolean;
+  missing?: string[];
 }
 
 type DirectAssistSource = 'typed' | 'stt' | 'screenshot';

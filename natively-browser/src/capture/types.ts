@@ -182,6 +182,7 @@ export interface CodingProblemPayload {
   visibleCode?: string;
   language?: string;
   selectedText?: string;
+  omittedSvgMathCount?: number;
 }
 
 /** Notes/docs editor payload — manual-first, selected/visible only. */

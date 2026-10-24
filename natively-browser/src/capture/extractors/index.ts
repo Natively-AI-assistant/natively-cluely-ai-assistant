@@ -33,7 +33,9 @@ import {
   extractEditorCode,
   extractPreBlocks,
   firstText,
+  normalizeMathDom,
   sliceSection,
+  SVG_MATH_OMITTED_NOTICE,
 } from './dom-helpers';
 
 const MAX_PAYLOAD_FIELD = 8000;
@@ -108,12 +110,22 @@ function extractCodingProblem(input: ExtractInput): ExtractOutput {
   const doc = input.document;
   const hints = input.platform?.platformHints;
   const selection = (input.getSelection?.() || '').trim();
-  const readable = readableText(input);
+
+  // Clone document for math normalization and safe extraction
+  let docClone: Document;
+  try {
+    docClone = doc.cloneNode(true) as Document;
+  } catch {
+    docClone = doc;
+  }
+  const mathResult = normalizeMathDom(docClone);
+
+  const readable = readableText({ ...input, document: docClone });
 
   const problemTitle =
     firstText(doc, hints?.titleSelectors) || readable.title || (doc.title || '').trim();
-  const statementFromSelectors = allText(doc, hints?.statementSelectors, MAX_PAYLOAD_FIELD);
-  const problemStatement = statementFromSelectors || readable.text || bodyInnerText(doc);
+  const statementFromSelectors = allText(docClone, hints?.statementSelectors, MAX_PAYLOAD_FIELD);
+  const problemStatement = statementFromSelectors || readable.text || bodyInnerText(docClone);
   const examples = sliceSection(problemStatement, hints?.examplesSignals || ['Example', 'Sample Input', 'Sample Output']);
   const constraints = sliceSection(problemStatement, hints?.constraintsSignals || ['Constraints', 'Constraint']);
   const visibleCode = extractEditorCode(doc, hints?.codeSelectors);
@@ -142,6 +154,7 @@ function extractCodingProblem(input: ExtractInput): ExtractOutput {
     visibleCode: cap(visibleCode),
     starterCode: cap(starterCode),
     selectedText: cap(selection, 4000),
+    omittedSvgMathCount: mathResult.omittedSvgMathCount > 0 ? mathResult.omittedSvgMathCount : undefined,
   };
 
   return finishEnvelope(input, payload, extractionSource, problemTitle, buildCodingDom(payload));
@@ -284,9 +297,14 @@ function assessPartial(
   if (category === 'coding_problem' || category === 'interview_assessment') {
     if (!has(p.problemStatement)) missing.push('problem statement');
     if (!has(p.visibleCode) && !has(p.starterCode)) missing.push('visible code');
+    if (typeof p.omittedSvgMathCount === 'number' && p.omittedSvgMathCount > 0) {
+      missing.push('SVG mathematical expressions');
+    }
     // Partial only if we got NEITHER the statement nor the code — having one is
-    // a usable capture; having neither is a thin one worth flagging.
-    return { partial: missing.length >= 2, missing };
+    // a usable capture; having neither is a thin one worth flagging. Also flag
+    // partial if essential mathematical formulas were omitted as raw SVG paths.
+    const isPartial = missing.length >= 2 || missing.includes('SVG mathematical expressions');
+    return { partial: isPartial, missing };
   }
   if (category === 'coding_editor') {
     if (!has(p.visibleCode) && !has(p.starterCode)) missing.push('visible code');
@@ -344,6 +362,9 @@ function finishEnvelope(
 /** Build the legacy `dom` string for a coding payload (front-matter style). */
 function buildCodingDom(p: CodingProblemPayload): string {
   const parts: string[] = [];
+  if (typeof p.omittedSvgMathCount === 'number' && p.omittedSvgMathCount > 0) {
+    parts.push(SVG_MATH_OMITTED_NOTICE);
+  }
   if (p.problemTitle) parts.push(`TITLE: ${p.problemTitle}`);
   if (p.selectedText) parts.push(`SELECTED TEXT:\n${p.selectedText}`);
   if (p.starterCode || p.visibleCode) {
