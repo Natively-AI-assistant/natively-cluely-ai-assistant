@@ -33,10 +33,21 @@ import {
   extractEditorCode,
   extractPreBlocks,
   firstText,
+  problemScopes,
+  recoverMath,
   sliceSection,
 } from './dom-helpers';
 
 const MAX_PAYLOAD_FIELD = 8000;
+/** The constraints field is shorter than the statement — it gets its own budget. */
+const MAX_CONSTRAINTS_FIELD = 1200;
+/** How much of the recovered formula list is repeated inside CONSTRAINTS. */
+const MATH_IN_CONSTRAINTS_LIMIT = 400;
+/** Heading the recovered formulas are listed under. */
+const MATH_LABEL = 'MATHEMATICAL EXPRESSIONS: ';
+/** The note that tells the model the capture lost a formula. */
+const INACCESSIBLE_MATH_NOTE =
+  'NOTE: Some mathematical expressions in this problem are rendered as images/SVG and could not be extracted as text. Consider capturing a screenshot for full context.';
 
 export interface ExtractDeps {
   document: Document;
@@ -104,6 +115,39 @@ function readableText(deps: ExtractDeps): { title: string; text: string } {
 
 /* ─────────────────────────── coding extractors ────────────────────── */
 
+/**
+ * Build the problem statement with the recovered formulas and the screenshot
+ * note RESERVED inside the field budget. Appending first and truncating after
+ * would silently drop the formulas from a long problem — exactly the loss the
+ * note exists to report.
+ */
+function buildStatement(base: string, mathText: string, note: string, limit: number): string {
+  const extra = [mathText ? `${MATH_LABEL}${mathText}` : '', note].filter(Boolean).join('\n\n');
+  if (!extra) return base.length > limit ? base.slice(0, limit) : base;
+  const TRUNCATED = '\n…(statement truncated)';
+  const room = limit - extra.length - 2 - TRUNCATED.length;
+  if (room <= 0) return extra.length > limit ? extra.slice(0, limit) : extra;
+  const head = base.length > room ? `${base.slice(0, room).trimEnd()}${TRUNCATED}` : base;
+  const out = head ? `${head}\n\n${extra}` : extra;
+  return out.length > limit ? out.slice(0, limit) : out;
+}
+
+/**
+ * Build the constraints field: the sliced section plus the recovered formulas,
+ * with room reserved for the formulas so a long section cannot push them out.
+ */
+function buildConstraints(base: string, mathText: string, limit: number): string {
+  if (!mathText) return base.length > limit ? base.slice(0, limit) : base;
+  const mathPart =
+    mathText.length > MATH_IN_CONSTRAINTS_LIMIT ? mathText.slice(0, MATH_IN_CONSTRAINTS_LIMIT).trimEnd() : mathText;
+  if (!base) return mathPart.slice(0, limit);
+  const room = limit - mathPart.length - 1;
+  if (room <= 0) return mathPart.slice(0, limit);
+  const head = base.length > room ? base.slice(0, room).trimEnd() : base;
+  const out = `${head}\n${mathPart}`;
+  return out.length > limit ? out.slice(0, limit) : out;
+}
+
 function extractCodingProblem(input: ExtractInput): ExtractOutput {
   const doc = input.document;
   const hints = input.platform?.platformHints;
@@ -113,9 +157,25 @@ function extractCodingProblem(input: ExtractInput): ExtractOutput {
   const problemTitle =
     firstText(doc, hints?.titleSelectors) || readable.title || (doc.title || '').trim();
   const statementFromSelectors = allText(doc, hints?.statementSelectors, MAX_PAYLOAD_FIELD);
-  const problemStatement = statementFromSelectors || readable.text || bodyInnerText(doc);
-  const examples = sliceSection(problemStatement, hints?.examplesSignals || ['Example', 'Sample Input', 'Sample Output']);
-  const constraints = sliceSection(problemStatement, hints?.constraintsSignals || ['Constraints', 'Constraint']);
+  const baseStatement = statementFromSelectors || readable.text || bodyInnerText(doc);
+
+  // Formulas: recovered as text where the page offers an equivalent, and
+  // flagged when they exist only as SVG paths (a screenshot is needed then).
+  // The checks are scoped to the problem's own containers so page icons are
+  // never read as formulas.
+  const math = recoverMath(doc, problemScopes(doc, hints?.statementSelectors));
+  const mathText = math.text;
+  const inaccessibleMath = math.inaccessible;
+
+  const problemStatement = buildStatement(
+    baseStatement,
+    mathText,
+    inaccessibleMath ? INACCESSIBLE_MATH_NOTE : '',
+    MAX_PAYLOAD_FIELD,
+  );
+  const examples = sliceSection(baseStatement, hints?.examplesSignals || ['Example', 'Sample Input', 'Sample Output']);
+  const constraintsRaw = sliceSection(baseStatement, hints?.constraintsSignals || ['Constraints', 'Constraint']);
+  const constraints = buildConstraints(constraintsRaw, mathText, MAX_CONSTRAINTS_FIELD);
   const visibleCode = extractEditorCode(doc, hints?.codeSelectors);
   const preBlocks = extractPreBlocks(doc);
 
@@ -138,13 +198,20 @@ function extractCodingProblem(input: ExtractInput): ExtractOutput {
     problemTitle: cap(problemTitle, 300),
     problemStatement: cap(problemStatement),
     examples: cap(examples || preBlocks, 2000),
-    constraints: cap(constraints, 1200),
+    constraints: cap(constraints, MAX_CONSTRAINTS_FIELD),
     visibleCode: cap(visibleCode),
     starterCode: cap(starterCode),
     selectedText: cap(selection, 4000),
   };
 
-  return finishEnvelope(input, payload, extractionSource, problemTitle, buildCodingDom(payload));
+  const out = finishEnvelope(input, payload, extractionSource, problemTitle, buildCodingDom(payload));
+  if (inaccessibleMath && out.envelope) {
+    out.envelope.meta.partial = true;
+    const missing = out.envelope.meta.missing || [];
+    if (!missing.includes('mathematical expressions')) missing.push('mathematical expressions');
+    out.envelope.meta.missing = missing;
+  }
+  return out;
 }
 
 function extractCodingEditor(input: ExtractInput): ExtractOutput {

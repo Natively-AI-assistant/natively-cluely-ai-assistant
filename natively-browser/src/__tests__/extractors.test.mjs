@@ -20,11 +20,12 @@ const cls = await import(pathToFileURL(path.resolve(__dirname, '../../dist-test/
 const R = reg.DEFAULT_REGISTRY;
 
 // ---- Fake DOM (class + descendant selectors, textarea value, getElementById) --
-function el(tag, { className = '', text = '', id = '', value, children = [] } = {}) {
+function el(tag, { className = '', text = '', id = '', value, children = [], attrs = {} } = {}) {
   const node = {
     tagName: tag.toUpperCase(),
     className, id, value,
     _text: text,
+    _attrs: attrs,
     children,
     parentNode: null,
     get textContent() {
@@ -32,10 +33,28 @@ function el(tag, { className = '', text = '', id = '', value, children = [] } = 
       return this._text;
     },
     get innerText() { return this.textContent; },
+    getAttribute(name) {
+      if (name === 'class') return this.className || null;
+      if (name === 'id') return this.id || null;
+      const v = this._attrs[name];
+      return v === undefined ? null : String(v);
+    },
     matches(sel) {
       sel = sel.trim();
       if (sel.startsWith('.')) return ('' + this.className).split(/\s+/).includes(sel.slice(1));
       if (sel.startsWith('#')) return this.id === sel.slice(1);
+      if (sel.startsWith('[')) {
+        const m = sel.match(/^\[([\w-]+)(?:([*^$]?=)\s*"?([^"\]]*)"?)?\]$/);
+        if (!m) return false;
+        const v = this.getAttribute(m[1]);
+        if (v === null || v === undefined) return false;
+        if (!m[2]) return true;
+        if (m[2] === '=') return v === (m[3] || '');
+        if (m[2] === '*=') return v.includes(m[3] || '');
+        if (m[2] === '^=') return v.startsWith(m[3] || '');
+        if (m[2] === '$=') return v.endsWith(m[3] || '');
+        return false;
+      }
       if (sel.startsWith('[contenteditable')) return this._contenteditable === true;
       return this.tagName === sel.toUpperCase();
     },
@@ -45,7 +64,7 @@ function el(tag, { className = '', text = '', id = '', value, children = [] } = 
       return null;
     },
     cloneNode() {
-      const c = el(tag, { className, text, id, value, children: children.map((x) => x.cloneNode()) });
+      const c = el(tag, { className, text, id, value, children: children.map((x) => x.cloneNode()), attrs: { ...attrs } });
       c._contenteditable = this._contenteditable;
       return c;
     },
@@ -272,5 +291,79 @@ describe('extractors — partial-capture honesty signal', () => {
       selection: 'this specific snippet the user highlighted intentionally',
     }));
     assert.notEqual(out.envelope.meta.partial, true);
+  });
+});
+
+describe('extractors — mathematical expressions in a coding problem', () => {
+  const hackerrank = (doc) =>
+    input(doc, {
+      host: 'hackerrank.com',
+      url: 'https://www.hackerrank.com/challenges/matrix-rotation-algo/problem',
+    });
+
+  test('a recovered formula is added to the statement', () => {
+    const stmt = el('div', {
+      className: 'problem-statement',
+      children: [
+        el('p', { text: 'Rotate the matrix by k times.' }),
+        el('span', { attrs: { 'data-tex': 'k \\bmod 4' } }),
+      ],
+    });
+    const doc = makeDoc([stmt], { title: 'Matrix Rotation', host: 'hackerrank.com' });
+    const out = ext.runExtractor(hackerrank(doc));
+    assert.match(out.envelope.payload.problemStatement, /MATHEMATICAL EXPRESSIONS: k \\bmod 4/);
+  });
+
+  test('a long statement still keeps the recovered formulas inside the field limit', () => {
+    const stmt = el('div', {
+      className: 'problem-statement',
+      children: [
+        el('p', { text: 'x'.repeat(9000) }),
+        el('span', { attrs: { 'data-tex': 'n^2' } }),
+      ],
+    });
+    const doc = makeDoc([stmt], { title: 'Matrix Rotation', host: 'hackerrank.com' });
+    const out = ext.runExtractor(hackerrank(doc));
+    const statement = out.envelope.payload.problemStatement;
+    assert.ok(statement.length <= 8000, `statement was ${statement.length} chars`);
+    assert.match(statement, /MATHEMATICAL EXPRESSIONS: n\^2/);
+  });
+
+  test('a long constraints section still keeps the recovered formulas', () => {
+    const stmt = el('div', {
+      className: 'problem-statement',
+      children: [
+        el('p', { text: 'Problem body.' }),
+        el('p', { text: 'Constraints:\n' + 'y'.repeat(2000) }),
+        el('span', { attrs: { 'data-tex': '10^5' } }),
+      ],
+    });
+    const doc = makeDoc([stmt], { title: 'Matrix Rotation', host: 'hackerrank.com' });
+    const out = ext.runExtractor(hackerrank(doc));
+    const constraints = out.envelope.payload.constraints;
+    assert.ok(constraints.length <= 1200, `constraints were ${constraints.length} chars`);
+    assert.match(constraints, /10\^5/);
+  });
+
+  test('a formula that exists only as SVG paths marks the capture partial', () => {
+    const svg = el('svg', { attrs: { role: 'img' }, children: [el('path', {})] });
+    const stmt = el('div', {
+      className: 'problem-statement',
+      children: [el('p', { text: 'Rotate the matrix by k times, then print the result.' }), svg],
+    });
+    const doc = makeDoc([stmt], { title: 'Matrix Rotation', host: 'hackerrank.com' });
+    const out = ext.runExtractor(hackerrank(doc));
+    assert.equal(out.envelope.meta.partial, true);
+    assert.ok(out.envelope.meta.missing.includes('mathematical expressions'));
+    assert.match(out.envelope.payload.problemStatement, /NOTE: Some mathematical expressions/);
+  });
+
+  test('an icon outside the problem does not make the capture partial', () => {
+    const icon = el('svg', { attrs: { 'aria-label': 'Settings' }, children: [el('path', {})] });
+    const stmt = el('div', { className: 'problem-statement', children: [el('p', { text: 'Rotate the matrix by k times, then print the result.' })] });
+    const doc = makeDoc([el('header', { children: [icon] }), stmt], { title: 'Matrix Rotation', host: 'hackerrank.com' });
+    const out = ext.runExtractor(hackerrank(doc));
+    assert.notEqual(out.envelope.meta.partial, true);
+    assert.ok(!out.envelope.payload.problemStatement.includes('Settings'));
   });
 });

@@ -26,30 +26,50 @@ const {
   sliceSection,
   bodyInnerText,
   readEmbeddedJson,
+  mathmlToText,
+  problemScopes,
+  recoverMath,
 } = await import(pathToFileURL(modPath).href);
 
 // ---- Minimal fake DOM -------------------------------------------------------
 // Surface implemented: textContent (own text + descendants), value, innerText
 // (only when given), parentNode, removeChild, cloneNode(deep), querySelector,
 // querySelectorAll (returns an array: forEach / length / iterable — all the
-// helpers use), and getElementById on the document.
+// helpers use), getAttribute, and getElementById on the document.
 //
 // Selector support is the subset the helpers use: comma lists, the descendant
-// combinator, and compound `tag`, `.class`, `#id`. Anything else throws a
-// SyntaxError, like a real engine does for a selector it cannot parse — which is
-// what the helpers' try/catch guards exist for.
+// combinator, and compound `tag`, `.class`, `#id`, `[attr]`, `[attr="v"]`,
+// `[attr*=v]`. Anything else throws a SyntaxError, like a real engine does for
+// a selector it cannot parse — which is what the helpers' try/catch guards
+// exist for.
 
 function parseCompound(part) {
-  if (!/^(?:[a-zA-Z][\w-]*)?(?:[.#][\w-]+)*$/.test(part) || part === '') {
+  const tokens = part.match(/^[a-zA-Z][\w-]*|\.[\w-]+|#[\w-]+|\[[^\]]+\]/g);
+  if (!tokens || tokens.join('') !== part || part === '') {
     throw new SyntaxError(`'${part}' is not a valid selector`);
   }
   const tag = (part.match(/^[a-zA-Z][\w-]*/) || [''])[0].toUpperCase();
   const classes = [...part.matchAll(/\.([\w-]+)/g)].map((m) => m[1]);
   const id = (part.match(/#([\w-]+)/) || [])[1];
+  const attrs = [...part.matchAll(/\[([\w-]+)(?:([*^$]?=)\s*"?([^"\]]*)"?)?\]/g)].map((m) => ({
+    name: m[1],
+    op: m[2] || '',
+    value: m[3] === undefined ? '' : m[3],
+  }));
   return (node) =>
     (!tag || node.tagName === tag) &&
     classes.every((c) => node.classList.includes(c)) &&
-    (id === undefined || node.id === id);
+    (id === undefined || node.id === id) &&
+    attrs.every((a) => {
+      const v = node.getAttribute ? node.getAttribute(a.name) : null;
+      if (v === null || v === undefined) return false;
+      if (!a.op) return true;
+      if (a.op === '=') return v === a.value;
+      if (a.op === '*=') return v.includes(a.value);
+      if (a.op === '^=') return v.startsWith(a.value);
+      if (a.op === '$=') return v.endsWith(a.value);
+      return false;
+    });
 }
 
 function parseSelector(selector) {
@@ -79,7 +99,7 @@ function queryAll(root, selector) {
 }
 
 /**
- * el('div', { class: 'a b', id: 'x', text: 'own text', value, innerText }, [children])
+ * el('div', { class: 'a b', id: 'x', text: 'own text', value, innerText, ...attrs }, [children])
  */
 function el(tag, attrs = {}, children = []) {
   const node = {
@@ -91,6 +111,12 @@ function el(tag, attrs = {}, children = []) {
     parentNode: null,
     get textContent() {
       return this.ownText + this.children.map((c) => c.textContent).join('');
+    },
+    getAttribute(name) {
+      if (name === 'class') return attrs.class === undefined ? null : attrs.class;
+      if (name === 'id') return attrs.id === undefined ? null : attrs.id;
+      const v = attrs[name];
+      return v === undefined ? null : String(v);
     },
     querySelectorAll(selector) {
       return queryAll(this, selector);
@@ -714,5 +740,234 @@ describe('readEmbeddedJson', () => {
 
   test('returns null when every lookup throws', () => {
     assert.equal(readEmbeddedJson(throwingDoc(), ['a', 'b']), null);
+  });
+});
+
+describe('mathmlToText', () => {
+  test('a superscript keeps its structure instead of flattening to "n2"', () => {
+    const math = el('math', {}, [el('msup', {}, [el('mi', { text: 'n' }), el('mn', { text: '2' })])]);
+    assert.equal(mathmlToText(math), 'n^{2}');
+  });
+
+  test('a fraction keeps the numerator over the denominator', () => {
+    const math = el('math', {}, [el('mfrac', {}, [el('mn', { text: '1' }), el('mn', { text: '2' })])]);
+    assert.equal(mathmlToText(math), '(1)/(2)');
+  });
+
+  test('a subscript and a sub/superscript keep their positions', () => {
+    const sub = el('math', {}, [el('msub', {}, [el('mi', { text: 'a' }), el('mi', { text: 'i' })])]);
+    assert.equal(mathmlToText(sub), 'a_{i}');
+    const both = el('math', {}, [
+      el('msubsup', {}, [el('mi', { text: 'x' }), el('mi', { text: 'i' }), el('mn', { text: '2' })]),
+    ]);
+    assert.equal(mathmlToText(both), 'x_{i}^{2}');
+  });
+
+  test('a square root and a root are written out', () => {
+    const sqrt = el('math', {}, [el('msqrt', {}, [el('mi', { text: 'x' })])]);
+    assert.equal(mathmlToText(sqrt), 'sqrt(x)');
+    const root = el('math', {}, [el('mroot', {}, [el('mi', { text: 'x' }), el('mn', { text: '3' })])]);
+    assert.equal(mathmlToText(root), 'root(x, 3)');
+  });
+
+  test('a compound base is parenthesised so the meaning is unambiguous', () => {
+    const math = el('math', {}, [
+      el('msup', {}, [el('mrow', {}, [el('mi', { text: 'a' }), el('mo', { text: '+' }), el('mi', { text: 'b' })]), el('mn', { text: '2' })]),
+    ]);
+    assert.equal(mathmlToText(math), '(a+b)^{2}');
+  });
+
+  test('a table keeps its rows and cells apart', () => {
+    const math = el('math', {}, [
+      el('mtable', {}, [
+        el('mtr', {}, [el('mtd', {}, [el('mn', { text: '1' })]), el('mtd', {}, [el('mn', { text: '2' })])]),
+        el('mtr', {}, [el('mtd', {}, [el('mn', { text: '3' })]), el('mtd', {}, [el('mn', { text: '4' })])]),
+      ]),
+    ]);
+    assert.equal(mathmlToText(math), '1, 2 ; 3, 4');
+  });
+
+  test('a TeX annotation is not folded into the structure', () => {
+    const math = el('math', {}, [
+      el('semantics', {}, [
+        el('mrow', {}, [el('mi', { text: 'x' })]),
+        el('annotation', { encoding: 'application/x-tex', text: 'x^2' }),
+      ]),
+    ]);
+    assert.equal(mathmlToText(math), 'x');
+  });
+});
+
+describe('problemScopes', () => {
+  test('collects the platform hint containers and the well-known judge ones', () => {
+    const hinted = el('div', { class: 'my-statement' }, []);
+    const known = el('div', { class: 'challenge_constraints_body' }, []);
+    const doc = makeDoc([hinted, known]);
+    const scopes = problemScopes(doc, ['.my-statement']);
+    assert.ok(scopes.includes(hinted));
+    assert.ok(scopes.includes(known));
+  });
+
+  test('a selector the engine rejects is skipped, not fatal', () => {
+    const doc = makeDoc([el('div', { class: 'problem-statement' }, [])]);
+    const scopes = problemScopes(doc, ['div[unclosed']);
+    assert.equal(scopes.length, 1);
+  });
+});
+
+describe('recoverMath', () => {
+  test('a TeX source carried by the markup is recovered', () => {
+    const doc = makeDoc([el('span', { 'data-tex': 'x^2 + y^2' })]);
+    const r = recoverMath(doc);
+    assert.equal(r.text, 'x^2 + y^2');
+    assert.equal(r.inaccessible, false);
+  });
+
+  test('MathML is recovered with its structure intact', () => {
+    const doc = makeDoc([el('math', {}, [el('msup', {}, [el('mi', { text: 'n' }), el('mn', { text: '2' })])])]);
+    const r = recoverMath(doc);
+    assert.equal(r.text, 'n^{2}');
+    assert.ok(!r.text.includes('n2'));
+    assert.equal(r.inaccessible, false);
+  });
+
+  test('a TeX annotation wins over the MathML structure', () => {
+    const doc = makeDoc([
+      el('math', {}, [
+        el('semantics', {}, [
+          el('mrow', {}, [el('mi', { text: 'x' })]),
+          el('annotation', { encoding: 'application/x-tex', text: 'x^2' }),
+        ]),
+      ]),
+    ]);
+    assert.equal(recoverMath(doc).text, 'x^2');
+  });
+
+  test('a KaTeX formula is recovered from its MathML, not from the rendered glyphs', () => {
+    const doc = makeDoc([
+      el('span', { class: 'katex' }, [
+        el('span', { class: 'katex-mathml' }, [el('math', {}, [el('msup', {}, [el('mi', { text: 'x' }), el('mn', { text: '2' })])])]),
+      ]),
+    ]);
+    const r = recoverMath(doc);
+    assert.equal(r.text, 'x^{2}');
+    assert.equal(r.inaccessible, false);
+  });
+
+  test('a formula renderer with no source at all is reported missing, not flattened', () => {
+    const doc = makeDoc([
+      el('span', { class: 'katex' }, [
+        el('span', { class: 'katex-html' }, [el('span', { class: 'mord', text: 'x2' })]),
+      ]),
+    ]);
+    const r = recoverMath(doc);
+    assert.equal(r.text, '');
+    assert.equal(r.inaccessible, true);
+  });
+
+  test('a role=math element with plain text is read as text', () => {
+    const doc = makeDoc([el('span', { role: 'math', text: 'x + y' })]);
+    const r = recoverMath(doc);
+    assert.equal(r.text, 'x + y');
+    assert.equal(r.inaccessible, false);
+  });
+
+  test('a labelled formula SVG is recovered from its accessible label', () => {
+    const svg = el('svg', { role: 'img', 'aria-label': 'x squared' }, [el('path', {})]);
+    const doc = makeDoc([el('div', { class: 'problem-statement' }, [svg])]);
+    const r = recoverMath(doc, problemScopes(doc));
+    assert.equal(r.text, 'x squared');
+    assert.equal(r.inaccessible, false);
+  });
+
+  test('aria-labelledby is resolved to the text of the element it points at', () => {
+    const label = el('span', { id: 'formula-label', text: 'n squared' });
+    const svg = el('svg', { role: 'img', 'aria-labelledby': 'formula-label' }, [el('path', {})]);
+    const doc = makeDoc([el('div', { class: 'problem-statement' }, [svg, label])]);
+    const r = recoverMath(doc, problemScopes(doc));
+    assert.equal(r.text, 'n squared');
+    assert.equal(r.inaccessible, false);
+  });
+
+  test('a label reference to a missing element does NOT count as captured text', () => {
+    const svg = el('svg', { role: 'img', 'aria-labelledby': 'missing-label' }, [el('path', {})]);
+    const doc = makeDoc([el('div', { class: 'problem-statement' }, [svg])]);
+    const r = recoverMath(doc, problemScopes(doc));
+    assert.equal(r.text, '');
+    assert.equal(r.inaccessible, true);
+  });
+
+  test('a label reference to an empty element does NOT count as captured text', () => {
+    const label = el('span', { id: 'formula-label', text: '   ' });
+    const svg = el('svg', { role: 'img', 'aria-labelledby': 'formula-label' }, [el('path', {})]);
+    const doc = makeDoc([el('div', { class: 'problem-statement' }, [svg, label])]);
+    const r = recoverMath(doc, problemScopes(doc));
+    assert.equal(r.text, '');
+    assert.equal(r.inaccessible, true);
+  });
+
+  test('a formula whose TeX source sits on the wrapping element is NOT reported missing', () => {
+    const svg = el('svg', { role: 'img' }, [el('path', {})]);
+    const wrap = el('span', { 'data-tex': 'sum_{i=1}^{n} i' }, [svg]);
+    const doc = makeDoc([el('div', { class: 'problem-statement' }, [wrap])]);
+    const r = recoverMath(doc, problemScopes(doc));
+    assert.equal(r.text, 'sum_{i=1}^{n} i');
+    assert.equal(r.inaccessible, false);
+  });
+
+  test('an icon outside the problem is neither read as a formula nor reported missing', () => {
+    const icon = el('svg', { 'aria-label': 'Settings' }, [el('path', {})]);
+    const doc = makeDoc([
+      el('header', {}, [icon]),
+      el('div', { class: 'problem-statement' }, [el('p', { text: 'Given an array' })]),
+    ]);
+    const r = recoverMath(doc, problemScopes(doc));
+    assert.equal(r.text, '');
+    assert.equal(r.inaccessible, false);
+  });
+
+  test('an icon inside a control inside the problem is not a formula', () => {
+    const icon = el('svg', { role: 'img' }, [el('path', {})]);
+    const doc = makeDoc([el('div', { class: 'problem-statement' }, [el('button', {}, [icon])])]);
+    const r = recoverMath(doc, problemScopes(doc));
+    assert.equal(r.inaccessible, false);
+  });
+
+  test('a path-only formula inside the problem is reported missing (the HackerRank case)', () => {
+    const svg = el('svg', { role: 'img' }, [el('path', {})]);
+    const doc = makeDoc([el('div', { class: 'challenge_constraints_body' }, [el('p', {}, [svg])])]);
+    const r = recoverMath(doc, problemScopes(doc));
+    assert.equal(r.text, '');
+    assert.equal(r.inaccessible, true);
+  });
+
+  test('a graphic with no paths in the problem is not a lost formula', () => {
+    const svg = el('svg', { role: 'img' }, []);
+    const doc = makeDoc([el('div', { class: 'problem-statement' }, [svg])]);
+    const r = recoverMath(doc, problemScopes(doc));
+    assert.equal(r.inaccessible, false);
+  });
+
+  test('without a problem scope an image-role graphic is not treated as a formula', () => {
+    const svg = el('svg', { role: 'img' }, [el('path', {})]);
+    const doc = makeDoc([el('div', {}, [svg])]);
+    const r = recoverMath(doc);
+    assert.equal(r.inaccessible, false);
+  });
+
+  test('the recovered list is de-duplicated and capped', () => {
+    const doc = makeDoc([
+      el('span', { 'data-tex': 'x^2' }),
+      el('span', { 'data-tex': 'x^2' }),
+      el('span', { 'data-tex': 'y^2' }),
+    ]);
+    assert.equal(recoverMath(doc).text, 'x^2 ; y^2');
+    assert.equal(recoverMath(doc, [], 5).text.length, 5);
+  });
+
+  test('a document that throws on every query recovers nothing and reports no loss', () => {
+    const r = recoverMath(throwingDoc());
+    assert.equal(r.text, '');
+    assert.equal(r.inaccessible, false);
   });
 });
