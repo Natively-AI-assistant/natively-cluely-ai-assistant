@@ -1,5 +1,7 @@
 import { animate, AnimatePresence, motion, motionValue, useMotionValue, useTransform } from 'framer-motion';
 import {
+  AArrowDown,
+  AArrowUp,
   ArrowRight,
   ArrowDown,
   BookOpen,
@@ -24,6 +26,8 @@ import {
   Quote,
   RefreshCw,
   SlidersHorizontal,
+  Volume2,
+  VolumeX,
   X,
 } from 'lucide-react';
 import {
@@ -119,6 +123,14 @@ function SkillPickerLayer({
     />
   );
 }
+
+/** Answer text size range for the A−/A+ buttons, in px. */
+const ANSWER_FONT_MIN = 11;
+const ANSWER_FONT_MAX = 22;
+const ANSWER_FONT_DEFAULT = 14;
+
+/** Streams read aloud: every answer except the list of suggested follow-up questions. */
+const isReadAloudIntent = (intent: string) => intent !== 'follow_up_questions';
 
 /** Intents that show LLM answer content — pin chat panel on first stream token. */
 const ANSWER_PANEL_INTENTS = new Set([
@@ -441,6 +453,7 @@ import { AmbientChip } from './overlay/AmbientChip';
 import { LastTimeRecapBanner, useLastTimeRecap } from './overlay/LastTimeRecapNotice';
 import type { LiveHelperAction } from '../types/assist';
 import { useMeetingMute } from './overlay/useMeetingMute';
+import { useReadAloud } from './overlay/useReadAloud';
 
 // PERF: hoisted plugin arrays. ReactMarkdown receives `remarkPlugins` and
 // `rehypePlugins` as new array literals if defined inline at the call site —
@@ -2175,6 +2188,18 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const stored = localStorage.getItem('natively_hideChatHidesWidget');
     return stored ? stored === 'true' : true;
   });
+  // Answer text size (A−/A+ in the input row). Drives --answer-font-size,
+  // which every answer surface reads through the .answer-fs classes.
+  const [answerFontSize, setAnswerFontSize] = useState(() => {
+    const stored = Number(localStorage.getItem('natively_answerFontSize'));
+    return Number.isFinite(stored) && stored >= ANSWER_FONT_MIN && stored <= ANSWER_FONT_MAX
+      ? stored
+      : ANSWER_FONT_DEFAULT;
+  });
+  // Read-aloud of streamed answers (speaker toggle in the input row).
+  const readAloud = useReadAloud();
+  const readAloudRef = useRef(readAloud);
+  readAloudRef.current = readAloud;
 
   // Active mode name. (A mode/sources chip rendered here briefly on
   // 2026-07-31 and was removed on user feedback — the zero-sources signal
@@ -2408,7 +2433,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     () => ({
       standard: {
         p: ({ node, ...props }: any) => (
-          <p className="mb-[2.5px] last:mb-0 leading-[1.45] text-[14px] whitespace-pre-wrap" {...props} />
+          <p className="mb-[2.5px] last:mb-0 leading-[1.45] answer-fs whitespace-pre-wrap" {...props} />
         ),
         strong: ({ node, ...props }: any) => (
           <strong className="font-semibold overlay-hotword" {...props} />
@@ -2417,12 +2442,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           <em className="italic opacity-90 overlay-text-secondary" {...props} />
         ),
         ul: ({ node, ...props }: any) => (
-          <ul className="list-disc ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] text-[14px]" {...props} />
+          <ul className="list-disc ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] answer-fs" {...props} />
         ),
         ol: ({ node, ...props }: any) => (
-          <ol className="list-decimal ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] text-[14px]" {...props} />
+          <ol className="list-decimal ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] answer-fs" {...props} />
         ),
-        li: ({ node, ...props }: any) => <li className="pl-1 mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
+        li: ({ node, ...props }: any) => <li className="pl-1 mb-[2.5px] last:mb-0 leading-[1.45] answer-fs" {...props} />,
         code: ({ node, className, children, ...props }: any) => {
           const match = /language-([\w+#-]+)/.exec(className || '');
           const isBlock = isBlockCode(className, String(children));
@@ -2448,7 +2473,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           }
           return (
             <code
-              className={`overlay-inline-code-surface rounded px-1 py-0.5 text-[13px] font-mono ${isLightTheme ? 'text-slate-800' : ''}`}
+              className={`overlay-inline-code-surface rounded px-1 py-0.5 answer-fs-sm font-mono ${isLightTheme ? 'text-slate-800' : ''}`}
               {...props}
             >
               {children}
@@ -2466,7 +2491,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       },
       codeText: {
         p: ({ node, ...props }: any) => (
-          <p className="mb-[2.5px] last:mb-0 leading-[1.45] whitespace-pre-wrap text-[14px]" {...props} />
+          <p className="mb-[2.5px] last:mb-0 leading-[1.45] whitespace-pre-wrap answer-fs" {...props} />
         ),
         strong: ({ node, ...props }: any) => (
           <strong className="font-bold opacity-100 overlay-text-strong" {...props} />
@@ -2475,24 +2500,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           <em className="italic overlay-text-secondary" {...props} />
         ),
         ul: ({ node, ...props }: any) => (
-          <ul className="list-disc ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] text-[14px]" {...props} />
+          <ul className="list-disc ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] answer-fs" {...props} />
         ),
         ol: ({ node, ...props }: any) => (
-          <ol className="list-decimal ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] text-[14px]" {...props} />
+          <ol className="list-decimal ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] answer-fs" {...props} />
         ),
-        li: ({ node, ...props }: any) => <li className="pl-1 mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
+        li: ({ node, ...props }: any) => <li className="pl-1 mb-[2.5px] last:mb-0 leading-[1.45] answer-fs" {...props} />,
         h1: ({ node, ...props }: any) => (
-          <h1 className="text-[15px] font-bold mb-[2.5px] mt-1.5 leading-[1.45] overlay-text-strong uppercase tracking-wide" {...props} />
+          <h1 className="answer-fs-lg font-bold mb-[2.5px] mt-1.5 leading-[1.45] overlay-text-strong uppercase tracking-wide" {...props} />
         ),
         h2: ({ node, ...props }: any) => (
-          <h2 className="text-[13px] font-bold mb-[2.5px] mt-1 leading-[1.45] overlay-text-strong uppercase tracking-wide" {...props} />
+          <h2 className="answer-fs-sm font-bold mb-[2.5px] mt-1 leading-[1.45] overlay-text-strong uppercase tracking-wide" {...props} />
         ),
         h3: ({ node, ...props }: any) => (
-          <h3 className="text-[13px] font-semibold mb-[2.5px] mt-1 leading-[1.45] overlay-text-primary" {...props} />
+          <h3 className="answer-fs-sm font-semibold mb-[2.5px] mt-1 leading-[1.45] overlay-text-primary" {...props} />
         ),
         code: ({ node, ...props }: any) => (
           <code
-            className="overlay-inline-code-surface rounded px-1 py-0.5 text-[13px] font-mono whitespace-pre-wrap"
+            className="overlay-inline-code-surface rounded px-1 py-0.5 answer-fs-sm font-mono whitespace-pre-wrap"
             {...props}
           />
         ),
@@ -2512,7 +2537,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         ),
       },
       whatToAnswerText: {
-        p: ({ node, ...props }: any) => <p className="mb-[2.5px] last:mb-0 leading-[1.45] text-[14px] whitespace-pre-wrap" {...props} />,
+        p: ({ node, ...props }: any) => <p className="mb-[2.5px] last:mb-0 leading-[1.45] answer-fs whitespace-pre-wrap" {...props} />,
         strong: ({ node, ...props }: any) => (
           <strong
             className="font-semibold overlay-hotword"
@@ -2526,46 +2551,46 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           />
         ),
         ul: ({ node, ...props }: any) => (
-          <ul className="list-disc ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] text-[14px]" {...props} />
+          <ul className="list-disc ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] answer-fs" {...props} />
         ),
         ol: ({ node, ...props }: any) => (
-          <ol className="list-decimal ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] text-[14px]" {...props} />
+          <ol className="list-decimal ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] answer-fs" {...props} />
         ),
-        li: ({ node, ...props }: any) => <li className="pl-1 mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
+        li: ({ node, ...props }: any) => <li className="pl-1 mb-[2.5px] last:mb-0 leading-[1.45] answer-fs" {...props} />,
       },
       recapText: {
-        p: ({ node, ...props }: any) => <p className="mb-[2.5px] last:mb-0 leading-[1.45] text-[14px] whitespace-pre-wrap" {...props} />,
+        p: ({ node, ...props }: any) => <p className="mb-[2.5px] last:mb-0 leading-[1.45] answer-fs whitespace-pre-wrap" {...props} />,
         strong: ({ node, ...props }: any) => (
           <strong
             className="font-bold opacity-100 overlay-text-strong"
             {...props}
           />
         ),
-        ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] text-[14px]" {...props} />,
-        li: ({ node, ...props }: any) => <li className="pl-1 mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
+        ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] answer-fs" {...props} />,
+        li: ({ node, ...props }: any) => <li className="pl-1 mb-[2.5px] last:mb-0 leading-[1.45] answer-fs" {...props} />,
       },
       followUpQuestionsText: {
-        p: ({ node, ...props }: any) => <p className="mb-[2.5px] last:mb-0 leading-[1.45] text-[14px] whitespace-pre-wrap" {...props} />,
+        p: ({ node, ...props }: any) => <p className="mb-[2.5px] last:mb-0 leading-[1.45] answer-fs whitespace-pre-wrap" {...props} />,
         strong: ({ node, ...props }: any) => (
           <strong
             className="font-bold opacity-100 overlay-text-strong"
             {...props}
           />
         ),
-        ul: ({ node, ...props }: any) => <ol className="list-decimal ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] text-[14px]" {...props} />,
-        ol: ({ node, ...props }: any) => <ol className="list-decimal ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] text-[14px]" {...props} />,
-        li: ({ node, ...props }: any) => <li className="pl-1 mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
+        ul: ({ node, ...props }: any) => <ol className="list-decimal ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] answer-fs" {...props} />,
+        ol: ({ node, ...props }: any) => <ol className="list-decimal ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] answer-fs" {...props} />,
+        li: ({ node, ...props }: any) => <li className="pl-1 mb-[2.5px] last:mb-0 leading-[1.45] answer-fs" {...props} />,
       },
       shortenText: {
-        p: ({ node, ...props }: any) => <p className="mb-[2.5px] last:mb-0 leading-[1.45] text-[14px] whitespace-pre-wrap" {...props} />,
+        p: ({ node, ...props }: any) => <p className="mb-[2.5px] last:mb-0 leading-[1.45] answer-fs whitespace-pre-wrap" {...props} />,
         strong: ({ node, ...props }: any) => (
           <strong
             className="font-semibold overlay-hotword"
             {...props}
           />
         ),
-        ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] text-[14px]" {...props} />,
-        li: ({ node, ...props }: any) => <li className="pl-1 mb-[2.5px] last:mb-0 leading-[1.45] text-[14px]" {...props} />,
+        ul: ({ node, ...props }: any) => <ul className="list-disc ml-4 mt-[2.5px] mb-[2.5px] space-y-0 leading-[1.45] answer-fs" {...props} />,
+        li: ({ node, ...props }: any) => <li className="pl-1 mb-[2.5px] last:mb-0 leading-[1.45] answer-fs" {...props} />,
       },
     }),
     [isLightTheme],
@@ -2876,6 +2901,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     localStorage.setItem('natively_undetectable', String(isUndetectable));
     localStorage.setItem('natively_hideChatHidesWidget', String(hideChatHidesWidget));
   }, [isUndetectable, hideChatHidesWidget]);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty('--answer-font-size', `${answerFontSize}px`);
+    localStorage.setItem('natively_answerFontSize', String(answerFontSize));
+  }, [answerFontSize]);
 
   // Mouse Passthrough State
   const [isMousePassthrough, setIsMousePassthrough] = useState(false);
@@ -6668,6 +6698,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // commitRevealedCodeText (setMessages with the paced prefix) instead
       // of the imperative DOM node, but it's the same ticker/pacer instance,
       // so switching modes mid-stream never resets or skips revealedLen.
+      if (isReadAloudIntent(intent)) readAloudRef.current.feed(streamingMsgIdRef.current, token);
       ensureRevealTicker(streamingMsgIdRef.current);
       return;
     }
@@ -6687,6 +6718,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const reservedId = genMessageId();
     streamingMsgIdRef.current = reservedId;
     streamingIntentRef.current = intent;
+    if (isReadAloudIntent(intent)) readAloudRef.current.feed(reservedId, token);
     if (ANSWER_PANEL_INTENTS.has(intent)) {
       pinAnswerPanelRef.current();
     }
@@ -7342,6 +7374,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       const streamingMsgId =
         activeStreamIntent === intent ? streamingMsgIdRef.current : null;
       const bufferedText = streamingMsgId ? streamingTextRef.current : '';
+      // Speak the rest of the answer that just finished (only that stream's).
+      if (streamingMsgId) readAloudRef.current.finish(streamingMsgId);
 
       if (streamingMsgId && bufferedText) {
         const authoritativeText = text || bufferedText;
@@ -8721,6 +8755,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         const pendingTextSnapshot = streamingTextRef.current;
         const pendingMsgIdSnapshot = streamingMsgIdRef.current;
         const authoritativeText = finalText || pendingTextSnapshot;
+        if (pendingMsgIdSnapshot) readAloudRef.current.finish(pendingMsgIdSnapshot);
         // An answer Natively stopped itself — at the length limit, or because it
         // began repeating — says so under the text (2026-10-04). Attached
         // before either finalize path; both keep the row's other fields.
@@ -9783,7 +9818,7 @@ Provide only the answer, nothing else.`;
           return (
             <div
               key="streaming-precode"
-              className="w-full ai-response-card my-2.5 min-h-[24px] transition-opacity duration-200 markdown-content whitespace-pre-wrap text-[14px] leading-relaxed natively-streaming-answer"
+              className="w-full ai-response-card my-2.5 min-h-[24px] transition-opacity duration-200 markdown-content whitespace-pre-wrap answer-fs leading-relaxed natively-streaming-answer"
             >
               {isThinking ? (
                 <div className="flex items-center min-h-[24px] py-0.5">
@@ -9813,7 +9848,7 @@ Provide only the answer, nothing else.`;
             <div
               key="streaming"
               ref={(el) => registerStreamingNode(msg.id, el)}
-              className="w-full ai-response-card my-2.5 min-h-[24px] transition-opacity duration-200 markdown-content whitespace-pre-wrap text-[14px] leading-relaxed natively-streaming-answer"
+              className="w-full ai-response-card my-2.5 min-h-[24px] transition-opacity duration-200 markdown-content whitespace-pre-wrap answer-fs leading-relaxed natively-streaming-answer"
             >
               {/*
                * Shimmering "Thinking..." label INSIDE the streaming bubble. Renders
@@ -9861,7 +9896,7 @@ Provide only the answer, nothing else.`;
         // never registering streamingMsgIdRef — see ragRevealTick above).
         if (msg.text) {
           return (
-            <div key="streaming" className="w-full ai-response-card my-2.5 transition-opacity duration-200 markdown-content whitespace-pre-wrap text-[14px] leading-relaxed">
+            <div key="streaming" className="w-full ai-response-card my-2.5 transition-opacity duration-200 markdown-content whitespace-pre-wrap answer-fs leading-relaxed">
               {msg.text}
             </div>
           );
@@ -10118,7 +10153,7 @@ Provide only the answer, nothing else.`;
       if (msg.intent === 'shorten') {
         return (
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
-            <div className="text-[14px] leading-relaxed markdown-content">
+            <div className="answer-fs leading-relaxed markdown-content">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}
@@ -10135,7 +10170,7 @@ Provide only the answer, nothing else.`;
       if (msg.intent === 'recap') {
         return (
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
-            <div className="text-[14px] leading-relaxed markdown-content">
+            <div className="answer-fs leading-relaxed markdown-content">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}
@@ -10152,7 +10187,7 @@ Provide only the answer, nothing else.`;
       if (msg.intent === 'follow_up_questions') {
         return (
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
-            <div className="text-[14px] leading-relaxed markdown-content">
+            <div className="answer-fs leading-relaxed markdown-content">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}
@@ -10172,7 +10207,7 @@ Provide only the answer, nothing else.`;
 
         return (
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
-            <div className="text-[14px] leading-relaxed">
+            <div className="answer-fs leading-relaxed">
               {parts.map((part, i) => {
                 if (part.startsWith('```')) {
                   // Robust matching: handles unclosed blocks for streaming (```...$)
@@ -10235,7 +10270,7 @@ Provide only the answer, nothing else.`;
       if (msg.role === 'system' && !msg.isNegotiationCoaching) {
         return (
           <div className="w-full ai-response-card my-2.5 transition-opacity duration-200 relative group">
-            <div className="text-[14px] leading-relaxed markdown-content">
+            <div className="answer-fs leading-relaxed markdown-content">
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 rehypePlugins={REHYPE_PLUGINS}
@@ -12696,6 +12731,50 @@ Provide only the answer, nothing else.`;
                         <NotebookPen className="w-3.5 h-3.5" />
                       </button>
                     </div>
+
+                    {/* Answer text size: A− / A+ scale every AI answer surface. */}
+                    <div className="relative">
+                      <button
+                        onClick={() => setAnswerFontSize((s) => Math.max(ANSWER_FONT_MIN, s - 1))}
+                        disabled={answerFontSize <= ANSWER_FONT_MIN}
+                        aria-label={t('Smaller text')}
+                        title={t('Smaller text')}
+                        className="w-7 h-7 rounded-[9px] flex items-center justify-center interaction-base interaction-press overlay-bare-icon disabled:opacity-40"
+                      >
+                        <AArrowDown className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <button
+                        onClick={() => setAnswerFontSize((s) => Math.min(ANSWER_FONT_MAX, s + 1))}
+                        disabled={answerFontSize >= ANSWER_FONT_MAX}
+                        aria-label={t('Larger text')}
+                        title={t('Larger text')}
+                        className="w-7 h-7 rounded-[9px] flex items-center justify-center interaction-base interaction-press overlay-bare-icon disabled:opacity-40"
+                      >
+                        <AArrowUp className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Read aloud: speak answers as they stream, with the OS voices. */}
+                    {readAloud.supported && (
+                      <div className="relative">
+                        <button
+                          onClick={() => readAloud.setEnabled(!readAloud.enabled)}
+                          data-state={readAloud.enabled ? 'on' : undefined}
+                          aria-label={t('Read answers aloud')}
+                          aria-pressed={readAloud.enabled}
+                          title={readAloud.enabled
+                            ? t('Read aloud is on. Use headphones so the voice isn\'t transcribed.')
+                            : t('Read answers aloud')}
+                          className="w-7 h-7 rounded-[9px] flex items-center justify-center interaction-base interaction-press overlay-bare-icon"
+                        >
+                          {readAloud.enabled
+                            ? <Volume2 className="w-3.5 h-3.5" />
+                            : <VolumeX className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    )}
 
                     {/* Mouse Passthrough Toggle */}
                     <div className="relative">

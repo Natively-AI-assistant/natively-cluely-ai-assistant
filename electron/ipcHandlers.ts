@@ -41,7 +41,8 @@ import { RERANK_CANDIDATE_POOL, resolveRerankPoolSize } from './services/modes/r
 import { buildRerankProbe } from './services/reranking/rerankProbe';
 import { ProviderStatusRegistry } from './services/ProviderStatusRegistry';
 import { SkillsManager } from './services/SkillsManager';
-import { SAFE_DOCUMENT_EXTENSIONS } from './services/SafeDocumentTextExtractor';
+import { SAFE_DOCUMENT_EXTENSIONS, extractSafeDocumentText } from './services/SafeDocumentTextExtractor';
+import { clearSessionContext, describeSessionContext, setSessionContextEnabled, setSessionContextText, type SessionContextKind } from './services/SessionContext';
 import { DEFAULT_BUILTIN_SKILL_IDS, type SkillUploadPayload } from './services/skills/SkillValidator';
 
 import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
@@ -14272,6 +14273,53 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (typeof bio !== 'string') return { success: false, error: 'invalid' };
     const clean = bio.replace(/\r\n?/g, '\n').trim().slice(0, 600);
     return SettingsManager.getInstance().set('userBio', clean) ? { success: true, bio: clean } : { success: false, error: 'settings_store_degraded' };
+  });
+  // Session context (launcher "Resume & JD"): resume and job description text
+  // added to every live answer's system prompt (services/SessionContext.ts).
+  // Free: no Pro gate, no premium knowledge engine. Text is extracted locally.
+  const isSessionContextKind = (kind: unknown): kind is SessionContextKind => kind === 'resume' || kind === 'jd';
+  safeHandle('session-context:get', async () => describeSessionContext());
+  safeHandle('session-context:upload', async (_, kind: unknown) => {
+    if (!isSessionContextKind(kind)) return { success: false, error: 'invalid' };
+    let selectedPath: string | undefined;
+    try {
+      const result: any = await dialog.showOpenDialog({
+        properties: ['openFile'],
+        filters: [
+          { name: kind === 'resume' ? 'Resume' : 'Job description', extensions: ['pdf', 'docx', 'txt', 'md'] },
+          { name: 'Text, Documents & Code', extensions: [...SAFE_DOCUMENT_EXTENSIONS].map(extension => extension.slice(1)) },
+        ],
+      });
+      if (result.canceled || !result.filePaths?.[0]) return { success: false, cancelled: true };
+      selectedPath = result.filePaths[0] as string;
+      const extracted = await extractSafeDocumentText(selectedPath);
+      if (!extracted.content.trim()) {
+        return { success: false, error: 'No text could be read from that file. If it is a scanned PDF, paste the text instead.' };
+      }
+      if (!setSessionContextText(kind, extracted.content, extracted.fileName)) return { success: false, error: 'settings_store_degraded' };
+      return { success: true, ...describeSessionContext() };
+    } catch (error: any) {
+      if (path.extname(String(selectedPath || '')).toLowerCase() === '.doc') {
+        return { success: false, error: 'Legacy Word .doc files are not supported. Save the file as .docx and upload it again.' };
+      }
+      console.error('[IPC] session-context:upload error:', error?.message || error);
+      return { success: false, error: 'Could not read that file. It may be corrupt, password-protected, unsupported, or too large.' };
+    }
+  });
+  safeHandle('session-context:set-text', async (_, kind: unknown, text: unknown) => {
+    if (!isSessionContextKind(kind) || typeof text !== 'string') return { success: false, error: 'invalid' };
+    if (!setSessionContextText(kind, text, text.trim() ? 'Pasted text' : '')) return { success: false, error: 'settings_store_degraded' };
+    return { success: true, ...describeSessionContext() };
+  });
+  safeHandle('session-context:clear', async (_, kind: unknown) => {
+    if (!isSessionContextKind(kind)) return { success: false, error: 'invalid' };
+    if (!clearSessionContext(kind)) return { success: false, error: 'settings_store_degraded' };
+    return { success: true, ...describeSessionContext() };
+  });
+  safeHandle('session-context:set-enabled', async (_, enabled: unknown) => {
+    if (typeof enabled !== 'boolean') return { success: false, error: 'invalid' };
+    if (!setSessionContextEnabled(enabled)) return { success: false, error: 'settings_store_degraded' };
+    return { success: true, ...describeSessionContext() };
   });
   // The notes window's "Attach image": a picture kept with the running meeting
   // and described for the notes (the same describer shared screens use). Only

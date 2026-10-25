@@ -191,6 +191,15 @@ export interface AppSettings {
      *  care about) that the meeting notes prompt reads, like Granola's bio.
      *  At most 600 characters; empty = not used. */
     userBio?: string;
+    /** Session context (launcher "Resume & JD"): resume and job description
+     *  text the user loaded before a session, added to every live answer's
+     *  system prompt while sessionContextEnabled is on. Free feature,
+     *  independent of premium Profile Intelligence. See services/SessionContext.ts. */
+    sessionResumeText?: string;
+    sessionResumeFileName?: string;
+    sessionJdText?: string;
+    sessionJdFileName?: string;
+    sessionContextEnabled?: boolean;
     // Phase 6 — TelemetryService toggle. Defaults to true (local-only JSONL).
     // When false, no telemetry is written to disk and no sinks fire.
     telemetryEnabled?: boolean;
