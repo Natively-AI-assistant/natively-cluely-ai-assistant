@@ -102,6 +102,18 @@ export type DirectAssistEvent =
   | { type: 'cancel'; requestId: string; sequence: number }
 
 /** Mirrors electron/llm/visionResolver.ts VisionModelState (the renderer never imports from electron/*). */
+/** Session context (launcher "Resume & JD"), as main describes it. */
+export interface SessionContextInfo {
+  enabled: boolean
+  resume: { fileName: string; chars: number; text: string }
+  jd: { fileName: string; chars: number; text: string }
+  limits: { resume: number; jd: number }
+}
+
+export type SessionContextResult =
+  | ({ success: true } & SessionContextInfo)
+  | { success: false; error?: string; cancelled?: boolean }
+
 export interface VisionModelState {
   /** The user's own answer; `auto` leaves it to Natively. */
   setting: 'auto' | 'on' | 'off'
@@ -169,6 +181,12 @@ export interface ElectronAPI {
   /** "About you": a few lines the meeting notes prompt reads as the user's own bio. */
   userBioGet?: () => Promise<{ bio: string }>
   userBioSet?: (bio: string) => Promise<{ success: boolean; bio?: string; error?: string }>
+  // Session context (launcher "Resume & JD"): text added to every live answer.
+  sessionContextGet?: () => Promise<SessionContextInfo>
+  sessionContextUpload?: (kind: 'resume' | 'jd') => Promise<SessionContextResult>
+  sessionContextSetText?: (kind: 'resume' | 'jd', text: string) => Promise<SessionContextResult>
+  sessionContextClear?: (kind: 'resume' | 'jd') => Promise<SessionContextResult>
+  sessionContextSetEnabled?: (enabled: boolean) => Promise<SessionContextResult>
   /** The notes window's "Shorten": the tightened line, or null when it must not replace the original. */
   liveNotesShortenLine?: (line: string) => Promise<{ text: string | null }>
   /** The notes window's "Attach image": picks a picture, keeps it with the meeting, describes it for the notes. */

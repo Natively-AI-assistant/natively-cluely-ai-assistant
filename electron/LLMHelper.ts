@@ -167,6 +167,7 @@ import { createAgentRouterClients } from './llm/agentRouterClients'
 import { stripLeadingReasoningBlock } from './llm/reasoningTagFilter'
 import { describeNinerouterFailure, NINEROUTER_EMPTY_ANSWER } from './llm/ninerouterErrors'
 import { renderUserInstructionSystemLayer } from './llm/userInstructionContract'
+import { getSessionContextBlock, withSessionContext } from './services/SessionContext'
 // Groq rejects a request carrying more than 5 images. Every other vision
 // provider here takes as many as we send, so the cap lives on the Groq path.
 const GROQ_VISION_MAX_IMAGES = 5
@@ -4576,7 +4577,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
    * per-request dynamic content above the static body — that breaks prefix caching.
    */
   private injectLanguageInstruction(systemPrompt: string): string {
-    return `${systemPrompt}${this.buildLanguageInstructionSuffix()}`;
+    // Session context (launcher "Resume & JD") rides in the static body, before
+    // the language suffix: it is the same on every turn, so prefix caching
+    // still holds, and buildClaudeSystemBlocks still finds the suffix at the end.
+    return `${withSessionContext(systemPrompt, getSessionContextBlock())}${this.buildLanguageInstructionSuffix()}`;
   }
 
   /**

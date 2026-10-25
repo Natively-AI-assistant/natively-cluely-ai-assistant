@@ -3316,6 +3316,21 @@ body {
   font-weight: 600;
 }
 
+/* ── Answer text size ──────────────────────────────────────────────────
+   The overlay's A−/A+ buttons set --answer-font-size on the root (default
+   14px). Every surface that draws AI answer text sizes itself from it, so
+   streaming, finished markdown and code all scale together. The -sm/-lg
+   steps keep the original 13px/15px offsets around the 14px body. */
+.answer-fs {
+  font-size: var(--answer-font-size, 14px);
+}
+.answer-fs-sm {
+  font-size: calc(var(--answer-font-size, 14px) - 1px);
+}
+.answer-fs-lg {
+  font-size: calc(var(--answer-font-size, 14px) + 1px);
+}
+
 /* ── Streaming word materialization ────────────────────────────────────────
    Each newly revealed word (see src/lib/textRevealAnimation.mjs) is wrapped
    in a span carrying these animations plus a NEGATIVE animation-delay equal

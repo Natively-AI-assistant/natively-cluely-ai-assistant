@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useT } from '../i18n';
-import { ToggleLeft, ToggleRight, Search, Calendar, Globe, Clock, ChevronRight, LayoutGrid, RefreshCw, Eye, EyeOff, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Bell, DownloadCloud, CheckCircle, AlertCircle, User, Sparkles, ArrowUpRight } from 'lucide-react';
+import { ToggleLeft, ToggleRight, Search, Calendar, Globe, Clock, ChevronRight, LayoutGrid, RefreshCw, Eye, EyeOff, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Bell, DownloadCloud, CheckCircle, AlertCircle, User, Sparkles, ArrowUpRight, FileText } from 'lucide-react';
 import { ProfileIntelligenceIcon } from './ProfileIntelligenceIcon';
+import { SessionContextModal } from './SessionContextModal';
+import type { SessionContextInfo } from '../types/electron';
 import icon from "./icon.png";
 import mainui from "../UI_comp/mainui.png";
 import UpcomingCalendarCard from './ui/UpcomingCalendarCard';
@@ -168,6 +170,13 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
     // Keybinds
     const { isShortcutPressed } = useShortcuts();
     const isLight = useResolvedTheme() === 'light';
+    // "Resume & JD": the session context live answers are grounded in.
+    const [sessionContextOpen, setSessionContextOpen] = useState(false);
+    const [sessionContext, setSessionContext] = useState<SessionContextInfo | null>(null);
+    useEffect(() => {
+        void window.electronAPI?.sessionContextGet?.().then((r) => { if (r) setSessionContext(r); }).catch(() => {});
+    }, []);
+    const sessionContextLoaded = Boolean(sessionContext?.enabled && (sessionContext.resume.chars > 0 || sessionContext.jd.chars > 0));
     useEffect(() => {
         let mounted = true;
         console.log("Launcher mounted");
@@ -1089,6 +1098,25 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                                 )}
                                             </AnimatePresence>
                                         </div>
+
+                                        {/* Resume & JD: what live answers are grounded in. Set before
+                                            Start and kept for every later session until changed. */}
+                                        <button
+                                            onClick={() => setSessionContextOpen(true)}
+                                            className={`mr-3 flex items-center gap-1.5 border rounded-full px-3 py-1.5 transition-all duration-200 cursor-pointer active:scale-95 text-xs font-semibold shrink-0 select-none ${
+                                                sessionContextLoaded
+                                                    ? (isLight ? 'bg-emerald-500/5 hover:bg-emerald-500/10 border-emerald-500/20 text-emerald-600' : 'bg-emerald-400/10 hover:bg-emerald-400/20 border-emerald-500/20 text-emerald-400')
+                                                    : 'bg-bg-elevated hover:bg-bg-secondary border-border-subtle text-text-secondary'
+                                            }`}
+                                        >
+                                            {sessionContextLoaded ? <CheckCircle size={13} /> : <FileText size={13} />}
+                                            <span>{t('Resume & JD')}</span>
+                                        </button>
+                                        <SessionContextModal
+                                            open={sessionContextOpen}
+                                            onClose={() => setSessionContextOpen(false)}
+                                            onChange={setSessionContext}
+                                        />
 
                                         {/* Unified CTA pill — plain <button> (no `layout`, no `initial`) so both
                                             the pill AND its label appear in their final position on mount with
