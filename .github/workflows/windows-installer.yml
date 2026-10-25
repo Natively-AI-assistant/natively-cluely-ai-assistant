@@ -1,0 +1,61 @@
+# Builds a full Windows installer (.exe) from this fork, without the private
+# "premium" submodule. Runs on every push to a feature/** branch, or manually
+# from the Actions tab (pick the branch in the "Run workflow" dropdown).
+
+name: Build Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'feature/**'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      # Private premium code isn't available to forks: build in core mode.
+      NATIVELY_CORE_SMOKE: '1'
+      # The packager refuses to run without a Google Calendar secret. Forks don't
+      # have the real one, so calendar sync simply won't work in this build.
+      GOOGLE_CALENDAR_CLIENT_SECRET: 'fork-build-calendar-disabled'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer (UI)
+        run: npm run build
+
+      - name: Build Electron main process
+        run: npm run build:electron
+
+      - name: Build Rust audio module
+        run: npm run build:native
+
+      - name: Fetch sqlite-vec for Windows
+        run: node scripts/ensure-sqlite-vec.js
+
+      - name: Package installer
+        run: node scripts/package-app.js --win nsis --x64 --publish never
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: natively-windows-installer
+          path: release/*.exe
+          if-no-files-found: error
+          retention-days: 7
