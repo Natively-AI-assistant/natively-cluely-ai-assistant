@@ -3649,11 +3649,31 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       });
       if (decision.action === 'none') return;
       if (decision.action === 'snap') {
+        // A stopped tween never runs its onComplete, so the observer hold it
+        // armed and its settle are lost with it. The first quick-action answer
+        // is that case: the answer starts streaming mid-expand ('streaming'
+        // snap), grows the panel while every observer report is skipped, and
+        // the hold then expires on its timer with nothing left to report.
+        // Traced live: a 310px window under a 352px panel, footer cut off,
+        // until the next press re-measured. Do what onComplete does.
+        const interruptedTween = viewportTweenRef.current !== null;
         viewportTweenRef.current?.stop();
         viewportTweenRef.current = null;
         viewportTweenTargetRef.current = null;
         viewportAppliedRef.current = decision.height;
         viewportHeight.set(decision.height);
+        // A width transition owns the hold and settles it itself; so does a drag.
+        if (interruptedTween && !animationControlsRef.current && !isResizingRef.current) {
+          heightReportSuppressedUntilRef.current = 0;
+          requestAnimationFrame(() => {
+            measureVerticalCapRef.current?.();
+            const settled = contentRef.current?.offsetHeight ?? 0;
+            if (settled > 0) {
+              resizeOverlayWindow(settled);
+              syncStreamingHeightBaseline(settled);
+            }
+          });
+        }
         return;
       }
       // Already travelling to exactly this height — let it finish rather than
