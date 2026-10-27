@@ -1576,6 +1576,31 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // Issue #351: paste a clipboard image into the overlay attachment tray.
+  // Prefer this over renderer clipboardData — Windows stealth typing never
+  // focuses the overlay document, so paste must go through main.
+  safeHandle('attach-clipboard-image', async () => {
+    try {
+      return await appState.attachClipboardImage();
+    } catch (error) {
+      console.warn('[IPC] attach-clipboard-image failed:', error);
+      return { empty: true, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  // Issue #351: drag-drop a local image file onto the overlay.
+  safeHandle('attach-local-image', async (_event, filePath: unknown) => {
+    if (typeof filePath !== 'string' || !filePath.trim()) {
+      return { success: false, error: 'invalid_path' };
+    }
+    try {
+      return await appState.attachLocalImageFile(filePath);
+    } catch (error) {
+      console.warn('[IPC] attach-local-image failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
   safeHandle('take-selective-screenshot', async () => {
     try {
       const screenshotPath = await appState.takeSelectiveScreenshot();

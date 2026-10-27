@@ -1401,6 +1401,13 @@ import { SettingsManager } from "./services/SettingsManager"
 import { buildTelemetrySinks } from "./services/telemetry/telemetrySinks"
 import { PhoneMirrorService, shouldStartPhoneMirrorOnBoot } from "./services/PhoneMirrorService"
 import { PHONE_IMAGE_PREFIX } from "./utils/phoneImage"
+import {
+  imageExtFromBytes,
+  imageExtFromPath,
+  OVERLAY_ATTACH_IMAGE_MAX_BYTES,
+  OVERLAY_DROP_IMAGE_PREFIX,
+  OVERLAY_PASTE_IMAGE_PREFIX,
+} from "./utils/overlayImageAttach"
 import { renderPhoneAnswer } from "./services/phoneMirrorMarkdown"
 import { describeFormulaImage, describePageCaptureFallback, describeDoubleCaptureFailure, describeUnreadableFormulas, PAGE_CAPTURE_FALLBACK_CHANNEL, PAGE_CAPTURE_STARTED_CHANNEL } from "./services/pageCaptureFallback"
 import { FormulaScreenshotHandoff, markMissingFormulas, type FormulaShot } from "./services/formulaScreenshotHandoff"
@@ -9178,12 +9185,65 @@ export class AppState {
   }
 
   /**
+   * Attach an OS-clipboard image to the overlay tray (issue #351).
+   * Empty clipboard → `{ empty: true }`. Otherwise saves via addExternalImage
+   * and broadcasts `screenshot-attached` like a normal capture.
+   */
+  public async attachClipboardImage(): Promise<{ empty: true } | { success: true; path: string }> {
+    const img = clipboard.readImage()
+    if (!img || img.isEmpty()) return { empty: true }
+    const png = img.toPNG()
+    if (!png || png.length === 0) return { empty: true }
+    const imagePath = await this.screenshotHelper.addExternalImage(Buffer.from(png), 'png', {
+      namePrefix: OVERLAY_PASTE_IMAGE_PREFIX,
+    })
+    await this.sendAttachedImage(imagePath)
+    return { success: true, path: imagePath }
+  }
+
+  /**
+   * Attach a local image file (Finder/Explorer drag-drop) to the overlay tray
+   * (issue #351). The path must already look like a still image; bytes are
+   * copied into the screenshot queue so the original file can move or delete.
+   */
+  public async attachLocalImageFile(filePath: string): Promise<{ success: true; path: string }> {
+    if (!imageExtFromPath(filePath)) throw new Error('Unsupported image type')
+    // A dropped file is read whole into memory, so a folder or a huge file
+    // named .png stops here.
+    const stat = await fs.promises.stat(filePath)
+    if (!stat.isFile()) throw new Error('Not a file')
+    if (stat.size > OVERLAY_ATTACH_IMAGE_MAX_BYTES) throw new Error('Image too large')
+    const data = await fs.promises.readFile(filePath)
+    // The bytes decide, not the name: a HEIC or a PDF renamed .png would fail
+    // the thumbnail and every vision request later.
+    const ext = imageExtFromBytes(data)
+    if (!ext) throw new Error('Not a PNG, JPEG or WebP image')
+    const imagePath = await this.screenshotHelper.addExternalImage(data, ext, {
+      namePrefix: OVERLAY_DROP_IMAGE_PREFIX,
+    })
+    await this.sendAttachedImage(imagePath)
+    return { success: true, path: imagePath }
+  }
+
+  /**
    * Attach an image to the next answer the way a capture taken on this machine
    * is (the overlay lists it and sends it with its next request), and remember
    * it for the phone's next typed question. Returns whether a meeting surface
    * received it.
    */
   public async attachImageToMeeting(imagePath: string): Promise<boolean> {
+    const delivered = await this.sendAttachedImage(imagePath)
+    this.phoneImages.push({ path: imagePath, at: Date.now(), used: false })
+    if (this.phoneImages.length > 5) this.phoneImages = this.phoneImages.slice(-5)
+    return delivered
+  }
+
+  /**
+   * List an image on the launcher's and overlay's trays so the next answer
+   * sends it. A pasted or dropped image (#351) stops here: phoneImages holds
+   * what the phone sent, and a phone question must not carry a desktop paste.
+   */
+  private async sendAttachedImage(imagePath: string): Promise<boolean> {
     let preview = ''
     try {
       preview = await this.getImagePreview(imagePath)
@@ -9200,8 +9260,6 @@ export class AppState {
         delivered = true
       }
     }
-    this.phoneImages.push({ path: imagePath, at: Date.now(), used: false })
-    if (this.phoneImages.length > 5) this.phoneImages = this.phoneImages.slice(-5)
     return delivered
   }
 
