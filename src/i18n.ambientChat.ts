@@ -1,10 +1,9 @@
 // src/i18n.ambientChat.ts
 //
-// The tooltip on the meeting overlay's "Ambient" pill, shown when Ambient AI
-// Chat is on and the meeting captures no audio (src/components/overlay/
-// AmbientChip.tsx, placed in NativelyInterface.tsx). English source → [ru, zh,
-// ja, es], one row per sentence, so a language can never miss a row the others
-// have. Same shape as src/i18n.trial.ts.
+// The banner when the mic button is pressed while Ambient AI Chat is on and the
+// meeting captures no audio (NativelyInterface.tsx, fold-ambient-mic). English
+// source → [ru, zh, ja, es], one row per sentence, so a language can never miss
+// a row the others have. Same shape as src/i18n.trial.ts.
 //
 // "Ambient AI Chat" is the setting's name as Settings › General shows it, and
 // stays in English in every language, as it does there.
@@ -21,6 +20,20 @@ const ROWS: Record<string, Row> = {
     '已开启 Ambient AI Chat，因此不会收听或转录本次会议。',
     'Ambient AI Chat がオンのため、この会議は聞き取られず、文字起こしもされません。',
     'Ambient AI Chat está activado, así que esta reunión no se escucha ni se transcribe.',
+  ],
+  // The banner when the mic button is pressed in such a meeting; its message
+  // is the row above.
+  'Mic is off': [
+    'Микрофон выключен',
+    '麦克风已关闭',
+    'マイクはオフです',
+    'El micrófono está apagado',
+  ],
+  'Turn on mic': [
+    'Включить микрофон',
+    '开启麦克风',
+    'マイクをオンにする',
+    'Activar micrófono',
   ],
 };
 

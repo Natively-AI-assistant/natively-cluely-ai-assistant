@@ -9856,6 +9856,47 @@ export class AppState {
     this._ambientChatEnabled = enabled;
     SettingsManager.getInstance().set('ambientChatEnabled', enabled);
     console.log(`[AppState] ambientChatEnabled set to ${enabled}`);
+    if (!enabled) void this.startAudioForMeetingWithoutAudio();
+  }
+
+  /**
+   * Ambient AI Chat turned off during a meeting that started with it on (the
+   * overlay's "Turn on mic"): give the meeting the capture its start skipped,
+   * with the saved devices. The meeting's audio init without its device pick; queued
+   * behind any mic switch so a double click cannot build the pipeline twice.
+   * startCaptureChannels clears _meetingWithoutAudio, which drops the overlay's
+   * "Mic is off" banner.
+   * ponytail: desktop-call speaker labels stay off for the rest of this meeting
+   * (startDesktopCallSpeakers runs only at meeting start); they return next meeting.
+   */
+  private startAudioForMeetingWithoutAudio(): Promise<unknown> {
+    const run = async (): Promise<void> => {
+      if (!this.isMeetingActive || !this._meetingWithoutAudio) return;
+      const generation = this._meetingGeneration;
+      const current = () => generation === this._meetingGeneration && this.isMeetingActive && this._meetingWithoutAudio;
+      if (!(await ensureMacMicrophoneAccess('ambient chat off'))) {
+        this.sendAudioCaptureFailed({
+          channel: 'mic',
+          message: formatPermissionMessage('mic-denied'),
+          titleKey: permissionTitleKey('mic-denied'),
+          attempt: 0,
+          maxAttempts: 0,
+          terminal: true,
+          stuck: false,
+        });
+        return;
+      }
+      if (!current()) return;
+      console.log('[Main] Ambient AI Chat turned off mid-meeting — starting mic/system audio capture.');
+      // No applyVoiceLabels here: this meeting built no speech engines, and the
+      // ones setupSystemAudioPipeline builds get the setting at construction.
+      await this.setupSystemAudioPipeline();
+      if (!current()) return;
+      this.startCaptureChannels('ambientChatOff');
+    };
+    const next = this._inputSwitchChain.then(run, run);
+    this._inputSwitchChain = next.catch((err) => console.error('[Main] Starting audio after Ambient AI Chat off failed:', err));
+    return this._inputSwitchChain;
   }
 
   public getStealthShortcutGuardEnabled(): boolean {
