@@ -3,7 +3,7 @@ import { useLanguage, useT } from '../../i18n';
 import type { VisionModelState } from '../../types/electron';
 import { visionAutoText, visionStatusText, visionAnswerInForce, visionStatesShown, visionNotesKept } from './visionLine';
 import { Plus, Trash2, Edit2, AlertCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2, LogOut, Cloud, Server, Eye, Info, MessageSquare, Image, ImageOff, FileText, User, Boxes, ClipboardList, Laptop, KeyRound } from 'lucide-react';
-import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, type CodexModelCatalogResult, isModelAllowed, isOptInModelProvider, litellmModelLabel, gatewayModelLabel, ninerouterThinkingOptions, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
+import { CODEX_CLI_MODEL, cloudModelRows, codexCliSelectorId, codexModelOptions, type CodexModelCatalogResult, isModelAllowed, isOptInModelProvider, litellmModelLabel, gatewayModelLabel, ninerouterThinkingOptions, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
 import { PICKER_MENU_WIDTH, Presence, SettingsMenu, SettingsMotionReady, SwapLabel, capPickerLabel, useMotionReadyAfter } from './SettingsRow';
@@ -3990,7 +3990,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
      * wipe them.
      */
     const effectiveModels = useCallback((provider: string): AipModelEntry[] => {
-        const preset = STANDARD_CLOUD_MODELS[provider];
         const out: AipModelEntry[] = [];
         const seen = new Set<string>();
         const push = (id: string, label: string) => {
@@ -3998,7 +3997,9 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             seen.add(id);
             out.push({ id, label });
         };
-        preset?.ids.forEach((id, i) => push(id, preset.names[i] || id));
+        // Presets, or for a LIVE_CATALOGUE_PROVIDERS entry with a fetched
+        // catalogue, that catalogue alone: its retired presets would only 503.
+        cloudModelRows(provider, cloudFetchedModels).forEach(({ id, name }) => push(id, name));
         // LiteLLM has no preset table and no `cloudFetchedModels` entry — its universe
         // is whatever the proxy reported, held UNPREFIXED in `litellmModels`. Prefix it
         // here so the allow-list stores the same `litellm/<model>` ids that

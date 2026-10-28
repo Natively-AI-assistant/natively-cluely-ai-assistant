@@ -142,29 +142,79 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
     },
     agentrouter: {
         hasKeyCheck: (creds) => !!creds?.hasAgentRouterKey,
-        // The WHOLE live catalogue, not a sample: GET /v1/models returned
-        // exactly these four on 2026-09-30. The docs also name gpt-5.6-sol and
-        // glm-5.3, which the gateway no longer serves (503 "no available
-        // channel"), so they are deliberately absent. Refresh stays the
-        // authority as AgentRouter adds and retires models.
+        // A FIRST-RUN PLACEHOLDER only. AgentRouter turns its catalogue over
+        // between releases (2026-10-28: claude-opus-5, claude-opus-4-8 and
+        // deepseek-v4-flash all gone, three GPTs in their place), so once the
+        // key's own GET /v1/models has been fetched that list REPLACES these
+        // everywhere (LIVE_CATALOGUE_PROVIDERS, cloudModelRows). The catalogue
+        // re-fetches on key save and in the background (LiveModelCatalogService).
         //
-        // Not opt-in (four models, key-scoped catalogue), so these are live the
-        // moment a key is saved. DeepSeek leads because it is the one model
-        // AgentRouter does not ration per day: Claude and GPT answer 402 once
-        // the 02:00/11:00 UTC batch is gone, and "Set default" tends to land on
-        // the first row. The ids strip (one segment) to bare names the
-        // capability table knows, so Claude rows take screenshots and the
-        // DeepSeek/GPT rows are routed as text.
+        // These three are the whole list a default-group key got on
+        // 2026-10-28. gpt-5.6-sol leads: it is AGENTROUTER_DEFAULT_MODEL, the
+        // fastest of the three (first text 1.8-2.2 s against 5 s and up), and
+        // "Set default" tends to land on the first row. All three read images
+        // through the gpt-5/gpt-6 capability entries.
         ids: [
-            'agentrouter/deepseek-v4-flash',
-            'agentrouter/claude-opus-5',
+            'agentrouter/gpt-5.6-sol',
             'agentrouter/gpt-6-astra',
-            'agentrouter/claude-opus-4-8',
+            'agentrouter/gpt-6.1-sol',
         ],
-        names: ['DeepSeek V4 Flash (AgentRouter)', 'Claude Opus 5 (AgentRouter)', 'GPT-6 Astra (AgentRouter)', 'Claude Opus 4.8 (AgentRouter)'],
-        descs: ['Fastest • Text-only', 'Most capable • Daily quota', 'Reasoning • Daily quota', 'Balanced • Daily quota'],
+        names: ['GPT-5.6 Sol (AgentRouter)', 'GPT-6 Astra (AgentRouter)', 'GPT-6.1 Sol (AgentRouter)'],
+        descs: ['Fastest • Multimodal', 'Reasoning • Multimodal', 'Newest • Multimodal'],
         pmKey: 'agentrouterPreferredModel'
     },
+};
+
+/**
+ * Providers whose FETCHED catalogue replaces the presets once one exists,
+ * instead of only adding to them in Settings.
+ *
+ * Only for a gateway whose catalogue is small and scoped to the key, so the
+ * fetched list is exactly what the key can call: it cannot flood the overlay
+ * picker the way NVIDIA's 80 or OpenRouter's 444 would (see
+ * ModelPickerIgnoresFetchedCatalogue2026_10_14), and a preset it no longer
+ * lists is a model that 503s. AgentRouter is that case.
+ */
+export const LIVE_CATALOGUE_PROVIDERS: ReadonlySet<string> = new Set(['agentrouter']);
+
+/**
+ * A display name for an AgentRouter catalogue id the presets do not name:
+ * `gpt-6.1-sol` → `GPT-6.1 Sol`, `claude-opus-5-5` → `Claude Opus 5.5`,
+ * `deepseek-v4-flash` → `DeepSeek V4 Flash`.
+ */
+export const agentRouterModelName = (id: string): string => {
+    const bare = id.replace(/^agentrouter\//, '');
+    const gpt = /^gpt-(\d+(?:\.\d+)?)(?:-(.+))?$/i.exec(bare);
+    if (gpt) return `GPT-${gpt[1]}${gpt[2] ? ` ${prettifyModelId(gpt[2])}` : ''}`;
+    const vendors: Record<string, string> = { claude: 'Claude', deepseek: 'DeepSeek', glm: 'GLM', gemini: 'Gemini', qwen: 'Qwen', kimi: 'Kimi' };
+    const [vendor, ...rest] = bare.split('-');
+    // Claude writes versions with dashes (`opus-5-5`); join trailing digit runs with dots.
+    const words: string[] = [];
+    for (const part of rest) {
+        if (/^\d+$/.test(part) && words.length && /^\d+(?:\.\d+)*$/.test(words[words.length - 1])) words[words.length - 1] += `.${part}`;
+        else words.push(part);
+    }
+    const tail = words.map(w => /^v?\d/i.test(w) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    const head = vendors[vendor.toLowerCase()] ?? prettifyModelId(vendor);
+    return tail ? `${head} ${tail}` : head;
+};
+
+/**
+ * The model rows a cloud provider offers: its presets, or, for a
+ * LIVE_CATALOGUE_PROVIDERS entry with a non-empty fetched catalogue, that
+ * catalogue (named from the presets where they match, otherwise derived).
+ */
+export const cloudModelRows = (
+    provider: string,
+    fetched?: Record<string, { id: string; label?: string }[]> | null,
+): { id: string; name: string; desc: string }[] => {
+    const cfg = STANDARD_CLOUD_MODELS[provider];
+    if (!cfg) return [];
+    const presets = cfg.ids.map((id, i) => ({ id, name: cfg.names[i] || id, desc: cfg.descs[i] || '' }));
+    const live = LIVE_CATALOGUE_PROVIDERS.has(provider) ? (fetched?.[provider] || []).filter(m => m?.id) : [];
+    if (!live.length) return presets;
+    return live.map(m => presets.find(p => p.id === m.id)
+        ?? { id: m.id, name: `${agentRouterModelName(m.id)} (AgentRouter)`, desc: 'AgentRouter' });
 };
 
 // The id stays 'codex-cli' (persisted in settings and routing), but the provider

@@ -637,10 +637,40 @@ export function initializeIpcHandlers(appState: AppState): void {
     const { LiveModelCatalogService } = require('./services/LiveModelCatalogService');
     LiveModelCatalogService.getInstance().setOnUpdated((provider: string, models: { id: string; label: string }[]) => {
       broadcastLiveCatalogUpdated(provider, models);
+      if (provider === 'agentrouter') void followAgentRouterCatalogue(models);
     });
   } catch (e: any) {
     console.warn('[IPC] Could not initialize LiveModelCatalogService update listener:', e?.message);
   }
+
+  /**
+   * AgentRouter retires models between releases (agentRouter.ts fact 7). When a
+   * fresh catalogue no longer lists the user's preferred AgentRouter model, move
+   * the preference to pickAgentRouterModel()'s choice, then let the
+   * runtime-default repair replace a retired default (isRetiredId treats an id
+   * the catalogue dropped as retired). A model the user picked that is still
+   * listed is never touched.
+   */
+  const followAgentRouterCatalogue = async (models: { id: string; label?: string }[]): Promise<void> => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const { isAgentRouterModelRetired, pickAgentRouterModel } = require('./llm/agentRouter') as typeof import('./llm/agentRouter');
+      const cm = CredentialsManager.getInstance();
+      const ids = models.map((m) => m.id);
+      const preferred: string | undefined = cm.getPreferredModel?.('agentrouter');
+      let changed = false;
+      if (preferred && isAgentRouterModelRetired(preferred, ids)) {
+        const next = pickAgentRouterModel(undefined, ids);
+        console.log(`[IPC] AgentRouter retired ${preferred}; preferred model is now ${next}`);
+        cm.setPreferredModel('agentrouter', next);
+        changed = true;
+      }
+      if (await refreshRuntimeDefaultIfUnavailable()) changed = true;
+      if (changed) broadcastCredentialsChanged();
+    } catch (e: any) {
+      console.warn('[IPC] Could not follow the AgentRouter catalogue:', e?.message);
+    }
+  };
 
   // A saved key re-reads that provider's catalogue (forced: the old one belonged
   // to the previous key). Not awaited, so a slow /models never delays the save.
@@ -725,9 +755,15 @@ export function initializeIpcHandlers(appState: AppState): void {
       // 410'd on every call. Repair it the same way.
       const { isNvidiaNimRetiredModelId } =
         require('./llm/nvidiaNimModels') as typeof import('./llm/nvidiaNimModels');
+      // AgentRouter's retired set is not a list in the code: it is whatever the
+      // key's last fetched catalogue stopped listing (agentRouter.ts fact 7).
+      const { isAgentRouterModelRetired, pickAgentRouterModel } =
+        require('./llm/agentRouter') as typeof import('./llm/agentRouter');
+      const agentrouterCatalogueIds: string[] = (cm.getCloudFetchedModels?.('agentrouter') || []).map((m: any) => m?.id);
       const isRetiredId = (modelId: string): boolean =>
         _isRetiredGroqId(modelId) ||
-        (!!modelId && modelId.startsWith('nvidia_nim/') && isNvidiaNimRetiredModelId(modelId));
+        (!!modelId && modelId.startsWith('nvidia_nim/') && isNvidiaNimRetiredModelId(modelId)) ||
+        isAgentRouterModelRetired(modelId, agentrouterCatalogueIds);
       // Which provider a model id belongs to. Mirrors the family checks below, kept
       // as one helper so the disabled-provider test and the credential test can
       // never disagree about what a given id is. The renderer's
@@ -865,12 +901,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       // modelAvailable() classifies. Do not re-prefix.
       const fluxionFallbackModel: string | null = cm.getPreferredModel?.('fluxion') || null;
       // Stored prefixed like the two above. Unlike them it has a default when
-      // the user never promoted one: AGENTROUTER_DEFAULT_MODEL (DeepSeek, the
-      // one model not rationed per day). modelAvailable() still gates it on the
+      // the user never promoted one: AGENTROUTER_DEFAULT_MODEL (the fastest
+      // model), and either is swapped for a catalogue entry when the fetched
+      // catalogue no longer lists it. modelAvailable() still gates it on the
       // key, the disabled switch and the allow-list.
       const agentrouterFallbackModel: string =
-        cm.getPreferredModel?.('agentrouter')
-        || (require('./llm/agentRouter') as typeof import('./llm/agentRouter')).AGENTROUTER_DEFAULT_MODEL;
+        pickAgentRouterModel(cm.getPreferredModel?.('agentrouter'), agentrouterCatalogueIds);
       // Same contract again: stored fully prefixed (`ninerouter/<alias>/<model>`),
       // the form modelAvailable() classifies. Do not re-prefix.
       const ninerouterFallbackModel: string | null = cm.getPreferredModel?.('ninerouter') || null;

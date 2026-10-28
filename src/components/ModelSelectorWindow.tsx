@@ -2,7 +2,7 @@ import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 're
 import { Check, ImageOff, Loader2 } from 'lucide-react';
 import { groupModelOptions, type ModelSelectorOption } from './ui/modelSelectorGroups';
 import { MODEL_SELECTOR_WIDTH } from './ui/modelSelectorLabelText';
-import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, gatewayModelLabel, isModelAllowed, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
+import { CODEX_CLI_MODEL, cloudModelRows, codexCliSelectorId, codexModelOptions, gatewayModelLabel, isModelAllowed, LIVE_CATALOGUE_PROVIDERS, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme, interfaceThemeSurface, isCssOwnedInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import {
@@ -112,6 +112,11 @@ const ModelSelectorWindow = () => {
                 // 1. Get Stored Credentials (to know which Cloud providers are active)
                 const creds = await window.electronAPI?.getStoredCredentials?.();
 
+                // Fetched catalogues, read for LIVE_CATALOGUE_PROVIDERS only
+                // (cloudModelRows): every other provider keeps its presets, for
+                // the flooding reason ModelPickerIgnoresFetchedCatalogue gives.
+                const liveCatalogues = (await window.electronAPI?.getCloudFetchedModels?.().catch(() => null))?.models ?? null;
+
                 // 2. Custom Providers
                 const customProviders = await window.electronAPI?.getCustomProviders?.() || [];
 
@@ -173,11 +178,12 @@ const ModelSelectorWindow = () => {
                 // Cloud Models — standard models + unique preferred models
                 for (const [prov, cfg] of Object.entries(STANDARD_CLOUD_MODELS)) {
                     if (!cfg.hasKeyCheck(creds)) continue;
-                    cfg.ids.forEach((id, i) => {
-                        models.push({ id, name: cfg.names[i], type: 'cloud', provider: prov });
+                    const rows = cloudModelRows(prov, liveCatalogues);
+                    rows.forEach(({ id, name }) => {
+                        models.push({ id, name, type: 'cloud', provider: prov });
                     });
                     const pm = creds?.[cfg.pmKey];
-                    if (pm && !cfg.ids.includes(pm)) {
+                    if (pm && !rows.some(r => r.id === pm)) {
                         models.push({ id: pm, name: prettifyModelId(pm), type: 'cloud', provider: prov });
                     }
                 }
@@ -303,10 +309,16 @@ const ModelSelectorWindow = () => {
         const unsubCredentials = window.electronAPI?.onCredentialsChanged?.(() => {
             loadModels();
         });
+        // A background re-fetch of a live catalogue changes the rows without
+        // touching credentials, so it needs its own reload.
+        const unsubCatalogue = window.electronAPI?.onLiveCatalogUpdated?.((data) => {
+            if (data?.provider && LIVE_CATALOGUE_PROVIDERS.has(data.provider)) loadModels();
+        });
         return () => {
             cancelled = true;
             unsubscribe?.();
             unsubCredentials?.();
+            unsubCatalogue?.();
         };
     }, []);
 

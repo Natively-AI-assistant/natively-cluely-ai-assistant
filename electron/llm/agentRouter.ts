@@ -62,6 +62,24 @@
  *    `未提供令牌` (no token), and for an unknown or retired model `503 当前分组
  *    default 下对于模型 X 无可用渠道` ("no available channel for model X").
  *    explainAgentRouterError() turns each into something a user can act on.
+ *
+ * ─── Re-measured 2026-10-28 ────────────────────────────────────────────────
+ *
+ * 7. THE CATALOGUE TURNED OVER. claude-opus-4-8, claude-opus-5 and
+ *    deepseek-v4-flash now answer 503 "no available channel". /v1/models lists
+ *    gpt-5.6-sol, gpt-6-astra and gpt-6.1-sol for a `probation`-group key; the
+ *    public /api/pricing adds claude-opus-5-5, but only for the `svip` and
+ *    `test` groups. The list moves faster than releases do, so the fetched
+ *    catalogue is the source of truth (agentRouterCatalogue,
+ *    pickAgentRouterModel) and the presets are only a first-run placeholder.
+ *
+ * 8. GPT IS RESPONSES-ONLY. Every gpt-* id refuses `/v1/chat/completions` with
+ *    "does not support /v1/chat/completions, please use /v1/responses", although
+ *    /v1/models still reports `supported_endpoint_types: ["openai"]` — so the
+ *    endpoint types cannot pick the route. See agentRouterProtocolFor.
+ *
+ * 9. A KEY WITH NO CREDIT answers `insufficient_user_quota` ("user quota is not
+ *    enough") on every model, separate from fact 4's shared daily pool.
  */
 
 export const AGENTROUTER_ORIGIN = 'https://agentrouter.org';
@@ -102,26 +120,30 @@ export const AGENTROUTER_CLIENT_HEADERS: Readonly<Record<string, string>> = Obje
 });
 
 /**
- * The model the Auto Answer judge runs on for an AgentRouter-only user
- * (LLMHelper.judgeGatewayModel). NOT the selected model: the judge fires on
- * every candidate utterance, and on Claude or GPT that would drain the user's
- * daily ration (fact 4) on classification calls before a single answer. DeepSeek
- * is not rationed and returned headers in ~0.8-0.9 s in the live probes.
- * If AgentRouter drops it, the call 503s, the judge rung returns null, and the
- * structured ladder takes over — the same as an unconfigured gateway.
+ * What the runtime-default repair installs for an AgentRouter-only user who has
+ * not promoted a model of their own (ipcHandlers refreshRuntimeDefaultIfUnavailable),
+ * and the first preset in STANDARD_CLOUD_MODELS.
+ *
+ * gpt-5.6-sol because it is the fastest model left (fact 7). Measured
+ * 2026-10-28 on /v1/responses, reasoning `none`, two questions each: first
+ * text at 1.8-2.2 s (2.3-2.8 s at `low`), against 5-59 s for gpt-6-astra and
+ * 9.7 s plus a rate-limit refusal for gpt-6.1-sol. deepseek-v4-flash, the
+ * unrationed model this used to be, is gone. When this id is not in the user's
+ * fetched catalogue, pickAgentRouterModel() chooses from the catalogue instead.
  */
-export const AGENTROUTER_JUDGE_MODEL = `${AGENTROUTER_PREFIX}deepseek-v4-flash`;
+export const AGENTROUTER_DEFAULT_MODEL = `${AGENTROUTER_PREFIX}gpt-5.6-sol`;
 
 /**
- * What the runtime-default repair installs for an AgentRouter-only user who has
- * not promoted a model of their own (ipcHandlers refreshRuntimeDefaultIfUnavailable).
- * DeepSeek for the judge's reason: it is the one model not rationed per day, so
- * an automatically chosen default keeps answering after 11:00 UTC's Claude/GPT
- * batch runs out. Also the first preset in STANDARD_CLOUD_MODELS.
+ * The model the Auto Answer judge runs on for an AgentRouter-only user
+ * (LLMHelper.judgeGatewayModel). Fixed rather than the selected model so a slow
+ * pick (gpt-6-astra) does not slow every classification; the default's
+ * first-token time is the reason it was chosen. Resolved against the catalogue
+ * like the default, so a retired id is never sent.
  */
-export const AGENTROUTER_DEFAULT_MODEL = `${AGENTROUTER_PREFIX}deepseek-v4-flash`;
+export const AGENTROUTER_JUDGE_MODEL = AGENTROUTER_DEFAULT_MODEL;
 
-export type AgentRouterProtocol = 'openai' | 'anthropic';
+/** `openai` is Chat Completions, `responses` the OpenAI Responses API (fact 8). */
+export type AgentRouterProtocol = 'openai' | 'anthropic' | 'responses';
 
 /**
  * MUST be tested before every vendor predicate: AgentRouter's ids are the
@@ -168,11 +190,59 @@ export function agentRouterWireModel(modelId: string): string {
  * have — and which did not make direct DeepSeek deterministic anyway (3
  * distinct replies from 3 identical seeded requests).
  *
+ * GPT (and o-series) ids go to the Responses API: since 2026-10 every gpt-*
+ * model refuses Chat Completions outright (fact 8). Anything else (a future
+ * glm-*, say) stays on Chat Completions, unmeasured.
+ *
  * Covers the whole live catalogue, and is the ONE line to change if a later
  * measurement disagrees.
  */
 export function agentRouterProtocolFor(wireModel: string): AgentRouterProtocol {
-    return /^(?:claude-|deepseek-)/i.test(wireModel) ? 'anthropic' : 'openai';
+    if (/^(?:claude-|deepseek-)/i.test(wireModel)) return 'anthropic';
+    if (/^(?:gpt-|o\d)/i.test(wireModel)) return 'responses';
+    return 'openai';
+}
+
+/**
+ * The reasoning effort sent with a Responses request. `none` where it was
+ * accepted live through AgentRouter (2026-10-28: each of these answered with
+ * it), because the first word is what Natively is judged on; `low` otherwise,
+ * the floor every gpt-5.1+ / o-series model accepts. A wrong `none` is a 400,
+ * a wrong `low` only a slower answer, so unknown ids get `low`.
+ */
+const AGENTROUTER_NONE_REASONING = new Set(['gpt-5.6-sol', 'gpt-6-astra', 'gpt-6.1-sol']);
+export function agentRouterReasoningEffort(wireModel: string): 'none' | 'low' {
+    return AGENTROUTER_NONE_REASONING.has(wireModel.toLowerCase()) ? 'none' : 'low';
+}
+
+/**
+ * Which AgentRouter model to use when one has to be chosen automatically (the
+ * runtime-default repair, the judge, the structured ladder's rung).
+ *
+ * `wanted` (the user's preferred model, or the fixed default) wins while the
+ * fetched catalogue still lists it. If the catalogue no longer does, the model
+ * is gone (fact 7) and the catalogue's first row is used instead, which
+ * agentRouterCatalogue() orders default-first. With NO catalogue (never
+ * fetched, or the fetch failed) there is nothing to check against and `wanted`
+ * stands; a dead id then fails with "no available channel" as before.
+ */
+export function pickAgentRouterModel(wanted: string | null | undefined, catalogueIds: readonly string[] | null | undefined): string {
+    const ids = (catalogueIds || []).filter((id) => isAgentRouterModelId(id));
+    const candidate = wanted && isAgentRouterModelId(wanted) ? wanted : AGENTROUTER_DEFAULT_MODEL;
+    if (!ids.length || ids.includes(candidate)) return candidate;
+    if (ids.includes(AGENTROUTER_DEFAULT_MODEL)) return AGENTROUTER_DEFAULT_MODEL;
+    return ids[0];
+}
+
+/**
+ * True when the fetched catalogue exists and no longer lists `modelId`, i.e. the
+ * gateway has retired it. False without a catalogue: absence of evidence is not
+ * retirement, and a failed fetch must not move a working user off their model.
+ */
+export function isAgentRouterModelRetired(modelId: string, catalogueIds: readonly string[] | null | undefined): boolean {
+    if (!isAgentRouterModelId(modelId)) return false;
+    const ids = (catalogueIds || []).filter((id) => isAgentRouterModelId(id));
+    return ids.length > 0 && !ids.includes(modelId);
 }
 
 /** Claude family (not protocol): picks the native Claude system prompt and parameters. */
@@ -234,9 +304,12 @@ export function explainAgentRouterError(err: unknown, wireModel?: string): strin
     if (/无效的令牌|未提供令牌/.test(text) || status === 401) {
         return 'AgentRouter rejected the API key. Check it in Settings > AI Providers > AgentRouter.';
     }
+    if (/insufficient_user_quota|user quota is not enough/i.test(text)) {
+        return 'Your AgentRouter account has no credit left. Top it up on agentrouter.org, or pick another provider.';
+    }
     if (status === 402 || /budget pool quota has been exhausted/i.test(text)) {
-        return `AgentRouter has used up today's shared allowance for ${model}. Claude and GPT refill at 02:00 and `
-            + '11:00 UTC; DeepSeek on AgentRouter keeps working in the meantime.';
+        return `AgentRouter has used up today's shared allowance for ${model}. It refills at 02:00 and `
+            + '11:00 UTC. Pick another model or provider in the meantime.';
     }
     if (/无可用渠道|no available channel/i.test(text)) {
         return `AgentRouter has no capacity for ${model} right now, or has taken it offline. Refresh the model `
@@ -245,7 +318,7 @@ export function explainAgentRouterError(err: unknown, wireModel?: string): strin
     if (/content-blocked/i.test(text)) {
         return 'AgentRouter\'s content filter blocked this request.';
     }
-    if (status === 429) {
+    if (status === 429 || /rate_limit_exceeded|too_many_requests/i.test(text)) {
         return 'AgentRouter is rate-limiting this key. Wait a moment and try again.';
     }
     return null;

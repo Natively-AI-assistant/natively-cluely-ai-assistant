@@ -135,9 +135,12 @@ async function fetchFluxionModels(apiKey: string): Promise<ProviderModel[]> {
 /**
  * AgentRouter's catalogue: GET /v1/models, key-scoped (401 `无效的令牌` on a
  * bad key), carrying `supported_endpoint_types` per model. Returned 4 ids on
- * 2026-09-30 — claude-opus-4-8, claude-opus-5, deepseek-v4-flash, gpt-6-astra —
- * while the docs still list gpt-5.6-sol and glm-5.3, which would 503 "no
- * available channel". So this list, not the docs, is the source.
+ * 2026-09-30 (claude-opus-4-8, claude-opus-5, deepseek-v4-flash, gpt-6-astra)
+ * and a different 3 on 2026-10-28 (gpt-5.6-sol, gpt-6-astra, gpt-6.1-sol), the
+ * first three of the old list by then answering 503 "no available channel".
+ * So this list, not the docs or the presets, is the source: the pickers show
+ * it in place of the presets (LIVE_CATALOGUE_PROVIDERS) and the default repair
+ * follows it (pickAgentRouterModel).
  *
  * Needs the client-identity header like every AgentRouter route (see
  * AGENTROUTER_CLIENT_HEADERS); without it this is a 401

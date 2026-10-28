@@ -11530,9 +11530,12 @@ if (process.env.THINKING_MATRIX === '1') {
 
   logStartupPhase('initializeApp:complete');
 
-  // Refresh each keyed provider's model catalogue once it is a day old, off the
-  // launch path. Cleared on quit so it never starts network calls mid-shutdown.
-  const catalogRefreshTimer = setTimeout(() => {
+  // Refresh each keyed provider's model catalogue once it is older than its TTL
+  // (LiveModelCatalogService.ttlFor), off the launch path, then re-check hourly:
+  // an app left running for days otherwise kept its launch-time catalogue. The
+  // check is TTL-gated, so most ticks make no network call. Both timers are
+  // cleared on quit so they never start network calls mid-shutdown.
+  const runCatalogRefresh = () => {
     try {
       const { LiveModelCatalogService } = require('./services/LiveModelCatalogService');
       LiveModelCatalogService.getInstance().refreshAllConfiguredProviders().catch((err: any) => {
@@ -11541,8 +11544,16 @@ if (process.env.THINKING_MATRIX === '1') {
     } catch (e: any) {
       console.warn('[Main] Could not initiate background live model catalog refresh:', e?.message);
     }
-  }, 15000);
-  app.once('before-quit', () => clearTimeout(catalogRefreshTimer));
+  };
+  const catalogRefreshTimer = setTimeout(runCatalogRefresh, 15000);
+  // Hourly; mirrors LiveModelCatalogService.BACKGROUND_CHECK_MS without a
+  // second require outside the try above.
+  const catalogRefreshInterval = setInterval(runCatalogRefresh, 60 * 60 * 1000);
+  catalogRefreshInterval.unref?.();
+  app.once('before-quit', () => {
+    clearTimeout(catalogRefreshTimer);
+    clearInterval(catalogRefreshInterval);
+  });
 
   // The local MCP server (Settings › Connections): back on only if the user left
   // it on. Off the launch path; stopped in will-quit.

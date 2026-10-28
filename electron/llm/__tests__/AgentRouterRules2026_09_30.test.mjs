@@ -51,17 +51,25 @@ describe('ids', () => {
 });
 
 describe('protocol per model', () => {
-  test('Claude and DeepSeek go to /v1/messages, everything else to /v1/chat/completions', () => {
+  test('Claude and DeepSeek go to /v1/messages, GPT to /v1/responses, the rest to /v1/chat/completions', () => {
     assert.equal(ar.agentRouterProtocolFor('claude-opus-5'), 'anthropic');
-    assert.equal(ar.agentRouterProtocolFor('claude-opus-4-8'), 'anthropic');
+    assert.equal(ar.agentRouterProtocolFor('claude-opus-5-5'), 'anthropic');
     // DeepSeek on the Anthropic route AGAINST the docs: on Chat Completions its
     // thinking-off switch was ignored on 9 of 12 requests and a long answer came
     // back empty (all 8192 tokens spent reasoning). Measured 2026-09-30.
     assert.equal(ar.agentRouterProtocolFor('deepseek-v4-flash'), 'anthropic');
-    // gpt-6-astra's supported_endpoint_types is ['openai'] only (measured) —
-    // the anthropic route would fail for it.
-    assert.equal(ar.agentRouterProtocolFor('gpt-6-astra'), 'openai');
-    assert.equal(ar.agentRouterProtocolFor('glm-5.3'), 'openai');
+    // Every gpt-* id refuses /v1/chat/completions since 2026-10 ("please use
+    // /v1/responses"), although /v1/models still says ['openai']. Measured
+    // 2026-10-28 on gpt-5.6-sol, gpt-6-astra and gpt-6.1-sol.
+    for (const id of ['gpt-5.6-sol', 'gpt-6-astra', 'gpt-6.1-sol', 'GPT-7', 'o4-mini']) {
+      assert.equal(ar.agentRouterProtocolFor(id), 'responses', id);
+    }
+    assert.equal(ar.agentRouterProtocolFor('glm-5.3'), 'openai', 'unmeasured families stay on Chat Completions');
+  });
+
+  test('reasoning effort: none only where it was accepted live, low otherwise', () => {
+    for (const id of ['gpt-5.6-sol', 'gpt-6-astra', 'gpt-6.1-sol']) assert.equal(ar.agentRouterReasoningEffort(id), 'none', id);
+    assert.equal(ar.agentRouterReasoningEffort('gpt-7-nova'), 'low', 'a wrong none is a 400; a wrong low is only slower');
   });
 
   test('the Claude-family check is about the model, not the route', () => {
@@ -101,19 +109,49 @@ describe('client identity', () => {
 });
 
 describe('judge and default model', () => {
-  test('both are the unrationed DeepSeek model, prefixed', () => {
-    assert.equal(ar.AGENTROUTER_JUDGE_MODEL, 'agentrouter/deepseek-v4-flash');
-    assert.equal(ar.AGENTROUTER_DEFAULT_MODEL, 'agentrouter/deepseek-v4-flash');
+  test('both are the fastest live model, prefixed', () => {
+    // gpt-5.6-sol: first text 1.8-2.2 s on 2026-10-28, against 5 s and up for
+    // the other two. deepseek-v4-flash, the old default, answers 503 now.
+    assert.equal(ar.AGENTROUTER_DEFAULT_MODEL, 'agentrouter/gpt-5.6-sol');
+    assert.equal(ar.AGENTROUTER_JUDGE_MODEL, ar.AGENTROUTER_DEFAULT_MODEL);
   });
 
-  test('the default is a shipped preset, so the picker can show what the repair installs', () => {
+  test('the default is the FIRST shipped preset, so the picker can show what the repair installs', () => {
     const utils = fs.readFileSync(path.join(root, 'src/utils/modelUtils.ts'), 'utf8');
     const block = utils.slice(utils.indexOf('    agentrouter: {'), utils.indexOf("pmKey: 'agentrouterPreferredModel'"));
     assert.ok(block.length > 0 && block.length < 4000, 'the agentrouter preset block must be found and bounded');
-    assert.ok(block.includes(`'${ar.AGENTROUTER_DEFAULT_MODEL}'`));
-    // The docs' gpt-5.6-sol and glm-5.3 are NOT served (503) — never preset them.
-    assert.ok(!block.includes("'agentrouter/gpt-5.6-sol'"));
-    assert.ok(!block.includes("'agentrouter/glm-5.3'"));
+    const ids = [...block.matchAll(/'(agentrouter\/[^']+)'/g)].map((m) => m[1]);
+    assert.equal(ids[0], ar.AGENTROUTER_DEFAULT_MODEL);
+    // Retired by 2026-10-28 (503 "no available channel") — never preset them again.
+    for (const gone of ['claude-opus-5', 'claude-opus-4-8', 'deepseek-v4-flash', 'glm-5.3']) {
+      assert.ok(!ids.includes(`agentrouter/${gone}`), gone);
+    }
+  });
+});
+
+describe('following the fetched catalogue', () => {
+  const LIVE = ['agentrouter/gpt-5.6-sol', 'agentrouter/gpt-6-astra', 'agentrouter/gpt-6.1-sol'];
+
+  test('a wanted model the catalogue still lists is kept', () => {
+    assert.equal(ar.pickAgentRouterModel('agentrouter/gpt-6-astra', LIVE), 'agentrouter/gpt-6-astra');
+  });
+
+  test('a model the catalogue dropped is replaced by the default, or the first row without it', () => {
+    assert.equal(ar.pickAgentRouterModel('agentrouter/claude-opus-5', LIVE), 'agentrouter/gpt-5.6-sol');
+    assert.equal(ar.pickAgentRouterModel('agentrouter/deepseek-v4-flash', ['agentrouter/gpt-6.1-sol', 'agentrouter/gpt-6-astra']), 'agentrouter/gpt-6.1-sol');
+  });
+
+  test('no catalogue (never fetched, or the fetch failed): nothing to check against, the wanted model stands', () => {
+    assert.equal(ar.pickAgentRouterModel('agentrouter/claude-opus-5', []), 'agentrouter/claude-opus-5');
+    assert.equal(ar.pickAgentRouterModel(undefined, null), ar.AGENTROUTER_DEFAULT_MODEL);
+    assert.equal(ar.pickAgentRouterModel('gemini-3.8-flash', LIVE), ar.AGENTROUTER_DEFAULT_MODEL, 'a non-AgentRouter id is never returned');
+  });
+
+  test('retired = the catalogue exists and no longer lists it; absence of a catalogue is not retirement', () => {
+    assert.equal(ar.isAgentRouterModelRetired('agentrouter/claude-opus-5', LIVE), true);
+    assert.equal(ar.isAgentRouterModelRetired('agentrouter/gpt-6-astra', LIVE), false);
+    assert.equal(ar.isAgentRouterModelRetired('agentrouter/claude-opus-5', []), false);
+    assert.equal(ar.isAgentRouterModelRetired('claude-opus-5', LIVE), false, 'only AgentRouter ids');
   });
 });
 
@@ -152,9 +190,25 @@ describe('explainAgentRouterError — real bodies, real wrappers', () => {
     for (const make of [openaiErr, anthropicErr, axiosErr]) {
       const msg = ar.explainAgentRouterError(make(402, BUDGET), 'claude-opus-5');
       assert.match(msg, /claude-opus-5/);
-      assert.match(msg, /02:00 and 11:00 UTC/);
-      assert.match(msg, /DeepSeek/);
+      assert.match(msg, /02:00 and\s+11:00 UTC/);
+      assert.match(msg, /another model or provider/);
+      assert.doesNotMatch(msg, /DeepSeek/, 'DeepSeek is no longer served, so it is no way out');
     }
+  });
+
+  // Measured 2026-10-28 on a key with no credit: HTTP 403 on every model.
+  const NO_CREDIT = { error: { message: 'user quota is not enough (request id: 2026102818100792519056272v5h9vPYwRnp)', type: 'new_api_error', param: '', code: 'insufficient_user_quota' } };
+  test('a key with no credit is named as that, not as a bad key or the daily pool', () => {
+    for (const make of [openaiErr, anthropicErr, axiosErr]) {
+      const msg = ar.explainAgentRouterError(make(403, NO_CREDIT));
+      assert.match(msg, /no credit left/);
+    }
+  });
+
+  // Measured 2026-10-28: a rate limit arrives INSIDE a 200 stream as `response.failed`.
+  test('an in-stream rate limit reads as a rate limit', () => {
+    const err = Object.assign(new Error('Your requests to *** have exceeded token rate limit'), { error: { code: 'rate_limit_exceeded' } });
+    assert.match(ar.explainAgentRouterError(err), /rate-limiting/);
   });
 
   test('the Chinese "no available channel" 503 names the model and the fix', () => {
@@ -205,18 +259,17 @@ describe('the pure module stays pure', () => {
 });
 
 describe('the fetched catalogue order', () => {
-  test('the unrationed default comes first, so the card never adopts a rationed model', () => {
+  test('the default comes first, so the card adopts the fastest model', () => {
     // ProviderCard adopts the FIRST fetched row as the preferred model when
-    // there is none; plain alphabetical order put claude-opus-4-8 there (seen
-    // live). These are the ids /v1/models returned on 2026-09-30, in its order.
-    const models = ar.agentRouterCatalogue(['claude-opus-4-8', 'claude-opus-5', 'deepseek-v4-flash', 'gpt-6-astra']);
+    // there is none, and pickAgentRouterModel falls back to it. These are the
+    // ids /v1/models returned on 2026-10-28, in its order.
+    const models = ar.agentRouterCatalogue(['gpt-6-astra', 'gpt-6.1-sol', 'gpt-5.6-sol']);
     assert.deepEqual(models.map((m) => m.id), [
-      'agentrouter/deepseek-v4-flash',
-      'agentrouter/claude-opus-4-8',
-      'agentrouter/claude-opus-5',
+      'agentrouter/gpt-5.6-sol',
       'agentrouter/gpt-6-astra',
+      'agentrouter/gpt-6.1-sol',
     ]);
-    assert.equal(models[0].label, 'deepseek-v4-flash', 'labels are the bare ids');
+    assert.equal(models[0].label, 'gpt-5.6-sol', 'labels are the bare ids');
   });
 
   test('junk rows are dropped, and a catalogue without the default is plain alphabetical', () => {

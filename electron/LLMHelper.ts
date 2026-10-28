@@ -159,9 +159,11 @@ import {
   AGENTROUTER_JUDGE_MODEL,
   agentRouterError,
   agentRouterProtocolFor,
+  agentRouterReasoningEffort,
   agentRouterWireModel,
   isAgentRouterClaudeWireModel,
   isAgentRouterModelId,
+  pickAgentRouterModel,
 } from './llm/agentRouter'
 import { createAgentRouterClients } from './llm/agentRouterClients'
 import { stripLeadingReasoningBlock } from './llm/reasoningTagFilter'
@@ -753,6 +755,22 @@ export class LLMHelper {
 
   private isProviderDisabled(family: string): boolean {
     return isProviderFamilyDisabled(family, this.getDisabledProviderFamilies());
+  }
+
+  /**
+   * An automatically chosen AgentRouter model (judge, structured ladder),
+   * checked against the fetched catalogue LIVE, like the disabled list above:
+   * AgentRouter retires models between releases, and a fixed id that is gone
+   * 503s on every call. See pickAgentRouterModel.
+   */
+  private agentRouterAutoModel(wanted: string): string {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const rows = CredentialsManager.getInstance().getCloudFetchedModels?.('agentrouter');
+      return pickAgentRouterModel(wanted, Array.isArray(rows) ? rows.map((m: any) => m?.id) : []);
+    } catch {
+      return wanted;
+    }
   }
 
   /** Error text for "nothing left to try", which reads very differently when
@@ -5994,9 +6012,9 @@ let isMultimodal = !!(imagePaths?.length);
     if (family === 'openrouter') return this.openrouterClient ? OPENROUTER_JUDGE_MODEL : null;
     if (family === 'fluxion') return (this.fluxionOpenAIClient || this.fluxionAnthropicClient) ? this.currentModelId : null;
     // NOT the selected model: see AGENTROUTER_JUDGE_MODEL. The judge runs on
-    // every candidate utterance, and on a rationed Claude/GPT pick that would
-    // spend the user's daily AgentRouter allowance on classification.
-    if (family === 'agentrouter') return this.hasAgentRouterCredential() ? AGENTROUTER_JUDGE_MODEL : null;
+    // every candidate utterance, so it stays on the fastest model rather than
+    // whatever slower one the user picked.
+    if (family === 'agentrouter') return this.hasAgentRouterCredential() ? this.agentRouterAutoModel(AGENTROUTER_JUDGE_MODEL) : null;
     if (family === 'ninerouter') return this.ninerouterClient ? this.currentModelId : null;
     if (family === 'nvidia_nim') return this.nvidiaNimClient ? this.currentModelId : null;
     if (family === 'litellm') return this.litellmClient ? this.currentModelId : null;
@@ -6607,17 +6625,17 @@ let isMultimodal = !!(imagePaths?.length);
     // Intelligence read the résumé with its rule-based parser.
     //
     // The model is the gateway's automatic default (AGENTROUTER_DEFAULT_MODEL,
-    // DeepSeek), NOT the selected one, for the reason the Auto Answer judge
-    // gives: a profile upload makes six or more structured calls, and on a
-    // Claude or GPT pick those would be taken from the user's daily ration.
-    // Thinking off and the DeepSeek output cap come from
-    // agentRouterAnthropicParams, as for a chat turn; 0.4 as the rungs above.
+    // resolved against the fetched catalogue), NOT the selected one, for the
+    // reason the Auto Answer judge gives: a profile upload makes six or more
+    // structured calls, and a slow pick would make each of them slow. 0.4 as
+    // the rungs above (ignored for GPT, which takes no temperature).
     //
     // Last on purpose, after DeepSeek: nobody with a working rung is moved.
     if (this.hasAgentRouterCredential()) {
+      const arModel = this.agentRouterAutoModel(AGENTROUTER_DEFAULT_MODEL);
       providers.push({
-        name: `AgentRouter (${agentRouterWireModel(AGENTROUTER_DEFAULT_MODEL)})`,
-        execute: () => this.generateWithAgentRouter(message, undefined, undefined, AGENTROUTER_DEFAULT_MODEL, signal, { temperature: 0.4 }),
+        name: `AgentRouter (${agentRouterWireModel(arModel)})`,
+        execute: () => this.generateWithAgentRouter(message, undefined, undefined, arModel, signal, { temperature: 0.4 }),
       });
     }
 
@@ -7701,6 +7719,11 @@ let isMultimodal = !!(imagePaths?.length);
       return;
     }
 
+    if (agentRouterProtocolFor(model) === 'responses') {
+      yield* this.streamAgentRouterResponses(model, userMessage, systemPrompt, imagePaths, abortSignal, opts);
+      return;
+    }
+
     const client = this.agentrouterOpenAIClient;
     if (!client) throw new Error('AgentRouter client not initialized');
     const messages = await this.buildOpenRouterMessages(userMessage, systemPrompt, imagePaths);
@@ -7730,6 +7753,82 @@ let isMultimodal = !!(imagePaths?.length);
       throw agentRouterError(e, model);
     } finally {
       if (abortSignal?.aborted && typeof stream?.abort === 'function') stream.abort();
+      if (abortSignal?.aborted && typeof stream?.controller?.abort === 'function') stream.controller.abort();
+    }
+  }
+
+  /**
+   * Responses API parameters for an AgentRouter GPT model: streamWithOpenai's
+   * output cap (getOpenAiMaxOutput), reasoning as low as the model was measured
+   * to accept (agentRouterReasoningEffort), no temperature or seed (reasoning
+   * models refuse non-default sampling). The fast seam's 256 is raised to 512
+   * for the hidden reasoning tokens, as agentRouterOpenAIParams does.
+   */
+  private agentRouterResponsesParams(model: string, opts?: AgentRouterCallOptions): Record<string, unknown> {
+    return {
+      max_output_tokens: opts?.maxTokens ? Math.max(opts.maxTokens, 512) : getOpenAiMaxOutput(model, MAX_OUTPUT_TOKENS),
+      reasoning: { effort: agentRouterReasoningEffort(model) },
+    };
+  }
+
+  /**
+   * AgentRouter GPT over the OpenAI Responses API (`/v1/responses`), the only
+   * route those models accept since 2026-10 (agentRouter.ts fact 8). The system
+   * prompt travels as `instructions`, images as `input_image` data URLs, and
+   * `store: false` keeps the turn off the gateway's response store, as the
+   * Codex backend request does. Text arrives as `response.output_text.delta`;
+   * an in-band `response.failed` (a rate limit lands there, measured) is
+   * explained like every other AgentRouter error.
+   */
+  private async * streamAgentRouterResponses(
+    model: string,
+    userMessage: string,
+    systemPrompt: string | undefined,
+    imagePaths: string[] | undefined,
+    abortSignal: AbortSignal | undefined,
+    opts: AgentRouterCallOptions | undefined,
+  ): AsyncGenerator<string, void, unknown> {
+    const client = this.agentrouterOpenAIClient;
+    if (!client) throw new Error('AgentRouter client not initialized');
+    const imageParts = imagePaths?.length ? await this.buildOpenAiImageParts(imagePaths) : [];
+    const content = imageParts.length
+      ? [{ type: 'input_text', text: userMessage }, ...imageParts.map((p: any) => ({ type: 'input_image', image_url: p.image_url.url, detail: 'auto' }))]
+      : userMessage;
+    let stream: any;
+    try {
+      stream = await client.responses.create(
+        {
+          model,
+          stream: true,
+          store: false,
+          ...(systemPrompt ? { instructions: systemPrompt } : {}),
+          input: [{ role: 'user', content }],
+          ...this.agentRouterResponsesParams(model, opts),
+        } as any,
+        { signal: abortSignal },
+      );
+    } catch (e: any) {
+      if (abortSignal?.aborted) return;
+      throw agentRouterError(e, model);
+    }
+    try {
+      for await (const event of stream) {
+        if (abortSignal?.aborted) return;
+        // Same `data: null` guard as the Chat Completions branch.
+        if (!event) continue;
+        if (event.type === 'response.output_text.delta') {
+          if (typeof event.delta === 'string' && event.delta) yield event.delta;
+          continue;
+        }
+        if (event.type === 'response.failed' || event.type === 'error') {
+          const error = event.response?.error ?? event.error ?? event;
+          throw agentRouterError(Object.assign(new Error(String(error?.message || 'gateway failed mid-stream')), { error }), model);
+        }
+      }
+    } catch (e: any) {
+      if (abortSignal?.aborted) return;
+      throw e?.agentRouter ? e : agentRouterError(e, model);
+    } finally {
       if (abortSignal?.aborted && typeof stream?.controller?.abort === 'function') stream.controller.abort();
     }
   }

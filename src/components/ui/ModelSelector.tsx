@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronDown, Check, Cloud, Terminal, Server, Plus } from 'lucide-react';
-import { getCodexCliModelDisplayName, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
+import { cloudModelRows, getCodexCliModelDisplayName, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { useT } from '../../i18n';
 import { ProviderMark } from './ProviderMark';
 
@@ -52,6 +52,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                 // Build dynamic cloud models from credentials
                 // @ts-ignore
                 const creds = await window.electronAPI?.getStoredCredentials?.();
+                const liveCatalogues = (await window.electronAPI?.getCloudFetchedModels?.().catch(() => null))?.models ?? null;
                 const cModels: { id: string; name: string; desc: string; provider: string }[] = [];
 
                 if (creds?.hasNativelyKey) {
@@ -59,9 +60,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                 }
                 for (const [prov, cfg] of Object.entries(STANDARD_CLOUD_MODELS)) {
                     if (!cfg.hasKeyCheck(creds)) continue;
-                    cfg.ids.forEach((id, i) => cModels.push({ id, name: cfg.names[i], desc: cfg.descs[i], provider: prov }));
+                    const rows = cloudModelRows(prov, liveCatalogues);
+                    rows.forEach(({ id, name, desc }) => cModels.push({ id, name, desc, provider: prov }));
                     const pm = creds?.[cfg.pmKey];
-                    if (pm && !cfg.ids.includes(pm)) {
+                    if (pm && !rows.some(r => r.id === pm)) {
                         cModels.push({ id: pm, name: prettifyModelId(pm), desc: `${prov.charAt(0).toUpperCase() + prov.slice(1)} • Preferred`, provider: prov });
                     }
                 }

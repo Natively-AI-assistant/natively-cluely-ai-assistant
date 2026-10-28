@@ -16,6 +16,12 @@
  * stays as it was: presets, narrowed by the allow-list, plus the default model.
  * A model from the fetched list reaches the picker through "Set default".
  *
+ * ONE exception (2026-10-28): LIVE_CATALOGUE_PROVIDERS, today AgentRouter
+ * alone. Its catalogue is three models scoped to the key, so it cannot flood,
+ * and it retired three of its four presets within a month, so presets alone
+ * offered models that 503. The fetched list reaches the picker ONLY through
+ * cloudModelRows(), which ignores it for every other provider.
+ *
  * Run: node --test src/components/__tests__/ModelPickerIgnoresFetchedCatalogue2026_10_14.test.mjs
  */
 import { test } from 'node:test';
@@ -27,12 +33,24 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 const picker = readFileSync(join(ROOT, 'src/components/ModelSelectorWindow.tsx'), 'utf8');
 
-test('the overlay picker does not read the fetched catalogue', () => {
-  assert.doesNotMatch(picker, /getCloudFetchedModels/);
+const utils = readFileSync(join(ROOT, 'src/utils/modelUtils.ts'), 'utf8');
+
+test('the overlay picker reads the fetched catalogue only through cloudModelRows', () => {
   assert.doesNotMatch(picker, /cloudFetchedModels/);
+  // One read, and the only consumer of what it returns is cloudModelRows.
+  assert.equal((picker.match(/getCloudFetchedModels/g) || []).length, 1);
+  assert.equal((picker.match(/liveCatalogues/g) || []).length, 2, 'declared once, passed to cloudModelRows once');
+  assert.match(picker, /cloudModelRows\(prov, liveCatalogues\)/);
 });
 
-test('its cloud rows are the presets plus the default model', () => {
-  assert.match(picker, /cfg\.ids\.forEach\(\(id, i\) => \{\s*models\.push\(\{ id, name: cfg\.names\[i\], type: 'cloud', provider: prov \}\);/);
-  assert.match(picker, /const pm = creds\?\.\[cfg\.pmKey\];\s*if \(pm && !cfg\.ids\.includes\(pm\)\)/);
+test('only AgentRouter follows its fetched catalogue; every other provider keeps its presets', () => {
+  assert.match(utils, /export const LIVE_CATALOGUE_PROVIDERS: ReadonlySet<string> = new Set\(\['agentrouter'\]\);/);
+  const fn = utils.slice(utils.indexOf('export const cloudModelRows'), utils.indexOf('\n};\n', utils.indexOf('export const cloudModelRows')));
+  assert.match(fn, /LIVE_CATALOGUE_PROVIDERS\.has\(provider\)/, 'the fetched list is gated on the set');
+  assert.match(fn, /if \(!live\.length\) return presets;/, 'no catalogue yet: presets');
+});
+
+test('its cloud rows are those rows plus the default model', () => {
+  assert.match(picker, /const rows = cloudModelRows\(prov, liveCatalogues\);\s*rows\.forEach\(\(\{ id, name \}\) => \{\s*models\.push\(\{ id, name, type: 'cloud', provider: prov \}\);/);
+  assert.match(picker, /const pm = creds\?\.\[cfg\.pmKey\];\s*if \(pm && !rows\.some\(r => r\.id === pm\)\)/);
 });
