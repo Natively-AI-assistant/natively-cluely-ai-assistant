@@ -14,7 +14,9 @@ const KEY_A = 'made-up-key-AAAA-1111';
 const KEY_B = 'made-up-key-BBBB-2222';
 const QUOTA_403 = { status: 403, body: { error: { message: 'user quota is not enough (request id: x)', code: 'insufficient_user_quota' } } };
 const POOL_402 = { status: 402, body: { error: { message: 'Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool.' } } };
-const OK_200 = { status: 200, body: { id: 'r1', model: 'gpt-6-astra', choices: [{ message: { content: '{"ok":true}' }, finish_reason: 'stop' }], usage: { total_tokens: 3 } } };
+// A Responses API reply (the judge's route since 2026-10-28), shaped as AgentRouter returned it for gpt-6-astra:
+// a reasoning item, then the message.
+const OK_200 = { status: 200, body: { id: 'r1', object: 'response', model: 'gpt-6-astra', status: 'completed', output: [{ type: 'reasoning', summary: [] }, { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '{"ok":true}', annotations: [] }] }], usage: { input_tokens: 2, output_tokens: 1, total_tokens: 3 } } };
 
 // The line queue3.mjs watches for to stop starting new steps, taken from its source so the two cannot drift.
 const queueSource = fs.readFileSync(path.join(HERE, 'queue3.mjs'), 'utf8');
@@ -34,17 +36,19 @@ async function client({ keys = { AGENTROUTER_API_KEY: KEY_A, AGENTROUTER_API_KEY
   if (diskFloorMb != null) { process.env.AQ_DISK_FLOOR_MB = String(diskFloorMb); process.env.AQ_DISK_WAIT_MS = String(diskWaitMs); }
   const calls = [];
   const lines = [];
+  const requests = [];
   const realFetch = globalThis.fetch; const realError = console.error;
   globalThis.fetch = async (url, init) => {
     const which = init.headers.Authorization === `Bearer ${KEY_A}` ? 'A' : init.headers.Authorization === `Bearer ${KEY_B}` ? 'B' : '?';
     calls.push(which);
+    requests.push({ url: String(url), body: init.body ? JSON.parse(init.body) : null });
     const a = await answer(which, calls.length);
     return { status: a.status, text: async () => (typeof a.body === 'string' ? a.body : JSON.stringify(a.body)), headers: { get: () => null } };
   };
   console.error = (...x) => { lines.push(x.join(' ')); };
   const m = await import(`${pathToFileURL(path.join(dir, 'client.mjs')).href}?case=${++seq}`);
   const restore = () => { globalThis.fetch = realFetch; console.error = realError; delete process.env.NATIVELY_ENV_FILE; delete process.env.AQ_DISK_FLOOR_MB; delete process.env.AQ_DISK_WAIT_MS; fs.rmSync(dir, { recursive: true, force: true }); };
-  return { m, calls, lines, restore };
+  return { m, calls, lines, requests, restore };
 }
 const MSG = [{ role: 'user', content: 'x' }];
 
@@ -64,6 +68,38 @@ test('a key out of account quota hands the same call to the second key', async (
     assert.equal(c.lines.length, 1);
     assert.match(c.lines[0], /AGENTROUTER_API_KEY is out of quota — continuing on AGENTROUTER_API_KEY_1/);
     assert.equal(QUEUE_STOP.test(c.lines[0]), false, 'a hand-over must not stop the queue');
+  } finally { c.restore(); }
+});
+
+test('the judge calls the Responses API: same model, system text as instructions, one output cap', async () => {
+  // 2026-10-28: AgentRouter refuses /v1/chat/completions for every gpt-* id.
+  const c = await client({ answer: () => OK_200 });
+  try {
+    const r = await c.m.chat([{ role: 'system', content: 'CHARTER' }, { role: 'user', content: 'judge this' }], { maxTokens: 1234 });
+    assert.equal(r.ok, true);
+    assert.equal(r.content, '{"ok":true}', 'the text of the message item; the reasoning item is skipped');
+    assert.equal(r.finish_reason, 'stop');
+    assert.equal(r.returned_model, 'gpt-6-astra');
+    const q = c.requests[0];
+    assert.match(q.url, /\/v1\/responses$/);
+    assert.equal(q.body.model, 'gpt-6-astra');
+    assert.equal(q.body.instructions, 'CHARTER');
+    assert.deepEqual(q.body.input, [{ role: 'user', content: 'judge this' }]);
+    assert.equal(q.body.max_output_tokens, 1234, 'even with an old probe record that says max_tokens');
+    assert.equal(q.body.temperature, 0);
+    assert.equal(q.body.stream, false);
+    assert.equal(q.body.messages, undefined);
+    assert.equal(q.body.max_tokens, undefined);
+  } finally { c.restore(); }
+});
+
+test('a reply cut off by the output cap reads as length, and with no text it is not ok', async () => {
+  const cut = { status: 200, body: { id: 'r2', model: 'gpt-6-astra', status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' }, output: [{ type: 'reasoning', summary: [] }] } };
+  const c = await client({ answer: () => cut });
+  try {
+    const r = await c.m.chat(MSG);
+    assert.equal(r.ok, false);
+    assert.equal(r.finish_reason, 'length');
   } finally { c.restore(); }
 });
 

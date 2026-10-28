@@ -229,24 +229,58 @@ export function stopNewCalls(reason) {
 }
 /** Set once a route rejects temperature=0 (spec §19: drop only the rejected optional parameter). */
 export let TEMPERATURE_REJECTED = false;
+
+/**
+ * 2026-10-28: AgentRouter refuses /v1/chat/completions for every gpt-* id ("does not support
+ * /v1/chat/completions, please use /v1/responses"), so the judge calls the Responses API. Same model, same
+ * gateway, same key hand-over; only the envelope changes. Non-streaming answers with JSON there (measured,
+ * gpt-6-astra, 3.2 s), and temperature 0 was accepted.
+ */
+export const JUDGE_ROUTE = '/responses';
+
+/** Chat messages → a Responses body: system text becomes `instructions`, the rest the `input` items. */
+export function responsesBody(messages, { maxTokens, temperature } = {}) {
+  const system = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n');
+  const body = { model: JUDGE_MODEL, stream: false, store: false, input: messages.filter((m) => m.role !== 'system').map((m) => ({ role: m.role, content: m.content })) };
+  if (system) body.instructions = system;
+  if (maxTokens != null) body.max_output_tokens = maxTokens;
+  if (temperature != null) body.temperature = temperature;
+  return body;
+}
+
+/** The answer text of a Responses reply: every output_text part of its message items, or null if there is none. */
+export function responsesText(json) {
+  const parts = (Array.isArray(json?.output) ? json.output : [])
+    .filter((o) => o?.type === 'message')
+    .flatMap((o) => (Array.isArray(o.content) ? o.content : []))
+    .filter((c) => c?.type === 'output_text' && typeof c.text === 'string');
+  if (parts.length) return parts.map((c) => c.text).join('');
+  return typeof json?.output_text === 'string' ? json.output_text : null;
+}
+
+/** Chat-style finish reason from a Responses reply, so stored records keep one vocabulary. */
+function responsesFinish(json) {
+  if (json?.status === 'completed') return 'stop';
+  const reason = json?.incomplete_details?.reason;
+  return reason === 'max_output_tokens' ? 'length' : reason ?? json?.status ?? null;
+}
 export async function chat(messages, { maxTokens = 4000, temperature = 0, retries = 5, timeoutMs = 180000 } = {}) {
   if (VIA_CLI) return chatFable(messages, { retries: Math.min(retries, 3), timeoutMs: Math.max(timeoutMs, 300000) });
   if (!RATIONED) { const mb = await diskRoom(); if (mb < DISK_FLOOR_MB) stopNewCalls(`disk nearly full (${Math.round(mb)} MB free)`); }
   if (RATIONED) return { ok: false, rationed: true, status: RATIONED.startsWith('disk') ? null : 402, error: RATIONED, requested_model: JUDGE_MODEL, attempts: 0, at: new Date().toISOString() };
   const probe = assertProbeOk();
   const unsupported = new Set(probe.unsupported_params ?? []);
-  const body = { model: JUDGE_MODEL, messages, stream: false };
-  if (!unsupported.has('temperature') && !TEMPERATURE_REJECTED) body.temperature = temperature;
-  const tokParam = probe.token_param ?? 'max_tokens';
-  if (!unsupported.has(tokParam)) body[tokParam] = maxTokens;
+  // The Responses API has one output cap, max_output_tokens, whatever the probe recorded for the old route.
+  const body = responsesBody(messages, {
+    maxTokens: unsupported.has('max_output_tokens') ? null : maxTokens,
+    temperature: unsupported.has('temperature') || TEMPERATURE_REJECTED ? null : temperature,
+  });
   let attempt = 0; let last = null; let droppedTemperature = false;
   while (attempt <= retries) {
-    const r = await rawCall('POST', '/chat/completions', body, { timeoutMs });
+    const r = await rawCall('POST', JUDGE_ROUTE, body, { timeoutMs });
     last = r;
     if (r.status === 200 && r.json) {
-      const choice = r.json.choices?.[0];
-      const content = typeof choice?.message?.content === 'string' ? choice.message.content
-        : Array.isArray(choice?.message?.content) ? choice.message.content.map((p) => p?.text ?? '').join('') : null;
+      const content = responsesText(r.json);
       return {
         ok: content != null,
         content,
@@ -255,7 +289,7 @@ export async function chat(messages, { maxTokens = 4000, temperature = 0, retrie
         model_mismatch: !!r.json.model && r.json.model !== JUDGE_MODEL,
         response_id: r.json.id ?? null,
         request_id: r.headers['x-request-id'] ?? r.headers['x-oneapi-request-id'] ?? null,
-        finish_reason: choice?.finish_reason ?? null,
+        finish_reason: responsesFinish(r.json),
         usage: r.json.usage ?? null,
         latency_ms: r.latencyMs,
         temperature: 'temperature' in body ? body.temperature : 'default',
