@@ -138,6 +138,13 @@ jobs:
           echo "$APPLE_API_KEY_P8_BASE64" | base64 --decode > "$API_KEY_PATH"
           echo "APPLE_API_KEY=$API_KEY_PATH" >> "$GITHUB_ENV"
 
+      # Source of the Parakeet Neural Engine helper's one dependency (FluidAudio,
+      # pinned by commit in scripts/build-parakeet-ane.js), fetched here so a
+      # network failure retries and stops the run before the long packaging step
+      # instead of inside electron-builder's afterPack. afterPack reuses it.
+      - name: Fetch FluidAudio source (Parakeet Neural Engine helper)
+        run: node scripts/build-parakeet-ane.js --fetch-source
+
       - name: Build, sign, notarize, staple
         env:
           # App Store Connect API-key strategy (consumed by notarize.js + afterAllArtifactBuild.cjs):

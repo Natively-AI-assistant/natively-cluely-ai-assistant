@@ -3,21 +3,43 @@
 // Built by scripts/build-parakeet-ane.js; never by the ordinary Electron build.
 import PackageDescription
 
+// FluidAudio (Apache-2.0) is compiled from source in FluidAudio/, which the
+// build script fetches at the commit it pins (FLUIDAUDIO in
+// scripts/build-parakeet-ane.js) and verifies. It is not a SwiftPM package
+// dependency on purpose: SwiftPM downloads every binary target a dependency
+// declares, traits or not, and FluidAudio declares a prebuilt Rust
+// xcframework (~87 MB, TTS text normalization only) this helper never links.
+// These targets mirror FluidAudio's own manifest without it, which is the
+// same as its `traits: []` opt-out: the NemoTextProcessing code compiles out.
+let fluidAudio = "FluidAudio/Sources"
+
 let package = Package(
     name: "ParakeetANE",
     platforms: [.macOS(.v14)],
-    dependencies: [
-        // Apache-2.0. Pinned exactly: the CoreML file names the helper loads
-        // (and Natively downloads) are versioned with the library.
-        // `traits: []` opts out of the NemoTextProcessing trait, a prebuilt
-        // Rust binary used only for TTS text normalization; ASR does not need
-        // it, and without it the helper is built entirely from source.
-        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.17.7", traits: []),
-    ],
     targets: [
+        .target(
+            name: "FluidAudio",
+            dependencies: ["FastClusterWrapper", "MachTaskSelfWrapper"],
+            path: "\(fluidAudio)/FluidAudio",
+            exclude: ["ASR/Parakeet/Unified/benchmark.md"],
+            resources: [.process("TTS/LuxTts/G2p/Resources")],
+            // Third-party code: quiet, as SwiftPM keeps a package dependency.
+            swiftSettings: [.unsafeFlags(["-suppress-warnings"])]
+        ),
+        .target(
+            name: "FastClusterWrapper",
+            path: "\(fluidAudio)/FastClusterWrapper",
+            publicHeadersPath: "include",
+            cxxSettings: [.unsafeFlags(["-w"])]
+        ),
+        .target(
+            name: "MachTaskSelfWrapper",
+            path: "\(fluidAudio)/MachTaskSelfWrapper",
+            publicHeadersPath: "include"
+        ),
         .executableTarget(
             name: "ParakeetANE",
-            dependencies: [.product(name: "FluidAudio", package: "FluidAudio")],
+            dependencies: ["FluidAudio"],
             path: "Sources/ParakeetANE"
         ),
     ]
