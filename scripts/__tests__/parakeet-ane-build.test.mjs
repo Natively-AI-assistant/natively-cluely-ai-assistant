@@ -122,7 +122,8 @@ test('arm64: release swift build, arch check, copy, ad-hoc sign and verify', (t)
   const firstSwift = calls.findIndex((c) => c.command === 'xcrun');
   assert.ok(calls.indexOf(fetch) < firstSwift, 'the source is in place before swift build');
   assert.equal(fs.readFileSync(output, 'utf8'), 'arm64');
-  assert.equal(fs.statSync(output).mode & 0o111, 0o111);
+  // Windows filesystems have no execute bit to check (as apple-speech-build.test.mjs).
+  if (process.platform !== 'win32') assert.equal(fs.statSync(output).mode & 0o111, 0o111);
 
   const build = calls.find((c) => c.command === 'xcrun' && c.args.includes('build') && !c.args.includes('--show-bin-path'));
   assert.ok(build, 'swift build must run');

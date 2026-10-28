@@ -332,7 +332,10 @@ test('darwin arm64: a package without the Parakeet Neural Engine helper is refus
   assert.match(output, /Missing Parakeet Neural Engine helper/);
 });
 
-test('darwin arm64: a non-executable helper is refused, an executable one passes', (t) => {
+// The gate reads the execute bit with fs.accessSync(X_OK), which a Windows host
+// cannot represent (every file passes), and macOS packages are only built and
+// gated on macOS.
+test('darwin arm64: a non-executable helper is refused, an executable one passes', { skip: process.platform === 'win32' && 'no execute bit on a Windows host' }, (t) => {
   const { app } = completePackage(t, 'darwin');
   putThinExecutable(app, CPU_TYPE_ARM64);
   const helper = put(app, ANE_HELPER);
