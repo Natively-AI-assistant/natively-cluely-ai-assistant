@@ -192,8 +192,11 @@ export interface ElectronAPI {
     callback: (data: { path: string; preview: string }) => void
   ) => () => void
   onScreenshotAttached: (
-    /** `formulaCapture`: a page capture's formula images (#645), which replace an earlier capture's. */
-    callback: (data: { path: string; preview: string; formulaCapture?: string }) => void
+    /**
+     * `formulaCapture`: a page capture's formula images (#645), which replace an earlier capture's.
+     * `quiet`: the phone asked for or sent it, so the overlay lists it without showing itself.
+     */
+    callback: (data: { path: string; preview: string; formulaCapture?: string; quiet?: boolean }) => void
   ) => () => void
   onCaptureAndProcess: (
     callback: (data: { path: string; preview: string }) => void

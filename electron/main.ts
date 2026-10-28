@@ -9229,10 +9229,12 @@ export class AppState {
    * Attach an image to the next answer the way a capture taken on this machine
    * is (the overlay lists it and sends it with its next request), and remember
    * it for the phone's next typed question. Returns whether a meeting surface
-   * received it.
+   * received it. Only the phone comes here, so the attachment is quiet: the
+   * overlay lists it without showing itself on the desktop the phone is
+   * standing in for.
    */
   public async attachImageToMeeting(imagePath: string): Promise<boolean> {
-    const delivered = await this.sendAttachedImage(imagePath)
+    const delivered = await this.sendAttachedImage(imagePath, { quiet: true })
     this.phoneImages.push({ path: imagePath, at: Date.now(), used: false })
     if (this.phoneImages.length > 5) this.phoneImages = this.phoneImages.slice(-5)
     return delivered
@@ -9242,8 +9244,9 @@ export class AppState {
    * List an image on the launcher's and overlay's trays so the next answer
    * sends it. A pasted or dropped image (#351) stops here: phoneImages holds
    * what the phone sent, and a phone question must not carry a desktop paste.
+   * `quiet` adds it to the trays without the overlay showing itself.
    */
-  private async sendAttachedImage(imagePath: string): Promise<boolean> {
+  private async sendAttachedImage(imagePath: string, opts: { quiet?: boolean } = {}): Promise<boolean> {
     let preview = ''
     try {
       preview = await this.getImagePreview(imagePath)
@@ -9255,7 +9258,8 @@ export class AppState {
     let delivered = false
     for (const win of [helper.getLauncherWindow(), helper.getOverlayWindow()]) {
       if (!win || sent.has(win.id)) continue
-      if (this.sendToWindow(win, 'screenshot-attached', { path: imagePath, preview })) {
+      const payload = opts.quiet ? { path: imagePath, preview, quiet: true } : { path: imagePath, preview }
+      if (this.sendToWindow(win, 'screenshot-attached', payload)) {
         sent.add(win.id)
         delivered = true
       }

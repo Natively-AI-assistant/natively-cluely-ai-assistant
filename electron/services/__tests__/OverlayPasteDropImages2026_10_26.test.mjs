@@ -67,7 +67,7 @@ describe('overlay paste/drop image attach (issue #351)', () => {
       assert.doesNotMatch(body, /attachImageToMeeting|phoneImages/, method);
     }
     const toMeeting = between(main, 'public async attachImageToMeeting(', '\n  }\n');
-    assert.match(toMeeting, /this\.sendAttachedImage\(imagePath\)/);
+    assert.match(toMeeting, /this\.sendAttachedImage\(imagePath, \{ quiet: true \}\)/);
     assert.match(toMeeting, /this\.phoneImages\.push/);
     assert.doesNotMatch(between(main, 'private async sendAttachedImage(', '\n  }\n'), /phoneImages/);
   });

@@ -50,7 +50,7 @@ describe('addAttachment', () => {
 
   test('the overlay adds every attached image through it, and a page capture clears old formula images', () => {
     const src = fs.readFileSync(path.resolve(__dirname, '../../components/NativelyInterface.tsx'), 'utf8');
-    assert.match(src, /import \{ addAttachment, withoutFormulaImages \} from '\.\.\/lib\/attachmentTray\.mjs';/);
+    assert.match(src, /import \{ addAttachment, revealsOverlay, withoutFormulaImages \} from '\.\.\/lib\/attachmentTray\.mjs';/);
     assert.equal(src.match(/addAttachment\(/g).length, 3);
     assert.doesNotMatch(src, /\]\.slice\(-5\)|updated\.slice\(-5\)/);
     const handler = src.slice(src.indexOf('window.electronAPI?.onDomContextReceived?.('));
