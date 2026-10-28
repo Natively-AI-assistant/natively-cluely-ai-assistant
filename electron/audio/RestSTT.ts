@@ -5,7 +5,8 @@
  *   Events: 'transcript' ({ text, isFinal, confidence }), 'error' (Error)
  *   Methods: start(), stop(), write(chunk: Buffer)
  *
- * Buffers raw PCM chunks, prepends a WAV header, and uploads via REST every ~3 seconds.
+ * Buffers raw PCM chunks, prepends a WAV header, and uploads via REST every
+ * ~3-6 seconds (Groq: ~10 s, its minimum billed length — see minBilledMs).
  * Supports two upload modes:
  *   - Multipart FormData (Groq, OpenAI, ElevenLabs)
  *   - Raw binary body (Azure, IBM Watson)
@@ -28,6 +29,9 @@ interface RestSttProviderConfig {
     extraFormFields?: Record<string, string>;
     /** Extract transcript text from the API response */
     extractTranscript: (data: any) => string;
+    /** The provider bills every request as at least this much audio: chunks
+     *  are built up to it (issue #698). See also setHoldSpeechEnds. */
+    minBilledMs?: number;
 }
 
 type ProviderConfigFactory = (apiKey: string, region?: string, languageKey?: string) => RestSttProviderConfig;
@@ -48,6 +52,8 @@ const PROVIDER_CONFIGS: Record<RestSttProvider, ProviderConfigFactory> = {
                 ...(lang ? { language: lang } : {})
             },
             extractTranscript: whisperTextWithoutHallucinations,
+            // "Minimum Billed Length: 10 seconds" (console.groq.com/docs/speech-to-text).
+            minBilledMs: GROQ_MIN_BILLED_MS,
         };
     },
     openai: (apiKey, region, languageKey) => {
@@ -146,6 +152,19 @@ const CHUNK_QUIET_RATIO = 0.1;
 // organisation — both channels share it — and bills every request as at
 // least 10 s of audio. A 429 used to drop the audio it carried. Now the audio
 // waits out retry-after and goes up with whatever arrived meanwhile.
+//
+// Billing (issue #698, 2026-10-28). The 3-6 s chunks above were billed as
+// 10 s each on Groq: one report showed 6.4K s of audio billed as 27.2K s. For
+// a provider with a minimum billed length, a chunk now ends at a pause only
+// once it holds that much audio, and is cut at most CHUNK_SPLIT_SEARCH_MS
+// after it. A native speech end still uploads at once, except on a channel
+// set to hold them (setHoldSpeechEnds: the user's own mic, never the
+// interviewer, whose questions Auto Answer and Answer wait on). There it
+// uploads at once only when the channel has not uploaded for that long, and
+// otherwise waits — until then, the interviewer speaking (releaseHeldSpeech),
+// or finalize(). Measured on a two-sided interview: 2.74x billed → 1.76x, and
+// at most 15 requests a minute for both channels (was 19; free tier: 20).
+const GROQ_MIN_BILLED_MS = 10_000;
 /** Wait when a 429 has no usable retry-after. */
 const RATE_LIMIT_DEFAULT_WAIT_MS = 5_000;
 /** Audio kept while waiting — the newest this many ms. 60 s of 16 kHz mono is
@@ -223,6 +242,12 @@ export class RestSTT extends EventEmitter {
     /** After a 429: keep buffering, upload nothing, until this time. */
     private rateLimitedUntil = 0;
     private rateLimitRetryTimer: NodeJS.Timeout | null = null;
+    /** When the last upload went out (minBilledMs providers pace on it). */
+    private lastUploadAt = 0;
+    /** A speech end held back by minBilledMs: uploads when the wait is over. */
+    private heldSpeechEndTimer: NodeJS.Timeout | null = null;
+    /** Whether speech ends may be held (setHoldSpeechEnds). */
+    private holdSpeechEnds = false;
 
     // Audio config (must match SystemAudioCapture output)
     private sampleRate = 16000;
@@ -306,14 +331,44 @@ export class RestSTT extends EventEmitter {
         this.isActive = true;
         this.chunks = [];
         this.totalBufferedBytes = 0;
+        this.lastUploadAt = 0;
         this.resetFrames();
 
         // Safety-net timer: flush even during continuous speech to prevent
         // unbounded buffer growth and Whisper API file-size/timeout errors.
         // Primary flush is driven by Rust speech_ended events.
         this.safetyNetTimer = setInterval(() => {
-            this.flushAndUpload('10 s timer');
-        }, SAFETY_NET_INTERVAL_MS);
+            this.flushAndUpload('safety-net timer');
+        }, this.safetyNetMs());
+    }
+
+    /** Longer than the cap for a minBilledMs provider, so the cap cuts at a
+     *  quiet frame before the timer would cut mid-word. */
+    private safetyNetMs(): number {
+        return Math.max(SAFETY_NET_INTERVAL_MS, this.chunkMaxMs() + 1_000);
+    }
+
+    private clearHeldSpeechEnd(): void {
+        if (!this.heldSpeechEndTimer) return;
+        clearTimeout(this.heldSpeechEndTimer);
+        this.heldSpeechEndTimer = null;
+    }
+
+    private chunkMinMs(): number {
+        return Math.max(CHUNK_MIN_MS, this.config.minBilledMs ?? 0);
+    }
+
+    /** The cut searches the last CHUNK_SPLIT_SEARCH_MS, so it never falls short of the minimum. */
+    private chunkMaxMs(): number {
+        return this.config.minBilledMs ? this.config.minBilledMs + CHUNK_SPLIT_SEARCH_MS : CHUNK_MAX_MS;
+    }
+
+    private bytesPerSecond(): number {
+        return this.sampleRate * this.numChannels * (this.bitsPerSample / 8);
+    }
+
+    private bufferedMs(): number {
+        return this.totalBufferedBytes / this.bytesPerSecond() * 1000;
     }
 
     /**
@@ -333,6 +388,7 @@ export class RestSTT extends EventEmitter {
             clearTimeout(this.rateLimitRetryTimer);
             this.rateLimitRetryTimer = null;
         }
+        this.clearHeldSpeechEnd();
         this.rateLimitedUntil = 0;
 
         // Flush remaining audio
@@ -383,7 +439,7 @@ export class RestSTT extends EventEmitter {
     /** After every write: end the chunk at a short pause, or cut it at the cap. */
     private maybeEndChunk(): void {
         const frames = this.frameRms.length;
-        if (frames * FRAME_MS < CHUNK_MIN_MS) return;
+        if (frames * FRAME_MS < this.chunkMinMs()) return;
         const sorted = [...this.frameRms].sort((a, b) => a - b);
         const level = sorted[Math.floor(sorted.length * 0.9)];
         const quiet = Math.max(SILENCE_RMS_THRESHOLD, level * CHUNK_QUIET_RATIO);
@@ -393,11 +449,12 @@ export class RestSTT extends EventEmitter {
             this.flushAndUpload('short pause');
             return;
         }
-        if (frames * FRAME_MS >= CHUNK_MAX_MS) {
+        const maxMs = this.chunkMaxMs();
+        if (frames * FRAME_MS >= maxMs) {
             const from = Math.max(0, frames - CHUNK_SPLIT_SEARCH_MS / FRAME_MS);
             let cut = from;
             for (let i = from; i < frames; i++) if (this.frameRms[i] < this.frameRms[cut]) cut = i;
-            this.flushAndUpload(`${CHUNK_MAX_MS / 1000} s cap`, cut + 1);
+            this.flushAndUpload(`${maxMs / 1000} s cap`, cut + 1);
         }
     }
 
@@ -406,23 +463,62 @@ export class RestSTT extends EventEmitter {
      * The native suppressor already holds a hangover before it reports the end
      * (VAD_HANGOVER / speech_hangover: 600 ms system audio, 500 ms microphone —
      * not the 150-200 ms this comment used to claim), so we flush immediately
-     * without adding redundant TS debouncing.
+     * without adding redundant TS debouncing — unless this channel holds
+     * speech ends, the provider has a minimum billed length, and the channel
+     * uploaded less than that long ago with less than that much audio: then
+     * the audio waits for the rest of the gap (more speech may join it) and
+     * goes up as one request.
      */
     public notifySpeechEnded(): void {
         if (!this.isActive) return;
+
+        const minBilledMs = this.config.minBilledMs ?? 0;
+        const waitMs = this.holdSpeechEnds && minBilledMs > 0 && this.bufferedMs() < minBilledMs
+            ? this.lastUploadAt + minBilledMs - Date.now()
+            : 0;
+        if (waitMs > 0) {
+            if (this.heldSpeechEndTimer || this.totalBufferedBytes < MIN_BUFFER_BYTES) return;
+            console.log(`${this.logTag} Speech ended — holding ${Math.round(this.bufferedMs())} ms for ${Math.round(waitMs)} ms (${this.provider} bills ${minBilledMs / 1000} s minimum per request)`);
+            this.heldSpeechEndTimer = setTimeout(() => {
+                this.heldSpeechEndTimer = null;
+                this.flushAndUpload('held speech end');
+            }, waitMs);
+            return;
+        }
 
         console.log(`${this.logTag} Speech ended detected by native VAD — flushing buffer immediately`);
         this.flushAndUpload('speech end');
     }
 
     /**
-     * An upload is on its way, queued behind one, or held by a rate limit:
-     * a transcript may still come. Dictation's last-words wait reads it
-     * (services/dictation/dictationSession.ts); nothing on the meeting path does.
+     * Let speech ends wait for the provider's minimum billed length (issue
+     * #698). For the user's own mic only: an interviewer question held back
+     * would reach Auto Answer and Answer late.
+     */
+    public setHoldSpeechEnds(on: boolean): void {
+        this.holdSpeechEnds = on;
+        if (!on) this.releaseHeldSpeech();
+    }
+
+    /** Upload a held speech end now: the other side started or stopped
+     *  talking, so this side's words go first and the transcript keeps order. */
+    public releaseHeldSpeech(): void {
+        if (!this.isActive || !this.heldSpeechEndTimer) return;
+        this.clearHeldSpeechEnd();
+        this.flushAndUpload('other side spoke');
+    }
+
+    /**
+     * An upload is on its way, queued behind one, held by a rate limit, or a
+     * held speech end: a transcript may still come. Dictation's last-words
+     * wait reads it (services/dictation/dictationSession.ts), and so does the
+     * meeting end (main.ts endMeeting).
      */
     public hasPendingWork(): boolean {
         if (!this.isActive) return false;
-        return this.isUploading || this.flushPending || (Date.now() < this.rateLimitedUntil && this.totalBufferedBytes > 0);
+        return this.isUploading || this.flushPending
+            || (this.heldSpeechEndTimer !== null && this.totalBufferedBytes > 0)
+            || (Date.now() < this.rateLimitedUntil && this.totalBufferedBytes > 0);
     }
 
     public finalize(): void {
@@ -466,9 +562,10 @@ export class RestSTT extends EventEmitter {
         if (this.safetyNetTimer && this.isActive) {
             clearInterval(this.safetyNetTimer);
             this.safetyNetTimer = setInterval(() => {
-                this.flushAndUpload('10 s timer');
-            }, SAFETY_NET_INTERVAL_MS);
+                this.flushAndUpload('safety-net timer');
+            }, this.safetyNetMs());
         }
+        this.clearHeldSpeechEnd();
 
         // Grab current buffer and reset — or, for a cut, the audio before the cut.
         let currentChunks: Buffer[];
@@ -512,12 +609,14 @@ export class RestSTT extends EventEmitter {
         const wavBuffer = this.addWavHeader(pcm16k, TARGET_RATE);
 
         this.isUploading = true;
+        const previousUploadAt = this.lastUploadAt;
+        this.lastUploadAt = Date.now();
 
         try {
             const transcript = await this.uploadAudio(wavBuffer);
 
             if (transcript && transcript.trim().length > 0) {
-                const audioMs = Math.round(rawPcm.length / (this.sampleRate * this.numChannels * (this.bitsPerSample / 8)) * 1000);
+                const audioMs = Math.round(rawPcm.length / this.bytesPerSecond() * 1000);
                 console.log(`${this.logTag} Transcript received`, { length: transcript.trim().length, audioMs, trigger });
                 this.emit('transcript', {
                     text: transcript.trim(),
@@ -530,6 +629,9 @@ export class RestSTT extends EventEmitter {
             const response = (err as { response?: { status?: number; headers?: Record<string, unknown> } })?.response;
             if (response?.status === 429 && this.isActive) {
                 this.holdForRateLimit(currentChunks, currentBytes, retryAfterMs(response.headers?.['retry-after']));
+            } else {
+                // Nothing was transcribed (or billed): the next speech end need not wait for it.
+                this.lastUploadAt = previousUploadAt;
             }
             this.emit('error', err instanceof Error ? err : new Error(String(err)));
         } finally {
@@ -551,7 +653,7 @@ export class RestSTT extends EventEmitter {
     private holdForRateLimit(refused: Buffer[], refusedBytes: number, waitMs: number | null): void {
         this.chunks = refused.concat(this.chunks);
         this.totalBufferedBytes += refusedBytes;
-        const maxBytes = Math.round(this.sampleRate * this.numChannels * (this.bitsPerSample / 8) * RATE_LIMIT_MAX_BUFFER_MS / 1000);
+        const maxBytes = Math.round(this.bytesPerSecond() * RATE_LIMIT_MAX_BUFFER_MS / 1000);
         while (this.totalBufferedBytes > maxBytes && this.chunks.length > 1) {
             this.totalBufferedBytes -= this.chunks.shift()!.length;
         }
