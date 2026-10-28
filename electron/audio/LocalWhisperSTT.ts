@@ -504,6 +504,11 @@ export class LocalWhisperSTT extends EventEmitter {
     private resolveAndApplyParakeetLanguage(): void {
         const attemptedKey = this.language;
         if (!attemptedKey || attemptedKey === 'auto') return;
+        // Parakeet v2 is English-only: like every other English-only model,
+        // Settings locks its language to the English variants and the worker
+        // ignores the key, so there is no 25-language check to apply.
+        const { isEnglishOnlyLocalModel } = require('./whisper/modelLanguageSupport');
+        if (isEnglishOnlyLocalModel(this.modelId)) return;
         const { RECOGNITION_LANGUAGES } = require('../config/languages');
         const entry = RECOGNITION_LANGUAGES[attemptedKey];
         const iso = entry?.iso639 || attemptedKey.split('-')[0].toLowerCase();

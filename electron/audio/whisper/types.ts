@@ -24,6 +24,9 @@ export type WhisperModelId =
   // Parakeet — NVIDIA FastConformer TDT v3, Multilingual (25 European languages), CC-BY-4.0.
   // Direct ONNX Runtime engine driving encoder and decoder_joint graphs.
   | 'istupakov/parakeet-tdt-0.6b-v3-onnx'
+  // Parakeet TDT v2 — the English-only predecessor of v3, same ONNX layout,
+  // lower English WER. CC-BY-4.0.
+  | 'istupakov/parakeet-tdt-0.6b-v2-onnx'
   // Nemotron 3.5 ASR Streaming — NVIDIA's cache-aware FastConformer-RNNT,
   // multilingual, genuinely chunked/streaming (not simulated like every other
   // entry above). Int4 ONNX export via onnx-community. Bypasses
@@ -146,6 +149,13 @@ export interface WorkerInitMessage {
   // 'encoder-decoder' / 'single') and the raw-ONNX engines
   // ('nemotron-rnnt', 'parakeet-tdt'). See WhisperModelInfo.sessionLayout for the source of truth.
   sessionLayout?: 'encoder-decoder' | 'single' | 'nemotron-rnnt' | 'parakeet-tdt';
+  // parakeet-tdt only: which engine runs it, decided on the main process by
+  // parakeet/aneBackend.ts resolveParakeetBackend(). 'coreml-ane' (Apple
+  // Silicon with the helper built) also carries the helper's path, which the
+  // worker cannot resolve itself (no electron `app` in a worker thread).
+  // Unset = 'onnx', the engine every platform used before.
+  parakeetBackend?: 'coreml-ane' | 'onnx';
+  aneHelperPath?: string;
   // Dual-channel Nemotron only (sessionLayout === 'nemotron-rnnt'; ignored by
   // every other model): identifies which channel (mic/system, or whatever
   // LocalWhisperSTT.channelLabel resolves to) this init is for. Two channels

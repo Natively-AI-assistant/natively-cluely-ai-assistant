@@ -201,7 +201,7 @@ function formatSize(mb: number): string {
  */
 const FAMILY_RULES: Array<{ id: string; label: string; note: string; test: (name: string) => boolean }> = [
     { id: 'moonshine', label: 'Moonshine', note: 'Smallest and quickest to start', test: (n) => /^moonshine/i.test(n) },
-    { id: 'parakeet', label: 'Parakeet', note: 'NVIDIA FastConformer TDT, Multilingual (25 languages)', test: (n) => /^parakeet/i.test(n) },
+    { id: 'parakeet', label: 'Parakeet', note: 'NVIDIA FastConformer TDT. v2: English; v3: Multilingual (25 languages)', test: (n) => /^parakeet/i.test(n) },
     { id: 'nemotron', label: 'Nemotron', note: 'NVIDIA FastConformer-RNNT, real streaming, multilingual', test: (n) => /^nemotron/i.test(n) },
     { id: 'distil', label: 'Distil-Whisper', note: 'Compressed Whisper, near-equal accuracy', test: (n) => /^distil/i.test(n) },
     { id: 'whisper', label: 'Whisper', note: 'Original OpenAI checkpoints', test: () => true },

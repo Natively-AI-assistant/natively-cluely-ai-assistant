@@ -38,6 +38,9 @@ const repoRoot = path.resolve(__dirname, '..');
 // Apple Speech helper binary name — derived from the disguise alias so it stays
 // in lockstep with scripts/build-apple-speech.js HELPER_NAME (never the brand).
 const APPLE_SPEECH_HELPER = `${disguiseNames.darwin}-asr`;
+// Parakeet Neural Engine helper — same derivation as scripts/build-parakeet-ane.js
+// HELPER_NAME. Apple Silicon packages only: the Intel package never has one.
+const PARAKEET_ANE_HELPER = `${disguiseNames.darwin}-parakeet`;
 
 // Required packaged model files (the source of truth for the local fallback stack).
 const REQUIRED_MODEL_FILES = [
@@ -389,6 +392,44 @@ function resolveResourcesDir(appArg) {
   return { resources: macResources, platform: 'darwin' };
 }
 
+const MH_MAGIC_64 = 0xfeedfacf; // thin 64-bit Mach-O, read little-endian
+const FAT_MAGIC = 0xcafebabe; // universal binary, big-endian header
+const CPU_TYPE_ARM64 = 0x0100000c;
+
+/**
+ * Whether a .app's main executable has an arm64 slice, from its Mach-O header.
+ * null when there is no readable executable (an unpacked fixture), so callers
+ * can tell "Intel package" from "cannot tell".
+ */
+function macAppHasArm64(appDir) {
+  const macosDir = path.join(appDir, 'Contents', 'MacOS');
+  let entries;
+  try { entries = fs.readdirSync(macosDir); } catch { return null; }
+  let sawMachO = false;
+  for (const name of entries) {
+    let header;
+    try {
+      const fd = fs.openSync(path.join(macosDir, name), 'r');
+      try {
+        header = Buffer.alloc(4096);
+        header = header.subarray(0, fs.readSync(fd, header, 0, header.length, 0));
+      } finally { fs.closeSync(fd); }
+    } catch { continue; }
+    if (header.length < 8) continue;
+    if (header.readUInt32LE(0) === MH_MAGIC_64) {
+      sawMachO = true;
+      if (header.readUInt32LE(4) === CPU_TYPE_ARM64) return true;
+    } else if (header.readUInt32BE(0) === FAT_MAGIC) {
+      sawMachO = true;
+      const count = header.readUInt32BE(4);
+      for (let i = 0; i < count && 8 + i * 20 + 4 <= header.length; i += 1) {
+        if (header.readUInt32BE(8 + i * 20) === CPU_TYPE_ARM64) return true;
+      }
+    }
+  }
+  return sawMachO ? false : null;
+}
+
 function verifyPackaged(appArg, platformArg) {
   console.log('[verify-packaged-local-assets] packaged mode:', appArg);
   const { resources, platform: detectedPlatform } = resolveResourcesDir(appArg);
@@ -479,6 +520,26 @@ function verifyPackaged(appArg, platformArg) {
       }
     }
   }
+
+  // Parakeet Neural Engine helper (Apple Silicon packages only), compiled into
+  // Contents/Resources/parakeet-ane/ by the same afterPack hook. Without it the
+  // app still works — Parakeet falls back to the ONNX CPU engine — so a missing
+  // helper is exactly the silent regression this gate exists to catch.
+  if (platform === 'darwin' && macAppHasArm64(path.resolve(appArg)) === true) {
+    const helper = path.join(resources, 'parakeet-ane', PARAKEET_ANE_HELPER);
+    if (!exists(helper)) {
+      errors.push(
+        `Missing Parakeet Neural Engine helper: Resources/parakeet-ane/${PARAKEET_ANE_HELPER} ` +
+        '(scripts/after-pack.cjs should have compiled it during afterPack).',
+      );
+    } else {
+      try {
+        fs.accessSync(helper, fs.constants.X_OK);
+      } catch {
+        errors.push(`Parakeet Neural Engine helper is not executable: Resources/parakeet-ane/${PARAKEET_ANE_HELPER}`);
+      }
+    }
+  }
 }
 
 // Exported for scripts/__tests__/verify-packaged-local-assets.test.mjs, which
@@ -495,6 +556,8 @@ export {
   REQUIRED_UNPACKED_NATIVE_WIN32,
   REQUIRED_UNPACKED_NATIVE_WIN32_ANY,
   APPLE_SPEECH_HELPER,
+  PARAKEET_ANE_HELPER,
+  macAppHasArm64,
   unpackedImportClosureMisses,
   llamaRuntimeProblems,
 };

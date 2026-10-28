@@ -209,7 +209,7 @@ test('afterPack destination is private to one target app', () => {
   });
 });
 
-test('composite afterPack builds the helper before the existing signing hook', async () => {
+test('composite afterPack builds the helpers before the existing signing hook', async () => {
   const events = [];
   const context = { arch: 3 };
   await runAfterPack(context, {
@@ -217,12 +217,16 @@ test('composite afterPack builds the helper before the existing signing hook', a
       assert.equal(received, context);
       events.push('build');
     },
+    buildParakeetAne: async (received) => {
+      assert.equal(received, context);
+      events.push('parakeet-ane');
+    },
     signApp: async (received) => {
       assert.equal(received, context);
       events.push('sign');
     },
   });
-  assert.deepEqual(events, ['build', 'sign']);
+  assert.deepEqual(events, ['build', 'parakeet-ane', 'sign']);
 });
 
 test('a helper build failure stops signing and therefore stops packaging', async () => {

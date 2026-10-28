@@ -214,8 +214,9 @@ function isNemotronModel(modelId: string): boolean {
  *    through resolveNemotronLangId() (the verified transcription-ready tier,
  *    including the documented en-IN/en-AU/en-CA → en-US inference and the
  *    ar-SA → ar-AR alias). 'auto' excluded — Nemotron has no auto-detect.
- *  - Parakeet TDT: the 25 European languages in its training vocabulary + auto.
- *    The only model offered PARAKEET_ONLY_LANGUAGE_KEYS.
+ *  - Parakeet TDT v3: the 25 European languages in its training vocabulary +
+ *    auto. The only model offered PARAKEET_ONLY_LANGUAGE_KEYS. (v2 is
+ *    English-only and takes the last branch.)
  *  - Multilingual Whisper family: everything except PARAKEET_ONLY_LANGUAGE_KEYS,
  *    including 'auto'.
  *  - English-only models: the English variants only, language locked.
@@ -228,7 +229,9 @@ export function getLocalModelLanguageSupport(modelId: string): LocalModelLanguag
       .map(([key]) => key);
     return { languageSelectable: true, accentSelectable: true, allowedLanguageKeys: allowed };
   }
-  if (isParakeetTdtModel(modelId)) {
+  // Parakeet v2 shares v3's session layout but is English-only, so it falls
+  // through to the English-only branch below.
+  if (isParakeetTdtModel(modelId) && !isEnglishOnlyLocalModel(modelId)) {
     const allowed = Object.entries(RECOGNITION_LANGUAGES)
       .filter(([key, lang]) => key === 'auto' || PARAKEET_TDT_SUPPORTED_ISO639.has(lang.iso639))
       .map(([key]) => key);
