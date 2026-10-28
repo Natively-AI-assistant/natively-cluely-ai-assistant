@@ -7,3 +7,5 @@ export declare function addAttachment<T extends { path: string; formulaCapture?:
 ): T[];
 
 export declare function withoutFormulaImages<T extends { path: string; formulaCapture?: string }>(tray: T[]): T[];
+
+export declare function revealsOverlay(item: { quiet?: boolean }): boolean;

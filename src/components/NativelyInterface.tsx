@@ -342,7 +342,7 @@ import {
   type DirectAssistFallbackHop,
   type DirectAssistFallbackNotice,
 } from '../lib/directAssistFailure.mjs';
-import { addAttachment, withoutFormulaImages } from '../lib/attachmentTray.mjs';
+import { addAttachment, revealsOverlay, withoutFormulaImages } from '../lib/attachmentTray.mjs';
 import { imageFilesFromDrop, overlayPasteAction } from '../lib/overlayImageDrop.mjs';
 import { shouldSkipLiveRagForChatFollowUp } from '../lib/liveRagFollowUpGate.mjs';
 import {
@@ -5588,9 +5588,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     return () => unsubscribe();
   }, []);
 
-  const handleScreenshotAttach = (data: { path: string; preview: string; formulaCapture?: string }) => {
-    setIsExpanded(true);
-    setAttachedContext((prev) => addAttachment(prev, data));
+  const handleScreenshotAttach = (data: { path: string; preview: string; formulaCapture?: string; quiet?: boolean }) => {
+    // A phone capture or photo is quiet: it joins the tray (which the phone
+    // shows) without the overlay popping up on the desktop.
+    const { quiet, ...item } = data;
+    if (revealsOverlay({ quiet })) setIsExpanded(true);
+    setAttachedContext((prev) => addAttachment(prev, item));
   };
 
   // STT Status listener — must survive isExpanded changes.

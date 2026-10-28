@@ -40,3 +40,16 @@ export function addAttachment(tray, item, max = MAX_ATTACHMENTS) {
 export function withoutFormulaImages(tray) {
   return tray.some((s) => s.formulaCapture) ? tray.filter((s) => !s.formulaCapture) : tray;
 }
+
+/**
+ * Whether an attached image should show the overlay. A capture taken here
+ * does, so the user sees it land; one the phone asked for or sent is `quiet`,
+ * because the phone is the screen in use and the overlay popping up on the
+ * desktop is exactly what it is there to avoid.
+ *
+ * @param {{ quiet?: boolean }} item
+ * @returns {boolean}
+ */
+export function revealsOverlay(item) {
+  return item.quiet !== true;
+}
