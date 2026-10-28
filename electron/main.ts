@@ -1325,6 +1325,8 @@ type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreaming
   finalize?: () => void | boolean;
   setAudioChannelCount?: (count: number) => void;
   notifySpeechEnded?: () => void;
+  /** RestSTT: upload a held speech end now (issue #698). */
+  releaseHeldSpeech?: () => void;
 };
 
 type ScreenshotWindowMode = 'launcher' | 'overlay';
@@ -4082,7 +4084,12 @@ export class AppState {
 
       if (apiKey) {
         console.log(`[Main] Using RestSTT (${sttProvider}) for ${speaker}`);
-        stt = new RestSTT(sttProvider, apiKey, modelOverride, region, speaker);
+        const rest = new RestSTT(sttProvider, apiKey, modelOverride, region, speaker);
+        // Groq bills every request as 10 s (issue #698): the user's own short
+        // utterances may wait to share one. Never the interviewer's — Auto
+        // Answer and Answer wait on them. Released when the interviewer talks.
+        if (speaker === 'user') rest.setHoldSpeechEnds(true);
+        stt = rest;
       } else {
         console.warn(`[Main] No API key for ${sttProvider} STT, falling back to GoogleSTT`);
         stt = new GoogleSTT(speaker);
@@ -4808,6 +4815,8 @@ export class AppState {
       if (this.systemAudioCapture === capture) {
         this.googleSTT?.notifySpeechEnded?.();
         this._sttFailover.system?.notifySpeechEnded();
+        // The user's held words (RestSTT, issue #698) go up with the interviewer's.
+        this.googleSTT_User?.releaseHeldSpeech?.();
         // Auto Answer: the local VAD saw the interviewer stop. For a provider
         // with no end-of-turn event of its own this is the only early signal;
         // the controller guards against a half-transcribed turn by ignoring the
@@ -4834,6 +4843,9 @@ export class AppState {
       // it would otherwise promote a frozen interim on.
       if (this.systemAudioCapture === capture && edge?.channel === 'interviewer' && edge.speaking) {
         this.simpleAutoAnswer.onLocalSpeechStart();
+        // The user's held words (RestSTT, issue #698) go up before the
+        // interviewer's reply, so the transcript keeps its order.
+        this.googleSTT_User?.releaseHeldSpeech?.();
       }
     });
     // setupAudioRecoveryHandler registers its own 'error' listener — do not
@@ -8206,6 +8218,12 @@ export class AppState {
         // 1. Grace window for STT trailing finals (Google/Soniox/Deepgram all
         //    reply to finalize() within 100–200ms). 250ms is conservative.
         await new Promise(resolve => setTimeout(resolve, 250));
+        // 1a. A REST provider (Groq: ~10 s chunks, issue #698) answers only
+        //     after its upload: wait for one in flight or queued, up to 5 s.
+        const restStts = [this.googleSTT, this.googleSTT_User].filter((s): s is RestSTT => s instanceof RestSTT);
+        for (const deadline = Date.now() + 5_000; Date.now() < deadline && restStts.some((s) => s.hasPendingWork());) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
         // 1b. A stand-in's last words (no wait when none was running).
         await standInDrain;
 
