@@ -103,6 +103,18 @@ export function classifyLocalModelLoadFailure(
         return 'corrupt-files';
     }
 
+    // macOS only: the Parakeet Neural Engine helper (parakeet/aneBackend.ts)
+    // could not parse the vocabulary file it was given — FluidAudio's reading
+    // of one JSON file on disk, nothing else. CoreML's own load errors ("failed
+    // to build the model execution plan", "compile the model with Xcode") are
+    // NOT matched: CoreML also raises them when the Neural Engine compiler
+    // fails on intact files, and deleting those would only re-download the same
+    // bytes. Damaged CoreML bundles are caught before any load instead, by
+    // their exact pinned sizes (isParakeetCoreMlCached), and fetched again.
+    if (platform === 'darwin' && m.includes('vocabulary parsing failed')) {
+        return 'corrupt-files';
+    }
+
     return 'unknown';
 }
 

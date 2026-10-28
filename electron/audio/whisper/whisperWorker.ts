@@ -225,8 +225,16 @@ async function initNemotronChannel(msg: any, channelId: string): Promise<void> {
 }
 
 // ── Dual-channel Parakeet TDT (2026-09-25) ─────────────────────────────
+// Either engine: ONNX Runtime on the CPU (ParakeetTdtEngine) or, on Apple
+// Silicon, the Neural Engine helper (AneParakeetEngine). Both are stateless
+// per call, so the worker treats them alike.
+interface ParakeetChannelEngine {
+  transcribe(pcm: Float32Array): Promise<{ text: string }>;
+}
 let parakeetSharedResources: import('./parakeet/parakeetTdtEngine').ParakeetTdtSharedResources | null = null;
-const parakeetChannels = new Map<string, import('./parakeet/parakeetTdtEngine').ParakeetTdtEngine>();
+// One helper process per worker, shared by its channels like the ONNX sessions.
+let parakeetAneEngine: import('./parakeet/aneBackend').AneParakeetEngine | null = null;
+const parakeetChannels = new Map<string, ParakeetChannelEngine>();
 const parakeetChains = new Map<string, Promise<void>>();
 function getParakeetChain(channelId: string): Promise<void> {
   return parakeetChains.get(channelId) ?? Promise.resolve();
@@ -238,19 +246,45 @@ let parakeetInitChain: Promise<void> = Promise.resolve();
 
 async function initParakeetChannel(msg: any, channelId: string): Promise<void> {
   try {
-    const { ParakeetTdtEngine } = require('./parakeet/parakeetTdtEngine');
-    let engine;
-    if (parakeetSharedResources) {
+    const path = require('path');
+    const modelDir = path.join(msg.cacheDir, ...String(msg.modelId).split('/'));
+    const onProgress = (pct: number) => {
+      parentPort!.postMessage({ type: 'progress', modelId: msg.modelId, progress: pct, channelId: msg.channelId });
+    };
+    let engine: ParakeetChannelEngine;
+    if (msg.parakeetBackend === 'coreml-ane' && msg.aneHelperPath) {
+      if (!parakeetAneEngine) {
+        const { AneParakeetEngine, parakeetCoreMlModelForRepo } = require('./parakeet/aneBackend');
+        // sourceRepoId is the CoreML repo (see buildWorkerInitMessage); its
+        // files live in that repo's own folder, beside the ONNX one.
+        const found = parakeetCoreMlModelForRepo(String(msg.sourceRepoId ?? ''));
+        if (!found || found.modelId !== msg.modelId) throw new Error(`${msg.modelId} has no Neural Engine build at ${msg.sourceRepoId}`);
+        const { downloadParakeetFiles } = require('./parakeet/downloadFiles');
+        const coremlDir = path.join(msg.cacheDir, ...String(msg.sourceRepoId).split('/'));
+        const model = found.model;
+        await downloadParakeetFiles(coremlDir, model.download, onProgress);
+        parakeetAneEngine = await AneParakeetEngine.create(msg.aneHelperPath, coremlDir, model.version, {
+          // The helper is this worker's engine. If it dies mid-session, end the
+          // worker too, so the host's existing crash handling (error event,
+          // recovery, reload on the next start) runs instead of every later
+          // request failing quietly.
+          onUnexpectedExit: (error: Error) => {
+            parentPort!.postMessage({ type: 'error', message: `Parakeet Neural Engine helper stopped: ${error.message}` });
+            process.exit(1);
+          },
+        });
+      }
+      engine = parakeetAneEngine!;
+    } else if (parakeetSharedResources) {
+      const { ParakeetTdtEngine } = require('./parakeet/parakeetTdtEngine');
       engine = await ParakeetTdtEngine.create(msg.cacheDir, msg.executionProviders ?? ['cpu'], parakeetSharedResources);
     } else {
+      const { ParakeetTdtEngine } = require('./parakeet/parakeetTdtEngine');
       const { downloadParakeetTdtFiles } = require('./parakeet/downloadFiles');
-      const path = require('path');
-      const modelDir = path.join(msg.cacheDir, ...String(msg.modelId).split('/'));
-      await downloadParakeetTdtFiles(modelDir, (pct: number) => {
-        parentPort!.postMessage({ type: 'progress', modelId: msg.modelId, progress: pct, channelId: msg.channelId });
-      });
-      engine = await ParakeetTdtEngine.create(modelDir, msg.executionProviders ?? ['cpu']);
-      parakeetSharedResources = engine.getSharedResources();
+      await downloadParakeetTdtFiles(modelDir, onProgress, msg.modelId);
+      const onnxEngine = await ParakeetTdtEngine.create(modelDir, msg.executionProviders ?? ['cpu']);
+      parakeetSharedResources = onnxEngine.getSharedResources();
+      engine = onnxEngine;
     }
     parakeetChannels.set(channelId, engine);
     loadedModelId = msg.modelId;
@@ -269,6 +303,9 @@ parentPort.on('message', async (msg: any) => {
     // flight here, and process.exit() in a worker thread stops this thread
     // only. Work still queued behind this message is abandoned on purpose —
     // the host has already stopped listening for it.
+    // The Neural Engine helper would also exit on its own when this thread's
+    // pipes close; disposing it first makes that immediate.
+    parakeetAneEngine?.dispose();
     process.exit(0);
   }
   if (msg.type === 'init') {

@@ -160,6 +160,23 @@ describe('corrupt local model purge', () => {
         }
     });
 
+    test('Parakeet Neural Engine helper: a broken vocabulary is corrupt (macOS only), CoreML load errors are not', () => {
+        const vocab = 'Failed to load model: Failed to load Parakeet CoreML models: Failed to load ASR models: Vocabulary parsing failed';
+        assert.equal(isCorrupt(vocab, 'darwin'), true);
+        assert.equal(isCorrupt(vocab, 'win32'), false, 'the CoreML helper never runs on Windows');
+        // CoreML raises these for damaged bundles AND when the Neural Engine
+        // compiler fails on intact ones. Deleting would re-download the same
+        // bytes on every Install, so they stay 'unknown'; damaged bundles are
+        // caught by their exact sizes before any load (isParakeetCoreMlCached).
+        for (const msg of [
+            "Failed to load model: Failed to load Parakeet CoreML models: Failed to build the model execution plan using a model architecture file '/m/FluidInference/parakeet-tdt-0.6b-v2-coreml/Encoder.mlmodelc/model.mil' with error code: -14.",
+            'Failed to load model: Failed to load Parakeet CoreML models: Unable to load model: file:///m/FluidInference/parakeet-tdt-0.6b-v2-coreml/Encoder.mlmodelc/. Compile the model with Xcode or `MLModel.compileModel(at:)`. ',
+            'Failed to load model: The Parakeet Neural Engine helper exited (SIGSEGV)',
+        ]) {
+            assert.equal(isCorrupt(msg, 'darwin'), false, `Expected "${msg}" to keep the download`);
+        }
+    });
+
     test('empty and junk input do not throw or purge', () => {
         // Defensive: this runs on an error path, where the last thing wanted is a
         // second exception, and an unrecognised message must not delete anything.

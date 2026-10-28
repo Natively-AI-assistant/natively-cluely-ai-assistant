@@ -188,10 +188,11 @@ test('the composite afterPack hook runs it between the helper build and signing'
   const context = { arch: 1, electronPlatformName: 'win32' };
   await runAfterPack(context, {
     buildHelper: async () => { events.push('build'); },
+    buildParakeetAne: async () => { events.push('parakeet-ane'); },
     bundleVcRuntime: async (received) => { assert.equal(received, context); events.push('vc-runtime'); },
     signApp: async () => { events.push('sign'); },
   });
-  assert.deepEqual(events, ['build', 'vc-runtime', 'sign'], 'nothing may be added to the app after it is signed');
+  assert.deepEqual(events, ['build', 'parakeet-ane', 'vc-runtime', 'sign'], 'nothing may be added to the app after it is signed');
 });
 
 test('the packaged-asset verifier requires the four DLLs on Windows', () => {

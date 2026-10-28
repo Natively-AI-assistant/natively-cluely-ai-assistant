@@ -93,6 +93,14 @@ dist/
 # injected per target architecture during electron-builder afterPack.
 /resources/apple-speech/Natively-asr
 
+# Compiled Parakeet Neural Engine helper (Apple Silicon), the license notices
+# copied beside it, its SwiftPM build tree, and the FluidAudio source it is
+# compiled from. Fetched and built by scripts/build-parakeet-ane.js, never
+# committed.
+/resources/parakeet-ane/
+/native/parakeet-ane/.build/
+/native/parakeet-ane/FluidAudio/
+
 # husky auto-generated machinery — only the user-facing hook files
 # (e.g. .husky/pre-commit) are committed.
 .husky/_

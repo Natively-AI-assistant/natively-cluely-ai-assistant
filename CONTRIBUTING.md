@@ -90,6 +90,14 @@ npm run build:apple-speech -- --arch arm64
 
 Use `x64` for Intel or `universal` for both architectures. Regular development, tests, and non-macOS builds do not invoke the Swift compiler. Production macOS packaging builds the helper for the package's target architecture.
 
+On Apple Silicon, the local Parakeet models (v2 English, v3 multilingual) run on the Neural Engine through a second helper built on [FluidAudio](https://github.com/FluidInference/FluidAudio). Build it to test that path locally (the first build fetches FluidAudio's source at a pinned commit with git):
+
+```bash
+npm run build:parakeet-ane
+```
+
+Without it, Parakeet runs on the ONNX Runtime CPU engine, which is also what Windows and Intel Macs always use. Production packaging builds it for the arm64 package only.
+
 If you've added code that should be tested, add tests.
 If you've changed APIs, update the documentation.
 Ensure the test suite passes.

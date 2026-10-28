@@ -160,10 +160,28 @@ export function buildWorkerInitMessage(
     } catch {
         sessionLayout = undefined;
     }
+    // Parakeet TDT: the folder chosen above decides the engine. Its CoreML
+    // repo (only ever chosen on a Mac that can use the Neural Engine) runs on
+    // the helper; the ONNX files under the id run on the CPU, as before.
+    // Best-effort like the lookups above: a failure means the ONNX engine.
+    let parakeetBackend: { parakeetBackend: 'coreml-ane'; aneHelperPath: string } | undefined;
+    if (sessionLayout === 'parakeet-tdt') {
+        try {
+            const { parakeetCoreMlModelForRepo, resolveParakeetBackend } = require('./parakeet/aneBackend');
+            const resolved = resolveParakeetBackend();
+            if (parakeetCoreMlModelForRepo(sourceRepoId)?.modelId === modelId
+                && resolved.backend === 'coreml-ane' && resolved.helperPath) {
+                parakeetBackend = { parakeetBackend: 'coreml-ane', aneHelperPath: resolved.helperPath };
+            }
+        } catch {
+            parakeetBackend = undefined;
+        }
+    }
     return {
         type: 'init',
         modelId,
         ...(sourceRepoId !== modelId ? { sourceRepoId } : {}),
+        ...(parakeetBackend ?? {}),
         ...(resumableFiles.length > 0 ? { resumableFiles } : {}),
         ...(isWhisperEncoderModel(modelId, sessionLayout)
             ? { intraOpThreads: getBoundedOnnxSessionOptions('whisper-encode').intraOpNumThreads }

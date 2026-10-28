@@ -296,3 +296,84 @@ test('source mode: this repository still unpacks everything the GGUF path needs'
   const result = spawnSync(process.execPath, [SCRIPT], { encoding: 'utf8' });
   assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
 });
+
+// ── Parakeet Neural Engine helper (Apple Silicon packages only) ──────────────
+// The gate reads the main executable's Mach-O header to tell the arm64 .app
+// from the Intel one: only the arm64 package carries the helper. A package
+// with no readable executable (the fixtures above) is not asked for it.
+
+const CPU_TYPE_ARM64 = 0x0100000c;
+const CPU_TYPE_X86_64 = 0x01000007;
+
+/** A thin 64-bit Mach-O header for Contents/MacOS/X. */
+function putThinExecutable(app, cpuType) {
+  const header = Buffer.alloc(32);
+  header.writeUInt32LE(0xfeedfacf, 0);
+  header.writeUInt32LE(cpuType, 4);
+  put(path.join(app, 'Contents', 'MacOS'), 'X', header);
+}
+
+/** A universal (fat) header listing the given slices. */
+function putFatExecutable(app, cpuTypes) {
+  const header = Buffer.alloc(8 + cpuTypes.length * 20);
+  header.writeUInt32BE(0xcafebabe, 0);
+  header.writeUInt32BE(cpuTypes.length, 4);
+  cpuTypes.forEach((cpu, i) => header.writeUInt32BE(cpu, 8 + i * 20));
+  put(path.join(app, 'Contents', 'MacOS'), 'X', header);
+}
+
+const ANE_HELPER = `Contents/Resources/parakeet-ane/${gate.PARAKEET_ANE_HELPER}`;
+
+test('darwin arm64: a package without the Parakeet Neural Engine helper is refused', (t) => {
+  const { app } = completePackage(t, 'darwin');
+  putThinExecutable(app, CPU_TYPE_ARM64);
+  const { status, output } = runGate(app, 'darwin');
+  assert.equal(status, 1, output);
+  assert.match(output, /Missing Parakeet Neural Engine helper/);
+});
+
+// The gate reads the execute bit with fs.accessSync(X_OK), which a Windows host
+// cannot represent (every file passes), and macOS packages are only built and
+// gated on macOS.
+test('darwin arm64: a non-executable helper is refused, an executable one passes', { skip: process.platform === 'win32' && 'no execute bit on a Windows host' }, (t) => {
+  const { app } = completePackage(t, 'darwin');
+  putThinExecutable(app, CPU_TYPE_ARM64);
+  const helper = put(app, ANE_HELPER);
+  fs.chmodSync(helper, 0o644);
+  let run = runGate(app, 'darwin');
+  assert.equal(run.status, 1, run.output);
+  assert.match(run.output, /Parakeet Neural Engine helper is not executable/);
+  fs.chmodSync(helper, 0o755);
+  run = runGate(app, 'darwin');
+  assert.equal(run.status, 0, run.output);
+});
+
+test('darwin x64: the Intel package is not asked for the helper', (t) => {
+  const { app } = completePackage(t, 'darwin');
+  putThinExecutable(app, CPU_TYPE_X86_64);
+  const { status, output } = runGate(app, 'darwin');
+  assert.equal(status, 0, output);
+});
+
+test('darwin universal: an arm64 slice means the helper is required', (t) => {
+  const { app } = completePackage(t, 'darwin');
+  putFatExecutable(app, [CPU_TYPE_X86_64, CPU_TYPE_ARM64]);
+  assert.equal(gate.macAppHasArm64(app), true);
+  const { status, output } = runGate(app, 'darwin');
+  assert.equal(status, 1, output);
+  assert.match(output, /Missing Parakeet Neural Engine helper/);
+});
+
+test('Mach-O arch detection: x64-only is false, no executable is unknown', (t) => {
+  const { app } = completePackage(t, 'darwin');
+  assert.equal(gate.macAppHasArm64(app), null);
+  putFatExecutable(app, [CPU_TYPE_X86_64]);
+  assert.equal(gate.macAppHasArm64(app), false);
+});
+
+test('win32: never asked for the macOS helper', (t) => {
+  const { app } = completePackage(t, 'win32');
+  const { status, output } = runGate(app, 'win32');
+  assert.equal(status, 0, output);
+  assert.doesNotMatch(output, /Parakeet Neural Engine/);
+});
