@@ -7,8 +7,8 @@ import { useEffect, useState } from 'react';
  * capture and without STT (electron/main.ts, the `_ambientChatEnabled` gate in
  * the meeting's audio init). Nothing is ever transcribed, so the overlay says
  * so instead of drawing "Listening..." for audio that is not captured
- * (issue #679): an "Ambient" pill beside the settings button (AmbientChip),
- * asked for instead of a banner.
+ * (issue #679): a "Mic is off" banner from the meeting's start, with a way to
+ * turn it on. (An "Ambient" pill beside the settings button was removed, 2026-10-27.)
  *
  * Main owns the fact, per meeting (`_meetingWithoutAudio`): set when a
  * meeting starts with the setting on, cleared when anything starts a capture

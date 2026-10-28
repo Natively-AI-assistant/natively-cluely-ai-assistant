@@ -9936,6 +9936,63 @@ export class AppState {
     this._ambientChatEnabled = enabled;
     SettingsManager.getInstance().set('ambientChatEnabled', enabled);
     console.log(`[AppState] ambientChatEnabled set to ${enabled}`);
+    if (!enabled) void this.startAudioForMeetingWithoutAudio();
+  }
+
+  /**
+   * Ambient AI Chat turned off during a meeting that started with it on (the
+   * overlay's "Turn on mic"): give the meeting the capture its start skipped,
+   * on the devices the meeting asked for, as the meeting start would. Queued
+   * behind any mic switch so a double click cannot build the pipeline twice.
+   * startCaptureChannels clears _meetingWithoutAudio, which drops the overlay's
+   * "Mic is off" banner.
+   * ponytail: desktop-call speaker labels stay off for the rest of this meeting
+   * (startDesktopCallSpeakers runs only at meeting start); they return next meeting.
+   */
+  private startAudioForMeetingWithoutAudio(): Promise<unknown> {
+    const run = async (): Promise<void> => {
+      if (!this.isMeetingActive || !this._meetingWithoutAudio) return;
+      const generation = this._meetingGeneration;
+      const current = () => generation === this._meetingGeneration && this.isMeetingActive && this._meetingWithoutAudio;
+      if (!(await ensureMacMicrophoneAccess('ambient chat off'))) {
+        this.sendAudioCaptureFailed({
+          channel: 'mic',
+          message: formatPermissionMessage('mic-denied'),
+          titleKey: permissionTitleKey('mic-denied'),
+          attempt: 0,
+          maxAttempts: 0,
+          terminal: true,
+          stuck: false,
+        });
+        return;
+      }
+      if (!current()) return;
+      console.log('[Main] Ambient AI Chat turned off mid-meeting — starting mic/system audio capture.');
+      // ponytail: the speech engines pre-warmed at launch are reused and keep
+      // the voice labels last applied to them (applyVoiceLabels runs only at
+      // meeting start); a Settings › Audio label change since launch waits for
+      // the next meeting.
+      // setupSystemAudioPipeline alone opens the system defaults; build the
+      // captures on the meeting's devices first (as reconfigureSttProvider does).
+      const meetingAudio = this._meetingAudioRequest;
+      if (meetingAudio && !this.systemAudioCapture && !this.microphoneCapture) {
+        await this.reconfigureAudio(
+          this.followedInputDeviceId(meetingAudio.inputDeviceId),
+          meetingAudio.outputDeviceId,
+          { start: false },
+        );
+      }
+      if (current()) await this.setupSystemAudioPipeline();
+      if (current()) {
+        this.startCaptureChannels('ambientChatOff');
+      } else if (!this.isMeetingActive) {
+        // Stop landed during the setup: release what it built for nobody.
+        this.releaseOrphanedRebuild();
+      }
+    };
+    const next = this._inputSwitchChain.then(run, run);
+    this._inputSwitchChain = next.catch((err) => console.error('[Main] Starting audio after Ambient AI Chat off failed:', err));
+    return this._inputSwitchChain;
   }
 
   public getStealthShortcutGuardEnabled(): boolean {

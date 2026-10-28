@@ -10,11 +10,11 @@
 //    engine change mid-meeting) and at the end, pushed on every change;
 //  - the overlay follows that, not the live setting, read on mount and at
 //    every meeting start;
-//  - while it holds, a clear glass "Ambient" pill beside the settings button
-//    says so (a banner was turned down, 2026-10-24), the notepad's status line
-//    says so, and Answer does not open a recording. It goes straight to What
-//    to Answer, which is where a Stop with nothing heard already goes (issue
-//    #540);
+//  - while it holds, the notepad's status line says so, and Answer does not
+//    open a recording. It goes straight to What to Answer, which is where a
+//    Stop with nothing heard already goes (issue #540), and raises a "Mic is
+//    off" banner with Turn on mic. (An "Ambient" pill beside the settings
+//    button said so too; removed 2026-10-27.);
 //  - main does not open the mic in such a meeting from the notepad's mic
 //    picker or on wake from sleep (both used to record the meeting anyway).
 
@@ -100,28 +100,15 @@ test('the notice follows main, not the setting: read on mount and at every meeti
   assert.match(notice, /unsubPush\?\.\(\)/, 'the push listener is never removed');
 });
 
-const PILL_TITLE = 'Ambient AI Chat is on, so this meeting is not being heard or transcribed.';
+const BANNER_MESSAGE = 'Ambient AI Chat is on, so this meeting is not being heard or transcribed.';
 
-test('the overlay shows a clear glass "Ambient" pill right after the settings button, not a banner', () => {
+// 2026-10-27: the "Ambient" pill went, and the "Mic is off" banner
+// (fold-ambient-mic) shows from the meeting's start instead.
+test('the overlay has no "Ambient" pill; the "Mic is off" banner says it instead', () => {
   const ui = read('components/NativelyInterface.tsx');
   assert.match(ui, /useAmbientChatMeeting\(\)/, 'the overlay does not use the hook');
-  assert.doesNotMatch(ui, /fold-ambient-chat|AmbientChatNoticeBanner/, 'the banner is back above the input');
-  const settingsIcon = ui.indexOf('<SlidersHorizontal className="w-3.5 h-3.5" />');
-  const pill = ui.indexOf('<AmbientChip ');
-  const notesIcon = ui.indexOf('<NotebookPen className="w-3.5 h-3.5" />');
-  assert.ok(settingsIcon >= 0 && pill > settingsIcon && pill < notesIcon, 'not between the settings and notes buttons');
-  assert.match(ui, /\{ambientChat\.on && \(\s*<AmbientChip title=\{t\('Ambient AI Chat is on, so this meeting is not being heard or transcribed\.'\)\} \/>\s*\)\}/);
-
-  // Clear Liquid Glass from the kit (picked over lavender glass and a dark
-  // tag): the overlay's text colour plus a small amber dot, at the toolbar's
-  // 28px.
-  const chip = read('components/overlay/AmbientChip.tsx');
-  const css = read('components/overlay/AmbientChip.css');
-  assert.match(chip, /className="ov-tone-scope lg-button lg-clear lg-sm amb-chip"/);
-  assert.match(chip, /<span className="amb-chip-dot" aria-hidden="true" \/>/);
-  assert.match(chip, /<span className="lg-label">Ambient<\/span>/);
-  assert.match(css, /\.amb-chip-dot \{[^}]*background: var\(--ovb-warning/);
-  assert.match(css, /\.lg-button\.lg-sm\.amb-chip \{[^}]*--lg-pill-h: 28px;/);
+  assert.doesNotMatch(ui, /AmbientChip|ambient-label/, 'the pill is back beside the settings button');
+  assert.ok(!exists('components/overlay/AmbientChip.tsx'), 'the pill component is back');
 });
 
 test('the notepad says it too, before any other audio line (the overlay is hidden there)', () => {
@@ -148,9 +135,8 @@ test('with Ambient AI Chat on, Answer goes to What to Answer instead of recordin
   assert.match(gated, /return;/, 'with Ambient AI Chat on, the recording still opens');
 });
 
-test('the pill\'s tooltip has a row in every language, and no row is left over', async () => {
-  // "Ambient" itself is the setting's name, which Settings does not translate.
-  const own = [PILL_TITLE];
+test('the mic banner has a row in every language, and no row is left over', async () => {
+  const own = [BANNER_MESSAGE, 'Mic is off', 'Turn on mic'];
   const mod = await import(pathToFileURL(path.join(SRC, TABLE)).href);
   assert.deepEqual([...mod.AMBIENT_CHAT_EN].sort(), own.sort());
   for (const [lang, table] of Object.entries({ ru: mod.AMBIENT_CHAT_RU, zh: mod.AMBIENT_CHAT_ZH, ja: mod.AMBIENT_CHAT_JA, es: mod.AMBIENT_CHAT_ES })) {
@@ -165,4 +151,37 @@ test('the pill\'s tooltip has a row in every language, and no row is left over',
   for (const lang of ['RU', 'ZH', 'JA', 'ES']) {
     assert.ok(i18n.includes(`...AMBIENT_CHAT_${lang},`), `the ${lang} dictionary does not include the table`);
   }
+});
+
+// Users turned Ambient AI Chat on thinking it was something good, then reported
+// the mic as broken. The overlay says why from the meeting's start and turns it
+// off from there; main then starts the meeting's capture instead of waiting for
+// the next one.
+test('an Ambient AI Chat meeting says "Mic is off" from its start and can turn the mic on', () => {
+  const ui = read('components/NativelyInterface.tsx');
+  assert.match(ui, /const showAmbientMicNotice = ambientChat\.on && !ambientMicDismissed;/, 'not shown from the start, or outlives the audio-less meeting');
+  assert.match(ui, /if \(!ambientChat\.on\) setAmbientMicDismissed\(false\);/, 'a dismissal carries into the next meeting');
+  const start = ui.indexOf('const handleAnswerNow = async () => {');
+  const body = ui.slice(start, ui.indexOf('const selectSkill', start));
+  assert.match(body, /if \(ambientChat\.on\) \{\s*setAmbientMicDismissed\(false\);/, 'the mic button does not bring a dismissed notice back');
+  const fold = between(ui, 'testId="fold-ambient-mic"', '</ChromeFold>');
+  assert.match(fold, /title=\{t\('Mic is off'\)\}/);
+  assert.match(fold, /message=\{t\('Ambient AI Chat is on, so this meeting is not being heard or transcribed\.'\)\}/);
+  assert.match(fold, /onClick=\{\(\) => window\.electronAPI\?\.setAmbientChatEnabled\?\.\(false\)\}/);
+  assert.match(fold, /\{t\('Turn on mic'\)\}/);
+
+  const main = MAIN();
+  const setter = between(main, 'public setAmbientChatEnabled(', 'private startAudioForMeetingWithoutAudio(');
+  assert.match(setter, /if \(!enabled\) void this\.startAudioForMeetingWithoutAudio\(\);/, 'turning it off mid-meeting leaves the meeting silent');
+  const starter = between(main, 'private startAudioForMeetingWithoutAudio(', 'return this._inputSwitchChain;');
+  assert.match(starter, /if \(!this\.isMeetingActive \|\| !this\._meetingWithoutAudio\) return;/, 'opens the mic outside an audio-less meeting');
+  assert.match(starter, /ensureMacMicrophoneAccess\(/, 'skips the macOS mic permission');
+  assert.ok(starter.indexOf('setupSystemAudioPipeline()') < starter.indexOf("startCaptureChannels('ambientChatOff')"), 'starts channels before the pipeline exists');
+  // The meeting's own devices, not the system defaults setupSystemAudioPipeline opens.
+  assert.match(starter, /const meetingAudio = this\._meetingAudioRequest;/, 'opens the system defaults, not the meeting\'s devices');
+  assert.match(starter, /this\.followedInputDeviceId\(meetingAudio\.inputDeviceId\)/, 'ignores Follow the meeting app\'s mic');
+  assert.ok(starter.indexOf('reconfigureAudio(') < starter.indexOf('setupSystemAudioPipeline()'), 'the devices are picked after the pipeline is built');
+  assert.match(starter, /\{ start: false \}/, 'the device pick starts the channels itself');
+  assert.match(starter, /else if \(!this\.isMeetingActive\) \{[\s\S]*?this\.releaseOrphanedRebuild\(\);/, 'a Stop during the setup leaves its captures built for nobody');
+  assert.match(starter, /this\._inputSwitchChain\.then\(run, run\)/, 'not serialised with mic switches');
 });

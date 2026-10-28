@@ -440,7 +440,6 @@ import { useOverlayTrial } from './overlay/useOverlayTrial';
 import { TrialChip, TrialNoticeBanner } from './overlay/TrialNotice';
 import { AutoStopNoticeBanner, useMeetingAutoStopNotice } from './overlay/AutoStopNotice';
 import { useAmbientChatMeeting } from './overlay/AmbientChatNotice';
-import { AmbientChip } from './overlay/AmbientChip';
 import { LastTimeRecapBanner, useLastTimeRecap } from './overlay/LastTimeRecapNotice';
 import type { LiveHelperAction } from '../types/assist';
 import { useMeetingMute } from './overlay/useMeetingMute';
@@ -1448,6 +1447,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const autoStop = useMeetingAutoStopNotice();
   // Ambient AI Chat: this meeting captures no audio (overlay/AmbientChatNotice.tsx).
   const ambientChat = useAmbientChatMeeting();
+  // Such a meeting says so from its start ("Mic is off"). ✕ hides it until the
+  // mic button is pressed; it drops when the meeting gets audio (main clears
+  // ambientChat.on), and the next audio-less meeting shows it again.
+  const [ambientMicDismissed, setAmbientMicDismissed] = useState(false);
+  useEffect(() => {
+    if (!ambientChat.on) setAmbientMicDismissed(false);
+  }, [ambientChat.on]);
+  const showAmbientMicNotice = ambientChat.on && !ambientMicDismissed;
   // "Last time" for a recurring meeting (overlay/LastTimeRecapNotice.tsx).
   const lastTime = useLastTimeRecap();
   // Muted in Zoom / Teams / Meet: the mic is transcribed as silence (main: MeetingMuteSync).
@@ -9489,6 +9496,7 @@ Provide only the answer, nothing else.`;
       // recording would draw "Listening..." with nothing able to arrive in it
       // (issue #679). Go where a Stop with nothing heard goes (issue #540).
       if (ambientChat.on) {
+        setAmbientMicDismissed(false);
         void handlersRef.current.handleWhatToSay();
         return;
       }
@@ -11833,6 +11841,32 @@ Provide only the answer, nothing else.`;
               {autoStop.stopsAt !== null && <AutoStopNoticeBanner notice={autoStop} />}
               </ChromeFold>
 
+              {/* An Ambient AI Chat meeting, from its start: users turn the
+                  setting on thinking it is something good, then report the mic
+                  as broken. Say why, and turn it off from here; main starts
+                  the meeting's capture (setAmbientChatEnabled). */}
+              <ChromeFold show={showAmbientMicNotice} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-ambient-mic">
+              {showAmbientMicNotice && (
+                <OverlayBanner
+                  className="mx-4"
+                  tone="warning"
+                  icon={<MicOff strokeWidth={2.2} />}
+                  title={t('Mic is off')}
+                  message={t('Ambient AI Chat is on, so this meeting is not being heard or transcribed.')}
+                  onDismiss={() => setAmbientMicDismissed(true)}
+                  dismissLabel={t('Dismiss')}
+                  actions={
+                    <OverlayBannerButton
+                      variant="primary"
+                      onClick={() => window.electronAPI?.setAmbientChatEnabled?.(false)}
+                    >
+                      {t('Turn on mic')}
+                    </OverlayBannerButton>
+                  }
+                />
+              )}
+              </ChromeFold>
+
               {/* PR #173: STT Not Configured Warning Banner */}
               <ChromeFold show={sttNotConfigured && !trialExplainsNoStt} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-stt-not-configured">
               {sttNotConfigured && !trialExplainsNoStt && (
@@ -12963,13 +12997,6 @@ Provide only the answer, nothing else.`;
                         <SlidersHorizontal className="w-3.5 h-3.5" />
                       </button>
                     </div>
-
-                    {/* Ambient AI Chat is on: this meeting captures no audio, so
-                        nothing is transcribed (issue #679). A small pill beside
-                        settings, asked for instead of a banner. */}
-                    {ambientChat.on && (
-                      <AmbientChip title={t('Ambient AI Chat is on, so this meeting is not being heard or transcribed.')} />
-                    )}
 
                     {/* Notes: the notes window, where the user types their own notes for
                         this meeting; they go into the meeting notes at Stop. Lavender's
