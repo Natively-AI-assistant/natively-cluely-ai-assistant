@@ -9862,7 +9862,7 @@ export class AppState {
   /**
    * Ambient AI Chat turned off during a meeting that started with it on (the
    * overlay's "Turn on mic"): give the meeting the capture its start skipped,
-   * with the saved devices. The meeting's audio init without its device pick; queued
+   * on the devices the meeting asked for, as the meeting start would. Queued
    * behind any mic switch so a double click cannot build the pipeline twice.
    * startCaptureChannels clears _meetingWithoutAudio, which drops the overlay's
    * "Mic is off" banner.
@@ -9888,11 +9888,27 @@ export class AppState {
       }
       if (!current()) return;
       console.log('[Main] Ambient AI Chat turned off mid-meeting — starting mic/system audio capture.');
-      // No applyVoiceLabels here: this meeting built no speech engines, and the
-      // ones setupSystemAudioPipeline builds get the setting at construction.
-      await this.setupSystemAudioPipeline();
-      if (!current()) return;
-      this.startCaptureChannels('ambientChatOff');
+      // ponytail: the speech engines pre-warmed at launch are reused and keep
+      // the voice labels last applied to them (applyVoiceLabels runs only at
+      // meeting start); a Settings › Audio label change since launch waits for
+      // the next meeting.
+      // setupSystemAudioPipeline alone opens the system defaults; build the
+      // captures on the meeting's devices first (as reconfigureSttProvider does).
+      const meetingAudio = this._meetingAudioRequest;
+      if (meetingAudio && !this.systemAudioCapture && !this.microphoneCapture) {
+        await this.reconfigureAudio(
+          this.followedInputDeviceId(meetingAudio.inputDeviceId),
+          meetingAudio.outputDeviceId,
+          { start: false },
+        );
+      }
+      if (current()) await this.setupSystemAudioPipeline();
+      if (current()) {
+        this.startCaptureChannels('ambientChatOff');
+      } else if (!this.isMeetingActive) {
+        // Stop landed during the setup: release what it built for nobody.
+        this.releaseOrphanedRebuild();
+      }
     };
     const next = this._inputSwitchChain.then(run, run);
     this._inputSwitchChain = next.catch((err) => console.error('[Main] Starting audio after Ambient AI Chat off failed:', err));

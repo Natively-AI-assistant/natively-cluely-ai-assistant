@@ -76,5 +76,6 @@ test('reconfigureAudio can build without starting; every other caller still star
   assert.ok(optOut >= 0 && optOut < start, 'start:false returns before the start, and only then');
   const others = [...main.matchAll(/this\.reconfigureAudio\(([^;]*?)\);/g)].map((m) => m[1]);
   const withOptions = others.filter((args) => /start:\s*false/.test(args));
-  assert.equal(withOptions.length, 1, 'only the STT rebuild opts out of the start');
+  // The STT rebuild, and Ambient AI Chat's "Turn on mic" (startAudioForMeetingWithoutAudio).
+  assert.equal(withOptions.length, 2, 'only the STT rebuild and the Ambient "Turn on mic" opt out of the start');
 });

@@ -177,5 +177,11 @@ test('an Ambient AI Chat meeting says "Mic is off" from its start and can turn t
   assert.match(starter, /if \(!this\.isMeetingActive \|\| !this\._meetingWithoutAudio\) return;/, 'opens the mic outside an audio-less meeting');
   assert.match(starter, /ensureMacMicrophoneAccess\(/, 'skips the macOS mic permission');
   assert.ok(starter.indexOf('setupSystemAudioPipeline()') < starter.indexOf("startCaptureChannels('ambientChatOff')"), 'starts channels before the pipeline exists');
+  // The meeting's own devices, not the system defaults setupSystemAudioPipeline opens.
+  assert.match(starter, /const meetingAudio = this\._meetingAudioRequest;/, 'opens the system defaults, not the meeting\'s devices');
+  assert.match(starter, /this\.followedInputDeviceId\(meetingAudio\.inputDeviceId\)/, 'ignores Follow the meeting app\'s mic');
+  assert.ok(starter.indexOf('reconfigureAudio(') < starter.indexOf('setupSystemAudioPipeline()'), 'the devices are picked after the pipeline is built');
+  assert.match(starter, /\{ start: false \}/, 'the device pick starts the channels itself');
+  assert.match(starter, /else if \(!this\.isMeetingActive\) \{[\s\S]*?this\.releaseOrphanedRebuild\(\);/, 'a Stop during the setup leaves its captures built for nobody');
   assert.match(starter, /this\._inputSwitchChain\.then\(run, run\)/, 'not serialised with mic switches');
 });

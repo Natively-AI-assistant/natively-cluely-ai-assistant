@@ -1,7 +1,7 @@
 // src/i18n.ambientChat.ts
 //
-// The banner when the mic button is pressed while Ambient AI Chat is on and the
-// meeting captures no audio (NativelyInterface.tsx, fold-ambient-mic). English
+// The banner shown from the start of a meeting that captures no audio because
+// Ambient AI Chat is on (NativelyInterface.tsx, fold-ambient-mic). English
 // source → [ru, zh, ja, es], one row per sentence, so a language can never miss
 // a row the others have. Same shape as src/i18n.trial.ts.
 //
@@ -21,8 +21,7 @@ const ROWS: Record<string, Row> = {
     'Ambient AI Chat がオンのため、この会議は聞き取られず、文字起こしもされません。',
     'Ambient AI Chat está activado, así que esta reunión no se escucha ni se transcribe.',
   ],
-  // The banner when the mic button is pressed in such a meeting; its message
-  // is the row above.
+  // The banner's title and button; its message is the row above.
   'Mic is off': [
     'Микрофон выключен',
     '麦克风已关闭',
