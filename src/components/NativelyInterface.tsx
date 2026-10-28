@@ -8073,6 +8073,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     );
   }, [attachedContext]);
 
+  // Phone Mirror's Answer chip toggles this recording, so the phone shows it
+  // too: Stop while recording, Answer again once it ends. Reported on every
+  // change, including the false on mount, which clears one left by a reload.
+  useEffect(() => {
+    window.electronAPI?.phoneMirrorSetRecording?.(isManualRecording);
+  }, [isManualRecording]);
+
   // The phone took one off its tray (it shows this tray), so it leaves here.
   useEffect(() => {
     return window.electronAPI?.onPhoneMirrorDetach?.(({ path }) => {

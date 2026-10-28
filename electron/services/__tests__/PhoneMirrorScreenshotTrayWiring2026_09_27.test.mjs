@@ -193,6 +193,7 @@ after(async () => {
 
 const settle = (ms) => new Promise((r) => setTimeout(r, ms));
 const lastTray = () => phone.of('attachments').at(-1)?.items;
+const lastRecording = () => phone.of('recording').at(-1)?.active;
 async function askFromPhone(message) {
   const before = streamChatCalls.length;
   phone.ws.send(JSON.stringify({ type: 'chat', message }));
@@ -266,13 +267,34 @@ describe('overlay → phone, executed', () => {
     assert.equal(typeof exposed.onPhoneMirrorDetach, 'function', 'the overlay can listen for it');
   });
 
-  test('a closed overlay leaves no tray on the phone', async () => {
+  test('the Answer button recording reaches the phone (its chip reads Stop)', async () => {
+    assert.equal(lastRecording(), false, 'not recording, replayed on connect');
+    exposed.phoneMirrorSetRecording(true);
+    await settle(40);
+    assert.equal(lastRecording(), true);
+    exposed.phoneMirrorSetRecording(false);
+    await settle(40);
+    assert.equal(lastRecording(), false);
+  });
+
+  test('another window cannot report a recording, nor a non-boolean', async () => {
+    const before = phone.of('recording').length;
+    onListeners.get('phone-mirror:recording')({ sender: launcher.webContents }, true);
+    onListeners.get('phone-mirror:recording')({ sender: overlay.webContents }, 'true');
+    await settle(40);
+    assert.equal(phone.of('recording').length, before);
+  });
+
+  test('a closed overlay leaves no tray and no recording on the phone', async () => {
     exposed.phoneMirrorSetAttachments([{ path: CAPTURE, preview: thumb(1) }]);
+    exposed.phoneMirrorSetRecording(true);
     await settle(40);
     assert.equal(lastTray().length, 1);
+    assert.equal(lastRecording(), true);
     overlay.webContents.fire('destroyed');
     await settle(40);
     assert.deepEqual(lastTray(), []);
+    assert.equal(lastRecording(), false);
   });
 
   test('with no overlay to hold them, the phone\'s own photos still go with its question', async () => {
@@ -300,6 +322,10 @@ describe('the overlay reports its tray (renderer call sites)', () => {
     const body = effectAround('phoneMirrorImagesSent?.(', 'messages');
     assert.match(body, /msg\.hasScreenshot/);
     assert.match(body, /phoneMirrorImagesSent\?\.\(msg\.id, paths\)/);
+  });
+
+  test('every Answer / Stop recording change is reported', () => {
+    assert.match(effectAround('phoneMirrorSetRecording?.(', 'isManualRecording'), /phoneMirrorSetRecording\?\.\(isManualRecording\)/);
   });
 
   test('Remove from the phone leaves the overlay tray', () => {

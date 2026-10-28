@@ -78,6 +78,9 @@ export type StreamEvent =
     }
   | { type: 'meeting'; active: boolean; reset: boolean }
   | { type: 'attachments'; items: PhoneAttachment[] }
+  // The overlay's Answer button is recording the desktop mic (it reads Stop);
+  // the phone's Answer chip mirrors it.
+  | { type: 'recording'; active: boolean }
   | { type: 'images'; id: string; images: PhoneAttachment[]; createdAt: string };
 
 /**
@@ -268,6 +271,8 @@ export class PhoneMirrorService {
   // every screenshot seen in it lately, by path.
   private attachments: PhoneAttachment[] = [];
   private attachmentPaths: string[] = [];
+  // The overlay's manual (Answer / Stop) recording, mirrored (see setRecording).
+  private recording = false;
   private shots = new Map<string, PhoneAttachment & { fromPhone: boolean }>();
   private rateBuckets = new Map<string, { count: number; resetAt: number }>();
   private statusListeners = new Set<StatusListener>();
@@ -630,6 +635,9 @@ export class PhoneMirrorService {
       this.transcriptPartial = null;
       this.history = [];
       this.awaitingAnswers.clear();
+      // The overlay drops a recording on either edge; the phone's chip must
+      // not keep reading Stop. Its own 'meeting' frame resets the chip too.
+      this.recording = false;
       if (this.livePartial) {
         this.droppedStreams.add(this.livePartial.streamId);
         // Bounded: a stream that never finishes must not pin memory.
@@ -672,6 +680,20 @@ export class PhoneMirrorService {
     if (same) return;
     this.attachments = next;
     this.broadcast({ type: 'attachments', items: next });
+  }
+
+  /**
+   * Mirror the overlay's Answer button: true while it records the desktop mic
+   * (it reads Stop), false once it stops. A tap on the phone's Answer chip
+   * toggles it, and without this the phone showed no sign that it had.
+   * Tracked while stopped too, like the tray, so a phone that connects later
+   * sees whether a recording is running.
+   */
+  setRecording(active: boolean): void {
+    const next = active === true;
+    if (next === this.recording) return;
+    this.recording = next;
+    this.broadcast({ type: 'recording', active: next });
   }
 
   /** The screenshots in the overlay's tray, for a question typed on the phone (the overlay then clears it). */
@@ -1452,6 +1474,7 @@ export class PhoneMirrorService {
     this.token = '';
     this.extToken = '';
     this.livePartial = null;
+    this.recording = false;
     this.cancelLiveRender();
     this.rateBuckets.clear();
     this.armedUntil = 0;
@@ -2015,6 +2038,8 @@ export class PhoneMirrorService {
       );
       // Always sent, so a phone coming back never keeps a tray the desktop has since cleared.
       ws.send(JSON.stringify({ type: 'attachments', items: this.attachments }));
+      // Likewise, so a phone that reconnects never keeps reading Stop.
+      ws.send(JSON.stringify({ type: 'recording', active: this.recording }));
     } catch (_) {
       /* client may be gone already */
     }

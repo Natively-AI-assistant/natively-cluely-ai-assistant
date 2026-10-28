@@ -1837,6 +1837,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.send('phone-mirror:attachments', items),
   phoneMirrorImagesSent: (id: string, paths: string[]) =>
     ipcRenderer.send('phone-mirror:images-sent', id, paths),
+  // The Answer button is recording the mic (reads Stop); the phone's chip follows.
+  phoneMirrorSetRecording: (active: boolean) =>
+    ipcRenderer.send('phone-mirror:recording', active),
   // The phone took a screenshot or photo off the tray; the overlay removes it.
   onPhoneMirrorDetach: (callback: (data: { path: string }) => void) => {
     const subscription = (_: any, data: any) => callback(data);

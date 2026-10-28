@@ -20307,10 +20307,14 @@ export function initializeIpcHandlers(appState: AppState): void {
     overlayTrayLive = true;
     if (!phoneTrayReporters.has(event.sender)) {
       phoneTrayReporters.add(event.sender);
-      // A closed overlay has no tray; the phone must not keep showing one.
+      // A closed overlay has no tray and records nothing; the phone must not
+      // keep showing either.
       event.sender.once('destroyed', () => {
         overlayTrayLive = false;
-        try { PhoneMirrorService.getInstance().setAttachments([]); } catch { /* mirror only */ }
+        try {
+          PhoneMirrorService.getInstance().setAttachments([]);
+          PhoneMirrorService.getInstance().setRecording(false);
+        } catch { /* mirror only */ }
       });
     }
     return true;
@@ -20352,6 +20356,15 @@ export function initializeIpcHandlers(appState: AppState): void {
       );
     } catch (e) {
       console.warn('[PhoneMirror] attachments mirror failed:', e);
+    }
+  });
+  // The overlay's Answer button recording (it reads Stop), for the phone's chip.
+  safeOn('phone-mirror:recording', (event, active: unknown) => {
+    if (!fromOverlayWindow(event) || typeof active !== 'boolean') return;
+    try {
+      PhoneMirrorService.getInstance().setRecording(active);
+    } catch (e) {
+      console.warn('[PhoneMirror] recording mirror failed:', e);
     }
   });
   safeOn('phone-mirror:images-sent', (event, id: unknown, paths: unknown) => {
