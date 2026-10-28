@@ -188,7 +188,6 @@ function catalogEntry(modelId: string): WhisperModelInfo | undefined {
   return MODEL_CATALOG.find(m => m.id === modelId);
 }
 
-/** The repo a model is downloaded from: its `repoId`, or the id itself. */
 // Test seam for the Parakeet repo choice below (see parakeet/aneBackend.ts).
 export { setParakeetBackendDepsForTesting } from './parakeet/aneBackend';
 
@@ -205,6 +204,7 @@ function parakeetCoreMlRepo(modelId: string): string | undefined {
   return ane.resolveParakeetBackend().backend === 'coreml-ane' ? model.download.repo : undefined;
 }
 
+/** The repo a model is downloaded from: the Parakeet CoreML repo above, its `repoId`, or the id itself. */
 export function getModelDownloadRepo(modelId: string): string {
   return parakeetCoreMlRepo(modelId) ?? catalogEntry(modelId)?.repoId ?? modelId;
 }
@@ -645,6 +645,7 @@ export function getAvailableModels(): WhisperModelInfo[] {
     if (m.installedOnly && !cached) return [];
     return [{
       ...m,
+      sizeMb: downloadSizeMb(m),
       status: cached ? 'available' as const : 'missing' as const,
       upgradeAvailable: cached && dtype !== undefined && isModelUpgradeAvailable(m.id, dtype),
     }];
@@ -659,7 +660,14 @@ export function getAvailableModels(): WhisperModelInfo[] {
  */
 export function getModelSizeBytes(modelId: string): number {
   const m = MODEL_CATALOG.find(x => x.id === modelId);
-  return m ? Math.round(m.sizeMb * 1024 * 1024) : 0;
+  return m ? Math.round(downloadSizeMb(m) * 1024 * 1024) : 0;
+}
+
+/** What a download of `m` fetches: the CoreML files for Parakeet on a Neural Engine Mac, else the catalog size. */
+function downloadSizeMb(m: WhisperModelInfo): number {
+  if (!parakeetCoreMlRepo(m.id)) return m.sizeMb;
+  const ane = require('./parakeet/aneBackend') as typeof import('./parakeet/aneBackend');
+  return ane.parakeetCoreMlSizeMb(m.id) ?? m.sizeMb;
 }
 
 /** Catalog size in MB, or undefined for an unknown id (callers then use the flat memory floor). */
@@ -751,8 +759,14 @@ function supersededModelCacheDirs(
 ): string[] {
   if (!dtype) return [];
   return MODEL_CATALOG
-    .filter(m => m.repoId && m.repoId !== m.id && m.legacyFilesUsable)
-    .filter(m => isRepoCached(m.id, m.repoId!, dtype, cacheDir))
+    .filter(m => {
+      // Parakeet on a Neural Engine Mac: the ONNX files under the id are the
+      // older copy once the CoreML one is installed (~660 MB nothing opens).
+      const coreml = parakeetCoreMlRepo(m.id);
+      if (coreml) return isRepoCached(m.id, coreml, dtype, cacheDir);
+      return !!m.repoId && m.repoId !== m.id && !!m.legacyFilesUsable
+        && isRepoCached(m.id, m.repoId, dtype, cacheDir);
+    })
     .map(m => m.id);
 }
 

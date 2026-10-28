@@ -181,6 +181,14 @@ export function resolveParakeetBackend(deps: ParakeetBackendDeps = depsOverride 
   }
 }
 
+/** Download size of `modelId`'s CoreML files in MB (what Settings shows on a Neural Engine Mac), or undefined. */
+export function parakeetCoreMlSizeMb(modelId: string): number | undefined {
+  const model = PARAKEET_CORE_ML_MODELS[modelId];
+  if (!model) return undefined;
+  const bytes = model.download.files.reduce((sum, f) => sum + f.approxBytes, 0);
+  return Math.round(bytes / (1024 * 1024));
+}
+
 /** Whether `modelId` has a Neural Engine build at all (both catalog Parakeet models do). */
 export function hasParakeetCoreMlModel(modelId: string): boolean {
   return !!PARAKEET_CORE_ML_MODELS[modelId];

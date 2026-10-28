@@ -19,7 +19,7 @@ const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 
-// MUST stay in sync with electron/audio/whisper/parakeet/aneHelper.ts and
+// MUST stay in sync with electron/audio/whisper/parakeet/aneBackend.ts and
 // scripts/verify-packaged-local-assets.mjs — guarded by
 // scripts/__tests__/parakeet-ane-build.test.mjs.
 const HELPER_NAME = `${require('./disguise-name.cjs').darwin}-parakeet`;
@@ -96,7 +96,7 @@ function buildParakeetAne({
     run('xcrun', swiftArgs, { stdio: 'inherit' });
   } catch (error) {
     throw new Error(
-      '[parakeet-ane] swift build failed. Xcode 16 or newer is required, and the first build ' +
+      '[parakeet-ane] swift build failed. Xcode 26 or newer (Swift 6.2) is required, and the first build ' +
       'downloads FluidAudio from GitHub.\n' +
       `Underlying error: ${error.message}`
     );

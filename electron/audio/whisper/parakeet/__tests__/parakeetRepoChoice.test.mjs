@@ -99,6 +99,29 @@ describe('Mac that can use the Neural Engine', () => {
     assert.equal(mm.resolveModelSourceRepo(V2, DTYPE, dir), V2, 'the half-written CoreML copy is skipped');
     assert.equal(mm.isModelUpgradeAvailable(V2, DTYPE, dir), true, 'and the Update stays on offer');
   });
+
+  test('the startup sweep removes the ONNX copy only once the CoreML copy is fully installed', (t) => {
+    onPlatform(t, NEURAL_ENGINE_MAC);
+    const dir = cacheDir(t);
+    const onnxDir = path.join(dir, ...V2.split('/'));
+    installOnnx(dir);
+    assert.deepEqual(mm.purgeObsoleteModelCaches(dir, DTYPE), [], 'no CoreML copy yet: the ONNX one is the model');
+    installCoreMl(dir);
+    mm.markModelDownloadStarted(V2, dir);
+    assert.deepEqual(mm.purgeObsoleteModelCaches(dir, DTYPE), [], 'an update in progress never costs the working copy');
+    mm.clearModelDownloadMarker(V2, dir);
+    assert.deepEqual(mm.purgeObsoleteModelCaches(dir, DTYPE), [V2]);
+    assert.equal(fs.existsSync(onnxDir), false);
+    assert.equal(mm.resolveModelSourceRepo(V2, DTYPE, dir), V2_COREML, 'the CoreML copy is untouched');
+  });
+
+  test('download size is the CoreML files, not the ONNX export', (t) => {
+    onPlatform(t, NEURAL_ENGINE_MAC);
+    const coremlBytes = ane.PARAKEET_CORE_ML_MODELS[V2].download.files.reduce((sum, f) => sum + f.approxBytes, 0);
+    assert.equal(ane.parakeetCoreMlSizeMb(V2), Math.round(coremlBytes / (1024 * 1024)));
+    assert.equal(mm.getModelSizeBytes(V2), ane.parakeetCoreMlSizeMb(V2) * 1024 * 1024);
+    assert.ok(mm.getModelSizeBytes(V2) < 661 * 1024 * 1024);
+  });
 });
 
 for (const [name, deps] of Object.entries(PLATFORMS_WITHOUT)) {
@@ -110,6 +133,20 @@ for (const [name, deps] of Object.entries(PLATFORMS_WITHOUT)) {
       assert.equal(mm.resolveModelSourceRepo(V2, DTYPE, dir), V2);
       installOnnx(dir);
       assert.equal(mm.isModelUpgradeAvailable(V2, DTYPE, dir), false);
+    });
+
+    test('the ONNX copy is never swept, even next to a CoreML folder', (t) => {
+      onPlatform(t, deps);
+      const dir = cacheDir(t);
+      installOnnx(dir);
+      installCoreMl(dir);
+      assert.deepEqual(mm.purgeObsoleteModelCaches(dir, DTYPE), []);
+      assert.equal(mm.resolveModelSourceRepo(V2, DTYPE, dir), V2);
+    });
+
+    test('download size is the catalog ONNX size', (t) => {
+      onPlatform(t, deps);
+      assert.equal(mm.getModelSizeBytes(V2), 661 * 1024 * 1024);
     });
   });
 }
