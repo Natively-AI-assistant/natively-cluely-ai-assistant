@@ -110,20 +110,42 @@ describe('CoreML model sets', () => {
     }
   });
 
-  test('cache check needs every CoreML file, non-empty, in the repo folder', (t) => {
+  test('every CoreML file has an exact size, and progress weighs it by that size', () => {
+    for (const m of Object.values(ane.PARAKEET_CORE_ML_MODELS)) {
+      for (const f of m.download.files) {
+        assert.ok(Number.isInteger(f.bytes) && f.bytes > 0, `${f.path} has an exact size`);
+        assert.equal(f.approxBytes, f.bytes);
+      }
+    }
+    // Spot checks against the Hugging Face tree at the pinned revisions.
+    const size = (id, p) => ane.PARAKEET_CORE_ML_MODELS[id].download.files.find((f) => f.path === p).bytes;
+    assert.equal(size(V2, 'Encoder.mlmodelc/weights/weight.bin'), 445_187_200);
+    assert.equal(size(V2, 'parakeet_vocab.json'), 18_762);
+    assert.equal(size(V3, 'Preprocessor.mlmodelc/coremldata.bin'), 486);
+    assert.equal(size(V3, 'parakeet_vocab.json'), 151_122);
+  });
+
+  test('cache check needs every CoreML file, at its exact size, in the repo folder', (t) => {
     const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'parakeet-ane-cache-'));
     t.after(() => fs.rmSync(repoDir, { recursive: true, force: true }));
     const files = ane.PARAKEET_CORE_ML_MODELS[V2].download.files;
-    for (const { path: rel } of files.slice(0, -1)) {
+    const place = (rel, bytes) => {
       const full = path.join(repoDir, rel);
       fs.mkdirSync(path.dirname(full), { recursive: true });
-      fs.writeFileSync(full, 'x');
-    }
+      fs.writeFileSync(full, '');
+      fs.truncateSync(full, bytes); // sparse: no real disk for the encoder
+    };
+    for (const { path: rel, bytes } of files.slice(0, -1)) place(rel, bytes);
+    const last = files.at(-1);
     assert.equal(ane.isParakeetCoreMlCached(repoDir, V2), false, 'one file missing');
-    fs.writeFileSync(path.join(repoDir, files.at(-1).path), '');
+    place(last.path, 0);
     assert.equal(ane.isParakeetCoreMlCached(repoDir, V2), false, 'an empty file is not installed');
-    fs.writeFileSync(path.join(repoDir, files.at(-1).path), '{}');
+    place(last.path, last.bytes - 1);
+    assert.equal(ane.isParakeetCoreMlCached(repoDir, V2), false, 'a truncated file is not installed');
+    place(last.path, last.bytes);
     assert.equal(ane.isParakeetCoreMlCached(repoDir, V2), true);
+    place('Encoder.mlmodelc/weights/weight.bin', 4096);
+    assert.equal(ane.isParakeetCoreMlCached(repoDir, V2), false, 'a short encoder (interrupted copy) is not installed');
     assert.equal(ane.isParakeetCoreMlCached(repoDir, 'onnx-community/moonshine-base-ONNX'), false);
   });
 

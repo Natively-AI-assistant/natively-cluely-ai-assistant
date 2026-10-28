@@ -160,20 +160,21 @@ describe('corrupt local model purge', () => {
         }
     });
 
-    test('damaged Parakeet CoreML bundles (Neural Engine helper) are corrupt on macOS only', () => {
-        // Messages the helper printed for copies of the real v2 download that
-        // were truncated, zeroed or overwritten (paths shortened).
-        const damaged = [
+    test('Parakeet Neural Engine helper: a broken vocabulary is corrupt (macOS only), CoreML load errors are not', () => {
+        const vocab = 'Failed to load model: Failed to load Parakeet CoreML models: Failed to load ASR models: Vocabulary parsing failed';
+        assert.equal(isCorrupt(vocab, 'darwin'), true);
+        assert.equal(isCorrupt(vocab, 'win32'), false, 'the CoreML helper never runs on Windows');
+        // CoreML raises these for damaged bundles AND when the Neural Engine
+        // compiler fails on intact ones. Deleting would re-download the same
+        // bytes on every Install, so they stay 'unknown'; damaged bundles are
+        // caught by their exact sizes before any load (isParakeetCoreMlCached).
+        for (const msg of [
             "Failed to load model: Failed to load Parakeet CoreML models: Failed to build the model execution plan using a model architecture file '/m/FluidInference/parakeet-tdt-0.6b-v2-coreml/Encoder.mlmodelc/model.mil' with error code: -14.",
             'Failed to load model: Failed to load Parakeet CoreML models: Unable to load model: file:///m/FluidInference/parakeet-tdt-0.6b-v2-coreml/Encoder.mlmodelc/. Compile the model with Xcode or `MLModel.compileModel(at:)`. ',
-            'Failed to load model: Failed to load Parakeet CoreML models: Failed to load ASR models: Vocabulary parsing failed',
-        ];
-        for (const msg of damaged) {
-            assert.equal(isCorrupt(msg, 'darwin'), true, `Expected "${msg}" to be treated as corrupt on macOS`);
-            assert.equal(isCorrupt(msg, 'win32'), false, 'the CoreML helper never runs on Windows');
+            'Failed to load model: The Parakeet Neural Engine helper exited (SIGSEGV)',
+        ]) {
+            assert.equal(isCorrupt(msg, 'darwin'), false, `Expected "${msg}" to keep the download`);
         }
-        // A crash is not evidence that the files are bad: keep the download.
-        assert.equal(isCorrupt('Failed to load model: The Parakeet Neural Engine helper exited (SIGSEGV)', 'darwin'), false);
     });
 
     test('empty and junk input do not throw or purge', () => {

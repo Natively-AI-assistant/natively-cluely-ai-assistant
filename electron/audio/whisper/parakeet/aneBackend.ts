@@ -28,7 +28,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import type { ParakeetDownloadSet } from './downloadFiles';
+import { isParakeetFileIntact, type ParakeetDownloadSet } from './downloadFiles';
 
 export type ParakeetBackend = 'coreml-ane' | 'onnx';
 
@@ -49,14 +49,23 @@ interface CoreMlModel {
 // (AsrModels.getModelFileNames: Preprocessor, Encoder, Decoder, the joint and
 // parakeet_vocab.json). Pinned to a repo revision because the helper is pinned
 // to a library version: a later rename upstream must not break an installed
-// app. Sizes from the Hugging Face tree API, for the progress bar.
-function mlmodelc(name: string, weightBytes: number, milBytes: number): ParakeetDownloadSet['files'] {
+// app. Exact sizes at that revision, from the Hugging Face tree API: the
+// progress bar's weights, and the integrity check (a file of any other size
+// is damaged, so it is fetched again and the copy does not count as
+// installed — see isParakeetCoreMlCached).
+function exact(path: string, bytes: number): ParakeetDownloadSet['files'][number] {
+  return { path, approxBytes: bytes, bytes };
+}
+function mlmodelc(
+  name: string,
+  sizes: { coremldata: number; metadata: number; mil: number; weight: number },
+): ParakeetDownloadSet['files'] {
   return [
-    { path: `${name}.mlmodelc/analytics/coremldata.bin`, approxBytes: 243 },
-    { path: `${name}.mlmodelc/coremldata.bin`, approxBytes: 550 },
-    { path: `${name}.mlmodelc/metadata.json`, approxBytes: 3_400 },
-    { path: `${name}.mlmodelc/model.mil`, approxBytes: milBytes },
-    { path: `${name}.mlmodelc/weights/weight.bin`, approxBytes: weightBytes },
+    exact(`${name}.mlmodelc/analytics/coremldata.bin`, 243),
+    exact(`${name}.mlmodelc/coremldata.bin`, sizes.coremldata),
+    exact(`${name}.mlmodelc/metadata.json`, sizes.metadata),
+    exact(`${name}.mlmodelc/model.mil`, sizes.mil),
+    exact(`${name}.mlmodelc/weights/weight.bin`, sizes.weight),
   ];
 }
 
@@ -67,11 +76,11 @@ export const PARAKEET_CORE_ML_MODELS: Readonly<Record<string, CoreMlModel>> = {
       repo: 'FluidInference/parakeet-tdt-0.6b-v2-coreml',
       revision: 'ee09c569f73759e6d44c9bd16766f477b2b36d39',
       files: [
-        ...mlmodelc('Preprocessor', 298_880, 27_166),
-        ...mlmodelc('Encoder', 445_187_200, 959_769),
-        ...mlmodelc('Decoder', 14_429_952, 13_106),
-        ...mlmodelc('JointDecision', 3_453_388, 9_722),
-        { path: 'parakeet_vocab.json', approxBytes: 18_762 },
+        ...mlmodelc('Preprocessor', { coremldata: 494, metadata: 2_974, mil: 27_166, weight: 298_880 }),
+        ...mlmodelc('Encoder', { coremldata: 485, metadata: 2_926, mil: 959_769, weight: 445_187_200 }),
+        ...mlmodelc('Decoder', { coremldata: 554, metadata: 3_427, mil: 13_106, weight: 14_429_952 }),
+        ...mlmodelc('JointDecision', { coremldata: 534, metadata: 2_936, mil: 9_722, weight: 3_453_388 }),
+        exact('parakeet_vocab.json', 18_762),
       ],
     },
   },
@@ -81,11 +90,11 @@ export const PARAKEET_CORE_ML_MODELS: Readonly<Record<string, CoreMlModel>> = {
       repo: 'FluidInference/parakeet-tdt-0.6b-v3-coreml',
       revision: '7dd20fe6b1797d35f5e3307e8b1732d9a178edfe',
       files: [
-        ...mlmodelc('Preprocessor', 491_072, 28_181),
-        ...mlmodelc('Encoder', 445_187_200, 959_769),
-        ...mlmodelc('Decoder', 23_604_992, 13_110),
-        ...mlmodelc('JointDecisionv3', 12_642_764, 11_775),
-        { path: 'parakeet_vocab.json', approxBytes: 151_122 },
+        ...mlmodelc('Preprocessor', { coremldata: 486, metadata: 2_841, mil: 28_181, weight: 491_072 }),
+        ...mlmodelc('Encoder', { coremldata: 485, metadata: 2_921, mil: 959_769, weight: 445_187_200 }),
+        ...mlmodelc('Decoder', { coremldata: 554, metadata: 3_427, mil: 13_110, weight: 23_604_992 }),
+        ...mlmodelc('JointDecisionv3', { coremldata: 521, metadata: 3_453, mil: 11_775, weight: 12_642_764 }),
+        exact('parakeet_vocab.json', 151_122),
       ],
     },
   },
@@ -99,13 +108,11 @@ export function parakeetCoreMlModelForRepo(repo: string): { modelId: string; mod
   return undefined;
 }
 
-/** Every CoreML file of `modelId` is in `repoDir` (that repo's own folder) and non-empty. */
+/** Every CoreML file of `modelId` is in `repoDir` (that repo's own folder) at its exact pinned size. */
 export function isParakeetCoreMlCached(repoDir: string, modelId: string): boolean {
   const model = PARAKEET_CORE_ML_MODELS[modelId];
   if (!model) return false;
-  return model.download.files.every(({ path: file }) => {
-    try { return fs.statSync(path.join(repoDir, file)).size > 0; } catch { return false; }
-  });
+  return model.download.files.every(({ path: file, bytes }) => isParakeetFileIntact(path.join(repoDir, file), bytes));
 }
 
 /** Path to the compiled helper (packaged vs development); null outside the Electron main process. */

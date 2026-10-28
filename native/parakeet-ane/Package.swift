@@ -42,5 +42,7 @@ let package = Package(
             dependencies: ["FluidAudio"],
             path: "Sources/ParakeetANE"
         ),
-    ]
+    ],
+    // As FluidAudio's own manifest (FastClusterWrapper uses `if constexpr`).
+    cxxLanguageStandard: .cxx17
 )

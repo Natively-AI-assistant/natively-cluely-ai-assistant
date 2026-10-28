@@ -121,6 +121,30 @@ describe('downloadParakeetFiles', () => {
     assert.deepEqual(requested, [`${base}/parakeet_vocab.json`]);
   });
 
+  test('with exact sizes, a damaged file on disk is fetched again and a short body is refused', async (t) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'parakeet-dl-'));
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    const exact = { ...set, files: [
+      { path: 'Encoder.mlmodelc/weights/weight.bin', approxBytes: 7, bytes: 7 },
+      { path: 'parakeet_vocab.json', approxBytes: 2, bytes: 2 },
+    ] };
+    fs.mkdirSync(path.join(dir, 'Encoder.mlmodelc/weights'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'Encoder.mlmodelc/weights/weight.bin'), 'wei'); // interrupted earlier copy
+    fs.writeFileSync(path.join(dir, 'parakeet_vocab.json'), '{}'); // intact: kept
+    const requested = mockFetch(t, {
+      [`${base}/Encoder.mlmodelc/weights/weight.bin`]: 'weights',
+      [`${base}/parakeet_vocab.json`]: '{', // short, with a content-length that agrees
+    });
+    await downloads.downloadParakeetFiles(dir, exact, () => {});
+    assert.deepEqual(requested, [`${base}/Encoder.mlmodelc/weights/weight.bin`]);
+    assert.equal(fs.readFileSync(path.join(dir, 'Encoder.mlmodelc/weights/weight.bin'), 'utf8'), 'weights');
+
+    // A short body still cannot slip in when the pinned size is known.
+    fs.rmSync(path.join(dir, 'parakeet_vocab.json'));
+    await assert.rejects(downloads.downloadParakeetFiles(dir, exact, () => {}), /expected 2 bytes \(pinned revision\), received 1/);
+    assert.equal(fs.existsSync(path.join(dir, 'parakeet_vocab.json')), false);
+  });
+
   test('a truncated file is rejected and leaves nothing behind', async (t) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'parakeet-dl-'));
     t.after(() => fs.rmSync(dir, { recursive: true, force: true }));

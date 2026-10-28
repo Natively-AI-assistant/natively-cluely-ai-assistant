@@ -643,11 +643,14 @@ export function getAvailableModels(): WhisperModelInfo[] {
   return MODEL_CATALOG.filter(m => !m.hidden).flatMap(m => {
     const cached = isModelCached(m.id, dtype);
     if (m.installedOnly && !cached) return [];
+    const upgradeAvailable = cached && dtype !== undefined && isModelUpgradeAvailable(m.id, dtype);
     return [{
       ...m,
-      sizeMb: downloadSizeMb(m),
+      // The copy on disk while an older one is installed (Settings adds these
+      // up as the installed total), else what a download fetches.
+      sizeMb: upgradeAvailable ? m.sizeMb : downloadSizeMb(m),
       status: cached ? 'available' as const : 'missing' as const,
-      upgradeAvailable: cached && dtype !== undefined && isModelUpgradeAvailable(m.id, dtype),
+      upgradeAvailable,
     }];
   });
 }

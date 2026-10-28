@@ -49,11 +49,13 @@ const installOnnx = (dir) => {
     fs.writeFileSync(p, 'x');
   }
 };
+// Each file at its exact pinned size (sparse, so the 445 MB encoder costs no disk).
 const installCoreMl = (dir) => {
-  for (const { path: rel } of ane.PARAKEET_CORE_ML_MODELS[V2].download.files) {
+  for (const { path: rel, bytes } of ane.PARAKEET_CORE_ML_MODELS[V2].download.files) {
     const p = path.join(dir, ...V2_COREML.split('/'), rel);
     fs.mkdirSync(path.dirname(p), { recursive: true });
-    fs.writeFileSync(p, 'x');
+    fs.writeFileSync(p, '');
+    fs.truncateSync(p, bytes);
   }
 };
 
@@ -113,6 +115,18 @@ describe('Mac that can use the Neural Engine', () => {
     assert.deepEqual(mm.purgeObsoleteModelCaches(dir, DTYPE), [V2]);
     assert.equal(fs.existsSync(onnxDir), false);
     assert.equal(mm.resolveModelSourceRepo(V2, DTYPE, dir), V2_COREML, 'the CoreML copy is untouched');
+  });
+
+  test('a damaged CoreML copy (a file of the wrong size) is not installed: no sweep, the ONNX copy loads', (t) => {
+    onPlatform(t, NEURAL_ENGINE_MAC);
+    const dir = cacheDir(t);
+    installOnnx(dir);
+    installCoreMl(dir);
+    fs.truncateSync(path.join(dir, ...V2_COREML.split('/'), 'Encoder.mlmodelc/weights/weight.bin'), 1024);
+    assert.equal(mm.resolveModelSourceRepo(V2, DTYPE, dir), V2);
+    assert.equal(mm.isModelUpgradeAvailable(V2, DTYPE, dir), true, 'offered again, and the download refetches the bad file');
+    assert.deepEqual(mm.purgeObsoleteModelCaches(dir, DTYPE), []);
+    assert.ok(fs.existsSync(path.join(dir, ...V2.split('/'))));
   });
 
   test('download size is the CoreML files, not the ONNX export', (t) => {

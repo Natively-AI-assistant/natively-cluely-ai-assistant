@@ -22,6 +22,22 @@ export interface ParakeetDownloadFile {
   path: string;
   /** Progress-bar weight only. Truncation is checked against content-length. */
   approxBytes: number;
+  /**
+   * Exact size, when the file set is pinned to a revision (the CoreML
+   * bundles). A file on disk of any other size is damaged: it is fetched
+   * again instead of kept, and the install does not count as complete.
+   */
+  bytes?: number;
+}
+
+/** A file on disk is usable: its exact size when that is known, else non-empty. */
+export function isParakeetFileIntact(filePath: string, bytes?: number): boolean {
+  try {
+    const size = fs.statSync(filePath).size;
+    return bytes === undefined ? size > 0 : size === bytes;
+  } catch {
+    return false;
+  }
 }
 
 /** Everything one engine needs from one Hugging Face repo. */
@@ -117,8 +133,9 @@ export async function downloadParakeetTdtFiles(
 
 /**
  * Downloads every file in `set` into `destDir`, keeping the repo's folder
- * layout (CoreML bundles are folders). Files already on disk with a non-zero
- * size are kept, so an interrupted download resumes at file granularity.
+ * layout (CoreML bundles are folders). Files already on disk that are intact
+ * (isParakeetFileIntact) are kept, so an interrupted download resumes at file
+ * granularity; a damaged one is fetched again.
  */
 export async function downloadParakeetFiles(
   destDir: string,
@@ -139,9 +156,9 @@ export async function downloadParakeetFiles(
   };
 
   let downloadedSoFar = 0;
-  for (const { path: file, approxBytes } of set.files) {
+  for (const { path: file, approxBytes, bytes } of set.files) {
     const destPath = path.join(destDir, file);
-    if (fs.existsSync(destPath) && fs.statSync(destPath).size > 0) {
+    if (isParakeetFileIntact(destPath, bytes)) {
       downloadedSoFar += approxBytes;
       report(Math.min(99, Math.round((downloadedSoFar / totalApproxBytes) * 100)));
       continue;
@@ -187,9 +204,14 @@ export async function downloadParakeetFiles(
           `Downloaded file ${file} was truncated: expected ${expectedBytes} bytes, received ${fileBytes}`,
         );
       }
+      if (bytes !== undefined && fileBytes !== bytes) {
+        throw new Error(
+          `Downloaded file ${file} was truncated: expected ${bytes} bytes (pinned revision), received ${fileBytes}`,
+        );
+      }
 
       // If another concurrent download already finished and placed the valid file, we don't clobber it
-      if (fs.existsSync(destPath) && fs.statSync(destPath).size > 0) {
+      if (isParakeetFileIntact(destPath, bytes)) {
         try { fs.unlinkSync(partialPath); } catch { /* ignore */ }
       } else {
         fs.renameSync(partialPath, destPath);
