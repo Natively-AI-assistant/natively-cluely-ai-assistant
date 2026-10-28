@@ -9233,6 +9233,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         isRecordingRef.current = false;
         answerStopInFlightRef.current = false;
         setIsManualRecording(false);
+        // Told now, ahead of the question below: the [isManualRecording]
+        // effect reports it only after the question has reached main, and the
+        // phone would then add a second Thinking that nothing answers.
+        window.electronAPI?.phoneMirrorSetRecording?.(false);
         setManualTranscript('');
 
         const currentAttachments = attachedContext;
