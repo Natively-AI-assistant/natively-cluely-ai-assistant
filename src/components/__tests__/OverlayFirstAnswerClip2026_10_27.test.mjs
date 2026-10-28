@@ -29,9 +29,15 @@ const snapBranch = () => {
 
 test('a snap that interrupts a height tween releases its hold and settles the window', () => {
   const snap = snapBranch();
-  const noted = snap.indexOf('const interruptedTween = viewportTweenRef.current !== null;');
+  const noted = snap.indexOf('const interruptedTween =');
   const stop = snap.indexOf('viewportTweenRef.current?.stop();');
   assert.ok(noted >= 0 && noted < stop, 'whether a tween was running must be read before it is stopped');
+  // A tween still waiting on its window lead has a target but no animation yet.
+  assert.match(
+    snap.slice(noted, stop),
+    /viewportTweenRef\.current !== null \|\| viewportTweenTargetRef\.current !== null/,
+    'a snap while the tween waits on its window lead leaves the hold armed',
+  );
   assert.match(
     snap,
     /if \(interruptedTween && !animationControlsRef\.current && !isResizingRef\.current\) \{\s*heightReportSuppressedUntilRef\.current = 0;/,

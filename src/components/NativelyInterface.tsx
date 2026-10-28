@@ -3656,7 +3656,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // the hold then expires on its timer with nothing left to report.
         // Traced live: a 310px window under a 352px panel, footer cut off,
         // until the next press re-measured. Do what onComplete does.
-        const interruptedTween = viewportTweenRef.current !== null;
+        // The target is set before the window lead is awaited, the tween ref
+        // only once it runs; a snap in that gap leaves the same hold behind.
+        const interruptedTween =
+          viewportTweenRef.current !== null || viewportTweenTargetRef.current !== null;
         viewportTweenRef.current?.stop();
         viewportTweenRef.current = null;
         viewportTweenTargetRef.current = null;
