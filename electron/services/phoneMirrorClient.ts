@@ -857,6 +857,13 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
       .chip:active, .chip.is-pressed { transform: scale(0.96); background: var(--fill-press); transition-duration: var(--duration-micro); }
       .chip.is-primary:active, .chip.is-primary.is-pressed { background: var(--accent-tint-2); }
       .chip.is-sent { background: var(--accent-tint-2); color: var(--accent); }
+      /* The desktop's Answer button is recording its mic: this chip reads Stop,
+         with a pulsing dot, until a tap (here or there) stops it. */
+      .chip.is-recording { display: inline-flex; align-items: center; gap: 6px; color: var(--danger); }
+      .chip.is-recording::before {
+        content: ""; width: 7px; height: 7px; border-radius: 50%;
+        background: var(--danger); animation: tk-pulse 1.2s ease-in-out infinite;
+      }
       .chip:disabled { opacity: 0.4; }
       /* Needs a meeting and none is running: still tappable, it says why. */
       .chip.needs-meeting { opacity: 0.45; }
@@ -1285,6 +1292,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         .tray-thumb.is-new { animation: fade-in var(--duration-fast) var(--ease-out) both; }
         .t-stagger-line { transition: none !important; }
         .chip.is-shaking { animation: none !important; }
+        .chip.is-recording::before { animation: none; }
         .tk-line { scroll-behavior: auto; }
         .app[data-meeting="live"][data-speaking="true"] .tk-dot { animation: none; }
         .t-icon-swap .t-icon { transition: none !important; }
@@ -2414,8 +2422,9 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           codeHint: { label: 'Code Hint', expect: ['Code Hint'] },
           brainstorm: { label: 'Brainstorm', expect: ['Brainstorm'] },
           recap: { label: 'Recap', expect: ['Recap'] },
-          // Answer toggles voice recording on the desktop; the reply comes
-          // later (or never, on the first tap), so no placeholder.
+          // Answer toggles voice recording on the desktop: the first tap
+          // starts it, so no placeholder. The desktop reports the recording
+          // (onRecording below), and the placeholder appears when it stops.
           answer: null,
         };
         var PENDING_TIMEOUT_MS = 45000;
@@ -2482,6 +2491,15 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
             paintUserState(mine);
             return;
           }
+          // What a stopped recording heard: the question goes above its
+          // placeholder, which then waits for the answer under the same id.
+          var voice = takePending(function (e) { return e.action === 'answer' && !e.streamId; });
+          if (voice) {
+            insertBeforePending({ key: ev.id, t: timeOf(ev.createdAt), kind: 'user', content: content });
+            if (ev.awaiting) voice.streamId = String(ev.id).replace(/^u:/, '');
+            voice.timer = setTimeout(function () { expirePending(voice); }, PENDING_TIMEOUT_MS);
+            return;
+          }
           appendEntry({ key: ev.id, t: timeOf(ev.createdAt), kind: 'user', content: content });
           // Asked on the desktop, answer on its way: Thinking under it, as the
           // overlay shows, until the first words stream in under the same id.
@@ -2497,10 +2515,12 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           return entry;
         }
         // The placeholder this answer resolves: its own (a desktop question's,
-        // by stream id) first, else a question typed here.
+        // by stream id) first, else a question typed here, else a recording
+        // just stopped.
         function takeAnswerPending(streamId) {
           return takePending(function (e) { return e.streamId === streamId; }) ||
-            takePending(function (e) { return e.action === 'chat' && !e.streamId; });
+            takePending(function (e) { return e.action === 'chat' && !e.streamId; }) ||
+            takePending(function (e) { return e.action === 'answer' && !e.streamId; });
         }
         var liveRaf = 0;
         // Answers still streaming when a new session started: their late
@@ -2616,6 +2636,31 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
             return;
           }
           if (ev.message) showToast(String(ev.message));
+        }
+        // ───── Desktop recording (the Answer chip) ─────────────────────────
+        // Answer starts the desktop recording its mic and a second tap stops it
+        // and answers what was said. The overlay's button reads Stop meanwhile;
+        // so does this chip. A stop seen live gets the usual placeholder until
+        // the answer arrives; the state replayed on connect only repaints.
+        var answerChip = document.querySelector('.chip[data-action="answer"]');
+        var recording = false;
+        var recordingSynced = false;
+        function paintRecording() {
+          if (!answerChip) return;
+          answerChip.classList.toggle('is-recording', recording);
+          answerChip.textContent = recording ? 'Stop' : 'Answer';
+          answerChip.setAttribute('aria-label', recording ? 'Stop recording on your desktop and answer' : 'Answer: record on your desktop');
+        }
+        function setRecording(active, live) {
+          var stopped = recording && !active;
+          recording = active;
+          paintRecording();
+          if (stopped && live) addPending('answer', 'Answer', ['What to Answer', 'Answer']);
+        }
+        function onRecording(ev) {
+          var live = recordingSynced;
+          recordingSynced = true;
+          setRecording(!!ev.active, live);
         }
         // ───── Desktop screenshots ────────────────────────────────────────
         // The overlay's tray (what its next answer goes out with) arrives whole
@@ -2766,6 +2811,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
             case 'transcript-history': onTranscriptHistory(ev); break;
             case 'meeting': onMeeting(ev); break;
             case 'attachments': onAttachments(ev); break;
+            case 'recording': onRecording(ev); break;
             case 'images': onImages(ev); break;
             default: break;
           }
@@ -2823,6 +2869,8 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         function onMeeting(ev) {
           meetingActive = !!ev.active;
           if (ev.reset) {
+            // The overlay drops a recording on either edge, with no answer.
+            setRecording(false, false);
             // Started: a new session, as on the overlay. Ended: a clean canvas
             // that says so; the meeting's summary is on the desktop.
             meetingEnded = !meetingActive;
@@ -3205,6 +3253,8 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           ws.addEventListener('open', function () {
             if (ws !== socket) return;
             opened = true;
+            // The replay that follows says whether the desktop is recording.
+            recordingSynced = false;
             reconnectDelay = 800;
             setConn('live');
           });

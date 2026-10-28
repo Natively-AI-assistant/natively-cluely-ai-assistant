@@ -17641,6 +17641,14 @@ export function initializeIpcHandlers(appState: AppState): void {
     const { ModesManager } = require('./services/ModesManager');
     const manualActiveMode = ModesManager.getInstance().getActiveMode();
 
+    // The phone's Answer chip shows this turn too: the question once the first
+    // words arrive (a fallback before then publishes it itself), then the
+    // answer under the same id, which resolves the chip's Thinking.
+    let onPhone = false;
+    const mirrorToPhone = (send: (phone: PhoneMirrorService) => void) => {
+      try { send(PhoneMirrorService.getInstance()); } catch { /* mirror only */ }
+    };
+
     try {
       const stream = ragManager.queryMeeting(liveMeetingId, query, abortController.signal);
 
@@ -17655,6 +17663,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         if (abortController.signal.aborted) break;
         ragLiveAnswer += chunk;
         event.sender.send('rag:stream-chunk', { live: true, chunk });
+        mirrorToPhone((phone) => {
+          if (!onPhone) phone.publishUserMessage(queryKey, query, { awaitingAnswer: true });
+          onPhone = true;
+          phone.publishToken(queryKey, chunk);
+        });
       }
 
       // See the meeting-scoped handler's identical comment above — a stale
@@ -17663,9 +17676,14 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!abortController.signal.aborted) {
         event.sender.send('rag:stream-complete', { live: true });
         recordLiveRagTurn(event.sender.id, query, ragLiveAnswer, manualActiveMode);
+        if (onPhone) mirrorToPhone((phone) => phone.publishDone(queryKey, ragLiveAnswer));
+      } else if (onPhone) {
+        mirrorToPhone((phone) => phone.publishError(queryKey, 'a newer question replaced it'));
       }
       return { success: true };
     } catch (error: any) {
+      // Cut off mid-answer (a fallback below publishes the question again).
+      if (onPhone) mirrorToPhone((phone) => phone.publishError(queryKey, error?.name === 'AbortError' ? 'a newer question replaced it' : 'it was cut off'));
       if (error.name !== 'AbortError') {
         const msg = error.message || '';
         // If JIT RAG failed (no embeddings yet, no relevant context), fallback to regular chat
@@ -20307,10 +20325,14 @@ export function initializeIpcHandlers(appState: AppState): void {
     overlayTrayLive = true;
     if (!phoneTrayReporters.has(event.sender)) {
       phoneTrayReporters.add(event.sender);
-      // A closed overlay has no tray; the phone must not keep showing one.
+      // A closed overlay has no tray and records nothing; the phone must not
+      // keep showing either.
       event.sender.once('destroyed', () => {
         overlayTrayLive = false;
-        try { PhoneMirrorService.getInstance().setAttachments([]); } catch { /* mirror only */ }
+        try {
+          PhoneMirrorService.getInstance().setAttachments([]);
+          PhoneMirrorService.getInstance().setRecording(false);
+        } catch { /* mirror only */ }
       });
     }
     return true;
@@ -20352,6 +20374,15 @@ export function initializeIpcHandlers(appState: AppState): void {
       );
     } catch (e) {
       console.warn('[PhoneMirror] attachments mirror failed:', e);
+    }
+  });
+  // The overlay's Answer button recording (it reads Stop), for the phone's chip.
+  safeOn('phone-mirror:recording', (event, active: unknown) => {
+    if (!fromOverlayWindow(event) || typeof active !== 'boolean') return;
+    try {
+      PhoneMirrorService.getInstance().setRecording(active);
+    } catch (e) {
+      console.warn('[PhoneMirror] recording mirror failed:', e);
     }
   });
   safeOn('phone-mirror:images-sent', (event, id: unknown, paths: unknown) => {

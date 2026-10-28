@@ -17,7 +17,8 @@
 // mic; action placeholders replaced in place by the labelled answer; typed
 // question → echo reconciled → streamed answer; reconnect mid-stream without
 // doubled text; the transcript island's tap / flick / drag / tap-outside; the
-// split column; screen-capture confirmation; expired links (4401 close and a
+// split column; the Answer chip following the desktop recording (Stop, then
+// Answer and a placeholder); screen-capture confirmation; expired links (4401 close and a
 // refused reconnect); text contrast; and no page errors.
 //
 // Not covered (needs a physical device): the real on-screen keyboard and
@@ -111,7 +112,9 @@ let failNextImage = false;
 // Timeout scenarios: a desktop that drops one chat, or ignores actions.
 // trayUploads: a thumbnail for the photos the phone sends, which the real
 // desktop lists in the overlay's tray (null: it never shows them there).
-const desktop = { dropChatOnce: new Set(), ignoreActions: false, ignoreDetach: false, trayUploads: null };
+// voice: the Answer action toggles a recording, as the overlay's Answer / Stop
+// does (off elsewhere: the other scenarios tap Answer and expect nothing).
+const desktop = { dropChatOnce: new Set(), ignoreActions: false, ignoreDetach: false, trayUploads: null, voice: null };
 // The overlay's tray as this fake desktop holds it; every change is reported
 // whole, as the overlay does.
 const desktopTray = [];
@@ -131,6 +134,19 @@ svc.setPhoneImageHandler(async (image) => {
 });
 svc.onPhoneCommand(async (cmd) => {
   if (cmd.type === 'chat' && desktop.dropChatOnce.delete(cmd.message)) return;
+  if (cmd.type === 'action' && cmd.action === 'answer' && desktop.voice) {
+    const recording = !svc.recording;
+    svc.setRecording(recording);
+    if (recording) return;
+    // Stopped: the STT tail lands, then the question and its streamed answer.
+    await sleep(700);
+    const id = String(++streamSeq);
+    svc.publishUserMessage(id, desktop.voice.question, { awaitingAnswer: true });
+    await sleep(400);
+    for (const word of desktop.voice.answer.split(/(?<= )/)) { svc.publishToken(id, word); await sleep(20); }
+    svc.publishDone(id, desktop.voice.answer);
+    return;
+  }
   if (cmd.type === 'action') {
     const label = LABELS[cmd.action];
     if (!label || desktop.ignoreActions) return;
@@ -519,6 +535,63 @@ async function tokenScenarios() {
 // The two slow paths, once, on one device (~70 s): a question the desktop never
 // echoes turns "Not delivered" with a Retry that works, and an action nobody
 // answers says so and clears itself.
+// The Answer chip mirrors the desktop recording it starts: Stop (with its dot)
+// while recording, from a tap here or on the desktop and for a phone that
+// connects mid-recording; once stopped, Answer again and a Thinking placeholder
+// that the heard question goes above and the answer replaces in place.
+async function recordingScenario(dev) {
+  const tag = `${dev.name}/recording`;
+  svc.history = [];
+  svc.livePartial = null;
+  svc.setRecording(false);
+  desktop.voice = { question: 'How would you shard the ledger?', answer: 'By account id, so **one account never spans two shards**.' };
+  const browser = await launch(dev.engine);
+  const { ctx, page, errors } = await openPage(browser, dev, 'dark');
+  const chip = () => page.$eval('.chip[data-action="answer"]', (n) => ({ text: n.textContent, rec: n.classList.contains('is-recording'), dot: getComputedStyle(n, '::before').backgroundColor, label: n.getAttribute('aria-label') }));
+  try {
+    check(tag, 'idle: the chip reads Answer', (await chip()).text === 'Answer');
+    await page.click('.chip[data-action="answer"]');
+    await page.waitForFunction(() => document.querySelector('.chip[data-action="answer"]').textContent === 'Stop', null, { timeout: 2000 });
+    const rec = await chip();
+    check(tag, 'recording: the chip reads Stop, with a red dot', rec.text === 'Stop' && rec.rec && rec.dot !== 'rgba(0, 0, 0, 0)' && /Stop recording/.test(rec.label), JSON.stringify(rec));
+    check(tag, 'the first tap adds no placeholder', (await page.$$('.answer.is-pending')).length === 0);
+
+    // A phone that connects mid-recording reads Stop too, with no placeholder.
+    const second = await openPage(browser, dev, 'dark');
+    await second.page.waitForFunction(() => document.querySelector('.chip[data-action="answer"]').textContent === 'Stop', null, { timeout: 2000 });
+    check(tag, 'a phone that connects mid-recording reads Stop', true);
+
+    await page.click('.chip[data-action="answer"]');
+    await page.waitForFunction(() => document.querySelector('.chip[data-action="answer"]').textContent === 'Answer', null, { timeout: 2000 });
+    check(tag, 'stopped: the chip reads Answer again, no dot', !(await chip()).rec);
+    await page.waitForSelector('.answer.is-pending .thinking', { timeout: 1000 });
+    check(tag, 'stopped: Thinking until the answer arrives', true);
+    await page.waitForSelector('.row-user', { timeout: 3000 });
+    const order = await page.$$eval('#feedInner > :not(#empty)', (ns) => ns.map((n) => n.classList.contains('row-user') ? 'question' : n.classList.contains('is-pending') ? 'pending' : 'other'));
+    check(tag, 'the heard question lands above the placeholder', order.join(',') === 'question,pending', order.join(','));
+    await page.waitForSelector('.answer.is-pending', { state: 'detached', timeout: 4000 });
+    await page.waitForSelector('.answer.is-streaming', { state: 'detached', timeout: 6000 });
+    const answers = await page.$$eval('.answer', (ns) => ns.map((n) => n.textContent));
+    check(tag, 'the answer took the placeholder slot (one answer)', answers.length === 1 && /never spans two shards/.test(answers[0]), JSON.stringify(answers));
+    check(tag, 'the other phone follows the stop', await second.page.$eval('.chip[data-action="answer"]', (n) => n.textContent === 'Answer'));
+
+    // Stopped on the desktop instead: the chip follows the same way.
+    svc.setRecording(true);
+    await page.waitForFunction(() => document.querySelector('.chip[data-action="answer"]').textContent === 'Stop', null, { timeout: 2000 });
+    svc.publishMeetingState(true);
+    await page.waitForFunction(() => document.querySelector('.chip[data-action="answer"]').textContent === 'Answer', null, { timeout: 2000 });
+    check(tag, 'a new meeting drops the recording without a placeholder', (await page.$$('.answer.is-pending')).length === 0);
+    await second.ctx.close();
+    check(tag, 'no page errors', errors.length === 0, errors.join(' | '));
+  } finally {
+    desktop.voice = null;
+    svc.setRecording(false);
+    svc.publishMeetingState(false);
+    await ctx.close();
+    await browser.close();
+  }
+}
+
 async function timeoutScenarios() {
   const dev = DEVICES[1];
   svc.history = [];
@@ -1085,6 +1158,11 @@ if (!only || only === 'markdown') {
 if (!only || only === 'images') {
   for (const dev of [DEVICES[1], DEVICES[3]]) {
     try { await imageScenarios(dev); } catch (e) { check(`${dev.name}/images`, 'threw', false, e.message.split('\n')[0]); }
+  }
+}
+if (!only || only === 'recording') {
+  for (const dev of [DEVICES[1], DEVICES[3]]) {
+    try { await recordingScenario(dev); } catch (e) { check(`${dev.name}/recording`, 'threw', false, e.message.split('\n')[0]); }
   }
 }
 if (!only || only === 'timeouts') {

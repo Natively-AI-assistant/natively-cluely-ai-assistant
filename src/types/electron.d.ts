@@ -1367,6 +1367,8 @@ export interface ElectronAPI {
   // question is sent, the screenshots it was sent with. Overlay window only.
   phoneMirrorSetAttachments?: (items: Array<{ path: string; preview: string }>) => void;
   phoneMirrorImagesSent?: (id: string, paths: string[]) => void;
+  // Phone Mirror's Answer chip reads Stop while the overlay's Answer button records.
+  phoneMirrorSetRecording?: (active: boolean) => void;
   onPhoneMirrorDetach?: (callback: (data: { path: string }) => void) => () => void;
   // Smart Browser Context v2 — auto-capture settings.
   browserContextGetSettings: () => Promise<BrowserContextSettings | { error: string }>;
