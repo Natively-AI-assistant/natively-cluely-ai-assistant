@@ -22,7 +22,7 @@
 
 import type { EvidenceScope } from '../contracts/types';
 import {
-  advance, appendTurn, withTurnScreen, resolveReference, MAX_SUMMARY_CHARS, SHARED_SESSION_BUCKET,
+  advance, appendTurn, withTurnScreen, resolveReference, MAX_SUMMARY_CHARS, MAX_TURN_ANSWER_CHARS, SHARED_SESSION_BUCKET,
   type ConversationState, type HistoryTurn, type ResolvedReference,
 } from './conversation-state';
 
@@ -86,6 +86,9 @@ export function resolveConversationSessionId(
  * (2026-09-24): the typed-chat ring grew 6 → 7 → 8 → 9 → 10 across four
  * separate meetings, and a new meeting's first question carried the previous
  * meeting's questions and answers in its history.
+ *
+ * Outside a meeting (and with no mode) this is OVERLAY_CONVERSATION_SCOPE, not
+ * the shared bucket — see there.
  */
 export function meetingConversationKey(parts: {
   meetingConversationId?: string | null;
@@ -94,7 +97,44 @@ export function meetingConversationKey(parts: {
   metadataMeetingId?: string | null;
 }): string {
   const marker = parts.meetingConversationId || parts.dynamicSessionId || parts.calendarEventId || null;
+  if (!parts.metadataMeetingId && !marker) return OVERLAY_CONVERSATION_SCOPE;
   return resolveConversationSessionId(parts.metadataMeetingId || marker, marker);
+}
+
+/**
+ * The overlay's conversation outside a meeting: its typed chat AND every hotkey
+ * answer (What to answer, Answer, Code hint, Brainstorm) share it.
+ *
+ * Reported 2026-10-28: "Cmd+1 doesn't remember the context, manual chat does".
+ * Outside a meeting the hotkeys wrote to the shared bucket ('engine') and the
+ * overlay's typed chat to `s:<its webContents id>`, so a screenshot asked
+ * about in typed chat was invisible to the next Cmd+1 and the other way round.
+ * And because the shared bucket is not a conversation identity, the bridge
+ * dropped every one of its exchanges that had no screen, so Cmd+1 did not
+ * remember its own previous answers either.
+ *
+ * A named key rather than the overlay's webContents id: the engine knows no
+ * window. The launcher's chat is another conversation and keeps its own
+ * `s:<sender>` key (chatConversationKey).
+ */
+export const OVERLAY_CONVERSATION_SCOPE = 's:overlay';
+
+/** The key a chat window uses outside a meeting. */
+export function outOfMeetingConversationKey(sender: { id: string | number; isOverlay: boolean }): string {
+  return sender.isOverlay ? OVERLAY_CONVERSATION_SCOPE : resolveConversationSessionId(null, sender.id);
+}
+
+/**
+ * The key a typed-chat turn reads and writes: the engine's key while a meeting
+ * (or a mode session) names the conversation, otherwise the window's own
+ * out-of-meeting key, which for the overlay is the one its hotkeys use.
+ */
+export function chatConversationKey(
+  engineKey: string | null | undefined,
+  sender: { id: string | number; isOverlay: boolean },
+): string {
+  if (engineKey && engineKey !== NO_CONVERSATION_SCOPE && engineKey !== OVERLAY_CONVERSATION_SCOPE) return engineKey;
+  return outOfMeetingConversationKey(sender);
 }
 
 export interface AdvanceTurnInput {
@@ -171,12 +211,25 @@ export function recordAnswerSummary(
     anchor?: boolean;
     /** Who asked — see HistoryTurn.from. Live surfaces pass 'meeting'. */
     from?: 'meeting';
+    /**
+     * Kept in the ring, screenshot and all, without becoming what the next
+     * follow-up refers to (Brainstorm): `previousAnswerSummary` stays on the
+     * last real answer, so "explain that" after it still means that answer.
+     */
+    aside?: boolean;
   },
 ): HistoryTurn | null {
   const s = store();
   let cur = s.get(sessionId);
   if (!cur && question?.trim()) {
-    cur = { previousQuestion: question.trim(), turns: [] } as unknown as ConversationState;
+    // Every field a state has except its identity (see isSameConversation): the
+    // next typed turn now continues this state, and advance() and the referent
+    // resolver read its lists. A bare `{ previousQuestion, turns }` made
+    // `[...base.activeEntities]` throw on the first follow-up with a pronoun.
+    cur = {
+      previousQuestion: question.trim(), turns: [], activeEntities: [],
+      previousEvidenceIds: [], previousSourceIds: [], unresolvedReferences: [], updatedAt: 0,
+    } as unknown as ConversationState;
   }
   if (!cur) return null;
   // THE question this answer answers, captured by the caller at turn time.
@@ -199,7 +252,7 @@ export function recordAnswerSummary(
   const turns = appendTurn(before, turnQuestion, text, screenContext, opts?.from);
   s.set(sessionId, {
     ...cur,
-    previousAnswerSummary: text.slice(0, MAX_SUMMARY_CHARS) || undefined,
+    previousAnswerSummary: opts?.aside ? cur.previousAnswerSummary : text.slice(0, MAX_SUMMARY_CHARS) || undefined,
     // COMPLETES the open turn: `advance()` recorded the question when the turn
     // started, and this is the first moment its answer exists. Appending here
     // (rather than only overwriting a single slot) is what lets turn N see
@@ -214,7 +267,7 @@ export function recordAnswerSummary(
     // Only a caller passing `{ anchor: true }` may do this — see the
     // parameter's docblock for why the deferred what-to-answer writer must
     // not.
-    ...(opts?.anchor && turnQuestion ? { previousQuestion: turnQuestion } : {}),
+    ...(opts?.anchor && !opts.aside && turnQuestion ? { previousQuestion: turnQuestion } : {}),
   });
   // The turn this call wrote, for a writer that completes it later (the screen
   // text). null when appendTurn refused it (no question, or no answer).
@@ -240,6 +293,29 @@ export function attachScreenToAnsweredTurn(
   if (!turns) return false;
   s.set(sessionId, { ...cur, turns });
   return true;
+}
+
+/**
+ * Remove the newest recorded turn that gave `answerText`. For an answer that a
+ * retry REPLACED (the assessment-refusal retry): both were recorded, so the
+ * ring held the refusal next to the real answer, each carrying the same
+ * screenshot, and the refusal steered later follow-ups toward refusing too.
+ *
+ * `skipNewest`: the newest turn is the retry's own and stands whatever it said.
+ * A retry that refused again gives the very same text, and the newest match
+ * was then the retry, so the full-screen refusal was the one kept.
+ */
+export function removeAnsweredTurn(sessionId: string, answerText: string, opts: { skipNewest?: boolean } = {}): boolean {
+  const s = store();
+  const cur = s.get(sessionId);
+  if (!cur?.turns?.length) return false;
+  const answer = String(answerText ?? '').slice(0, MAX_TURN_ANSWER_CHARS);
+  for (let i = cur.turns.length - (opts.skipNewest ? 2 : 1); i >= 0; i--) {
+    if (cur.turns[i].a !== answer) continue;
+    s.set(sessionId, { ...cur, turns: [...cur.turns.slice(0, i), ...cur.turns.slice(i + 1)] });
+    return true;
+  }
+  return false;
 }
 
 /** Resolve a question against the session's state. Pure pass-through when no state. */

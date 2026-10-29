@@ -93,6 +93,16 @@ describe('WTA keeps the active coding problem for a coding continuation (#539)',
     assert.doesNotMatch(prompt, /# Question\n[^\n]*rotate the active encryption key/);
   });
 
+  // 2026-10-29: a Cmd+1 press now records the question it answered. The note
+  // appended for THIS prompt is scaffolding; recorded, it rode into the next
+  // turn's history and the behavioural question above went out carrying it.
+  test('the conversation records the ask as heard, not the note added for this prompt', async () => {
+    const { getConversationState, OVERLAY_CONVERSATION_SCOPE } = require(path.resolve(repoRoot, 'dist-electron/electron/context-intelligence/question/conversation-state-store.js'));
+    await press([...earlier, [3, 'interviewer', 'show the solution in python']]);
+    const turns = getConversationState(OVERLAY_CONVERSATION_SCOPE)?.turns ?? [];
+    assert.equal(turns[turns.length - 1]?.q, 'show the solution in python');
+  });
+
   // The old turns can still reach the prompt through the durable meeting-transcript
   // block (unchanged by this fix); what must not happen is the question being
   // rewritten as a follow-up to the OLD problem.

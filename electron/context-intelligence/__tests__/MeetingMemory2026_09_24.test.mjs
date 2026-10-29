@@ -217,9 +217,10 @@ describe('each meeting has its own conversation, mode or no mode', () => {
     const after = meetingConversationKey({ meetingConversationId: 'conv_a', dynamicSessionId: 'session_2' });
     assert.equal(before, after);
   });
-  test('outside a meeting the shared bucket is still returned, so typed chat keys by its window', async () => {
-    const { meetingConversationKey, NO_CONVERSATION_SCOPE } = await load('question/conversation-state-store.js');
-    assert.equal(meetingConversationKey({}), NO_CONVERSATION_SCOPE);
+  test('outside a meeting the overlay conversation is returned, which the overlay\'s typed chat shares (2026-10-28)', async () => {
+    const { meetingConversationKey, OVERLAY_CONVERSATION_SCOPE, NO_CONVERSATION_SCOPE } = await load('question/conversation-state-store.js');
+    assert.equal(meetingConversationKey({}), OVERLAY_CONVERSATION_SCOPE);
+    assert.notEqual(meetingConversationKey({}), NO_CONVERSATION_SCOPE);
   });
   test('a calendar meeting id is still preferred when metadata carries one', async () => {
     const { meetingConversationKey } = await load('question/conversation-state-store.js');

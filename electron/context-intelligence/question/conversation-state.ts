@@ -436,9 +436,25 @@ export function conversationKey(scope: EvidenceScope): string {
   return scopeKey({ ...scope, meetingId: undefined });
 }
 
-/** Whether `scope` continues the conversation `state` was recorded in. */
+/**
+ * Whether `scope` continues the conversation `state` was recorded in.
+ *
+ * A state with NO identity at all was seeded by recordAnswerSummary: a hotkey
+ * press (Cmd+1 on a screenshot, Code hint, Brainstorm) that never goes through
+ * orchestrate() opened the conversation. It was stored under this very session
+ * id, so under a real one it IS this conversation. Treating it as foreign reset
+ * the ring on the next typed message (measured 2026-10-29, e2e through the
+ * compiled handler): Cmd+1 on a screenshot, then "what port does that use?",
+ * and the ring held only the typed turn, the screenshot gone for good. Under
+ * the shared bucket the session id names no conversation, so a seed there
+ * still resets, as any scope drift does.
+ */
 export function isSameConversation(state: ConversationState, scope: EvidenceScope): boolean {
   if (state.scopeId === scopeKey(scope)) return true;
+  if (state.scopeId === undefined && state.conversationId === undefined) {
+    const session = String(scope.sessionId ?? '').trim();
+    return Boolean(session) && session !== SHARED_SESSION_BUCKET;
+  }
   return state.conversationId !== undefined && state.conversationId === conversationKey(scope);
 }
 

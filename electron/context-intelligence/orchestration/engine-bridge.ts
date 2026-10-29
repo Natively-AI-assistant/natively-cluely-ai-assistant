@@ -14,8 +14,8 @@
 // never "no answer".
 
 import { isContextIntelligenceV3Enabled } from '../contracts/flag';
-import { MAX_TURN_SCREEN_CHARS, type HistoryTurn } from '../question/conversation-state';
-import { renderHistory } from '../question/history-render';
+import type { HistoryTurn } from '../question/conversation-state';
+import { renderHistory, speechWindowContains, HISTORY_SCREEN_BUDGET_CHARS } from '../question/history-render';
 
 /** Allowance for the history RECALL tier: up to three older exchanges the
  *  question is about, with their screen text (history-render.ts). */
@@ -56,19 +56,9 @@ function redactTracePayload<T>(payload: T): unknown {
  */
 const COMPLETED_EXCHANGE_RE = /^(?:Assistant:|Previous answer)/m;
 
-/**
- * Whether a live speech window already carries this answer. SessionTracker
- * renders an assistant turn as "[ASSISTANT (PREVIOUS SUGGESTION)]: <text>", so
- * the answer's opening words — whitespace-collapsed, gist line dropped — are
- * the stable thing to look for. Too short an opening is not evidence either
- * way and is treated as absent (a duplicated line costs less than a lost one).
- */
-export function speechWindowContains(speech: string, answer: string): boolean {
-  const norm = (x: string) => x.replace(/\[\[GIST\]\][^\n]*/g, '').replace(/\s+/g, ' ').trim();
-  const probe = norm(answer).slice(0, 60);
-  if (probe.length < 24) return false;
-  return norm(speech).includes(probe);
-}
+// speechWindowContains moved to history-render (quick actions dedupe with it
+// too); re-exported here for existing importers.
+export { speechWindowContains };
 
 export interface BridgeInput {
   surface: AnswerSurface;
@@ -430,7 +420,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
             // Screen text gets its OWN allowance: sharing one budget meant a
             // single screenshot consumed the whole conversation allowance and
             // evicted every older turn.
-            screenBudgetChars: MAX_TURN_SCREEN_CHARS * 2,
+            screenBudgetChars: HISTORY_SCREEN_BUDGET_CHARS,
             screensDenied,
             // Text read off a kept-on-device screenshot: shown only when this
             // turn stays on this device. Asked live, like the scope above.
@@ -492,7 +482,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
             // BUDGETED like the ring branch. Unbudgeted, 10 screen turns once
             // put 80,000 characters of screen text into an 83,072-character
             // prompt on every what-to-answer and assist turn.
-            screenBudgetChars: MAX_TURN_SCREEN_CHARS * 2,
+            screenBudgetChars: HISTORY_SCREEN_BUDGET_CHARS,
             screensDenied: isScopeDenied('screenshots', readProviderScopePolicy()),
             onDeviceScreens: readSelectionStaysOnDevice(),
             // Dedupe against the ACTUAL window text, not "was it recent": the
