@@ -56,6 +56,9 @@ export const SCREEN_EXCERPT_MIN_CHARS = 300;
 export const SCREEN_EXCERPT_MAX_COUNT = Math.floor(SCREEN_EXCERPT_BUDGET_CHARS / SCREEN_EXCERPT_MIN_CHARS);
 /** Past the condensed allowance, an exchange carried for its screen keeps this much of its question. */
 export const SCREEN_ONLY_QUESTION_CHARS = 200;
+/** Stands in for a screenshot or page a later turn of the conversation also read, and carries. */
+export const SAME_SCREEN_NOTE =
+  '(the same screenshot or page a later turn in this conversation attached; its text is carried with that turn)';
 /** Ends an excerpt, so the model knows the screen went on. */
 export const SCREEN_EXCERPT_MARKER =
   '\n[SHORTENED: only the start of this earlier screen\'s text is carried here. Do not infer anything from the missing part.]';
@@ -250,14 +253,19 @@ function screenExcerpt(screen: string, chars: number): string {
  * The screen text each turn carries in THIS prompt (see SCREENS ARE NEVER
  * DROPPED). Newest first: in full while the allowance lasts, then an excerpt
  * of every older one. A turn absent from the map has no screen this prompt may
- * show.
+ * show. An older turn that read the same screenshot or page as a newer one
+ * (`screenSource`) gets SAME_SCREEN_NOTE instead: repeated presses on one
+ * screenshot would otherwise spend the allowance on copies and shorten the
+ * other screens.
  */
 function allocateScreens(
   turns: readonly HistoryTurn[], opts: Pick<RenderHistoryOptions, 'screensDenied' | 'onDeviceScreens' | 'screenBudgetChars'>,
-): { screens: Map<HistoryTurn, string>; notCarried: number } {
+): { screens: Map<HistoryTurn, string>; notCarried: number; repeats: Set<HistoryTurn> } {
   const out = new Map<HistoryTurn, string>();
-  if (opts.screensDenied) return { screens: out, notCarried: 0 };
+  const repeats = new Set<HistoryTurn>();
+  if (opts.screensDenied) return { screens: out, notCarried: 0, repeats };
   const older: HistoryTurn[] = [];
+  const carriedSources = new Set<string>();
   let spent = 0;
   for (let i = turns.length - 1; i >= 0; i--) {
     const t = turns[i];
@@ -265,6 +273,10 @@ function allocateScreens(
     if (!text) continue;
     // A note standing in for screen text is short, never cut and never charged.
     if (!hasScreenText(t, opts)) { out.set(t, text); continue; }
+    if (t.screenSource) {
+      if (carriedSources.has(t.screenSource)) { out.set(t, SAME_SCREEN_NOTE); repeats.add(t); continue; }
+      carriedSources.add(t.screenSource);
+    }
     if (spent + text.length <= opts.screenBudgetChars) {
       spent += text.length;
       out.set(t, text);
@@ -279,7 +291,7 @@ function allocateScreens(
       Math.min(SCREEN_EXCERPT_MAX_CHARS, Math.floor(SCREEN_EXCERPT_BUDGET_CHARS / excerpted.length)));
     for (const t of excerpted) out.set(t, screenExcerpt(String(t.screen), each));
   }
-  return { screens: out, notCarried: older.length - excerpted.length };
+  return { screens: out, notCarried: older.length - excerpted.length, repeats };
 }
 
 export function renderHistory(turns: readonly HistoryTurn[], opts: RenderHistoryOptions): RenderedHistory {
@@ -296,9 +308,9 @@ export function renderHistory(turns: readonly HistoryTurn[], opts: RenderHistory
     : [...turns];
   // Decided before any tier: which tier an exchange lands in must not decide
   // whether its screen is carried.
-  const { screens, notCarried } = allocateScreens(candidates, opts);
+  const { screens, notCarried, repeats } = allocateScreens(candidates, opts);
   /** The exchange holds screen text that only it can carry into this prompt. */
-  const carriedForScreen = (t: HistoryTurn) => screens.has(t) && hasScreenText(t, opts);
+  const carriedForScreen = (t: HistoryTurn) => screens.has(t) && hasScreenText(t, opts) && !repeats.has(t);
   const answerOf = (t: HistoryTurn) => (answerElsewhere.has(t) ? '' : t.a);
   const full: HistoryTurn[] = [];
   let spent = 0;
@@ -346,7 +358,7 @@ export function renderHistory(turns: readonly HistoryTurn[], opts: RenderHistory
   // full-tier turn whose screen was shortened is in the pool too: it is
   // rendered where it is, with its whole screen.
   const inFull = new Set(full);
-  const shortened = (t: HistoryTurn) => screens.has(t) && screens.get(t) !== shownScreen(t, opts);
+  const shortened = (t: HistoryTurn) => screens.has(t) && !repeats.has(t) && screens.get(t) !== shownScreen(t, opts);
   const pool = candidates.filter((t) => !inFull.has(t) || shortened(t));
   const picked: number[] = [];
   if (opts.query && (opts.recallBudgetChars ?? 0) > 0 && pool.length) {
@@ -354,7 +366,7 @@ export function renderHistory(turns: readonly HistoryTurn[], opts: RenderHistory
     for (const idx of rankRelatedTurns(pool, opts.query)) {
       const t = pool[idx];
       const cost = (inFull.has(t) ? 0 : t.q.length + Math.min(answerOf(t).length, RECALL_ANSWER_CHARS) + 48)
-        + (opts.screensDenied ? 0 : Math.min(shownScreen(t, opts)?.length ?? 0, RECALL_SCREEN_CHARS));
+        + (opts.screensDenied || repeats.has(t) ? 0 : Math.min(shownScreen(t, opts)?.length ?? 0, RECALL_SCREEN_CHARS));
       if (picked.length && recallSpent + cost > opts.recallBudgetChars!) continue;
       recallSpent += cost;
       picked.push(idx);
@@ -371,7 +383,9 @@ export function renderHistory(turns: readonly HistoryTurn[], opts: RenderHistory
   const screenLine = (t: HistoryTurn, whole = false): string[] => {
     if (!t.screen) return [];
     if (opts.screensDenied || keptAway(t, opts)) screenWithheld = true;
-    const text = whole && !opts.screensDenied ? shownScreen(t, opts) : screens.get(t);
+    // A repeat stays a pointer even when recalled: the newer turn carries the
+    // text, and recalls that one whole when it was shortened.
+    const text = whole && !opts.screensDenied && !repeats.has(t) ? shownScreen(t, opts) : screens.get(t);
     if (!text) return [];
     if (!keptAway(t, opts)) carriesScreen = true;
     // The screenshot the user attached on that turn, as text. The image is

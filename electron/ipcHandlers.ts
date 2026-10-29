@@ -2909,23 +2909,25 @@ export function initializeIpcHandlers(appState: AppState): void {
               if (!v3Truncated) {
                 try {
                   const {
-                    recordAnswerSummary,
+                    recordAnswerSummary, finishedTurnKey,
                   } = require('./context-intelligence/question/conversation-state-store');
                   // Third argument is what makes a screenshot survive its own
                   // turn: the description enters the conversation ring, so a
                   // later "what was in that screenshot?" has something to read.
                   // The key MUST match the one the scope above was built with,
                   // or this writes a ring nothing ever reads.
-                  // The key the turn STARTED under: a meeting starting or
-                  // ending while it streamed must not move it to another ring.
+                  // The key the turn STARTED under: a meeting starting while it
+                  // streamed must not move it to another ring, and a meeting
+                  // that ENDED took its ring with it, so the turn is not kept.
                   const ringKey = v3ConversationKey;
+                  const ringOpen = finishedTurnKey(ringKey, v3ConversationSessionId(appState, senderId)) !== null;
                   const { SCREEN_BEING_READ, SCREEN_NOT_TRANSCRIBED } = require('./services/screen/screenDescription') as
                     typeof import('./services/screen/screenDescription');
                   // A screenshot whose first reading came back empty was still
                   // SHARED: recorded with no marker, a failed transcription below
                   // left later turns told no screenshot was ever sent.
                   const screenPlaceholder = v3ScreenDescription || (imagePaths?.length ? SCREEN_BEING_READ : undefined);
-                  const turn = recordAnswerSummary(
+                  const turn = ringOpen ? recordAnswerSummary(
                     ringKey,
                     finalText,
                     screenPlaceholder,
@@ -2935,7 +2937,9 @@ export function initializeIpcHandlers(appState: AppState): void {
                     // streamed filed this answer, and its screenshot, under the
                     // other turn's question.
                     v3Question.trim() || undefined,
-                  );
+                    { screenSource: (require('./context-intelligence/question/conversation-state') as
+                      typeof import('./context-intelligence/question/conversation-state')).screenSourceKey({ imagePaths }) },
+                  ) : null;
                   // The screen text above is the ANSWERING pre-pass's paraphrase
                   // ("your build failed due to disk quota"), with the error code
                   // and ticket id a follow-up asks for already gone. Replaced by
@@ -16372,6 +16376,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       for (const p of paths) {
         try {
           const out = await optimizer.optimize(p, { profile, provider: 'openai', cacheKey: p });
+          // So the conversation reads and names the screenshot, not the copy.
+          (require('./context-intelligence/question/conversation-state') as
+            typeof import('./context-intelligence/question/conversation-state')).noteScreenshotCopy(out.path, p);
           optimized.push(out.path);
         } catch (err: any) {
           console.warn(

@@ -182,6 +182,16 @@ export function advanceConversationState(input: AdvanceTurnInput): ConversationS
 }
 
 /**
+ * The conversation a turn that started under `startedUnder` is recorded in
+ * once it finishes, or null when that was a meeting which has ended since: its
+ * conversation was cleared with it, and recording under the key now in force
+ * would put the meeting's exchange into the overlay's own conversation.
+ */
+export function finishedTurnKey(startedUnder: string, current: string): string | null {
+  return startedUnder.startsWith('m:') && startedUnder !== current ? null : startedUnder;
+}
+
+/**
  * Attach the answer summary AFTER the stream completes. Split from
  * advanceConversationState because the caller has the final text only after
  * the provider finishes; the referent for the NEXT turn should include what
@@ -217,6 +227,8 @@ export function recordAnswerSummary(
      * last real answer, so "explain that" after it still means that answer.
      */
     aside?: boolean;
+    /** What the turn's screen text was read from, as screenSourceKey names it. */
+    screenSource?: string;
   },
 ): HistoryTurn | null {
   const s = store();
@@ -249,7 +261,7 @@ export function recordAnswerSummary(
   const turnQuestion = question?.trim() || cur.previousQuestion || '';
   const text = String(answerText ?? '');
   const before = cur.turns ?? [];
-  const turns = appendTurn(before, turnQuestion, text, screenContext, opts?.from);
+  const turns = appendTurn(before, turnQuestion, text, screenContext, opts?.from, opts?.screenSource);
   s.set(sessionId, {
     ...cur,
     previousAnswerSummary: opts?.aside ? cur.previousAnswerSummary : text.slice(0, MAX_SUMMARY_CHARS) || undefined,

@@ -878,7 +878,10 @@ export const CODE_HINT_PROMPT = `
 export function buildCodeHintMessage(
    questionContext: string | null,
    questionSource: 'screenshot' | 'transcript' | null,
-   transcriptContext: string | null
+   transcriptContext: string | null,
+   /** The conversation so far (screenshots shared in it included). Sent with a
+    *  pinned question, which takes no transcript. */
+   history: string | null = null,
 ): string {
    const parts: string[] = [];
 
@@ -891,6 +894,11 @@ export function buildCodeHintMessage(
       parts.push(`<coding_question ${sourceLabel}>
    ${questionContext}
    </coding_question>`);
+      if (history?.trim()) {
+         parts.push(`<conversation_history>
+   ${history.trim()}
+   </conversation_history>`);
+      }
    } else if (transcriptContext) {
       // Transcript is a fallback ONLY when no explicit question is pinned.
       // Passing it alongside a pinned question is redundant noise that increases token cost.

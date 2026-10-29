@@ -415,7 +415,10 @@ test('a screenshot that could not be transcribed is still recorded as having exi
   assert.match(engine, /this\.recordLiveTurn\(answer, options\?\.screenContext,\s*heard \|\| \(sawScreen \? undefined : IntelligenceEngine\.UNPROMPTED_TURN_QUESTION\),\s*imagePaths\?\.length \?\? 0, imagePaths,/);
   // The recorded text is a DEDICATED transcription, not the answering call's
   // output — that reuse is what stored a paraphrase with no identifiers.
-  assert.match(engine, /transcribeScreenForMemory\(imagePaths, question\?\.trim\(\) \|\| undefined\)/);
+  // (2026-10-29: of the screenshots themselves. Code hint and Brainstorm pass
+  // optimized copies, which understand() refuses as outside the app folder.)
+  assert.match(engine, /const shots: string\[\] \| undefined = imagePaths\?\.map\(screenshotSourceOf\);/);
+  assert.match(engine, /transcribeScreenForMemory\(shots, question\?\.trim\(\) \|\| undefined\)/);
 });
 
 // ── Three defects found only by running a real session ──────────────────────

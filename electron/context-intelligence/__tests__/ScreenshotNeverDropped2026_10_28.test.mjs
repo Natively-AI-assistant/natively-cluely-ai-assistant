@@ -24,9 +24,11 @@ const store = await load('question/conversation-state-store.js');
 const {
   renderHistory, renderHistoryForQuickAction, HISTORY_SCREEN_BUDGET_CHARS, SCREEN_EXCERPT_MARKER,
   SCREEN_EXCERPT_BUDGET_CHARS, SCREEN_EXCERPT_MAX_COUNT, SCREEN_ONLY_QUESTION_CHARS, QUICK_ACTION_HISTORY_HEADER,
-  neutralizeRoleHeaders,
+  neutralizeRoleHeaders, SAME_SCREEN_NOTE,
 } = await load('question/history-render.js');
-const { appendTurn, MAX_TURN_SCREEN_CHARS, MAX_HISTORY_TURNS } = await load('question/conversation-state.js');
+const {
+  appendTurn, MAX_TURN_SCREEN_CHARS, MAX_HISTORY_TURNS, screenSourceKey, noteScreenshotCopy, screenshotSourceOf,
+} = await load('question/conversation-state.js');
 const { SCREEN_NOT_TRANSCRIBED, SCREEN_BEING_READ } = await load('../services/screen/screenDescription.js');
 const { buildV3Prompt } = await load('orchestration/engine-bridge.js');
 const { CONTEXT_INTELLIGENCE_V3_ENV_KEY } = await load('contracts/flag.js');
@@ -35,7 +37,7 @@ process.env[CONTEXT_INTELLIGENCE_V3_ENV_KEY] = '1';
 const {
   OVERLAY_CONVERSATION_SCOPE, NO_CONVERSATION_SCOPE, meetingConversationKey, chatConversationKey,
   outOfMeetingConversationKey, recordAnswerSummary, getConversationState, clearConversationState,
-  advanceConversationState, removeAnsweredTurn,
+  advanceConversationState, removeAnsweredTurn, finishedTurnKey,
 } = store;
 
 const overlay = { id: 5, isOverlay: true };
@@ -333,5 +335,117 @@ describe('a refused answer that a retry replaced leaves the conversation', () =>
     assert.equal(removeAnsweredTurn(key, refusal, { skipNewest: true }), true);
     assert.deepEqual(getConversationState(key).turns.map((t) => t.screen), ['CROPPED page area']);
     clearConversationState(key);
+  });
+});
+
+describe('repeated presses on one screenshot or page carry its text once', () => {
+  const full = 8000;
+  /** An older, different screenshot, then three presses on one queued screenshot (Code hint, Brainstorm, Cmd+1). */
+  const pressed = (withKeys) => {
+    let turns = appendTurn([], 'Q-OLD', 'answer old', screen('OLD', full), undefined, withKeys ? 'img-old' : undefined);
+    for (const [q, tag] of [['(code hint)', 'A1'], ['(brainstorm)', 'A2'], ['(what to answer)', 'A3']]) {
+      turns = appendTurn(turns, q, `answer ${tag}`, screen(tag, full), undefined, withKeys ? 'img-a' : undefined);
+    }
+    return turns;
+  };
+
+  test('before: three copies spent the allowance and the older screenshot was cut', () => {
+    const text = renderHistory(pressed(false), opts()).text;
+    assert.ok(!text.includes('ID-OLD-END'), 'the older screenshot was carried whole');
+  });
+
+  test('the newest copy carries the text, older presses point at it, the older screenshot stays whole', () => {
+    const text = renderHistory(pressed(true), opts()).text;
+    assert.ok(text.includes('ID-A3-END'));
+    assert.ok(!text.includes('ID-A1-END') && !text.includes('ID-A2-END'), 'a copy was carried');
+    assert.equal(text.split(SAME_SCREEN_NOTE).length - 1, 2);
+    assert.ok(text.includes('ID-OLD-END'), 'the older screenshot was shortened by copies');
+    // Each press keeps its own exchange.
+    for (const a of ['answer A1', 'answer A2', 'answer A3']) assert.ok(text.includes(a), a);
+  });
+
+  test('a question about the screenshot recalls no copy', () => {
+    const text = renderHistory(pressed(true), opts({ query: 'which constraint line about the input array', recallBudgetChars: 40_000 })).text;
+    assert.ok(!text.includes('ID-A1-END') && !text.includes('ID-A2-END'), 'recall brought a copy back');
+    assert.ok(text.includes('ID-A3-END'));
+  });
+
+  test('two different screenshots are both carried', () => {
+    let turns = appendTurn([], 'q1', 'a1', screen('X'), undefined, 'img-x');
+    turns = appendTurn(turns, 'q2', 'a2', screen('Y'), undefined, 'img-y');
+    const text = renderHistory(turns, opts()).text;
+    assert.ok(text.includes('ID-X-END') && text.includes('ID-Y-END'));
+    assert.ok(!text.includes(SAME_SCREEN_NOTE));
+  });
+
+  test('while the newest copy is still being read, an older copy carries the text', () => {
+    let turns = appendTurn([], 'q1', 'a1', screen('A1'), undefined, 'img-a');
+    turns = appendTurn(turns, 'q2', 'a2', SCREEN_BEING_READ, undefined, 'img-a');
+    const text = renderHistory(turns, opts()).text;
+    assert.ok(text.includes('ID-A1-END'));
+    assert.ok(!text.includes(SAME_SCREEN_NOTE));
+  });
+
+  test('the source key names the screenshots and page without storing them', () => {
+    const a = screenSourceKey({ imagePaths: ['/q/1.png', '/q/2.png'] });
+    assert.equal(a, screenSourceKey({ imagePaths: ['/q/2.png', '/q/1.png'] }));
+    assert.notEqual(a, screenSourceKey({ imagePaths: ['/q/1.png'] }));
+    assert.ok(!a.includes('png') && !a.includes('/'));
+    const page = screenSourceKey({ page: 'Two Sum. Given an array nums...' });
+    assert.equal(page, screenSourceKey({ page: '  Two Sum. Given an array nums...\n' }));
+    assert.notEqual(page, screenSourceKey({ page: 'Three Sum. Given an array nums...' }));
+    assert.notEqual(page, screenSourceKey({ imagePaths: ['/q/1.png'], page: 'Two Sum. Given an array nums...' }));
+    assert.equal(screenSourceKey({ imagePaths: [] }), undefined);
+    assert.equal(screenSourceKey({}), undefined);
+  });
+
+  test('an optimized copy names the screenshot it was made from', () => {
+    // Code hint and Brainstorm get a re-encoded copy; What to answer gets the queued file.
+    noteScreenshotCopy('/tmp/optimized/c1.jpg', '/q/shot.png');
+    noteScreenshotCopy('/tmp/optimized/c2.webp', '/q/shot.png');
+    assert.equal(screenshotSourceOf('/tmp/optimized/c1.jpg'), '/q/shot.png');
+    assert.equal(screenshotSourceOf('/q/other.png'), '/q/other.png');
+    const key = screenSourceKey({ imagePaths: ['/q/shot.png'] });
+    assert.equal(screenSourceKey({ imagePaths: ['/tmp/optimized/c1.jpg'] }), key);
+    assert.equal(screenSourceKey({ imagePaths: ['/tmp/optimized/c2.webp'] }), key);
+    noteScreenshotCopy('/q/same.png', '/q/same.png');
+    assert.equal(screenshotSourceOf('/q/same.png'), '/q/same.png');
+  });
+
+  test('the key is stored only with a screen', () => {
+    clearConversationState('source-key');
+    recordAnswerSummary('source-key', 'answer one', 'screen one', 'question one', { screenSource: 'k1' });
+    recordAnswerSummary('source-key', 'answer two', undefined, 'question two', { screenSource: 'k2' });
+    const turns = getConversationState('source-key').turns;
+    assert.equal(turns[0].screenSource, 'k1');
+    assert.equal('screenSource' in turns[1], false);
+  });
+
+  test('one captured page pressed on three times does not shorten the screenshot before it', () => {
+    // A coding interview: the problem's screenshot, then Cmd+1 three times on
+    // the same problem page, which the extension attaches on each press.
+    const pageKey = screenSourceKey({ page: 'the problem page' });
+    let turns = appendTurn([], '(screenshot)', 'answer shot', screen('SHOT', full), undefined, screenSourceKey({ imagePaths: ['/q/a.png'] }));
+    for (const n of [1, 2, 3]) {
+      turns = appendTurn(turns, `(press ${n})`, `answer ${n}`, `Browser page captured for this turn:\n${screen(`PAGE${n}`, full)}`, undefined, pageKey);
+    }
+    const text = renderHistory(turns, opts()).text;
+    assert.ok(text.includes('ID-SHOT-END'), 'the screenshot was shortened by copies of the page');
+    assert.ok(text.includes('ID-PAGE3-END'));
+    assert.equal(text.split(SAME_SCREEN_NOTE).length - 1, 2);
+  });
+});
+
+describe('a turn that finishes after its meeting ended', () => {
+  test('is not recorded: the meeting\'s conversation was cleared with it', () => {
+    assert.equal(finishedTurnKey('m:meeting-1', OVERLAY_CONVERSATION_SCOPE), null);
+    assert.equal(finishedTurnKey('m:meeting-1', 'm:meeting-2'), null);
+  });
+
+  test('is recorded where it started otherwise', () => {
+    assert.equal(finishedTurnKey('m:meeting-1', 'm:meeting-1'), 'm:meeting-1');
+    // An overlay turn still streaming when a meeting starts stays in the overlay's conversation.
+    assert.equal(finishedTurnKey(OVERLAY_CONVERSATION_SCOPE, 'm:meeting-1'), OVERLAY_CONVERSATION_SCOPE);
+    assert.equal(finishedTurnKey('s:7', 's:7'), 's:7');
   });
 });

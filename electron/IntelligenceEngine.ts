@@ -5,6 +5,8 @@
 import type { SessionWriteDecision } from './llm/FinalAnswerGenerationPolicy';
 import { LiveHelperLLM, LIVE_HELPER_EMPTY, LIVE_HELPER_WINDOW_SECONDS, catchUpWindowSeconds, liveHelperDisplayKind, type LiveHelperAction } from './llm/liveHelpers';
 import { repairCapReached, endsInsideFence, looksCutOff } from './llm/repairCap';
+import { CODE_HINT_STREAM_FAILED } from './llm/CodeHintLLM';
+import { BRAINSTORM_STREAM_FAILED } from './llm/BrainstormLLM';
 import { EventEmitter } from 'events';
 import { LLMHelper } from './LLMHelper';
 import { SessionTracker, TranscriptSegment, SuggestionTrigger, ContextItem } from './SessionTracker';
@@ -643,12 +645,15 @@ export class IntelligenceEngine extends EventEmitter {
      * What a Code hint or Brainstorm press records as its answer. The canned
      * failure message ("I couldn't detect any code in the screenshot") is not
      * an answer and, recorded as one, told every later turn the screen held no
-     * code. A failed press on a screenshot is still recorded, under a neutral
-     * note, so the screen it carried is kept; one with nothing attached is not
-     * recorded at all (null).
+     * code. Nor is the one the action streams when its provider call fails
+     * (CODE_HINT_STREAM_FAILED, BRAINSTORM_STREAM_FAILED), alone or after a
+     * partial answer. A failed press on a screenshot is still recorded, under a
+     * neutral note, so the screen it carried is kept; one with nothing attached
+     * is not recorded at all (null).
      */
     static actionTurnAnswer(produced: boolean, text: string, imagePaths?: readonly string[]): string | null {
-        if (produced) return text;
+        const failed = [CODE_HINT_STREAM_FAILED, BRAINSTORM_STREAM_FAILED].some((m) => text.trimEnd().endsWith(m));
+        if (produced && !failed) return text;
         return imagePaths?.length ? IntelligenceEngine.ACTION_PRODUCED_NOTHING : null;
     }
 
@@ -1900,7 +1905,7 @@ export class IntelligenceEngine extends EventEmitter {
          *  meeting was heard; a press the user made on a screenshot is theirs. */
         from: 'meeting' | 'user' = 'meeting',
         extra: {
-            /** The browser page the answer read (Cmd/Ctrl+Shift+Y, or the
+            /** The browser page the answer read (Cmd/Ctrl+Y, or the
              *  extension's automatic attach). It was read once and dropped:
              *  the next press, typed or hotkey, had no record of the page. */
             page?: string;
@@ -1908,6 +1913,9 @@ export class IntelligenceEngine extends EventEmitter {
              *  conversation (Brainstorm): "explain that" after it still means
              *  the last answer. See recordAnswerSummary's `aside`. */
             aside?: boolean;
+            /** The conversation key when the press started (conversationSessionId).
+             *  The answer can finish after Stop ended the meeting. */
+            startedUnder?: string;
         } = {},
     ): void {
         if (!answer) return;
@@ -1924,13 +1932,23 @@ export class IntelligenceEngine extends EventEmitter {
         if (asked && !question?.trim()) from = 'user';
         void (async () => {
         try {
-            const { recordAnswerSummary, attachScreenToAnsweredTurn } =
+            const { recordAnswerSummary, attachScreenToAnsweredTurn, finishedTurnKey } =
                 require('./context-intelligence/question/conversation-state-store');
+            const { screenSourceKey, screenshotSourceOf } = require('./context-intelligence/question/conversation-state');
+            // Code hint and Brainstorm pass optimized copies, which screen
+            // understanding refuses (outside the user-data folder) and which
+            // miss the reading already cached for the screenshot. The
+            // screenshots they were made from are read and named instead.
+            const shots: string[] | undefined = imagePaths?.map(screenshotSourceOf);
+            const screenSource: string | undefined = screenSourceKey({ imagePaths: shots, page });
             const { SCREEN_NOT_TRANSCRIBED, SCREEN_BEING_READ, composeScreenDescription: compose } =
                 require('./services/screen/screenDescription');
             // Captured now: the awaited transcription below can outlive a
             // session switch, and its text belongs to the turn recorded here.
-            const sessionId = this.conversationSessionId();
+            // A press whose meeting ended while it ran is not recorded at all.
+            const current = this.conversationSessionId();
+            const sessionId: string | null = extra.startedUnder ? finishedTurnKey(extra.startedUnder, current) : current;
+            if (!sessionId) return;
             // The caller's already-computed ScreenUnderstandingResult, as the
             // text to record with until a dedicated transcription arrives.
             //
@@ -1980,7 +1998,11 @@ export class IntelligenceEngine extends EventEmitter {
                 // A live turn's question was HEARD, not typed: What-to-answer
                 // resolves it from the transcript and Auto Answer passes the
                 // detected interviewer question. A screenshot press is the user's.
-                { ...(from === 'meeting' ? { from: 'meeting' as const } : {}), ...(extra.aside ? { aside: true } : {}) },
+                {
+                    ...(from === 'meeting' ? { from: 'meeting' as const } : {}),
+                    ...(extra.aside ? { aside: true } : {}),
+                    ...(screenSource ? { screenSource } : {}),
+                },
             );
             // A DEDICATED transcription, not the answering call's output. The
             // answering call is asked to answer concisely; measured live, its
@@ -1989,11 +2011,11 @@ export class IntelligenceEngine extends EventEmitter {
             // reference, which is precisely what the follow-up then asked for.
             // After the answer AND after the turn is recorded, so it costs the
             // user nothing and holds nothing up.
-            if (imagePaths?.length) {
+            if (shots?.length) {
                 const { transcribeScreenForMemory } = require('./services/screen/screenTranscription');
                 // A read that throws is a read that failed: the turn must not be
                 // left saying "still being read" for the rest of the session.
-                const screenText = await Promise.resolve(transcribeScreenForMemory(imagePaths, question?.trim() || undefined)).catch((): string => '');
+                const screenText = await Promise.resolve(transcribeScreenForMemory(shots, question?.trim() || undefined)).catch((): string => '');
                 // To THIS turn, by the turn object. By the answer alone, a later
                 // turn that happened to give the same answer took the text.
                 if (screenText) attachScreenToAnsweredTurn(sessionId, answer, withPage(screenText)!, { turn, placeholder: recorded });
@@ -2017,6 +2039,7 @@ export class IntelligenceEngine extends EventEmitter {
         // advanced the state, or, with no state yet, not at all: the turn and
         // its screenshot were simply never recorded.
         const turnOut: { question?: string } = {};
+        const startedUnder = this.conversationSessionId();
         const answer = await this.runWhatShouldISayInner(question, confidence, imagePaths, { ...options, turnOut });
         // With no question, the turn is recorded only once the run got as far as
         // resolving one (turnOut is set there). A press that returned earlier
@@ -2032,7 +2055,7 @@ export class IntelligenceEngine extends EventEmitter {
             const sawScreen = Boolean(imagePaths?.length || options?.screenContext || options?.domContext?.trim());
             this.recordLiveTurn(answer, options?.screenContext,
                 heard || (sawScreen ? undefined : IntelligenceEngine.UNPROMPTED_TURN_QUESTION),
-                imagePaths?.length ?? 0, imagePaths, 'meeting', { page: options?.domContext });
+                imagePaths?.length ?? 0, imagePaths, 'meeting', { page: options?.domContext, startedUnder });
         }
         return answer;
     }
@@ -8345,8 +8368,9 @@ export class IntelligenceEngine extends EventEmitter {
         // The FOURTH V3 surface ('manual-chat' via pathTag 'engine'). It reads
         // the ring at the buildV3Prompt call below and, like the other two live
         // surfaces, had no writer — so its own answers never became history.
+        const startedUnder = this.conversationSessionId();
         const manualAnswer = await this.runManualAnswerInner(question);
-        this.recordLiveTurn(manualAnswer, undefined, question);
+        this.recordLiveTurn(manualAnswer, undefined, question, 0, undefined, 'meeting', { startedUnder });
         return manualAnswer;
     }
 
@@ -8552,6 +8576,7 @@ export class IntelligenceEngine extends EventEmitter {
      *   3. transcriptContext (last N seconds of conversation — fallback for inference)
      */
     async runCodeHint(imagePaths?: string[], problemStatement?: string): Promise<string | null> {
+        const startedUnder = this.conversationSessionId();
         if (this.assistCancellationToken) {
             this.assistCancellationToken.abort();
             this.assistCancellationToken = null;
@@ -8592,14 +8617,15 @@ export class IntelligenceEngine extends EventEmitter {
             // renders that history itself and sends its own message instead
             // (CodeHintLLM: `v3?.user ?? ...`), so it is built only without one.
             // With a pinned question there is no transcript, but the history
-            // still goes: the constraints screenshot shared two turns before
-            // the problem was detected belongs to the same problem.
+            // still goes, in its own block (buildCodeHintMessage drops the
+            // transcript beside a question): the constraints screenshot shared
+            // two turns before the problem was detected belongs to the same problem.
             const recentTranscript = questionContext === null ? this.session.getFormattedContext(180) : null;
-            const transcriptContext = codeHintV3
+            const transcriptContext = codeHintV3 || questionContext !== null
                 ? recentTranscript
-                : (questionContext === null
-                    ? this.withConversationHistory(recentTranscript)
-                    : this.conversationHistoryText(questionContext)) || recentTranscript;
+                : this.withConversationHistory(recentTranscript) || recentTranscript;
+            const pinnedHistory = codeHintV3 || questionContext === null
+                ? '' : this.conversationHistoryText(questionContext);
 
             console.log(`[IntelligenceEngine] Code hint — question source: ${questionContext ? (questionSource ?? 'passed') : 'none'}, transcript lines: ${transcriptContext ? transcriptContext.split('\n').length : 0}, images: ${imagePaths?.length ?? 0}`);
             const stream = this.codeHintLLM.generateStream(
@@ -8607,7 +8633,8 @@ export class IntelligenceEngine extends EventEmitter {
                 questionContext ?? undefined,
                 questionSource,
                 transcriptContext ?? undefined,
-                codeHintV3 ?? undefined
+                codeHintV3 ?? undefined,
+                pinnedHistory || undefined,
             );
 
             let streamAborted = false;
@@ -8647,7 +8674,7 @@ export class IntelligenceEngine extends EventEmitter {
             // is deleted once the screenshot queue moves past it.
             this.recordLiveTurn(IntelligenceEngine.actionTurnAnswer(hinted, fullHint, imagePaths),
                 undefined, IntelligenceEngine.actionTurnQuestion('Code hint', questionContext),
-                imagePaths?.length ?? 0, imagePaths, 'user');
+                imagePaths?.length ?? 0, imagePaths, 'user', { startedUnder });
 
             this.emit('suggested_answer', fullHint, 'Code Hint', 1.0);
             this.setMode('idle');
@@ -8665,6 +8692,7 @@ export class IntelligenceEngine extends EventEmitter {
      * Generates a spoken script outlining 2-3 problem-solving approaches with trade-offs.
      */
     async runBrainstorm(imagePaths?: string[], problemStatement?: string): Promise<string | null> {
+        const startedUnder = this.conversationSessionId();
         if (this.assistCancellationToken) {
             this.assistCancellationToken.abort();
             this.assistCancellationToken = null;
@@ -8770,7 +8798,7 @@ export class IntelligenceEngine extends EventEmitter {
             // Into the conversation, screenshot and all (see runCodeHint).
             this.recordLiveTurn(IntelligenceEngine.actionTurnAnswer(generated, fullResult, imagePaths),
                 undefined, IntelligenceEngine.actionTurnQuestion('Brainstorm approaches', resolvedProblem),
-                imagePaths?.length ?? 0, imagePaths, 'user', { aside: true });
+                imagePaths?.length ?? 0, imagePaths, 'user', { aside: true, startedUnder });
 
             this.emit('suggested_answer', fullResult, 'Brainstorming Approaches', 1.0);
             this.setMode('idle');

@@ -18,8 +18,10 @@ import {
 
 const { IntelligenceEngine } = require(dist('IntelligenceEngine.js'));
 const {
-  getConversationState, clearConversationState, recordAnswerSummary,
+  getConversationState, clearConversationState, recordAnswerSummary, OVERLAY_CONVERSATION_SCOPE,
 } = require(dist('context-intelligence/question/conversation-state-store.js'));
+const { CodeHintLLM, CODE_HINT_STREAM_FAILED } = require(dist('llm/CodeHintLLM.js'));
+const { BRAINSTORM_STREAM_FAILED } = require(dist('llm/BrainstormLLM.js'));
 const { SCREEN_NOT_TRANSCRIBED } = require(dist('services/screen/screenDescription.js'));
 
 isolateSingletons();
@@ -40,6 +42,12 @@ const session = (over = {}) => ({
   ...over,
 });
 const streamOf = (text) => ({ generateStream: async function* () { yield text; } });
+/** The real CodeHintLLM over a provider that hands back `reply` (or throws it). */
+const realCodeHint = (reply, sent = {}) => new CodeHintLLM({
+  getPromptTier: () => 'standard',
+  fitContextForCurrentModel: (m) => m,
+  streamChat: async function* (message) { sent.message = message; if (reply instanceof Error) throw reply; yield reply; },
+});
 const MISSING_SHOT = '/nonexistent/natively-test-shot.png';
 
 describe('Cmd+1', () => {
@@ -139,6 +147,40 @@ describe('Code hint (Cmd+6) and Brainstorm (Cmd+7) are recorded', () => {
     assert.equal(turns()[0].q, 'Brainstorm approaches for: Merge k sorted lists');
   });
 
+  test('presses on one queued screenshot name it the same, so history carries it once', async () => {
+    const { screenSourceKey } = require(dist('context-intelligence/question/conversation-state.js'));
+    const e = engine({
+      codeHintLLM: streamOf('Check the loop bound.'),
+      brainstormLLM: streamOf('Approach one: sort first.'),
+      session: session({ getActiveDesign: () => null }),
+      buildV3ForTranscriptSurface: async () => null,
+    });
+    await e.runCodeHint([MISSING_SHOT]);
+    await e.runBrainstorm([MISSING_SHOT], 'Merge k sorted lists');
+    await e.runCodeHint([`${MISSING_SHOT}.other.png`]);
+    assert.equal(await until(() => turns().length === 3), true);
+    assert.equal(turns()[0].screenSource, screenSourceKey({ imagePaths: [MISSING_SHOT] }));
+    assert.equal(turns()[1].screenSource, turns()[0].screenSource);
+    assert.notEqual(turns()[2].screenSource, turns()[0].screenSource, 'a different screenshot shares the key');
+  });
+
+  test('Code hint and Brainstorm on optimized copies name the queued screenshot, as What to answer does', async () => {
+    const { screenSourceKey, noteScreenshotCopy } = require(dist('context-intelligence/question/conversation-state.js'));
+    noteScreenshotCopy('/nonexistent/optimized/hint-copy.jpg', MISSING_SHOT);
+    noteScreenshotCopy('/nonexistent/optimized/brainstorm-copy.jpg', MISSING_SHOT);
+    const e = engine({
+      codeHintLLM: streamOf('Check the loop bound.'),
+      brainstormLLM: streamOf('Approach one: sort first.'),
+      session: session({ getActiveDesign: () => null }),
+      buildV3ForTranscriptSurface: async () => null,
+    });
+    await e.runCodeHint(['/nonexistent/optimized/hint-copy.jpg']);
+    await e.runBrainstorm(['/nonexistent/optimized/brainstorm-copy.jpg'], 'Merge k sorted lists');
+    assert.equal(await until(() => turns().length === 2), true);
+    const key = screenSourceKey({ imagePaths: [MISSING_SHOT] });
+    assert.deepEqual(turns().map((t) => t.screenSource), [key, key]);
+  });
+
   test('a later code hint press with no screenshot is handed the earlier screen', async () => {
     recordAnswerSummary(SESSION, 'Use a hash map.', 'Two Sum: nums = [2,7,11,15], target = 9. ID-TWOSUM', '(Shared a screenshot and asked for help with it)');
     let seen = null;
@@ -170,6 +212,53 @@ describe('Code hint (Cmd+6) and Brainstorm (Cmd+7) are recorded', () => {
     assert.equal(await until(() => turns().length === 1), true);
     assert.equal(turns()[0].a, IntelligenceEngine.ACTION_PRODUCED_NOTHING);
     assert.equal(await until(() => turns()[0].screen === SCREEN_NOT_TRANSCRIBED), true, 'the screenshot is kept');
+  });
+
+  test('a provider failure is not recorded as the answer; the screenshot is kept', async () => {
+    const e = engine({ codeHintLLM: realCodeHint(new Error('429 Too Many Requests')), session: session(), buildV3ForTranscriptSurface: async () => null });
+    const shown = await e.runCodeHint([MISSING_SHOT]);
+    assert.equal(shown, CODE_HINT_STREAM_FAILED, 'the user still sees the message');
+    assert.equal(await until(() => turns().length === 1), true);
+    assert.equal(turns()[0].a, IntelligenceEngine.ACTION_PRODUCED_NOTHING);
+    assert.equal(await until(() => turns()[0].screen === SCREEN_NOT_TRANSCRIBED), true, 'the screenshot is kept');
+  });
+
+  test('a failure message after part of an answer is not an answer either', () => {
+    for (const failed of [CODE_HINT_STREAM_FAILED, BRAINSTORM_STREAM_FAILED]) {
+      assert.equal(IntelligenceEngine.actionTurnAnswer(true, `Approach one: sort.${failed}`, [MISSING_SHOT]), IntelligenceEngine.ACTION_PRODUCED_NOTHING);
+      assert.equal(IntelligenceEngine.actionTurnAnswer(true, failed, undefined), null);
+    }
+    assert.equal(IntelligenceEngine.actionTurnAnswer(true, 'Approach one: sort first.', [MISSING_SHOT]), 'Approach one: sort first.');
+  });
+
+  test('a press still running when its meeting ends is not recorded anywhere', async () => {
+    clearConversationState('m:ended-meeting');
+    clearConversationState(OVERLAY_CONVERSATION_SCOPE);
+    let key = 'm:ended-meeting';
+    const e = engine({
+      conversationSessionId: () => key,
+      // Stop lands while the hint streams.
+      codeHintLLM: { generateStream: async function* () { key = OVERLAY_CONVERSATION_SCOPE; yield 'Check the loop bound.'; } },
+      session: session(), buildV3ForTranscriptSurface: async () => null,
+    });
+    await e.runCodeHint([MISSING_SHOT]);
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(getConversationState(OVERLAY_CONVERSATION_SCOPE)?.turns?.length ?? 0, 0, 'the meeting\'s exchange reached the overlay\'s conversation');
+    assert.equal(getConversationState('m:ended-meeting')?.turns?.length ?? 0, 0);
+  });
+
+  test('a press still running when a meeting starts stays in the conversation it began in', async () => {
+    clearConversationState(OVERLAY_CONVERSATION_SCOPE);
+    let key = OVERLAY_CONVERSATION_SCOPE;
+    const e = engine({
+      conversationSessionId: () => key,
+      codeHintLLM: { generateStream: async function* () { key = 'm:new-meeting'; yield 'Check the loop bound.'; } },
+      session: session(), buildV3ForTranscriptSurface: async () => null,
+    });
+    await e.runCodeHint([MISSING_SHOT]);
+    assert.equal(await until(() => (getConversationState(OVERLAY_CONVERSATION_SCOPE)?.turns?.length ?? 0) === 1), true);
+    assert.equal(getConversationState('m:new-meeting')?.turns?.length ?? 0, 0);
+    clearConversationState(OVERLAY_CONVERSATION_SCOPE);
   });
 
   test('a press that produced nothing and carried nothing records nothing', async () => {
@@ -288,15 +377,15 @@ describe('in a meeting: page captures and every remaining hotkey', () => {
     assert.equal(getConversationState(SESSION).previousAnswerSummary, 'A mutex has an owner.');
   });
 
-  test('Code hint with a pinned question and no V3 turn still gets the history', async () => {
+  test('Code hint with a pinned question and no V3 turn still sends the history', async () => {
+    // Through the real CodeHintLLM: buildCodeHintMessage drops the transcript
+    // beside a pinned question, so a history passed as one never reached the model.
     recordAnswerSummary(SESSION, 'Noted.', 'Constraints: n <= 10^5. ID-PINNED', '(Shared a screenshot and asked for help with it)');
-    let seen = null;
-    const e = engine({
-      codeHintLLM: { generateStream: async function* (_imgs, _q, _src, transcript) { seen = transcript; yield 'Use a hash map.'; } },
-      session: session(), buildV3ForTranscriptSurface: async () => null,
-    });
+    const sent = {};
+    const e = engine({ codeHintLLM: realCodeHint('Use a hash map.', sent), session: session(), buildV3ForTranscriptSurface: async () => null });
     await e.runCodeHint(undefined, 'Two Sum');
-    assert.match(String(seen), /ID-PINNED/);
+    assert.match(String(sent.message), /<coding_question[^>]*>\s*Two Sum/);
+    assert.match(String(sent.message), /<conversation_history>[\s\S]*ID-PINNED[\s\S]*<\/conversation_history>/);
   });
 
   test('Define reads the history; Catch me up stays on what was said', async () => {
