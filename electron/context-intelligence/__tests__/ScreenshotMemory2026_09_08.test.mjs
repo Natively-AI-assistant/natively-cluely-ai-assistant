@@ -337,7 +337,9 @@ test('speculative pre-fetches are excluded from the ring', async () => {
   const engine = fsmod.readFileSync(path.resolve(process.cwd(), 'electron/IntelligenceEngine.ts'), 'utf8');
   // Auto Answer speculatively pre-computes answers the user may never see.
   // Recording those would make the history describe exchanges that never happened.
-  assert.match(engine, /if \(!options\?\.speculative\) \{[\s\S]{0,120}?this\.recordLiveTurn\(answer, options\?\.screenContext, question, imagePaths\?\.length \?\? 0, imagePaths\);/);
+  // (2026-10-29: the guard also needs `answered`, and the recorded question is
+  // the one the run resolved, so the call spans several lines.)
+  assert.match(engine, /if \(!options\?\.speculative && answered\) \{[\s\S]{0,700}?this\.recordLiveTurn\(answer, options\?\.screenContext,/);
 });
 
 test('the live writer sits INSIDE the engine, so Auto Answer cannot bypass it', async () => {
@@ -406,11 +408,14 @@ test('a screenshot that could not be transcribed is still recorded as having exi
   assert.match(engine, /imagePaths\?\.length \? SCREEN_BEING_READ : \(imageCount > 0 \|\| screenContext\) \? SCREEN_NOT_TRANSCRIBED : undefined/);
   // And screenContext is a real fallback source, not an unread parameter.
   assert.match(engine, /const fallbackText = screenContext \? \(compose\(screenContext as never\) \|\| ''\) : '';/);
-  assert.match(engine, /if \(screenText\) attachScreenToAnsweredTurn\(sessionId, answer, screenText, \{ turn, placeholder \}\);/);
-  assert.match(engine, /this\.recordLiveTurn\(answer, options\?\.screenContext, question, imagePaths\?\.length \?\? 0, imagePaths\)/);
+  // (2026-10-29: a page captured for the turn is recorded with its screen, so
+  // the text attached replaces the placeholder as recorded, page included.)
+  assert.match(engine, /if \(screenText\) attachScreenToAnsweredTurn\(sessionId, answer, withPage\(screenText\)!, \{ turn, placeholder: recorded \}\);/);
+  assert.match(engine, /else if \(placeholder === SCREEN_BEING_READ\) attachScreenToAnsweredTurn\(sessionId, answer, withPage\(SCREEN_NOT_TRANSCRIBED\)!, \{ turn, placeholder: recorded \}\);/);
+  assert.match(engine, /this\.recordLiveTurn\(answer, options\?\.screenContext,\s*heard \|\| \(sawScreen \? undefined : IntelligenceEngine\.UNPROMPTED_TURN_QUESTION\),\s*imagePaths\?\.length \?\? 0, imagePaths,/);
   // The recorded text is a DEDICATED transcription, not the answering call's
   // output — that reuse is what stored a paraphrase with no identifiers.
-  assert.match(engine, /transcribeScreenForMemory\(imagePaths, question\)/);
+  assert.match(engine, /transcribeScreenForMemory\(imagePaths, question\?\.trim\(\) \|\| undefined\)/);
 });
 
 // ── Three defects found only by running a real session ──────────────────────
@@ -531,10 +536,18 @@ test('EVERY ring reader derives its key from the shared resolver', () => {
     ipc.indexOf('// ── CONTEXT INTELLIGENCE V3 — wired manual-chat surface'),
     ipc.indexOf('} catch (v3Err: any) {'),
   );
-  assert.match(v3Slice, /recordAnswerSummary\(\s*\n\s*v3ConversationSessionId\(appState, senderId\)/);
+  // (2026-10-29: the writer uses the key the turn STARTED under, the same
+  // const the reader used, so a meeting starting mid-stream cannot move it.)
+  assert.match(v3Slice, /const ringKey = v3ConversationKey;/);
+  assert.match(v3Slice, /recordAnswerSummary\(\s*\n\s*ringKey,/);
 });
 
 test('the merge branch is budgeted, newest-first, like the ring branch beside it', async () => {
+  // (2026-10-29: the allowance is the history renderer's: the newest screens
+  // whole, older ones as short excerpts, so no screen drops out of the prompt.)
+  const { HISTORY_SCREEN_BUDGET_CHARS, SCREEN_EXCERPT_BUDGET_CHARS } =
+    await import(dist('context-intelligence/question/history-render.js'));
+  const allowance = HISTORY_SCREEN_BUDGET_CHARS + SCREEN_EXCERPT_BUDGET_CHARS;
   const SID = 'merge-budget';
   const SPEECH = '[INTERVIEWER]: keep going\n[ME]: sure';
   store.clearConversationState(SID);
@@ -548,9 +561,9 @@ test('the merge branch is budgeted, newest-first, like the ring branch beside it
   // BEFORE: every screen-bearing turn was mapped with no cap — measured at
   // 80,000 chars of screen text in an 83,072-char prompt, on every live turn.
   const screenChars = (out.user.match(/S{50,}/g) ?? []).reduce((n, s) => n + s.length, 0);
-  assert.ok(screenChars <= MAX_TURN_SCREEN_CHARS * 2,
-    `merged screen text ${screenChars} exceeds the ${MAX_TURN_SCREEN_CHARS * 2} allowance the ring branch enforces`);
-  assert.ok(out.user.length < 20_000, `prompt ${out.user.length} chars — the budget is not being applied`);
+  assert.ok(screenChars <= allowance,
+    `merged screen text ${screenChars} exceeds the ${allowance} allowance the ring branch enforces`);
+  assert.ok(out.user.length < allowance + 8_000, `prompt ${out.user.length} chars — the budget is not being applied`);
   // The most recent screen is the one a follow-up most likely means, so it must
   // survive even when it alone fills the allowance.
   assert.match(out.user, /\[screen attached that turn\] S/);
@@ -603,5 +616,14 @@ test('the no-scope sentinel never shadows a per-sender key', async () => {
   // A real meeting still unifies every surface — that is the whole point.
   assert.equal(resolveConversationSessionId('m1', 7), resolveConversationSessionId('m1', 9));
 
-  assert.match(ipc, /if \(key && key !== NO_CONVERSATION_SCOPE\) return key;/);
+  // (2026-10-29: the check moved into chatConversationKey, shared by the
+  // typed chat and the hotkeys.)
+  const { chatConversationKey, OVERLAY_CONVERSATION_SCOPE } =
+    await import(dist('context-intelligence/question/conversation-state-store.js'));
+  const window7 = { id: 7, isOverlay: false };
+  assert.notEqual(chatConversationKey(NO_CONVERSATION_SCOPE, window7), NO_CONVERSATION_SCOPE);
+  assert.equal(chatConversationKey(NO_CONVERSATION_SCOPE, window7), resolveConversationSessionId(null, 7));
+  assert.equal(chatConversationKey(NO_CONVERSATION_SCOPE, { id: 7, isOverlay: true }), OVERLAY_CONVERSATION_SCOPE);
+  assert.equal(chatConversationKey(resolveConversationSessionId('m1', 9), window7), resolveConversationSessionId('m1', 7));
+  assert.match(ipc, /return chatConversationKey\(engineKey, \{ id: fallbackKey,/);
 });
