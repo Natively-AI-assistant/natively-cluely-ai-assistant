@@ -15,6 +15,7 @@
 //   2. Prior assistant output is a REFERENT, never evidence. It can tell you what
 //      "it" refers to; it can never support a factual claim.
 
+import { createHash } from 'node:crypto';
 import type { EvidenceScope, PriorTurnDecision, SourceType } from '../contracts/types';
 import { scopeKey } from '../contracts/types';
 import { isRetrievalFixEnabled } from '../contracts/retrieval-flags';
@@ -49,6 +50,59 @@ export interface HistoryTurn {
    * question as "User:" would put the interviewer's words in the user's mouth.
    */
   from?: 'meeting';
+  /**
+   * What `screen` was read from: the screenshots and browser page the turn
+   * attached (see screenSourceKey). Code hint, Brainstorm and What to answer
+   * pressed on one queued screenshot or one captured page each record it, so
+   * the history carries its text once and points the other turns at it.
+   */
+  screenSource?: string;
+}
+
+/**
+ * Optimized copies of screenshots: copy path → the screenshot it was made from.
+ * On globalThis, like the conversation store: esbuild inlines this module per
+ * entry bundle, and the copy is noted in one and read in another.
+ */
+const SCREENSHOT_COPIES_KEY = '__nativelyScreenshotCopiesV1__';
+const MAX_SCREENSHOT_COPIES = 256;
+function screenshotCopies(): Map<string, string> {
+  const g = globalThis as unknown as Record<string, unknown>;
+  let m = g[SCREENSHOT_COPIES_KEY] as Map<string, string> | undefined;
+  if (!m) { m = new Map(); g[SCREENSHOT_COPIES_KEY] = m; }
+  return m;
+}
+
+/**
+ * Notes that `copy` is a re-encoded copy of the screenshot at `source`. Code
+ * hint and Brainstorm are handed copies, written outside the user-data folder
+ * (which screen understanding refuses to read), while What to answer and typed
+ * chat get the queued file itself.
+ */
+export function noteScreenshotCopy(copy: string, source: string): void {
+  if (!copy || !source || copy === source) return;
+  const copies = screenshotCopies();
+  copies.delete(copy);
+  copies.set(copy, source);
+  if (copies.size > MAX_SCREENSHOT_COPIES) copies.delete(copies.keys().next().value as string);
+}
+
+/** The screenshot a path was copied from (see noteScreenshotCopy), or the path itself. */
+export function screenshotSourceOf(p: string): string {
+  return screenshotCopies().get(p) ?? p;
+}
+
+/**
+ * Names what a turn's screen text was read from, without storing it: the
+ * screenshot paths (queued screenshots get fresh UUID names, so the same paths
+ * mean the same picture; a copy counts as its source) and the captured page's
+ * text. Undefined for neither.
+ */
+export function screenSourceKey(from: { imagePaths?: readonly string[]; page?: string }): string | undefined {
+  const paths = (from.imagePaths ?? []).filter((p) => typeof p === 'string' && p.length > 0).map(screenshotSourceOf);
+  const page = String(from.page ?? '').trim();
+  if (!paths.length && !page) return undefined;
+  return createHash('sha1').update([...[...paths].sort(), page ? `page:${page}` : ''].join('\n')).digest('hex').slice(0, 16);
 }
 
 export interface ConversationState {
@@ -191,6 +245,7 @@ export const MAX_TURN_QUESTION_CHARS = 1200;
 /** Append a completed exchange, oldest-evicted. Pure; never mutates `turns`. */
 export function appendTurn(
   turns: readonly HistoryTurn[], q: string, a: string, screen?: string, from?: HistoryTurn['from'],
+  screenSource?: string,
 ): HistoryTurn[] {
   const rawQuestion = String(q ?? '');
   // Marked when cut, so a truncated message never reads as the whole of it.
@@ -203,7 +258,9 @@ export function appendTurn(
   const shot = rawShot.length > MAX_TURN_SCREEN_CHARS
     ? rawShot.slice(0, MAX_TURN_SCREEN_CHARS) + SCREEN_TRUNCATION_MARKER
     : rawShot;
-  return [...turns, { q: question, a: answer, ...(shot ? { screen: shot } : {}), ...(from ? { from } : {}) }]
+  return [...turns, {
+    q: question, a: answer, ...(shot ? { screen: shot } : {}), ...(from ? { from } : {}), ...(shot && screenSource ? { screenSource } : {}),
+  }]
     .slice(-MAX_HISTORY_TURNS);
 }
 
@@ -436,9 +493,25 @@ export function conversationKey(scope: EvidenceScope): string {
   return scopeKey({ ...scope, meetingId: undefined });
 }
 
-/** Whether `scope` continues the conversation `state` was recorded in. */
+/**
+ * Whether `scope` continues the conversation `state` was recorded in.
+ *
+ * A state with NO identity at all was seeded by recordAnswerSummary: a hotkey
+ * press (Cmd+1 on a screenshot, Code hint, Brainstorm) that never goes through
+ * orchestrate() opened the conversation. It was stored under this very session
+ * id, so under a real one it IS this conversation. Treating it as foreign reset
+ * the ring on the next typed message (measured 2026-10-29, e2e through the
+ * compiled handler): Cmd+1 on a screenshot, then "what port does that use?",
+ * and the ring held only the typed turn, the screenshot gone for good. Under
+ * the shared bucket the session id names no conversation, so a seed there
+ * still resets, as any scope drift does.
+ */
 export function isSameConversation(state: ConversationState, scope: EvidenceScope): boolean {
   if (state.scopeId === scopeKey(scope)) return true;
+  if (state.scopeId === undefined && state.conversationId === undefined) {
+    const session = String(scope.sessionId ?? '').trim();
+    return Boolean(session) && session !== SHARED_SESSION_BUCKET;
+  }
   return state.conversationId !== undefined && state.conversationId === conversationKey(scope);
 }
 

@@ -48,9 +48,15 @@ test('the adoption branches still cannot reach recordLiveTurn on their own', () 
   // insight is unprompted, so it has no question and no exchange to record —
   // appending it filed the user's earlier question as answered by an insight
   // they never asked for. Assist still READS the ring.
-  assert.equal(sites, 3, 'reveal + the two question-bearing wrappers');
+  // + runCodeHint and runBrainstorm (2026-10-28): a press on a screenshot is
+  // an exchange, and its screen is the problem later presses are about.
+  assert.equal(sites, 5, 'reveal + the two question-bearing wrappers + code hint + brainstorm');
   for (const m of ['async runWhatShouldISay(', 'async runManualAnswer(']) {
     assert.ok(src.includes(m), `${m} must still exist as the wrapper that records`);
+  }
+  for (const [from, to] of [['async runCodeHint(', 'async runBrainstorm('], ['async runBrainstorm(', '\n    }\n\n']]) {
+    const start = src.indexOf(from);
+    assert.match(src.slice(start, src.indexOf(to, start + from.length)), /this\.recordLiveTurn\(/, `${from} must record its turn`);
   }
   const assist = src.slice(src.indexOf('async runAssistMode()'), src.indexOf('private async runAssistModeInner'));
   assert.doesNotMatch(assist, /recordLiveTurn/, 'assist must not write a question-less turn');

@@ -264,28 +264,28 @@ const DIRECT_ASSIST_IMAGE_MIMES: Readonly<Record<string, string>> = Object.freez
  * ring. They previously derived it independently — typed chat off a webContents
  * id, what-to-answer off the meeting id — so each surface built a history the
  * other could not read, and a screenshot described on one was invisible to the
- * other. `fallbackKey` covers a turn with no engine at all, where nothing else
- * is going to read the ring either.
+ * other. Outside a meeting the overlay's typed chat shares the key its hotkeys
+ * use, and any other window keeps its own (chatConversationKey). `fallbackKey`
+ * is the sender's webContents id.
  */
 function v3ConversationSessionId(appState: AppState, fallbackKey: string | number): string {
-  const {
-    resolveConversationSessionId, NO_CONVERSATION_SCOPE,
-  } = require('./context-intelligence/question/conversation-state-store') as
+  const { chatConversationKey } = require('./context-intelligence/question/conversation-state-store') as
     typeof import('./context-intelligence/question/conversation-state-store');
+  let engineKey: string | undefined;
   try {
     const manager = appState.getIntelligenceManager?.() as
       { conversationSessionId?: () => string } | undefined;
-    const key = manager?.conversationSessionId?.();
-    // `NO_CONVERSATION_SCOPE` means the engine has no meeting and no session, so
-    // its key is a shared bucket rather than an identity. Returning it here was
-    // truthy, so the per-sender fallback below was unreachable and every window
-    // — typed chat, what-to-answer, assist — collapsed into one ring. That is
-    // the failure the comment at IntelligenceEngine.conversationSessionId
-    // documents, and it made the renderer-destroyed clear below wipe the live
-    // ring that what-to-answer and assist were using.
-    if (key && key !== NO_CONVERSATION_SCOPE) return key;
-  } catch { /* no engine on this turn — fall through */ }
-  return resolveConversationSessionId(null, fallbackKey);
+    engineKey = manager?.conversationSessionId?.();
+  } catch { /* no engine on this turn — the sender's own key */ }
+  return chatConversationKey(engineKey, { id: fallbackKey, isOverlay: isOverlaySender(appState, fallbackKey) });
+}
+
+/** Whether `senderId` is the overlay window's renderer. */
+function isOverlaySender(appState: AppState, senderId: string | number): boolean {
+  try {
+    const overlay = appState.getWindowHelper?.()?.getOverlayWindow?.();
+    return Boolean(overlay && !overlay.isDestroyed() && overlay.webContents.id === Number(senderId));
+  } catch { return false; }
 }
 
 function isDirectAssistCanonicalPathInsideRoot(root: string, candidate: string): boolean {
@@ -2262,6 +2262,9 @@ export function initializeIpcHandlers(appState: AppState): void {
             // it was before this block existed (bytes only), because the port is
             // simply omitted. It must never fail a live answer.
             let v3ScreenDescription = '';
+            // The text came from the description cache, which only a dedicated
+            // transcription fills: the record needs no second read.
+            let v3ScreenIsTranscription = false;
             if (imagePaths?.length) {
               try {
                 const screenStore = require('./services/screen/ScreenshotDescriptionStore') as
@@ -2288,6 +2291,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                     try { return appState.processingHelper.getLLMHelper().selectionStaysOnDevice() === true; } catch { return false; }
                   })();
                   v3ScreenDescription = hasOnDeviceScreenText(cachedDescription) && !turnOnDevice ? '' : cachedDescription;
+                  v3ScreenIsTranscription = Boolean(v3ScreenDescription);
                 }
                 const {
                   getScreenUnderstandingService,
@@ -2905,18 +2909,55 @@ export function initializeIpcHandlers(appState: AppState): void {
               if (!v3Truncated) {
                 try {
                   const {
-                    recordAnswerSummary,
+                    recordAnswerSummary, finishedTurnKey,
                   } = require('./context-intelligence/question/conversation-state-store');
                   // Third argument is what makes a screenshot survive its own
                   // turn: the description enters the conversation ring, so a
                   // later "what was in that screenshot?" has something to read.
                   // The key MUST match the one the scope above was built with,
                   // or this writes a ring nothing ever reads.
-                  recordAnswerSummary(
-                    v3ConversationSessionId(appState, senderId),
+                  // The key the turn STARTED under: a meeting starting while it
+                  // streamed must not move it to another ring, and a meeting
+                  // that ENDED took its ring with it, so the turn is not kept.
+                  const ringKey = v3ConversationKey;
+                  const ringOpen = finishedTurnKey(ringKey, v3ConversationSessionId(appState, senderId)) !== null;
+                  const { SCREEN_BEING_READ, SCREEN_NOT_TRANSCRIBED } = require('./services/screen/screenDescription') as
+                    typeof import('./services/screen/screenDescription');
+                  // A screenshot whose first reading came back empty was still
+                  // SHARED: recorded with no marker, a failed transcription below
+                  // left later turns told no screenshot was ever sent.
+                  const screenPlaceholder = v3ScreenDescription || (imagePaths?.length ? SCREEN_BEING_READ : undefined);
+                  const turn = ringOpen ? recordAnswerSummary(
+                    ringKey,
                     finalText,
-                    v3ScreenDescription || undefined,
-                  );
+                    screenPlaceholder,
+                    // THIS turn's question, captured when it started. Read from
+                    // the state at write time instead, a hotkey or Auto Answer
+                    // turn that advanced the same meeting ring while this one
+                    // streamed filed this answer, and its screenshot, under the
+                    // other turn's question.
+                    v3Question.trim() || undefined,
+                    { screenSource: (require('./context-intelligence/question/conversation-state') as
+                      typeof import('./context-intelligence/question/conversation-state')).screenSourceKey({ imagePaths }) },
+                  ) : null;
+                  // The screen text above is the ANSWERING pre-pass's paraphrase
+                  // ("your build failed due to disk quota"), with the error code
+                  // and ticket id a follow-up asks for already gone. Replaced by
+                  // a dedicated transcription, as What-to-answer does, after the
+                  // answer and off its path.
+                  if (turn && imagePaths?.length && !v3ScreenIsTranscription) {
+                    const { transcribeScreenForMemory } = require('./services/screen/screenTranscription') as
+                      typeof import('./services/screen/screenTranscription');
+                    const { attachScreenToAnsweredTurn } = require('./context-intelligence/question/conversation-state-store') as
+                      typeof import('./context-intelligence/question/conversation-state-store');
+                    void transcribeScreenForMemory(imagePaths, v3Question.trim() || undefined)
+                      .catch((): string => '')
+                      .then((screenText) => {
+                        if (screenText) attachScreenToAnsweredTurn(ringKey, finalText, screenText, { turn, placeholder: screenPlaceholder });
+                        else if (screenPlaceholder === SCREEN_BEING_READ) attachScreenToAnsweredTurn(ringKey, finalText, SCREEN_NOT_TRANSCRIBED, { turn, placeholder: screenPlaceholder });
+                      })
+                      .catch(() => { /* the pre-pass text stays */ });
+                  }
                 } catch { /* continuity only */ }
                 try {
                   // The user/answer PAIR is the antecedent unit for follow-up
@@ -3005,14 +3046,27 @@ export function initializeIpcHandlers(appState: AppState): void {
         try {
           if (!_convoCleanupRegistered.has(senderId)) {
             _convoCleanupRegistered.add(senderId);
+            // The window's OWN out-of-meeting ring, decided now. MUST be the key
+            // the writers use outside a meeting: this was String(senderId)
+            // while writes moved to v3ConversationSessionId, which left "clear"
+            // deleting an empty bucket and the real ring alive behind it.
+            //
+            // And never the meeting's ring. The key was worked out when the
+            // window was DESTROYED, which mid-meeting is `m:<meeting>`: closing
+            // or reloading the launcher wiped the history the overlay's typed
+            // chat and hotkeys were using, every screenshot included, while the
+            // window's own ring was left behind. The meeting's ring is the
+            // engine's to clear, when the meeting ends.
+            let ownRingKey: string | null = null;
+            try {
+              ownRingKey = (require('./context-intelligence/question/conversation-state-store') as
+                typeof import('./context-intelligence/question/conversation-state-store'))
+                .outOfMeetingConversationKey({ id: senderId, isOverlay: isOverlaySender(appState, senderId) });
+            } catch { /* noop */ }
             event.sender?.once?.('destroyed', () => {
               _convoCleanupRegistered.delete(senderId);
               try { _manualConversationMemory.clearSession(String(senderId)); } catch { /* noop */ }
-              // MUST be the same key the writers use. This was String(senderId)
-              // while writes moved to v3ConversationSessionId, which would have
-              // left "clear" deleting an empty bucket and the real ring — the
-              // user's screenshots included — alive behind it.
-              try { require('./context-intelligence/question/conversation-state-store').clearConversationState(v3ConversationSessionId(appState, senderId)); } catch { /* noop */ }
+              try { if (ownRingKey) require('./context-intelligence/question/conversation-state-store').clearConversationState(ownRingKey); } catch { /* noop */ }
             });
           }
         } catch { /* noop */ }
@@ -16203,6 +16257,17 @@ export function initializeIpcHandlers(appState: AppState): void {
                   },
                 );
                 if (retryAnswer) {
+                  // Both runs recorded a turn, each with the screenshot: the
+                  // refusal is dropped from the conversation, so it neither
+                  // takes a screen's room nor steers the next follow-up toward
+                  // refusing. The retry's own turn stands, whatever it said.
+                  try {
+                    (require('./context-intelligence/question/conversation-state-store') as
+                      typeof import('./context-intelligence/question/conversation-state-store'))
+                      // runWhatShouldISay recorded the retry before returning,
+                      // so it is the newest turn, even when it gave the refusal's text.
+                      .removeAnsweredTurn(intelligenceManager.conversationSessionId(), answer, { skipNewest: true });
+                  } catch { /* continuity only */ }
                   // The retry replaces the refusal; `improved` tells the
                   // renderer whether the retry ANSWERED (true) or refused
                   // again (false).
@@ -16311,6 +16376,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       for (const p of paths) {
         try {
           const out = await optimizer.optimize(p, { profile, provider: 'openai', cacheKey: p });
+          // So the conversation reads and names the screenshot, not the copy.
+          (require('./context-intelligence/question/conversation-state') as
+            typeof import('./context-intelligence/question/conversation-state')).noteScreenshotCopy(out.path, p);
           optimized.push(out.path);
         } catch (err: any) {
           console.warn(

@@ -90,6 +90,13 @@ function makeEngine(answers, session, local) {
   const captured = [];
   const s = session || new SessionTracker();
   const engine = new IntelligenceEngine(makeHelper([...answers], captured, local), s);
+  // A new session is a new conversation. Out of a meeting every engine here
+  // shares the overlay's conversation, so an earlier scenario's answer came
+  // back as history (V13 found V12's chart in it).
+  if (!session) {
+    const { clearConversationState } = require(d('context-intelligence/question/conversation-state-store.js'));
+    clearConversationState(engine.conversationSessionId());
+  }
   const events = { tokens: [], answers: [], refined: [] };
   engine.on('suggested_answer_token', (t) => events.tokens.push(String(t)));
   engine.on('suggested_answer', (a) => events.answers.push(String(a)));
