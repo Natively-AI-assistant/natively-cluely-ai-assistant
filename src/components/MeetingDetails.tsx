@@ -107,24 +107,22 @@ const ASK_BAR_SATURATION_DARK = 1.4;
 const ASK_BAR_SATURATION_LIGHT = 1.2;
 
 /*
- * The send orb — a plain circle, deliberately.
+ * The send orb — the website's send button (heynatively.com/chat): a round
+ * button in the lavender Liquid Glass, deep lavender arrow. Owner request,
+ * 2026-10-30: "this should be liquid glass like in the website". It was a
+ * solid grey/white disc, on the reasoning that a second glass surface inside
+ * the pill's would compete with it; the site draws exactly that and it reads.
  *
- * It sits ON the pill, and the pill is already the glass: it refracts, it
- * tints, it carries a rim. A second refracting surface nested inside that one
- * competes with it — two lenses 8px apart, each bending the other's output —
- * and at 30px the result reads as an artefact rather than as a material. So
- * the orb contributes no glass of its own and lets the body's show through
- * around it.
+ * The material is .lg-lavender (ui-components), re-tinted for dark by
+ * .lg-lav-tinted (index.css) as the follow-up email's send pill is; the
+ * round box, rim stops and glyph are .mn-ask-send (index.css). Grey and
+ * disabled while the box is empty; lavender once something is typed.
  *
- * Which leaves it doing the one job a send affordance has: being findable. A
- * solid disc against the pill's translucency is the strongest possible signal
- * for that, and it inverts by theme so the contrast survives both.
+ * 36px in the 48px bar with an even 6px inset, the site's proportion (its
+ * button fills about three quarters of the bar's height); 30px read as a dot.
  */
-const ASK_ORB_SIZE = 30;
-/** The disc: white on the dark pill, grey on the light one. */
-const ASK_ORB_FILL = { dark: '#FFFFFF', light: '#8E8E93' };
-/** The arrow, chosen against its own disc rather than against the theme. */
-const ASK_ORB_GLYPH = { dark: '#111113', light: '#FFFFFF' };
+const ASK_ORB_SIZE = 36;
+const ASK_ORB_INSET = (ASK_BAR_HEIGHT - ASK_ORB_SIZE) / 2;
 
 const formatTime = (ms: number) => {
     const date = new Date(ms);
@@ -4000,24 +3998,24 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={handleInputKeyDown}
                         placeholder={t("Ask about this meeting...")}
-                        className="w-full h-full pl-5 pr-12 bg-transparent border-0 text-sm text-text-primary placeholder-text-tertiary/70 focus:outline-none"
+                        className="w-full h-full pl-5 pr-14 bg-transparent border-0 text-sm text-text-primary placeholder-text-tertiary/70 focus:outline-none"
                     />
-                    {/* Positioned at 9px rather than with a translate, so the
-                        transform channel stays free for the press. */}
-                    <button
-                        type="button"
-                        onClick={handleSubmitQuestion}
-                        aria-label={t('Ask about this meeting...')}
-                        className="absolute right-2 top-[9px] inline-flex items-center justify-center rounded-full border-0 p-0 appearance-none cursor-pointer transition-transform duration-150 ease-out active:scale-[0.94]"
-                        style={{
-                            width: ASK_ORB_SIZE,
-                            height: ASK_ORB_SIZE,
-                            background: ASK_ORB_FILL[isLight ? 'light' : 'dark'],
-                            color: ASK_ORB_GLYPH[isLight ? 'light' : 'dark'],
-                        }}
-                    >
-                        <ArrowUp size={14} className="rotate-45" />
-                    </button>
+                    {/* Positioned by its inset rather than with a translate, so
+                        the transform channel stays free for the press. */}
+                    {/* The span holds the position (.lg-button sets its own
+                        position: relative for the rim and lens layers). */}
+                    <span className="absolute flex" style={{ top: ASK_ORB_INSET, right: ASK_ORB_INSET }}>
+                        <LiquidGlassButton
+                            variant="lavender"
+                            onClick={handleSubmitQuestion}
+                            disabled={!query.trim()}
+                            aria-label={t('Ask about this meeting...')}
+                            className="lg-sm lg-lav-tinted mn-ask-send"
+                            style={{ '--lg-pill-h': `${ASK_ORB_SIZE}px` } as React.CSSProperties}
+                        >
+                            <ArrowUp size={18} strokeWidth={2.5} className="rotate-45" />
+                        </LiquidGlassButton>
+                    </span>
                 </GlassSurface>
             </div>
 

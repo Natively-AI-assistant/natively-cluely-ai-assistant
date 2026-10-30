@@ -10316,6 +10316,97 @@ html[data-platform="linux"][data-window="launcher"] body {
   .mn-fu-send-more:not(:disabled):hover svg,
   .mn-fu-send-more[aria-expanded='true']:not(:disabled):hover svg { translate: none; }
 }
+/* The meeting-notes ask bar's send (MeetingDetails.tsx, ASK_ORB_SIZE), also the
+   top bar's search-all-meetings chat (GlobalChatOverlay.tsx): the
+   website's round send button in the same lavender glass. A circle, so no side
+   padding, and the rim stops are lengths: the whole button is cap. */
+.lg-button.lg-sm.mn-ask-send {
+  width: var(--lg-pill-h);
+  padding: 0;
+  --lg-cap-0: 2px;
+  --lg-cap-1: 6px;
+  --lg-cap-2: calc(var(--lg-pill-h) / 2);
+}
+.mn-ask-send .lg-content,
+.mn-ask-send .lg-label { display: flex; align-items: center; justify-content: center; }
+.mn-ask-send .lg-content { height: 100%; width: 100%; }
+/* Empty box: grey, and not pressable (disabled). Owner: "greyed out if nothing
+   is typed in, if typed in the periwinkle tint". Only background-COLOR changes
+   (the sheen image stays), so the base .lg-button background-color transition
+   fades it into the lavender as the first character lands; the glyph, rim and
+   glow fade with it. Light is the old disc's grey #8E8E93 with its white arrow;
+   dark is the dark-mode system grey #636366, with the same white arrow (owner:
+   "arrow color should be whitish, the circle surrounding it greyish"). */
+/* Motion (owner: "better animation while switching from grey to periwinkle
+   and back, also hover"). Waking (grey -> lavender) is the invitation: 250ms
+   --ease-smooth-out for the fill, glow, rim and arrow ink together, while the
+   arrow pops from .86 on --ease-bounce, so the button visibly arms the moment
+   the first character lands. Going back to grey gets out of the way: 150ms,
+   same curve, no bounce (never bounce a close). Each rule carries the
+   transition for the state it lands IN, which is how the two directions get
+   their own timing. The rim and arrow ink read --lg-lav-* variables, so the
+   properties that consume them (::before box-shadow, .lg-content color)
+   carry the transitions. The arrow moves with the individual `scale` and
+   `translate` properties so Tailwind's rotate-45 transform is untouched. */
+.lg-button.mn-ask-send {
+  transition:
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),           /* press: Emil's strong ease-out */
+    background-color 250ms cubic-bezier(0.22, 1, 0.36, 1),    /* --duration-fast, --ease-smooth-out */
+    box-shadow 250ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.lg-button.mn-ask-send::before { transition: box-shadow 250ms cubic-bezier(0.22, 1, 0.36, 1); }
+.mn-ask-send .lg-content { transition: color 250ms cubic-bezier(0.22, 1, 0.36, 1); }
+.mn-ask-send svg {
+  transition:
+    scale 250ms cubic-bezier(0.34, 1.36, 0.64, 1),            /* --ease-bounce: pops as it arms */
+    translate 250ms cubic-bezier(0.34, 1.36, 0.64, 1);        /* hover out: settles back softly */
+}
+.lg-button.mn-ask-send:disabled,
+.lg-button.mn-ask-send:disabled::before {
+  transition:
+    background-color 150ms cubic-bezier(0.22, 1, 0.36, 1),    /* --duration-quick: the close */
+    box-shadow 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Full-strength white arrow on the grey (owner: "arrow color should be white"):
+   the material's disabled rule dims .lg-content to .6, which read as grey-on-grey. */
+.lg-button.mn-ask-send:disabled .lg-content { opacity: 1; transition: color 150ms cubic-bezier(0.22, 1, 0.36, 1); }
+.mn-ask-send:disabled svg {
+  scale: .86;
+  transition: scale 150ms cubic-bezier(0.22, 1, 0.36, 1), translate 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Hover: the material's own lens bloom and tint (ui-components), plus the
+   arrow leaning 1.5px the way it points, quick in (150ms) and softer out
+   (the 250ms bounce above). Pointer devices only; :hover sticks after a tap. */
+@media (hover: hover) and (pointer: fine) {
+  .mn-ask-send:not(:disabled):hover svg {
+    translate: 1.5px -1.5px;
+    transition: scale 250ms cubic-bezier(0.34, 1.36, 0.64, 1), translate 150ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+/* Press: .985 is sized for wide pills; a 36px disc needs .95 to register. */
+.lg-button.mn-ask-send:not(:disabled):active { transform: scale(.95); }
+.lg-button.lg-lavender.lg-lav-tinted.mn-ask-send:disabled {
+  --lg-lav-fg: #FFFFFF;
+  --lg-lav-rim: rgba(255, 255, 255, .18);
+  --lg-lav-glow: transparent;
+  background-color: #636366;
+}
+[data-theme='light'] .lg-button.lg-lavender.lg-lav-tinted.mn-ask-send:disabled {
+  --lg-lav-fg: #FFFFFF;
+  --lg-lav-rim: rgba(255, 255, 255, .50);
+  --lg-lav-under: rgba(0, 0, 0, .10);
+  --lg-lav-drop: rgba(0, 0, 0, .08);
+  --lg-lav-glow: transparent;
+  background-color: #8E8E93;
+}
+/* Reduced motion keeps the colour fades (they explain the state change) and
+   drops everything that moves: the pop, the lean and the press. */
+@media (prefers-reduced-motion: reduce) {
+  .mn-ask-send svg,
+  .mn-ask-send:disabled svg { transition: none; scale: none; }
+  .mn-ask-send:not(:disabled):hover svg { translate: none; }
+  .lg-button.mn-ask-send:not(:disabled):active { transform: none; }
+}
 /* The pill's own hover tint, which the re-tint's background shorthand would otherwise tie with. */
 @media (hover: hover) {
   .lg-button.lg-lavender:is(.mn-fu-send, .lg-lav-tinted):not([aria-disabled='true']):not(:disabled):hover { background-color: var(--lg-lav-hover); }
