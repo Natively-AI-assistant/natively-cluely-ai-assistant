@@ -393,6 +393,56 @@ jobs:
         if: ${{ !cancelled() && steps.smoke_scope.outputs.mode != 'invalid' }}
         run: npm run test:scripts
 
+  extension-tests:
+    # The companion browser extension (natively-browser/) has its own package,
+    # typecheck and node --test suite, and no job ran any of it, so its tests
+    # ran only when someone ran them by hand. It needs neither the root install
+    # nor the private premium submodule, so fork PRs run it in full. Both OSes,
+    # like the job above: on Windows npm runs `npm test` through cmd.exe, which
+    # hands the test glob to Node unexpanded.
+    name: Extension tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
+
+    defaults:
+      run:
+        working-directory: natively-browser
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: natively-browser/package-lock.json
+
+      - name: Install extension dependencies
+        run: npm ci
+
+      - name: Typecheck extension
+        run: npm run typecheck
+
+      # Builds dist-test/ first. The type-parity suite also reads the desktop's
+      # copies of the Smart Browser Context types from the full checkout.
+      - name: Run extension unit tests
+        run: npm test
+
+      # The unpacked build only: build:store shells out to `zip`, which
+      # Windows runners do not have.
+      - name: Build extension
+        run: npm run build
+
   api-smoke:
     # Runs weekly (Monday 09:00 UTC, see the schedule trigger above) and on
     # demand via workflow_dispatch. Requires secrets: NATIVELY_API_KEY (or
