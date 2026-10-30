@@ -5,11 +5,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { genMessageId } from '../utils/messageId';
 import { mapLanguageForPrism, isBlockCode } from '../utils/prismLanguage';
 import { registerPrismLanguages } from '../utils/registerPrismLanguages';
-import nativelyIcon from './icon.png';
+import { NativelyWordmark } from './NativelyWordmark';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { splitGistLineStreaming } from '../lib/displayMarkup';
-// .lg-bubble (your questions), imported here so the chat does not depend on
-// MeetingDetails having loaded the stylesheet first.
+// .lg-bubble.lg-bubble-lavender (your questions), imported here so the chat
+// does not depend on MeetingDetails having loaded the stylesheet first.
 import '../ui-components/LiquidGlassButton.css';
 
 import ReactMarkdown from 'react-markdown';
@@ -90,11 +90,12 @@ const UserMessage: React.FC<{ content: string }> = ({ content }) => (
         transition={{ duration: 0.15 }}
         className="flex justify-end mb-6"
     >
-        {/* The same subtle Liquid Glass as the Usage tab's question bubble
-            (.lg-bubble, ui-components): fill and white text from
-            --bubble-user-*, so a question reads the same in both places. The
-            box and radius stay this chat's own. */}
-        <div className="lg-bubble px-5 py-3 rounded-2xl rounded-tr-md max-w-[70%] text-[15px] leading-relaxed">
+        {/* The Usage tab's question card, exactly (MeetingDetails.tsx): the
+            website's lavender Liquid Glass (.lg-bubble.lg-bubble-lavender,
+            ui-components) and its shape, 19px padding, corners 19/5.5/19/19,
+            semibold label. Owner request: the same colour and shape as the
+            Usage tab's question card. */}
+        <div className="lg-bubble lg-bubble-lavender px-[19px] py-[9px] rounded-[19px] rounded-tr-[5.5px] max-w-[80%] text-[15px] font-semibold leading-relaxed select-text">
             {content}
         </div>
     </motion.div>
@@ -596,11 +597,14 @@ ${contextString}`;
                         {/* Header with close button. No divider under it, by owner request:
                             the messages run straight up to the title. */}
                         <div className="flex items-center justify-between px-4 py-3 shrink-0">
-                            {/* One step darker than it was (tertiary -> secondary, logo
-                                50% -> 70%), by owner request. */}
-                            <div className="flex items-center gap-2 text-text-secondary">
-                                <img src={nativelyIcon} className="w-3.5 h-3.5 force-black-icon opacity-70" alt="logo" />
-                                <span className="text-[13px] font-medium">Search this meeting</span>
+                            {/* The natively wordmark, as the Usage tab heads its answers
+                                (MeetingDetails.tsx), in place of the round app icon: owner
+                                request, "use the new natively branding". currentColor, so
+                                it takes text-secondary in both themes. The wordmark stands
+                                alone: the "Search this meeting" label after it was removed,
+                                owner request. */}
+                            <div className="flex items-center text-text-secondary">
+                                <NativelyWordmark height={14} className="block shrink-0" />
                             </div>
                             <button
                                 onClick={handleClose}

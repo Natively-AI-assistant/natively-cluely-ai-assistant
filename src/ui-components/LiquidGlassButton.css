@@ -1099,7 +1099,8 @@
   .lg-bubble.lg-bubble-lavender — the Usage tab's question, as the website draws
   it in "The whole call, distilled" (natively-website PremiumMeetingNotesCard:
   .lg-button.lg-lavender.lg-sm). Owner request: "like the website's usage
-  section". The "ask about this meeting" chat keeps the plain .lg-bubble.
+  section". The "ask about this meeting" chat (MeetingChatOverlay.tsx) uses the
+  same card since 2026-10-30, owner request.
 
   LIGHT is the website's values as they render there: the .24 lavender tint
   under a white sheen on the top face, ONE 1px white rim (.lg-sm collapses the
