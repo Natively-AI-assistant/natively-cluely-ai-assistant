@@ -305,6 +305,9 @@ export interface AppSettings {
     //   vision_only    — Stricter: require vision-capable provider. No text-only provider fallback. No OCR fallback.
     //   private_vision — Local vision only (Ollama image-capable / Codex local / approved local custom). Never call cloud vision. Hard error if no local vision provider available.
     screenUnderstandingMode?: 'vision_first' | 'vision_only' | 'private_vision';
+    /** Which screen the full-screenshot shortcut captures: 'overlay' (default),
+     *  'cursor', or 'display:<id>' (electron/screenshotDisplay.ts). */
+    screenshotDisplay?: string;
     // When true (default) and the active mode is a technical / coding interview, prefer
     // direct vision LLM over structured-extract-then-answer for lowest latency.
     technicalInterviewVisionFirst?: boolean;

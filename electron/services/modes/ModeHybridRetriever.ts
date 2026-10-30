@@ -577,7 +577,12 @@ export class ModeHybridRetriever {
         // A space mismatch means the stored vectors are unusable with the
         // current provider — report as pending so the UI shows re-indexing.
         const activeSpace = this.embeddingPipeline.getActiveSpaceKey?.();
-        if (state.status === 'ready' && activeSpace && state.embeddingSpace !== activeSpace) {
+        // Unless a stand-in is only covering for the primary those vectors are
+        // in: they are kept, not re-indexed (isKeptForPrimary), so "pending"
+        // would be a badge that never resolves until the primary returns, and
+        // then flips back by itself.
+        if (state.status === 'ready' && activeSpace && state.embeddingSpace !== activeSpace
+            && !this.isKeptForPrimary(state, null, activeSpace)) {
             return { status: 'pending', chunkCount: state.chunkCount, embeddedChunkCount: 0 };
         }
         // A file whose tail never embedded is reported as pending for exactly the
@@ -590,6 +595,22 @@ export class ModeHybridRetriever {
             return { status: 'pending', chunkCount: state.chunkCount, embeddedChunkCount: state.embeddedChunkCount };
         }
         return { status: state.status, chunkCount: state.chunkCount, embeddedChunkCount: state.embeddedChunkCount };
+    }
+
+    /**
+     * Whether a file's vectors are held for the primary embedder while a
+     * stand-in covers for it: some are stored, in a space that is not the
+     * active one, for this content (when `contentHash` is given).
+     */
+    private isKeptForPrimary(
+        state: { fileHash: string; embeddingSpace: string | null; embeddedChunkCount: number } | null,
+        contentHash: string | null,
+        activeSpace: string | null | undefined,
+    ): boolean {
+        if (!state || !state.embeddingSpace || !activeSpace || state.embeddingSpace === activeSpace) return false;
+        if (state.embeddedChunkCount <= 0) return false;
+        if (contentHash !== null && state.fileHash !== contentHash) return false;
+        return this.embeddingPipeline.isRunningOnStandIn?.() === true;
     }
 
     /**
@@ -714,6 +735,14 @@ export class ModeHybridRetriever {
         if (state && state.status === 'ocr_required' && state.fileHash === contentHash) {
             return;
         }
+        // Never migrate a file INTO a stand-in's space (EmbeddingPipeline
+        // .isRunningOnStandIn). Vectors already in the primary's space stay where
+        // they are and are used again the moment it is back; re-indexing here
+        // deleted them, re-embedded at the stand-in's width, and reversed it all
+        // after the demotion. Files with nothing embedded yet still index now.
+        if (this.isKeptForPrimary(state, contentHash, activeSpace)) {
+            return;
+        }
 
         const chunks = this.chunkText(content);
         if (chunks.length === 0) return;
@@ -800,7 +829,12 @@ export class ModeHybridRetriever {
             try { this.db.prepare('DELETE FROM mode_reference_chunks WHERE file_id = ?').run(file.id); this.chunkCache.delete(file.id); }
             catch (e) { console.warn('[ModeHybridRetriever] could not clear a stale index before re-indexing:', e); }
         }
-        this.updateIndexState(file.id, contentHash, chunks.length, 'indexing', activeSpace, 0);
+        // Pick up where a stopped run left off. A rate limit mid-file keeps the
+        // embedded prefix (the partial branch below), and every retry used to
+        // embed the file again from chunk 0 — so it met the same rate limit at
+        // the same place, and 30 PDFs spent hours re-buying the same vectors.
+        const resumeVectors = this.loadResumablePrefix(file.id, previous, contentHash, activeSpace, chunks);
+        this.updateIndexState(file.id, contentHash, chunks.length, 'indexing', activeSpace, resumeVectors.length);
         try {
             // Large files (e.g. a 14k-row CSV → hundreds of chunks) can't be embedded
             // in ONE call: the pipeline wraps a single getEmbeddingsWithFallback in a
@@ -823,8 +857,10 @@ export class ModeHybridRetriever {
             const INDEX_BATCH = providerMax && providerMax > 0
                 ? Math.min(configuredBatch, providerMax)
                 : configuredBatch;
-            const plan = planEmbedBatches(chunks, INDEX_BATCH, MODE_INDEX_EMBED_BATCH_CHARS);
-            if (plan.length === 1) {
+            const resumeAt = resumeVectors.length;
+            if (resumeAt > 0) console.log(`[ModeHybridRetriever] ${file.fileName}: resuming at chunk ${resumeAt}/${chunks.length}`);
+            const plan = planEmbedBatches(chunks.slice(resumeAt), INDEX_BATCH, MODE_INDEX_EMBED_BATCH_CHARS);
+            if (plan.length === 1 && resumeAt === 0) {
                 const result = await this.embedSubBatchWithRetry(chunks, file.fileName);
                 const embeddings = result.embeddings;
                 const wrote = this.persistChunks(file.id, chunks, embeddings, result.space);
@@ -845,13 +881,24 @@ export class ModeHybridRetriever {
                 // the remaining chunks kept as lexical-only text), and mark the file
                 // 'ready' as long as a meaningful fraction embedded — a partially
                 // vectorized large CSV massively outperforms an all-lexical one.
-                const embeddedVectors: number[][] = [];
-                let embeddingSpace: string | null = null;
+                const embeddedVectors: number[][] = [...resumeVectors];
+                let embeddingSpace: string | null = resumeVectors.length > 0 ? activeSpace : null;
                 let failedOffset = -1;
                 for (const slice of plan) {
                     const start = embeddedVectors.length;
                     try {
                         const result = await this.embedSubBatchWithRetry(slice, file.fileName);
+                        // One file, one space. A sustained outage can promote the
+                        // fallback between two sub-batches; its vectors used to be
+                        // appended to the primary's and the whole file stored under
+                        // whichever space came last. Stop at the switch instead:
+                        // the prefix keeps its own space, the tail stays lexical,
+                        // and the resume above finishes it in the right space.
+                        if (embeddingSpace && result.space !== embeddingSpace) {
+                            failedOffset = start;
+                            console.warn(`[ModeHybridRetriever] ${file.fileName}: embedding space changed at offset ${start} (${embeddingSpace} → ${result.space}); keeping ${embeddedVectors.length} embedded + rest lexical.`);
+                            break;
+                        }
                         embeddedVectors.push(...result.embeddings);
                         embeddingSpace = result.space;
                         console.log(`[ModeHybridRetriever] ${file.fileName}: embedded ${embeddedVectors.length}/${chunks.length} chunks`);
@@ -908,6 +955,45 @@ export class ModeHybridRetriever {
             this.persistChunks(file.id, chunks, null, null);
             this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null, 0);
             emitIngestDebug('failed', 0, e instanceof Error ? e.message : String(e));
+        }
+    }
+
+    /**
+     * The vectors a stopped run already stored for this file, in chunk order,
+     * when they can be reused as they are: same content hash, same space, a
+     * contiguous prefix from chunk 0 whose text still matches the chunker's
+     * output. Anything else returns [] and the file is embedded from the start.
+     */
+    private loadResumablePrefix(
+        fileId: string,
+        state: ModeReferenceIndexState | null,
+        contentHash: string,
+        activeSpace: string | null,
+        chunks: string[],
+    ): number[][] {
+        if (!state || !activeSpace) return [];
+        if (state.fileHash !== contentHash || state.embeddingSpace !== activeSpace) return [];
+        if (state.chunkCount !== chunks.length) return [];
+        const want = state.embeddedChunkCount;
+        if (want <= 0 || want >= chunks.length) return [];
+        try {
+            const rows = this.db.prepare(`
+                SELECT chunk_index, text, embedding FROM mode_reference_chunks
+                WHERE file_id = ? AND embedding IS NOT NULL AND embedding_space = ?
+                ORDER BY chunk_index LIMIT ?
+            `).all(fileId, activeSpace, want) as Array<{ chunk_index: number; text: string; embedding: Buffer }>;
+            if (rows.length !== want) return [];
+            const out: number[][] = [];
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                if (row.chunk_index !== i || row.text !== chunks[i]) return [];
+                const buf = row.embedding;
+                out.push(Array.from(new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4)));
+            }
+            return out;
+        } catch (e) {
+            console.warn('[ModeHybridRetriever] could not read the stored prefix; embedding from the start:', e);
+            return [];
         }
     }
 
@@ -2890,9 +2976,17 @@ export class ModeHybridRetriever {
                 if (list) list.push(c);
                 else byFile.set(c.sourceId, [c]);
             }
+            // When every file's floor fits, all of it is reserved, as before.
+            // When it cannot (2026-10-29: a mode with 30 PDFs, 12 slots), the
+            // floor used to fill all 12 with one chunk from each of 12 files, so
+            // the file the question was about got one chunk and eleven barely
+            // related files got the rest. Now half the slots are reserved, for
+            // the files that rank best (byFile is in best-chunk order), and the
+            // other half go by score.
+            const reserved = byFile.size * PER_FILE_FLOOR <= topK ? topK : Math.ceil(topK / 2);
             for (let round = 0; round < PER_FILE_FLOOR; round++) {
                 for (const list of byFile.values()) {
-                    if (selected.length >= topK) break;
+                    if (selected.length >= reserved) break;
                     const c = list[round];
                     if (c) tryAdd(c);
                 }

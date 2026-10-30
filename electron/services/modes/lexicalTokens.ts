@@ -161,9 +161,23 @@ export interface WordsOfOptions {
   shortNumerics?: boolean;
 }
 
+/**
+ * Lower-case with Latin/Greek/Cyrillic accents folded ("replicación" →
+ * "replicacion"), the same folding people.ts nameKey uses. A Spanish question
+ * typed or transcribed without accents shared no term with the accented PDF
+ * it was about, and PDF text extraction often yields decomposed accents
+ * (o + U+0301) that did not even match the composed form. NFKD also splits
+ * ligatures ("ﬁ" → "fi"). Only U+0300–U+036F is dropped: Devanagari vowel
+ * signs, Japanese voicing marks and the like are other blocks and survive,
+ * and NFC puts them back together.
+ */
+export function foldForMatching(text: string): string {
+  return text.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').normalize('NFC').toLowerCase();
+}
+
 export function wordsOf(text: string, options: WordsOfOptions = {}): string[] {
   const shortNumerics = options.shortNumerics === true;
-  const lower = text.toLowerCase();
+  const lower = foldForMatching(text);
   const base = lower
     // English possessive: collapse "Green's" → "green", "interviewer's" →
     // "interviewer", symmetrically on query and chunk.

@@ -25,6 +25,7 @@ import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier
 import { OutputRouteMismatchDetector } from "./audio/outputRouteMismatch.mjs"
 import { FatalMainProcessCoordinator } from "./utils/fatalMainProcess"
 import { installResilientDnsLookup } from "./utils/resilientDnsLookup"
+import { trustSystemCertificates } from "./utils/systemCertificates"
 import { resolveDebugLogPath } from "./utils/debugLogPath.mjs"
 import { MeetingLifecycleQueue, type MeetingLifecycleState } from "./audio/meetingLifecycleQueue"
 import { systemAudioGrant, systemAudioRecordingBlocked, zeroFillMeansScreenRecordingLost, zeroFillMeansSystemAudioRecordingDenied } from "./audio/systemAudioPermission"
@@ -48,6 +49,12 @@ import {
 // bounded FALLBACK behind a cached system lookup. See
 // electron/utils/resilientDnsLookup.ts for the contract and its tests.
 installResilientDnsLookup();
+
+// Antivirus HTTPS scanning and corporate TLS inspection re-sign connections
+// with a root that lives only in the OS store, which Node never read: every
+// transcription socket and LLM call failed until the user turned their
+// antivirus off. See electron/utils/systemCertificates.ts.
+trustSystemCertificates();
 
 if (!app.isPackaged) {
   require('dotenv').config();
@@ -1400,6 +1407,7 @@ try {
 
 import { CredentialsManager } from "./services/CredentialsManager"
 import { SettingsManager } from "./services/SettingsManager"
+import { parseScreenshotDisplayPreference, resolveScreenshotDisplay } from "./screenshotDisplay"
 import { buildTelemetrySinks } from "./services/telemetry/telemetrySinks"
 import { PhoneMirrorService, shouldStartPhoneMirrorOnBoot } from "./services/PhoneMirrorService"
 import { PHONE_IMAGE_PREFIX } from "./utils/phoneImage"
@@ -2928,6 +2936,12 @@ export class AppState {
         const { ModesManager } = require('./services/ModesManager');
         const modeEmbeddingPipeline = this.ragManager.getEmbeddingPipeline();
         ModesManager.getInstance().setSharedEmbeddingPipeline(modeEmbeddingPipeline);
+        // Background re-indexing tells the Modes Manager badges, as uploads do.
+        ModesManager.getInstance().setReferenceIndexStatusListener((event: { modeId: string; fileId: string; phase: 'indexing' | 'done' }) => {
+          BrowserWindow.getAllWindows().forEach((win) => {
+            if (!win.isDestroyed()) win.webContents.send('mode-file-index-status', event);
+          });
+        });
         this.scheduleModeReferenceIndexRetry();
 
         // Context Intelligence V3: hand the engine LAZY access to the meeting
@@ -4361,6 +4375,11 @@ export class AppState {
 
       // Extract richer error info from Axios errors (RestSTT)
       let errorMessage = err.message;
+      // Node's socket/TLS code (UNABLE_TO_VERIFY_LEAF_SIGNATURE, ECONNRESET…)
+      // travels with the message so the overlay can tell an intercepted or
+      // blocked connection from a bad key (src/lib/sttErrorMapper.ts).
+      const nodeCode = typeof grpcCode === 'string' && /^[A-Z][A-Z0-9_]{2,}$/.test(grpcCode) ? grpcCode : '';
+      if (nodeCode && !errorMessage.includes(nodeCode)) errorMessage = `${errorMessage} (${nodeCode})`;
       const axiosErr = err as any;
       const httpStatus = axiosErr?.response?.status || 0;
       if (axiosErr?.response?.data?.error) {
@@ -8934,16 +8953,18 @@ export class AppState {
   }
 
   private getTargetDisplayForFullScreenshot(session: ScreenshotCaptureSession): Electron.Display {
+    const cursorDisplay = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    let overlayDisplay: Electron.Display = cursorDisplay;
     if (session.windowMode === 'overlay' && session.overlayBounds) {
-      return screen.getDisplayMatching(session.overlayBounds);
+      overlayDisplay = screen.getDisplayMatching(session.overlayBounds);
+    } else {
+      overlayDisplay = this.getDisplayById(session.overlayDisplayId) ?? cursorDisplay;
     }
 
-    const lastOverlayDisplay = this.getDisplayById(session.overlayDisplayId);
-    if (lastOverlayDisplay) {
-      return lastOverlayDisplay;
-    }
-
-    return screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    // Settings › Overlay › Screenshot screen. With three monitors the overlay's
+    // screen is often not the one the question is on (customer, 2026-10-29).
+    const preference = parseScreenshotDisplayPreference(SettingsManager.getInstance().get('screenshotDisplay'));
+    return resolveScreenshotDisplay(preference, screen.getAllDisplays(), overlayDisplay, cursorDisplay);
   }
 
   private hideWindowsForScreenshot(session: ScreenshotCaptureSession): void {

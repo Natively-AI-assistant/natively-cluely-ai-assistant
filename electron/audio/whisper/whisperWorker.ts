@@ -34,6 +34,10 @@ import { getBoundedOnnxSessionOptions } from '../../utils/onnxThreadConfig';
 import { detectedWhisperLanguage, isEnglishOnlyLocalModel, resolveWhisperLanguage } from './modelLanguageSupport';
 import { moonshineMaxNewTokens } from './moonshineTokenBudget';
 import { loadedOnnxFiles, onnxDirFor } from './modelManager';
+import { trustSystemCertificates } from '../../utils/systemCertificates';
+
+// Model downloads run on this thread, and the CA list is per thread.
+trustSystemCertificates();
 
 let pipe: any = null;
 let loadedModelId = '';

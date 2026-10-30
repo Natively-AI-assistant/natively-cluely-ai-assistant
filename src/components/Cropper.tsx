@@ -13,12 +13,17 @@ import { Crosshair } from 'lucide-react';
  * 3. Theme-aware: Supports light/dark themes for consistent UX.
  * 4. mouseUp is also handled at window level (via useEffect) so dragging outside the
  *    viewport still completes the selection instead of leaving it stuck.
+ * 5. A click without a drag captures the whole screen it lands on (main reads
+ *    the mouse position; see CropperWindowHelper's display-picked listener).
+ * 6. The window can move between screens while open (Windows, mixed scaling),
+ *    so the canvas redraws on resize and main is told while a drag is held.
  */
 const Cropper: React.FC = () => {
     const [startPos, setStartPos] = useState<{ x: number, y: number } | null>(null);
     const [currentPos, setCurrentPos] = useState<{ x: number, y: number } | null>(null);
     const [hudPosition, setHudPosition] = useState<{ x: number, y: number } | null>(null);
     const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+    const [viewport, setViewport] = useState({ width: window.innerWidth, height: window.innerHeight });
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const hudRef = useRef<HTMLDivElement>(null);
@@ -53,8 +58,12 @@ const Cropper: React.FC = () => {
         const y = Math.min(sp.y, cp.y);
         const width = Math.abs(cp.x - sp.x);
         const height = Math.abs(cp.y - sp.y);
+        (window as any).electronAPI.cropperDrag?.(false);
         if (width > MIN_SELECTION_SIZE && height > MIN_SELECTION_SIZE) {
             (window as any).electronAPI.cropperConfirmed({ x, y, width, height });
+        } else if (width <= MIN_SELECTION_SIZE && height <= MIN_SELECTION_SIZE && (window as any).electronAPI.cropperPickDisplay) {
+            // A click: the whole screen under the mouse.
+            (window as any).electronAPI.cropperPickDisplay();
         } else {
             setStartPos(null);
             setCurrentPos(null);
@@ -107,12 +116,16 @@ const Cropper: React.FC = () => {
             commitSelection(startPosRef.current, currentPosRef.current);
         };
 
+        const handleResize = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
+
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('mouseup', handleWindowMouseUp);
+        window.addEventListener('resize', handleResize);
 
         return () => {
             window.removeEventListener('keydown', handleKeyDown);
             window.removeEventListener('mouseup', handleWindowMouseUp);
+            window.removeEventListener('resize', handleResize);
             cleanupIpc();
             resizeObs?.disconnect();
         };
@@ -120,6 +133,7 @@ const Cropper: React.FC = () => {
 
     const handleMouseDown = (e: React.MouseEvent) => {
         e.preventDefault(); // prevent text selection
+        (window as any).electronAPI.cropperDrag?.(true);
         setStartPos({ x: e.clientX, y: e.clientY });
         setCurrentPos({ x: e.clientX, y: e.clientY });
     };
@@ -142,8 +156,8 @@ const Cropper: React.FC = () => {
         if (!canvas) return;
 
         const dpr = window.devicePixelRatio || 1;
-        const cssWidth = window.innerWidth;
-        const cssHeight = window.innerHeight;
+        const cssWidth = viewport.width;
+        const cssHeight = viewport.height;
 
         // Physical pixel dimensions — prevents blurry canvas on HiDPI/Retina screens
         canvas.width = cssWidth * dpr;
@@ -197,7 +211,7 @@ const Cropper: React.FC = () => {
             drawCorner(x + w, y + h - cornerSize, x + w, y + h, x + w - cornerSize, y + h);
             drawCorner(x + cornerSize, y + h, x, y + h, x, y + h - cornerSize);
         }
-    }, [startPos, currentPos, theme]);
+    }, [startPos, currentPos, theme, viewport]);
 
     const isLightTheme = theme === 'light';
 
@@ -251,6 +265,17 @@ const Cropper: React.FC = () => {
                             }}
                         >
                             Select area
+                        </span>
+
+                        <span
+                            className="text-[10px]"
+                            style={{
+                                color: isLightTheme
+                                    ? 'rgba(0, 0, 0, 0.4)'
+                                    : 'rgba(255, 255, 255, 0.4)'
+                            }}
+                        >
+                            or click for the whole screen
                         </span>
 
                         <div

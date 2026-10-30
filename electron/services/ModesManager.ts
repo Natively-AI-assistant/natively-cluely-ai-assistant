@@ -394,6 +394,13 @@ function rowToSection(row: any): ModeNoteSection {
     };
 }
 
+/** One background re-index step, in the shape of the 'mode-file-index-status' push. */
+export interface ReferenceIndexStatusEvent {
+    modeId: string;
+    fileId: string;
+    phase: 'indexing' | 'done';
+}
+
 export class ModesManager {
     private static instance: ModesManager;
     private readonly modeContextRetriever = new ModeContextRetriever();
@@ -1254,16 +1261,37 @@ export class ModesManager {
             const files = this.getReferenceFiles(mode.id);
             if (files.length === 0) continue;
             // Cheap status read (no embedding work) gates the expensive retry.
-            const hasEligible = files.some(f => {
+            const eligible = files.filter(f => {
                 try {
                     return RETRY_ELIGIBLE_INDEX_STATUSES.has(this.modeContextRetriever.getReferenceFileIndexStatus(f.id).status);
                 } catch {
                     return true; // status lookup failed → let the retry decide
                 }
             });
-            if (!hasEligible) continue;
-            await this.modeContextRetriever.retryLexicalOnlyFiles(files).catch(() => { /* logged inside */ });
+            // One file at a time, so each badge changes when its own file does.
+            for (const f of eligible) {
+                this.reportReferenceIndexStatus({ modeId: mode.id, fileId: f.id, phase: 'indexing' });
+                await this.modeContextRetriever.retryLexicalOnlyFiles([f]).catch(() => { /* logged inside */ });
+                this.reportReferenceIndexStatus({ modeId: mode.id, fileId: f.id, phase: 'done' });
+            }
         }
+    }
+
+    private referenceIndexStatusListener: ((event: ReferenceIndexStatusEvent) => void) | null = null;
+
+    /**
+     * Where background re-indexing (boot retry, mode-activation prewarm) reports
+     * progress. main broadcasts it as 'mode-file-index-status', the push an
+     * upload already sends and the Modes Manager badges already follow. Without
+     * it a file re-indexed in the background changed badge only when the user
+     * happened to re-open the mode, which read as statuses flipping on their own.
+     */
+    public setReferenceIndexStatusListener(listener: ((event: ReferenceIndexStatusEvent) => void) | null): void {
+        this.referenceIndexStatusListener = listener;
+    }
+
+    private reportReferenceIndexStatus(event: ReferenceIndexStatusEvent): void {
+        try { this.referenceIndexStatusListener?.(event); } catch { /* a status push never breaks indexing */ }
     }
 
     /** Modes that have at least one retry-eligible reference file. Used by the
@@ -1294,7 +1322,9 @@ export class ModesManager {
             // `status` cannot see the content; the hash check can (chunker bump →
             // lazy per-mode re-index, see referenceFileNeedsReindex).
             if (status !== 'ready' || this.modeContextRetriever.referenceFileNeedsReindex(file)) {
+                this.reportReferenceIndexStatus({ modeId, fileId: file.id, phase: 'indexing' });
                 await this.modeContextRetriever.indexReferenceFile(file).catch(() => { /* logged inside */ });
+                this.reportReferenceIndexStatus({ modeId, fileId: file.id, phase: 'done' });
             }
         }
         // Phase 3: warm the local cross-encoder reranker at activation so the

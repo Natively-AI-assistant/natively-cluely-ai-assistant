@@ -23,8 +23,12 @@ import {
   hasSentenceTransformerHead, loadSentenceTransformerHead, scoreWithHead,
   type SentenceTransformerHead,
 } from './sentenceTransformerHead';
+import { trustSystemCertificates } from '../utils/systemCertificates';
 
 if (!parentPort) throw new Error('localRerankerWorker must be run as a Worker thread');
+
+// A non-bundled reranker downloads on this thread, and the CA list is per thread.
+trustSystemCertificates();
 
 let model: any = null;
 let tokenizer: any = null;

@@ -56,6 +56,14 @@ export interface LocalEmbeddingRecipe {
   /** config.max_position_embeddings. */
   maxSeqLength: number;
   /**
+   * Most texts one worker message may carry. In-process ONNX grows its arena
+   * across every forward pass of a message: 100 full-length chunks aborted the
+   * whole app with a native SIGTRAP, 16 indexed cleanly (measured on the
+   * 66-page thesis fixture, ModeHybridRetriever F22). LocalEmbeddingProvider
+   * splits any larger batch, whoever sends it.
+   */
+  maxBatchSize: number;
+  /**
    * Free memory, in GB, this model needs ABOVE the shared ONNX floor before it
    * is allowed to load.
    *
@@ -84,6 +92,10 @@ export const BUNDLED_LOCAL_EMBEDDING: Readonly<LocalEmbeddingRecipe & {
   queryPrefix: 'query: ',
   documentPrefix: 'passage: ',
   maxSeqLength: 512,
+  // The batch F22 measured safe. Without it a batch sized for the provider the
+  // app just fell back FROM (32 for Natively, 100 for Gemini/OpenAI) reached
+  // this model whole and took the app down mid-upload (2026-10-29).
+  maxBatchSize: 16,
   // Measured peak RSS 198 MB against MiniLM's 120 MB: +78 MB. Rounded up to
   // 0.2 GB for the 17 MB tokenizer and activation memory on full-length
   // (512-token) chunks, which the sanity probe texts did not exercise.

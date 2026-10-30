@@ -625,6 +625,26 @@ export class EmbeddingPipeline {
     }
 
     /**
+     * True while the active provider is a stand-in the app expects to hand back:
+     * a pinned provider that is missing or down (isRunningOnUnpinnedFallback),
+     * or, in auto mode, a runtime promotion whose primary is being re-probed
+     * (schedulePrimaryReprobe). The second case returns on its own within a
+     * minute of the primary answering, and restores the primary's space.
+     *
+     * isRunningOnUnpinnedFallback() alone reads false in auto mode, so the
+     * reference-file indexer took a 429 burst's promotion for a provider change:
+     * it deleted each file's hosted vectors, re-embedded it at the stand-in's
+     * width, then did it all again in reverse after the demotion. A customer
+     * with 30 PDFs watched that cycle for hours (2026-10-29).
+     */
+    isRunningOnStandIn(): boolean {
+        if (this.isRunningOnUnpinnedFallback()) return true;
+        return this.primaryReprobeTimer !== null
+            && this.provider !== null
+            && this.provider === this.fallbackProvider;
+    }
+
+    /**
      * Register the callback that re-arms the deferred re-index sweep once the
      * pinned provider is active again. RAGManager owns the sweep, so the
      * pipeline only signals; it does not schedule.
@@ -1022,13 +1042,33 @@ export class EmbeddingPipeline {
         } catch (primaryError) {
             const fallback = this.fallbackProvider;
             if (!fallback || fallback === active) throw primaryError;
+            // Same bar as the batch and query paths (T13): only a SUSTAINED
+            // outage may change the session's embedding space. This path
+            // promoted on ONE failure — a single 429 while a résumé ingested
+            // switched the whole app to the on-device model, every reference
+            // file read "not indexed" against the new space and re-indexed
+            // into it, then flipped back when the reprobe found the primary
+            // healthy (a customer watched 30 PDFs cycle indexed → not indexed →
+            // indexing for hours, 2026-10-29). Below the streak the caller gets
+            // the error: every caller already treats a failed embed as
+            // "lexical for now, retried later".
+            const hardFailures = this.noteQueryHardFailure('single_embed_hard_failure');
+            if (hardFailures < PROMOTE_AFTER_CONSECUTIVE_FAILURES) {
+                console.warn(
+                    `[EmbeddingPipeline] Single embedding failed via ${active.name}; left unembedded rather than `
+                    + `switching spaces (${hardFailures}/${PROMOTE_AFTER_CONSECUTIVE_FAILURES} consecutive failures):`,
+                    primaryError instanceof Error ? primaryError.message : primaryError
+                );
+                throw primaryError;
+            }
             console.warn(
-                `[EmbeddingPipeline] Primary single embedding failed via ${active.name}; ` +
-                `falling back to ${fallback.name}:`,
+                `[EmbeddingPipeline] PROMOTING ${fallback.name} from the single-embed path: ${hardFailures} `
+                + `consecutive hard failures on ${active.name}:`,
                 primaryError instanceof Error ? primaryError.message : primaryError
             );
             const embedding = await this.embedWithTimeout(fallback, text, 'fallback-live-chunk');
             this.promoteFallbackProvider(fallback);
+            this.schedulePrimaryReprobe(active);
             return { embedding, space: fallback.space, provider: fallback.name, dimensions: fallback.dimensions };
         }
     }
@@ -1049,7 +1089,11 @@ export class EmbeddingPipeline {
             throw new Error('Embedding provider not initialized');
         }
         if (texts.length === 0) return [];
-        const provider = this.provider;
+        return this.embedBatchWithTimeout(this.provider, texts);
+    }
+
+    /** One batch through ONE given provider, under EMBED_TIMEOUT_MS. */
+    private embedBatchWithTimeout(provider: IEmbeddingProvider, texts: string[]): Promise<number[][]> {
         return new Promise<number[][]>((resolve, reject) => {
             const timer = setTimeout(() => {
                 reject(new Error(
@@ -1107,7 +1151,13 @@ export class EmbeddingPipeline {
                 await new Promise((r) => setTimeout(r, wait));
                 try {
                     if (!active) throw primaryError;
-                    const embeddings = await this.getEmbeddings(texts);
+                    // Through `active`, never this.provider: two files index at
+                    // once, and the other one may have promoted the fallback
+                    // during the wait above. getEmbeddings() would then embed
+                    // with the on-device model (384-d) while this labels the
+                    // vectors with the primary's space (2048-d) — stored as
+                    // "indexed", scoring 0 against every query.
+                    const embeddings = await this.embedBatchWithTimeout(active, texts);
                     const space = active.space;
                     if (!space) throw new Error('Embedding provider has no active space');
                     this.noteQuerySuccess();

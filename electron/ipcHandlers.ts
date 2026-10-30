@@ -4,7 +4,8 @@ import * as crypto from 'crypto';
 import { repairCapReached, endsInsideFence } from './llm/repairCap';
 import { AntigravityService, initializeAntigravityLifecycle } from './services/AntigravityService';
 import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
-import { app, BrowserWindow, clipboard, dialog, desktopCapturer, ipcMain, nativeImage, shell, systemPreferences } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, desktopCapturer, ipcMain, nativeImage, screen, shell, systemPreferences } from 'electron';
+import { startChatWebSearch } from './services/webSearch/chatWebSearch';
 import { setOpenAtLogin, getOpenAtLogin } from './utils/windowsTaskbarPolicy';
 import { normalizeMeetingSurface } from './utils/meetingSurface';
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
@@ -2040,6 +2041,17 @@ export function initializeIpcHandlers(appState: AppState): void {
           }
         }
 
+        // Web search for typed chat (services/webSearch/chatWebSearch.ts). It
+        // starts here and is awaited where each path assembles its prompt, so
+        // it runs alongside evidence retrieval. Never for the Answer button
+        // (a spoken question) or a skill turn.
+        const webSearchBlockPromise = startChatWebSearch(message, {
+          typed: !options?.liveQuestion && options?.surface !== 'live',
+          skill: Boolean(skillPromptBlock),
+          meetingActive: appState.getIsMeetingActive(),
+          callerScoped: options?.skipSystemPrompt === true && Boolean(context),
+        }, () => require('./services/resolveCompanySearchProvider').resolveCompanySearchProvider());
+
         // ── CONTEXT INTELLIGENCE V3 — wired manual-chat surface ──────────────
         //
         // Deliberately a SHORT-CIRCUIT, not an interleave. The legacy assembly
@@ -2676,8 +2688,10 @@ export function initializeIpcHandlers(appState: AppState): void {
             // A persona-less V3 system (v2 kill-switch) has no diagram contract;
             // a v2 persona already carries exactly one, and the helper never
             // adds a second.
+            const v3WebSearchBlock = await webSearchBlockPromise;
             const v3SystemPrompt = withDiagramContract(
-              skillPromptBlock ? `${composed.system}\n\n## ACTIVE SKILL\n${skillPromptBlock}` : composed.system,
+              (skillPromptBlock ? `${composed.system}\n\n## ACTIVE SKILL\n${skillPromptBlock}` : composed.system)
+                + (v3WebSearchBlock ? `\n\n${v3WebSearchBlock}` : ''),
               manualDiagramTurn,
               { tier: llmHelper?.getPromptTier?.() === 'tiny' ? 'local' : 'cloud', surface: answerSurface },
             );
@@ -4873,6 +4887,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         // are the first thing the model sees in the user context block.
         if (skillPromptBlock) {
           context = context ? `${skillPromptBlock}\n\n${context}` : skillPromptBlock;
+        }
+        const legacyWebSearchBlock = await webSearchBlockPromise;
+        if (legacyWebSearchBlock) {
+          context = context ? `${context}\n\n${legacyWebSearchBlock}` : legacyWebSearchBlock;
         }
 
         // Use CHAT_MODE_PROMPT for general chat — bypasses the interview-copilot
@@ -8601,6 +8619,27 @@ export function initializeIpcHandlers(appState: AppState): void {
         win.webContents.send('provider-data-scopes-changed', merged);
       }
     });
+    return { success: true };
+  });
+
+  // Settings › Overlay › Screenshot screen (electron/screenshotDisplay.ts).
+  safeHandle('get-screenshot-display', async () => {
+    const { listScreenshotDisplays, parseScreenshotDisplayPreference } = require('./screenshotDisplay');
+    let primaryId: number | null = null;
+    try { primaryId = screen.getPrimaryDisplay().id; } catch { /* no display yet */ }
+    return {
+      preference: parseScreenshotDisplayPreference(SettingsManager.getInstance().get('screenshotDisplay')),
+      displays: listScreenshotDisplays(screen.getAllDisplays(), primaryId),
+    };
+  });
+
+  safeHandle('set-screenshot-display', async (_, value: unknown) => {
+    const { parseScreenshotDisplayPreference } = require('./screenshotDisplay');
+    const preference = parseScreenshotDisplayPreference(value);
+    if (preference !== value) return { success: false, error: 'invalid_value' };
+    if (!SettingsManager.getInstance().set('screenshotDisplay', preference)) {
+      return { success: false, error: 'settings_store_degraded' };
+    }
     return { success: true };
   });
 
