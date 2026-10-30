@@ -477,7 +477,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                     >
                         {/* Main Pill */}
                         <div className="relative">
-                            {/* At rest, the "My Natively" section's colour (Launcher.tsx), recessed into
+                            {/* At rest, the home header section's colour (Launcher.tsx), recessed into
                                 the header with an inner top shadow and a hairline ring. Open, it blends
                                 into the same colour at 90% so the frost shows: in on the dropdown-open
                                 clock (250ms smooth-out), back on the close clock (150ms).

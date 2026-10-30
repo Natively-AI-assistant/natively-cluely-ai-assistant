@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useT } from '../i18n';
 import { ToggleLeft, ToggleRight, Search, Calendar, Globe, Clock, ChevronRight, LayoutGrid, RefreshCw, Eye, EyeOff, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Bell, DownloadCloud, CheckCircle, AlertCircle, User, Sparkles, ArrowUpRight } from 'lucide-react';
 import { ProfileIntelligenceIcon } from './ProfileIntelligenceIcon';
+import { NativelyWordmark } from './NativelyWordmark';
 import icon from "./icon.png";
 import mainui from "../UI_comp/mainui.png";
 import UpcomingCalendarCard from './ui/UpcomingCalendarCard';
@@ -985,7 +986,11 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                     {/* 1.5. Hero Header (Title + Controls + CTA) */}
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-4">
-                                            <h1 className="text-3xl font-celeb-light font-medium text-text-primary tracking-wide drop-shadow-sm">{t('My Natively')}</h1>
+                                            {/* The website's and the extension's "natively" wordmark, at the
+                                                navbar's 27px; currentColor, so it follows the theme. */}
+                                            <h1 className="m-0 shrink-0 text-text-primary">
+                                                <NativelyWordmark height={27} className="block" />
+                                            </h1>
 
                                             {/* Refresh Button */}
                                             <button
