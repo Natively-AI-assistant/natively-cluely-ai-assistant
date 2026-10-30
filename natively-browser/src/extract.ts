@@ -43,7 +43,7 @@ import {
   type InlineFormulasOptions,
 } from './math-text';
 import { DEFAULT_REGISTRY, findPlatform, normalizeHost } from './capture/registry/registry';
-import { outermost } from './capture/extractors/dom-helpers';
+import { blockText, outermost } from './capture/extractors/dom-helpers';
 
 // Mirror of DOM_CONTEXT_MAX_CHARS in electron/config/constants.ts and
 // src/constants/domCapture.ts. This is a separate package so we cannot import
@@ -207,51 +207,12 @@ function innerTextFallback(doc: Document, formulas: InlineFormulasOptions): stri
   inlineFormulas(clone as never, formulas);
   const drop = clone.querySelectorAll('script, style, noscript, template');
   drop.forEach((n) => n.parentNode?.removeChild(n));
-  // innerText respects visibility/line-breaks; textContent does not. Prefer
-  // innerText when available (jsdom/real browser), else fall back to textContent.
-  const text = (clone as { innerText?: string }).innerText ?? clone.textContent ?? '';
+  // A detached clone's innerText is its textContent in Chrome (no layout), so
+  // a real node is read block by block; innerText only for a shim without one.
+  const text = clone.childNodes
+    ? blockText(clone)
+    : ((clone as { innerText?: string }).innerText ?? clone.textContent ?? '');
   return collapseWhitespace(text);
-}
-
-const BLOCK_TAGS = new Set([
-  'p', 'div', 'section', 'article', 'header', 'footer', 'ul', 'ol', 'li', 'pre', 'table', 'tr',
-  'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'dl', 'dt', 'dd',
-]);
-const SKIP_TAGS = new Set(['script', 'style', 'noscript', 'template', 'svg']);
-// Table cells sit side by side: keep a gap between them, or "N" and "10^5" in
-// a constraints table read as "N10^5".
-const CELL_TAGS = new Set(['td', 'th']);
-
-/**
- * Text of a DETACHED element with line breaks at block boundaries. innerText
- * would do this on the live page, but a clone has no layout, and the live page
- * still has the formulas only as SVG.
- */
-function blockText(root: Node): string {
-  const out: string[] = [];
-  const walk = (node: Node) => {
-    for (const child of Array.from(node.childNodes || [])) {
-      if (child.nodeType === 3) {
-        out.push((child as Text).data);
-        continue;
-      }
-      if (child.nodeType !== 1) continue;
-      const tag = (child.nodeName || '').toLowerCase();
-      if (SKIP_TAGS.has(tag)) continue;
-      if (tag === 'br') {
-        out.push('\n');
-        continue;
-      }
-      const block = BLOCK_TAGS.has(tag);
-      if (block) out.push('\n');
-      if (tag === 'li') out.push('- ');
-      walk(child);
-      if (block) out.push('\n');
-      else if (CELL_TAGS.has(tag)) out.push(' ');
-    }
-  };
-  walk(root);
-  return collapseWhitespace(out.join(''));
 }
 
 /**

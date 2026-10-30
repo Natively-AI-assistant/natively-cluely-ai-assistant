@@ -21,12 +21,72 @@ export function collapseWhitespace(s: string): string {
     .trim();
 }
 
+// Blocks set apart by a blank line, and blocks that only start a new line: a
+// Codeforces sample test is a <pre> of one <div> per line, and a blank line
+// between each would end its section after the first line (sliceSection).
+const PARAGRAPH_TAGS = new Set([
+  'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'table', 'blockquote', 'section', 'article',
+  'header', 'footer', 'dl',
+]);
+const LINE_TAGS = new Set(['div', 'li', 'pre', 'tr', 'dt', 'dd']);
+const SKIP_TAGS = new Set(['script', 'style', 'noscript', 'template', 'svg']);
+// Table cells sit side by side: keep a gap between them, or "N" and "10^5" in
+// a constraints table read as "N10^5".
+const CELL_TAGS = new Set(['td', 'th']);
+// Where the page's own line breaks are the text's, as in a sample input.
+const VERBATIM_TAGS = new Set(['pre', 'code', 'textarea']);
+const LINE_BREAK = '\u0001';
+const PARAGRAPH_BREAK = '\u0002';
+
 /**
- * textContent of `el` with rendered formulas replaced by their text, or by the
- * UNREADABLE_FORMULA marker when the page has none (#645). Reads a clone, so
- * the live page is untouched. Script/style text is dropped after the formulas
- * are inlined: MathJax 2 keeps each TeX source in a <script> beside the formula,
- * which would otherwise print every formula twice.
+ * Text of a DETACHED node with line breaks at block boundaries. innerText
+ * would do this on the live page, but a clone has no layout, and Chrome then
+ * returns its textContent: "A. Theatre Square" ran into "time limit per test",
+ * and "Constraints" into the sample input. Source line breaks outside
+ * <pre>/<code> are spaces, as innerText makes them. A shim node without
+ * childNodes is read as its textContent.
+ */
+export function blockText(root: Node): string {
+  if (!root.childNodes) return collapseWhitespace(root.textContent || '');
+  const out: string[] = [];
+  const walk = (node: Node, verbatim: boolean) => {
+    for (const child of Array.from(node.childNodes || [])) {
+      if (child.nodeType === 3) {
+        const data = (child as Text).data;
+        out.push(verbatim ? data : data.replace(/\s+/g, ' '));
+        continue;
+      }
+      if (child.nodeType !== 1) continue;
+      const tag = (child.nodeName || '').toLowerCase();
+      if (SKIP_TAGS.has(tag)) continue;
+      if (tag === 'br') {
+        out.push(LINE_BREAK);
+        continue;
+      }
+      const brk = PARAGRAPH_TAGS.has(tag) ? PARAGRAPH_BREAK : LINE_TAGS.has(tag) ? LINE_BREAK : '';
+      out.push(brk);
+      if (tag === 'li') out.push('- ');
+      walk(child, verbatim || VERBATIM_TAGS.has(tag));
+      out.push(brk);
+      if (CELL_TAGS.has(tag)) out.push(' ');
+    }
+  };
+  walk(root, false);
+  // Adjacent boundaries make one break, the widest of them. Whitespace around
+  // a break is dropped, a <pre>'s own closing newline too.
+  const text = out
+    .join('')
+    .replace(/[ \t\r\n]*[\u0001\u0002][\u0001\u0002 \t\r\n]*/g, (run) => (run.includes(PARAGRAPH_BREAK) ? '\n\n' : '\n'));
+  return collapseWhitespace(text);
+}
+
+/**
+ * Text of `el` with rendered formulas replaced by their text, or by the
+ * UNREADABLE_FORMULA marker when the page has none (#645), and line breaks at
+ * block boundaries (blockText). Reads a clone, so the live page is untouched.
+ * Script/style text is dropped after the formulas are inlined: MathJax 2 keeps
+ * each TeX source in a <script> beside the formula, which would otherwise
+ * print every formula twice.
  */
 function textOf(el: Node | null | undefined): string {
   if (!el) return '';
@@ -40,7 +100,7 @@ function textOf(el: Node | null | undefined): string {
     } catch {
       /* shim without querySelectorAll */
     }
-    return clone.textContent || '';
+    return blockText(clone);
   } catch {
     return el.textContent || '';
   }
@@ -102,12 +162,20 @@ export function allText(doc: ParentNode, selectors: string[] | undefined, cap = 
  */
 export function extractEditorCode(doc: ParentNode, extraSelectors?: string[], cap = 8000): string {
   const chunks: string[] = [];
+  // Keyed without whitespace: the same code read once per line and once as a
+  // run-together textContent ("class Solution {public:") is one chunk.
   const seen = new Set<string>();
   const push = (raw: string | null | undefined) => {
     const t = (raw || '').replace(/ /g, ' ').replace(/\r\n?/g, '\n').replace(/[ \t]+$/gm, '').trim();
-    if (t.length < 2 || seen.has(t)) return;
-    seen.add(t);
+    const key = t.replace(/\s+/g, '');
+    if (t.length < 2 || seen.has(key)) return;
+    seen.add(key);
     chunks.push(t);
+  };
+  /** An editor's lines joined by newlines, or its textContent when it has no line elements. */
+  const editorText = (el: Element): string | null => {
+    const lines = el.querySelectorAll('.view-line, .cm-line, .CodeMirror-line, .ace_line');
+    return lines.length ? Array.from(lines).map((l) => l.textContent || '').join('\n') : el.textContent;
   };
 
   const safeQuery = (sel: string): Element[] => {
@@ -143,7 +211,7 @@ export function extractEditorCode(doc: ParentNode, extraSelectors?: string[], ca
   // Any platform-specific code selectors.
   if (extraSelectors) {
     for (const sel of extraSelectors) {
-      for (const el of safeQuery(sel)) push(el.textContent);
+      for (const el of safeQuery(sel)) push(editorText(el));
     }
   }
 
@@ -179,14 +247,24 @@ export function extractPreBlocks(doc: ParentNode, cap = 4000): string {
  */
 export function sliceSection(body: string, signals: string[] | undefined, maxLen = 1200): string {
   if (!signals || !body) return '';
-  const lower = body.toLowerCase();
-  for (const sig of signals) {
-    const idx = lower.indexOf(sig.toLowerCase());
-    if (idx === -1) continue;
+  const from = (idx: number, sig: string): string => {
     const tail = body.slice(idx, idx + maxLen);
     // Stop at a double-newline boundary if there is one well past the heading.
     const end = tail.indexOf('\n\n', sig.length + 4);
     return (end > 0 ? tail.slice(0, end) : tail).trim();
+  };
+  // A heading first: the signal at the start of a line, in its own case.
+  // Codeforces' header row reads "input / standard input" above the "Input"
+  // section, and "For example" comes mid-sentence before the "Example" heading.
+  for (const sig of signals) {
+    for (let idx = body.indexOf(sig); idx !== -1; idx = body.indexOf(sig, idx + 1)) {
+      if (idx === 0 || body[idx - 1] === '\n') return from(idx, sig);
+    }
+  }
+  const lower = body.toLowerCase();
+  for (const sig of signals) {
+    const idx = lower.indexOf(sig.toLowerCase());
+    if (idx !== -1) return from(idx, sig);
   }
   return '';
 }
@@ -203,7 +281,11 @@ export function bodyInnerText(doc: Document, cap = 12000): string {
   } catch {
     /* shim without querySelectorAll */
   }
-  const text = (clone as { innerText?: string }).innerText ?? clone.textContent ?? '';
+  // A detached clone's innerText is its textContent in Chrome (no layout), so
+  // a real node is read block by block; innerText only for a shim without one.
+  const text = clone.childNodes
+    ? blockText(clone)
+    : ((clone as { innerText?: string }).innerText ?? clone.textContent ?? '');
   const out = collapseWhitespace(text);
   return out.length > cap ? out.slice(0, cap) : out;
 }

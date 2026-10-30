@@ -322,6 +322,25 @@ describe('extractEditorCode', () => {
     assert.equal(extractEditorCode(doc), 'def two_sum(nums, target):\n    return []');
   });
 
+  test('a platform selector on the same editor adds no run-together copy', () => {
+    // LeetCode's registry names '.monaco-editor .view-lines'. Its textContent
+    // has no newlines ("class Solution {public:"), so it read as a second copy.
+    const doc = makeDoc([
+      el('div', { class: 'monaco-editor' }, [
+        el('div', { class: 'view-lines' }, lines('view-line', 'class Solution {', 'public:', '};')),
+      ]),
+    ]);
+    assert.equal(extractEditorCode(doc, ['.monaco-editor .view-lines']), 'class Solution {\npublic:\n};');
+  });
+
+  test('code that differs only in whitespace is kept once, as first read', () => {
+    const doc = makeDoc([
+      el('div', { class: 'cm-content' }, lines('cm-line', 'int main() {', '  return 0;', '}')),
+      el('div', { class: 'solution-box', text: 'int main() {return 0;}' }),
+    ]);
+    assert.equal(extractEditorCode(doc, ['.solution-box']), 'int main() {\n  return 0;\n}');
+  });
+
   test('Monaco: a root with no rendered lines contributes nothing', () => {
     const doc = makeDoc([el('div', { class: 'monaco-editor', text: 'Loading editor…' })]);
     assert.equal(extractEditorCode(doc), '');
@@ -572,6 +591,38 @@ describe('sliceSection', () => {
     assert.equal(sliceSection('', ['Constraints']), '');
     assert.equal(sliceSection(body, undefined), '');
     assert.equal(sliceSection(body, []), '');
+  });
+
+  // Codeforces: the header row "input / standard input" and a mid-sentence
+  // "For example" both come before the real headings.
+  const codeforces = [
+    'A. Primary Task',
+    'input',
+    'standard input',
+    '',
+    'For example, instead of 10^5 he wrote 105.',
+    '',
+    'Input',
+    '',
+    'The first line contains t.',
+    '',
+    'Example',
+    'Input',
+    '7',
+    '100',
+  ].join('\n');
+
+  test('a heading at the start of a line, in its own case, wins over an earlier match', () => {
+    assert.equal(sliceSection(codeforces, ['Example']), 'Example\nInput\n7\n100');
+    assert.equal(sliceSection(codeforces, ['Input']), 'Input\n\nThe first line contains t.');
+  });
+
+  test('a later signal heading a line wins over an earlier one found only mid-line', () => {
+    assert.match(sliceSection(codeforces, ['instead', 'Example']), /^Example\n/);
+  });
+
+  test('without a heading, the first match anywhere is still used', () => {
+    assert.equal(sliceSection('Read the constraints below.\n\nn <= 5', ['Constraints']), 'constraints below.');
   });
 });
 
