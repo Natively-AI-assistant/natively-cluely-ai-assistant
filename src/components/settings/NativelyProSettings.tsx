@@ -635,8 +635,9 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
     // or a checkout link is an app release; that was already the case.
     const lifetimeUrl = 'https://checkout.dodopayments.com/buy/pdt_0NbHo6EnXlNPqNcZ14OTi';
     const yearlyUrl = 'https://checkout.dodopayments.com/buy/pdt_0NcM4QBwy0CDcPV9CXaNP';
-    const yearlyPriceText = '$30';
-    const lifetimePriceText = '$50';
+    // $39 / $79 from 2026-10-30, as the website's /pricing has shown since 2026-10-13.
+    const yearlyPriceText = '$39';
+    const lifetimePriceText = '$79';
 
     // Parse numeric prices once. Used both for the "Save N%" chip on the
     // toggle and for the live "Save $X over 3 years" copy under the
