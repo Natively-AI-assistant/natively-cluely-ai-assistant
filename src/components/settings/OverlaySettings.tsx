@@ -19,7 +19,8 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { AppWindow, ChevronDown, Layout, Monitor, NotebookPen, RotateCcw } from 'lucide-react';
 import NotesWindow, { type NotesWindowPreview } from '../NotesWindow';
 import { useT } from '../../i18n';
-import type { MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
+import { resolveMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
+import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import type { OverlayAppearance } from '../../lib/overlayAppearance';
 import {
     DEFAULT_OVERLAY_BUTTON_ORDER,
@@ -44,7 +45,7 @@ const THEMES: { mode: MeetingInterfaceTheme; label: string; description: string 
     { mode: 'default', label: 'Default', description: 'Default overlay appearance' },
     { mode: 'liquid-glass', label: 'Liquid Glass', description: 'Liquid glass — Apple-inspired transparent overlay' },
     { mode: 'modern', label: 'Modern', description: 'Modern — polished dark glass with cobalt accents' },
-    { mode: 'lavender', label: 'Lavender', description: 'Lavender — white glass with lavender buttons, as on the website' },
+    { mode: 'lavender', label: 'Lavender', description: 'Lavender glass from the website, light even in dark mode' },
 ];
 
 type Drag = {
@@ -619,6 +620,9 @@ export const OverlaySettings: React.FC<{
     const saved = useOverlayButtonOrder();
     const isDefaultOrder = sameOverlayButtonOrder(saved, DEFAULT_OVERLAY_BUTTON_ORDER);
     const style = THEMES.find((o) => o.mode === theme) ?? THEMES[0];
+    // The preview draws what the meeting will paint (Default is Lavender in
+    // light mode); the picker keeps the pick itself.
+    const paintedTheme = resolveMeetingInterfaceTheme(theme, useResolvedTheme());
     const [surface, setSurface] = useMeetingSurface();
     const switcher = <SurfaceSwitch value={surface ?? 'overlay'} onChange={setSurface} disabled={surface === null} />;
 
@@ -659,7 +663,7 @@ export const OverlaySettings: React.FC<{
                         </button>
                     )}
                 </div>
-                <Preview opacity={opacity} theme={theme} />
+                <Preview opacity={opacity} theme={paintedTheme} />
             </section>
 
             <div className={SETTINGS_CARD}>

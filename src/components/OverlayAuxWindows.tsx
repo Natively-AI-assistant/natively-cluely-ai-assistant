@@ -333,14 +333,30 @@ export function OverlayToggleWindow() {
         visibility: synced ? 'visible' : 'hidden',
       } as React.CSSProperties}
     >
-      <ResizeToggle
-        expanded={!!state.shellWide}
-        onToggle={() => sendAction('toggle-width')}
-        appearance={appearance}
-        interfaceTheme={themeAttr === 'default' ? undefined : themeAttr}
-        topOffset={4}
-        rightOffset={4}
-      />
+      {/* Fades with the panel when it is hidden or shown (Cmd+B, the pill's
+          chevron), on the panel's own timings: out in 220ms, in over 340ms.
+          Without it the button stayed fully drawn until main hid its window,
+          which the overlay asks for 400ms after the fade starts. The pill
+          does the same on its wrapper; the just-shown guard stops button
+          transitions only, so this one still runs. */}
+      <div
+        style={{
+          opacity: state.expanded === false ? 0 : 1,
+          pointerEvents: state.expanded === false ? 'none' : 'auto',
+          transition: state.expanded === false
+            ? 'opacity 0.22s cubic-bezier(0.32, 0, 0.67, 0)'
+            : 'opacity 0.34s cubic-bezier(0.23, 1, 0.32, 1)',
+        }}
+      >
+        <ResizeToggle
+          expanded={!!state.shellWide}
+          onToggle={() => sendAction('toggle-width')}
+          appearance={appearance}
+          interfaceTheme={themeAttr === 'default' ? undefined : themeAttr}
+          topOffset={4}
+          rightOffset={4}
+        />
+      </div>
     </div>
   );
 }

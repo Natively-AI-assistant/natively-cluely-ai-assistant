@@ -18,7 +18,6 @@ import {
   MessageSquare,
   Mic,
   MicOff,
-  NotebookPen,
   Pencil,
   Quote,
   RefreshCw,
@@ -420,7 +419,7 @@ import {
 } from '../lib/overlayAppearance';
 import { NegotiationCoachingCard } from '../premium';
 import type { DynamicActionPayload } from '../types/electron';
-import { getCodexCliModelDisplayName, gatewayModelLabel, litellmModelLabel } from '../utils/modelUtils';
+import { getCodexCliModelDisplayName, gatewayModelLabel, litellmModelLabel, modelChipName } from '../utils/modelUtils';
 import { getModifierSymbol, isMac, isWindows } from '../utils/platformUtils';
 import { acceleratorToKeys } from '../utils/keyboardUtils';
 import { DynamicActionBar } from './dynamic-actions/DynamicActionBar';
@@ -1492,7 +1491,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   // The notes window (`?window=notes`) is open: the Notes button shows it.
-  const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [conversationContext, setConversationContext] = useState<string>('');
   const [isManualRecording, setIsManualRecording] = useState(false);
   const isRecordingRef = useRef(false); // Ref to track recording state (avoids stale closure)
@@ -2403,8 +2401,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // Glass and modern keep a dark panel under the light app theme and lavender
   // a light one under the dark theme; only default follows the app.
   const isLightSurface = interfaceThemeSurface(interfaceTheme, isLightTheme ? 'light' : 'dark') === 'light';
-  // Lavender keeps the website theme's dark code well on its light panel.
-  const useDarkCodeTheme = !isLightSurface || isLavenderTheme;
+  // Lavender's code sits in a light well of its own glass (2026-10-30), so it
+  // takes the light code theme like every other light panel.
+  const useDarkCodeTheme = !isLightSurface;
   const codeTheme = useDarkCodeTheme ? vividDarkCodeTheme : oneLight;
   const codeLineNumberColor = useDarkCodeTheme ? VIVID_DARK_LINE_NUMBER_COLOR : 'rgba(24,24,24,0.4)';
   // Header only shows for the light theme and the modern/glass interface
@@ -5389,15 +5388,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     return () => unsubscribe();
   }, []);
 
-  // The notes window opens and closes outside this window (its own X, a
-  // meeting starting); follow it so the Notes button reads right.
-  useEffect(() => {
-    let cancelled = false;
-    window.electronAPI?.notesWindowIsOpen?.().then((open) => { if (!cancelled) setIsNotesOpen(open === true); }).catch(() => {});
-    const off = window.electronAPI?.onNotesWindowVisibility?.((open) => setIsNotesOpen(open));
-    return () => { cancelled = true; off?.(); };
-  }, []);
-
   // Sync Window Visibility with Expanded State
   useEffect(() => {
     // First run is the mount-time isExpanded=true. main.startMeeting() has
@@ -8106,8 +8096,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     );
   }, [attachedContext]);
 
-  // Phone Mirror's Answer chip toggles this recording, so the phone shows it
-  // too: Stop while recording, Answer again once it ends. Reported on every
+  // Phone Mirror's Speak chip toggles this recording, so the phone shows it
+  // too: Stop while recording, Speak again once it ends. Reported on every
   // change, including the false on mount, which clears one left by a reload.
   useEffect(() => {
     window.electronAPI?.phoneMirrorSetRecording?.(isManualRecording);
@@ -12192,7 +12182,7 @@ Provide only the answer, nothing else.`;
               {showAnswerPanel && (
                 <motion.div
                   ref={scrollContainerRef}
-                  className={`relative flex-1 overflow-y-auto overflow-x-hidden ${hasChatContent ? 'p-4 space-y-3' : 'p-0'} no-drag isolate`}
+                  className={`overlay-scroll-fade relative flex-1 overflow-y-auto overflow-x-hidden ${hasChatContent ? 'p-4 space-y-3' : 'p-0'} no-drag isolate`}
                   layout={false}
                   style={{ scrollbarWidth: 'none', maxHeight: scrollMaxH, minHeight: scrollMinH }}
                 >
@@ -12523,13 +12513,15 @@ Provide only the answer, nothing else.`;
                   // Lavender: the hero's paper pill (hlg-*), icon and label in its slots.
                   const heroChipClass = 'hlg-sm hero-pill hero-hotkey interaction-base interaction-press shrink-0';
                   const heroIcon = (Icon: typeof Mic) => <Icon size={11} strokeWidth={2} />;
+                  // From the shared list, so Settings › Overlay draws the same word.
+                  const answerLabel = t(OVERLAY_BUTTONS.answer.label);
                   const answerContent = isLavenderTheme ? (
                     <span className="flex items-center gap-[5px]">
-                      <Mic size={11} strokeWidth={2} /> {t('Answer')}
+                      <Mic size={11} strokeWidth={2} /> {answerLabel}
                     </span>
                   ) : (
                     <span className="flex items-center gap-1.5">
-                      <Mic className="w-3 h-3 opacity-70" /> {t('Answer')}
+                      <Mic className="w-3 h-3 opacity-70" /> {answerLabel}
                     </span>
                   );
                   const stopContent = (
@@ -12538,14 +12530,18 @@ Provide only the answer, nothing else.`;
                       {t('Stop')}
                     </span>
                   );
-                  // The Answer chip is as wide as its wider label: invisible
-                  // copies of both share one grid cell with the live label, so
-                  // Answer ⇄ Stop never slides the rest of the row sideways.
+                  // The voice chip is labelled Speak, not Answer (the owner,
+                  // 2026-10-30: "Answer" sat beside "What to answer?"; you
+                  // speak a question and Stop sends it). Speak over Ask for
+                  // its width, close to Answer's. It is as wide as its wider
+                  // label: invisible copies of both share one grid cell with
+                  // the live label, so Speak ⇄ Stop never slides the rest of
+                  // the row sideways.
                   const answerSizers = (
                     <>
                       <span className="ov-chip-sizer flex items-center gap-1.5" aria-hidden>
                         <span className="w-3 h-3 shrink-0" />
-                        {ghost(t('Answer'))}
+                        {ghost(answerLabel)}
                       </span>
                       <span className="ov-chip-sizer flex items-center gap-1.5" aria-hidden>
                         <span className="w-1.5 h-1.5 shrink-0" />
@@ -12844,9 +12840,6 @@ Provide only the answer, nothing else.`;
                   {/* Custom Rich Placeholder */}
                   {!inputValue && (
                     <div className="absolute inset-x-3 top-1/2 -translate-y-1/2 min-w-0 overflow-hidden whitespace-nowrap pointer-events-none text-[13px] overlay-text-muted">
-                      {isLavenderTheme ? (
-                      <span className="overlay-input-placeholder-full">{t('Ask anything on screen or conversation')}</span>
-                      ) : (
                       <span className="overlay-input-placeholder-full inline-flex items-center gap-1.5">
                         <span>{t('Ask anything on screen or conversation, or')}</span>
                       <span className="flex items-center gap-1 opacity-80">
@@ -12866,7 +12859,6 @@ Provide only the answer, nothing else.`;
                       </span>
                       <span>{t('for selective screenshot')}</span>
                       </span>
-                      )}
                       <span className="overlay-input-placeholder-compact">{t('Ask anything…')}</span>
                     </div>
                   )}
@@ -12913,7 +12905,9 @@ Provide only the answer, nothing else.`;
                       {isLavenderTheme && <span className="hlg-lens" aria-hidden="true" />}
                       <span className={isLavenderTheme ? 'hlg-content' : 'contents'}>
                       <ModelSelectorLabel>
-                        {(() => {
+                        {/* The model's own name only, in every style: no
+                            provider, no prefix, no slug (modelChipName). */}
+                        {modelChipName((() => {
                           const m = currentModel;
                           const codexCliName = getCodexCliModelDisplayName(m);
                           if (codexCliName) return codexCliName;
@@ -12968,7 +12962,7 @@ Provide only the answer, nothing else.`;
                           // Retired 2026-09-10; DeepSeek serves it as deepseek-flash (V4.1).
                           if (m === 'deepseek-v4-flash') return 'DeepSeek V4.1 Flash';
                           return m;
-                        })()}
+                        })())}
                       </ModelSelectorLabel>
                       {isLavenderTheme ? (
                         <svg className="shrink-0" width="8" height="8" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M3 4l2 2 2-2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
@@ -13011,23 +13005,9 @@ Provide only the answer, nothing else.`;
                       </button>
                     </div>
 
-                    {/* Notes: the notes window, where the user types their own notes for
-                        this meeting; they go into the meeting notes at Stop. Lavender's
-                        row is the hero's, without Notes and Passthrough (owner request);
-                        passthrough keeps its global shortcut there. */}
-                    {!isLavenderTheme && (<>
-                    <div className="relative">
-                      <button
-                        onClick={() => { void window.electronAPI?.notesWindowToggle?.(); }}
-                        data-state={isNotesOpen ? 'open' : undefined}
-                        aria-label={t('Notes')}
-                        aria-pressed={isNotesOpen}
-                        className="w-7 h-7 rounded-[9px] flex items-center justify-center interaction-base interaction-press overlay-bare-icon"
-                      >
-                        <NotebookPen className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
+                    {/* No Notes button in any style (the owner, 2026-10-30): the
+                        notepad is reached from Settings › Overlay, so the row keeps
+                        settings and click-through only. */}
                     {/* Mouse Passthrough Toggle. Opens into a pill with the
                         exit hotkey when turned on — once click-through is on
                         this button can no longer be clicked, so the hotkey is
@@ -13045,7 +13025,6 @@ Provide only the answer, nothing else.`;
                         ariaLabel={t('Toggle Mouse Passthrough')}
                       />
                     </div>
-                    </>)}
                   </div>
 
                   {isLavenderTheme ? (

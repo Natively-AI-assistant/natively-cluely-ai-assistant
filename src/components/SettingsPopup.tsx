@@ -3,7 +3,7 @@ import { MessageSquare, Camera, Zap, Eye } from 'lucide-react';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { getModifierSymbol } from '../utils/platformUtils';
-import { getMeetingInterfaceTheme, type MeetingInterfaceTheme, interfaceThemeSurface, isCssOwnedInterfaceTheme } from '../lib/meetingInterfaceTheme';
+import { getMeetingInterfaceTheme, type MeetingInterfaceTheme, interfaceThemeSurface, isCssOwnedInterfaceTheme, resolveMeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import {
     clampOverlayOpacity,
     getDefaultOverlayOpacity,
@@ -83,9 +83,11 @@ const SettingsPopup = () => {
     // sign-in. Key-based, like Settings — the on/off switches decide whether it
     // APPLIES, not whether the toggle can be used, so the two never disagree.
     const [fastResponseAvailable, setFastResponseAvailable] = useState(false);
-    const [interfaceTheme, setInterfaceTheme] = useState<MeetingInterfaceTheme>(() => {
+    const [chosenInterfaceTheme, setInterfaceTheme] = useState<MeetingInterfaceTheme>(() => {
         return getMeetingInterfaceTheme();
     });
+    // What the overlay paints for that pick (Default is Lavender in light mode).
+    const interfaceTheme = resolveMeetingInterfaceTheme(chosenInterfaceTheme, isLightTheme ? 'light' : 'dark');
 
     // Overlay opacity — same localStorage key + init logic SettingsOverlay.tsx
     // and App.tsx use ('natively_overlay_opacity', theme-aware default when
@@ -403,7 +405,16 @@ const SettingsPopup = () => {
     const iconClass = 'w-3.5 h-3.5';
 
     return (
-        <div className="w-fit h-fit bg-transparent flex flex-col">
+        <div
+            className="w-fit h-fit bg-transparent flex flex-col"
+            // Lavender works its body out from the opacity slider where
+            // data-interface-theme sits. This window's attribute sits above
+            // any slider value, so the panel took the 0.65 default and read
+            // thinner than the overlay. Re-declared here under the live
+            // value, as NativelyInterface's own root does.
+            data-interface-theme={interfaceTheme === 'lavender' ? 'lavender' : undefined}
+            style={interfaceTheme === 'lavender' ? ({ ['--overlay-opacity' as '--overlay-opacity']: String(overlayOpacity) } as React.CSSProperties) : undefined}
+        >
             <div
                 ref={contentRef}
                 className={`w-[180px] backdrop-blur-md border rounded-[14px] overflow-hidden p-1 flex flex-col origin-top-left overlay-shell-surface overlay-popover-surface ${popupPanelClass}`}
@@ -412,7 +423,12 @@ const SettingsPopup = () => {
                 <div className="relative z-[1] flex flex-col">
                     {renderToggleRow({
                         key: 'undetectable',
-                        icon: <CustomGhost className={iconClass} />,
+                        // The ghost the launcher and Settings show: an outline
+                        // while Detectable, filled with cut-out eyes while
+                        // Undetectable, so the icon says the state too.
+                        icon: isUndetectable
+                            ? <CustomGhost className={iconClass} fill="currentColor" eyeColor={isDarkBg ? '#1E1E1E' : '#FFFFFF'} />
+                            : <CustomGhost className={iconClass} />,
                         label: isUndetectable ? 'Undetectable' : 'Detectable',
                         checked: isUndetectable,
                         onToggle: () => {
@@ -462,7 +478,7 @@ const SettingsPopup = () => {
                     {/* Profile Mode lives in Settings › Profile Intelligence only;
                         it was dropped from this popup by owner request. */}
 
-                    <div className="px-2 pt-2 pb-0.5 text-[11px] leading-4 font-semibold select-none" style={{ color: headerColor }}>
+                    <div className="px-2 pt-2 pb-0.5 text-[11px] leading-4 font-semibold text-center select-none" style={{ color: headerColor }}>
                         Shortcuts
                     </div>
                     {renderShortcutRow({

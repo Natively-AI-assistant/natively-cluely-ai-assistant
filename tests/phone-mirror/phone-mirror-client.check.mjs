@@ -17,8 +17,8 @@
 // mic; action placeholders replaced in place by the labelled answer; typed
 // question → echo reconciled → streamed answer; reconnect mid-stream without
 // doubled text; the transcript island's tap / flick / drag / tap-outside; the
-// split column; the Answer chip following the desktop recording (Stop, then
-// Answer and a placeholder); screen-capture confirmation; expired links (4401 close and a
+// split column; the Speak chip following the desktop recording (Stop, then
+// Speak and a placeholder); screen-capture confirmation; expired links (4401 close and a
 // refused reconnect); text contrast; and no page errors.
 //
 // Not covered (needs a physical device): the real on-screen keyboard and
@@ -535,9 +535,9 @@ async function tokenScenarios() {
 // The two slow paths, once, on one device (~70 s): a question the desktop never
 // echoes turns "Not delivered" with a Retry that works, and an action nobody
 // answers says so and clears itself.
-// The Answer chip mirrors the desktop recording it starts: Stop (with its dot)
+// The Speak chip mirrors the desktop recording it starts: Stop (with its dot)
 // while recording, from a tap here or on the desktop and for a phone that
-// connects mid-recording; once stopped, Answer again and a Thinking placeholder
+// connects mid-recording; once stopped, Speak again and a Thinking placeholder
 // that the heard question goes above and the answer replaces in place.
 async function recordingScenario(dev) {
   const tag = `${dev.name}/recording`;
@@ -549,7 +549,7 @@ async function recordingScenario(dev) {
   const { ctx, page, errors } = await openPage(browser, dev, 'dark');
   const chip = () => page.$eval('.chip[data-action="answer"]', (n) => ({ text: n.textContent, rec: n.classList.contains('is-recording'), dot: getComputedStyle(n, '::before').backgroundColor, label: n.getAttribute('aria-label') }));
   try {
-    check(tag, 'idle: the chip reads Answer', (await chip()).text === 'Answer');
+    check(tag, 'idle: the chip reads Speak', (await chip()).text === 'Speak');
     await page.click('.chip[data-action="answer"]');
     await page.waitForFunction(() => document.querySelector('.chip[data-action="answer"]').textContent === 'Stop', null, { timeout: 2000 });
     const rec = await chip();
@@ -562,8 +562,8 @@ async function recordingScenario(dev) {
     check(tag, 'a phone that connects mid-recording reads Stop', true);
 
     await page.click('.chip[data-action="answer"]');
-    await page.waitForFunction(() => document.querySelector('.chip[data-action="answer"]').textContent === 'Answer', null, { timeout: 2000 });
-    check(tag, 'stopped: the chip reads Answer again, no dot', !(await chip()).rec);
+    await page.waitForFunction(() => document.querySelector('.chip[data-action="answer"]').textContent === 'Speak', null, { timeout: 2000 });
+    check(tag, 'stopped: the chip reads Speak again, no dot', !(await chip()).rec);
     await page.waitForSelector('.answer.is-pending .thinking', { timeout: 1000 });
     check(tag, 'stopped: Thinking until the answer arrives', true);
     await page.waitForSelector('.row-user', { timeout: 3000 });
@@ -573,13 +573,13 @@ async function recordingScenario(dev) {
     await page.waitForSelector('.answer.is-streaming', { state: 'detached', timeout: 6000 });
     const answers = await page.$$eval('.answer', (ns) => ns.map((n) => n.textContent));
     check(tag, 'the answer took the placeholder slot (one answer)', answers.length === 1 && /never spans two shards/.test(answers[0]), JSON.stringify(answers));
-    check(tag, 'the other phone follows the stop', await second.page.$eval('.chip[data-action="answer"]', (n) => n.textContent === 'Answer'));
+    check(tag, 'the other phone follows the stop', await second.page.$eval('.chip[data-action="answer"]', (n) => n.textContent === 'Speak'));
 
     // Stopped on the desktop instead: the chip follows the same way.
     svc.setRecording(true);
     await page.waitForFunction(() => document.querySelector('.chip[data-action="answer"]').textContent === 'Stop', null, { timeout: 2000 });
     svc.publishMeetingState(true);
-    await page.waitForFunction(() => document.querySelector('.chip[data-action="answer"]').textContent === 'Answer', null, { timeout: 2000 });
+    await page.waitForFunction(() => document.querySelector('.chip[data-action="answer"]').textContent === 'Speak', null, { timeout: 2000 });
     check(tag, 'a new meeting drops the recording without a placeholder', (await page.$$('.answer.is-pending')).length === 0);
     await second.ctx.close();
     check(tag, 'no page errors', errors.length === 0, errors.join(' | '));

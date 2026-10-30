@@ -144,7 +144,7 @@ export const AnswerFlowFigure: React.FC = () => (
 // the guide's legend repeats. Kept schematic on purpose — a pixel copy of the
 // overlay goes stale with every restyle, a diagram of its parts does not.
 
-const QUICK_ACTIONS = ['What to answer?', 'Clarify', 'Recap', 'Follow Up Question', 'Answer'];
+const QUICK_ACTIONS = ['What to answer?', 'Clarify', 'Recap', 'Follow Up Question', 'Speak'];
 
 const Chip: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
   <span className={`inline-flex items-center gap-1 rounded-full border border-border-subtle bg-bg-item-surface px-2 py-0.5 text-[9.5px] font-medium text-text-primary whitespace-nowrap ${className}`}>

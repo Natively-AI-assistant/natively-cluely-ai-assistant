@@ -231,7 +231,7 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
           <span className={chip} style={appearance.chipStyle}><MessageSquare className="w-3 h-3 opacity-70" /> {tr('Clarify')}</span>
           <span className={chip} style={appearance.chipStyle}><RefreshCw className="w-3 h-3 opacity-70" /> {tr('Recap')}</span>
           <span className={chip} style={appearance.chipStyle}><HelpCircle className="w-3 h-3 opacity-70" /> {tr('Follow Up Question')}</span>
-          <span className={`${chip} justify-center min-w-[74px]`} style={appearance.chipStyle}><Mic className="w-3 h-3 opacity-70" /> {tr('Answer')}</span>
+          <span className={`${chip} justify-center min-w-[74px]`} style={appearance.chipStyle}><Mic className="w-3 h-3 opacity-70" /> {tr('Speak')}</span>
         </div>
 
         {/* Input area */}
@@ -254,7 +254,7 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
                     className={`h-12 w-auto rounded-[10px] border object-cover shadow-sm ${isLight ? 'border-black/15' : 'border-white/20'}`} />
                 ))}
               </div>
-              <span className="text-[10px] overlay-text-muted">{tr('Ask a question or click Answer')}</span>
+              <span className="text-[10px] overlay-text-muted">{tr('Type a question or click Speak')}</span>
             </div>
           </ChromeFold>
 

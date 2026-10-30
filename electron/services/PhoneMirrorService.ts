@@ -78,8 +78,8 @@ export type StreamEvent =
     }
   | { type: 'meeting'; active: boolean; reset: boolean }
   | { type: 'attachments'; items: PhoneAttachment[] }
-  // The overlay's Answer button is recording the desktop mic (it reads Stop);
-  // the phone's Answer chip mirrors it.
+  // The overlay's Speak button is recording the desktop mic (it reads Stop);
+  // the phone's Speak chip mirrors it.
   | { type: 'recording'; active: boolean }
   | { type: 'images'; id: string; images: PhoneAttachment[]; createdAt: string };
 
@@ -683,8 +683,8 @@ export class PhoneMirrorService {
   }
 
   /**
-   * Mirror the overlay's Answer button: true while it records the desktop mic
-   * (it reads Stop), false once it stops. A tap on the phone's Answer chip
+   * Mirror the overlay's Speak button: true while it records the desktop mic
+   * (it reads Stop), false once it stops. A tap on the phone's Speak chip
    * toggles it, and without this the phone showed no sign that it had.
    * Tracked while stopped too, like the tray, so a phone that connects later
    * sees whether a recording is running.

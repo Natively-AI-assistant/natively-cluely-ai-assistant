@@ -33,7 +33,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider, ToastViewport } from './components/ui/toast';
 import { OverlayPillWindow, OverlayToggleWindow } from './components/OverlayAuxWindows';
-import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme';
+import { getMeetingInterfaceTheme, resolveMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme';
+import { useResolvedTheme } from './hooks/useResolvedTheme';
 
 const CropperWindow = React.lazy(() => import('./components/Cropper'));
 const SettingsPopup = React.lazy(() => import('./components/SettingsPopup'));
@@ -68,6 +69,8 @@ const PanelShell: React.FC<{ context: string; className: string; children: React
   // Mirrors App's handling: the attribute is read at mount and refreshed on the
   // same two signals App listens to, so a theme change still lands here.
   const [theme, setTheme] = React.useState<MeetingInterfaceTheme>(getMeetingInterfaceTheme);
+  // What the overlay paints for the pick: Default is Lavender in light mode.
+  const painted = resolveMeetingInterfaceTheme(theme, useResolvedTheme());
   React.useEffect(() => {
     const onStorage = () => setTheme(getMeetingInterfaceTheme());
     window.addEventListener('storage', onStorage);
@@ -83,7 +86,7 @@ const PanelShell: React.FC<{ context: string; className: string; children: React
 
   return (
     <ErrorBoundary context={context}>
-      <div className={className} data-interface-theme={theme === 'default' ? undefined : theme}>
+      <div className={className} data-interface-theme={painted === 'default' ? undefined : painted}>
         <QueryClientProvider client={queryClient}>
           <ToastProvider>
             <React.Suspense fallback={<div className="h-full w-full" />}>

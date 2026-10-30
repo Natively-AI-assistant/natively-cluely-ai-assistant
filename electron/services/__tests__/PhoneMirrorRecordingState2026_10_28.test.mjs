@@ -210,10 +210,11 @@ describe('the page handles it', () => {
   const { PHONE_MIRROR_HTML: html } = require(clientBundle);
   const script = (html.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
 
-  test('the recording frame is dispatched and repaints the Answer chip', () => {
+  // The chip reads Speak since 2026-10-30, like the overlay's button.
+  test('the recording frame is dispatched and repaints the Speak chip', () => {
     assert.match(script, /case 'recording': onRecording\(ev\); break;/);
-    assert.match(html, /<button class="chip" type="button" data-action="answer">Answer<\/button>/);
-    assert.match(script, /answerChip\.textContent = recording \? 'Stop' : 'Answer';/);
+    assert.match(html, /<button class="chip" type="button" data-action="answer">Speak<\/button>/);
+    assert.match(script, /answerChip\.textContent = recording \? 'Stop' : 'Speak';/);
     assert.match(script, /answerChip\.classList\.toggle\('is-recording', recording\);/);
   });
 

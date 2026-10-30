@@ -47,7 +47,7 @@ test('the scan finds the strings it should', () => {
 
 test('every string the onboarding shows has a translation in all four languages', () => {
   for (const en of englishStrings()) {
-    if (ALREADY_TRANSLATED.has(en) || en === 'Answer' || en === 'Ask a question or click Answer') continue;
+    if (ALREADY_TRANSLATED.has(en)) continue;
     for (const [lang, dict] of Object.entries(DICTS)) {
       assert.ok(dict[en], `${lang} has no translation for: ${en}`);
       assert.notEqual(dict[en], en, `${lang} left this in English: ${en}`);

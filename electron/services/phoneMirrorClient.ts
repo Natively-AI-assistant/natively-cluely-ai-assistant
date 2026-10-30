@@ -857,7 +857,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
       .chip:active, .chip.is-pressed { transform: scale(0.96); background: var(--fill-press); transition-duration: var(--duration-micro); }
       .chip.is-primary:active, .chip.is-primary.is-pressed { background: var(--accent-tint-2); }
       .chip.is-sent { background: var(--accent-tint-2); color: var(--accent); }
-      /* The desktop's Answer button is recording its mic: this chip reads Stop,
+      /* The desktop's Speak button is recording its mic: this chip reads Stop,
          with a pulsing dot, until a tap (here or there) stops it. */
       .chip.is-recording { display: inline-flex; align-items: center; gap: 6px; color: var(--danger); }
       .chip.is-recording::before {
@@ -1390,7 +1390,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           </div>
           <div class="chips" id="chips" role="toolbar" aria-label="Ask your desktop">
             <button class="chip is-primary" type="button" data-action="whatToAnswer" data-needs-meeting>What to Say</button>
-            <button class="chip" type="button" data-action="answer">Answer</button>
+            <button class="chip" type="button" data-action="answer">Speak</button>
             <button class="chip" type="button" data-action="followUp" data-needs-meeting>Follow Up</button>
             <button class="chip" type="button" data-action="clarify" data-needs-meeting>Clarify</button>
             <button class="chip" type="button" data-action="codeHint">Code Hint</button>
@@ -2422,7 +2422,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           codeHint: { label: 'Code Hint', expect: ['Code Hint'] },
           brainstorm: { label: 'Brainstorm', expect: ['Brainstorm'] },
           recap: { label: 'Recap', expect: ['Recap'] },
-          // Answer toggles voice recording on the desktop: the first tap
+          // Speak toggles voice recording on the desktop: the first tap
           // starts it, so no placeholder. The desktop reports the recording
           // (onRecording below), and the placeholder appears when it stops.
           answer: null,
@@ -2637,19 +2637,21 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           }
           if (ev.message) showToast(String(ev.message));
         }
-        // ───── Desktop recording (the Answer chip) ─────────────────────────
-        // Answer starts the desktop recording its mic and a second tap stops it
+        // ───── Desktop recording (the Speak chip) ──────────────────────────
+        // Speak starts the desktop recording its mic and a second tap stops it
         // and answers what was said. The overlay's button reads Stop meanwhile;
-        // so does this chip. A stop seen live gets the usual placeholder until
-        // the answer arrives; the state replayed on connect only repaints.
+        // so does this chip. Both read Speak, not Answer, since 2026-10-30. The
+        // action is still 'answer', and the replies still come back labelled
+        // Answer. A stop seen live gets the usual placeholder until the answer
+        // arrives; the state replayed on connect only repaints.
         var answerChip = document.querySelector('.chip[data-action="answer"]');
         var recording = false;
         var recordingSynced = false;
         function paintRecording() {
           if (!answerChip) return;
           answerChip.classList.toggle('is-recording', recording);
-          answerChip.textContent = recording ? 'Stop' : 'Answer';
-          answerChip.setAttribute('aria-label', recording ? 'Stop recording on your desktop and answer' : 'Answer: record on your desktop');
+          answerChip.textContent = recording ? 'Stop' : 'Speak';
+          answerChip.setAttribute('aria-label', recording ? 'Stop recording on your desktop and answer' : 'Speak: ask out loud on your desktop');
         }
         function setRecording(active, live) {
           var stopped = recording && !active;

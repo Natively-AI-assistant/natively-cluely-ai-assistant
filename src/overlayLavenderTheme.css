@@ -434,42 +434,16 @@
   font-weight: 600;
 }
 
-/* "Thinking..." while the answer is on its way: the label rests on the muted
-   token and a bright band sweeps across it, as in the app's overlay. */
+/* "Thinking" while the answer is on its way: the shared sweep from index.css
+   (.natively-thinking-label), in Lavender's inks. Lavender used to run its own
+   copy that slid the gradient to 120% and -20%, past both ends of the word;
+   the gradient is the only paint on those letters, so "ing" and then "T"
+   vanished for a quarter second each pass (the owner saw it glitch,
+   2026-10-30). Only the two colours are Lavender's now; the geometry, the
+   loop and the reduced-motion branch are the shared ones. */
 [data-interface-theme="lavender"] .natively-thinking-label {
   --natively-thinking-base: var(--jelly-text-muted);
-  --natively-thinking-band: var(--jelly-text-primary);
-  display: inline-block;
-  color: var(--natively-thinking-base);
-  background-image: linear-gradient(
-    100deg,
-    var(--natively-thinking-base) 0%,
-    var(--natively-thinking-base) 38%,
-    var(--natively-thinking-band) 50%,
-    var(--natively-thinking-base) 62%,
-    var(--natively-thinking-base) 100%
-  );
-  background-size: 260% 100%;
-  background-position: 120% 0;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: hlg-thinking-sweep 1.7s linear infinite;
-}
-@keyframes hlg-thinking-sweep {
-  from {
-    background-position: 120% 0;
-  }
-  to {
-    background-position: -20% 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  [data-interface-theme="lavender"] .natively-thinking-label {
-    animation: none;
-    background-image: none;
-    -webkit-text-fill-color: currentColor;
-  }
+  --natively-thinking-sweep: var(--jelly-text-primary);
 }
 
 /* ── Motion ────────────────────────────────────────────────────────────── */
@@ -523,45 +497,66 @@
 
      ink        #1F1A2E   answers, typed text, labels
      ink-2      #4A4360   secondary text, icons
-     ink-3      #625A7C   muted text, placeholder
-     accent     #5B3FD0   links, hotwords, chip icons
+     ink-3      #625A7C   muted text, placeholder, button icons
+     accent     #5B3FD0   links, hotwords (--lavender-700)
 
    Like Default, low opacity over a dark, busy screen trades contrast for
    transparency: that is the slider's job.
 
-   One coloured surface: your question keeps the Usage tab's periwinkle glass
-   (#3F2593 on the .24 tint). The send button is the one solid fill, the
-   primary action. Everything else is quiet glass with a visible edge. */
+   Colour goes where Default puts it (the owner, 2026-10-30, when Lavender
+   became the light Default): your question, the gist, highlighted words and
+   the send button wear the violet. Every control (the five buttons, the model
+   chip, the icons) is neutral white glass, so the question is the one thing
+   that stands out. */
 
 [data-interface-theme="lavender"] {
   /* The slider, normalised the way Default does it: 0.35 → 0, 1 → 1. */
   --lv-n: clamp(0, calc((var(--overlay-opacity, 0.7) - 0.35) / 0.65), 1);
   /* Body and pill: Default's alphas (shell 0.085 → 1, pill 0.075 → 0.98), so
-     it is exactly as see-through, but the glass is the question card's in a
-     whisper: white with a hint of periwinkle (a quarter of the 226 214 255
-     tried first, at the owner's pick), so the periwinkle buttons and your
-     question stand out on it. */
-  --lv-glass: 248 245 255;
+     it is exactly as see-through, but the glass is tinted lavender, as
+     Default's is ice blue. 244 239 255 is the owner's 35% (2026-10-30), two
+     fifths of the way from the 25% tint (248 245 255, a quarter of the
+     226 214 255 tried first) to the 50% one (237 230 255), which was tried
+     with Lavender becoming the light Default and taken back. */
+  --lv-glass: 244 239 255;
   --lv-body: rgb(var(--lv-glass) / calc(0.085 + 0.915 * var(--lv-n)));
   --lv-float: rgb(var(--lv-glass) / calc(0.075 + 0.905 * var(--lv-n)));
   /* Default's blur: shell 4 → 18px, pill 3 → 11px. */
   --lv-blur: calc(4px + 14px * var(--lv-n));
   --lv-pill-blur: calc(3px + 8px * var(--lv-n));
 
+  /* One violet scale, as Default runs on --periwinkle-50…900: every violet
+     in Parts 2 and 3 is a step of it, and
+     src/components/__tests__/LavenderDefault2026_10_30.test.mjs holds each
+     role's contrast. Washes and shadows write a step as rgba: 400 is
+     156 111 243, 500 is 124 92 255, 700 is 91 63 208, 800 is 63 37 147. */
+  --lavender-50:  #F7F4FF;
+  --lavender-100: #EFEAFE; /* inline code */
+  --lavender-200: #DED4FD;
+  --lavender-300: #C4B3FB;
+  --lavender-400: #9C6FF3; /* the glass tint: question, gist, send */
+  --lavender-500: #7C5CFF; /* the Undetectable ring */
+  --lavender-600: #6D4AE8; /* switches, the listening dot */
+  --lavender-700: #5B3FD0; /* links, highlighted words, inline code, the gist label */
+  --lavender-800: #3F2593; /* text on the violet glass */
+  --lavender-900: #261A57;
+
   --lv-ink: #1F1A2E;
   --lv-ink-2: #4A4360;
   --lv-ink-3: #625A7C;
-  --lv-accent: #5B3FD0;
-  --lv-accent-solid: #6D4AE8;
-  --lv-accent-solid-hover: #5F3CDB;
+  --lv-accent: var(--lavender-700);
+  --lv-accent-solid: var(--lavender-600);
 
   /* The body is one flat sheet (the owner's call): no top-left bloom, no top
      sheen, no lit top line, no periwinkle underside. Only an even faint white
-     edge all round, a periwinkle hairline so it still separates from a white
-     page, and the card's periwinkle glow under it (never a grey drop). */
+     edge all round and a periwinkle hairline so it still separates from a white
+     page. No glow under it: the overlay window ends at the panel's edge, so a
+     drop shadow was cut off there and showed as a violet band along the
+     bottom. The pill and resize toggle keep a 1px drop, which fits inside
+     their windows (the toggle's is 36px around a 28px button). */
   --lv-rim: inset 0 0 0 1px rgba(255, 255, 255, 0.38);
   --lv-hairline: 0 0 0 1px rgba(91, 63, 208, 0.16);
-  --lv-drop: 0 2px 6px rgba(60, 30, 140, 0.10), 0 26px 60px -24px rgba(124, 92, 255, 0.5);
+  --lv-drop: 0 1px 2px rgba(60, 30, 140, 0.12);
 
   /* Chips: glass on glass, so they need their own edge to exist at all. */
   /* Default scales its chips and field with the slider too (0.055 → 0.9,
@@ -599,13 +594,33 @@
   position: relative;
   background: var(--lv-body);
   border: none;
-  box-shadow: var(--lv-drop), var(--lv-hairline), var(--lv-rim);
+  box-shadow: var(--lv-hairline), var(--lv-rim);
   -webkit-backdrop-filter: blur(var(--lv-blur)) saturate(190%);
   backdrop-filter: blur(var(--lv-blur)) saturate(190%);
 }
 /* Part 1's sweep sat OVER the content; the body stays flat without it. */
 [data-interface-theme="lavender"] .overlay-shell-surface::before {
   display: none;
+}
+/* The model menu and the settings popup are the same body. Their windows end
+   at the panel's edge, so index.css takes every shadow off
+   .overlay-popover-surface, and with it the hairline and rim. They come back
+   drawn inside the shape (the outer pixel periwinkle, the next white), where
+   the window cannot cut them. */
+[data-interface-theme="lavender"] .overlay-shell-surface.overlay-popover-surface {
+  box-shadow:
+    inset 0 0 0 1px rgba(91, 63, 208, 0.16),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.38) !important;
+}
+
+/* Switches inside the overlay's own windows (the settings popup) are the
+   scale's 600, not the app's periwinkle: a blue switch in a lavender panel
+   read as another app's control. Scoped to the panel, so Settings in the
+   launcher keep the one --toggle-on every other switch shares. */
+[data-interface-theme="lavender"] .overlay-shell-surface {
+  --toggle-on: var(--lavender-600);
+  --toggle-focus-ring: rgba(109, 74, 232, 0.22);
+  --accent-shadow-20: rgba(109, 74, 232, 0.20);
 }
 
 /* The top pill and resize toggle sit on the desktop, not on the panel: the
@@ -618,13 +633,6 @@
   box-shadow: var(--lv-drop), var(--lv-hairline), var(--lv-rim);
   -webkit-backdrop-filter: blur(var(--lv-pill-blur)) saturate(190%);
   backdrop-filter: blur(var(--lv-pill-blur)) saturate(190%);
-}
-/* The resize toggle has its own 36px window (WindowHelper TOGGLE_WINDOW_SIZE),
-   4px around the 28px button. The long periwinkle drop ran past it and was
-   cut square at the window's bottom and right edges, so the button looked
-   lopsided. Its shadow stays inside those 4px. */
-[data-interface-theme="lavender"] button.overlay-resize-toggle-surface {
-  box-shadow: 0 1px 2px rgba(60, 30, 140, 0.12), var(--lv-hairline), var(--lv-rim);
 }
 [data-interface-theme="lavender"] .overlay-resize-toggle-surface::before,
 [data-interface-theme="lavender"] .overlay-icon-surface::before {
@@ -681,48 +689,50 @@
   text-align: left;
 }
 
-/* The buttons and the model chip wear your question's liquid glass (the
-   Usage tab's question card, .lg-bubble.lg-bubble-lavender, light): white
-   sheen on the top face, the site's white rim (::before) and cap shade
-   (::after), deep periwinkle ink. The owner wants them glass, not flat (a flat
-   pass was tried 2026-10-26 and reverted). One step lighter than the card (.18
-   against its .24) and no glow at rest: the question is the one thing that
-   glows, a button only while it is under the pointer. */
+/* The buttons and the model chip are neutral white glass (the owner's pick,
+   2026-10-30, Default's own rule): violet on every control left your question
+   as one violet pill among nine. White over the body, a hairline in the ink,
+   ink labels and muted icons. Hover lightens the face (the owner,
+   2026-10-30: lighter, not darker) with a white layer over the white, and
+   tints the icon. The site's cap shade (::after) and white rim (::before) stay
+   off, so nothing lights the top face. A fixed white, not the slider's: the
+   label has to hold whatever the body's opacity. */
 [data-interface-theme="lavender"] .overlay-shell-surface .hlg-button.hlg-lavender.hero-pill {
-  --glass-inner-tint: rgba(156, 111, 243, 0.18);
-  --hlg-tint-hover: rgba(156, 111, 243, 0.30);
-  --hlg-rim-1: rgba(255, 255, 255, 0.78);
+  --glass-inner-tint: rgba(255, 255, 255, 0);
+  --hlg-tint-hover: transparent;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.42) 0, rgba(255, 255, 255, 0.10) 6px, rgba(255, 255, 255, 0) 100%),
-    linear-gradient(var(--glass-inner-tint), var(--glass-inner-tint));
+    linear-gradient(var(--glass-inner-tint), var(--glass-inner-tint)),
+    rgba(255, 255, 255, 0.62);
   box-shadow:
-    inset 0 -1px 0 rgba(90, 43, 176, 0.14),
-    0 1px 1px rgba(78, 46, 150, 0.10);
+    inset 0 0 0 1px rgba(31, 26, 46, 0.09),
+    0 1px 1px rgba(31, 26, 46, 0.05);
   transition:
     transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
     box-shadow 160ms ease,
     --glass-inner-tint 160ms ease;
 }
-[data-interface-theme="lavender"] .hlg-button.hlg-lavender.hero-pill .hlg-content,
-[data-interface-theme="lavender"] .hlg-button.hlg-lavender.hero-pill .hlg-icon {
-  color: #3F2593;
+[data-interface-theme="lavender"] .hlg-button.hlg-lavender.hero-pill .hlg-content {
+  color: var(--lv-ink);
 }
-/* The rim and cap layers stay under the label; the pointer lens stays off,
-   as on the card. */
-[data-interface-theme="lavender"] .overlay-shell-surface .hlg-button.hero-pill::before,
-[data-interface-theme="lavender"] .overlay-shell-surface .hlg-button.hero-pill::after {
-  z-index: -1;
+[data-interface-theme="lavender"] .hlg-button.hlg-lavender.hero-pill .hlg-icon {
+  color: var(--lv-ink-3);
+}
+[data-interface-theme="lavender"] .overlay-shell-surface .hlg-button.hero-pill::after,
+[data-interface-theme="lavender"] .overlay-shell-surface .hlg-button.hero-pill::before {
+  display: none;
 }
 [data-interface-theme="lavender"] .overlay-shell-surface .hlg-button.hero-pill .hlg-lens {
   display: none;
 }
 @media (hover: hover) and (pointer: fine) {
   [data-interface-theme="lavender"] .overlay-shell-surface .hlg-button.hlg-lavender.hero-pill:not(:disabled):hover {
-    --glass-inner-tint: rgba(156, 111, 243, 0.30);
+    --glass-inner-tint: rgba(255, 255, 255, 0.6);
     box-shadow:
-      inset 0 -1px 0 rgba(90, 43, 176, 0.16),
-      0 1px 2px rgba(78, 46, 150, 0.12),
-      0 10px 22px -10px rgba(156, 111, 243, 0.55);
+      inset 0 0 0 1px rgba(31, 26, 46, 0.11),
+      0 1px 2px rgba(31, 26, 46, 0.07);
+  }
+  [data-interface-theme="lavender"] .hlg-button.hlg-lavender.hero-pill:not(:disabled):hover .hlg-icon {
+    color: var(--lv-accent);
   }
 }
 
@@ -738,22 +748,39 @@
   }
 }
 
-/* Listening: the question's glass, not Default's emerald. */
-[data-interface-theme="lavender"] .ov-listening-in .bg-emerald-500\/10 {
+/* The gist under an answer wears your question's face (the owner,
+   2026-10-30): periwinkle over the same white lift, deep periwinkle ink, its
+   glow, no white top and no border. It stays a pill; the tail corner is the
+   question's, for what you said. Brightened with the question the same day,
+   the lift 0.38 → 0.74. */
+[data-interface-theme="lavender"] .overlay-gist-chip {
+  color: var(--lavender-800);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.42) 0, rgba(255, 255, 255, 0.10) 6px, rgba(255, 255, 255, 0) 100%),
-    rgba(156, 111, 243, 0.18);
+    linear-gradient(rgba(156, 111, 243, 0.24), rgba(156, 111, 243, 0.24)),
+    rgba(255, 255, 255, 0.74);
   border-color: transparent;
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.55),
-    inset 0 -1px 0 rgba(90, 43, 176, 0.14);
+    inset 0 -1px 0 rgba(90, 43, 176, 0.14),
+    0 1px 2px rgba(78, 46, 150, 0.10),
+    0 14px 30px -12px rgba(156, 111, 243, 0.55);
+}
+[data-interface-theme="lavender"] .overlay-gist-chip::before {
+  color: var(--lavender-700);
+}
+
+/* Listening: the buttons' neutral glass, not Default's emerald. The violet
+   dot is what says live. */
+[data-interface-theme="lavender"] .ov-listening-in .bg-emerald-500\/10 {
+  background: rgba(255, 255, 255, 0.62);
+  border-color: transparent;
+  box-shadow: inset 0 0 0 1px rgba(31, 26, 46, 0.09);
 }
 [data-interface-theme="lavender"] .ov-listening-in .text-emerald-800,
 [data-interface-theme="lavender"] .ov-listening-in .text-emerald-900 {
-  color: #3F2593;
+  color: var(--lv-ink-2);
 }
 [data-interface-theme="lavender"] .ov-listening-in .bg-emerald-700 {
-  background-color: #6D4AE8;
+  background-color: var(--lavender-600);
 }
 
 /* ── Your question: the Usage tab's periwinkle glass, as it is ─────────── */
@@ -776,18 +803,23 @@
   font-size: var(--hlg-label-size);
   font-weight: var(--hlg-label-weight);
   line-height: 1.45;
-  color: #3F2593;
+  color: var(--lavender-800);
+  /* The buttons' face (2026-10-30): an even white lift under the tint, and
+     no white sheen or rim on top. The lift went 0.38 → 0.74 the same day (the
+     owner asked for a brighter card), with the gist beside it. */
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.42) 0, rgba(255, 255, 255, 0.10) 6px, rgba(255, 255, 255, 0) 100%),
-    linear-gradient(var(--glass-inner-tint), var(--glass-inner-tint));
+    linear-gradient(var(--glass-inner-tint), var(--glass-inner-tint)),
+    rgba(255, 255, 255, 0.74);
   box-shadow:
     inset 0 -1px 0 rgba(90, 43, 176, 0.14),
     0 1px 2px rgba(78, 46, 150, 0.10),
     0 14px 30px -12px rgba(156, 111, 243, 0.55);
 }
-[data-interface-theme="lavender"] .hlg-button.hero-bubble::before,
 [data-interface-theme="lavender"] .hlg-button.hero-bubble::after {
   z-index: -1;
+}
+[data-interface-theme="lavender"] .hlg-button.hero-bubble::before {
+  display: none;
 }
 /* It arrives from its tail (the sharp top-right corner): scale 0.96 and fade,
    180ms. The site button's own transition list would drop the entrance. */
@@ -842,7 +874,7 @@
     --glass-inner-tint 160ms ease;
 }
 [data-interface-theme="lavender"] .hlg-button.hlg-lavender.hero-send .hlg-content {
-  color: #3F2593;
+  color: var(--lavender-800);
 }
 @media (hover: hover) and (pointer: fine) {
   [data-interface-theme="lavender"] .overlay-shell-surface .hlg-button.hlg-lavender.hero-send:not(:disabled):hover {
@@ -917,27 +949,21 @@
 
 /* ── Small controls and quiet surfaces ─────────────────────────────────── */
 
-/* Settings beside the model chip: the icon alone, no container at rest or on
-   hover (the owner's call). It takes the buttons' periwinkle ink, and hover
-   or open only deepens the colour. */
-[data-interface-theme="lavender"] .overlay-shell-surface .overlay-bare-icon[data-settings-toggle] {
-  color: #3F2593;
-  background: transparent;
-  box-shadow: none;
-}
-[data-interface-theme="lavender"] .overlay-shell-surface .overlay-bare-icon[data-settings-toggle]:hover,
-[data-interface-theme="lavender"] .overlay-shell-surface .overlay-bare-icon[data-settings-toggle][data-state='open'] {
-  color: #5B3FD0;
-  background: transparent;
-}
-
+/* Settings, Notes and click-through beside the model chip: the icon alone,
+   no container at rest or on hover (the owner's call), in the ink; hover or
+   an open window deepens it, click-through on turns it the accent (index.css
+   says the same in Default's colours; this sheet loads later, so it is said
+   again here). No background in any state, so the click-through pill keeps
+   its own tint when it opens. */
 [data-interface-theme="lavender"] .overlay-bare-icon {
   color: var(--lv-ink-2);
 }
 [data-interface-theme="lavender"] .overlay-bare-icon:hover,
 [data-interface-theme="lavender"] .overlay-bare-icon[data-state='open'] {
-  background: rgba(91, 63, 208, 0.08);
   color: var(--lv-ink);
+}
+[data-interface-theme="lavender"] .overlay-bare-icon[data-state='on'] {
+  color: var(--lv-accent);
 }
 [data-interface-theme="lavender"] .overlay-control-surface {
   background: var(--lv-chip);
@@ -958,6 +984,52 @@
 [data-interface-theme="lavender"] .overlay-chip-surface:hover {
   background: linear-gradient(var(--lv-chip-tint-hover), var(--lv-chip-tint-hover)), var(--lv-chip);
 }
+/* The click-through pill keeps its own motion (index.css --ov-ct-motion):
+   this sheet's .interaction-base list, at the same weight and loaded later,
+   replaced it and dropped width and padding, so in Lavender the pill snapped
+   open and shut. */
+[data-interface-theme="lavender"] .ov-ct.interaction-base {
+  transition: var(--ov-ct-motion);
+}
+
+/* The click-through pill, open: a filled lavender pill (the owner,
+   2026-10-30: the outlined, hollow one felt odd), the scale's 200 with no
+   edge, "to exit" in the violet ink. One flat colour, so it still fades in on
+   the pill's background-color transition (a gradient would snap). */
+[data-interface-theme="lavender"] .ov-ct[data-phase="expanded"] {
+  background: color-mix(in srgb, var(--lavender-200) 88%, transparent);
+  border-color: transparent;
+}
+[data-interface-theme="lavender"] .ov-ct[data-phase="expanded"] .ov-ct-exit {
+  color: var(--lavender-800);
+}
+
+/* The click-through pill's keys are white pill caps (the owner, 2026-10-30,
+   "prettier"): white on the pill's violet tint, a hairline and a 1px lift
+   instead of the accent outline, the glyph in the accent. Lavender only: on
+   the dark panels a white cap would be the loudest thing in the row. The pill
+   measures its label, so the wider caps still fit. */
+[data-interface-theme="lavender"] .ov-ct-key {
+  min-width: 22px;
+  height: 18px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow:
+    inset 0 0 0 1px rgba(91, 63, 208, 0.10),
+    0 1px 1px rgba(31, 26, 46, 0.08);
+  color: var(--lavender-700);
+}
+
+/* The settings and model menus: a row under the pointer lightens, as the
+   buttons do, where their TSX hover class laid the grey the old light
+   Default used; index.css repaints these rows the same way for glass and
+   modern. */
+[data-interface-theme="lavender"] .glass-popup-row:hover,
+[data-interface-theme="lavender"] .model-selector-row:hover {
+  background: rgba(255, 255, 255, 0.55) !important;
+}
 [data-interface-theme="lavender"] .overlay-subtle-surface {
   background: rgba(91, 63, 208, 0.04);
   border-color: rgba(31, 26, 46, 0.08);
@@ -966,22 +1038,33 @@
 
 /* ── Code ──────────────────────────────────────────────────────────────── */
 
-/* Glass behind code is unreadable: an opaque plum well. */
+/* A light well of the panel's own glass, a step whiter than the body, with
+   the light code theme (NativelyInterface: useDarkCodeTheme). The dark plum
+   well it replaced (2026-10-30) was the heaviest thing on the light panel and
+   pulled the eye off the answer. Its own small blur keeps code readable over
+   a busy screen at a low opacity. */
 [data-interface-theme="lavender"] .overlay-code-block-surface {
-  background: rgb(28 24 40 / calc(0.8 + 0.2 * var(--lv-n)));
-  border-color: rgba(31, 26, 46, 0.4);
-  box-shadow: 0 8px 22px -12px rgba(28, 24, 40, 0.6);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
+  background: rgb(255 255 255 / calc(0.5 + 0.4 * var(--lv-n)));
+  border-color: rgba(91, 63, 208, 0.14);
+  box-shadow: none;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 [data-interface-theme="lavender"] .overlay-code-header-surface {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(124, 92, 255, 0.06);
+  border-color: rgba(91, 63, 208, 0.10);
 }
+/* Inline code is a pill (the owner, 2026-10-30), like the keys and the gist:
+   a fuller curve than the TSX's 4px corners and a little more room at the
+   ends for it. A highlight that wraps stays a pill on each line. */
 [data-interface-theme="lavender"] .overlay-inline-code-surface {
-  background: #EFEAFE;
+  background: var(--lavender-100);
   box-shadow: inset 0 0 0 1px rgba(91, 63, 208, 0.12);
-  color: #4B2FC0;
+  color: var(--lavender-700);
+  border-radius: 999px;
+  padding: 1px 7px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 
 /* ── Text ──────────────────────────────────────────────────────────────── */
@@ -1051,10 +1134,10 @@
   --overlay-control-hover-bg:   rgba(91, 63, 208, 0.08);
   --overlay-icon-bg:            rgba(91, 63, 208, 0.08);
   --overlay-icon-hover-bg:      rgba(91, 63, 208, 0.13);
-  --overlay-code-bg:            #1C1828;
-  --overlay-code-border:        rgba(31, 26, 46, 0.4);
-  --overlay-code-header-bg:     rgba(255, 255, 255, 0.05);
-  --overlay-inline-code-bg:     #EFEAFE;
+  --overlay-code-bg:            rgb(255 255 255 / calc(0.5 + 0.4 * var(--lv-n)));
+  --overlay-code-border:        rgba(91, 63, 208, 0.14);
+  --overlay-code-header-bg:     rgba(124, 92, 255, 0.06);
+  --overlay-inline-code-bg:     var(--lavender-100);
   --overlay-panel-shadow:       rgba(40, 30, 80, 0.38);
   --overlay-pill-shadow:        rgba(40, 30, 80, 0.38);
   --overlay-shell-blur:         var(--lv-blur);

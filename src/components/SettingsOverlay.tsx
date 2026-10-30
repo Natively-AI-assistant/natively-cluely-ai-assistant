@@ -42,7 +42,7 @@ import {
     OVERLAY_OPACITY_MIN,
     getDefaultOverlayOpacity,
 } from '../lib/overlayAppearance';
-import { getMeetingInterfaceTheme, setMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
+import { getMeetingInterfaceTheme, resolveMeetingInterfaceTheme, setMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import { setGenieAnimationEnabled, useGenieAnimationEnabled } from '../lib/genieAnimationSetting';
 import { KeyRecorder } from './ui/KeyRecorder';
 import { useConfirmDialog } from './ui/ConfirmDialog';
@@ -3439,7 +3439,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     { id: 'clarify', label: 'Clarify', icon: <MessageSquare size={14} /> },
                                                     { id: 'followUp', label: 'Follow Up', icon: <MessageSquare size={14} /> },
                                                     { id: 'dynamicAction4', label: 'Recap / Brainstorm', icon: <RefreshCw size={14} /> },
-                                                    { id: 'answer', label: 'Answer / Record', icon: <Mic size={14} /> },
+                                                    { id: 'answer', label: 'Speak', icon: <Mic size={14} /> },
                                                     { id: 'codeHint', label: 'Get Code Hint', icon: <Zap size={14} /> },
                                                     { id: 'brainstorm', label: 'Brainstorm Approaches', icon: <Zap size={14} /> },
                                                     { id: 'acceptSuggestion', label: 'Use Suggestion', icon: <CornerDownRight size={14} /> },
@@ -4523,7 +4523,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                 className="fixed inset-0 z-[49] pointer-events-none transition-opacity duration-150"
                 style={{ opacity: isPreviewingOpacity ? 1 : 0 }}
             >
-                <MockupNativelyInterface opacity={previewOverlayOpacity} theme={meetingInterfaceTheme} />
+                <MockupNativelyInterface opacity={previewOverlayOpacity} theme={resolveMeetingInterfaceTheme(meetingInterfaceTheme, resolvedTheme)} />
             </div>
         </>
     );

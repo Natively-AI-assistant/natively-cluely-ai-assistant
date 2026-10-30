@@ -36,8 +36,10 @@ test('the pill is sized from its label, not a fixed width', () => {
   assert.match(css, /\.ov-ct\[data-phase="expanded"\] \{\s*width: var\(--ov-ct-w\);/);
 });
 
-test('the icon is the dashed cursor', () => {
-  assert.match(component, /<MousePointer2 [^>]*strokeDasharray="3 2\.2"/);
+// Solid since 2026-10-30 (the owner); it was dashed, for "passes through".
+test('the icon is the solid cursor', () => {
+  assert.match(component, /<MousePointer2 /);
+  assert.doesNotMatch(component, /strokeDasharray/);
 });
 
 test('"to exit" takes the secondary text token; edges soften on the light shell only', () => {
@@ -58,4 +60,38 @@ test('liquid glass takes the dark accent under the light theme, like modern', ()
   const glassLight = css.slice(css.indexOf(`[data-theme='light'] [data-interface-theme="liquid-glass"] {`));
   const block = glassLight.slice(0, glassLight.indexOf('\n}\n'));
   assert.match(block, /--accent-primary: var\(--periwinkle-300\);/);
+});
+
+// Motion (transitions polish, 2026-10-30): the pill opens in 250ms and closes
+// in 150ms on the smooth-out curve, its keys and "to exit" arrive 40ms apart,
+// the cursor pops on turning on, and reduced motion turns all of it off. The
+// list lives in --ov-ct-motion so a theme that restyles .interaction-base can
+// hand it back: Lavender's own list, at the same weight and loaded later, had
+// dropped width and padding, and its pill snapped open and shut.
+const lavender = read('../../../overlayLavenderTheme.css');
+
+test('the pill opens in 250ms and closes in 150ms, both on the smooth-out curve', () => {
+  const close = css.match(/\.ov-ct \{\s*--ov-ct-motion:([^;]+);/);
+  const open = css.match(/\.ov-ct\[data-phase="expanded"\] \{\s*--ov-ct-motion:([^;]+);/);
+  assert.ok(close && open);
+  assert.match(close[1], /width 150ms cubic-bezier\(0\.22, 1, 0\.36, 1\)/);
+  assert.match(open[1], /width 250ms cubic-bezier\(0\.22, 1, 0\.36, 1\)/);
+  assert.match(css, /\.ov-ct\.interaction-base \{\s*transition: var\(--ov-ct-motion\);/);
+});
+
+test('Lavender hands the pill its own motion back', () => {
+  assert.match(lavender, /\[data-interface-theme="lavender"\] \.ov-ct\.interaction-base \{\s*transition: var\(--ov-ct-motion\);/);
+});
+
+test('the keys and "to exit" arrive in turn; the cursor pops on turning on', () => {
+  assert.match(component, /<kbd key=\{i\} className="ov-ct-key" style=\{\{ \['--ov-ct-i' as string\]: i \}\}>/);
+  assert.match(component, /<span className="ov-ct-exit" style=\{\{ \['--ov-ct-i' as string\]: keys\.length \}\}>/);
+  assert.match(css, /animation-delay: calc\(80ms \+ var\(--ov-ct-i, 0\) \* 40ms\);/);
+  assert.match(css, /\.ov-ct\[data-phase="expanded"\] > svg \{\s*animation: ov-ct-icon-on 250ms/);
+});
+
+test('reduced motion turns the pill\'s motion off', () => {
+  const reduced = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce) {\n  .ov-ct, .ov-ct[data-phase="expanded"]'));
+  assert.match(reduced, /--ov-ct-motion: none;/);
+  assert.match(reduced, /\.ov-ct\[data-phase="expanded"\] \.ov-ct-label > \*,\s*\.ov-ct\[data-phase="expanded"\] > svg \{ animation: none; \}/);
 });

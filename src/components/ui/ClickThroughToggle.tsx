@@ -91,13 +91,14 @@ const ClickThroughToggle: React.FC<ClickThroughToggleProps> = ({
       className="ov-ct w-7 h-7 rounded-[9px] flex items-center interaction-base interaction-press overlay-bare-icon"
       style={{ ['--ov-ct-w' as string]: `${labelWidth + CLICK_THROUGH_PILL_CHROME_PX}px` }}
     >
-      {/* The dashed cursor: the pointer passes through. */}
-      <MousePointer2 className="w-3.5 h-3.5 shrink-0" strokeDasharray="3 2.2" aria-hidden />
+      {/* A solid cursor, not the dashed one it was (the owner, 2026-10-30). */}
+      <MousePointer2 className="w-3.5 h-3.5 shrink-0" aria-hidden />
       <span ref={labelRef} className="ov-ct-label" aria-hidden>
+        {/* --ov-ct-i: each item's place in the stagger as the pill opens (index.css). */}
         {keys.map((key, i) => (
-          <kbd key={i} className="ov-ct-key">{key}</kbd>
+          <kbd key={i} className="ov-ct-key" style={{ ['--ov-ct-i' as string]: i }}>{key}</kbd>
         ))}
-        <span className="ov-ct-exit">{exitLabel}</span>
+        <span className="ov-ct-exit" style={{ ['--ov-ct-i' as string]: keys.length }}>{exitLabel}</span>
       </span>
     </button>
   );

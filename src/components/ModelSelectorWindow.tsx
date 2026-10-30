@@ -4,7 +4,7 @@ import { groupModelOptions, type ModelSelectorOption } from './ui/modelSelectorG
 import { MODEL_SELECTOR_WIDTH } from './ui/modelSelectorLabelText';
 import { CODEX_CLI_MODEL, cloudModelRows, codexCliSelectorId, codexModelOptions, gatewayModelLabel, isModelAllowed, LIVE_CATALOGUE_PROVIDERS, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
-import { getMeetingInterfaceTheme, type MeetingInterfaceTheme, interfaceThemeSurface, isCssOwnedInterfaceTheme } from '../lib/meetingInterfaceTheme';
+import { getMeetingInterfaceTheme, type MeetingInterfaceTheme, interfaceThemeSurface, isCssOwnedInterfaceTheme, resolveMeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import {
     clampOverlayOpacity,
     getDefaultOverlayOpacity,
@@ -36,7 +36,9 @@ const ModelSelectorWindow = () => {
     // --overlay-opacity happens to cascade in by default, not the user's
     // actual live-configured value — the same gap SettingsPopup.tsx's
     // already-committed fix (7c4f3bd2) closed for that window.
-    const [interfaceTheme, setInterfaceTheme] = useState<MeetingInterfaceTheme>(() => getMeetingInterfaceTheme());
+    const [chosenInterfaceTheme, setInterfaceTheme] = useState<MeetingInterfaceTheme>(() => getMeetingInterfaceTheme());
+    // What the overlay paints for that pick (Default is Lavender in light mode).
+    const interfaceTheme = resolveMeetingInterfaceTheme(chosenInterfaceTheme, isLight ? 'light' : 'dark');
     const [overlayOpacity, setOverlayOpacity] = useState<number>(() => {
         const stored = localStorage.getItem('natively_overlay_opacity');
         const parsed = stored ? parseFloat(stored) : NaN;
@@ -475,7 +477,16 @@ const ModelSelectorWindow = () => {
         : undefined;
 
     return (
-        <div className="w-fit h-fit bg-transparent flex flex-col">
+        <div
+            className="w-fit h-fit bg-transparent flex flex-col"
+            // Lavender works its body out from the opacity slider where
+            // data-interface-theme sits. This window's attribute sits above
+            // any slider value, so the panel took the 0.65 default and read
+            // thinner than the overlay. Re-declared here under the live
+            // value, as NativelyInterface's own root does.
+            data-interface-theme={interfaceTheme === 'lavender' ? 'lavender' : undefined}
+            style={interfaceTheme === 'lavender' ? ({ ['--overlay-opacity' as '--overlay-opacity']: String(overlayOpacity) } as React.CSSProperties) : undefined}
+        >
             <div
                 ref={panelRef}
                 className={`backdrop-blur-md border rounded-[14px] overflow-hidden p-1 flex flex-col origin-top-left overlay-shell-surface overlay-popover-surface ${panelClass}`}

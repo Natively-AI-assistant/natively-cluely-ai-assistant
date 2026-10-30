@@ -544,7 +544,7 @@ const HelpPane: React.FC<{
                             items={[
                                 { title: 'The pill', body: <>The logo opens the Launcher. Hide hides the overlay; {keys('toggleVisibility')} brings it back. The square ends the meeting.</> },
                                 { title: 'Live transcript', body: 'What is being said, as your speech provider hears it.' },
-                                { title: 'Quick actions', body: 'What to answer?, Clarify, Recap, Follow Up Question, and Answer, which records you. Settings › Overlay reorders them or swaps in Brainstorm, What did I miss?, Define or Sound smart.' },
+                                { title: 'Quick actions', body: 'What to answer?, Clarify, Recap, Follow Up Question, and Speak, which records you. Settings › Overlay reorders them or swaps in Brainstorm, What did I miss?, Define or Sound smart.' },
                                 { title: 'Ask box', body: <>Type any question. {keys('selectiveScreenshot')} attaches part of the screen.</> },
                                 { title: 'Model', body: 'Switches the AI model.' },
                                 { title: 'Quick settings', body: 'Undetectable, Fast Response and Transcript.' },

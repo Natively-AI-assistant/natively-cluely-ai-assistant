@@ -27,6 +27,18 @@ export function interfaceThemeSurface(theme: MeetingInterfaceTheme, appTheme: 'l
     return appTheme;
 }
 
+/**
+ * The style a window paints for the user's pick. Default is Lavender under the
+ * light app theme (the owner, 2026-10-30: Lavender replaces the light Default)
+ * and keeps its own dark panel under the dark one. Every other pick paints
+ * itself. The stored pick stays 'default', so Settings still shows Default
+ * chosen; only what is drawn changes. Every window that draws the overlay or
+ * a preview of it resolves through here, so they never disagree.
+ */
+export function resolveMeetingInterfaceTheme(theme: MeetingInterfaceTheme, appTheme: 'light' | 'dark'): MeetingInterfaceTheme {
+    return theme === 'default' && appTheme === 'light' ? 'lavender' : theme;
+}
+
 export function getMeetingInterfaceTheme(): MeetingInterfaceTheme {
     const stored = localStorage.getItem(STORAGE_KEY) as MeetingInterfaceTheme | null;
     // Reject unknown / legacy values so forward/backward compat can't poison the UI.

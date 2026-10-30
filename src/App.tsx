@@ -34,7 +34,7 @@ import { getOrchestrator } from "./lib/onboarding/orchestrator.ts"
 import { isInternalCaptureDevice } from "../electron/audio/audioDeviceSelection.mjs"
 import { ProviderChangeNotice, type EmbeddingDegradedNotice } from "./components/ProviderChangeNotice"
 import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
-import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
+import { getMeetingInterfaceTheme, resolveMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
 import { permissionsNeedAttention } from './lib/permissionAttentionPolicy.mjs'
 import { collectRendererLegacy } from './lib/cards/rendererLegacy.mjs'
 import { resetRendererTrialClaim } from './lib/trialCampaign.mjs'
@@ -1234,7 +1234,9 @@ const App: React.FC = () => {
     setIsProcessingMeeting(true);
   };
 
-  const interfaceThemeAttribute = meetingInterfaceTheme === 'default' ? undefined : meetingInterfaceTheme;
+  // What the overlay paints for the pick: Default is Lavender in light mode.
+  const paintedInterfaceTheme = resolveMeetingInterfaceTheme(meetingInterfaceTheme, isLight ? 'light' : 'dark');
+  const interfaceThemeAttribute = paintedInterfaceTheme === 'default' ? undefined : paintedInterfaceTheme;
 
   // Render Logic
   if (isCropperWindow) {
@@ -1317,7 +1319,7 @@ const App: React.FC = () => {
                   <NativelyInterface
                     onMeetingEnded={handleMeetingEnded}
                     overlayOpacity={overlayOpacity}
-                    interfaceTheme={meetingInterfaceTheme}
+                    interfaceTheme={paintedInterfaceTheme}
                   />
                 </React.Suspense>
               </div>

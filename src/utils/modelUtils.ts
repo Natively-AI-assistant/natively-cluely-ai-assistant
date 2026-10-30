@@ -281,6 +281,56 @@ export const prettifyModelId = (id: string): string => {
     return id.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 };
 
+/** Provider names the chip drops when a label carries one ("Groq Qwen 3.8", "x (Antigravity)"). */
+const CHIP_PROVIDER_SUFFIX = /\s*\((?:Antigravity|AgentRouter|9Router|OpenRouter|LiteLLM|Fluxion|Sidrune AI|NVIDIA NIM|NIM|Groq|Ollama)\)$/i;
+const CHIP_PROVIDER_PREFIX = /^Groq\s+/;
+/** Words a plain capital would get wrong. */
+const CHIP_WORDS: Record<string, string> = {
+    gpt: 'GPT', glm: 'GLM', oss: 'OSS', deepseek: 'DeepSeek', minimax: 'MiniMax', openai: 'OpenAI',
+    xai: 'xAI', vl: 'VL', it: 'IT',
+};
+
+/**
+ * The model selector chip's text, in every meeting style: the model's own
+ * name and nothing else (the owner, 2026-10-30). No routing or vendor prefix,
+ * no provider name, no slug punctuation:
+ * `agentrouter/claude-haiku-5-5` → "Claude Haiku 5.5",
+ * `ninerouter/minimax/MiniMax-M3` → "MiniMax M3", `gpt-4o` → "GPT 4o",
+ * "Groq Qwen 3.8" → "Qwen 3.8", `gemini-3-flash (Antigravity)` → "Gemini 3 Flash".
+ *
+ * A label already written for people (it has a space) keeps its spelling, so
+ * "GPT-5.6 Luna", "Natively API" and a custom provider's own name pass through.
+ * Only the chip uses this; the dropdown rows keep their provider groups.
+ */
+export const modelChipName = (label: string): string => {
+    const name = (label || '').trim().replace(CHIP_PROVIDER_SUFFIX, '').replace(CHIP_PROVIDER_PREFIX, '');
+    if (!name || /\s/.test(name)) return name || label;
+    // A slug: its last path segment, without a Bedrock-style `vendor.` prefix.
+    const slug = (name.split('/').filter(Boolean).pop() ?? name)
+        .replace(/^(?:anthropic|meta|amazon|cohere|mistral|ai21|google|openai)\./i, '');
+    const parts = slug.split(/[-_:\s]+/).filter(Boolean);
+    // A trailing `latest`, `preview` or snapshot date (`-20241022`, `-2024-08-06`) says nothing
+    // about the model, and the chip shows 16 characters.
+    if (parts.length > 1 && /^(?:latest|preview)$/i.test(parts[parts.length - 1])) parts.pop();
+    if (parts.length > 3 && /^\d{4}-\d{2}-\d{2}$/.test(parts.slice(-3).join('-'))) parts.splice(-3);
+    else if (parts.length > 1 && /^\d{8}$/.test(parts[parts.length - 1])) parts.pop();
+    const words: string[] = [];
+    for (const part of parts) {
+        const prev = words[words.length - 1];
+        // Claude writes versions with dashes (`haiku-5-5`): join short digit runs with dots.
+        if (prev && /^\d{1,2}(?:\.\d+)*$/.test(prev) && /^\d{1,2}$/.test(part)) words[words.length - 1] = `${prev}.${part}`;
+        else words.push(part);
+    }
+    return words.map((w) => {
+        if (/[A-Z]/.test(w)) return w; // the vendor's own casing: MiniMax, M3
+        if (/^\d+(?:\.\d+)?[bkm]$/i.test(w)) return w.toUpperCase(); // 8b → 8B
+        if (/^[a-z]\d/i.test(w) && w.length <= 4) return w.toUpperCase(); // v4 → V4
+        const lead = /^([a-z]+)(.*)$/i.exec(w);
+        if (!lead) return w;
+        return (CHIP_WORDS[lead[1].toLowerCase()] ?? lead[1].charAt(0).toUpperCase() + lead[1].slice(1)) + lead[2];
+    }).join(' ');
+};
+
 /**
  * Providers whose model allow-list is OPT-IN: an empty list means NOTHING is
  * selected, not "everything".

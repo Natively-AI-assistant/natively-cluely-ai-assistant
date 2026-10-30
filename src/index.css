@@ -901,13 +901,38 @@
   white-space: nowrap;
   border: 1px solid transparent;
 }
+/* The pill's motion, one list per direction (transitions polish,
+   2026-10-30). It opens like a resize, 250ms on the smooth-out curve
+   (--duration-fast, --ease-smooth-out), and closes faster, 150ms
+   (--duration-quick), so the 3s settle and turning it off get out of the way.
+   The tint and edge ride with the width; the icon's colour is a 150ms state
+   swap (ease-in-out). transform and opacity are interaction-press's, as they
+   were. The list sits in a variable so a theme that restyles .interaction-base
+   (Lavender does) can hand the pill its own list back in one line. */
+.ov-ct {
+  --ov-ct-motion:
+    color 150ms ease-in-out,
+    background-color 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 200ms cubic-bezier(0.25, 1, 0.5, 1),
+    opacity 200ms;
+}
+.ov-ct[data-phase="expanded"] {
+  --ov-ct-motion:
+    color 150ms ease-in-out,
+    background-color 250ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 250ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 250ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 250ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 200ms cubic-bezier(0.25, 1, 0.5, 1),
+    opacity 200ms;
+}
 /* Doubled with .interaction-base, which comes later in this file and would
-   otherwise replace the list, dropping width and padding: the pill would snap.
-   transform stays for interaction-press. */
+   otherwise replace the list, dropping width and padding: the pill would snap. */
 .ov-ct.interaction-base {
-  transition: color 200ms, background-color 200ms, border-color 200ms,
-              transform 200ms cubic-bezier(0.25, 1, 0.5, 1), opacity 200ms,
-              width 280ms cubic-bezier(0.2, 0, 0, 1), padding 280ms cubic-bezier(0.2, 0, 0, 1);
+  transition: var(--ov-ct-motion);
 }
 [data-theme='light'] .ov-ct {
   --ov-ct-pill-bg: 9%;
@@ -935,11 +960,33 @@
   font-size: 12px;
   font-weight: 500;
   opacity: 0;
-  transition: opacity 180ms;
+  /* Closing, the words go with the pill at once (--duration-quick, no wait). */
+  transition: opacity 150ms cubic-bezier(0.22, 1, 0.36, 1);
 }
+/* Opening, the label is there at once and its keys and "to exit" arrive one
+   after another: each fades in, rises 4px and unblurs from 2px
+   (--distance-micro, --blur-small) over 150ms (--duration-quick), 40ms apart
+   (--duration-stagger), after an 80ms beat (--duration-micro) that lets the
+   pill start opening first. Four items end by 350ms. --ov-ct-i is each one's
+   place, set in ClickThroughToggle. */
 .ov-ct[data-phase="expanded"] .ov-ct-label {
   opacity: 1;
-  transition-delay: 80ms;
+  transition: none;
+}
+@keyframes ov-ct-item-in {
+  from { opacity: 0; transform: translateY(4px); filter: blur(2px); }
+}
+.ov-ct[data-phase="expanded"] .ov-ct-label > * {
+  animation: ov-ct-item-in 150ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(80ms + var(--ov-ct-i, 0) * 40ms);
+}
+/* Turning on, the cursor gives a small pop (0.9 → 1, 250ms, --ease-bounce):
+   an entrance, so turning off gets none. */
+@keyframes ov-ct-icon-on {
+  from { transform: scale(0.9); }
+}
+.ov-ct[data-phase="expanded"] > svg {
+  animation: ov-ct-icon-on 250ms cubic-bezier(0.34, 1.36, 0.64, 1);
 }
 .ov-ct-key {
   display: inline-flex;
@@ -962,7 +1009,10 @@
   margin-left: 1px;
 }
 @media (prefers-reduced-motion: reduce) {
-  .ov-ct.interaction-base, .ov-ct-label { transition: none; }
+  .ov-ct, .ov-ct[data-phase="expanded"] { --ov-ct-motion: none; }
+  .ov-ct-label { transition: none; }
+  .ov-ct[data-phase="expanded"] .ov-ct-label > *,
+  .ov-ct[data-phase="expanded"] > svg { animation: none; }
 }
 
 [data-interface-theme="modern"] .glass-shortcut-key,
@@ -3334,6 +3384,29 @@ body {
   }
 }
 /* @diagram-card:end */
+
+/* The answer area fades out where it scrolls (the owner, 2026-10-30) instead
+   of slicing a bubble or a line with a straight edge above the buttons: up to
+   32px at the foot while there is more below, up to 24px at the head once it
+   has scrolled down from the top (the follow-up email's .mn-fu-msg values).
+   Each fade grows with the distance to its end, over the last 32px and first
+   24px of scroll, so at the very bottom, where a streaming answer sits, the
+   last line is whole, and an answer that fits (no scroll, so the timeline is
+   inactive) gets none. Guarded: without scroll timelines the two animations
+   would run at once to their end and leave a fade at the head for good. */
+@property --ov-fade-top { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --ov-fade-bottom { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@keyframes ov-scroll-fade-top { to { --ov-fade-top: 24px; } }
+@keyframes ov-scroll-fade-bottom { from { --ov-fade-bottom: 32px; } to { --ov-fade-bottom: 0px; } }
+@supports (animation-timeline: scroll()) {
+  .overlay-scroll-fade {
+    animation: ov-scroll-fade-top linear both, ov-scroll-fade-bottom linear both;
+    animation-timeline: scroll(self y), scroll(self y);
+    animation-range: 0px 24px, calc(100% - 32px) 100%;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--ov-fade-top), #000 calc(100% - var(--ov-fade-bottom)), transparent 100%);
+            mask-image: linear-gradient(to bottom, transparent 0, #000 var(--ov-fade-top), #000 calc(100% - var(--ov-fade-bottom)), transparent 100%);
+  }
+}
 
 .overlay-chip-surface {
   background: var(--overlay-chip-bg);
@@ -9502,7 +9575,8 @@ html[data-platform="linux"][data-window="launcher"] body {
        Phone Mirror's amber LAN switch, …) and the app's periwinkle accent.
        --toggle-on also fills the meeting notes Usage question bubble
        (--bubble-user-bg; lifted toward white in light mode), so retuning it
-       repaints that bubble too. */
+       repaints that bubble too. The one exception is inside the Lavender
+       overlay's own panel, which takes its violet (overlayLavenderTheme.css). */
     --toggle-off: #474949;
     --toggle-on: #6688F5;
     --toggle-thumb: #e1ebfe;

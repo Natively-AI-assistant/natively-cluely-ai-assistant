@@ -17787,7 +17787,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     const { ModesManager } = require('./services/ModesManager');
     const manualActiveMode = ModesManager.getInstance().getActiveMode();
 
-    // The phone's Answer chip shows this turn too: the question once the first
+    // The phone's Speak chip shows this turn too: the question once the first
     // words arrive (a fallback before then publishes it itself), then the
     // answer under the same id, which resolves the chip's Thinking.
     let onPhone = false;

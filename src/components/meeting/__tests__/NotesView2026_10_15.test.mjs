@@ -186,9 +186,11 @@ describe('wiring (source contracts)', () => {
         assert.match(RATING, /maxLength=\{500\}/);
     });
 
-    test('the overlay has a Notes button; the notes window is a light, tooltip-free route', () => {
-        assert.match(OVERLAY, /aria-label=\{t\('Notes'\)\}[\s\S]{0,400}?<NotebookPen/);
-        assert.match(OVERLAY, /notesWindowToggle\?\.\(\)/);
+    // The overlay's Notes button went on 2026-10-30 (the owner: the notepad is
+    // reached from Settings › Overlay); the window stays for the meeting page.
+    test('the overlay has no Notes button; the notes window is a light, tooltip-free route', () => {
+        assert.doesNotMatch(OVERLAY, /aria-label=\{t\('Notes'\)\}/);
+        assert.doesNotMatch(OVERLAY, /notesWindowToggle/);
         assert.match(AUX, /route === 'notes'[\s\S]*?<NotesWindow \/>/);
         assert.match(MAIN, /LIGHT_ROUTES = \[[^\]]*'notes'[^\]]*\]/);
     });
