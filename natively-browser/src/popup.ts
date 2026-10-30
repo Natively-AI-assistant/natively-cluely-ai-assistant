@@ -10,38 +10,49 @@ import {
   requestAllSitesPermission,
   requestOriginPermission,
 } from './capture/permissions';
+import { browserPlatform, modifierKeyLabel } from './hotkey-label';
 
 type StatusOutcome = DomPostOutcome | { kind: 'unpaired' };
+type Tone = 'ok' | 'err' | 'warn' | '';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-const dot = $('dot');
 const statusText = $('statusText');
 const pairCard = $('pairCard');
 const captureCard = $('captureCard');
+const setupCard = $('setupCard');
 const pairInput = $<HTMLInputElement>('pairInput');
 const pairBtn = $<HTMLButtonElement>('pairBtn');
 const connectBtn = $<HTMLButtonElement>('connectBtn');
 const captureBtn = $<HTMLButtonElement>('captureBtn');
 const unpairBtn = $<HTMLButtonElement>('unpairBtn');
+const allSitesRow = $('allSitesRow');
 const allSitesBtn = $<HTMLButtonElement>('allSitesBtn');
 // Lets the Meet reader run on meet.google.com: who is in the call and who is
 // speaking, for names on Natively's transcript (sent to the local app only,
 // while its meeting detection is on).
+const meetNamesRow = $('meetNamesRow');
 const meetNamesBtn = $<HTMLButtonElement>('meetNamesBtn');
-const allSitesHint = $<HTMLElement>('allSitesHint');
 const msg = $('msg');
+
+// The shortcut keycaps name this keyboard's modifier (⌘ or Ctrl).
+const modifier = modifierKeyLabel(browserPlatform(navigator as Navigator & { userAgentData?: { platform?: string } }));
+for (const key of document.querySelectorAll<HTMLElement>('kbd[data-mod]')) key.textContent = modifier;
 
 function send<R>(message: unknown): Promise<R> {
   return chrome.runtime.sendMessage(message) as Promise<R>;
 }
 
-function setDot(color: 'green' | 'red' | 'amber' | 'grey'): void {
-  dot.className = 'dot' + (color === 'grey' ? '' : ` ${color}`);
+/** The heading's corner pill; `null` when all is well (connected, it shows nothing). */
+function setStatus(text: string | null, tone: Tone = ''): void {
+  statusText.textContent = text ?? '';
+  statusText.className = 'status' + (tone ? ` ${tone}` : '') + (text ? '' : ' hidden');
 }
 
-function setMsg(text: string, kind: 'ok' | 'err' | 'warn' | ''): void {
+function setMsg(text: string, kind: Tone): void {
   msg.textContent = text;
+  // Two lines at most in the corner; the whole message on hover.
+  msg.title = text;
   msg.className = 'msg' + (kind ? ` ${kind}` : '');
 }
 
@@ -55,17 +66,17 @@ function describe(outcome: DomPostOutcome): { text: string; kind: 'ok' | 'err' |
     case 'success':
       return { text: 'Sent to Natively.', kind: 'ok' };
     case 'unauthorized':
-      return { text: 'Pairing expired (token rotated). Re-pair below.', kind: 'warn' };
+      return { text: 'Pairing expired. Connect again.', kind: 'warn' };
     case 'no-session':
-      return { text: 'Start a Natively session, then capture again.', kind: 'warn' };
+      return { text: 'Start a session in Natively, then capture again.', kind: 'warn' };
     case 'refused':
-      return { text: 'Open Natively and enable Phone Mirror.', kind: 'err' };
+      return { text: 'Open Natively and turn on Phone Mirror.', kind: 'err' };
     case 'rate-limited':
-      return { text: 'Too many requests — wait a moment and retry.', kind: 'warn' };
+      return { text: 'Too many requests. Wait a moment, then retry.', kind: 'warn' };
     case 'too-large':
-      return { text: 'Page too large to send.', kind: 'err' };
+      return { text: 'This page is too large to send.', kind: 'err' };
     case 'bad-request':
-      return { text: 'Desktop rejected the request.', kind: 'err' };
+      return { text: 'Natively rejected the request.', kind: 'err' };
     case 'http-error':
       return { text: `Unexpected response (${outcome.status}).`, kind: 'err' };
     case 'needs-host-permission':
@@ -78,16 +89,16 @@ function describe(outcome: DomPostOutcome): { text: string; kind: 'ok' | 'err' |
 function showPaired(paired: boolean): void {
   pairCard.classList.toggle('hidden', paired);
   captureCard.classList.toggle('hidden', !paired);
+  // Holds only the permissions still to give; with none it hides itself (CSS).
+  setupCard.classList.toggle('hidden', !paired);
 }
 
 async function refreshStatus(): Promise<void> {
   const outcome = await send<StatusOutcome>({ type: 'status' });
   if (outcome.kind === 'unpaired' || outcome.kind === 'unauthorized') {
-    setDot(outcome.kind === 'unauthorized' ? 'amber' : 'grey');
-    statusText.textContent =
-      outcome.kind === 'unauthorized' ? 'Pairing expired — re-pair' : 'Not paired';
+    setStatus(outcome.kind === 'unauthorized' ? 'Pairing expired' : 'Not paired', outcome.kind === 'unauthorized' ? 'warn' : '');
     showPaired(false);
-    if (outcome.kind === 'unauthorized') setMsg('Token rotated on desktop. Re-pair below.', 'warn');
+    if (outcome.kind === 'unauthorized') setMsg('Pairing expired. Connect again.', 'warn');
     return;
   }
   if (outcome.kind === 'success') {
@@ -100,14 +111,11 @@ async function refreshStatus(): Promise<void> {
       const r = await send<{ open: boolean }>({ type: 'ws-status' });
       wsOpen = !!r?.open;
     } catch { /* ignore */ }
-    setDot('green');
-    statusText.textContent = wsOpen ? 'Connected — capture ready' : 'Connected (connecting capture…)';
+    setStatus(wsOpen ? null : 'Connecting');
     return;
   }
   // Paired but desktop unreachable (refused / error / rate-limited).
-  setDot('red');
-  statusText.textContent =
-    outcome.kind === 'refused' ? 'Desktop offline — enable Phone Mirror' : 'Desktop unreachable';
+  setStatus(outcome.kind === 'refused' ? 'Natively offline' : 'Can’t reach Natively', 'err');
   showPaired(true);
 }
 
@@ -116,11 +124,11 @@ function describePair(outcome: PairFetchOutcome): { text: string; kind: 'ok' | '
     case 'paired':
       return { text: 'Connected.', kind: 'ok' };
     case 'not-armed':
-      return { text: 'Click "Connect browser extension" in Natively settings first.', kind: 'warn' };
+      return { text: 'Click Connect in Natively first, then press this.', kind: 'warn' };
     case 'forbidden':
-      return { text: 'Pairing refused by desktop.', kind: 'err' };
+      return { text: 'Natively refused the pairing.', kind: 'err' };
     case 'refused':
-      return { text: 'Open Natively and enable Phone Mirror.', kind: 'err' };
+      return { text: 'Open Natively and turn on Phone Mirror.', kind: 'err' };
     case 'error':
       return { text: outcome.message, kind: 'err' };
   }
@@ -169,11 +177,11 @@ captureBtn.addEventListener('click', async () => {
   // message; nothing else changes.
   if (report.outcome.kind === 'needs-host-permission') {
     const origin = report.outcome.origin;
-    setMsg(`Requesting access to ${hostOf(origin)}…`, '');
+    setMsg(`Asking for access to ${hostOf(origin)}…`, '');
     const grant = await requestOriginPermission(chrome.permissions, origin);
     if (grant.granted) {
       void send({ type: 'clear-grant-nudge' }).catch(() => {});
-      setMsg('Permission granted — capturing…', '');
+      setMsg('Access given. Capturing…', '');
       report = await send<CaptureReport>({ type: 'capture' });
     }
   }
@@ -197,10 +205,12 @@ allSitesBtn.addEventListener('click', async () => {
   allSitesBtn.disabled = false;
   if (r.granted) {
     void send({ type: 'clear-grant-nudge' }).catch(() => {});
-    setMsg(r.alreadyHad ? 'Already allowed on all sites.' : 'Allowed on all sites — the hotkey now works everywhere.', 'ok');
+    setMsg(r.alreadyHad ? 'Already allowed on all sites.' : 'Allowed on all sites. The hotkey works anywhere now.', 'ok');
     await refreshAllSites();
+    // All sites covers meet.google.com too.
+    await refreshMeetNames();
   } else {
-    setMsg('Not granted — per-site capture still works.', 'warn');
+    setMsg('Not allowed. Capture still asks site by site.', 'warn');
   }
 });
 
@@ -210,20 +220,20 @@ meetNamesBtn.addEventListener('click', async () => {
   meetNamesBtn.disabled = false;
   if (r.granted) {
     await send({ type: 'meet-reader-refresh' }).catch(() => {});
-    setMsg('Natively will put names on your Google Meet transcripts.', 'ok');
+    setMsg('Meet transcripts will show names.', 'ok');
     await refreshMeetNames();
   } else {
-    setMsg('Not allowed: Meet transcripts keep "Speaker 1".', 'warn');
+    setMsg('Not allowed. Meet transcripts keep "Speaker 1".', 'warn');
   }
 });
 
-/** Hide the Meet button once meet.google.com is allowed (all sites covers it too). */
+/** Hide the Meet row once meet.google.com is allowed (all sites covers it too). */
 async function refreshMeetNames(): Promise<void> {
   try {
     const r = await send<{ granted: boolean }>({ type: 'meet-reader-status' });
-    meetNamesBtn.classList.toggle('hidden', !!r?.granted);
+    meetNamesRow.classList.toggle('hidden', !!r?.granted);
   } catch {
-    /* leave it shown */
+    meetNamesRow.classList.remove('hidden');
   }
 }
 
@@ -241,14 +251,12 @@ void refreshStatus();
 void refreshAllSites();
 void refreshMeetNames();
 
-/** Hide the all-sites button once granted; show the explainer while offered. */
+/** Hide the all-sites row once granted. Hidden until known, so a granted one never flashes. */
 async function refreshAllSites(): Promise<void> {
   try {
     const r = await send<{ granted: boolean }>({ type: 'all-sites-status' });
-    const granted = !!r?.granted;
-    allSitesBtn.classList.toggle('hidden', granted);
-    allSitesHint.classList.toggle('hidden', granted);
+    allSitesRow.classList.toggle('hidden', !!r?.granted);
   } catch {
-    /* leave defaults */
+    allSitesRow.classList.remove('hidden');
   }
 }

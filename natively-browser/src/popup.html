@@ -5,39 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Natively Page Context</title>
     <style>
+      /*
+       * The website's look (heynatively.com/companion shows this popup): the
+       * site's paper, ink and violet, its Liquid Glass buttons, the lowercase
+       * wordmark and the shortcut keycaps. Connected and set up, the popup is
+       * the website's demo; the other states use the same pieces.
+       */
       :root {
-        color-scheme: dark;
+        color-scheme: light;
 
-        /* Canvas + surfaces (real Natively app tokens) */
-        --bg:        #1E1E21;   /* popup body — app --bg-main */
-        --surface:   #242429;   /* cards — app --bg-card */
-        --surface-2: #27272A;   /* inputs / inset wells — app --bg-item-surface */
-        --logo-navy: #0C1430;   /* logo tile backdrop, matches emblem */
+        --bg: #fbfaff;
+        --surface-2: #f4f1fb;
 
-        /* Borders — near-invisible; surface contrast does the work */
-        --border:      #333333;                  /* app --border-muted */
-        --border-hair: rgba(255, 255, 255, 0.06);
+        --border: #ded4eb;
+        --border-hair: rgba(76, 46, 122, 0.1);
 
-        /* Text */
-        --text:   #FFFFFF;
-        --text-2: #A0A0A0;
-        --text-3: #606060;
+        --text: #2e2a38;
+        --text-2: #5f5475;
+        --text-3: #766a8c;
 
-        /* Accent (blue) — primary action + focus only */
-        --accent:       #3b82f6;
-        --accent-600:   #2563EB;
-        --accent-ring:  rgba(59, 130, 246, 0.45);
+        --accent: #8a68ea;
+        --accent-ring: rgba(156, 111, 243, 0.4);
 
-        /* Status dot semantics */
-        --green:      #22C55E;
-        --green-glow: rgba(34, 197, 94, 0.55);
-        --amber:      #F59E0B;
-        --red:        #EF4444;
-
-        /* Msg line */
-        --ok:   #4ADE80;
-        --warn: #FBBF24;
-        --err:  #F87171;
+        --ok: #1a7f45;
+        --warn: #8f5f00;
+        --err: #b9302a;
 
         --ease: cubic-bezier(0.22, 1, 0.36, 1);
       }
@@ -48,7 +40,7 @@
         width: 320px;
         margin: 0;
         padding: 16px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
         background: var(--bg);
         color: var(--text);
         font-size: 13px;
@@ -56,136 +48,266 @@
         -webkit-font-smoothing: antialiased;
       }
 
-      /* ── Brand row ─────────────────────────────────────────── */
+      /* ── Heading: the wordmark, and a corner for status and messages ── */
       .brand {
-        display: flex;
-        align-items: center;
-        gap: 10px;
+        position: relative;
+        height: 22px;
         margin-bottom: 14px;
       }
-      .logo {
-        width: 30px;
-        height: 30px;
-        border-radius: 8px;
-        flex: 0 0 auto;
-        background: var(--logo-navy);
-        box-shadow:
-          inset 0 1px 0 rgba(255, 255, 255, 0.10),
-          0 1px 3px rgba(0, 0, 0, 0.45),
-          0 0 0 1px rgba(255, 255, 255, 0.05);
+      .brand-word {
+        display: block;
+        width: auto;
+        height: 22px;
       }
-      .brand-text { display: flex; flex-direction: column; line-height: 1.15; }
-      .wordmark {
-        font-size: 15px;
-        font-weight: 600;
-        letter-spacing: -0.02em;
-        color: var(--text);
+      /* Out of the flow, so nothing moves when a message arrives. Two lines at
+         most: the second still clears the card below. */
+      .corner {
+        position: absolute;
+        top: 0;
+        right: 0;
+        max-width: calc(100% - 96px);
+        text-align: right;
       }
-      .product {
-        font-size: 11px;
-        font-weight: 500;
-        letter-spacing: 0.01em;
-        color: var(--text-2);
-        margin-top: 1px;
-      }
-
-      /* ── Status row ────────────────────────────────────────── */
-      .status-row {
-        display: flex;
+      /* Only when something needs doing; connected, the corner is empty. */
+      .status {
+        display: inline-flex;
         align-items: center;
-        gap: 8px;
-        margin-bottom: 12px;
+        height: 22px;
+        padding: 0 9px;
+        border-radius: 999px;
+        background: rgba(118, 106, 140, 0.1);
+        color: var(--text-2);
+        font-size: 11px;
+        font-weight: 600;
+        white-space: nowrap;
       }
-      .dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: var(--text-3);
-        flex: 0 0 auto;
-        transition: background 0.25s var(--ease), box-shadow 0.25s var(--ease);
+      .status.warn { background: rgba(217, 138, 11, 0.12); color: var(--warn); }
+      .status.err { background: rgba(220, 59, 52, 0.1); color: var(--err); }
+      /* The latest message stands in for the status while it is shown. */
+      .corner:has(.msg:not(:empty)) .status { display: none; }
+
+      .msg {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+        padding-top: 3px;
+        font-size: 11px;
+        line-height: 16px;
+        color: var(--text-2);
+        animation: msg-in 180ms var(--ease);
       }
-      .dot.green {
-        background: var(--green);
-        box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18), 0 0 6px var(--green-glow);
+      .msg:empty { display: none; }
+      .msg.ok { color: var(--ok); }
+      .msg.warn { color: var(--warn); }
+      .msg.err { color: var(--err); }
+      @keyframes msg-in {
+        from { opacity: 0; transform: translateY(-2px); }
       }
-      .dot.amber { background: var(--amber); box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.16); }
-      .dot.red   { background: var(--red);   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.16); }
-      .status-text { font-size: 12px; color: var(--text-2); }
 
       /* ── Cards ─────────────────────────────────────────────── */
       .card {
-        background: var(--surface);
+        background: linear-gradient(180deg, #ffffff, #fbf9ff);
         border: 1px solid var(--border-hair);
         border-radius: 14px;
+        box-shadow: 0 1px 2px rgba(76, 46, 122, 0.05);
         padding: 14px;
         margin-bottom: 10px;
       }
-      /* Active card gets the one allowed top-light gradient (faux-glass depth). */
-      #pairCard,
-      #captureCard {
-        background:
-          linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0) 64%),
-          var(--surface);
-      }
 
-      /* ── Buttons ───────────────────────────────────────────── */
+      /* ── Buttons: the site's Liquid Glass ──────────────────── */
+      /* From the site's LiquidGlassButton.css: `.lg-lavender` for the main
+         action, `.lg-paper` for the quieter ones, at its two-ring rim. A flat
+         tint and a thin lit rim; hover only thickens the tint. */
       button {
+        position: relative;
+        isolation: isolate;
+        overflow: hidden;
         width: 100%;
         height: 40px;
         padding: 0 12px;
-        border: none;
-        border-radius: 10px;
+        border: 0;
+        border-radius: 999px;
+        font: inherit;
         font-size: 13px;
         font-weight: 600;
-        letter-spacing: -0.005em;
         cursor: pointer;
-        transition: background 0.15s var(--ease), transform 0.08s var(--ease),
-          box-shadow 0.15s var(--ease), opacity 0.15s var(--ease);
+        transition:
+          transform 110ms var(--ease),
+          background-color 300ms cubic-bezier(0.37, 0, 0.63, 1);
       }
-      button.primary {
-        background: var(--accent-600);
-        color: #fff;
-        box-shadow: 0 1px 0 rgba(255, 255, 255, 0.10) inset, 0 1px 3px rgba(0, 0, 0, 0.35);
+      button::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        box-shadow: inset 0 0 0 1px var(--rim-1), inset 0 0 0 2px var(--rim-2);
+        pointer-events: none;
       }
-      button.primary:hover { background: var(--accent); }
-      button.primary:active { transform: translateY(1px); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4); }
-      button.primary:disabled {
-        background: rgba(30, 58, 138, 0.30);
-        color: rgba(96, 165, 250, 0.40);
-        box-shadow: none;
-        cursor: default;
-        transform: none;
-      }
-      button.ghost {
-        background: transparent;
-        color: var(--text-2);
-        border: 1px solid var(--border);
-        height: 36px;
-        font-weight: 500;
-        box-shadow: none;
-      }
-      button.ghost:hover { background: rgba(255, 255, 255, 0.04); color: var(--text); border-color: #404040; }
-      button.ghost:active { transform: translateY(1px); }
+      button:active { transform: scale(0.985); }
+      button:disabled { cursor: default; transform: none; filter: saturate(0.4) brightness(0.92); }
+      button + button { margin-top: 8px; }
 
-      /* ── Input / details / hints ───────────────────────────── */
+      button.primary {
+        --rim-1: rgba(255, 255, 255, 0.78);
+        --rim-2: rgba(156, 111, 243, 0.3);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.1) 18%, rgba(255, 255, 255, 0) 100%),
+          rgba(156, 111, 243, 0.24);
+        color: #3f2593;
+        box-shadow:
+          inset 0 -1px 0 rgba(90, 43, 176, 0.14),
+          0 1px 2px rgba(78, 46, 150, 0.1),
+          0 14px 30px -12px rgba(156, 111, 243, 0.55);
+      }
+      /* The rim is light on the top face only, dying away across the caps. */
+      button.primary::before {
+        -webkit-mask-image:
+          linear-gradient(180deg, #000 0%, #000 4%, transparent 30%, transparent 100%),
+          linear-gradient(90deg, transparent 4.486%, rgba(0, 0, 0, 0.82) 11.589%, #000 26.542%, #000 73.458%, rgba(0, 0, 0, 0.82) 88.411%, transparent 95.514%);
+        -webkit-mask-composite: source-in;
+        mask-image:
+          linear-gradient(180deg, #000 0%, #000 4%, transparent 30%, transparent 100%),
+          linear-gradient(90deg, transparent 4.486%, rgba(0, 0, 0, 0.82) 11.589%, #000 26.542%, #000 73.458%, rgba(0, 0, 0, 0.82) 88.411%, transparent 95.514%);
+        mask-composite: intersect;
+      }
+      button.primary:hover:not(:disabled),
+      button.primary:focus-visible {
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.1) 18%, rgba(255, 255, 255, 0) 100%),
+          rgba(156, 111, 243, 0.36);
+      }
+
+      /* The same glass tinted white. Its rim closes all the way round: on
+         white it is the button's edge, not a highlight. */
+      button.ghost {
+        --rim-1: rgba(255, 255, 255, 0.88);
+        --rim-2: rgba(255, 255, 255, 0.34);
+        height: 36px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.44) 0%, rgba(255, 255, 255, 0.16) 100%),
+          rgba(255, 255, 255, 0.26);
+        color: var(--text);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.95),
+          inset 0 0 0 1px rgba(139, 107, 224, 0.14),
+          0 1px 2px rgba(46, 42, 56, 0.05),
+          0 12px 28px -14px rgba(46, 42, 56, 0.16);
+      }
+      button.ghost:hover:not(:disabled),
+      button.ghost:focus-visible {
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.44) 0%, rgba(255, 255, 255, 0.16) 100%),
+          rgba(255, 255, 255, 0.52);
+      }
+      button.small {
+        flex: 0 0 auto;
+        width: auto;
+        height: 30px;
+        padding: 0 12px;
+        font-size: 12px;
+      }
+
+      /* Natively draws no focus rings; keyboard focus shows as the hover tint.
+         The text field keeps its focus edge. */
+      :focus-visible { outline: none; }
+
+      /* ── Shortcuts: what to press, then what it does ─────── */
+      .keys {
+        display: grid;
+        gap: 8px;
+        margin-top: 14px;
+      }
+      .keys-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 12.5px;
+        font-weight: 500;
+      }
+      .keys-caps {
+        display: inline-flex;
+        gap: 4px;
+        /* As wide as "Ctrl" and one key, so the labels line up on either keyboard. */
+        min-width: 62px;
+      }
+      kbd {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 24px;
+        height: 24px;
+        padding: 0 7px;
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        background: #ffffff;
+        box-shadow: 0 1.5px 0 var(--border);
+        font-family: inherit;
+        font-size: 11.5px;
+        font-weight: 600;
+        line-height: 1;
+        color: var(--text);
+      }
+      .keys-note {
+        margin: 2px 0 0;
+        font-size: 11.5px;
+        line-height: 1.45;
+        color: var(--text-3);
+      }
+
+      /* ── Pairing ───────────────────────────────────────────── */
+      .hint {
+        margin: 12px 0 0;
+        font-size: 11.5px;
+        line-height: 1.5;
+        color: var(--text-2);
+      }
+      .hint strong { color: var(--text); font-weight: 600; }
+
+      details { margin-top: 10px; }
+      summary {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 0;
+        font-size: 11.5px;
+        font-weight: 500;
+        color: var(--text-2);
+        cursor: pointer;
+        list-style: none;
+        user-select: none;
+        transition: color 0.15s var(--ease);
+      }
+      summary:hover,
+      summary:focus-visible { color: var(--text); }
+      summary::-webkit-details-marker { display: none; }
+      summary::before {
+        content: '';
+        width: 5px;
+        height: 5px;
+        border-right: 1.5px solid currentColor;
+        border-bottom: 1.5px solid currentColor;
+        transform: rotate(-45deg);
+        transition: transform 0.18s var(--ease);
+      }
+      details[open] summary::before { transform: translateY(-1px) rotate(45deg); }
+
       label {
         display: block;
-        font-size: 10px;
-        font-weight: 600;
-        color: var(--text-3);
-        margin: 8px 0 5px;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
+        margin: 8px 0 6px;
+        font-size: 11.5px;
+        font-weight: 500;
+        color: var(--text-2);
       }
       input {
         width: 100%;
         height: 36px;
-        padding: 0 10px;
-        border-radius: 9px;
+        padding: 0 12px;
         border: 1px solid var(--border);
+        border-radius: 10px;
         background: var(--surface-2);
         color: var(--text);
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         font-size: 12px;
         transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease),
           background 0.15s var(--ease);
@@ -194,108 +316,107 @@
       input:focus {
         outline: none;
         border-color: var(--accent);
-        background: #1E1E22;
+        background: #ffffff;
         box-shadow: 0 0 0 3px var(--accent-ring);
       }
+      input + button { margin-top: 8px; }
 
-      details { margin-top: 10px; }
-      summary {
-        font-size: 11px;
-        font-weight: 500;
-        color: var(--text-2);
-        cursor: pointer;
-        list-style: none;
-        padding: 4px 0;
-        user-select: none;
-        transition: color 0.15s var(--ease);
+      /* ── Setup: one-time Chrome permissions ────────────────── */
+      /* Each row leaves once given; with none left, so does the card, and the
+         popup is the website's again. */
+      .setup { display: grid; gap: 12px; }
+      .setup:not(:has(.setup-row:not(.hidden))) { display: none; }
+      .setup-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
       }
-      summary:hover { color: var(--text); }
-      summary::-webkit-details-marker { display: none; }
-      summary::before {
-        content: '▸';
-        display: inline-block;
-        margin-right: 6px;
-        color: var(--text-3);
-        transition: transform 0.18s var(--ease);
+      .setup-text {
+        display: grid;
+        gap: 2px;
+        min-width: 0;
+        flex: 1 1 auto;
       }
-      details[open] summary::before { transform: rotate(90deg); }
+      .setup-title { font-size: 12.5px; font-weight: 600; }
+      .setup-sub { font-size: 11.5px; line-height: 1.4; color: var(--text-3); }
 
-      .mt { margin-top: 8px; }
-      .hint { font-size: 11px; color: var(--text-2); margin-top: 10px; line-height: 1.5; }
-      .hint strong { color: var(--text); font-weight: 600; }
+      .hidden { display: none !important; }
 
-      kbd {
-        display: inline-block;
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.10);
-        border-radius: 6px;
-        padding: 2px 6px;
-        font-size: 10px;
-        font-weight: 600;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        color: var(--text);
-        box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
-        line-height: 1;
-      }
-
-      .msg { font-size: 11px; margin-top: 10px; line-height: 1.45; min-height: 14px; }
-      .msg.ok { color: var(--ok); }
-      .msg.err { color: var(--err); }
-      .msg.warn { color: var(--warn); }
-      .hidden { display: none; }
-
-      /* ── Accessibility ─────────────────────────────────────── */
-      :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 10px; }
-      button:focus-visible { outline-offset: 3px; }
       @media (prefers-reduced-motion: reduce) {
-        * { transition: none !important; }
-        .dot.green { box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18); }
+        * { transition: none !important; animation: none !important; }
+        button:active { transform: none; }
       }
     </style>
   </head>
   <body>
     <header class="brand">
-      <img class="logo" src="icons/icon_128x128.png" alt="" width="30" height="30" />
-      <div class="brand-text">
-        <span class="wordmark">Natively</span>
-        <span class="product">Page Context</span>
+      <!-- The site's wordmark (natively-website src/assets/brand/natively-wordmark-black.svg). -->
+      <svg class="brand-word" role="img" aria-label="natively" width="80.0977" height="22" viewBox="21.3709 0 80.0977 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <g clip-path="url(#natively-wordmark-clip)">
+      <path d="M21.3709 16.6829V4.5781H23.6032L23.9023 6.0509H24.0174Q24.5927 5.1994 25.4672 4.7737Q26.3417 4.3479 27.3313 4.3479Q28.643 4.3479 29.6556 4.9348Q30.6681 5.5216 31.2435 6.6377Q31.8188 7.7539 31.8188 9.2497V16.6829H29.1723V9.5259Q29.1723 8.2141 28.4934 7.4777Q27.8145 6.7413 26.6639 6.7413Q25.5132 6.7413 24.7653 7.5352Q24.0174 8.3292 24.0174 9.5259V16.6829Z" fill="black"/>
+      <path transform="translate(-3.2218 0)" d="M47.1234 8.81246V16.6829H44.8912L44.592 15.2101H44.4769C44.2008 15.655 43.7597 16.05 43.1537 16.3952C42.5477 16.7404 41.8304 16.913 41.002 16.913C40.1582 16.913 39.4179 16.7519 38.7812 16.4298C38.1445 16.1076 37.6536 15.6627 37.3084 15.095C36.9632 14.5274 36.7906 13.883 36.7906 13.1619C36.7906 12.0573 37.1972 11.156 38.0103 10.4579C38.8234 9.75983 39.9587 9.4108 41.4162 9.4108H44.4769V8.74342C44.4769 8.08372 44.2621 7.5736 43.8326 7.21306C43.403 6.85252 42.82 6.67226 42.0836 6.67226C41.5313 6.67226 41.0633 6.79116 40.6798 7.02896C40.2962 7.26676 40.0354 7.57743 39.8973 7.96098H37.2048C37.4656 6.88704 38.0218 6.01639 38.8733 5.34901C39.7247 4.68163 40.8179 4.34795 42.1526 4.34795C43.7175 4.34795 44.9372 4.73917 45.8117 5.52161C46.6862 6.30405 47.1234 7.401 47.1234 8.81246ZM44.4769 11.9652V11.4359H41.4852C40.8102 11.4359 40.3001 11.5817 39.9549 11.8732C39.6097 12.1647 39.4371 12.5482 39.4371 13.0238C39.4371 13.5148 39.6135 13.9098 39.9664 14.209C40.3192 14.5082 40.8255 14.6578 41.4852 14.6578C42.3904 14.6578 43.1153 14.4085 43.66 13.9098C44.2046 13.4112 44.4769 12.763 44.4769 11.9652Z" fill="black"/>
+      <path transform="translate(-3.2218 0)" d="M54.1815 16.6829C53.0769 16.6829 52.2177 16.3876 51.604 15.7969C50.9904 15.2062 50.6835 14.3893 50.6835 13.346V7.04047H48.7734V4.57808H50.6835L51.0517 1.35626H53.33V4.57808H56.2987V7.04047H53.33V12.9778C53.33 13.346 53.4451 13.6452 53.6752 13.8753C53.9053 14.1054 54.2045 14.2205 54.5727 14.2205H56.2987V16.6829H54.1815Z" fill="black"/>
+      <path transform="translate(-3.2218 0)" d="M60.9714 16.6829H58.3249V5.26326H60.9714V16.6829ZM58.0487 2.09355C58.0487 1.67381 58.2021 1.31559 58.509 1.01888C58.8158 0.722176 59.1994 0.573822 59.6596 0.573822C60.1045 0.573822 60.4804 0.722176 60.7873 1.01888C61.0941 1.31559 61.2475 1.67381 61.2475 2.09355C61.2475 2.51328 61.0941 2.86788 60.7873 3.15735C60.4804 3.44683 60.1045 3.59156 59.6596 3.59156C59.2147 3.59156 58.835 3.44683 58.5205 3.15735C58.206 2.86788 58.0487 2.51328 58.0487 2.09355Z" fill="black"/>
+      <path transform="translate(-3.2218 0)" d="M70.2608 16.6829H67.039L62.5975 4.57808H65.4281L68.6269 13.8523H68.7419L71.8947 4.57808H74.7023L70.2608 16.6829Z" fill="black"/>
+      <path transform="translate(-3.2218 0)" d="M81.6165 4.5274C82.2016 4.52213 82.515 4.54846 82.9225 4.63269C83.215 4.6906 83.6329 4.81168 83.8471 4.90117C84.0665 4.9854 84.4165 5.16439 84.6307 5.30127C84.8606 5.43814 85.2262 5.74874 85.4926 6.0225C85.7956 6.3278 86.0516 6.6542 86.2083 6.9227C86.3441 7.1491 86.5113 7.486 86.5844 7.6703C86.6628 7.8492 86.7829 8.2072 86.8561 8.4599C86.9292 8.7126 87.0232 9.1864 87.065 9.5128C87.1068 9.8392 87.1382 10.4025 87.1382 10.7605C87.1382 11.2343 87.1225 11.4291 87.0755 11.4606C87.0389 11.4817 85.1165 11.4922 78.5971 11.4659L78.6389 11.7818C78.6598 11.9608 78.7434 12.2977 78.8217 12.5398C78.9001 12.7767 79.0516 13.1084 79.1613 13.2769C79.271 13.4401 79.4591 13.677 79.5844 13.8033C79.715 13.9244 79.9292 14.0876 80.0702 14.1665C80.2113 14.2455 80.5091 14.3613 80.7389 14.4192C81.0106 14.4877 81.324 14.5245 81.627 14.5245C81.9352 14.5245 82.2486 14.4877 82.515 14.4192C82.7449 14.3613 83.0426 14.2508 83.168 14.1823C83.2986 14.1086 83.5128 13.9612 83.6382 13.8507C83.7688 13.7401 83.9934 13.4716 84.1344 13.2611C84.2755 13.0452 84.3904 12.861 84.3956 12.8557C84.3956 12.8504 84.8188 12.9768 85.3359 13.1347C85.8531 13.2927 86.4382 13.4716 86.9814 13.6296L86.7829 14.0402C86.668 14.2613 86.4695 14.593 86.3389 14.7772C86.2031 14.9562 85.9732 15.23 85.8217 15.3826C85.6703 15.5353 85.3934 15.7669 85.2053 15.9038C85.0225 16.0354 84.7143 16.2302 84.5262 16.3302C84.3434 16.4355 83.9777 16.5934 83.7165 16.6829C83.4605 16.7724 83.0479 16.883 82.8023 16.9251C82.562 16.9672 82.0762 16.9988 81.7314 16.9988C81.3867 16.9988 80.8852 16.962 80.6083 16.9198C80.3367 16.8725 79.9083 16.7672 79.6576 16.6829C79.4068 16.5987 79.0777 16.4618 78.9262 16.3881C78.7747 16.3092 78.4874 16.1354 78.2837 15.9986C78.0852 15.8617 77.7822 15.6195 77.615 15.4669C77.4426 15.3089 77.1658 14.9931 76.9934 14.7614C76.821 14.5298 76.565 14.1034 76.424 13.8138C76.2829 13.5243 76.121 13.1347 76.0688 12.9452C76.0113 12.7609 75.9277 12.3924 75.8859 12.1292C75.8337 11.8397 75.8023 11.3448 75.8023 10.8394C75.8076 10.3814 75.8389 9.8181 75.8807 9.5497C75.9225 9.2917 76.0165 8.8653 76.0949 8.6021C76.168 8.3441 76.3195 7.9387 76.4344 7.7071C76.5441 7.4755 76.7374 7.1333 76.8576 6.9438C76.9829 6.7595 77.2494 6.4279 77.4583 6.2067C77.662 5.99091 78.0016 5.69084 78.2158 5.54343C78.4247 5.39603 78.7486 5.20124 78.9262 5.11175C79.1038 5.01699 79.4225 4.88538 79.6314 4.81694C79.8404 4.74324 80.1956 4.65375 80.4255 4.61163C80.6605 4.56951 81.1882 4.53266 81.6165 4.5274ZM80.53 6.9964C80.3576 7.0596 80.1225 7.1649 80.0076 7.228C79.8926 7.2965 79.6837 7.4702 79.5374 7.6123C79.3964 7.7598 79.1926 8.0388 79.0882 8.2388C78.9837 8.4389 78.8479 8.7705 78.7852 8.9706C78.7277 9.1759 78.6755 9.3707 78.6755 9.4075C78.6755 9.4602 79.2867 9.4707 81.5486 9.4707C84.2546 9.4707 84.4217 9.4654 84.4217 9.3812C84.4217 9.3285 84.3747 9.0916 84.3173 8.8547C84.2598 8.6126 84.1449 8.2757 84.0561 8.1019C83.9725 7.9282 83.8001 7.6755 83.68 7.5439C83.5598 7.4123 83.3613 7.2438 83.2464 7.1807C83.1314 7.1122 82.9329 7.0175 82.8023 6.9701C82.677 6.9227 82.3792 6.8701 82.1494 6.849C81.9195 6.8279 81.5329 6.8279 81.2874 6.849C81.0471 6.8701 80.7023 6.9332 80.53 6.9964Z" fill="black"/>
+      <path transform="translate(-3.2218 0)" d="M89.0188 0.573822H91.6307V16.6829H89.0188V0.573822Z" fill="black"/>
+      <path transform="translate(-3.2218 0)" d="M95.6008 4.83801L95.8673 5.53818C96.0135 5.92248 96.7344 7.79661 97.4762 9.70231C98.2128 11.6133 98.8397 13.1821 98.8658 13.1926C98.8971 13.1979 99.6232 11.3238 102.052 4.84327L104.69 4.83801L104.57 5.16967C104.502 5.34866 103.029 9.19171 101.295 13.7085C99.5658 18.2254 98.124 21.9421 98.0926 21.9631C98.0613 21.9842 97.5232 22 96.8964 22C96.0344 22 95.7523 21.9842 95.7314 21.9368C95.721 21.9 96.1389 20.6839 97.6173 16.604L97.2934 15.8143C97.121 15.3826 96.0553 12.7452 94.9322 9.96031C93.8091 7.17011 92.8844 4.88013 92.8844 4.86433C92.8844 4.8538 93.4956 4.83801 95.6008 4.83801Z" fill="black"/>
+      </g>
+      <defs>
+      <clipPath id="natively-wordmark-clip">
+      <rect width="83.3195" height="22" fill="black" transform="translate(21.3709)"/>
+      </clipPath>
+      </defs>
+      </svg>
+      <div class="corner" aria-live="polite">
+        <span id="statusText" class="status hidden"></span>
+        <span id="msg" class="msg"></span>
       </div>
     </header>
 
-    <div class="status-row">
-      <span id="dot" class="dot"></span>
-      <span id="statusText" class="status-text">Checking…</span>
-    </div>
-
     <!-- Pairing (shown when unpaired or re-pair needed) -->
-    <div id="pairCard" class="card hidden">
+    <section id="pairCard" class="card hidden">
       <button id="connectBtn" class="primary">Connect to Natively</button>
-      <div class="hint">
-        In Natively → Settings → Phone Mirror → Browser Extension, click
-        <strong>Connect browser extension</strong>, then press this within 60s.
-      </div>
-      <details class="mt">
+      <p class="hint">
+        In Natively, open <strong>Settings › Companion</strong> and click <strong>Connect</strong>
+        under Browser Extension. Then press this within a minute.
+      </p>
+      <details>
         <summary>Pair manually instead</summary>
         <label for="pairInput">Pairing string (port:token)</label>
         <input id="pairInput" type="text" placeholder="4123:AbC123…" autocomplete="off" spellcheck="false" />
-        <button id="pairBtn" class="ghost mt">Pair</button>
+        <button id="pairBtn" class="ghost">Pair</button>
       </details>
-    </div>
+    </section>
 
     <!-- Capture (shown when paired) -->
-    <div id="captureCard" class="card hidden">
+    <section id="captureCard" class="card hidden">
       <button id="captureBtn" class="primary">Capture this page</button>
-      <button id="allSitesBtn" class="ghost mt">Allow on all sites</button>
-      <button id="meetNamesBtn" class="ghost mt">Read names in Google Meet</button>
-      <button id="unpairBtn" class="ghost mt">Unpair</button>
-      <div class="hint">Hotkey: <kbd>Ctrl/⌘+Y</kbd> (then Enter, ⌘ still held, to ask). Capture pushes once per press.</div>
-      <div id="allSitesHint" class="hint hidden">
-        One browser prompt, then the hotkey captures <strong>any</strong> site — no per-site grants.
-        You can revoke it anytime under the extension's Details → Site access.
+      <button id="unpairBtn" class="ghost">Unpair</button>
+      <div class="keys">
+        <div class="keys-row"><span class="keys-caps"><kbd data-mod>⌘</kbd><kbd>Y</kbd></span><span>Capture this page</span></div>
+        <div class="keys-row"><span class="keys-caps"><kbd data-mod>⌘</kbd><kbd>↵</kbd></span><span>Then ask about it</span></div>
+        <p class="keys-note">Each press sends the page once.</p>
       </div>
-    </div>
+    </section>
 
-    <div id="msg" class="msg"></div>
+    <!-- One-time permissions (shown when paired, until given) -->
+    <section id="setupCard" class="card setup hidden">
+      <div id="allSitesRow" class="setup-row hidden" title="You can take it back in the extension's Details, under Site access.">
+        <div class="setup-text">
+          <span class="setup-title">Capture any site</span>
+          <span class="setup-sub">One Chrome prompt for all sites.</span>
+        </div>
+        <button id="allSitesBtn" class="ghost small">Allow</button>
+      </div>
+      <div id="meetNamesRow" class="setup-row hidden" title="Sent only to Natively on this computer.">
+        <div class="setup-text">
+          <span class="setup-title">Names in Google Meet</span>
+          <span class="setup-sub">Speaker names on transcripts.</span>
+        </div>
+        <button id="meetNamesBtn" class="ghost small">Allow</button>
+      </div>
+    </section>
 
     <script type="module" src="popup.js"></script>
   </body>

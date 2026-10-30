@@ -38,6 +38,8 @@ await build({
     // Shared DOM helpers for the extractors, and origin match-pattern derivation.
     path.join(rootDir, 'src', 'capture', 'extractors', 'dom-helpers.ts'),
     path.join(rootDir, 'src', 'capture', 'originPattern.ts'),
+    // The popup's shortcut keycaps: ⌘ on a Mac, Ctrl elsewhere.
+    path.join(rootDir, 'src', 'hotkey-label.ts'),
   ],
   bundle: true,
   outdir: path.join(rootDir, 'dist-test'),
