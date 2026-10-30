@@ -64,10 +64,53 @@ describe('popup markup', () => {
   test('connected and set up, nothing extra shows: no status, no setup card', () => {
     // The status pill and both permission rows start hidden; the script shows
     // them only when something needs doing.
-    assert.match(html, /id="statusText" class="status hidden"/);
+    assert.match(html, /id="statusText" class="status t-text-swap hidden"/);
     assert.match(html, /id="allSitesRow" class="setup-row hidden"/);
     assert.match(html, /id="meetNamesRow" class="setup-row hidden"/);
     assert.match(html, /\.setup:not\(:has\(\.setup-row:not\(\.hidden\)\)\) \{ display: none; \}/);
-    assert.match(ts, /setStatus\(wsOpen \? null : 'Connecting'\)/);
+    assert.match(ts, /if \(wsOpen\) setStatus\(null\);/);
+  });
+});
+
+describe('popup motion', () => {
+  const html = src('popup.html');
+  const motion = src('popup-motion.ts');
+
+  test('every button keeps its words in a label span the swaps work on', () => {
+    const buttons = [...html.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/g)];
+    assert.ok(buttons.length >= 6, `found ${buttons.length} buttons`);
+    for (const [whole, inner] of buttons) {
+      assert.match(inner, /^<span class="label t-text-swap">[^<]+<\/span>$/, whole);
+    }
+  });
+
+  test('the tokens the script times itself by are defined in the page', () => {
+    const read = [...motion.matchAll(/(?:ms|easing)\('(--[a-z-]+)'\)/g)].map((m) => m[1]);
+    assert.ok(read.length >= 3, `found ${read.length} token reads`);
+    for (const token of new Set(read)) assert.match(html, new RegExp(`${token}:\\s*[^;]+;`), token);
+  });
+
+  test('the closes are no slower than the opens', () => {
+    const value = (token) => parseFloat(html.match(new RegExp(`${token}:\\s*([\\d.]+)ms`))[1]);
+    // Text swap out/in at --duration-quick; cards and the fold at --duration-fast.
+    assert.ok(value('--duration-quick') <= value('--duration-fast'));
+  });
+
+  test('reduced motion keeps the fades and drops the travel, not everything', () => {
+    const reduced = html.slice(html.indexOf('@media (prefers-reduced-motion: reduce)'));
+    assert.doesNotMatch(reduced, /animation: none !important/);
+    assert.match(reduced, /\.card,\s*\.status \{ animation-name: fade-in; \}/);
+    assert.match(reduced, /\.t-text-swap \{ transition-property: opacity; \}/);
+    assert.match(motion, /reducedMotion\(\)\s*\? \[\{ opacity: 1 \}, \{ opacity: 0 \}\]/);
+  });
+
+  test('hover effects are for a real pointer only', () => {
+    const hovers = [...html.matchAll(/^[^\n{]*:hover[^\n{]*\{/gm)].map((m) => m[0].trim());
+    // summary:hover is a colour change, harmless on touch; everything else is gated.
+    const gatedFrom = html.indexOf('@media (hover: hover) and (pointer: fine)');
+    for (const rule of hovers) {
+      if (rule.startsWith('summary:hover')) continue;
+      assert.ok(gatedFrom >= 0 && html.indexOf(rule) > gatedFrom, rule);
+    }
   });
 });

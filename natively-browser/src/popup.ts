@@ -4,6 +4,10 @@
  * itself never holds the token persistently nor talks to the desktop directly.
  * The one exception is chrome.permissions.request: it needs the click's user
  * activation, which never reaches the service worker, so the popup calls it.
+ *
+ * Motion (popup-motion.ts): work in progress shows on the button pressed (its
+ * words shimmer), a result as a drawn check there and a line in the heading's
+ * corner, and a permission row folds away once Chrome has given it.
  */
 import type { CaptureReport, DomPostOutcome, PairFetchOutcome } from './service-worker';
 import {
@@ -11,12 +15,14 @@ import {
   requestOriginPermission,
 } from './capture/permissions';
 import { browserPlatform, modifierKeyLabel } from './hotkey-label';
+import { collapse, flashDone, initButtons, resetButtonLabel, setButtonLabel, shake, swapText } from './popup-motion';
 
 type StatusOutcome = DomPostOutcome | { kind: 'unpaired' };
 type Tone = 'ok' | 'err' | 'warn' | '';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
+const corner = $('corner');
 const statusText = $('statusText');
 const pairCard = $('pairCard');
 const captureCard = $('captureCard');
@@ -39,21 +45,39 @@ const msg = $('msg');
 const modifier = modifierKeyLabel(browserPlatform(navigator as Navigator & { userAgentData?: { platform?: string } }));
 for (const key of document.querySelectorAll<HTMLElement>('kbd[data-mod]')) key.textContent = modifier;
 
+initButtons(document);
+
 function send<R>(message: unknown): Promise<R> {
   return chrome.runtime.sendMessage(message) as Promise<R>;
 }
 
-/** The heading's corner pill; `null` when all is well (connected, it shows nothing). */
-function setStatus(text: string | null, tone: Tone = ''): void {
-  statusText.textContent = text ?? '';
-  statusText.className = 'status' + (tone ? ` ${tone}` : '') + (text ? '' : ' hidden');
+/**
+ * The heading's corner pill; `null` when all is well (connected, it shows
+ * nothing). A pill already showing swaps its words; one arriving pops in
+ * (CSS); one leaving just goes. `pending` shimmers ("Connecting").
+ */
+function setStatus(text: string | null, tone: Tone | 'pending' = ''): void {
+  const apply = (): void => {
+    statusText.textContent = text ?? '';
+    statusText.className = 'status t-text-swap' + (tone ? ` ${tone}` : '') + (text ? '' : ' hidden');
+    statusText.classList.toggle('t-shimmer', tone === 'pending');
+    if (tone === 'pending' && text) statusText.dataset.text = text;
+    else delete statusText.dataset.text;
+  };
+  const showing = !statusText.classList.contains('hidden') && statusText.getClientRects().length > 0;
+  if (showing && text) swapText(statusText, apply);
+  else apply();
 }
 
+/** The corner's message: swapped in place; an error also shakes the corner. */
 function setMsg(text: string, kind: Tone): void {
-  msg.textContent = text;
-  // Two lines at most in the corner; the whole message on hover.
-  msg.title = text;
-  msg.className = 'msg' + (kind ? ` ${kind}` : '');
+  swapText(msg, () => {
+    msg.textContent = text;
+    // Two lines at most in the corner; the whole message on hover.
+    msg.title = text;
+    msg.className = 'msg t-text-swap' + (kind ? ` ${kind}` : '');
+    if (kind === 'err') shake(corner);
+  });
 }
 
 /** "https://www.youtube.com/*" -> "www.youtube.com" (display only). */
@@ -70,7 +94,7 @@ function describe(outcome: DomPostOutcome): { text: string; kind: 'ok' | 'err' |
     case 'no-session':
       return { text: 'Start a session in Natively, then capture again.', kind: 'warn' };
     case 'refused':
-      return { text: 'Open Natively and turn on Phone Mirror.', kind: 'err' };
+      return { text: 'Turn on Phone Mirror.', kind: 'err' };
     case 'rate-limited':
       return { text: 'Too many requests. Wait a moment, then retry.', kind: 'warn' };
     case 'too-large':
@@ -86,6 +110,7 @@ function describe(outcome: DomPostOutcome): { text: string; kind: 'ok' | 'err' |
   }
 }
 
+/** Swaps the pairing card for the capture card or back; the one arriving rises in (CSS). */
 function showPaired(paired: boolean): void {
   pairCard.classList.toggle('hidden', paired);
   captureCard.classList.toggle('hidden', !paired);
@@ -96,6 +121,7 @@ function showPaired(paired: boolean): void {
 async function refreshStatus(): Promise<void> {
   const outcome = await send<StatusOutcome>({ type: 'status' });
   if (outcome.kind === 'unpaired' || outcome.kind === 'unauthorized') {
+    // The pill says which; the card under it says what to do.
     setStatus(outcome.kind === 'unauthorized' ? 'Pairing expired' : 'Not paired', outcome.kind === 'unauthorized' ? 'warn' : '');
     showPaired(false);
     if (outcome.kind === 'unauthorized') setMsg('Pairing expired. Connect again.', 'warn');
@@ -111,7 +137,8 @@ async function refreshStatus(): Promise<void> {
       const r = await send<{ open: boolean }>({ type: 'ws-status' });
       wsOpen = !!r?.open;
     } catch { /* ignore */ }
-    setStatus(wsOpen ? null : 'Connecting');
+    if (wsOpen) setStatus(null);
+    else setStatus('Connecting', 'pending');
     return;
   }
   // Paired but desktop unreachable (refused / error / rate-limited).
@@ -128,46 +155,55 @@ function describePair(outcome: PairFetchOutcome): { text: string; kind: 'ok' | '
     case 'forbidden':
       return { text: 'Natively refused the pairing.', kind: 'err' };
     case 'refused':
-      return { text: 'Open Natively and turn on Phone Mirror.', kind: 'err' };
+      return { text: 'Turn on Phone Mirror.', kind: 'err' };
     case 'error':
       return { text: outcome.message, kind: 'err' };
   }
 }
 
+/** A moment on the check before the capture card takes the pairing card's place. */
+const PAIRED_HOLD_MS = 600;
+
 connectBtn.addEventListener('click', async () => {
   connectBtn.disabled = true;
-  setMsg('Connecting…', '');
+  setButtonLabel(connectBtn, { text: 'Connecting…', busy: true });
   const outcome = await send<PairFetchOutcome>({ type: 'autopair' });
-  connectBtn.disabled = false;
   if (outcome.kind === 'paired') {
     setMsg('Connected.', 'ok');
+    await flashDone(connectBtn, 'Connected', PAIRED_HOLD_MS, false);
     await refreshStatus();
+    resetButtonLabel(connectBtn);
   } else {
+    setButtonLabel(connectBtn);
     const d = describePair(outcome);
     setMsg(d.text, d.kind);
   }
+  connectBtn.disabled = false;
 });
 
 pairBtn.addEventListener('click', async () => {
   const value = pairInput.value.trim();
   if (!value) return;
   pairBtn.disabled = true;
-  setMsg('Pairing…', '');
+  setButtonLabel(pairBtn, { text: 'Pairing…', busy: true });
   const outcome = await send<DomPostOutcome>({ type: 'pair', value });
-  pairBtn.disabled = false;
   if (outcome.kind === 'success') {
     pairInput.value = '';
     setMsg('Paired.', 'ok');
+    await flashDone(pairBtn, 'Paired', PAIRED_HOLD_MS, false);
     await refreshStatus();
+    resetButtonLabel(pairBtn);
   } else {
+    setButtonLabel(pairBtn);
     const d = describe(outcome);
     setMsg(d.text, d.kind);
   }
+  pairBtn.disabled = false;
 });
 
 captureBtn.addEventListener('click', async () => {
   captureBtn.disabled = true;
-  setMsg('Capturing…', '');
+  setButtonLabel(captureBtn, { text: 'Capturing…', busy: true });
   let report = await send<CaptureReport>({ type: 'capture' });
 
   // This click is a user gesture, and chrome.permissions.request requires one.
@@ -181,7 +217,7 @@ captureBtn.addEventListener('click', async () => {
     const grant = await requestOriginPermission(chrome.permissions, origin);
     if (grant.granted) {
       void send({ type: 'clear-grant-nudge' }).catch(() => {});
-      setMsg('Access given. Capturing…', '');
+      setMsg('Access given.', 'ok');
       report = await send<CaptureReport>({ type: 'capture' });
     }
   }
@@ -190,8 +226,45 @@ captureBtn.addEventListener('click', async () => {
   const d = describe(report.outcome);
   const suffix = report.outcome.kind === 'success' && report.chars ? ` (${report.chars} chars)` : '';
   setMsg(d.text + suffix, d.kind);
+  if (report.outcome.kind === 'success') void flashDone(captureBtn, 'Sent');
+  else setButtonLabel(captureBtn);
   if (report.outcome.kind === 'unauthorized') await refreshStatus();
 });
+
+/** Whether Chrome has given what `type` asks the service worker about. */
+async function granted(type: 'all-sites-status' | 'meet-reader-status'): Promise<boolean> {
+  try {
+    const r = await send<{ granted: boolean }>({ type });
+    return !!r?.granted;
+  } catch {
+    return false; // shown, so it can still be asked for
+  }
+}
+
+/**
+ * Shows the permission rows Chrome has not given yet. With `fold`, a row that
+ * goes folds away first (the whole card when it was the last), so the popup
+ * closes up in one move. All sites covers meet.google.com too.
+ */
+async function syncSetup(fold = false): Promise<void> {
+  const [allSites, meet] = await Promise.all([granted('all-sites-status'), granted('meet-reader-status')]);
+  const rows: Array<[HTMLElement, boolean]> = [[allSitesRow, allSites], [meetNamesRow, meet]];
+  const apply = (): void => {
+    for (const [row, given] of rows) row.classList.toggle('hidden', given);
+  };
+  const shown = rows.filter(([row]) => !row.classList.contains('hidden'));
+  const leaving = shown.filter(([, given]) => given).map(([row]) => row);
+  if (!fold || !leaving.length || setupCard.classList.contains('hidden')) return apply();
+  if (leaving.length === shown.length) return collapse(setupCard, apply);
+  // One of two rows goes: it takes the gap beside it along.
+  const [row] = leaving;
+  const gap = `-${getComputedStyle(setupCard).rowGap}`;
+  const staysAfter = shown.some(([other]) => other !== row && (row.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING));
+  await collapse(row, apply, staysAfter ? { bottom: gap } : { top: gap });
+}
+
+/** How long a given permission's check shows before its row folds away. */
+const GIVEN_HOLD_MS = 700;
 
 // One-time blanket grant: a single Chrome prompt covering https://*/* +
 // http://*/* (declared in optional_host_permissions), after which the desktop
@@ -202,40 +275,32 @@ captureBtn.addEventListener('click', async () => {
 allSitesBtn.addEventListener('click', async () => {
   allSitesBtn.disabled = true;
   const r = await requestAllSitesPermission(chrome.permissions);
-  allSitesBtn.disabled = false;
   if (r.granted) {
     void send({ type: 'clear-grant-nudge' }).catch(() => {});
     setMsg(r.alreadyHad ? 'Already allowed on all sites.' : 'Allowed on all sites. The hotkey works anywhere now.', 'ok');
-    await refreshAllSites();
-    // All sites covers meet.google.com too.
-    await refreshMeetNames();
+    await flashDone(allSitesBtn, '', GIVEN_HOLD_MS, false);
+    await syncSetup(true);
+    resetButtonLabel(allSitesBtn);
   } else {
     setMsg('Not allowed. Capture still asks site by site.', 'warn');
   }
+  allSitesBtn.disabled = false;
 });
 
 meetNamesBtn.addEventListener('click', async () => {
   meetNamesBtn.disabled = true;
   const r = await requestOriginPermission(chrome.permissions, 'https://meet.google.com/*');
-  meetNamesBtn.disabled = false;
   if (r.granted) {
     await send({ type: 'meet-reader-refresh' }).catch(() => {});
     setMsg('Meet transcripts will show names.', 'ok');
-    await refreshMeetNames();
+    await flashDone(meetNamesBtn, '', GIVEN_HOLD_MS, false);
+    await syncSetup(true);
+    resetButtonLabel(meetNamesBtn);
   } else {
     setMsg('Not allowed. Meet transcripts keep "Speaker 1".', 'warn');
   }
+  meetNamesBtn.disabled = false;
 });
-
-/** Hide the Meet row once meet.google.com is allowed (all sites covers it too). */
-async function refreshMeetNames(): Promise<void> {
-  try {
-    const r = await send<{ granted: boolean }>({ type: 'meet-reader-status' });
-    meetNamesRow.classList.toggle('hidden', !!r?.granted);
-  } catch {
-    meetNamesRow.classList.remove('hidden');
-  }
-}
 
 unpairBtn.addEventListener('click', async () => {
   await send({ type: 'unpair' });
@@ -248,15 +313,5 @@ pairInput.addEventListener('keydown', (e) => {
 });
 
 void refreshStatus();
-void refreshAllSites();
-void refreshMeetNames();
-
-/** Hide the all-sites row once granted. Hidden until known, so a granted one never flashes. */
-async function refreshAllSites(): Promise<void> {
-  try {
-    const r = await send<{ granted: boolean }>({ type: 'all-sites-status' });
-    allSitesRow.classList.toggle('hidden', !!r?.granted);
-  } catch {
-    allSitesRow.classList.remove('hidden');
-  }
-}
+// Rows start hidden, so a permission already given never flashes in.
+void syncSetup();

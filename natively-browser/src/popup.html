@@ -31,7 +31,23 @@
         --warn: #8f5f00;
         --err: #b9302a;
 
-        --ease: cubic-bezier(0.22, 1, 0.36, 1);
+        /* Motion tokens (transitions.dev's scale); popup-motion.ts reads the
+           durations and the easing, so the timers follow these. */
+        --duration-stagger: 40ms;
+        --duration-micro: 80ms;
+        --duration-quick: 150ms;
+        --duration-fast: 250ms;
+        --duration-very-slow: 500ms;
+        --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+        --ease-bounce: cubic-bezier(0.34, 1.36, 0.64, 1);
+        --distance-micro: 4px;
+        --distance-small: 6px;
+        --distance-base: 8px;
+        --blur-small: 2px;
+        --blur-large: 8px;
+
+        /* Lets "Pair manually instead" grow to its content's height. */
+        interpolate-size: allow-keywords;
       }
 
       * { box-sizing: border-box; }
@@ -80,6 +96,12 @@
         font-size: 11px;
         font-weight: 600;
         white-space: nowrap;
+        /* It arrives like a badge: a small pop from the corner. */
+        transform-origin: right center;
+        animation: pill-in var(--duration-fast) var(--ease-bounce) backwards;
+      }
+      @keyframes pill-in {
+        from { opacity: 0; transform: scale(0.96); }
       }
       .status.warn { background: rgba(217, 138, 11, 0.12); color: var(--warn); }
       .status.err { background: rgba(220, 59, 52, 0.1); color: var(--err); }
@@ -95,15 +117,11 @@
         font-size: 11px;
         line-height: 16px;
         color: var(--text-2);
-        animation: msg-in 180ms var(--ease);
       }
       .msg:empty { display: none; }
       .msg.ok { color: var(--ok); }
       .msg.warn { color: var(--warn); }
       .msg.err { color: var(--err); }
-      @keyframes msg-in {
-        from { opacity: 0; transform: translateY(-2px); }
-      }
 
       /* ── Cards ─────────────────────────────────────────────── */
       .card {
@@ -113,6 +131,14 @@
         box-shadow: 0 1px 2px rgba(76, 46, 122, 0.05);
         padding: 14px;
         margin-bottom: 10px;
+        /* A card arrives with a short rise: on open, where it waits on the
+           service worker's answer and would otherwise pop in, and when pairing
+           swaps one card for the other. The setup card follows a beat later. */
+        animation: card-in var(--duration-fast) var(--ease-smooth-out) backwards;
+      }
+      #setupCard { animation-delay: var(--duration-stagger); }
+      @keyframes card-in {
+        from { opacity: 0; transform: translateY(var(--distance-base)); }
       }
 
       /* ── Buttons: the site's Liquid Glass ──────────────────── */
@@ -133,8 +159,20 @@
         font-weight: 600;
         cursor: pointer;
         transition:
-          transform 110ms var(--ease),
+          transform var(--duration-quick) var(--ease-smooth-out),
           background-color 300ms cubic-bezier(0.37, 0, 0.63, 1);
+      }
+      /* The words, swapped in place for "Capturing…", a check, and back. */
+      /* One line tall at the line's top, so the words sit where bare text
+         would, and a check alone is centred on the same line. */
+      button .label {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        height: 1lh;
+        white-space: nowrap;
+        vertical-align: top;
       }
       button::before {
         content: '';
@@ -144,8 +182,12 @@
         box-shadow: inset 0 0 0 1px var(--rim-1), inset 0 0 0 2px var(--rim-2);
         pointer-events: none;
       }
-      button:active { transform: scale(0.985); }
-      button:disabled { cursor: default; transform: none; filter: saturate(0.4) brightness(0.92); }
+      /* Pressed, it gives a little; a small pill gives more, to be felt. */
+      button:active:not(:disabled) { transform: scale(0.98); }
+      button.small:active:not(:disabled) { transform: scale(0.96); }
+      button:disabled { cursor: default; }
+      /* Dimmed only when it cannot be used, not while it works or shows done. */
+      button:disabled:not([aria-busy]):not([data-done]) { filter: saturate(0.4) brightness(0.92); }
       button + button { margin-top: 8px; }
 
       button.primary {
@@ -171,7 +213,6 @@
           linear-gradient(90deg, transparent 4.486%, rgba(0, 0, 0, 0.82) 11.589%, #000 26.542%, #000 73.458%, rgba(0, 0, 0, 0.82) 88.411%, transparent 95.514%);
         mask-composite: intersect;
       }
-      button.primary:hover:not(:disabled),
       button.primary:focus-visible {
         background:
           linear-gradient(180deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.1) 18%, rgba(255, 255, 255, 0) 100%),
@@ -194,11 +235,23 @@
           0 1px 2px rgba(46, 42, 56, 0.05),
           0 12px 28px -14px rgba(46, 42, 56, 0.16);
       }
-      button.ghost:hover:not(:disabled),
       button.ghost:focus-visible {
         background:
           linear-gradient(180deg, rgba(255, 255, 255, 0.44) 0%, rgba(255, 255, 255, 0.16) 100%),
           rgba(255, 255, 255, 0.52);
+      }
+      /* Hover thickens the tint, for a real pointer only. */
+      @media (hover: hover) and (pointer: fine) {
+        button.primary:hover:not(:disabled) {
+          background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.1) 18%, rgba(255, 255, 255, 0) 100%),
+            rgba(156, 111, 243, 0.36);
+        }
+        button.ghost:hover:not(:disabled) {
+          background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.44) 0%, rgba(255, 255, 255, 0.16) 100%),
+            rgba(255, 255, 255, 0.52);
+        }
       }
       button.small {
         flex: 0 0 auto;
@@ -247,6 +300,18 @@
         font-weight: 600;
         line-height: 1;
         color: var(--text);
+        transition:
+          transform var(--duration-quick) var(--ease-smooth-out),
+          box-shadow var(--duration-quick) var(--ease-smooth-out);
+      }
+      /* Hovering a shortcut plays it: its keys go down one after the other, as
+         the hand presses them, and come up together. */
+      @media (hover: hover) and (pointer: fine) {
+        .keys-row:hover kbd {
+          transform: translateY(1.5px);
+          box-shadow: 0 0 0 var(--border);
+        }
+        .keys-row:hover kbd + kbd { transition-delay: var(--duration-micro); }
       }
       .keys-note {
         margin: 2px 0 0;
@@ -276,7 +341,7 @@
         cursor: pointer;
         list-style: none;
         user-select: none;
-        transition: color 0.15s var(--ease);
+        transition: color var(--duration-quick) var(--ease-smooth-out);
       }
       summary:hover,
       summary:focus-visible { color: var(--text); }
@@ -288,13 +353,39 @@
         border-right: 1.5px solid currentColor;
         border-bottom: 1.5px solid currentColor;
         transform: rotate(-45deg);
-        transition: transform 0.18s var(--ease);
+        transition: transform var(--duration-fast) var(--ease-smooth-out);
       }
       details[open] summary::before { transform: translateY(-1px) rotate(45deg); }
+      /* It grows open and folds shut at one pace (an accordion), with the
+         chevron turning alongside. Chrome 131 on; before that it just opens. */
+      details::details-content {
+        block-size: 0;
+        overflow: clip;
+        /* Room for the field's focus edge. */
+        overflow-clip-margin: 6px;
+        opacity: 0;
+        transition:
+          block-size var(--duration-fast) var(--ease-smooth-out),
+          opacity var(--duration-fast) var(--ease-smooth-out),
+          content-visibility var(--duration-fast) allow-discrete,
+          overflow 0s allow-discrete;
+      }
+      /* Shown at once, so the field takes focus straight away; clipped only
+         while it grows, so open, the Pair button's shadow is whole. */
+      details[open]::details-content {
+        block-size: auto;
+        opacity: 1;
+        overflow: visible;
+        transition-duration: var(--duration-fast), var(--duration-fast), 0s, 0s;
+        transition-delay: 0s, 0s, 0s, var(--duration-fast);
+      }
 
+      /* Padding, not a top margin: a margin would fall out through the
+         folding panel and jump as it shuts. */
       label {
         display: block;
-        margin: 8px 0 6px;
+        margin: 0 0 6px;
+        padding-top: 8px;
         font-size: 11.5px;
         font-weight: 500;
         color: var(--text-2);
@@ -309,8 +400,8 @@
         color: var(--text);
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         font-size: 12px;
-        transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease),
-          background 0.15s var(--ease);
+        transition: border-color 0.15s var(--ease-smooth-out), box-shadow 0.15s var(--ease-smooth-out),
+          background 0.15s var(--ease-smooth-out);
       }
       input::placeholder { color: var(--text-3); }
       input:focus {
@@ -324,7 +415,9 @@
       /* ── Setup: one-time Chrome permissions ────────────────── */
       /* Each row leaves once given; with none left, so does the card, and the
          popup is the website's again. */
-      .setup { display: grid; gap: 12px; }
+      /* A column of rows. Flex, not grid, so a row folding away can take the
+         gap beside it back with a negative margin (a grid track stops at 0). */
+      .setup { display: flex; flex-direction: column; gap: 12px; }
       .setup:not(:has(.setup-row:not(.hidden))) { display: none; }
       .setup-row {
         display: flex;
@@ -341,10 +434,129 @@
       .setup-sub { font-size: 11.5px; line-height: 1.4; color: var(--text-3); }
 
       .hidden { display: none !important; }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
 
+      /* ── Motion (transitions.dev recipes; popup-motion.ts drives them) ── */
+
+      /* Text states swap: the old words leave upward, blurred; the new ones
+         arrive from below. The corner's status and message, button labels. */
+      .t-text-swap {
+        transition:
+          transform var(--duration-quick) ease-in-out,
+          filter var(--duration-quick) ease-in-out,
+          opacity var(--duration-quick) ease-in-out;
+      }
+      .t-text-swap.is-exit {
+        transform: translateY(calc(var(--distance-micro) * -1));
+        filter: blur(var(--blur-small));
+        opacity: 0;
+      }
+      .t-text-swap.is-enter-start {
+        transform: translateY(var(--distance-micro));
+        filter: blur(var(--blur-small));
+        opacity: 0;
+        transition: none;
+      }
+
+      /* Shimmer text: words for work in progress ("Capturing…", "Connecting")
+         carry a band of light, so the wait reads as alive. */
+      button.primary { --shimmer-base: rgba(63, 37, 147, 0.5); --shimmer-highlight: #3f2593; }
+      button.ghost,
+      .status { --shimmer-base: var(--text-3); --shimmer-highlight: var(--text); }
+      .t-shimmer {
+        position: relative;
+        color: var(--shimmer-base);
+      }
+      .t-shimmer::before {
+        content: attr(data-text);
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        white-space: nowrap;
+        background-image: linear-gradient(90deg, transparent 0%, transparent 40%, var(--shimmer-highlight) 50%, transparent 60%, transparent 100%);
+        background-size: 400% 100%;
+        background-repeat: no-repeat;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        -webkit-text-fill-color: transparent;
+        animation: shimmer 2000ms linear infinite;
+      }
+      /* The pill's words sit inside its padding. */
+      .status.t-shimmer::before { inset: 0 9px; line-height: 22px; }
+      @keyframes shimmer {
+        0% { background-position: 100% 0; }
+        100% { background-position: 0% 0; }
+      }
+
+      /* Success check: fades in turning upright and rising out of blur, then
+         its stroke draws. On a button that just did its job. */
+      .t-success-check {
+        display: inline-block;
+        opacity: 0;
+      }
+      .t-success-check svg { display: block; overflow: visible; }
+      .t-success-check svg path {
+        /* The path is 11.7 long; one more so no sliver shows early. */
+        stroke-dasharray: 13;
+        stroke-dashoffset: 13;
+      }
+      .t-success-check[data-state="in"] {
+        animation:
+          check-fade var(--duration-very-slow) var(--ease-smooth-out) forwards,
+          check-rotate var(--duration-very-slow) var(--ease-smooth-out) forwards,
+          check-blur var(--duration-very-slow) var(--ease-smooth-out) forwards,
+          check-bob var(--duration-very-slow) var(--ease-bounce) forwards;
+      }
+      .t-success-check[data-state="in"] svg path {
+        animation: check-draw var(--duration-very-slow) var(--ease-smooth-out) var(--duration-micro) forwards;
+      }
+      @keyframes check-fade { to { opacity: 1; } }
+      @keyframes check-rotate { from { transform: rotate(80deg); } to { transform: rotate(0deg); } }
+      @keyframes check-blur { from { filter: blur(var(--blur-large)); } to { filter: blur(0); } }
+      @keyframes check-bob { from { translate: 0 var(--distance-base); } to { translate: 0 0; } }
+      @keyframes check-draw { to { stroke-dashoffset: 0; } }
+
+      /* Error state shake: the corner, when its message is an error.
+         Segments 80, 60, 80, 60 ms; the stops are their running totals. */
+      .corner.is-shaking {
+        animation: shake calc(var(--duration-micro) * 2 + 60ms * 2) linear;
+      }
+      @keyframes shake {
+        0% { transform: translateX(0); animation-timing-function: var(--ease-smooth-out); }
+        28.57% { transform: translateX(var(--distance-small)); animation-timing-function: var(--ease-smooth-out); }
+        57.14% { transform: translateX(calc(var(--distance-small) * -1)); animation-timing-function: var(--ease-smooth-out); }
+        78.57% { transform: translateX(var(--distance-micro)); animation-timing-function: var(--ease-smooth-out); }
+        100% { transform: translateX(0); }
+      }
+
+      /* Reduced motion: fewer and gentler, not none. The fades stay; travel,
+         blur, bounce, shake and the shimmer's sweep go. */
       @media (prefers-reduced-motion: reduce) {
-        * { transition: none !important; animation: none !important; }
-        button:active { transform: none; }
+        .card,
+        .status { animation-name: fade-in; }
+        .t-text-swap { transition-property: opacity; }
+        .t-text-swap.is-exit,
+        .t-text-swap.is-enter-start { transform: none; filter: none; }
+        .t-success-check[data-state="in"] { animation: check-fade var(--duration-quick) ease-out forwards; }
+        .t-success-check[data-state="in"] svg path { animation: none; stroke-dashoffset: 0; }
+        .t-shimmer::before,
+        .corner.is-shaking { animation: none; }
+        button:active:not(:disabled),
+        button.small:active:not(:disabled),
+        .keys-row:hover kbd { transform: none; }
+        details::details-content { transition-property: opacity, content-visibility; }
+        summary::before { transition: none; }
+      }
+      @keyframes fade-in {
+        from { opacity: 0; }
       }
     </style>
   </head>
@@ -368,15 +580,15 @@
       </clipPath>
       </defs>
       </svg>
-      <div class="corner" aria-live="polite">
-        <span id="statusText" class="status hidden"></span>
-        <span id="msg" class="msg"></span>
+      <div id="corner" class="corner" aria-live="polite">
+        <span id="statusText" class="status t-text-swap hidden"></span>
+        <span id="msg" class="msg t-text-swap"></span>
       </div>
     </header>
 
     <!-- Pairing (shown when unpaired or re-pair needed) -->
     <section id="pairCard" class="card hidden">
-      <button id="connectBtn" class="primary">Connect to Natively</button>
+      <button id="connectBtn" class="primary"><span class="label t-text-swap">Connect to Natively</span></button>
       <p class="hint">
         In Natively, open <strong>Settings › Companion</strong> and click <strong>Connect</strong>
         under Browser Extension. Then press this within a minute.
@@ -385,14 +597,14 @@
         <summary>Pair manually instead</summary>
         <label for="pairInput">Pairing string (port:token)</label>
         <input id="pairInput" type="text" placeholder="4123:AbC123…" autocomplete="off" spellcheck="false" />
-        <button id="pairBtn" class="ghost">Pair</button>
+        <button id="pairBtn" class="ghost"><span class="label t-text-swap">Pair</span></button>
       </details>
     </section>
 
     <!-- Capture (shown when paired) -->
     <section id="captureCard" class="card hidden">
-      <button id="captureBtn" class="primary">Capture this page</button>
-      <button id="unpairBtn" class="ghost">Unpair</button>
+      <button id="captureBtn" class="primary"><span class="label t-text-swap">Capture this page</span></button>
+      <button id="unpairBtn" class="ghost"><span class="label t-text-swap">Unpair</span></button>
       <div class="keys">
         <div class="keys-row"><span class="keys-caps"><kbd data-mod>⌘</kbd><kbd>Y</kbd></span><span>Capture this page</span></div>
         <div class="keys-row"><span class="keys-caps"><kbd data-mod>⌘</kbd><kbd>↵</kbd></span><span>Then ask about it</span></div>
@@ -407,14 +619,14 @@
           <span class="setup-title">Capture any site</span>
           <span class="setup-sub">One Chrome prompt for all sites.</span>
         </div>
-        <button id="allSitesBtn" class="ghost small">Allow</button>
+        <button id="allSitesBtn" class="ghost small"><span class="label t-text-swap">Allow</span></button>
       </div>
       <div id="meetNamesRow" class="setup-row hidden" title="Sent only to Natively on this computer.">
         <div class="setup-text">
           <span class="setup-title">Names in Google Meet</span>
           <span class="setup-sub">Speaker names on transcripts.</span>
         </div>
-        <button id="meetNamesBtn" class="ghost small">Allow</button>
+        <button id="meetNamesBtn" class="ghost small"><span class="label t-text-swap">Allow</span></button>
       </div>
     </section>
 
