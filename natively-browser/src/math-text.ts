@@ -57,6 +57,84 @@ export function countFormulaMarkers(text: string): number {
   return countUnreadableFormulas(text) + (text.match(FORMULA_IN_IMAGE_RE) || []).length;
 }
 
+// Placeholder for a formula to draw, numbered once the text is final: several
+// clones are extracted and only some of their text is sent.
+export const TOKEN_RE = /\uE000(\d+)\uE001/g;
+// What is left of a placeholder that a length cap cut through.
+const STRAY_TOKEN_RE = /\uE000\d*|\uE001/g;
+
+/** Whether `text` has a formula the page gave no text for, marked or still a placeholder. */
+export function hasFormulaGap(text: string | undefined): boolean {
+  return !!text && (text.includes(UNREADABLE_FORMULA) || /\uE000\d+\uE001/.test(text) || /\[formula \d+, see image\]/.test(text));
+}
+
+/**
+ * Formulas with no text that `serialize` can draw, across every clone of one
+ * extraction. `options()` goes to inlineFormulas, which puts a placeholder
+ * where each such formula was; `number()` turns the placeholders of the text
+ * that is sent into `[formula N, see image]`.
+ */
+export class FormulaTokens {
+  readonly markup: string[] = [];
+  private readonly numbered: string[] = [];
+  private readonly numberOf = new Map<string, number>();
+
+  constructor(private readonly serialize?: (formula: Element) => string | null) {}
+
+  readonly options = (sources?: Node): InlineFormulasOptions => ({
+    sources: sources as never,
+    markerFor: (formula) => {
+      if (!this.serialize) return null;
+      let svg: string | null = null;
+      try {
+        svg = this.serialize(formula as unknown as Element);
+      } catch {
+        svg = null;
+      }
+      if (!svg) return null;
+      this.markup.push(svg);
+      return `\uE000${this.markup.length - 1}\uE001`;
+    },
+  });
+
+  /**
+   * `text` with its placeholders numbered in reading order, continuing from
+   * earlier calls: one number per distinct formula (a page repeats its
+   * variables many times), the same number in every text of one capture.
+   */
+  number(text: string): string {
+    return text
+      .replace(TOKEN_RE, (_, id: string) => {
+        const svg = this.markup[Number(id)];
+        let n = this.numberOf.get(svg);
+        if (n === undefined) {
+          n = this.numbered.push(svg);
+          this.numberOf.set(svg, n);
+        }
+        return formulaInImage(n);
+      })
+      .replace(STRAY_TOKEN_RE, '');
+  }
+
+  /** SVG markup of formula N at index N - 1, for each number given so far. */
+  get formulas(): string[] {
+    return [...this.numbered];
+  }
+
+  /** `text` numbered and kept within `limit`, with the formulas it still shows. */
+  finish(text: string, limit: number): { text: string; formulas: string[] } {
+    let out = this.number(text);
+    const formulas = this.formulas;
+    if (out.length > limit) {
+      out = out.slice(0, limit);
+      let last = 0;
+      for (const m of out.matchAll(FORMULA_IN_IMAGE_RE)) last = Math.max(last, Number(m[1]));
+      formulas.length = last;
+    }
+    return { text: out, formulas };
+  }
+}
+
 // Outer elements of a rendered formula. MathJax 2 frames (SVG, HTML-CSS,
 // CommonHTML, native MathML) carry one of the MathJax_* classes, MathJax 3
 // uses <mjx-container>, KaTeX uses .katex, MediaWiki wraps MathML + a

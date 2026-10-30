@@ -77,11 +77,12 @@ let formulaImagesOf;
 let describeFormulaImage;
 let hasFormulaMarker;
 let FORMULA_IN_IMAGE_RE;
+let AUTO_FORMULA_IMAGE_MAX_AGE_MS;
 before(async () => {
   ({ PhoneMirrorService, unreadableFormulasOf, formulaImagesOf } = await import(dist('services/PhoneMirrorService.js')));
   ({ describeUnreadableFormulas, UNREADABLE_FORMULA_MARKER, PAGE_CAPTURE_FALLBACK_CHANNEL, describeFormulaImage, hasFormulaMarker, FORMULA_IN_IMAGE_RE } =
     await import(dist('services/pageCaptureFallback.js')));
-  ({ FormulaScreenshotHandoff, markMissingFormulas } = await import(dist('services/formulaScreenshotHandoff.js')));
+  ({ FormulaScreenshotHandoff, markMissingFormulas, AUTO_FORMULA_IMAGE_MAX_AGE_MS } = await import(dist('services/formulaScreenshotHandoff.js')));
 });
 after(() => {
   Module._load = originalLoad;
@@ -693,5 +694,126 @@ describe('the extension draws formula images only for a desktop that said it tak
     const budget = Number(/const FORMULA_IMAGE_BUDGET_MS = (\d+);/.exec(cs)?.[1]);
     const deadline = Number(/const CAPTURE_TIMEOUT_MS = ([\d_]+);/.exec(fs.readFileSync(path.resolve(repoRoot, 'electron/services/PhoneMirrorService.ts'), 'utf8'))?.[1].replace(/_/g, ''));
     assert.ok(budget > 0 && budget <= deadline / 2, `${budget} ms of ${deadline}`);
+  });
+});
+
+// What to answer pulls the page just before the answer (Smart Browser Context
+// v2). Its formulas with no text come as an image too, handed to that answer.
+describe('the automatic capture\'s formula images', () => {
+  const PAGE = 'CONSTRAINTS:\nConstraints\n\n[formula 1, see image]';
+
+  async function autoCaptureWith(meta, extra = {}) {
+    const svc = PhoneMirrorService.getInstance();
+    if (svc.isRunning()) await svc.stop({ persist: false });
+    const info = await svc.start({ exposeOnLan: false, persist: false });
+    const overlay = new FakeBrowserWindow();
+    svc.setOverlayResolver(() => overlay);
+    const { ws, frames } = await connectExtension(info.port, info.extToken);
+    const pending = svc.requestAutoContext({ timeoutMs: 3000 });
+    const req = await waitFor(() => frames.find((f) => f.type === 'request-auto-context'));
+    const res = await fetch(`http://127.0.0.1:${info.port}/dom?t=${encodeURIComponent(info.extToken)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dom: PAGE, reqId: req.reqId, meta, ...extra }),
+    });
+    assert.equal(res.status, 200);
+    ws.send(JSON.stringify({ type: 'capture-ack', reqId: req.reqId, status: 'done', category: 'coding_problem' }));
+    const result = await pending;
+    ws.close();
+    await svc.stop({ persist: false });
+    return { result, delivered: overlay.sent.find((s) => s.channel === 'dom-context-received'), sent: overlay.sent };
+  }
+
+  test('requestAutoContext resolves with the images; the renderer never gets them', async () => {
+    const { result, delivered, sent } = await autoCaptureWith(
+      { title: 'Matrix Layer Rotation', source: 'smart-auto', unreadableFormulas: 2 },
+      { formulaImages: [dataUrl('image/png', PNG)], formulaImageRanges: [[1, 5]] },
+    );
+    assert.equal(result.attached, true);
+    assert.equal(result.category, 'coding_problem');
+    assert.equal(result.unreadableFormulas, 2);
+    assert.equal(result.formulaImages.length, 1);
+    assert.ok(result.formulaImages[0].data.equals(PNG));
+    assert.deepEqual(result.formulaImages[0].formulas, [1, 5]);
+    assert.ok(delivered, 'the page text still reaches the overlay');
+    assert.doesNotMatch(JSON.stringify(delivered.args), /base64/);
+    // No notice: the images go with the answer, not into the tray.
+    assert.equal(sent.filter((s) => s.channel === PAGE_CAPTURE_FALLBACK_CHANNEL).length, 0);
+  });
+
+  test('the desktop says it takes them; the extension draws them only for a desktop that says so', async () => {
+    const svc = PhoneMirrorService.getInstance();
+    if (svc.isRunning()) await svc.stop({ persist: false });
+    const info = await svc.start({ exposeOnLan: false, persist: false });
+    svc.setOverlayResolver(() => new FakeBrowserWindow());
+    const ext = await connectExtension(info.port, info.extToken);
+    try {
+      const features = await waitFor(() => ext.frames.find((f) => f.type === 'desktop-features'));
+      assert.equal(features.autoFormulaImages, true);
+    } finally {
+      ext.ws.close();
+      await svc.stop({ persist: false });
+    }
+    // An older desktop drops them while its answer still reads "see image".
+    const sw = fs.readFileSync(path.resolve(repoRoot, 'natively-browser/src/service-worker.ts'), 'utf8');
+    assert.match(sw, /desktopAutoFormulaImages = msg\.autoFormulaImages === true;/);
+    assert.match(sw, /desktopFormulaImages = null;\s*desktopAutoFormulaImages = false;/);
+    assert.match(sw, /\.\.\.\(desktopFormulaImages && desktopAutoFormulaImages && !opts\.classifyOnly \? \{ formulaImages: desktopFormulaImages \} : \{\}\)/);
+  });
+
+  test('a capture without images resolves exactly as before', async () => {
+    const { result } = await autoCaptureWith({ title: 'Two Sum', source: 'smart-auto' });
+    assert.deepEqual(result, { attached: true, category: 'coding_problem' });
+  });
+
+  test('the answer that pulled the capture, asking at once, gets them after its own images', async () => {
+    const h = new FormulaScreenshotHandoff();
+    const shot = h.open({ maxAgeMs: AUTO_FORMULA_IMAGE_MAX_AGE_MS });
+    const request = h.addTo(PAGE, ['/u/screenshots/mine.png']);
+    shot.settle(['/u/screenshots/formulas-1.png']);
+    assert.deepEqual(await request, ['/u/screenshots/mine.png', '/u/screenshots/formulas-1.png']);
+  });
+
+  test('a later answer does not take them', async () => {
+    let now = 1_000;
+    const h = new FormulaScreenshotHandoff({ now: () => now });
+    const shot = h.open({ maxAgeMs: AUTO_FORMULA_IMAGE_MAX_AGE_MS });
+    shot.settle(['/u/screenshots/formulas-1.png']);
+    now += AUTO_FORMULA_IMAGE_MAX_AGE_MS + 1;
+    assert.deepEqual(await h.addTo(PAGE, []), []);
+    // A ⌘Y capture keeps its own, longer, wait.
+    const manual = h.open();
+    now += AUTO_FORMULA_IMAGE_MAX_AGE_MS + 1;
+    const request = h.addTo(PAGE, []);
+    manual.settle(['/u/screenshots/formulas-2.png']);
+    assert.deepEqual(await request, ['/u/screenshots/formulas-2.png']);
+  });
+
+  test('ipcHandlers.ts hands them to main and returns only the outcome', () => {
+    const ipc = fs.readFileSync(path.resolve(repoRoot, 'electron/ipcHandlers.ts'), 'utf8');
+    const h = ipc.slice(ipc.indexOf("safeHandle('phone-mirror:request-auto-context'"));
+    const body = h.slice(0, h.indexOf('\n  });\n'));
+    assert.match(body, /const \{ formulaImages, unreadableFormulas, \.\.\.result \} = await PhoneMirrorService\.getInstance\(\)\.requestAutoContext\(request\);/);
+    // Not awaited: main opens the handoff at once, and the answer waits for the files.
+    assert.match(body, /if \(formulaImages\?\.length\) void appState\.handFormulaImagesToAnswer\(formulaImages, unreadableFormulas \?\? 0\);\s*return result;/);
+  });
+
+  test('main.ts opens the handoff before its first await and never attaches them in the overlay', () => {
+    const main = fs.readFileSync(path.resolve(repoRoot, 'electron/main.ts'), 'utf8');
+    const fn = main.slice(main.indexOf('public async handFormulaImagesToAnswer('));
+    const body = fn.slice(0, fn.indexOf('\n  }\n') + 4);
+    const open = body.indexOf('this.formulaScreenshots.open({ maxAgeMs: AUTO_FORMULA_IMAGE_MAX_AGE_MS })');
+    assert.ok(open > 0 && open < body.indexOf('await '), 'opened before the first await');
+    assert.match(body, /shot\.settle\(paths\)/);
+    assert.match(body, /shot\.settle\(null\)/);
+    assert.doesNotMatch(body, /screenshot-attached|deliverToOverlay|takeScreenshot/);
+  });
+
+  test('What to answer marks the structured fields too, against the images it sends', () => {
+    const ipc = fs.readFileSync(path.resolve(repoRoot, 'electron/ipcHandlers.ts'), 'utf8');
+    const h = ipc.slice(ipc.indexOf("'generate-what-to-say'"));
+    const ask = h.indexOf('imagePaths = await appState.withFormulaScreenshot(options?.domContext, imagePaths);');
+    const header = h.indexOf('const header = appState.formulaTextFor(formatEnvelopeForPrompt(envelope), imagePaths);');
+    assert.ok(ask > 0 && header > ask);
   });
 });

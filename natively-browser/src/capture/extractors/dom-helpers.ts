@@ -9,7 +9,7 @@
  * JSON is read with JSON.parse only. Nothing here runs page code.
  */
 
-import { inlineFormulas } from '../../math-text';
+import { inlineFormulas, type InlineFormulasOptions } from '../../math-text';
 
 /** Collapse whitespace but preserve paragraph breaks. */
 export function collapseWhitespace(s: string): string {
@@ -86,13 +86,14 @@ export function blockText(root: Node): string {
  * block boundaries (blockText). Reads a clone, so the live page is untouched.
  * Script/style text is dropped after the formulas are inlined: MathJax 2 keeps
  * each TeX source in a <script> beside the formula, which would otherwise
- * print every formula twice.
+ * print every formula twice. `formulas` can mark the ones with no text for an
+ * image instead (FormulaTokens).
  */
-function textOf(el: Node | null | undefined): string {
+function textOf(el: Node | null | undefined, formulas?: InlineFormulasOptions): string {
   if (!el) return '';
   try {
     const clone = el.cloneNode(true);
-    inlineFormulas(clone as never);
+    inlineFormulas(clone as never, formulas);
     try {
       (clone as ParentNode)
         .querySelectorAll?.('script, style, noscript, template')
@@ -120,7 +121,7 @@ export function outermost<T extends Node>(nodes: ArrayLike<T>): T[] {
 }
 
 /** Trimmed textContent of the first element matching any selector, or ''. */
-export function firstText(doc: ParentNode, selectors: string[] | undefined): string {
+export function firstText(doc: ParentNode, selectors: string[] | undefined, formulas?: InlineFormulasOptions): string {
   if (!selectors) return '';
   for (const sel of selectors) {
     let el: Element | null = null;
@@ -129,14 +130,19 @@ export function firstText(doc: ParentNode, selectors: string[] | undefined): str
     } catch {
       continue;
     }
-    const t = textOf(el).trim();
+    const t = textOf(el, formulas).trim();
     if (t) return collapseWhitespace(t);
   }
   return '';
 }
 
 /** Concatenated text of every element matching any selector. */
-export function allText(doc: ParentNode, selectors: string[] | undefined, cap = 8000): string {
+export function allText(
+  doc: ParentNode,
+  selectors: string[] | undefined,
+  cap = 8000,
+  formulas?: InlineFormulasOptions,
+): string {
   if (!selectors) return '';
   const parts: string[] = [];
   for (const sel of selectors) {
@@ -147,7 +153,7 @@ export function allText(doc: ParentNode, selectors: string[] | undefined, cap = 
       continue;
     }
     for (const n of outermost(nodes ?? [])) {
-      const t = textOf(n).trim();
+      const t = textOf(n, formulas).trim();
       if (t) parts.push(t);
     }
     if (parts.length) break; // first selector that yields content wins
@@ -270,12 +276,12 @@ export function sliceSection(body: string, signals: string[] | undefined, maxLen
 }
 
 /** `body.innerText`-style fallback with script/style removed. */
-export function bodyInnerText(doc: Document, cap = 12000): string {
+export function bodyInnerText(doc: Document, cap = 12000, formulas?: InlineFormulasOptions): string {
   const body = doc.body;
   if (!body) return '';
   const clone = body.cloneNode(true) as HTMLElement;
   // Formulas first: MathJax 2 keeps each TeX source in a <script> dropped below.
-  inlineFormulas(clone as never);
+  inlineFormulas(clone as never, formulas);
   try {
     clone.querySelectorAll('script, style, noscript, template').forEach((n) => n.parentNode?.removeChild(n));
   } catch {

@@ -1055,7 +1055,7 @@ export class PhoneMirrorService {
      * auto path is enabled.
      */
     codingEnabled?: boolean;
-  }): Promise<{ attached: boolean; reason?: string; category?: string }> {
+  }): Promise<AutoContextResult> {
     const target = this.pickExtensionClient();
     if (!target) return Promise.resolve({ attached: false, reason: 'no-extension' });
     const reqId = generateToken();
@@ -1070,11 +1070,16 @@ export class PhoneMirrorService {
     const defaultTimeout = aiClassify ? AUTO_CONTEXT_AI_TIMEOUT_MS : CAPTURE_TIMEOUT_MS;
     this.openCaptureReqIds.add(reqId);
     return new Promise((resolve) => {
-      const settle = (r: { ok: boolean; reason?: string; category?: string }) => {
+      const settle = (r: DomCaptureResult) => {
         this.openCaptureReqIds.delete(reqId);
         resolve(
           r.ok
-            ? { attached: true, category: r.category }
+            ? {
+                attached: true,
+                category: r.category,
+                ...(r.unreadableFormulas ? { unreadableFormulas: r.unreadableFormulas } : {}),
+                ...(r.formulaImages?.length ? { formulaImages: r.formulaImages } : {}),
+              }
             : { attached: false, reason: r.reason },
         );
       };
@@ -1248,7 +1253,9 @@ export class PhoneMirrorService {
           this.emitStatusClientCount();
           if (this.meetingTabsWanted && this.extTokenSockets.has(ws)) this.sendMeetingTabsSubscribe(ws, true);
           try {
-            ws.send(JSON.stringify({ type: 'desktop-features', formulaImages: FORMULA_IMAGE_LIMITS }));
+            // autoFormulaImages: an automatic capture's images reach its answer
+            // (main.handFormulaImagesToAnswer); an extension draws them only then.
+            ws.send(JSON.stringify({ type: 'desktop-features', formulaImages: FORMULA_IMAGE_LIMITS, autoFormulaImages: true }));
           } catch (_) {
             /* the close handler clears this socket */
           }
@@ -2384,6 +2391,17 @@ export function unreadableFormulasOf(meta: unknown): number {
 }
 
 /** What requestDomCapture resolves with. */
+/** What a pre-answer auto-context pull attached. */
+export interface AutoContextResult {
+  attached: boolean;
+  reason?: string;
+  category?: string;
+  /** Formulas with no text that no formula image shows (#645). */
+  unreadableFormulas?: number;
+  /** The extension's image of the formulas with no text, already checked to be PNG or JPEG (#645). */
+  formulaImages?: FormulaImage[];
+}
+
 export interface DomCaptureResult {
   ok: boolean;
   reason?: string;

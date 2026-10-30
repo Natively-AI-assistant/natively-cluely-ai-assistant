@@ -14,7 +14,7 @@
 import { Readability } from '@mozilla/readability';
 import { extractPageContent, finishFormulaImages, type ExtractResult } from './extract';
 import { browserSheetEnv, drawFormulaSheets, serializeFormulaSvg, type FormulaImageLimits } from './formula-sheet';
-import { smartCapture, type SmartCaptureResult } from './capture/smart-capture';
+import { finishSmartFormulaImages, smartCapture, type SmartCaptureResult } from './capture/smart-capture';
 import type { BrowserContextCategory, CaptureMode } from './capture/types';
 
 export interface SmartExtractOpts {
@@ -31,6 +31,8 @@ export interface SmartExtractOpts {
   aiApproved?: boolean;
   /** Defaults true; false drops the coding eligibility branch. */
   codingEnabled?: boolean;
+  /** What the desktop takes; without it formulas with no text are not drawn. */
+  formulaImages?: FormulaImageLimits;
 }
 
 export type CaptureRequest =
@@ -44,9 +46,16 @@ export type CaptureRequest =
 /** A manual capture, with the image of its formulas that have no text (data URLs). */
 export type ExtractedPage = ExtractResult & { formulaImages?: string[]; formulaImageRanges?: Array<[number, number]> };
 
+/** A smart capture, with the image of its formulas that have no text (data URLs). */
+export type SmartCapturePage = SmartCaptureResult & {
+  unreadableFormulas?: number;
+  formulaImages?: string[];
+  formulaImageRanges?: Array<[number, number]>;
+};
+
 export type CaptureResponse =
   | { ok: true; result: ExtractedPage }
-  | { ok: true; smart: SmartCaptureResult }
+  | { ok: true; smart: SmartCapturePage }
   | { ok: false; error: string };
 
 const GUARD = '__natively_capture_listener__';
@@ -97,7 +106,29 @@ async function runExtraction(formulaImages?: FormulaImageLimits): Promise<Extrac
   return { ...finished, formulas: [], ...(images.length ? { formulaImages: images, formulaImageRanges: ranges } : {}) };
 }
 
-function runSmartCapture(opts: SmartExtractOpts): SmartCaptureResult {
+/**
+ * The smart capture, with its formulas that have no text drawn into an image
+ * when the desktop takes one (#645), in the same budget as a manual capture.
+ */
+async function runSmartCapture(opts: SmartExtractOpts): Promise<SmartCapturePage> {
+  const deadline = performance.now() + FORMULA_IMAGE_BUDGET_MS;
+  const limits = opts.formulaImages;
+  const smart = smartCaptureOf(opts, limits ? (formula) => serializeFormulaSvg(formula, document) : undefined);
+  if (!limits || !smart.formulas?.length) return smart;
+  try {
+    const { images, ranges, drawn } = await drawFormulaSheets(smart.formulas, browserSheetEnv(document), limits, deadline);
+    const finished = finishSmartFormulaImages(smart, drawn);
+    return { ...finished, ...(images.length ? { formulaImages: images, formulaImageRanges: ranges } : {}) };
+  } catch {
+    // The text still goes: an answer must never lose its page over the image.
+    return finishSmartFormulaImages(smart, new Set());
+  }
+}
+
+function smartCaptureOf(
+  opts: SmartExtractOpts,
+  serializeFormula?: (formula: Element) => string | null,
+): SmartCaptureResult {
   const mode = opts.mode || 'auto';
   return smartCapture({
     document,
@@ -123,6 +154,7 @@ function runSmartCapture(opts: SmartExtractOpts): SmartCaptureResult {
     aiApproved: opts.aiApproved === true,
     // Defaults true; false drops the coding eligibility branch.
     codingEnabled: opts.codingEnabled !== false,
+    serializeFormula,
   });
 }
 
@@ -142,9 +174,12 @@ if (!w[GUARD]) {
           return true;
         }
         if (message.type === 'natively:smart-extract') {
-          const smart = runSmartCapture(message);
-          sendResponse({ ok: true, smart });
-          return undefined;
+          runSmartCapture(message).then(
+            (smart) => sendResponse({ ok: true, smart }),
+            (err) => sendResponse({ ok: false, error: err instanceof Error ? err.message : String(err) }),
+          );
+          // Keeps the channel open for the async reply.
+          return true;
         }
       } catch (err) {
         sendResponse({ ok: false, error: err instanceof Error ? err.message : String(err) });

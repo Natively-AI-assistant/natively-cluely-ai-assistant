@@ -37,8 +37,10 @@ import {
   countUnreadableFormulas,
   FORMULA_IN_IMAGE_RE,
   formulaInImage,
+  FormulaTokens,
   FORMULAS_NOTE,
   inlineFormulas,
+  TOKEN_RE,
   UNREADABLE_FORMULA,
   type InlineFormulasOptions,
 } from './math-text';
@@ -104,59 +106,6 @@ export interface ExtractResult {
   unreadableFormulas: number;
   /** SVG markup of formula N at index N - 1, for each `[formula N, see image]` in `text`. */
   formulas: string[];
-}
-
-// Placeholder for a formula to draw, numbered once the text is final: several
-// clones are extracted and only one becomes the body.
-const TOKEN_RE = /\uE000(\d+)\uE001/g;
-
-/** Formulas with no text that `serializeFormula` can draw, across every clone of one extraction. */
-class FormulaTokens {
-  readonly markup: string[] = [];
-
-  constructor(private readonly serialize?: (formula: Element) => string | null) {}
-
-  readonly options = (sources?: Node): InlineFormulasOptions => ({
-    sources: sources as never,
-    markerFor: (formula) => {
-      if (!this.serialize) return null;
-      let svg: string | null = null;
-      try {
-        svg = this.serialize(formula as unknown as Element);
-      } catch {
-        svg = null;
-      }
-      if (!svg) return null;
-      this.markup.push(svg);
-      return `\uE000${this.markup.length - 1}\uE001`;
-    },
-  });
-
-  /**
-   * Number the formulas in `text` in reading order, one number per distinct
-   * formula (a page repeats its variables many times); keeps the text within
-   * `limit`.
-   */
-  finish(text: string, limit: number): { text: string; formulas: string[] } {
-    const formulas: string[] = [];
-    const numberOf = new Map<string, number>();
-    let out = text.replace(TOKEN_RE, (_, id: string) => {
-      const svg = this.markup[Number(id)];
-      let n = numberOf.get(svg);
-      if (n === undefined) {
-        n = formulas.push(svg);
-        numberOf.set(svg, n);
-      }
-      return formulaInImage(n);
-    });
-    if (out.length > limit) {
-      out = out.slice(0, limit);
-      let last = 0;
-      for (const m of out.matchAll(FORMULA_IN_IMAGE_RE)) last = Math.max(last, Number(m[1]));
-      formulas.length = last;
-    }
-    return { text: out, formulas };
-  }
 }
 
 /** Formula markers of every kind, placeholders included. */

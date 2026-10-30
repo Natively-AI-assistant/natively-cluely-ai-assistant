@@ -16158,7 +16158,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         if (options?.domContextEnvelope && process.env.NATIVELY_BROWSER_ENVELOPE_PROMPT !== 'off') {
           try {
             const envelope = sanitizeContextEnvelope(options.domContextEnvelope);
-            const header = formatEnvelopeForPrompt(envelope);
+            // Its formula markers too: an image that did not fit in this request (#645).
+            const header = appState.formulaTextFor(formatEnvelopeForPrompt(envelope), imagePaths);
             if (header) {
               effectiveDomContext = `${header}\n\n---\n\n${effectiveDomContext || ''}`.substring(
                 0,
@@ -16180,6 +16181,8 @@ export function initializeIpcHandlers(appState: AppState): void {
           received: typeof options?.domContext === 'string' ? options.domContext.length : 0,
           envelope: Boolean(options?.domContextEnvelope),
           effective: effectiveDomContext ? effectiveDomContext.length : 0,
+          // Formula images (#645) ride here too, so a page whose formulas went missing shows it.
+          images: validatedImagePaths?.length ?? 0,
         });
 
         // Question and imagePaths are now optional - IntelligenceManager infers from transcript
@@ -20389,7 +20392,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!request) {
         return { attached: false, reason: 'disabled' };
       }
-      return await PhoneMirrorService.getInstance().requestAutoContext(request);
+      const { formulaImages, unreadableFormulas, ...result } = await PhoneMirrorService.getInstance().requestAutoContext(request);
+      // Formulas the page draws with no text (#645): the extension's image of
+      // them goes to the answer that asked for this context, not to the renderer.
+      if (formulaImages?.length) void appState.handFormulaImagesToAnswer(formulaImages, unreadableFormulas ?? 0);
+      return result;
     } catch (e: any) {
       console.error('[IPC] phone-mirror:request-auto-context error:', e);
       return { attached: false, reason: e?.message || 'failed to request auto context' };

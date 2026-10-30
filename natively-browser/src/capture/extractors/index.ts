@@ -35,7 +35,7 @@ import {
   firstText,
   sliceSection,
 } from './dom-helpers';
-import { FORMULAS_NOTE, inlineFormulas, UNREADABLE_FORMULA } from '../../math-text';
+import { FormulaTokens, FORMULAS_NOTE, hasFormulaGap, inlineFormulas, type InlineFormulasOptions } from '../../math-text';
 
 const MAX_PAYLOAD_FIELD = 8000;
 
@@ -47,6 +47,13 @@ export interface ExtractDeps {
   /** Stable id for this capture (anti-clobber). */
   contextId: string;
   capturedAt: number;
+  /**
+   * SVG markup of a formula the page gives no text for (#645), to draw into an
+   * image; null when it cannot be drawn. Without it such formulas are sent as
+   * [formula not captured]; with it the coding extractor marks them
+   * `[formula N, see image]` and returns their markup in `formulas`.
+   */
+  serializeFormula?: (formula: Element) => string | null;
 }
 
 export interface ExtractInput extends ExtractDeps {
@@ -67,6 +74,8 @@ export interface ExtractOutput {
   envelope: ContextEnvelope | null;
   /** Legacy plain-string DOM payload for back-compat (empty for blocked). */
   dom: string;
+  /** SVG markup of formula N at index N - 1, for each `[formula N, see image]` (with serializeFormula). */
+  formulas?: string[];
 }
 
 /** Map a numeric confidence score to the coarse bucket carried on the envelope. */
@@ -89,11 +98,11 @@ function cap(s: string | undefined, n = MAX_PAYLOAD_FIELD): string | undefined {
 }
 
 /** Readability text, or '' (selection/editor paths don't need it). */
-function readableText(deps: ExtractDeps): { title: string; text: string } {
+function readableText(deps: ExtractDeps, formulas?: InlineFormulasOptions): { title: string; text: string } {
   if (!deps.readabilityFactory) return { title: '', text: '' };
   try {
     const clone = deps.document.cloneNode(true) as Document;
-    inlineFormulas(clone as never);
+    inlineFormulas(clone as never, formulas);
     const r = deps.readabilityFactory(clone).parse();
     if (r && typeof r.textContent === 'string' && r.textContent.trim()) {
       return { title: (r.title || '').trim(), text: collapseWhitespace(r.textContent) };
@@ -106,16 +115,16 @@ function readableText(deps: ExtractDeps): { title: string; text: string } {
 
 /* ─────────────────────────── coding extractors ────────────────────── */
 
-function extractCodingProblem(input: ExtractInput): ExtractOutput {
+function extractCodingProblem(input: ExtractInput, formulas?: InlineFormulasOptions): ExtractOutput {
   const doc = input.document;
   const hints = input.platform?.platformHints;
   const selection = (input.getSelection?.() || '').trim();
-  const readable = readableText(input);
+  const readable = readableText(input, formulas);
 
   const problemTitle =
-    firstText(doc, hints?.titleSelectors) || readable.title || (doc.title || '').trim();
-  const statementFromSelectors = allText(doc, hints?.statementSelectors, MAX_PAYLOAD_FIELD);
-  const problemStatement = statementFromSelectors || readable.text || bodyInnerText(doc);
+    firstText(doc, hints?.titleSelectors, formulas) || readable.title || (doc.title || '').trim();
+  const statementFromSelectors = allText(doc, hints?.statementSelectors, MAX_PAYLOAD_FIELD, formulas);
+  const problemStatement = statementFromSelectors || readable.text || bodyInnerText(doc, undefined, formulas);
   const examples = sliceSection(problemStatement, hints?.examplesSignals || ['Example', 'Sample Input', 'Sample Output']);
   const constraints = sliceSection(problemStatement, hints?.constraintsSignals || ['Constraints', 'Constraint']);
   const visibleCode = extractEditorCode(doc, hints?.codeSelectors);
@@ -351,7 +360,7 @@ function buildCodingDom(p: CodingProblemPayload): string {
   if (p.starterCode || p.visibleCode) {
     parts.push(`CODE ON PAGE (verbatim — use this exact structure, names, and signature):\n${p.visibleCode || p.starterCode}`);
   }
-  if ([p.problemStatement, p.examples, p.constraints].some((t) => t?.includes(UNREADABLE_FORMULA))) {
+  if ([p.problemStatement, p.examples, p.constraints].some(hasFormulaGap)) {
     parts.push(FORMULAS_NOTE);
   }
   if (p.problemStatement) parts.push(`PROBLEM:\n${p.problemStatement}`);
@@ -380,7 +389,7 @@ function buildDocsDom(p: DeveloperDocsPayload): string {
 
 /* ─────────────────────────── dispatch ─────────────────────────────── */
 
-const EXTRACTORS: Record<ExtractorId, ((input: ExtractInput) => ExtractOutput) | null> = {
+const EXTRACTORS: Record<ExtractorId, ((input: ExtractInput, formulas?: InlineFormulasOptions) => ExtractOutput) | null> = {
   codingProblem: extractCodingProblem,
   codingEditor: extractCodingEditor,
   docsVisible: extractDocsVisible,
@@ -427,10 +436,32 @@ export function runExtractor(input: ExtractInput): ExtractOutput {
 
   const fn = EXTRACTORS[extractorId];
   if (!fn) return { envelope: null, dom: '' };
-  const out = fn(input);
+  // Formulas with no text are marked to be drawn only where the capture can
+  // send an image of them (#645); the coding extractor is the one that reads them.
+  const tokens = input.serializeFormula ? new FormulaTokens(input.serializeFormula) : null;
+  const out = fn(input, tokens?.options());
+  if (tokens) numberFormulas(out, tokens);
   // Hard cap the legacy dom string to the shared 25k budget.
   if (out.dom.length > 25000) out.dom = out.dom.slice(0, 25000);
+  if (out.envelope && tokens) out.envelope.meta.charCount = out.dom.length;
   return out;
+}
+
+/**
+ * Number the formula placeholders of a capture in reading order: the dom
+ * first, then the envelope, so a formula has the same number in both.
+ */
+function numberFormulas(out: ExtractOutput, tokens: FormulaTokens): void {
+  out.dom = tokens.number(out.dom);
+  if (out.envelope) {
+    const payload = out.envelope.payload as unknown as Record<string, unknown>;
+    for (const [key, value] of Object.entries(payload)) {
+      if (typeof value === 'string') payload[key] = tokens.number(value);
+    }
+    if (out.envelope.meta.title) out.envelope.meta.title = tokens.number(out.envelope.meta.title);
+  }
+  const formulas = tokens.formulas;
+  if (formulas.length) out.formulas = formulas;
 }
 
 export { confidenceBucket };

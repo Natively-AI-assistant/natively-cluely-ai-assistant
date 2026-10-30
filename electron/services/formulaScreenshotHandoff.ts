@@ -19,6 +19,13 @@
 import path from 'node:path';
 import { hasFormulaMarker, UNREADABLE_FORMULA_MARKER } from './pageCaptureFallback';
 
+/**
+ * How long an automatic capture's formula images wait for the answer that
+ * pulled the capture. It asks as soon as the capture is in, so this only
+ * keeps them from a later answer about another page.
+ */
+export const AUTO_FORMULA_IMAGE_MAX_AGE_MS = 10_000;
+
 /** Name prefix of the extension's formula images (ScreenshotHelper.addFormulaImages). */
 export const FORMULA_IMAGE_PREFIX = 'formulas-';
 
@@ -75,6 +82,7 @@ export interface FormulaScreenshotHandoffOptions {
 
 interface Shot extends FormulaShot {
   at: number;
+  maxAgeMs: number;
   done: Promise<string[] | null>;
   claimed: boolean;
   delivered: boolean;
@@ -94,12 +102,18 @@ export class FormulaScreenshotHandoff {
     this.now = opts.now ?? Date.now;
   }
 
-  /** At the start of a ⌘/Ctrl+Y capture: the answer request can arrive before the ack. */
-  open(): FormulaShot {
+  /**
+   * At the start of a ⌘/Ctrl+Y capture: the answer request can arrive before
+   * the ack. An automatic capture opens one for the answer that pulled it,
+   * which asks right away: `maxAgeMs` keeps a later answer from taking images
+   * that one did not.
+   */
+  open(opts: { maxAgeMs?: number } = {}): FormulaShot {
     let resolve: (paths: string[] | null) => void = () => {};
     const done = new Promise<string[] | null>((r) => { resolve = r; });
     const shot: Shot = {
       at: this.now(),
+      maxAgeMs: opts.maxAgeMs ?? this.maxAgeMs,
       done,
       claimed: false,
       delivered: false,
@@ -127,7 +141,7 @@ export class FormulaScreenshotHandoff {
     const shot = this.shot;
     if (!shot || shot.claimed || shot.delivered) return imagePaths;
     if (!hasFormulaMarker(pageText)) return imagePaths;
-    if (this.now() - shot.at > this.maxAgeMs) return imagePaths;
+    if (this.now() - shot.at > shot.maxAgeMs) return imagePaths;
     shot.claimed = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timedOut = new Promise<'timeout'>((r) => { timer = setTimeout(() => r('timeout'), this.waitMs); });

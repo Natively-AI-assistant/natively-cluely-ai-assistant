@@ -1412,7 +1412,7 @@ import {
 } from "./utils/overlayImageAttach"
 import { renderPhoneAnswer } from "./services/phoneMirrorMarkdown"
 import { describeFormulaImage, describePageCaptureFallback, describeDoubleCaptureFailure, describeUnreadableFormulas, PAGE_CAPTURE_FALLBACK_CHANNEL, PAGE_CAPTURE_STARTED_CHANNEL } from "./services/pageCaptureFallback"
-import { FormulaScreenshotHandoff, markMissingFormulas, type FormulaShot } from "./services/formulaScreenshotHandoff"
+import { AUTO_FORMULA_IMAGE_MAX_AGE_MS, FormulaScreenshotHandoff, markMissingFormulas, type FormulaShot } from "./services/formulaScreenshotHandoff"
 import { setVerboseLoggingFlag } from "./verboseLog"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
@@ -9148,6 +9148,29 @@ export class AppState {
       shot?.settle(null);
       this.sendToWindow(overlay(), PAGE_CAPTURE_FALLBACK_CHANNEL, describeUnreadableFormulas(Math.max(1, unreadable), 'not-taken'));
       console.warn('[Main] Saving the formula image failed:', err?.message || err);
+    }
+  }
+
+  /**
+   * The automatic capture's image of the formulas with no text (#645), saved
+   * and handed to the answer that pulled the capture. Never attached in the
+   * overlay: that answer has already copied its attachments, and in the tray
+   * the images would ride the next question. Opened before the first await,
+   * so the answer request, sent right after, finds it while the files are
+   * written. No screenshot when there is no image: the page is not on screen.
+   */
+  public async handFormulaImagesToAnswer(
+    images: Array<{ data: Buffer; ext: 'jpg' | 'png' | 'webp'; formulas?: [number, number] }>,
+    unreadable: number,
+  ): Promise<void> {
+    const shot = this.formulaScreenshots.open({ maxAgeMs: AUTO_FORMULA_IMAGE_MAX_AGE_MS });
+    try {
+      const paths = await this.screenshotHelper.addFormulaImages(images);
+      shot.settle(paths);
+      console.log(`[Main] Formula image(s) from the automatic capture: ${paths.length} for this answer${unreadable ? `, ${unreadable} formula(s) in none` : ''}`);
+    } catch (err: any) {
+      shot.settle(null);
+      console.warn('[Main] Saving the automatic capture\'s formula image failed:', err?.message || err);
     }
   }
 

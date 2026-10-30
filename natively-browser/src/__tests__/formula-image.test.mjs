@@ -15,7 +15,11 @@ import { parseHtml } from './fake-html.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dist = (f) => pathToFileURL(path.resolve(__dirname, '../../dist-test', f)).href;
 const { extractPageContent, finishFormulaImages } = await import(dist('extract.js'));
-const { UNREADABLE_FORMULA, countFormulaMarkers } = await import(dist('math-text.js'));
+const { UNREADABLE_FORMULA, countFormulaMarkers, FormulaTokens } = await import(dist('math-text.js'));
+const ext = await import(dist('capture/extractors/index.js'));
+const reg = await import(dist('capture/registry/registry.js'));
+const cls = await import(dist('capture/classifier/tab-classifier.js'));
+const { smartCapture, finishSmartFormulaImages } = await import(dist('capture/smart-capture.js'));
 const { layoutFormulaSheets, drawFormulaSheets, formulaImageLimitsOf } = await import(dist('formula-sheet.js'));
 
 const svgFormula = (n) =>
@@ -107,6 +111,77 @@ describe('#645: formulas with no text go into an image with the capture', () => 
     const numbers = [...r.text.matchAll(/\[formula (\d+), see image\]/g)].map((m) => Number(m[1]));
     assert.equal(numbers.length, r.formulas.length);
     assert.deepEqual(numbers, numbers.map((_, i) => i + 1));
+  });
+});
+
+// The automatic capture (What to answer pulls the page just before the answer).
+function autoCapture(serialize) {
+  const host = 'hackerrank.com';
+  const candidate = cls.classifyTab({
+    registry: reg.DEFAULT_REGISTRY, host, url: HACKERRANK_URL, title: 'Matrix Layer Rotation | HackerRank',
+    signals: { codeEditorPresent: true, ioConstraintSignals: true },
+  });
+  return ext.runExtractor({
+    document: doc(), getSelection: () => '', contextId: 'ctx-auto', capturedAt: 1,
+    candidate, platform: reg.findPlatform(reg.DEFAULT_REGISTRY, host, HACKERRANK_URL), captureMode: 'auto',
+    ...(serialize ? { serializeFormula: serialize } : {}),
+  });
+}
+const CONSTRAINT_MARKERS = /Constraints\n+\[formula 4, see image\]\n\[formula 5, see image\]\n\[formula 6, see image\]\n\[formula 7, see image\]/;
+
+describe('#645: the automatic capture sends an image of its formulas too', () => {
+  test('they are numbered once, alike in the text and in the structured fields', () => {
+    const out = autoCapture(serializeFormula);
+    const p = out.envelope.payload;
+    assert.match(out.dom, /CONSTRAINTS:\nConstraints\n+\[formula 4, see image\]/);
+    assert.match(out.dom, CONSTRAINT_MARKERS);
+    assert.match(p.constraints, CONSTRAINT_MARKERS);
+    assert.match(p.problemStatement, /dimension \[formula 1, see image\] and a positive integer \[formula 2, see image\]\. You have to rotate the matrix \[formula 3, see image\] times/);
+    assert.deepEqual(out.formulas, [1, 2, 3, 4, 5, 6, 7].map((n) => `svg:MathJax-Element-${n}-Frame`));
+    // The note says what the markers mean; nothing of the placeholders is left.
+    assert.match(out.dom, /^FORMULAS: /m);
+    assert.doesNotMatch(out.dom + JSON.stringify(p), /[\uE000\uE001]/);
+    assert.equal(out.envelope.meta.charCount, out.dom.length);
+  });
+
+  test('without a desktop that takes the image, they stay [formula not captured], as before', () => {
+    const out = autoCapture();
+    assert.equal(out.formulas, undefined);
+    assert.doesNotMatch(out.dom, /\[formula \d+, see image\]/);
+    assert.equal((out.envelope.payload.constraints.match(/\[formula not captured\]/g) || []).length, 4);
+    assert.match(out.dom, /^FORMULAS: /m);
+  });
+
+  test('a formula the sheet could not draw becomes [formula not captured] in both, and is counted', () => {
+    const out = autoCapture(serializeFormula);
+    const done = finishSmartFormulaImages({ candidate: {}, blocked: false, ...out }, new Set([1, 2, 3, 4, 5, 6]));
+    assert.match(done.dom, /\[formula 6, see image\]\n\[formula not captured\]/);
+    assert.match(done.envelope.payload.constraints, /\[formula 6, see image\]\n\[formula not captured\]/);
+    assert.equal(done.unreadableFormulas, 1);
+    assert.equal(done.formulas, undefined);
+    // The capture it came from is left as it was.
+    assert.match(out.envelope.payload.constraints, /\[formula 7, see image\]/);
+  });
+
+  test('smartCapture passes the serializer through to the extractor', () => {
+    const r = smartCapture({
+      document: doc(), host: 'www.hackerrank.com', url: HACKERRANK_URL, title: 'Matrix Layer Rotation | HackerRank',
+      contextId: 'ctx-smart', capturedAt: 1, captureMode: 'auto', serializeFormula,
+    });
+    assert.equal(r.formulas?.length, 7);
+    assert.match(r.dom, /\[formula 7, see image\]/);
+  });
+
+  test('a placeholder cut short by a length cap leaves nothing behind', () => {
+    let n = 0;
+    const tokens = new FormulaTokens(() => `svg${++n}`);
+    const { markerFor } = tokens.options();
+    const a = markerFor({});
+    const b = markerFor({});
+    assert.equal(tokens.number(`x ${a} y ${b.slice(0, 2)}`), 'x [formula 1, see image] y ');
+    // Later texts of the same capture keep the numbers.
+    assert.equal(tokens.number(`${b} ${a}`), '[formula 2, see image] [formula 1, see image]');
+    assert.deepEqual(tokens.formulas, ['svg1', 'svg2']);
   });
 });
 
