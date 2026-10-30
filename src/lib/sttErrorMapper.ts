@@ -26,7 +26,29 @@ export type SttErrorCategoryId =
     | 'service_unavailable'
     | 'invalid_config'
     | 'session_conflict'
+    | 'secure_connection_blocked'
     | 'provider_error';
+
+/**
+ * Node's certificate errors when something between Natively and the provider
+ * re-signs the connection: antivirus HTTPS scanning (Kaspersky, ESET, Avast…)
+ * or a corporate TLS-inspection proxy whose root Node does not trust. Messages
+ * and codes as Node 24 reports them; main appends the code to the message.
+ */
+const SECURE_CONNECTION_BLOCKED = [
+    'self-signed certificate',
+    'self signed certificate',
+    'unable to verify the first certificate',
+    'unable_to_verify_leaf_signature',
+    'unable to get local issuer certificate',
+    'unable_to_get_issuer_cert',
+    'self_signed_cert_in_chain',
+    'depth_zero_self_signed_cert',
+    'err_tls_cert_altname_invalid',
+    "does not match certificate's altnames",
+    'certificate has expired',
+    'cert_has_expired',
+];
 
 /**
  * Categorize a raw STT error message into a user-friendly display.
@@ -42,7 +64,11 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
     if (lower.includes('service account json')) {
         return {
             title: 'Google Key Missing',
-            body: 'Google speech-to-text needs a Service Account JSON. Add one in Audio Settings, or choose another speech provider.',
+            // Google Cloud speech is the default provider, so a free user who
+            // only added a Gemini key lands here (customer, 2026-10-29) and
+            // took the Gemini key to be the one it wanted. Local Models
+            // transcribes on the device with no key at all.
+            body: 'Google speech-to-text needs a Service Account JSON, and a Gemini key cannot transcribe. To transcribe free on this device, choose Local Models in Audio Settings, or add a Service Account JSON there.',
             category: 'auth',
         };
     }
@@ -111,6 +137,16 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
             title: 'Rate Limited',
             body: 'Too many requests. The service is throttling your connection.',
             category: 'rate_limited',
+        };
+    }
+
+    // 5b. The connection was intercepted, not lost. Before 6: "Check your
+    // internet connection" sends someone whose internet works on a long hunt.
+    if (SECURE_CONNECTION_BLOCKED.some((pattern) => lower.includes(pattern))) {
+        return {
+            title: 'Secure Connection Blocked',
+            body: 'Antivirus HTTPS scanning or a network filter is intercepting the connection. Allow Natively in your antivirus, or turn off its HTTPS scanning for Natively.',
+            category: 'secure_connection_blocked',
         };
     }
 
@@ -186,4 +222,18 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
         body: 'The transcription service encountered an unexpected issue.',
         category: 'provider_error',
     };
+}
+
+/**
+ * Why the transcription service cannot be reached, when the errors say so:
+ * 'secure-connection' when a certificate was rejected (antivirus or network
+ * interception), 'unreachable' when the connection never got through.
+ * Null for everything else (keys, quota, provider faults), where the advice
+ * stays "check your provider and its key".
+ */
+export function sttConnectionCause(rawErrors: ReadonlyArray<string>): 'secure-connection' | 'unreachable' | null {
+    const categories = rawErrors.filter(Boolean).map((raw) => categorizeSttError(raw).category);
+    if (categories.includes('secure_connection_blocked')) return 'secure-connection';
+    if (categories.includes('connection_lost') || categories.includes('timed_out')) return 'unreachable';
+    return null;
 }

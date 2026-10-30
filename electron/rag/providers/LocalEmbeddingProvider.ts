@@ -153,7 +153,8 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       this.extraMemoryHeadroomGB = catalogEntry.bundled
         ? BUNDLED_LOCAL_EMBEDDING.extraMemoryHeadroomGB
         : (catalogEntry.memoryHeadroomGB ?? 0);
-      this.maxBatchSize = catalogEntry.maxBatchSize;
+      this.maxBatchSize = catalogEntry.maxBatchSize
+        ?? (catalogEntry.bundled ? BUNDLED_LOCAL_EMBEDDING.maxBatchSize : undefined);
       this.maxInputTokens = catalogEntry.maxInputTokens;
       const resolved = catalogEntry.bundled ? null : resolveEmbeddingModelPath(catalogEntry);
       this.modelPath = opts?.modelPath || resolved || LocalEmbeddingProvider.resolveModelPath(this.hfModelId);
@@ -184,6 +185,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       this.queryPrefix = bundled.queryPrefix;
       this.documentPrefix = bundled.documentPrefix;
       this.extraMemoryHeadroomGB = bundled.extraMemoryHeadroomGB;
+      this.maxBatchSize = bundled.maxBatchSize;
       this.modelPath = opts?.modelPath || LocalEmbeddingProvider.resolveModelPath(this.hfModelId);
     }
 

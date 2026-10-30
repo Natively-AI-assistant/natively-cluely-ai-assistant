@@ -19,6 +19,9 @@ const startUrl = isDev
  * CropperWindowHelper configuration constants.
  * These values can be overridden via environment variables for testing/debugging.
  */
+/** How often a cropper covering one screen checks which screen the mouse is on. */
+const CROPPER_FOLLOW_INTERVAL_MS = 120;
+
 const CROPPER_CONFIG = {
     /** Minimum selection size in pixels (protection against accidental clicks) */
     MIN_SELECTION_SIZE: parseInt(process.env.CROPPER_MIN_SELECTION_SIZE || '5', 10),
@@ -72,6 +75,12 @@ function getCombinedDisplayBounds(): Electron.Rectangle {
         return primary.bounds;
     }
     
+    return combinedBoundsOf(displays);
+}
+
+type DisplayGeometry = Pick<Electron.Display, 'id' | 'bounds' | 'scaleFactor'>;
+
+function combinedBoundsOf(displays: ReadonlyArray<Pick<Electron.Display, 'bounds'>>): Electron.Rectangle {
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
@@ -91,6 +100,76 @@ function getCombinedDisplayBounds(): Electron.Rectangle {
         width: maxX - minX,
         height: maxY - minY
     };
+}
+
+/** Whether the screens use different scale factors (a 150% laptop beside a 100% monitor). */
+export function hasMixedScaleFactors(displays: ReadonlyArray<Pick<Electron.Display, 'scaleFactor'>>): boolean {
+    return displays.some((d) => d.scaleFactor !== displays[0]?.scaleFactor);
+}
+
+/** The screen containing `point`, else the one nearest to it. */
+export function displayAtPoint<T extends Pick<Electron.Display, 'bounds'>>(displays: readonly T[], point: Electron.Point): T | undefined {
+    let best: T | undefined;
+    let bestDistance = Infinity;
+    for (const d of displays) {
+        const { x, y, width, height } = d.bounds;
+        const dx = Math.max(x - point.x, 0, point.x - (x + width - 1));
+        const dy = Math.max(y - point.y, 0, point.y - (y + height - 1));
+        const distance = dx * dx + dy * dy;
+        if (distance < bestDistance) { best = d; bestDistance = distance; }
+    }
+    return best;
+}
+
+/**
+ * Where the cropper window goes: across every screen, except on Windows when
+ * the screens' scale factors differ. There a window's DIP coordinates use ONE
+ * scale factor while each screen's bounds use its own, so a window spanning
+ * them is not placed where asked (verifyCombinedBounds has logged it) and a
+ * selection on the other screens maps to the wrong pixels. On such a layout
+ * the cropper covers the screen under the mouse and moves with the mouse
+ * (followCursorDisplay). `displayId` is that screen, or null for the span.
+ *
+ * macOS uses points across all screens, so its layout is unaffected.
+ */
+export function planCropperCoverage(
+    displays: readonly DisplayGeometry[],
+    cursor: Electron.Point,
+    platform: NodeJS.Platform,
+): { bounds: Electron.Rectangle; displayId: number | null } {
+    if (platform === 'win32' && displays.length > 1 && hasMixedScaleFactors(displays)) {
+        const d = displayAtPoint(displays, cursor) ?? displays[0];
+        return { bounds: { ...d.bounds }, displayId: d.id };
+    }
+    return { bounds: combinedBoundsOf(displays), displayId: null };
+}
+
+/** The part of `rect` inside `clip`, or null when they do not overlap. */
+export function intersectRect(rect: Electron.Rectangle, clip: Electron.Rectangle): Electron.Rectangle | null {
+    const x = Math.max(rect.x, clip.x);
+    const y = Math.max(rect.y, clip.y);
+    const right = Math.min(rect.x + rect.width, clip.x + clip.width);
+    const bottom = Math.min(rect.y + rect.height, clip.y + clip.height);
+    if (right <= x || bottom <= y) return null;
+    return { x, y, width: right - x, height: bottom - y };
+}
+
+/**
+ * Where the "Select area" hint goes, in the cropper window's own coordinates:
+ * top centre of the screen under the mouse. It used to be sent in desktop
+ * coordinates, which the page drew as window coordinates, so with a screen to
+ * the left of (or above) the main one the hint sat on the wrong screen.
+ */
+export function hudPositionFor(
+    displays: ReadonlyArray<Pick<Electron.Display, 'bounds'>>,
+    cursor: Electron.Point,
+    windowBounds: Electron.Rectangle,
+): Electron.Point {
+    const target = displayAtPoint(displays, cursor);
+    const globalPoint = target
+        ? { x: target.bounds.x + Math.round(target.bounds.width / 2), y: target.bounds.y + 32 }
+        : { x: cursor.x, y: cursor.y };
+    return { x: globalPoint.x - windowBounds.x, y: globalPoint.y - windowBounds.y };
 }
 
 /**
@@ -208,10 +287,18 @@ export class CropperWindowHelper {
     // Set once the app starts quitting: a renderer going away then is the
     // teardown, and no window must be built in its place.
     private isQuitting: boolean = false;
+    // The one screen the window covers (planCropperCoverage), or null when it
+    // spans them all. While it is set, the window follows the mouse between
+    // screens, except mid-drag (isDragging, reported by the page).
+    private coveredDisplayId: number | null = null;
+    private followTimer: NodeJS.Timeout | null = null;
+    private isDragging: boolean = false;
 
     // IPC listener references for cleanup
     private readonly confirmedListener: (event: IpcMainEvent, bounds: unknown) => void;
     private readonly cancelledListener: (event: IpcMainEvent) => void;
+    private readonly displayPickedListener: (event: IpcMainEvent) => void;
+    private readonly dragListener: (event: IpcMainEvent, active: unknown) => void;
     private beforeQuitHandler: (() => void) | null = null;
 
     constructor() {
@@ -242,11 +329,24 @@ export class CropperWindowHelper {
                 return;
             }
 
-            const globalBounds: Electron.Rectangle = {
+            let globalBounds: Electron.Rectangle = {
                 ...bounds,
                 x: bounds.x + cropperBounds.x,
                 y: bounds.y + cropperBounds.y,
             };
+
+            // Covering one screen: a drag that ran past its edge keeps the part
+            // on this screen, the only part the window could show.
+            const covered = this.getCoveredDisplay();
+            if (covered) {
+                const clipped = intersectRect(globalBounds, covered.bounds);
+                if (!clipped) {
+                    this.rejectCurrentSelection(null);
+                    this.hideOrClose();
+                    return;
+                }
+                globalBounds = clipped;
+            }
 
             // Validate input data for security using global coordinates to support multi-monitor setups
             if (!this.validateBounds(globalBounds)) {
@@ -265,9 +365,33 @@ export class CropperWindowHelper {
             this.hideOrClose();
         };
 
+        // A click without a drag captures the whole screen it was on. The mouse
+        // position is read here rather than taken from the page, whose window
+        // coordinates are not desktop coordinates on every layout.
+        this.displayPickedListener = () => {
+            if (!this.isWaitingForSelection) return;
+            const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+            const bounds = { ...display.bounds };
+            if (!this.validateBounds(bounds)) {
+                console.error('[CropperWindowHelper] picked screen failed validation:', bounds);
+                this.rejectCurrentSelection(null);
+                this.hideOrClose();
+                return;
+            }
+            console.log(`[CropperWindowHelper] whole screen picked: display ${display.id}`, bounds);
+            this.resolveCurrentSelection(bounds);
+            this.hideOrClose();
+        };
+
+        this.dragListener = (_event, active) => {
+            this.isDragging = active === true;
+        };
+
         // Setup IPC listeners for cropper actions
         ipcMain.on('cropper-confirmed', this.confirmedListener);
         ipcMain.on('cropper-cancelled', this.cancelledListener);
+        ipcMain.on('cropper-display-picked', this.displayPickedListener);
+        ipcMain.on('cropper-drag', this.dragListener);
 
         // Fallback cleanup: if app quits before dispose() is called, clean up IPC listeners
         // Store reference so we can remove it if dispose() is called first
@@ -278,6 +402,9 @@ export class CropperWindowHelper {
                 this.unregisterEscapeShortcut();
                 ipcMain.removeListener('cropper-confirmed', this.confirmedListener);
                 ipcMain.removeListener('cropper-cancelled', this.cancelledListener);
+                ipcMain.removeListener('cropper-display-picked', this.displayPickedListener);
+                ipcMain.removeListener('cropper-drag', this.dragListener);
+                this.stopFollowingCursor();
             }
         };
         app.on('before-quit', this.beforeQuitHandler);
@@ -393,6 +520,7 @@ export class CropperWindowHelper {
      */
     private resolveCurrentSelection(bounds: Electron.Rectangle | null): void {
         this.unregisterEscapeShortcut();
+        this.stopFollowingCursor();
         if (!this.isWaitingForSelection) {
             console.warn('[CropperWindowHelper] resolveCurrentSelection called but not waiting for selection');
             return;
@@ -411,6 +539,7 @@ export class CropperWindowHelper {
      */
     private rejectCurrentSelection(reason?: unknown): void {
         this.unregisterEscapeShortcut();
+        this.stopFollowingCursor();
         if (!this.isWaitingForSelection) {
             console.warn('[CropperWindowHelper] rejectCurrentSelection called but not waiting for selection');
             return;
@@ -511,54 +640,71 @@ export class CropperWindowHelper {
                 // valid selections were silently rejected. Re-fit on every
                 // show; the confirm listener reads getBounds() fresh, so the
                 // mapping is correct once the window matches reality.
-                const combinedNow = getCombinedDisplayBounds();
-                const current = this.cropperWindow.getBounds();
-                if (
-                    current.x !== combinedNow.x ||
-                    current.y !== combinedNow.y ||
-                    current.width !== combinedNow.width ||
-                    current.height !== combinedNow.height
-                ) {
-                    console.log('[CropperWindowHelper] Display arrangement changed — refitting cropper to', combinedNow);
-                    this.applyCombinedBounds(combinedNow, 'show:refit');
-                }
-
-                // Get cursor position and display info at the moment cropper is shown
-                const cursorPosition = screen.getCursorScreenPoint();
-                const displays = screen.getAllDisplays();
-                
-                // Find which display contains the cursor
-                let targetDisplay: Electron.Display | null = null;
-                for (const display of displays) {
-                    const { x, y, width, height } = display.bounds;
-                    if (cursorPosition.x >= x && cursorPosition.x < x + width &&
-                        cursorPosition.y >= y && cursorPosition.y < y + height) {
-                        targetDisplay = display;
-                        break;
-                    }
-                }
-                
-                // Calculate HUD position: center top of the display where cursor was
-                const hudPosition = targetDisplay ? {
-                    x: targetDisplay.bounds.x + Math.round(targetDisplay.bounds.width / 2),
-                    y: targetDisplay.bounds.y + 32
-                } : {
-                    x: cursorPosition.x,
-                    y: cursorPosition.y
-                };
-                
-                console.log(`[CropperWindowHelper] Cursor at ${JSON.stringify(cursorPosition)}, display bounds: ${targetDisplay ? JSON.stringify(targetDisplay.bounds) : 'unknown'}`);
-                console.log(`[CropperWindowHelper] HUD position: ${JSON.stringify(hudPosition)}`);
-                
-                // Send reset with HUD position
-                this.cropperWindow.webContents.send('reset-cropper', { hudPosition });
+                this.isDragging = false;
+                this.fitToCoverage('show:refit');
+                this.sendReset();
                 this.applyOpacityShield();
+                if (this.coveredDisplayId !== null) this.startFollowingCursor();
             } else {
                 // Window doesn't exist yet — createWindow will call applyOpacityShield
                 // via ready-to-show once the URL finishes loading.
                 this.createWindow(true);
             }
         });
+    }
+
+    private planCoverage(): { bounds: Electron.Rectangle; displayId: number | null } {
+        const displays = screen.getAllDisplays();
+        if (displays.length === 0) return { bounds: getCombinedDisplayBounds(), displayId: null };
+        return planCropperCoverage(displays, screen.getCursorScreenPoint(), process.platform);
+    }
+
+    private getCoveredDisplay(): Electron.Display | undefined {
+        if (this.coveredDisplayId === null) return undefined;
+        return screen.getAllDisplays().find((d) => d.id === this.coveredDisplayId);
+    }
+
+    /** Puts the window where planCoverage says; true when it moved. */
+    private fitToCoverage(reason: string): boolean {
+        if (!this.cropperWindow || this.cropperWindow.isDestroyed()) return false;
+        const coverage = this.planCoverage();
+        this.coveredDisplayId = coverage.displayId;
+        const current = this.cropperWindow.getBounds();
+        if (boundsMatch(coverage.bounds, current)) return false;
+        console.log(`[CropperWindowHelper] refitting cropper (${reason}) to`, coverage.bounds);
+        this.applyCombinedBounds(coverage.bounds, reason);
+        return true;
+    }
+
+    /** Clears the page's selection and places the hint on the screen under the mouse. */
+    private sendReset(): void {
+        if (!this.cropperWindow || this.cropperWindow.isDestroyed()) return;
+        const hudPosition = hudPositionFor(screen.getAllDisplays(), screen.getCursorScreenPoint(), this.cropperWindow.getBounds());
+        this.cropperWindow.webContents.send('reset-cropper', { hudPosition });
+    }
+
+    /**
+     * Covering one screen, the window moves to whichever screen the mouse goes
+     * to, so every screen stays selectable. Not mid-drag: the selection stays
+     * on the screen it started on.
+     */
+    private startFollowingCursor(): void {
+        this.stopFollowingCursor();
+        this.followTimer = setInterval(() => {
+            if (!this.isWaitingForSelection || this.isDragging || this.isDisposed) return;
+            if (!this.cropperWindow || this.cropperWindow.isDestroyed()) return;
+            const before = this.coveredDisplayId;
+            const coverage = this.planCoverage();
+            if (coverage.displayId === null || coverage.displayId === before) return;
+            if (this.fitToCoverage('follow')) this.sendReset();
+        }, CROPPER_FOLLOW_INTERVAL_MS);
+    }
+
+    private stopFollowingCursor(): void {
+        if (this.followTimer) {
+            clearInterval(this.followTimer);
+            this.followTimer = null;
+        }
     }
 
     /**
@@ -687,10 +833,12 @@ export class CropperWindowHelper {
             return;
         }
 
-        // Get combined bounds of ALL displays for multi-monitor support
-        const combinedBounds = getCombinedDisplayBounds();
+        // Every screen, or the one under the mouse (planCropperCoverage).
+        const coverage = this.planCoverage();
+        const combinedBounds = coverage.bounds;
+        this.coveredDisplayId = coverage.displayId;
 
-        console.log(`[CropperWindowHelper] Creating cropper window with multi-monitor bounds:`, combinedBounds);
+        console.log(`[CropperWindowHelper] Creating cropper window with bounds:`, combinedBounds, coverage.displayId === null ? '(all screens)' : `(screen ${coverage.displayId})`);
 
         const windowSettings = buildCropperWindowSettings(combinedBounds, process.platform);
 
@@ -922,6 +1070,9 @@ export class CropperWindowHelper {
         // Remove IPC listeners
         ipcMain.removeListener('cropper-confirmed', this.confirmedListener);
         ipcMain.removeListener('cropper-cancelled', this.cancelledListener);
+        ipcMain.removeListener('cropper-display-picked', this.displayPickedListener);
+        ipcMain.removeListener('cropper-drag', this.dragListener);
+        this.stopFollowingCursor();
         console.log('[CropperWindowHelper] IPC listeners removed');
 
         // Close window. Direct — NOT via closeWindow(): its guard includes

@@ -27,6 +27,11 @@ test('the message GoogleSTT actually sends reads as a missing Google key', () =>
   assert.equal(c.category, 'auth');
   assert.match(c.body, /Audio Settings/);
   assert.doesNotMatch(c.body, /API key/i, 'Google STT takes a key file, not an API key');
+  // 2026-10-29: a free user with only a Gemini key read this as asking for
+  // that key. It says the Gemini key cannot transcribe, and names the free
+  // on-device option.
+  assert.match(c.body, /Gemini key cannot transcribe/);
+  assert.match(c.body, /Local Models/);
 });
 
 test('an ordinary auth failure is still Authentication Failed', () => {

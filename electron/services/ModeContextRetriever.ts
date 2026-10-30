@@ -1,5 +1,5 @@
 import { Mode, ModeReferenceFile } from './ModesManager';
-import { wordsOf } from './modes/lexicalTokens';
+import { foldForMatching, wordsOf } from './modes/lexicalTokens';
 import { normalizeLineEndings } from './modes/semanticChunker';
 import { ModeHybridRetriever, ModeRetrievedContext as HybridContext } from './modes/ModeHybridRetriever';
 import { VectorStore } from '../rag/VectorStore';
@@ -1258,7 +1258,8 @@ export class ModeContextRetriever {
             : [];
         const contentWordBonus = (chunk: string): number => {
             if (queryContentStems.length === 0) return 0;
-            const lower = chunk.toLowerCase();
+            // Folded like the stems (wordsOf), or an accented word never matched itself.
+            const lower = foldForMatching(chunk);
             let hit = 0;
             for (const stem of queryContentStems) if (lower.includes(stem)) hit++;
             // Tiebreak WITHIN equally-section-boosted chunks: the chunk that

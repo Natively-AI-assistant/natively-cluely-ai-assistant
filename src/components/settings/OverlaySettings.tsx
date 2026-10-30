@@ -16,7 +16,7 @@
 // and buttons slide to their new places with a FLIP transform.
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { AppWindow, ChevronDown, Layout, NotebookPen, RotateCcw } from 'lucide-react';
+import { AppWindow, ChevronDown, Layout, Monitor, NotebookPen, RotateCcw } from 'lucide-react';
 import NotesWindow, { type NotesWindowPreview } from '../NotesWindow';
 import { useT } from '../../i18n';
 import type { MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
@@ -498,6 +498,116 @@ const NotepadPreview: React.FC = () => (
     </div>
 );
 
+type ScreenshotDisplay = { id: number; number: number; name: string; width: number; height: number; primary: boolean };
+
+/**
+ * Which screen the screenshot shortcut captures (electron/screenshotDisplay.ts).
+ * Shown only with more than one screen. The list is re-read when the menu
+ * opens, so a monitor plugged in since Settings opened is there.
+ */
+const ScreenshotScreenRow: React.FC = () => {
+    const t = useT();
+    const [preference, setPreference] = useState('overlay');
+    const [displays, setDisplays] = useState<ScreenshotDisplay[]>([]);
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+
+    const load = () => {
+        window.electronAPI?.getScreenshotDisplay?.()
+            .then((res) => {
+                if (!res) return;
+                setPreference(res.preference);
+                setDisplays(res.displays);
+            })
+            .catch(() => { /* keeps the last list */ });
+    };
+    useEffect(load, []);
+    useEffect(() => { if (open) load(); }, [open]);
+
+    useEffect(() => {
+        if (!open) return;
+        const onDown = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+        };
+        // Escape closes the menu, never all of Settings (as in StylePicker).
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape') return;
+            e.stopPropagation();
+            setOpen(false);
+            ref.current?.querySelector('button')?.focus();
+        };
+        document.addEventListener('mousedown', onDown);
+        document.addEventListener('keydown', onKey, true);
+        return () => {
+            document.removeEventListener('mousedown', onDown);
+            document.removeEventListener('keydown', onKey, true);
+        };
+    }, [open]);
+
+    if (displays.length < 2) return null;
+
+    const screenLabel = (d: ScreenshotDisplay) => {
+        const detail = d.name || `${d.width}×${d.height}`;
+        return `${t('Screen')} ${d.number} · ${detail}${d.primary ? ` (${t('main')})` : ''}`;
+    };
+    const options = [
+        { value: 'overlay', label: t("The overlay's screen") },
+        { value: 'cursor', label: t('The screen under the mouse') },
+        ...displays.map((d) => ({ value: `display:${d.id}`, label: screenLabel(d) })),
+    ];
+    // A saved screen that is unplugged reads as the default, which is what a
+    // screenshot then captures (resolveScreenshotDisplay).
+    const current = options.find((o) => o.value === preference) ?? options[0];
+
+    const choose = (value: string) => {
+        setOpen(false);
+        const previous = preference;
+        setPreference(value);
+        window.electronAPI?.setScreenshotDisplay?.(value)
+            .then((res) => { if (!res?.success) setPreference(previous); })
+            .catch(() => setPreference(previous));
+    };
+
+    return (
+        <div className={SETTINGS_CARD}>
+            <SettingsRow
+                icon={<Monitor size={20} />}
+                title={t('Screenshot screen')}
+                description={t('Which screen the screenshot shortcut captures. In an area screenshot, a click captures the whole screen you click on.')}
+                control={
+                    <div className="relative" ref={ref}>
+                        <button
+                            type="button"
+                            onClick={() => setOpen((o) => !o)}
+                            aria-expanded={open}
+                            className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 max-w-[220px]"
+                        >
+                            <span className="min-w-0 text-ellipsis overflow-hidden whitespace-nowrap">
+                                <Presence kind="text" id={current.value}>{current.label}</Presence>
+                            </span>
+                            <ChevronDown size={12} className={`shrink-0 transition-transform duration-[250ms] ease-sculpted motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} />
+                        </button>
+                        <SettingsMenu open={open} origin="top right" role="listbox" ariaLabel={t('Screenshot screen')} className="absolute right-0 top-full mt-1 min-w-full w-max max-w-[320px] bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 select-none">
+                            {options.map((option) => (
+                                <button
+                                    key={option.value}
+                                    type="button"
+                                    role="option"
+                                    aria-selected={current.value === option.value}
+                                    onClick={() => choose(option.value)}
+                                    className={`w-full text-left px-2.5 py-1.5 rounded-md text-xs flex items-center transition-colors ${current.value === option.value ? 'text-text-primary bg-[color:color-mix(in_srgb,var(--bg-item-active)_50%,transparent)]' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
+                                >
+                                    <span className="font-medium truncate">{option.label}</span>
+                                </button>
+                            ))}
+                        </SettingsMenu>
+                    </div>
+                }
+            />
+        </div>
+    );
+};
+
 export const OverlaySettings: React.FC<{
     opacity: number;
     theme: MeetingInterfaceTheme;
@@ -523,6 +633,7 @@ export const OverlaySettings: React.FC<{
                     />
                     <NotepadPreview />
                 </section>
+                <ScreenshotScreenRow />
             </div>
         );
     }
@@ -562,6 +673,8 @@ export const OverlaySettings: React.FC<{
             </div>
 
             {opacityControl}
+
+            <ScreenshotScreenRow />
         </div>
     );
 };

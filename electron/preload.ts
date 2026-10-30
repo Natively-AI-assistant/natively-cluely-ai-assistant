@@ -1303,6 +1303,13 @@ interface ElectronAPI {
       post_call_summary?: boolean;
     }) => void,
   ) => () => void;
+  getScreenshotDisplay: () => Promise<{
+    preference: string;
+    displays: Array<{ id: number; number: number; name: string; width: number; height: number; primary: boolean }>;
+  }>;
+  setScreenshotDisplay: (preference: string) => Promise<{ success: boolean; error?: string }>;
+  cropperPickDisplay: () => void;
+  cropperDrag: (active: boolean) => void;
   getScreenUnderstandingMode: () => Promise<'vision_first' | 'vision_only' | 'private_vision'>;
   setScreenUnderstandingMode: (
     mode: 'vision_first' | 'vision_only' | 'private_vision',
@@ -3536,6 +3543,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('provider-data-scopes-changed', subscription);
     };
   },
+  getScreenshotDisplay: () => ipcRenderer.invoke('get-screenshot-display'),
+  setScreenshotDisplay: (preference: string) => ipcRenderer.invoke('set-screenshot-display', preference),
   getScreenUnderstandingMode: () => ipcRenderer.invoke('get-screen-understanding-mode'),
   setScreenUnderstandingMode: (mode: 'vision_first' | 'vision_only' | 'private_vision') =>
     ipcRenderer.invoke('set-screen-understanding-mode', mode),
@@ -3597,6 +3606,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Cropper API
   cropperConfirmed: (bounds: Electron.Rectangle) => ipcRenderer.send('cropper-confirmed', bounds),
   cropperCancelled: () => ipcRenderer.send('cropper-cancelled'),
+  cropperPickDisplay: () => ipcRenderer.send('cropper-display-picked'),
+  cropperDrag: (active: boolean) => ipcRenderer.send('cropper-drag', active === true),
   /** Launcher only: the boot reveal animation has fully landed. */
   notifyLauncherRevealComplete: () => ipcRenderer.send('launcher:reveal-complete'),
   onResetCropper: (callback: (data: { hudPosition: { x: number; y: number } }) => void) => {

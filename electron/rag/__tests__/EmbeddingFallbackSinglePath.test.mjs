@@ -33,15 +33,22 @@ describe('EmbeddingPipeline single-text fallback promotion', () => {
     assert.match(block, /return result\.embedding/, 'legacy callers still receive a bare vector');
   });
 
-  test('getEmbeddingWithFallback() returns producer metadata and promotes fallback after primary failure', () => {
+  // UPDATED 2026-10-29. Promoting on the FIRST single-embed failure was the
+  // query path's T13 defect again: one 429 during résumé ingest switched the
+  // app's space and every reference file re-indexed into the stand-in and back.
+  // Behaviour is asserted in ReferenceIndexFlipFlop2026_10_29.test.mjs.
+  test('getEmbeddingWithFallback() returns producer metadata and promotes only after a sustained outage', () => {
     const source = read('electron/rag/EmbeddingPipeline.ts');
     const block = methodBlock(source, 'async getEmbeddingWithFallback(text: string)');
     assert.match(block, /const active = this\.provider/, 'must capture active provider before awaiting');
     assert.match(block, /embedWithTimeout\(active, text, 'live-chunk'\)/, 'primary single embed should be attempted first');
     assert.match(block, /space: active\.space|const space = active\.space/, 'success metadata should come from captured active provider');
     assert.match(block, /catch\s*\(primaryError\)[\s\S]*const fallback = this\.fallbackProvider/, 'primary failure should enter fallback branch');
+    assert.match(block, /noteQueryHardFailure\('single_embed_hard_failure'\)/, 'a failure counts toward the shared promotion streak');
+    assert.match(block, /hardFailures < PROMOTE_AFTER_CONSECUTIVE_FAILURES[\s\S]*throw primaryError/, 'below the streak the embed fails and the space is untouched');
     assert.match(block, /embedWithTimeout\(fallback, text, 'fallback-live-chunk'\)/, 'fallback provider should perform the single embed');
-    assert.match(block, /this\.promoteFallbackProvider\(fallback\)/, 'successful fallback should become the active provider/space');
+    assert.match(block, /this\.promoteFallbackProvider\(fallback\)/, 'a sustained outage still promotes');
+    assert.match(block, /this\.schedulePrimaryReprobe\(active\)/, 'a promotion schedules its own demotion');
     assert.match(block, /space: fallback\.space, provider: fallback\.name, dimensions: fallback\.dimensions/, 'fallback metadata should come from the fallback that produced the vector');
   });
 

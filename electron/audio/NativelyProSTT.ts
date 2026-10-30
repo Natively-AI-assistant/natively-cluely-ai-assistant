@@ -635,7 +635,7 @@ export class NativelyProSTT extends EventEmitter {
             this.lastServerActivityAt = Date.now();
             try {
                 const msg = JSON.parse(data.toString());
-                if (!msg.text || msg.is_final) {
+                if ((!msg.text && msg.utterance_end !== true) || msg.is_final) {
                     console.log(`[NativelyProSTT:${this.channel}] Server msg`, {
                         type: msg.type,
                         final: Boolean(msg.is_final),
@@ -737,6 +737,28 @@ export class NativelyProSTT extends EventEmitter {
                             if (this.isActive) this.connect();
                         }, 250);
                     }
+                    return;
+                }
+
+                // natively-api 2026-10-29: in auto mode the relay reports each change of
+                // the language it hears as `language_heard` and keeps every provider
+                // multilingual, so a speaker who switches language is followed. Display
+                // only: reconnecting would pin it, which is what `language_detected` did
+                // to every auto session (the relay no longer sends that in auto mode).
+                if (typeof msg.language_heard === 'string' && msg.language_heard) {
+                    this.emit('languageDetected', msg.language_heard);
+                    return;
+                }
+
+                // End of an utterance (natively-api, 2026-10-29): one frame after
+                // each utterance's final text, from Deepgram's UtteranceEnd and
+                // speech_final, Soniox's <end> and ElevenLabs' commits. The same
+                // event the direct providers emit, so Auto Answer closes a
+                // question at the speaker's real stop instead of waiting out the
+                // quiet window, which merged back-to-back questions. A server
+                // that predates the frame never sends it.
+                if (msg.utterance_end === true) {
+                    try { this.emit('endpoint', { type: 'utterance_end' }); } catch { /* listeners never break the socket */ }
                     return;
                 }
 

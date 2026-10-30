@@ -29,7 +29,7 @@ import {
   mergeRollingTranscriptFinal,
   mergeRollingTranscriptPartial,
 } from '../../electron/utils/rollingTranscriptState.ts';
-import { categorizeSttError } from '../lib/sttErrorMapper';
+import { categorizeSttError, sttConnectionCause } from '../lib/sttErrorMapper';
 import { splitGistLine, splitGistLineStreaming, collapseBlockGaps } from '../lib/displayMarkup';
 
 import type { SkillSummary } from '../types/electron';
@@ -11326,6 +11326,18 @@ Provide only the answer, nothing else.`;
   const shouldShowSttSummaryPill =
     !sttNotConfigured && !sttFailed && !sttReconnecting &&
     (sttUserStatus === 'preparing' || sttInterviewerStatus === 'preparing');
+  // What to do depends on why. An antivirus re-signing the connection, or a
+  // firewall dropping it, was reported as "check your provider and its key",
+  // and a customer reinstalled ten times before turning their antivirus off.
+  const sttConnectionAdvice = (() => {
+    const cause = sttConnectionCause([
+      sttUserStatus === 'failed' || sttUserStatus === 'reconnecting' ? sttUserError : '',
+      sttInterviewerStatus === 'failed' || sttInterviewerStatus === 'reconnecting' ? sttInterviewerError : '',
+    ]);
+    if (cause === 'secure-connection') return t('Antivirus HTTPS scanning or a network filter is intercepting the connection. Allow Natively in your antivirus, or turn off its HTTPS scanning for Natively.');
+    if (cause === 'unreachable') return t('Natively cannot reach the transcription service. Check your internet connection, and allow Natively in your firewall and antivirus.');
+    return null;
+  })();
   const sttStatusBanner: { tone: 'warning' | 'error'; title: string; message: string } | null =
     sttNotConfigured
       ? null
@@ -11336,18 +11348,19 @@ Provide only the answer, nothing else.`;
             // Two lines: what stopped, then what to do. The provider's own
             // error (often a bare status like "401 Unauthorized") is not
             // shown; a code on screen explains nothing.
-            message:
+            message: `${
               sttUserStatus === 'failed' && sttInterviewerStatus === 'failed'
-                ? t('Nothing is being transcribed right now. Check your transcription provider and its key in Settings.')
+                ? t('Nothing is being transcribed right now.')
                 : sttUserStatus === 'failed'
-                  ? t('Your microphone is no longer being transcribed. Check your transcription provider and its key in Settings.')
-                  : t('Interviewer audio is no longer being transcribed. Check your transcription provider and its key in Settings.'),
+                  ? t('Your microphone is no longer being transcribed.')
+                  : t('Interviewer audio is no longer being transcribed.')
+            } ${sttConnectionAdvice ?? t('Check your transcription provider and its key in Settings.')}`,
           }
         : sttReconnecting && !sttFailed
           ? {
               tone: 'warning',
               title: t('Transcription Reconnecting'),
-              message: t('The connection to your speech-to-text provider dropped. Retrying.'),
+              message: `${t('The connection to your speech-to-text provider dropped.')} ${sttConnectionAdvice ?? t('Retrying.')}`,
             }
           : (sttUserFallback || sttInterviewerFallback)
             ? {
