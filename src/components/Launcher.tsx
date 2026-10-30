@@ -1339,7 +1339,9 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                         {/* Liquid Icon Orb */}
                         <div className="relative flex items-center justify-center w-9 h-9 rounded-full bg-gradient-to-b from-blue-400/20 to-blue-600/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] border border-white/5">
                             <div className="absolute inset-0 rounded-full bg-blue-500/20 blur-md" />
-                            <RefreshCw size={15} className="text-blue-300 animate-[spin_2s_linear_infinite] drop-shadow-[0_0_5px_rgba(59,130,246,0.6)]" />
+                            {/* Light: a darker blue and no glow, as ProviderChangeNotice's ORB does;
+                                the dark theme's pale blue-300 vanished into the pale disc. */}
+                            <RefreshCw size={15} className={`relative animate-[spin_2s_linear_infinite] ${isLight ? 'text-blue-600' : 'text-blue-300 drop-shadow-[0_0_5px_rgba(59,130,246,0.6)]'}`} />
                         </div>
 
                         {/* Text Content */}
