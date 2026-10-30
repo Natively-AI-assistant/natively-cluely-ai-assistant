@@ -78,6 +78,7 @@ it. See [`CONTRACT.md`](./CONTRACT.md) for the `/dom` + `/ws` + `/pair` API.
 | `tabs` | Resolve which tab to capture (the one you were last on) when the browser isn't the focused OS app, and list tabs for the desktop's tab picker. |
 | `storage` | Persist the pairing token (`chrome.storage.local`) and track the last-active tab (`chrome.storage.session`). |
 | `alarms` | A 25s heartbeat that keeps the MV3 service worker resident so it can receive the desktop's capture push. |
+| `offscreen` | One hidden page that reads Chrome's light or dark theme (`matchMedia`), so the toolbar icon is the black mark on a light toolbar and the white mark on a dark one. It reads nothing else. |
 | `host_permissions: http://127.0.0.1/*`, `http://localhost/*`, `ws://127.0.0.1/*` | Let the service worker make the cross-origin loopback `fetch`/WebSocket to the desktop. **Loopback only** — the extension cannot reach any public site's network. |
 
 There is **no `<all_urls>`** and **no persistent content script**. Extraction

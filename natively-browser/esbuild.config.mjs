@@ -10,7 +10,7 @@
  *   - popup.ts           → the action popup script
  *
  * @mozilla/readability (MIT, AGPL-compatible) is bundled into content-script.
- * Static assets (manifest.json, popup.html, icons) are copied verbatim to dist/.
+ * Static assets (manifest.json, popup.html, theme-watch.html, icons) are copied verbatim to dist/.
  */
 import { build } from 'esbuild';
 import { cp, mkdir, rm, readFile, writeFile } from 'node:fs/promises';
@@ -28,6 +28,8 @@ const entryPoints = [
   path.join(srcDir, 'popup.ts'),
   // The Meet reader (names on the transcript), registered only when allowed.
   path.join(srcDir, 'meet-reader.ts'),
+  // The hidden page that tells the toolbar icon Chrome's light or dark theme.
+  path.join(srcDir, 'theme-watch.ts'),
 ];
 
 async function run() {
@@ -66,6 +68,7 @@ async function run() {
     await writeFile(path.join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
   }
   await cp(path.join(srcDir, 'popup.html'), path.join(outDir, 'popup.html'));
+  await cp(path.join(srcDir, 'theme-watch.html'), path.join(outDir, 'theme-watch.html'));
 
   // Icons directory is optional.
   const iconsDir = path.join(rootDir, 'icons');

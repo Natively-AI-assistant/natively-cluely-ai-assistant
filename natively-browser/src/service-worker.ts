@@ -23,6 +23,7 @@ import { originPatternFromUrl } from './capture/originPattern';
 import { requestOriginPermission, requestAllSitesPermission, hasAllSitesPermission } from './capture/permissions';
 import { meetingTabsReport } from './meeting-tabs';
 import { formulaImageLimitsOf, type FormulaImageLimits } from './formula-sheet';
+import { openThemeWatch, toolbarIconFor } from './toolbar-icon';
 
 const STORAGE_KEY = 'pairing';
 const PAIR_PROBE_DOM = '__pair_probe__';
@@ -1176,6 +1177,15 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 chrome.runtime.onStartup.addListener(() => { void ensureWsConnected(); });
 chrome.runtime.onInstalled.addListener(() => { void ensureWsConnected(); });
+
+// The toolbar icon follows Chrome's theme (toolbar-icon.ts): the hidden theme
+// page reports light or dark, now and on each change. Opened on every wake; a
+// second open is refused by Chrome, which is fine.
+void openThemeWatch(chrome.offscreen);
+chrome.runtime.onMessage.addListener((msg: { type?: string; dark?: unknown }, sender) => {
+  if (msg?.type !== 'toolbar-theme' || sender.id !== chrome.runtime.id) return;
+  chrome.action.setIcon({ path: toolbarIconFor(msg.dark === true) }).catch(() => {});
+});
 
 // Wake-on-browser-interaction: these fire whenever the user touches Chrome, which
 // is exactly the moment right before they'd trigger a capture. Each wakes a dead

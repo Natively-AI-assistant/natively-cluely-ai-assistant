@@ -108,11 +108,12 @@
       /* The latest message stands in for the status while it is shown. */
       .corner:has(.msg:not(:empty)) .status { display: none; }
 
+      /* One line, always; a longer one ends in "…" and shows whole on hover. */
       .msg {
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 2;
+        display: block;
+        white-space: nowrap;
         overflow: hidden;
+        text-overflow: ellipsis;
         padding-top: 3px;
         font-size: 11px;
         line-height: 16px;
@@ -270,6 +271,12 @@
         display: grid;
         gap: 8px;
         margin-top: 14px;
+      }
+      /* The rows and the note sit centred as one block, all starting at one left edge. */
+      .keys-list {
+        display: grid;
+        gap: 8px;
+        justify-self: center;
       }
       .keys-row {
         display: flex;
@@ -606,9 +613,11 @@
       <button id="captureBtn" class="primary"><span class="label t-text-swap">Capture this page</span></button>
       <button id="unpairBtn" class="ghost"><span class="label t-text-swap">Unpair</span></button>
       <div class="keys">
-        <div class="keys-row"><span class="keys-caps"><kbd data-mod>⌘</kbd><kbd>Y</kbd></span><span>Capture this page</span></div>
-        <div class="keys-row"><span class="keys-caps"><kbd data-mod>⌘</kbd><kbd>↵</kbd></span><span>Then ask about it</span></div>
-        <p class="keys-note">Each press sends the page once.</p>
+        <div class="keys-list">
+          <div class="keys-row"><span class="keys-caps"><kbd data-mod>⌘</kbd><kbd>Y</kbd></span><span>Capture this page</span></div>
+          <div class="keys-row"><span class="keys-caps"><kbd data-mod>⌘</kbd><kbd>↵</kbd></span><span>Then ask about it</span></div>
+          <p class="keys-note">Each press sends the page once.</p>
+        </div>
       </div>
     </section>
 
