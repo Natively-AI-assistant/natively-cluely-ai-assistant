@@ -11117,15 +11117,17 @@ html[data-platform="linux"][data-window="launcher"] body {
   -webkit-mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask) !important;
   mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask) !important;
 }
-[data-theme='light'] [data-interface-theme] .pricing-card-yearly {
-  box-shadow:
-    inset 0 -1px 0 rgba(15, 23, 42, 0.10),
-    0 6px 18px rgba(15, 23, 42, 0.12) !important;
-}
-[data-theme='light'] [data-interface-theme] .pricing-card-lifetime {
-  box-shadow:
-    inset 0 -1px 0 rgba(15, 23, 42, 0.10),
-    0 6px 18px rgba(15, 23, 42, 0.12) !important;
+/* The floor only, no outer contact shadow. The two cards sit in the Plans
+   accordion, whose .t-acc-panel-inner is overflow: hidden for its height
+   animation, so the 0 6px 18px shadow was cut off flush with the cards' sides
+   and hung under each one as a square grey block. The :hover selectors tie the
+   light hover rules near the top of this file (0,4,0) and win on order, so
+   hovering no longer brings back a bigger clipped blue glow. */
+[data-theme='light'] [data-interface-theme] .pricing-card-yearly,
+[data-theme='light'] [data-interface-theme] .pricing-card-lifetime,
+[data-theme='light'] [data-interface-theme] .pricing-card-yearly:hover,
+[data-theme='light'] [data-interface-theme] .pricing-card-lifetime:hover {
+  box-shadow: inset 0 -1px 0 rgba(15, 23, 42, 0.10) !important;
 }
 
 /* ── 3. The purchase buttons ──────────────────────────────────────────────
