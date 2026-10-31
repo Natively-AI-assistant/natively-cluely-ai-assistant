@@ -24,7 +24,10 @@ import { analyzeUserInstructions, removeGroundingOverrides, userInstructionsOver
  */
 export type QuickAction = 'recap' | 'follow_up_questions' | 'clarify' | 'brainstorm' | 'brainstorm_alternatives'
     // The live helpers (2026-10-15, liveHelpers.ts): What did I miss?, Define, Sound smart.
-    | 'catch_me_up' | 'define' | 'sound_smart';
+    | 'catch_me_up' | 'define' | 'sound_smart'
+    // A button the user made (2026-10-30, customButtons.ts): its contract is
+    // in the system prompt, and the request names it (customButtonName).
+    | 'custom_button';
 
 // Each ends by naming the conversation's language. LLMHelper's language line
 // answers in the language of "the user's most recent message", and an English
@@ -61,6 +64,8 @@ const REQUESTS: Record<QuickAction, string> = {
     // "my own words": like Brainstorm's "in my voice", so it comes back as a
     // line to say and not as advice about what to say.
     sound_smart: 'Give me one specific, insightful point or question I could say next, in my own words, built on what was just said',
+    // With the button's name when there is one (requestFor).
+    custom_button: 'Do what my button asks, as its instructions say',
 };
 // The request's own length, and what a length is measured outside of.
 const DEFAULT_LENGTH: Partial<Record<QuickAction, { length: string; outside: string }>> = {
@@ -137,7 +142,9 @@ function requestFor(action: QuickAction, extras: QuickActionTurnExtras | undefin
     const userLength = standing && own ? standingLength(standing) : null;
     const length = own ? (userLength ?? own.length) : '';
     const listening = action === 'follow_up_questions' && extras?.otherPersonSpokeAlone ? IF_THEY_ARE_TEACHING : '';
-    return `${REQUESTS[action]}${listening}${length ? `. ${length}${own?.outside ?? ''}` : ''}${extras?.languagePinned ? '' : IN_CONVERSATION_LANGUAGE}.${standing ? STANDING_INSTRUCTIONS_FIRST : ''}`;
+    const name = action === 'custom_button' ? extras?.customButtonName?.replace(/["<>]/g, '').trim() : '';
+    const asked = name ? `Do what my ${name} button asks, as its instructions say` : REQUESTS[action];
+    return `${asked}${listening}${length ? `. ${length}${own?.outside ?? ''}` : ''}${extras?.languagePinned ? '' : IN_CONVERSATION_LANGUAGE}.${standing ? STANDING_INSTRUCTIONS_FIRST : ''}`;
 }
 
 /**
@@ -192,6 +199,8 @@ export interface QuickActionTurnExtras {
      * (IF_THEY_ARE_TEACHING).
      */
     otherPersonSpokeAlone?: boolean;
+    /** The pressed custom button's name, for its request. */
+    customButtonName?: string;
 }
 
 /** What the engine tells Clarify and Follow-up questions about the context it hands them. */

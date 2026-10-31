@@ -557,6 +557,8 @@ interface ElectronAPI {
   ) => Promise<{ refined: string | null; intent: string }>;
   generateRecap: () => Promise<{ summary: string | null }>;
   generateLiveHelper: (action: 'catch_me_up' | 'define' | 'sound_smart' | 'follow_up_questions', opts?: { sinceMs?: number }) => Promise<{ text: string | null }>;
+  compileCustomButton: (input: { name: string; description: string }) => Promise<{ instruction: string; source: 'model' | 'fallback' }>;
+  generateCustomButton: (input: { name: string; instruction: string; imagePaths?: string[]; readMinutes?: number }) => Promise<{ text: string | null; error?: string }>;
   submitManualQuestion: (question: string) => Promise<{ answer: string | null; question: string }>;
   getIntelligenceContext: () => Promise<{
     context: string;
@@ -1496,6 +1498,8 @@ interface ElectronAPI {
   // Settings › Overlay: the meeting overlay's button order, passed to every window the same way.
   setOverlayButtonOrder: (order: string[]) => void;
   onOverlayButtonOrderChanged: (callback: (order: string[]) => void) => () => void;
+  setOverlayCustomButtons: (buttons: { id: string; name: string; prompt: string; instruction: string; screenshot: boolean }[]) => void;
+  onOverlayCustomButtonsChanged: (callback: (buttons: unknown) => void) => () => void;
 
   // Cancel the in-flight gemini-chat-stream. Renderer wires this to "drop
   // the current answer" user actions (Escape, navigation, chat-overlay unmount).
@@ -2301,6 +2305,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   generateRecap: () => ipcRenderer.invoke('generate-recap'),
   generateLiveHelper: (action: 'catch_me_up' | 'define' | 'sound_smart' | 'follow_up_questions', opts?: { sinceMs?: number }) =>
     ipcRenderer.invoke('generate-live-helper', action, opts),
+  compileCustomButton: (input: { name: string; description: string }) =>
+    ipcRenderer.invoke('custom-button:compile', input),
+  generateCustomButton: (input: { name: string; instruction: string; imagePaths?: string[]; readMinutes?: number }) =>
+    ipcRenderer.invoke('generate-custom-button', input),
   submitManualQuestion: (question: string) =>
     ipcRenderer.invoke('submit-manual-question', question),
   getIntelligenceContext: () => ipcRenderer.invoke('get-intelligence-context'),
@@ -3773,6 +3781,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('overlay-buttons:changed', handler);
     return () => {
       ipcRenderer.removeListener('overlay-buttons:changed', handler);
+    };
+  },
+  setOverlayCustomButtons: (buttons: { id: string; name: string; prompt: string; instruction: string; screenshot: boolean }[]) => {
+    ipcRenderer.send('overlay-custom-buttons:set', buttons);
+  },
+  onOverlayCustomButtonsChanged: (callback: (buttons: unknown) => void) => {
+    const handler = (_evt: unknown, buttons: unknown) => callback(buttons);
+    ipcRenderer.on('overlay-custom-buttons:changed', handler);
+    return () => {
+      ipcRenderer.removeListener('overlay-custom-buttons:changed', handler);
     };
   },
 

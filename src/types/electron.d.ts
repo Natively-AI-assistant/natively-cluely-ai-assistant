@@ -492,6 +492,10 @@ export interface ElectronAPI {
   generateRecap: () => Promise<{ summary: string | null }>
   /** The overlay's live helpers: What did I miss?, Define, Sound smart. Streams like Recap and Clarify. */
   generateLiveHelper?: (action: LiveHelperAction, opts?: { sinceMs?: number }) => Promise<{ text: string | null }>
+  /** Settings › Overlay › Your buttons: rewrite the user's description into the button's contract (a fallback when no model answers). */
+  compileCustomButton?: (input: { name: string; description: string }) => Promise<{ instruction: string; source: 'model' | 'fallback' }>
+  /** A press of a custom button: runs like a live helper and streams into Recap's card. */
+  generateCustomButton?: (input: { name: string; instruction: string; imagePaths?: string[]; readMinutes?: number }) => Promise<{ text: string | null; error?: string }>
   submitManualQuestion: (question: string) => Promise<{ answer: string | null; question: string }>
   getIntelligenceContext: () => Promise<{ context: string; lastAssistantMessage: string | null; activeMode: string }>
   resetIntelligence: () => Promise<{ success: boolean; error?: string }>
@@ -845,6 +849,8 @@ export interface ElectronAPI {
   onGenieAnimationChanged: (callback: (enabled: boolean) => void) => () => void
   setOverlayButtonOrder: (order: string[]) => void
   onOverlayButtonOrderChanged: (callback: (order: string[]) => void) => () => void
+  setOverlayCustomButtons: (buttons: { id: string; name: string; prompt: string; instruction: string; screenshot: boolean }[]) => void
+  onOverlayCustomButtonsChanged: (callback: (buttons: unknown) => void) => () => void
 
   // Phase 3 — Cluely-style dynamic action cards.
   onIntelligenceDynamicAction: (callback: (data: { action: DynamicActionPayload }) => void) => () => void

@@ -410,8 +410,9 @@ import { useShortcuts } from '../hooks/useShortcuts';
 import ClickThroughToggle from './ui/ClickThroughToggle';
 import { analytics, detectProviderType, reportAnswerFailed } from '../lib/analytics/analytics.service';
 import { interfaceThemeSurface, isCssOwnedInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
-import { overlayRowOf, useOverlayButtonOrder, type OverlayButtonId } from '../lib/overlayButtonOrder';
-import { OVERLAY_BUTTONS } from './overlay/overlayButtons';
+import { isBuiltinOverlayButtonId, overlayRowOf, useOverlayButtonOrder, type BuiltinOverlayButtonId, type OverlayButtonId } from '../lib/overlayButtonOrder';
+import { getOverlayCustomButton, overlayCustomReadMinutes, useOverlayCustomButtons, type OverlayCustomButtonId } from '../lib/overlayCustomButtons';
+import { OVERLAY_BUTTONS, overlayButtonFace } from './overlay/overlayButtons';
 import {
   getGlassOverlayAppearance,
   getOverlayAppearance,
@@ -1431,7 +1432,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 }) => {
   // Lavender paints a light panel under the dark app theme too, so every
   // light/dark class choice below follows the panel, not the app.
-  const isLightTheme = interfaceTheme === 'lavender' || useResolvedTheme() === 'light';
+  // The hook runs on every render: behind `||` it was skipped while the theme
+  // was Lavender, and flipping in or out of Lavender changed the hook order
+  // and crashed the overlay ("Should have a queue").
+  const resolvedTheme = useResolvedTheme();
+  const isLightTheme = interfaceTheme === 'lavender' || resolvedTheme === 'light';
   const isGlassTheme = interfaceTheme === 'liquid-glass';
   const isModernTheme = interfaceTheme === 'modern';
   // Lavender draws its buttons with the website hero's own button
@@ -4270,6 +4275,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // width). English with Inter and the default five fits the default.
   const overlayButtonOrder = useOverlayButtonOrder();
   const overlayRow = overlayRowOf(overlayButtonOrder);
+  const overlayCustomButtons = useOverlayCustomButtons();
   const quickRowRef = useRef<HTMLDivElement>(null);
   const rowMeasureRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -9699,6 +9705,55 @@ Provide only the answer, nothing else.`;
     }
   };
 
+  // A button the user made (Settings › Overlay › Your buttons). It runs like
+  // Define: main puts the button's contract in the system prompt as its
+  // action, with the mode and the core rules, and reads the conversation as
+  // context (llm/customButtons.ts); the answer streams into Recap's card.
+  // With "Screenshot every press" the screen goes with it.
+  const handleCustomButton = async (id: OverlayCustomButtonId) => {
+    const button = getOverlayCustomButton(id);
+    if (!button) return;
+    const actionKey = `custom:${button.id}`;
+    if (!tryBeginOverlayAction(actionKey)) return;
+    setIsExpanded(true);
+    setIsProcessing(true);
+    setMessages((prev) => [
+      ...prev,
+      { id: genMessageId(), role: 'user', text: button.name, isQuickActionLabel: true },
+    ]);
+    analytics.trackCommandExecuted(button.screenshot ? 'custom_button_screenshot' : 'custom_button');
+
+    try {
+      const imagePaths: string[] = [];
+      if (button.screenshot) {
+        try {
+          const shot = await window.electronAPI.takeScreenshot();
+          if (shot?.path) imagePaths.push(shot.path);
+        } catch (err) {
+          console.warn('[custom-button] screenshot failed; asking without it:', err);
+        }
+      }
+      prepareIntelligenceStreamPlaceholder('recap');
+      // A button saved before its contract was written runs on the user's own words.
+      const instruction = button.instruction || button.prompt;
+      const result = await window.electronAPI.generateCustomButton?.({ name: button.name, instruction, imagePaths, readMinutes: overlayCustomReadMinutes(button.prompt) });
+      if (!result?.text) discardEmptyPlaceholder('recap');
+    } catch (err) {
+      discardEmptyPlaceholder('recap');
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: genMessageId(),
+          role: 'system',
+          ...failedLine(err),
+        },
+      ]);
+    } finally {
+      endOverlayAction(actionKey);
+      setIsProcessing(false);
+    }
+  };
+
   // Refresh the latest-handler ref on every render so the captured-key
   // listener (mounted with [] deps) calls the CURRENT closure, not a
   // stale snapshot from first render.
@@ -12555,7 +12610,7 @@ Provide only the answer, nothing else.`;
                   // not buttons, and CSS-drawn labels.
                   const measureChip = (id: OverlayButtonId) => {
                     if (isLavenderTheme) {
-                      const { Icon, label } = OVERLAY_BUTTONS[id];
+                      const { Icon, label } = overlayButtonFace(id, t, overlayCustomButtons);
                       return (
                         <span key={id} className={`hlg-button hlg-lavender ${heroChipClass}${id === 'answer' ? ' min-w-[74px]' : ''}`}>
                           <span className="hlg-content">
@@ -12564,7 +12619,7 @@ Provide only the answer, nothing else.`;
                             ) : (
                               <>
                                 <span className="hlg-icon">{heroIcon(Icon)}</span>
-                                <span className="hlg-label">{ghost(t(label))}</span>
+                                <span className="hlg-label">{ghost(label)}</span>
                               </>
                             )}
                           </span>
@@ -12578,15 +12633,15 @@ Provide only the answer, nothing else.`;
                         </span>
                       );
                     }
-                    const { Icon, label } = OVERLAY_BUTTONS[id];
+                    const { Icon, label } = overlayButtonFace(id, t, overlayCustomButtons);
                     return (
                       <span key={id} className={chipClass} style={appearance.chipStyle}>
                         <Icon className="w-3 h-3 opacity-70" />
-                        {ghost(t(label))}
+                        {ghost(label)}
                       </span>
                     );
                   };
-                  const onChip: Record<Exclude<OverlayButtonId, 'answer'>, () => void> = {
+                  const onBuiltinChip: Record<Exclude<BuiltinOverlayButtonId, 'answer'>, () => void> = {
                     what_to_answer: () => void handleWhatToSay(),
                     clarify: () => void handleClarify(),
                     recap: () => void handleRecap(),
@@ -12596,6 +12651,9 @@ Provide only the answer, nothing else.`;
                     define: () => void handleLiveHelper('define'),
                     sound_smart: () => void handleLiveHelper('sound_smart'),
                   };
+                  // The user's own buttons ask their prompt (handleCustomButton).
+                  const onChip = (id: Exclude<OverlayButtonId, 'answer'>) =>
+                    isBuiltinOverlayButtonId(id) ? onBuiltinChip[id] : () => void handleCustomButton(id);
                   const chip = (id: OverlayButtonId) => {
                     if (isLavenderTheme) {
                       if (id === 'answer') {
@@ -12617,10 +12675,10 @@ Provide only the answer, nothing else.`;
                           </HeroGlassButton>
                         );
                       }
-                      const { Icon, label } = OVERLAY_BUTTONS[id];
+                      const { Icon, label } = overlayButtonFace(id, t, overlayCustomButtons);
                       return (
-                        <HeroGlassButton key={id} variant="lavender" onClick={onChip[id]} className={heroChipClass} icon={heroIcon(Icon)}>
-                          {t(label)}
+                        <HeroGlassButton key={id} variant="lavender" onClick={onChip(id)} className={heroChipClass} icon={heroIcon(Icon)}>
+                          {label}
                         </HeroGlassButton>
                       );
                     }
@@ -12643,10 +12701,10 @@ Provide only the answer, nothing else.`;
                         </button>
                       );
                     }
-                    const { Icon, label } = OVERLAY_BUTTONS[id];
+                    const { Icon, label } = overlayButtonFace(id, t, overlayCustomButtons);
                     return (
-                      <button key={id} onClick={onChip[id]} className={chipClass} style={appearance.chipStyle}>
-                        <Icon className="w-3 h-3 opacity-70" /> {t(label)}
+                      <button key={id} onClick={onChip(id)} className={chipClass} style={appearance.chipStyle}>
+                        <Icon className="w-3 h-3 opacity-70" /> {label}
                       </button>
                     );
                   };

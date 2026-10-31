@@ -3,7 +3,8 @@
 // Style picker (moved from General's advanced settings) and Interface Opacity
 // (moved from General). Buttons are dragged to reorder the row or dropped on
 // one in the other group to swap them; the result is saved through
-// overlayButtonOrder.ts, which every window follows.
+// overlayButtonOrder.ts, which every window follows. Under it, Your buttons
+// (OverlayCustomButtons.tsx) makes the user's own buttons, which join the tray.
 //
 // A switcher at the top (2026-10-20) picks what every meeting opens
 // (utils/meetingSurface.ts): the Natively overlay (all of the above) or the
@@ -26,13 +27,16 @@ import {
     DEFAULT_OVERLAY_BUTTON_ORDER,
     OVERLAY_ROW_SIZE,
     moveOverlayButton,
+    normalizeOverlayButtonOrder,
     sameOverlayButtonOrder,
     setOverlayButtonOrder,
     swapOverlayButtons,
     useOverlayButtonOrder,
     type OverlayButtonId,
 } from '../../lib/overlayButtonOrder';
-import { OVERLAY_BUTTONS } from '../overlay/overlayButtons';
+import { useOverlayCustomButtons } from '../../lib/overlayCustomButtons';
+import { overlayButtonFace } from '../overlay/overlayButtons';
+import { CustomButtonsSection } from './OverlayCustomButtons';
 import { OverlayChipContent, OverlayMockup, overlayChipClass, useOverlayAppearance } from './OverlayMockup';
 import { Presence, SETTINGS_CARD, SettingsMenu, SettingsRow, SettingsSectionHeading } from './SettingsRow';
 
@@ -274,8 +278,8 @@ const Preview: React.FC<{ opacity: number; theme: MeetingInterfaceTheme }> = ({ 
     const appearance = useOverlayAppearance(opacity, theme);
     const row = editor.order.slice(0, OVERLAY_ROW_SIZE);
     const tray = editor.order.slice(OVERLAY_ROW_SIZE);
-    const isGlassTheme = theme === 'liquid-glass';
-    const label = (id: OverlayButtonId, place: string) => `${t(OVERLAY_BUTTONS[id].label)}, ${place}`;
+    const customs = useOverlayCustomButtons();
+    const label = (id: OverlayButtonId, place: string) => `${overlayButtonFace(id, t, customs).label}, ${place}`;
 
     useLayoutEffect(() => {
         const stage = stageRef.current;
@@ -618,7 +622,8 @@ export const OverlaySettings: React.FC<{
 }> = ({ opacity, theme, onThemeChange, opacityControl }) => {
     const t = useT();
     const saved = useOverlayButtonOrder();
-    const isDefaultOrder = sameOverlayButtonOrder(saved, DEFAULT_OVERLAY_BUTTON_ORDER);
+    // Custom buttons sit after the built-in ones in the default order.
+    const isDefaultOrder = sameOverlayButtonOrder(saved, normalizeOverlayButtonOrder(DEFAULT_OVERLAY_BUTTON_ORDER));
     const style = THEMES.find((o) => o.mode === theme) ?? THEMES[0];
     // The preview draws what the meeting will paint (Default is Lavender in
     // light mode); the picker keeps the pick itself.
@@ -665,6 +670,8 @@ export const OverlaySettings: React.FC<{
                 </div>
                 <Preview opacity={opacity} theme={paintedTheme} />
             </section>
+
+            <CustomButtonsSection />
 
             <div className={SETTINGS_CARD}>
                 <SettingsRow

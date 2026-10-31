@@ -12,7 +12,8 @@ import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { getGlassOverlayAppearance, getOverlayAppearance, type OverlayAppearance } from '../../lib/overlayAppearance';
 import { isCssOwnedInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
 import { overlayRowOf, useOverlayButtonOrder, type OverlayButtonId } from '../../lib/overlayButtonOrder';
-import { OVERLAY_BUTTONS } from '../overlay/overlayButtons';
+import { useOverlayCustomButtons } from '../../lib/overlayCustomButtons';
+import { overlayButtonFace } from '../overlay/overlayButtons';
 import GlassEffectLayer from '../ui/GlassEffectLayer';
 import { ModelSelectorLabel } from '../ui/ModelSelectorLabel';
 import { MODEL_SELECTOR_WIDTH } from '../ui/modelSelectorLabelText';
@@ -30,18 +31,18 @@ export const overlayChipClass = (id: OverlayButtonId, theme?: MeetingInterfaceTh
 
 export const OverlayChipContent: React.FC<{ id: OverlayButtonId; theme?: MeetingInterfaceTheme }> = ({ id, theme }) => {
     const t = useT();
-    const { Icon, label } = OVERLAY_BUTTONS[id];
+    const { Icon, label } = overlayButtonFace(id, t, useOverlayCustomButtons());
     if (theme === 'lavender') {
         return (
             <span className="hlg-content">
                 <span className="hlg-icon"><Icon size={11} strokeWidth={2} /></span>
-                <span className="hlg-label">{t(label)}</span>
+                <span className="hlg-label">{label}</span>
             </span>
         );
     }
     return (
         <>
-            <Icon className="w-3 h-3 opacity-70" /> {t(label)}
+            <Icon className="w-3 h-3 opacity-70" /> {label}
         </>
     );
 };

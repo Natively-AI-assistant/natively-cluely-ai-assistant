@@ -9240,23 +9240,58 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Settings › Overlay: which buttons the meeting overlay shows and in what
   // order (every button once; the first five are the row), passed on the same
   // way. Only the known ids, each once, are passed on; the renderer
-  // re-normalises whatever arrives (src/lib/overlayButtonOrder.ts).
+  // re-normalises whatever arrives (src/lib/overlayButtonOrder.ts). The
+  // user's own buttons (2026-10-30) are in the list by `custom:` ids, at most
+  // OVERLAY_CUSTOM_MAX of them.
   const OVERLAY_BUTTON_IDS = new Set([
     'what_to_answer', 'clarify', 'recap', 'follow_up', 'answer',
     'brainstorm', 'catch_me_up', 'define', 'sound_smart',
   ]);
+  const OVERLAY_CUSTOM_ID = /^custom:[a-z0-9-]{1,40}$/;
+  const OVERLAY_CUSTOM_MAX = 4;
   safeOn('overlay-buttons:set', (_event, order: unknown) => {
     if (
       !Array.isArray(order) ||
-      order.length !== OVERLAY_BUTTON_IDS.size ||
+      order.length < OVERLAY_BUTTON_IDS.size ||
+      order.length > OVERLAY_BUTTON_IDS.size + OVERLAY_CUSTOM_MAX ||
       new Set(order).size !== order.length ||
-      !order.every((id) => typeof id === 'string' && OVERLAY_BUTTON_IDS.has(id))
+      !order.every((id) => typeof id === 'string' && (OVERLAY_BUTTON_IDS.has(id) || OVERLAY_CUSTOM_ID.test(id))) ||
+      order.filter((id) => OVERLAY_BUTTON_IDS.has(id)).length !== OVERLAY_BUTTON_IDS.size
     ) return;
     const copy = [...order] as string[];
     BrowserWindow.getAllWindows().forEach((win) => {
       if (win.isDestroyed()) return;
       try {
         win.webContents.send('overlay-buttons:changed', copy);
+      } catch {
+        // Renderer may be tearing down between isDestroyed() and send.
+      }
+    });
+  });
+
+  // Settings › Overlay › Your buttons: the user's own buttons (name, the
+  // user's description, the contract written from it, screenshot switch), passed on to every window the same way. Only a plain
+  // copy of well-formed entries goes on; the renderer re-normalises it
+  // (src/lib/overlayCustomButtons.ts).
+  safeOn('overlay-custom-buttons:set', (_event, buttons: unknown) => {
+    if (!Array.isArray(buttons) || buttons.length > OVERLAY_CUSTOM_MAX) return;
+    const copy: { id: string; name: string; prompt: string; instruction: string; screenshot: boolean }[] = [];
+    for (const raw of buttons) {
+      if (!raw || typeof raw !== 'object') return;
+      const { id, name, prompt, instruction, screenshot } = raw as Record<string, unknown>;
+      if (
+        typeof id !== 'string' || !OVERLAY_CUSTOM_ID.test(id) ||
+        typeof name !== 'string' || Array.from(name).length > 10 ||
+        typeof prompt !== 'string' || prompt.length > 2000 ||
+        (instruction !== undefined && (typeof instruction !== 'string' || instruction.length > 1200)) ||
+        typeof screenshot !== 'boolean'
+      ) return;
+      copy.push({ id, name, prompt, instruction: typeof instruction === 'string' ? instruction : '', screenshot });
+    }
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (win.isDestroyed()) return;
+      try {
+        win.webContents.send('overlay-custom-buttons:changed', copy);
       } catch {
         // Renderer may be tearing down between isDestroyed() and send.
       }
@@ -16637,6 +16672,57 @@ export function initializeIpcHandlers(appState: AppState): void {
         try {
           const label = action === 'catch_me_up' ? 'What did I miss?' : action === 'define' ? 'Define' : action === 'follow_up_questions' ? 'Follow-up questions' : 'Sound smart';
           PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), text, label);
+        } catch (_) {}
+      }
+      return { text };
+    }, (r: any) => !r || r.text === null || r.text === undefined);
+  });
+
+  // Settings › Overlay › Your buttons (llm/customButtons.ts). Saving a button
+  // rewrites the user's description into a contract in the style of the
+  // built-in buttons; a model that is missing or fails leaves the fallback
+  // (the description's lines as sentences), so a save never fails on it.
+  safeHandle('custom-button:compile', async (_, input: unknown) => {
+    const { name, description } = (input && typeof input === 'object' ? input : {}) as { name?: unknown; description?: unknown };
+    if (typeof name !== 'string' || typeof description !== 'string') return { instruction: '', source: 'fallback' };
+    const { compileCustomButtonInstruction, fallbackCustomButtonInstruction, CUSTOM_BUTTON_DESCRIPTION_MAX_CHARS } =
+      require('./llm/customButtons') as typeof import('./llm/customButtons');
+    const cleanName = Array.from(name.trim()).slice(0, 10).join('');
+    const cleanDescription = description.slice(0, CUSTOM_BUTTON_DESCRIPTION_MAX_CHARS);
+    const llmHelper = appState.processingHelper?.getLLMHelper?.();
+    if (!llmHelper) return { instruction: fallbackCustomButtonInstruction(cleanDescription), source: 'fallback' };
+    return compileCustomButtonInstruction(cleanName, cleanDescription, (system, user) =>
+      llmHelper.chat(user, undefined, undefined, system, true /* skipModeInjection */));
+  });
+
+  // A press of a custom button: its contract runs as a live helper does
+  // (IntelligenceEngine.runCustomButton). The screenshot, when the button
+  // takes one, was captured by the renderer through take-screenshot.
+  safeHandle('generate-custom-button', async (_, input: unknown) => {
+    const { name, instruction, imagePaths, readMinutes } = (input && typeof input === 'object' ? input : {}) as { name?: unknown; instruction?: unknown; imagePaths?: unknown; readMinutes?: unknown };
+    if (typeof name !== 'string' || !name.trim() || typeof instruction !== 'string') return { text: null };
+    const paths = Array.isArray(imagePaths) ? imagePaths.filter((p): p is string => typeof p === 'string').slice(0, 5) : [];
+    if (paths.length) {
+      // SECURITY: only images under userData, as generate-brainstorm.
+      const { app } = require('electron');
+      const { validateImagePath } = require('./utils/curlUtils');
+      const userDataDir = app.getPath('userData');
+      for (const imagePath of paths) {
+        const validation = validateImagePath(imagePath, userDataDir);
+        if (!validation.isValid) {
+          console.warn(`[IPC] generate-custom-button: invalid image path rejected: ${validation.reason}`);
+          return { text: null, error: 'invalid_image_path' };
+        }
+      }
+    }
+    const button = { name: Array.from(name.trim()).slice(0, 10).join(''), instruction: instruction.slice(0, 1200) };
+    const { customButtonReadSeconds } = require('./llm/customButtons') as typeof import('./llm/customButtons');
+    const readSeconds = customButtonReadSeconds(readMinutes);
+    return _tracked(async () => {
+      const text = await appState.getIntelligenceManager().runCustomButton(button, paths, readSeconds);
+      if (text) {
+        try {
+          PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), text, button.name);
         } catch (_) {}
       }
       return { text };

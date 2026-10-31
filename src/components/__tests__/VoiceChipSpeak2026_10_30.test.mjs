@@ -33,8 +33,11 @@ test('the overlay draws its label and its sizer from that list', () => {
 });
 
 test('Settings › Overlay draws every chip, and its labels, from that list', () => {
-  assert.match(read('src/components/settings/OverlayMockup.tsx'), /const \{ Icon, label \} = OVERLAY_BUTTONS\[id\];/);
-  assert.match(read('src/components/settings/OverlaySettings.tsx'), /t\(OVERLAY_BUTTONS\[id\]\.label\)/);
+  // Through overlayButtonFace, which reads OVERLAY_BUTTONS for the built-in
+  // buttons and the user's names for custom ones (2026-10-30).
+  assert.match(read('src/components/overlay/overlayButtons.ts'), /const \{ Icon, label \} = OVERLAY_BUTTONS\[id\];\s*return \{ Icon, label: t\(label\) \};/);
+  assert.match(read('src/components/settings/OverlayMockup.tsx'), /const \{ Icon, label \} = overlayButtonFace\(id, t, useOverlayCustomButtons\(\)\);/);
+  assert.match(read('src/components/settings/OverlaySettings.tsx'), /overlayButtonFace\(id, t, customs\)\.label/);
 });
 
 test('the phone chip reads Speak, and the word has its translations', () => {

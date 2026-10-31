@@ -8585,6 +8585,17 @@ export class AppState {
     })
 
     this.intelligenceManager.on('manual_answer_result', (answer: string, question: string) => {
+    // The user's own buttons (llm/customButtons.ts) are shown in Recap's card,
+    // like Define and What did I miss?.
+    this.intelligenceManager.on('custom_button_token', (token: string) => {
+      queueBatch('recap', { token });
+    })
+
+    this.intelligenceManager.on('custom_button', (text: string) => {
+      flushBatchesBeforeFinal();
+      this.sendToWindow(mainWindow(), 'intelligence-recap', { summary: text })
+    })
+
       const win = mainWindow()
       this.sendToWindow(win, 'intelligence-manual-result', { answer, question })
 

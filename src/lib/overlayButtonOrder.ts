@@ -1,4 +1,10 @@
 import { useSyncExternalStore } from 'react';
+import {
+    getOverlayCustomButtons,
+    isOverlayCustomButtonId,
+    subscribeOverlayCustomButtons,
+    type OverlayCustomButtonId,
+} from './overlayCustomButtons.ts';
 
 /**
  * Settings › Overlay: which five buttons the meeting overlay shows, and in
@@ -11,8 +17,12 @@ import { useSyncExternalStore } from 'react';
  * (genieAnimationSetting.ts): the `storage` event, and an IPC hop through main
  * carrying the new order (the `storage` event does not reliably cross
  * BrowserWindows; see meetingInterfaceTheme.ts).
+ *
+ * The user's own buttons (overlayCustomButtons.ts, 2026-10-30) are in the
+ * list too, by their `custom:` ids: one that exists and is missing from a
+ * saved order goes to the end (the tray), and one that was deleted drops out.
  */
-export type OverlayButtonId =
+export type BuiltinOverlayButtonId =
     | 'what_to_answer'
     | 'clarify'
     | 'recap'
@@ -23,10 +33,12 @@ export type OverlayButtonId =
     | 'define'
     | 'sound_smart';
 
+export type OverlayButtonId = BuiltinOverlayButtonId | OverlayCustomButtonId;
+
 /** How many buttons the overlay's row holds. */
 export const OVERLAY_ROW_SIZE = 5;
 
-export const DEFAULT_OVERLAY_BUTTON_ORDER: readonly OverlayButtonId[] = [
+export const DEFAULT_OVERLAY_BUTTON_ORDER: readonly BuiltinOverlayButtonId[] = [
     'what_to_answer',
     'clarify',
     'recap',
@@ -49,26 +61,36 @@ export const OVERLAY_BUTTON_ORDER_KEY = 'natively_overlay_button_order';
  * two became one (2026-10-27): a saved row that showed it shows Follow Up
  * Question in its place.
  */
-const RENAMED_OVERLAY_BUTTON_IDS: Readonly<Record<string, OverlayButtonId>> = {
+const RENAMED_OVERLAY_BUTTON_IDS: Readonly<Record<string, BuiltinOverlayButtonId>> = {
     follow_up_questions: 'follow_up',
 };
+
+export const isBuiltinOverlayButtonId = (id: unknown): id is BuiltinOverlayButtonId =>
+    DEFAULT_OVERLAY_BUTTON_ORDER.includes(id as BuiltinOverlayButtonId);
 
 /**
  * Any stored or sent value, made into a full order: known ids once each, in
  * the order given, then any button missing from it (a value from an older
- * version, a damaged one) at the end in its default place. Never throws.
+ * version, a damaged one, a custom button just made) at the end: built-in
+ * ones in their default place, then custom ones in the order they were made.
+ * `customIds` are the custom buttons that exist; any other `custom:` id is
+ * dropped. Never throws.
  */
-export function normalizeOverlayButtonOrder(value: unknown): OverlayButtonId[] {
+export function normalizeOverlayButtonOrder(
+    value: unknown,
+    customIds: readonly OverlayCustomButtonId[] = getOverlayCustomButtons().map((b) => b.id),
+): OverlayButtonId[] {
     const out: OverlayButtonId[] = [];
+    const known = (id: unknown): id is OverlayButtonId =>
+        isBuiltinOverlayButtonId(id) || (isOverlayCustomButtonId(id) && customIds.includes(id));
     if (Array.isArray(value)) {
         for (const raw of value) {
             const id = (typeof raw === 'string' && RENAMED_OVERLAY_BUTTON_IDS[raw]) || raw;
-            if (DEFAULT_OVERLAY_BUTTON_ORDER.includes(id as OverlayButtonId) && !out.includes(id as OverlayButtonId)) {
-                out.push(id as OverlayButtonId);
-            }
+            if (known(id) && !out.includes(id)) out.push(id);
         }
     }
     for (const id of DEFAULT_OVERLAY_BUTTON_ORDER) if (!out.includes(id)) out.push(id);
+    for (const id of customIds) if (!out.includes(id)) out.push(id);
     return out;
 }
 
@@ -129,6 +151,9 @@ if (typeof window !== 'undefined') {
     } catch {
         /* no preload (a harness): the storage event still works */
     }
+    // A custom button made or deleted: the saved order, read again against
+    // the new list (a new one joins the tray, a deleted one leaves).
+    subscribeOverlayCustomButtons(() => adopt(read()));
 }
 
 export function getOverlayButtonOrder(): OverlayButtonId[] {

@@ -4,6 +4,8 @@
 
 import type { SessionWriteDecision } from './llm/FinalAnswerGenerationPolicy';
 import { LiveHelperLLM, LIVE_HELPER_EMPTY, LIVE_HELPER_WINDOW_SECONDS, catchUpWindowSeconds, liveHelperDisplayKind, type LiveHelperAction } from './llm/liveHelpers';
+import { CustomButtonLLM, CUSTOM_BUTTON_EMPTY, CUSTOM_BUTTON_WINDOW_SECONDS } from './llm/customButtons';
+import type { CustomButtonActionV2 } from './llm/promptSystemV2';
 import { repairCapReached, endsInsideFence, looksCutOff } from './llm/repairCap';
 import { CODE_HINT_STREAM_FAILED } from './llm/CodeHintLLM';
 import { BRAINSTORM_STREAM_FAILED } from './llm/BrainstormLLM';
@@ -181,6 +183,9 @@ export interface IntelligenceModeEvents {
     // Clarify row (liveHelperDisplayKind), so the overlay needs no new stream.
     'live_helper': (text: string, action: LiveHelperAction) => void;
     'live_helper_token': (token: string, action: LiveHelperAction) => void;
+    // The user's own buttons (llm/customButtons.ts), shown in Recap's card.
+    'custom_button': (text: string, name: string) => void;
+    'custom_button_token': (token: string, name: string) => void;
     'manual_answer_started': () => void;
     'manual_answer_result': (answer: string, question: string) => void;
     'mode_changed': (mode: IntelligenceMode) => void;
@@ -246,6 +251,7 @@ export class IntelligenceEngine extends EventEmitter {
     private whatToAnswerLLM: WhatToAnswerLLM | null = null;
     private codeHintLLM: CodeHintLLM | null = null;
     private liveHelperLLM: LiveHelperLLM | null = null;
+    private customButtonLLM: CustomButtonLLM | null = null;
     private brainstormLLM: BrainstormLLM | null = null;
 
     // Concurrency tracking
@@ -821,8 +827,13 @@ export class IntelligenceEngine extends EventEmitter {
      * `transcriptLed` says whether the speech window is the main context
      * (a substantial transcript, with or without the history around it).
      */
-    private buildActionContextWithManualFallback(lastSeconds: number, opts: { withHistory?: boolean } = {}): { text: string; rendered: boolean; transcriptLed: boolean } | null {
-        const transcriptContext = this.buildPreparedTranscriptContext(lastSeconds);
+    private buildActionContextWithManualFallback(lastSeconds: number, opts: { withHistory?: boolean; durableSpeech?: boolean } = {}): { text: string; rendered: boolean; transcriptLed: boolean } | null {
+        // The rolling window holds three minutes (and keeps 12 turns of them). A
+        // longer read asks for `durableSpeech`: what was said in the whole span,
+        // from the durable transcript, as Catch me up reads it.
+        const transcriptContext = opts.durableSpeech
+            ? this.session.getFormattedSpeech(lastSeconds)
+            : this.buildPreparedTranscriptContext(lastSeconds);
         // The conversation so far, screenshots included (conversationHistoryText).
         const history = opts.withHistory ? this.conversationHistoryText(transcriptContext ?? '') : '';
         const historyBlock = history
@@ -998,6 +1009,7 @@ export class IntelligenceEngine extends EventEmitter {
         this.followUpQuestionsLLM = new FollowUpQuestionsLLM(this.llmHelper);
         this.whatToAnswerLLM = new WhatToAnswerLLM(this.llmHelper);
         this.liveHelperLLM = new LiveHelperLLM(this.llmHelper);
+        this.customButtonLLM = new CustomButtonLLM(this.llmHelper);
         // Interaction router warmup (2026-09-05). RouterModel.warmup() existed
         // but nothing in production called it, so the first speculative turn
         // paid the 5s load inline. isAvailable() inside warmup() returns false
@@ -8255,6 +8267,75 @@ export class IntelligenceEngine extends EventEmitter {
         } catch (error) {
             if (generationId !== null && this.currentGenerationId !== generationId) return null;
             this.emit('error', error as Error, shownAs);
+            this.setMode('idle');
+            return null;
+        }
+    }
+
+    /**
+     * A button the user made (llm/customButtons.ts), run as a live helper:
+     * the same press, stream, supersession and failure reporting as Define,
+     * shown in Recap's card. Its contract is the action block of the system
+     * prompt; the conversation is the context. With a screenshot (the
+     * button's "Screenshot every press") it runs even before anyone speaks.
+     */
+    /**
+     * `readSeconds`: how far back the button reads, from its "What to read"
+     * line (customButtonReadSeconds). Past the rolling three minutes it reads
+     * the durable transcript.
+     */
+    async runCustomButton(button: CustomButtonActionV2, imagePaths: string[] = [], readSeconds: number = CUSTOM_BUTTON_WINDOW_SECONDS): Promise<string | null> {
+        this.setMode('recap');
+        let generationId: number | null = null;
+        try {
+            if (!this.customButtonLLM) {
+                this.setMode('idle');
+                this.emit('error', new Error('This needs an AI model. Add one in Settings, then try again.'), 'recap');
+                return null;
+            }
+            const actionContext = this.buildActionContextWithManualFallback(readSeconds, { withHistory: true, durableSpeech: readSeconds > CUSTOM_BUTTON_WINDOW_SECONDS });
+            const context = actionContext?.text?.trim() ? actionContext.text : '';
+            if (!context && imagePaths.length === 0) {
+                this.setMode('idle');
+                this.emit('custom_button', CUSTOM_BUTTON_EMPTY, button.name);
+                return null;
+            }
+
+            generationId = ++this.currentGenerationId;
+            let full = '';
+            const stream = this.customButtonLLM.generateStream(button, context, imagePaths, { contextIsRendered: actionContext?.rendered === true });
+            let aborted = false;
+            for await (const token of stream) {
+                if (this.currentGenerationId !== generationId) {
+                    await stream.return(undefined);
+                    aborted = true;
+                    break;
+                }
+                this.emit('custom_button_token', token, button.name);
+                full += token;
+            }
+            if (aborted) return null;
+            if (!full.trim() && this.currentGenerationId === generationId) {
+                this.setMode('idle');
+                this.emit('error', new Error('Nothing came back. Try again.'), 'recap');
+                return null;
+            }
+            if (full && this.currentGenerationId === generationId) {
+                this.emit('custom_button', full, button.name);
+                this.session.pushUsage({
+                    type: 'chat',
+                    timestamp: Date.now(),
+                    question: button.name,
+                    answer: full,
+                    source: 'generated_action',
+                    synthetic: true,
+                });
+            }
+            if (this.currentGenerationId === generationId) this.setMode('idle');
+            return full;
+        } catch (error) {
+            if (generationId !== null && this.currentGenerationId !== generationId) return null;
+            this.emit('error', error as Error, 'recap');
             this.setMode('idle');
             return null;
         }
