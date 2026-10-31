@@ -15,6 +15,7 @@ import { answerSources, applyTranscriptEvent, askContext, EMPTY_LIVE_TRANSCRIPT,
 import { TranscriptControls } from './notes/TranscriptControls';
 import { NpPop } from './notes/NpPop';
 import { NOTE_RECIPES, noteRecipeById, parseSlashCommand, recipesFor, searchRecipes, type NoteRecipe } from '../../electron/llm/noteRecipes';
+import { NOTEPAD_DEMO_STILL_MS, notepadDemoFrame, sameDemoContent, type NotepadDemoFrame } from './notes/notepadDemo';
 
 /**
  * The notes window (`?window=notes`, 2026-10-15), laid out and working like
@@ -57,7 +58,10 @@ import { NOTE_RECIPES, noteRecipeById, parseSlashCommand, recipesFor, searchReci
  *
  * `preview` (2026-10-20): Settings › Overlay's notepad tab draws this same page
  * with sample notes. It talks to nothing (every effect returns at once), its
- * top strip is no drag handle, and it takes no clicks.
+ * top strip is no drag handle, and it takes no clicks. With `demo` (2026-11-01)
+ * it plays notes/notepadDemo.ts on a loop: the transcript streaming in, notes
+ * typed, the bars moving, "/" listing the recipes, then Ask answering. Reduced
+ * motion shows one still frame.
  */
 
 type Phase = 'idle' | 'live' | 'ended';
@@ -69,6 +73,12 @@ export interface NotesWindowPreview {
     title: string;
     people: number;
     text: string;
+    /** Play the live demo (notes/notepadDemo.ts) instead of still notes. */
+    demo?: boolean;
+    /** The template chip shown over the notes. */
+    templateId?: string;
+    /** The other side's name in the transcript bubbles. */
+    them?: string;
 }
 
 /** How often typing tells main "the user is typing" (no automatic stop under their hands). */
@@ -132,7 +142,9 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     const [text, setText] = useState(preview?.text ?? '');
     const [phase, setPhase] = useState<Phase>(preview ? 'live' : 'idle');
     const [meetingId, setMeetingId] = useState<string | null>(null);
-    const [info, setInfo] = useState(() => (preview ? { ...EMPTY_INFO, title: preview.title, people: preview.people } : EMPTY_INFO));
+    const [info, setInfo] = useState(() => (preview
+        ? { ...EMPTY_INFO, title: preview.title, people: preview.people, speakers: { me: 'You', them: preview.them ?? EMPTY_INFO.speakers.them } }
+        : EMPTY_INFO));
     const [savedTitle, setSavedTitle] = useState<string | null>(null);
     const [ask, setAskState] = useState('');
     const [askEngaged, setAskEngaged] = useState(false);
@@ -147,7 +159,8 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     const [hitIndex, setHitIndex] = useState(0);
     const [atBottom, setAtBottom] = useState(true);
     const [shownKind, setShownKind] = useState<'transcript' | 'ask' | null>(null);
-    const [panelHeight, setPanelHeight] = useState(() => readPanelHeight());
+    // The preview's panel leaves the notes in view above it.
+    const [panelHeight, setPanelHeight] = useState(() => (preview ? 300 : readPanelHeight()));
     const [resizing, setResizing] = useState(false);
     const [winH, setWinH] = useState(() => (typeof window === 'undefined' ? 900 : window.innerHeight));
     const askCardRef = useRef<HTMLDivElement>(null);
@@ -306,6 +319,34 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     useEffect(() => { if (!showTranscript) { setAtBottom(true); setFindTranscript(false); } }, [showTranscript]);
     // The transcript belongs to a running meeting: after Stop it closes, so Ask has its slot back.
     useEffect(() => { if (phase !== 'live') setShowTranscript(false); }, [phase]);
+    // The preview's live demo: one frame every 90 ms, held while the window is hidden.
+    const demo = !!preview?.demo;
+    useEffect(() => {
+        if (!demo) return;
+        let last: NotepadDemoFrame | null = null;
+        const show = (f: NotepadDemoFrame) => {
+            setLevel(f.level);
+            setShowTranscript(f.showTranscript);
+            setAskEngaged(f.askOpen);
+            if (last && sameDemoContent(last, f)) return;
+            last = f;
+            setText(f.text);
+            setLive(f.transcript);
+            setAsk(f.askText);
+            setTurns(f.turns.map((t) => ({ ...t, kind: 'helper', recipeId: 'what-did-i-miss' })));
+        };
+        if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { show(notepadDemoFrame(NOTEPAD_DEMO_STILL_MS)); return; }
+        let elapsed = 0;
+        let prev = performance.now();
+        show(notepadDemoFrame(0));
+        const timer = setInterval(() => {
+            const now = performance.now();
+            if (!document.hidden) elapsed += Math.min(now - prev, 250);
+            prev = now;
+            show(notepadDemoFrame(elapsed));
+        }, 90);
+        return () => clearInterval(timer);
+    }, [demo, setAsk]);
     useEffect(() => {
         const onResize = () => setWinH(window.innerHeight);
         window.addEventListener('resize', onResize);
@@ -529,7 +570,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
 
     // ── Note templates ──
     useEffect(() => {
-        if (preview || phase === 'ended') { setLiveTemplateId(null); return; }
+        if (preview || phase === 'ended') { setLiveTemplateId(preview?.templateId && phase !== 'ended' ? preview.templateId : null); return; }
         window.electronAPI?.liveNotesGetTemplate?.().then((id) => setLiveTemplateId(noteTemplateById(id) ? id : null)).catch(() => {});
     }, [phase, preview]);
     useEffect(() => {

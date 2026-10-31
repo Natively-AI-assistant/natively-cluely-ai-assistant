@@ -19,6 +19,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { AppWindow, ChevronDown, Layout, Monitor, NotebookPen, RotateCcw } from 'lucide-react';
 import NotesWindow, { type NotesWindowPreview } from '../NotesWindow';
+import { NOTEPAD_DEMO_PEOPLE, NOTEPAD_DEMO_TEMPLATE, NOTEPAD_DEMO_THEM, NOTEPAD_DEMO_TITLE } from '../notes/notepadDemo';
 import { useT } from '../../i18n';
 import { resolveMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
@@ -481,11 +482,14 @@ const SurfaceSwitch: React.FC<{ value: Surface; onChange: (s: Surface) => void; 
     );
 };
 
-/** Sample notes for the notepad's preview. */
+/** The notepad's preview plays a short sample meeting on a loop (notes/notepadDemo.ts). */
 const NOTEPAD_SAMPLE: NotesWindowPreview = {
-    title: 'Weekly product sync',
-    people: 4,
-    text: '# Launch\n- Beta goes out Thursday\n- Docs page still needs screenshots\n\n# Next steps\n- Maya drafts the release note\n- ',
+    title: NOTEPAD_DEMO_TITLE,
+    people: NOTEPAD_DEMO_PEOPLE,
+    text: '',
+    demo: true,
+    templateId: NOTEPAD_DEMO_TEMPLATE,
+    them: NOTEPAD_DEMO_THEM,
 };
 /** The notes window's first-open width (notesWindowPolicy's NOTES_WINDOW_DEFAULT_SIZE) and a tall height, scaled down. */
 const NOTEPAD_PREVIEW = { width: 460, height: 780, scale: 0.6 } as const;
