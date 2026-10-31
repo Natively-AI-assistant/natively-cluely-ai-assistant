@@ -1220,13 +1220,11 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                 <section className="px-8 py-8 min-h-full">
                                     <div className="max-w-4xl mx-auto space-y-8">
 
-                                        {/* Coming up today (Brief me, reminder drafts) and the catch-up
-                                            after back-to-back meetings (assist/AssistToday). */}
+                                        {/* The list holds meeting names only. The one thing above it is
+                                            the calendar reminder's "Running late" draft, shown only when
+                                            the reminder asks for it (assist/AssistToday). */}
                                         <AssistToday
-                                            events={upcomingEvents}
                                             isLight={isLight}
-                                            isMeetingActive={isMeetingActive}
-                                            onOpenMeeting={(id) => { void handleOpenMeeting({ id } as Meeting); }}
                                             draftRequest={reminderDraftRequest}
                                         />
 

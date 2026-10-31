@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { AlertCircle, ArrowUpRight, Bell, CalendarDays, CalendarRange, Check, Info, Link2, ListChecks, Loader2, PhoneOff, RefreshCw, ScreenShare, Video } from 'lucide-react';
+import { AlertCircle, ArrowUpRight, Bell, CalendarDays, CalendarRange, Check, Info, Link2, Loader2, PhoneOff, RefreshCw, ScreenShare, Video } from 'lucide-react';
 import { useLanguage, useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { Collapse, CollapseItem, Presence, SettingsMotionReady, SwapLabel, useMotionReadyAfter, useSettledFlag } from './SettingsRow';
@@ -349,27 +349,6 @@ export const CalendarSettings: React.FC = () => {
     window.electronAPI?.setMeetingAutoStopEnabled?.(!was)
       .then((r) => { if (!r?.success) setAutoStop(was); })
       .catch(() => setAutoStop(was));
-  }, []);
-
-  // The catch-up after back-to-back meetings (main: services/assist).
-  // Same save-first pattern as Detect meetings. Unset = on.
-  const [catchUp, setCatchUp] = useState<boolean | null>(null);
-  useEffect(() => {
-    let live = true;
-    window.electronAPI?.getCatchUpEnabled?.()
-      .then((on) => { if (live) setCatchUp(on !== false); })
-      .catch(() => { if (live) setCatchUp(true); });
-    return () => { live = false; };
-  }, []);
-  const catchUpRef = useRef(catchUp);
-  catchUpRef.current = catchUp;
-  const toggleCatchUp = useCallback(() => {
-    const was = catchUpRef.current;
-    if (was === null) return;
-    setCatchUp(!was);
-    window.electronAPI?.setCatchUpEnabled?.(!was)
-      .then((r) => { if (!r?.success) setCatchUp(was); })
-      .catch(() => setCatchUp(was));
   }, []);
 
   // Snapshot shared screens (main: ScreenShareContext). Off unless turned on.
@@ -1004,27 +983,6 @@ export const CalendarSettings: React.FC = () => {
             </div>
             <p className="cp-desc" style={{ margin: 0 }}>
               {t('When someone else shares their screen in Zoom or Teams, Natively takes a picture every 10 seconds and adds what it shows to your notes, using your vision model. Never while you present, and paused while Undetectable is on. Get consent from the people in the meeting first.')}
-            </p>
-          </div>
-        </section>
-
-        {/* ── Catch-up after back-to-back meetings ── */}
-        <section>
-          <div className="cp-card">
-            <div className="cp-card-header">
-              <span className="cp-card-icon"><ListChecks size={12} /></span>
-              <h4 className="cp-card-label">{t('Catch up after back-to-back meetings')}</h4>
-              <span className="ml-auto flex items-center">
-                <SettingsToggle
-                  checked={!!catchUp}
-                  onChange={toggleCatchUp}
-                  label={t('Catch up after back-to-back meetings')}
-                  disabled={catchUp === null}
-                />
-              </span>
-            </div>
-            <p className="cp-desc" style={{ margin: 0 }}>
-              {t('After two or more meetings with less than 15 minutes between them, the launcher shows what was decided and what you took on, in one place.')}
             </p>
           </div>
         </section>

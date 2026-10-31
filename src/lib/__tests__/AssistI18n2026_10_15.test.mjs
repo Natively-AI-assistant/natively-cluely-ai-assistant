@@ -17,7 +17,6 @@ const launcher = read('components/assist/AssistToday.tsx');
 // The overlay's buttons are labelled from one table (2026-10-20, Settings ›
 // Overlay), passed through t() where they are drawn.
 const overlayButtons = read('components/overlay/overlayButtons.ts');
-const settings = read('components/settings/CalendarSettings.tsx');
 const tStrings = (text) => [...text.matchAll(/\bt\(\s*'((?:[^'\\]|\\.)*)'\s*\)/g)].map((m) => m[1].replace(/\\'/g, "'"));
 // Words that already had rows elsewhere in the app.
 const EXISTING = new Set(['Dismiss', 'Close', 'Copy', 'Meeting']);
@@ -25,12 +24,19 @@ const EXISTING = new Set(['Dismiss', 'Close', 'Copy', 'Meeting']);
 const used = new Set([
   ...tStrings(launcher),
   ...['What did I miss?', 'Define', 'Sound smart'].filter((s) => overlayButtons.includes(`label: '${s}'`)),
-  ...tStrings(settings).filter((s) => s.startsWith('Catch up after') || s.startsWith('After two or more')),
 ].filter((s) => !EXISTING.has(s)));
 
 test('every string the assist components show has a row, and no row is left over', () => {
-  assert.ok(used.size >= 30, `found only ${used.size} strings: the scan is broken`);
+  assert.ok(used.size >= 10, `found only ${used.size} strings: the scan is broken`);
   assert.deepEqual([...ASSIST_EN].sort(), [...used].sort());
+});
+
+test('the launcher no longer shows Coming up today, Catch up or Yours to do (2026-11-01)', () => {
+  for (const gone of ['Coming up today', 'Catch up', 'Yours to do', 'Brief me', 'Decided']) {
+    assert.ok(!used.has(gone), `still shown: ${gone}`);
+  }
+  assert.doesNotMatch(launcher, /assistGetCatchUp|assistGetDailyBrief|assistGetMeetingBrief/);
+  assert.doesNotMatch(read('components/settings/CalendarSettings.tsx'), /Catch up after back-to-back meetings/);
 });
 
 test('every language has every row, translated', () => {
