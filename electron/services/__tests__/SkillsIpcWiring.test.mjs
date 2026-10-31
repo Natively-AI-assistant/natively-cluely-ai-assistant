@@ -161,18 +161,21 @@ test('SkillsSettings renderer guards upload bridge methods and exposes the uploa
   assert.match(view, /await window\.electronAPI\.skillsUpload\(/);
 
   // UI affordances — drag-and-drop zone, .md file picker, preview card.
-  // Skills is the first plaque of Settings › Intelligence (2026-10-21): the
-  // whole card is the drop target, only single-file (.md) uploads are in the
-  // in-flow UI, and folders go in through the Open folder button in its heading.
-  assert.match(view, /onDrop:/, 'the plaque must handle a drop');
+  // Skills is the first section of Settings › Intelligence: the whole section
+  // is the drop target (2026-10-21; flat again, no card, since 2026-10-31),
+  // only single-file (.md) uploads are in the in-flow UI, and folders go in
+  // through the Open folder button beside its heading.
+  assert.match(view, /onDrop:/, 'the section must handle a drop');
   assert.match(view, /<input[\s\S]{0,200}type="file"[\s\S]{0,200}accept="\.md/,
     'must include a .md file picker');
   assert.match(view, /Install/, 'preview card must have an Install button');
   assert.match(view, /Cancel/, 'preview card must have a Cancel button');
-  assert.match(view, /<SettingsPlaque[\s\S]{0,12000}?\{\.\.\.dropTarget\}/,
-    'the Skills plaque itself must be the drop target');
-  assert.match(view, /Drop a SKILL\.md on this card/,
-    'the plaque must say a file can be dropped on it');
+  assert.match(view, /<div className="relative select-text" \{\.\.\.dropTarget\}>/,
+    'the Skills section root itself must be the drop target');
+  assert.doesNotMatch(view, /SettingsPlaque/,
+    'Skills is laid out like every other Settings section, not as a card');
+  assert.match(view, /Drop a SKILL\.md on this section/,
+    'the section must say a file can be dropped on it');
   assert.match(view, /onClick=\{\(\) => \{ void openFolder\(\); \}\}[\s\S]{0,120}Open folder/,
     'Open folder must remain so users can add folders via the OS file manager');
 });

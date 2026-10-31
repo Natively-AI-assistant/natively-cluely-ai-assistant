@@ -4,14 +4,15 @@
 // SettingsManager.userBio (at most 600 characters); empty means not used.
 // Saved on blur, never sent anywhere on its own.
 //
-// The field is a writing surface, not a form box: the plaque's sunken well
-// (SETTINGS_WELL), growing with its text instead of a resize grip, with the
-// save note and the count on one quiet line inside it. The count only shows
-// while typing or near the limit; "Saved" answers the blur that saved.
+// The field is Settings' input box (SETTINGS_INPUT's border, fill and accent
+// edge on focus) around a textarea that grows with its text instead of a
+// resize grip, with the save note and the count on one quiet line inside it.
+// The count only shows while typing or near the limit; "Saved" answers the
+// blur that saved.
 import React, { useEffect, useRef, useState } from 'react';
 import { Check, UserRound } from 'lucide-react';
 import { useT } from '../../i18n';
-import { Presence, SETTINGS_WELL, SettingsRow } from './SettingsRow';
+import { Presence, SettingsRow } from './SettingsRow';
 
 const MAX = 600;
 // Past this the count stays up after the field loses focus.
@@ -66,7 +67,7 @@ export const AboutYouSettings: React.FC = () => {
             descriptionKey={saved ? 'set' : 'empty'}
         >
             <div className="pb-3">
-                <div className={`${SETTINGS_WELL} settings-well-field`}>
+                <div className="rounded-lg border border-border-subtle bg-bg-input transition-colors duration-150 ease-out focus-within:border-accent-primary">
                     <textarea
                         aria-label={t('About you')}
                         className="block max-h-48 min-h-[4.5rem] w-full resize-none bg-transparent px-3 pt-2.5 text-xs leading-relaxed text-text-primary placeholder:text-text-tertiary focus:outline-none [field-sizing:content]"

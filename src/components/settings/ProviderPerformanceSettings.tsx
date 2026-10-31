@@ -3,8 +3,8 @@ import { AnimatePresence } from 'framer-motion';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useT } from '../../i18n';
 import {
-    Collapse, CollapseItem, Presence, SETTINGS_BTN, SettingsMotionReady, SettingsNotice, SettingsPlaque, SettingsRow,
-    useMotionReadyAfter, useSettingsTones, useSettledFlag,
+    Collapse, CollapseItem, Presence, SETTINGS_BTN, SettingsGroupLabel, SettingsMotionReady, SettingsNotice, SettingsRow,
+    SettingsSectionHeading, useMotionReadyAfter, useSettingsTones, useSettledFlag,
 } from './SettingsRow';
 
 /**
@@ -203,134 +203,128 @@ const ProviderPerformanceSettings: React.FC<{
             ? (data.network.offline ? t('offline') : t(NETWORK_LABEL[data.network.interfaceClass] ?? data.network.interfaceClass))
             : t('Not detected');
 
-    // Two plaques (SettingsPlaque), the page's grouped list: the settings first (the
+    // One category, laid out as General lays out a section: the settings first (the
     // three switches the pane hands in, then the calibration action they govern), then
-    // the read-out as its own card. The read-out always has at least two rows —
-    // Current network plus either the measurements or the empty row — so its card
-    // never holds a single row. Older / other-network rows say so in their own
+    // ONE labelled group for the read-out. The read-out always has at least two rows —
+    // Current network plus either the measurements or the empty row — so the label
+    // never sits over a single row. Older / other-network rows say so in their own
     // description instead of under a second-level label.
     return (
         <SettingsMotionReady.Provider value={motionReady}>
-        <div className="space-y-3">
-            <SettingsPlaque
+            <SettingsSectionHeading
                 title={t('Provider performance')}
                 subtitle={t('Learns each provider’s speed from normal use. Only calibration costs extra.')}
-            >
-                {settings}
+            />
+            {settings}
 
-                {/* The one action here that costs money, so its row says so before the
-                    button, not after. Phase 21's rule is that nothing is spent silently. */}
+            {/* The one action here that costs money, so its row says so before the
+                button, not after. Phase 21's rule is that nothing is spent silently. */}
+            <SettingsRow
+                icon={<Radar size={20} />}
+                title={t('Run calibration')}
+                description={t('Sends small test requests to measure speed. Uses your API key.')}
+                control={
+                    <button type="button" className={SETTINGS_BTN} onClick={() => void calibrate()} disabled={busy !== null}>
+                        <Presence kind="icon" id={calibrating ? 'busy' : 'idle'}>
+                            {calibrating ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+                        </Presence>
+                        {t('Run')}
+                    </button>
+                }
+            >
+                {/* The outcome grows in under the row; a new outcome swaps in place. */}
+                <Collapse open={!!calibrateNote}>
+                    <p className="pb-3 text-xs text-text-secondary" role="status">
+                        <Presence kind="text" id={calibrateNote} block>{calibrateNote}</Presence>
+                    </p>
+                </Collapse>
+            </SettingsRow>
+
+            <SettingsGroupLabel>{t('Measurements')}</SettingsGroupLabel>
+
+            <SettingsRow
+                icon={<Wifi size={20} />}
+                title={t('Current network')}
+                description={networkDescription}
+                descriptionKey={networkKey}
+                control={
+                    <button type="button" className={SETTINGS_BTN} onClick={() => void load()} disabled={loading}>
+                        <Presence kind="icon" id={refreshing ? 'busy' : 'idle'}>
+                            {refreshing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                        </Presence>
+                        {t('Refresh')}
+                    </button>
+                }
+            />
+
+            {/* Every read-out row grows in and folds away as the measurements change
+                (a Refresh that learned a new model, a Forget that cleared them all),
+                instead of the list jumping. Keys are the rows' identities. */}
+            <AnimatePresence initial={false}>
+
+            {/* Keyed on having data, not on `loading`: a Refresh of an empty read-out
+                must not fold this row away and grow it back. */}
+            {data !== null && profiles.length === 0 ? (
+                <CollapseItem key="empty">
+                    <SettingsRow
+                        icon={<Activity size={20} />}
+                        title={t('Nothing measured yet')}
+                        description={t('Ask a question and Natively starts learning your provider’s speed.')}
+                    />
+                </CollapseItem>
+            ) : null}
+
+            {current.map((p) => (
+                <CollapseItem key={`${p.providerId}|${p.modelId}|${p.networkProfileId}`}>
+                    <MeasurementRow p={p} t={t} />
+                </CollapseItem>
+            ))}
+            {others.map((p) => (
+                <CollapseItem key={`${p.providerId}|${p.modelId}|${p.networkProfileId}`}>
+                    <MeasurementRow p={p} t={t} older />
+                </CollapseItem>
+            ))}
+
+            {/* This block exists because the failure it reports is otherwise SILENT:
+                when a repair window expires before the provider's first token, the user
+                simply never sees their answer improve, and nothing anywhere says so. */}
+            {lateStreams.map((s) => (
+                <CollapseItem key={`late-${s.kind}`}>
                 <SettingsRow
-                    icon={<Radar size={20} />}
-                    title={t('Run calibration')}
-                    description={t('Sends small test requests to measure speed. Uses your API key.')}
-                    control={
-                        <button type="button" className={SETTINGS_BTN} onClick={() => void calibrate()} disabled={busy !== null}>
-                            <Presence kind="icon" id={calibrating ? 'busy' : 'idle'}>
-                                {calibrating ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-                            </Presence>
-                            {t('Run')}
-                        </button>
+                    icon={<Timer size={20} />}
+                    title={t(s.kind)}
+                    description={
+                        <>
+                            {t('{done} of {total} finished in time.')
+                                .replace('{done}', String(s.completed))
+                                .replace('{total}', String(s.attempts))}
+                            {s.maxObservedTtftMs > 0
+                                ? ` ${t('Slowest start: {n}s.').replace('{n}', (s.maxObservedTtftMs / 1000).toFixed(1))}`
+                                : ''}
+                        </>
                     }
-                >
-                    {/* The outcome grows in under the row; a new outcome swaps in place. */}
-                    <Collapse open={!!calibrateNote}>
-                        <p className="pb-3 text-xs text-text-secondary" role="status">
-                            <Presence kind="text" id={calibrateNote} block>{calibrateNote}</Presence>
-                        </p>
-                    </Collapse>
-                </SettingsRow>
-            </SettingsPlaque>
+                />
+                </CollapseItem>
+            ))}
 
-            <SettingsPlaque
-                title={t('Measurements')}
-                subtitle={t('What Natively has learned about each provider’s speed so far.')}
-            >
+            {profiles.length > 0 ? (
+                <CollapseItem key="forget">
                 <SettingsRow
-                    icon={<Wifi size={20} />}
-                    title={t('Current network')}
-                    description={networkDescription}
-                    descriptionKey={networkKey}
+                    icon={<RotateCcw size={20} />}
+                    title={t('Forget all measurements')}
+                    description={t('Clears what Natively has learned. It relearns from your next answer.')}
                     control={
-                        <button type="button" className={SETTINGS_BTN} onClick={() => void load()} disabled={loading}>
-                            <Presence kind="icon" id={refreshing ? 'busy' : 'idle'}>
-                                {refreshing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                        <button type="button" className={SETTINGS_BTN} onClick={() => void forget()} disabled={busy !== null}>
+                            <Presence kind="icon" id={forgetting ? 'busy' : 'idle'}>
+                                {forgetting ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
                             </Presence>
-                            {t('Refresh')}
+                            {t('Forget')}
                         </button>
                     }
                 />
-
-                {/* Every read-out row grows in and folds away as the measurements change
-                    (a Refresh that learned a new model, a Forget that cleared them all),
-                    instead of the list jumping. Keys are the rows' identities. */}
-                <AnimatePresence initial={false}>
-
-                {/* Keyed on having data, not on `loading`: a Refresh of an empty read-out
-                    must not fold this row away and grow it back. */}
-                {data !== null && profiles.length === 0 ? (
-                    <CollapseItem key="empty">
-                        <SettingsRow
-                            icon={<Activity size={20} />}
-                            title={t('Nothing measured yet')}
-                            description={t('Ask a question and Natively starts learning your provider’s speed.')}
-                        />
-                    </CollapseItem>
-                ) : null}
-
-                {current.map((p) => (
-                    <CollapseItem key={`${p.providerId}|${p.modelId}|${p.networkProfileId}`}>
-                        <MeasurementRow p={p} t={t} />
-                    </CollapseItem>
-                ))}
-                {others.map((p) => (
-                    <CollapseItem key={`${p.providerId}|${p.modelId}|${p.networkProfileId}`}>
-                        <MeasurementRow p={p} t={t} older />
-                    </CollapseItem>
-                ))}
-
-                {/* This block exists because the failure it reports is otherwise SILENT:
-                    when a repair window expires before the provider's first token, the user
-                    simply never sees their answer improve, and nothing anywhere says so. */}
-                {lateStreams.map((s) => (
-                    <CollapseItem key={`late-${s.kind}`}>
-                    <SettingsRow
-                        icon={<Timer size={20} />}
-                        title={t(s.kind)}
-                        description={
-                            <>
-                                {t('{done} of {total} finished in time.')
-                                    .replace('{done}', String(s.completed))
-                                    .replace('{total}', String(s.attempts))}
-                                {s.maxObservedTtftMs > 0
-                                    ? ` ${t('Slowest start: {n}s.').replace('{n}', (s.maxObservedTtftMs / 1000).toFixed(1))}`
-                                    : ''}
-                            </>
-                        }
-                    />
-                    </CollapseItem>
-                ))}
-
-                {profiles.length > 0 ? (
-                    <CollapseItem key="forget">
-                    <SettingsRow
-                        icon={<RotateCcw size={20} />}
-                        title={t('Forget all measurements')}
-                        description={t('Clears what Natively has learned. It relearns from your next answer.')}
-                        control={
-                            <button type="button" className={SETTINGS_BTN} onClick={() => void forget()} disabled={busy !== null}>
-                                <Presence kind="icon" id={forgetting ? 'busy' : 'idle'}>
-                                    {forgetting ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
-                                </Presence>
-                                {t('Forget')}
-                            </button>
-                        }
-                    />
-                    </CollapseItem>
-                ) : null}
-                </AnimatePresence>
-            </SettingsPlaque>
-        </div>
+                </CollapseItem>
+            ) : null}
+            </AnimatePresence>
         </SettingsMotionReady.Provider>
     );
 };

@@ -459,53 +459,6 @@ export const SettingsDisclosureButton: React.FC<{
   </button>
 );
 
-// The white plaque Plans & Billing and AI Providers wear (.natively-key-card),
-// as a group of rows: macOS System Settings' grouped list in Natively's
-// material. The heading sits inside the card on the tile edge, an `action`
-// (buttons that act on the whole group) sits beside it, and the rows hang
-// under it with hairlines between them that start at the text column, not
-// the card edge (.settings-plaque-rows, src/index.css). `lead` is content
-// between the heading and the rows that is not a row (notices, a preview),
-// so it gets no hairline. `footer` is the group's small print, outside and
-// under the card. Extra props (drag handlers) go on the card itself.
-// The card clips its content (overflow: hidden), so nothing that has to
-// escape it, like a dropdown menu, may live in a plaque.
-export const SETTINGS_PLAQUE = 'natively-key-card bg-bg-item-surface rounded-2xl border border-border-subtle';
-
-export const SettingsPlaque: React.FC<{
-  title?: React.ReactNode;
-  subtitle?: React.ReactNode;
-  action?: React.ReactNode;
-  lead?: React.ReactNode;
-  footer?: React.ReactNode;
-  className?: string;
-  children?: React.ReactNode;
-} & Omit<React.HTMLAttributes<HTMLDivElement>, 'title' | 'className' | 'children'>> = ({
-  title, subtitle, action, lead, footer, className = '', children, ...rest
-}) => (
-  <div>
-    <div {...rest} className={`${SETTINGS_PLAQUE} ${className}`}>
-      {title ? (
-        <div className="flex items-start justify-between gap-4 px-[17px] pt-4 pb-1.5">
-          <div className="min-w-0">
-            <h3 className="text-[15px] font-semibold leading-tight tracking-[-0.01em] text-text-primary">{title}</h3>
-            {subtitle ? <p className="mt-1 text-xs leading-relaxed text-text-secondary">{subtitle}</p> : null}
-          </div>
-          {action ? <div className="flex shrink-0 items-center gap-2">{action}</div> : null}
-        </div>
-      ) : null}
-      {lead}
-      <div className={`settings-plaque-rows pb-1.5 ${title ? '' : 'pt-1.5'}`}>{children}</div>
-    </div>
-    {footer ? <p className="px-[17px] pt-2 text-[11.5px] leading-relaxed text-text-secondary">{footer}</p> : null}
-  </div>
-);
-
-// A sunken well inside a plaque, for a form or a preview that opens under a
-// row. A card on a card read as a second plaque; a well reads as part of
-// this one, the pressed-in vocabulary of .natively-key-input.
-export const SETTINGS_WELL = 'settings-plaque-well rounded-xl';
-
 // A small group label inside a disclosure, set on the tile edge.
 export const SettingsGroupLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   // text-secondary, not General's text-tertiary: tertiary measures 3.25:1 on the

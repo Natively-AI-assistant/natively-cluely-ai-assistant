@@ -654,9 +654,11 @@ export const CalendarSettings: React.FC = () => {
               <ArrowUpRight size={12} className="cp-arrow" />
             </button>
           ) : (
+            // Connect: the row's small pill, flat (a fill, no outline) in the
+            // primary ink, so it reads as the row's action without a colour.
             <button
               type="button"
-              className="cp-pill cp-pill--sm"
+              className="cp-pill cp-pill--sm cp-pill--flat"
               onClick={() => connectSource(src.id)}
               disabled={busy !== null || src.state === 'unconfigured' || (src.id === 'ics' && icsDraft !== null && !icsDraft.trim())}
             >

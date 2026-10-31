@@ -25,11 +25,12 @@ import {
     Presence,
     SETTINGS_BTN,
     SETTINGS_BTN_BASE,
-    SETTINGS_WELL,
+    SETTINGS_CARD,
+    SettingsFootnote,
     SettingsMotionReady,
     SettingsNotice,
-    SettingsPlaque,
     SettingsRow,
+    SettingsSectionHeading,
     SwapLabel,
     useMotionReadyAfter,
     useSettingsTones,
@@ -468,7 +469,7 @@ export const SkillsSettings: React.FC = () => {
     const truncate = (s: string, n: number) =>
         s.length <= n ? s : `${s.slice(0, n).trimEnd()}…`;
 
-    // The drop handlers, on the whole plaque: the card is the target.
+    // The drop handlers, on the whole section: all of Skills is the target.
     const dropTarget = {
         onDragEnter: (e: React.DragEvent) => {
             e.preventDefault();
@@ -489,19 +490,27 @@ export const SkillsSettings: React.FC = () => {
 
     return (
         <SettingsMotionReady.Provider value={motionReady}>
-        {/* A section of Settings › Intelligence: one plaque, the page's grouped
-            list. Open folder and Upload act on the whole group, so they sit in
-            its heading; the card itself is the drop target, and a frosted veil
+        {/* A section of Settings › Intelligence, laid out as the other tabs lay out
+            a section: the heading, with Open folder and Upload beside it (they act
+            on the whole list, as Overlay's Reset sits beside its heading), then
+            the rows. The whole section is the drop target, and a frosted veil
             says so while a file is over it. The preview and the notices open
             between the heading and the list. The page owns the entrance fade
             and the stagger, so this root carries neither. */}
-        <SettingsPlaque
-            className="select-text"
-            title={t('Skills')}
-            subtitle={t('Instructions the chat follows. Start a message with /name or $name to use one.')}
-            footer={t('Drop a SKILL.md on this card to add it. Built-in skills can’t be deleted.')}
-            action={
-                <>
+        <div className="relative select-text" {...dropTarget}>
+            <div aria-hidden={!isDragging} data-open={isDragging} className="settings-drop-veil text-sm font-semibold">
+                <FileUp size={18} />
+                {t('Drop to add this skill')}
+            </div>
+
+            <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                    <SettingsSectionHeading
+                        title={t('Skills')}
+                        subtitle={t('Instructions the chat follows. Start a message with /name or $name to use one.')}
+                    />
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
                     <button type="button" className={SETTINGS_BTN} onClick={() => { void openFolder(); }}>
                         <FolderOpen size={14} />
                         {t('Open folder')}
@@ -517,116 +526,107 @@ export const SkillsSettings: React.FC = () => {
                         </Presence>
                         {t('Upload')}
                     </button>
-                </>
-            }
-            lead={
-                <div className="px-[17px]">
-                    <div aria-hidden={!isDragging} data-open={isDragging} className="settings-drop-veil text-sm font-semibold">
-                        <FileUp size={18} />
-                        {t('Drop to add this skill')}
-                    </div>
-
-                    <input
-                        ref={uploadInputRef}
-                        type="file"
-                        accept=".md,text/markdown"
-                        className="hidden"
-                        onChange={async (e) => {
-                            const f = e.target.files?.[0];
-                            if (f) await handleFilePicked(f);
-                            e.currentTarget.value = ''; // allow re-pick of same file
-                        }}
-                        disabled={uploading}
-                    />
-
-                    {/* What the file holds, before anything is written to disk. */}
-                    <Collapse open={!!preview}>
-                        <div className="pt-1.5 pb-2">
-                            {preview && (
-                                <div className={`${SETTINGS_WELL} p-4 space-y-3`}>
-                                    <div className="min-w-0">
-                                        <div className="flex items-center gap-2 min-w-0">
-                                            <h4 className="text-sm font-bold text-text-primary truncate">{preview.preview.name}</h4>
-                                            <span className="text-[11px] font-mono text-text-tertiary shrink-0">/{preview.preview.id}</span>
-                                        </div>
-                                        {preview.preview.description && (
-                                            <p className="text-xs text-text-secondary mt-0.5">{preview.preview.description}</p>
-                                        )}
-                                    </div>
-
-                                    {preview.preview.instructionsPreview && (
-                                        <pre className="rounded-lg bg-bg-input border border-border-subtle px-3 py-2 text-[11px] font-mono text-text-secondary whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
-                                            {truncate(preview.preview.instructionsPreview, RENDER_PREVIEW_MAX)}
-                                        </pre>
-                                    )}
-
-                                    {/* One quiet line of what else came with it; a kind it has none of is left out. */}
-                                    <p className="text-[11px] text-text-tertiary">
-                                        {[
-                                            ...([
-                                                [preview.preview.referenceCount, t('reference'), t('references')],
-                                                [preview.preview.assetCount, t('asset'), t('assets')],
-                                                [preview.preview.scriptCount, t('script'), t('scripts')],
-                                                [preview.preview.otherCount, t('other file'), t('other files')],
-                                            ] as const)
-                                                .filter(([n]) => n > 0)
-                                                .map(([n, one, many]) => `${n} ${n === 1 ? one : many}`),
-                                            formatBytes(preview.preview.totalBytes),
-                                        ].join(' · ')}
-                                    </p>
-
-                                    {preview.preview.fileTree.length > 0 && (
-                                        <details className="text-[11px] text-text-tertiary">
-                                            <summary className="cursor-pointer hover:text-text-secondary transition-colors">
-                                                {preview.preview.fileTree.length} {t('files')}
-                                            </summary>
-                                            <ul className="mt-2 font-mono space-y-0.5 max-h-32 overflow-y-auto">
-                                                {preview.preview.fileTree.map((p) => (
-                                                    <li key={p} className="truncate">{p}</li>
-                                                ))}
-                                            </ul>
-                                        </details>
-                                    )}
-
-                                    <div className="flex items-center justify-end gap-2">
-                                        <button type="button" className={SETTINGS_BTN} onClick={handleCancel} disabled={installing}>
-                                            {t('Cancel')}
-                                        </button>
-                                        <LiquidGlassButton
-                                            variant="action"
-                                            className="lg-sm"
-                                            onClick={() => { void handleInstall(); }}
-                                            disabled={installing}
-                                        >
-                                            <SwapLabel id={installing ? 'installing' : 'install'} sizers={[t('Install'), t('Installing…')]}>
-                                                {installing ? t('Installing…') : t('Install')}
-                                            </SwapLabel>
-                                        </LiquidGlassButton>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </Collapse>
-
-                    <Collapse open={!!success}>
-                        <div className="pt-1.5 pb-2">
-                            <SettingsNotice tone={tones.ok} icon={<Check size={14} />} className="">
-                                {success}
-                            </SettingsNotice>
-                        </div>
-                    </Collapse>
-
-                    <Collapse open={!!status}>
-                        <div className="pt-1.5 pb-2">
-                            <SettingsNotice tone={tones.danger} icon={<AlertCircle size={14} />} alert shakeKey={status ?? ''} className="">
-                                {status}
-                            </SettingsNotice>
-                        </div>
-                    </Collapse>
                 </div>
-            }
-            {...dropTarget}
-        >
+            </div>
+
+            <input
+                ref={uploadInputRef}
+                type="file"
+                accept=".md,text/markdown"
+                className="hidden"
+                onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    if (f) await handleFilePicked(f);
+                    e.currentTarget.value = ''; // allow re-pick of same file
+                }}
+                disabled={uploading}
+            />
+
+            {/* What the file holds, before anything is written to disk. */}
+            <Collapse open={!!preview}>
+                <div className="pt-1.5 pb-2">
+                    {preview && (
+                        <div className={`${SETTINGS_CARD} p-4 space-y-3`}>
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <h4 className="text-sm font-bold text-text-primary truncate">{preview.preview.name}</h4>
+                                    <span className="text-[11px] font-mono text-text-tertiary shrink-0">/{preview.preview.id}</span>
+                                </div>
+                                {preview.preview.description && (
+                                    <p className="text-xs text-text-secondary mt-0.5">{preview.preview.description}</p>
+                                )}
+                            </div>
+
+                            {preview.preview.instructionsPreview && (
+                                <pre className="rounded-lg bg-bg-input border border-border-subtle px-3 py-2 text-[11px] font-mono text-text-secondary whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
+                                    {truncate(preview.preview.instructionsPreview, RENDER_PREVIEW_MAX)}
+                                </pre>
+                            )}
+
+                            {/* One quiet line of what else came with it; a kind it has none of is left out. */}
+                            <p className="text-[11px] text-text-tertiary">
+                                {[
+                                    ...([
+                                        [preview.preview.referenceCount, t('reference'), t('references')],
+                                        [preview.preview.assetCount, t('asset'), t('assets')],
+                                        [preview.preview.scriptCount, t('script'), t('scripts')],
+                                        [preview.preview.otherCount, t('other file'), t('other files')],
+                                    ] as const)
+                                        .filter(([n]) => n > 0)
+                                        .map(([n, one, many]) => `${n} ${n === 1 ? one : many}`),
+                                    formatBytes(preview.preview.totalBytes),
+                                ].join(' · ')}
+                            </p>
+
+                            {preview.preview.fileTree.length > 0 && (
+                                <details className="text-[11px] text-text-tertiary">
+                                    <summary className="cursor-pointer hover:text-text-secondary transition-colors">
+                                        {preview.preview.fileTree.length} {t('files')}
+                                    </summary>
+                                    <ul className="mt-2 font-mono space-y-0.5 max-h-32 overflow-y-auto">
+                                        {preview.preview.fileTree.map((p) => (
+                                            <li key={p} className="truncate">{p}</li>
+                                        ))}
+                                    </ul>
+                                </details>
+                            )}
+
+                            <div className="flex items-center justify-end gap-2">
+                                <button type="button" className={SETTINGS_BTN} onClick={handleCancel} disabled={installing}>
+                                    {t('Cancel')}
+                                </button>
+                                <LiquidGlassButton
+                                    variant="action"
+                                    className="lg-sm"
+                                    onClick={() => { void handleInstall(); }}
+                                    disabled={installing}
+                                >
+                                    <SwapLabel id={installing ? 'installing' : 'install'} sizers={[t('Install'), t('Installing…')]}>
+                                        {installing ? t('Installing…') : t('Install')}
+                                    </SwapLabel>
+                                </LiquidGlassButton>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </Collapse>
+
+            <Collapse open={!!success}>
+                <div className="pt-1.5 pb-2">
+                    <SettingsNotice tone={tones.ok} icon={<Check size={14} />} className="">
+                        {success}
+                    </SettingsNotice>
+                </div>
+            </Collapse>
+
+            <Collapse open={!!status}>
+                <div className="pt-1.5 pb-2">
+                    <SettingsNotice tone={tones.danger} icon={<AlertCircle size={14} />} alert shakeKey={status ?? ''} className="">
+                        {status}
+                    </SettingsNotice>
+                </div>
+            </Collapse>
+
             <AnimatePresence initial={false}>
                 {skills.map((skill) => {
                     const deleting = deletingIds.has(skill.id);
@@ -701,10 +701,14 @@ export const SkillsSettings: React.FC = () => {
                 <SettingsRow
                     icon={<FileCode size={20} />}
                     title={t('No skills yet')}
-                    description={t('Upload a SKILL.md, or drop one on this card.')}
+                    description={t('Upload a SKILL.md, or drop one here.')}
                 />
             )}
-        </SettingsPlaque>
+
+            <SettingsFootnote icon={<FileUp size={14} />}>
+                {t('Drop a SKILL.md on this section to add it. Built-in skills can’t be deleted.')}
+            </SettingsFootnote>
+        </div>
         </SettingsMotionReady.Provider>
     );
 };

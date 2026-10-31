@@ -8746,64 +8746,21 @@ html[data-platform="linux"][data-window="launcher"] body {
     0 4px 12px rgba(0, 0, 0, 0.035) !important;
 }
 
-/* ── 1b. The plaque as a group of rows (SettingsPlaque, SettingsRow.tsx) ──
-   A hairline between rows, starting at the text column (1px border + 16px
-   padding + 40px tile + 16px gap = 73px) and stopping on the tile edge at the
-   right, as macOS System Settings insets its separators. Drawn as a pseudo
-   on each row after the first, so a row that folds in or out (Collapse,
-   CollapseItem) brings its own line and fades with it. Explicit colours:
-   dark --border-subtle is transparent. */
-.settings-plaque-rows > * { position: relative; }
-.settings-plaque-rows > * + *::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 73px;
-  right: 17px;
-  height: 1px;
-  background: rgba(255, 255, 255, 0.07);
-  pointer-events: none;
-}
-[data-theme='light'] .settings-plaque-rows > * + *::before { background: rgba(0, 0, 0, 0.07); }
-
-/* A sunken well on the plaque (SETTINGS_WELL): forms and previews that open
-   under a row. Darker than the plaque with a soft inner top shadow in dark;
-   a faint grey with a hairline in light, where an inner shadow reads as dirt. */
-.settings-plaque-well {
-  background: rgba(0, 0, 0, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.22);
-}
-[data-theme='light'] .settings-plaque-well {
-  background: rgba(0, 0, 0, 0.025);
-  border-color: rgba(0, 0, 0, 0.07);
-  box-shadow: none;
-}
-/* A well that is itself a text field (About you): the edge takes the accent
-   while the field inside has focus, as SETTINGS_INPUT's border does. No ring. */
-.settings-well-field {
-  transition: border-color 150ms ease, background-color 150ms ease;
-}
-.settings-well-field:focus-within {
-  border-color: color-mix(in srgb, var(--accent-primary) 60%, transparent);
-}
-[data-theme='light'] .settings-well-field:focus-within {
-  background: #fff;
-}
-
-/* The Skills plaque while a file is dragged over it: a periwinkle ring and a
-   frosted veil carrying one line, so the whole card reads as the target. It
-   materialises (blur and scale with the fade) in 180ms ease-out and leaves
-   in 120ms; pointer-events stay off so the card underneath keeps the drag. */
+/* Settings › Intelligence › Skills while a file is dragged over it: a
+   periwinkle ring and a frosted veil carrying one line, so the whole section
+   reads as the target. It reaches 8px past the section, so the ring does not
+   touch the heading's first letter. It materialises (blur and scale with the
+   fade) in 180ms ease-out and leaves in 120ms; pointer-events stay off so
+   the section underneath keeps the drag. */
 .settings-drop-veil {
   position: absolute;
-  inset: 0;
+  inset: -8px;
   z-index: 10;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border-radius: inherit;
+  border-radius: 14px;
   pointer-events: none;
   color: var(--accent-primary);
   background: color-mix(in srgb, var(--accent-primary) 10%, transparent);

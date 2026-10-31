@@ -14,8 +14,8 @@ import { AboutYouSettings } from './AboutYouSettings';
 import { LiquidGlassBadge } from '../../ui-components/LiquidGlassBadge';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
 import {
-  Collapse, Presence, SETTINGS_BTN, SETTINGS_BTN_BASE, SETTINGS_BTN_NEUTRAL, SETTINGS_FIELD_LABEL, SETTINGS_INPUT,
-  SETTINGS_WELL, SettingsDisclosureButton, SettingsMotionReady, SettingsNotice, SettingsPlaque, SettingsRow, SettingsSectionHeading,
+  Collapse, Presence, SETTINGS_BTN, SETTINGS_BTN_BASE, SETTINGS_BTN_NEUTRAL, SETTINGS_CARD, SETTINGS_FIELD_LABEL, SETTINGS_INPUT,
+  SettingsDisclosureButton, SettingsMotionReady, SettingsNotice, SettingsRow, SettingsSectionHeading,
   SettingsSwitch, useMotionReadyAfter, useSettingsTones, useSettledFlag,
 } from './SettingsRow';
 import { copyText } from '../../lib/copyText';
@@ -764,339 +764,341 @@ export const IntelligenceSettings: React.FC = () => {
     // and the file's own motion (Presence / Collapse from SettingsRow, silent until
     // SettingsMotionReady) is interaction-only and lives deeper in the tree.
     //
-    // Each category is one plaque (SettingsPlaque): the white card Plans & Billing
-    // and AI Providers wear, holding its heading and its rows, with inset hairlines
-    // between the rows, as macOS System Settings groups a pane (redesign 2026-10-21;
-    // it was one flat column of eighteen identical rows under four loose headings).
-    // Skills, Memory, Notes & answers, Provider performance; only diagnostics sit
-    // behind a disclosure, at the foot, as General's ADVANCED does. Forms that open
-    // under a row sit in a sunken well (SETTINGS_WELL), not a card on the card.
-    // The rows are still General's row (40px tile, 14px bold title, 12px
-    // description, control), so the text column lines up with every other pane.
+    // Laid out as every other Settings tab is: each category is a section heading
+    // over plain rows, with no card around them. Skills, Notes & answers, Memory,
+    // Provider performance; only diagnostics sit behind a disclosure, at the foot,
+    // as General's ADVANCED does.
+    //
+    // Built from General's parts, as Companion is: Audio's section heading, General's row
+    // (40px tile, 14px bold title, 12px description, control), General's secondary
+    // button and ADVANCED disclosure, Audio's card for anything that opens under a
+    // row, and the Liquid Glass badge/button General and Billing use.
+    //
+    // 2026-10-31: the grouped white cards ("plaques", 2026-10-21) are gone. They
+    // made this the one tab that looked different from all the others.
     <SettingsMotionReady.Provider value={motionReady}>
     <div className="space-y-6 animated fadeIn" data-settings-stagger>
-      {/* ── The pane title, General's: 18px bold heading and one line under it,
-          then Skills, which leads the page and brings its own plaque. One stagger
-          child, so the title and the first card settle together. ── */}
+      {/* ── The pane title, General's: 18px bold heading and one line under it. ── */}
       <section>
         <SettingsSectionHeading
           title={t('Intelligence')}
           subtitle={t('Skills, memory, and how Natively writes your notes and answers.')}
         />
-        <div className="pt-2">
-          <SkillsSettings />
-        </div>
+      </section>
+
+      {/* ── Skills: the instructions the chat follows; leads the page. ── */}
+      <section>
+        <SkillsSettings />
+      </section>
+
+      {/* ── Notes & answers, right under Skills and above Memory (owner's order,
+          2026-10-31). About you leads it: it is the bio every meeting summary
+          reads; under Skills a row with no heading read as one more skill. ── */}
+      <section>
+        <SettingsSectionHeading
+          title={t('Notes & answers')}
+          subtitle={t('How meeting notes are written and live answers are checked.')}
+        />
+        <AboutYouSettings />
+        {flagRows('notes')}
       </section>
 
       {/* ── Memory: Hindsight long-term memory, then the memory switches ── */}
       <section>
-        <SettingsPlaque
+        <SettingsSectionHeading
           title={t('Memory')}
           subtitle={t('What Natively remembers across your chats and meetings.')}
+        />
+
+        <SettingsRow
+          icon={<Brain size={20} />}
+          title={t('Long-term memory')}
+          badge={
+            <>
+              <LiquidGlassBadge variant="sky">{t('Beta')}</LiquidGlassBadge>
+              <StatusBadge status={status} testing={testing} />
+            </>
+          }
+          description={hindsightDescription}
+          // Keyed on set-up vs not, never on the address: typing a URL must update the
+          // line in place, not replay a swap on every keystroke.
+          descriptionKey={status === 'not-configured' ? 'none' : 'configured'}
+          control={
+            <>
+              {/* Retry arrives with the unreachable state and leaves with it. */}
+              <Presence kind="control" id={status === 'unreachable' ? 'retry' : null}>
+                <button type="button" className={SETTINGS_BTN} onClick={onTest} disabled={testing}>
+                  <Presence kind="icon" id={testingShown ? 'busy' : 'idle'}>
+                    {testingShown ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                  </Presence>
+                  {t('Retry')}
+                </button>
+              </Presence>
+              <Presence kind="control" id={setupControlId}>
+                {setupControlId === 'cta' ? (
+                  // The one primary action on the pane, in the Liquid Glass action
+                  // colour Companion's Connect uses.
+                  <LiquidGlassButton variant="action" className="lg-sm" aria-expanded={showSetup} onClick={() => setShowSetup(true)}>
+                    {setupToggleLabel}
+                  </LiquidGlassButton>
+                ) : (
+                  // min-width holds the button still while "Edit setup" ⇄ "Hide setup"
+                  // swaps, so the row's control column never jitters.
+                  <button type="button" className={`${SETTINGS_BTN} min-w-[108px]`} aria-expanded={showSetup} onClick={() => setShowSetup((v) => !v)}>
+                    <SlidersHorizontal size={14} />
+                    <Presence kind="text" id={setupToggleLabel}>{setupToggleLabel}</Presence>
+                  </button>
+                )}
+              </Presence>
+            </>
+          }
         >
-          <SettingsRow
-            icon={<Brain size={20} />}
-            title={t('Long-term memory')}
-            badge={
-              <>
-                <LiquidGlassBadge variant="sky">{t('Beta')}</LiquidGlassBadge>
-                <StatusBadge status={status} testing={testing} />
-              </>
-            }
-            description={hindsightDescription}
-            // Keyed on set-up vs not, never on the address: typing a URL must update the
-            // line in place, not replay a swap on every keystroke.
-            descriptionKey={status === 'not-configured' ? 'none' : 'configured'}
-            control={
-              <>
-                {/* Retry arrives with the unreachable state and leaves with it. */}
-                <Presence kind="control" id={status === 'unreachable' ? 'retry' : null}>
-                  <button type="button" className={SETTINGS_BTN} onClick={onTest} disabled={testing}>
-                    <Presence kind="icon" id={testingShown ? 'busy' : 'idle'}>
-                      {testingShown ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                    </Presence>
-                    {t('Retry')}
-                  </button>
-                </Presence>
-                <Presence kind="control" id={setupControlId}>
-                  {setupControlId === 'cta' ? (
-                    // The one primary action on the pane, in the Liquid Glass action
-                    // colour Companion's Connect uses.
-                    <LiquidGlassButton variant="action" className="lg-sm" aria-expanded={showSetup} onClick={() => setShowSetup(true)}>
-                      {setupToggleLabel}
-                    </LiquidGlassButton>
+          {/* Each notice grows in under the row and folds away when it no longer applies.
+              The key-rejected one is an alert, so it also shakes once as it lands. */}
+          <Collapse open={status === 'unreachable'}>
+            <div className="pb-3">
+              <SettingsNotice tone={tones.warn} icon={<WifiOff size={14} />} className="">
+                {t('Can’t reach the memory server. Make sure it’s running, then retry.')}
+              </SettingsNotice>
+            </div>
+          </Collapse>
+          <Collapse open={status === 'auth-failed'}>
+            <div className="pb-3">
+              <SettingsNotice tone={tones.danger} icon={<AlertCircle size={14} />} alert shakeKey="auth-failed" className="">
+                {t('Hindsight Cloud rejected the account key. Paste a new one in the setup.')}
+              </SettingsNotice>
+            </div>
+          </Collapse>
+
+          {/* Surfaced when the user just saved a new AI provider key while an app-managed
+              server is already up. The server inherited the OLD env at spawn and won't see
+              the new key until restart. Lives under the row, not inside the setup card, so
+              it is seen whether or not the setup is open. */}
+          <Collapse open={!!restartHint}>
+            <div className="pb-3">
+              <SettingsNotice tone={tones.warn} icon={<AlertCircle size={14} />} className="">
+                {t('You just saved a new')} <span className="font-medium">{restartHint?.provider}</span> {t('key, but the running Hindsight server still has the old one. Quit and relaunch Natively, or toggle autoStart off and on to restart the server.')}
+              </SettingsNotice>
+            </div>
+          </Collapse>
+
+          <Collapse open={showSetup}>
+            <div className="pb-3">
+              <div className={`${SETTINGS_CARD} p-4 space-y-4`}>
+                {/* Mode-aware setup. Local: 3-step pip-install + start + paste (the user does
+                    nothing because we auto-spawn). Cloud: 2-step paste URL + paste key. No
+                    `pip install` for Cloud (the server is user-managed). */}
+                <ol className="space-y-3 text-xs leading-relaxed text-text-secondary">
+                  {cloudSetup ? (
+                    // CLOUD FLOW — no install, just paste URL + key
+                    <>
+                      <li>
+                        <span className="font-semibold text-text-primary">{t('1. Paste your Hindsight Cloud address below.')}</span> {t("If you don’t have one, sign up at")}{' '}
+                        <button type="button" onClick={() => openExternal('https://hindsight.vectorize.io')} className="text-accent-primary hover:underline">hindsight.vectorize.io</button>.
+                      </li>
+                      <li>
+                        <span className="font-semibold text-text-primary">{t('2. Paste your Cloud account key.')}</span> {t('Found in your Hindsight Cloud dashboard. The app saves it automatically — no Apply needed.')}
+                      </li>
+                    </>
                   ) : (
-                    // min-width holds the button still while "Edit setup" ⇄ "Hide setup"
-                    // swaps, so the row's control column never jitters.
-                    <button type="button" className={`${SETTINGS_BTN} min-w-[108px]`} aria-expanded={showSetup} onClick={() => setShowSetup((v) => !v)}>
-                      <SlidersHorizontal size={14} />
-                      <Presence kind="text" id={setupToggleLabel}>{setupToggleLabel}</Presence>
-                    </button>
+                    // LOCAL FLOW — 3 steps. Step 3 is fully automatic when the companion is installed.
+                    <>
+                      <li>
+                        <span className="font-semibold text-text-primary">{t('1. Install the companion app.')}</span> {t('In your Terminal, run:')}
+                        <CopyBlock text="pip install hindsight-all" />
+                        <span className="mt-1.5 block">{t('Requires Python 3.11 or later.')}</span>
+                      </li>
+                      <li>
+                        <span className="font-semibold text-text-primary">{t('2. Start it.')}</span>{' '}
+                        {t('From the Natively project folder, run the bundled launcher and keep it running while you use the app:')}
+                        <CopyBlock text="bash scripts/hindsight-start.sh" />
+                        <span className="mt-1.5 block">
+                          {t('Starts the embedded memory server on port 8888.')}
+                        </span>
+                        <span className="mt-1 block">
+                          <span className="font-medium text-text-primary">{t('If you start it from inside Natively')}</span> {t('(autoStart toggle ON below), your AI provider key from the AI Providers screen is forwarded to the server automatically — nothing else to do.')}
+                        </span>
+                        <span className="mt-1 block">
+                          <span className="font-medium text-text-primary">{t('If you run the script yourself')}</span> {t('in a Terminal, also export your AI provider key so the server can use it (the script reads your shell environment, not the app’s stored credentials):')}
+                        </span>
+                        {detectedProvider && detectedProvider !== 'other' && detectedProvider !== 'litellm' ? (
+                          // Auto-detected: show the env-var snippet that matches the user's
+                          // configured AI provider. Prevents the "wrong env var name → silent
+                          // failure" footgun. The label tells them which provider this is for.
+                          <>
+                            <CopyBlock
+                              text={`export ${PROVIDER_ENV_HINTS[detectedProvider].env}=your-key-here`}
+                              label={PROVIDER_ENV_HINTS[detectedProvider].snippetLabel}
+                            />
+                            <span className="mt-1.5 block">
+                              {t('We detected your AI Providers key for')} <span className="font-medium text-text-primary">{PROVIDER_ENV_HINTS[detectedProvider].label}</span> {t('— the env var name above is the one the launcher reads.')}
+                            </span>
+                          </>
+                        ) : detectedProvider === 'litellm' ? (
+                          // User is routing through their own LiteLLM gateway (a base URL is set in
+                          // AI Providers, no direct provider key). Render a single LiteLLM-specific
+                          // snippet instead of the 5-block fallback — the gateway is already
+                          // configured and the launcher reads LITELLM_BASE_URL.
+                          <>
+                            <CopyBlock
+                              text="export LITELLM_BASE_URL=your-gateway-url"
+                              label="LiteLLM gateway:"
+                            />
+                            <span className="mt-1.5 block">
+                              {t('We detected a LiteLLM gateway URL in AI Providers. The launcher forwards it automatically when started from inside Natively; if you run the script yourself, also export the URL above.')}
+                            </span>
+                          </>
+                        ) : detectedProvider === 'other' ? (
+                          // No provider configured yet (or unrecognized) — render every supported
+                          // env var name as its own copyable line so the user can pick the right
+                          // one for whatever key they save. Each is a one-click copy.
+                          <>
+                            <span className="mt-1.5 block">
+                              {t('No AI provider key is configured yet. Save one in the AI Providers screen, then copy the matching line below:')}
+                            </span>
+                            <div className="mt-2">
+                              <span className={SETTINGS_FIELD_LABEL}>{t('Pick the one that matches your key')}</span>
+                              {(Object.keys(PROVIDER_ENV_HINTS) as Array<keyof typeof PROVIDER_ENV_HINTS>).map((k) => (
+                                <CopyBlock
+                                  key={k}
+                                  text={`export ${PROVIDER_ENV_HINTS[k].env}=your-key-here`}
+                                  label={PROVIDER_ENV_HINTS[k].snippetLabel}
+                                />
+                              ))}
+                            </div>
+                          </>
+                        ) : (
+                          // Still loading (detectedProvider === null). Show a neutral placeholder so
+                          // the panel doesn't pop in empty; replaced on the next render once the
+                          // credentials IPC resolves.
+                          <CopyBlock text="export GEMINI_API_KEY=your-key-here" label={t("Loading provider…")} />
+                        )}
+                      </li>
+                      <li>
+                        <span className="font-semibold text-text-primary">{t('3. Paste the address below')}</span> {t('(the local default is already filled in). The app connects automatically — no Apply needed.')}
+                      </li>
+                    </>
                   )}
-                </Presence>
-              </>
-            }
-          >
-            {/* Each notice grows in under the row and folds away when it no longer applies.
-                The key-rejected one is an alert, so it also shakes once as it lands. */}
-            <Collapse open={status === 'unreachable'}>
-              <div className="pb-3">
-                <SettingsNotice tone={tones.warn} icon={<WifiOff size={14} />} className="">
-                  {t('Can’t reach the memory server. Make sure it’s running, then retry.')}
-                </SettingsNotice>
-              </div>
-            </Collapse>
-            <Collapse open={status === 'auth-failed'}>
-              <div className="pb-3">
-                <SettingsNotice tone={tones.danger} icon={<AlertCircle size={14} />} alert shakeKey="auth-failed" className="">
-                  {t('Hindsight Cloud rejected the account key. Paste a new one in the setup.')}
-                </SettingsNotice>
-              </div>
-            </Collapse>
+                </ol>
+                <button type="button" onClick={() => openExternal('https://hindsight.vectorize.io/developer/installation')} className="text-xs font-medium text-accent-primary hover:underline">
+                  {t('Full setup guide & troubleshooting →')}
+                </button>
 
-            {/* Surfaced when the user just saved a new AI provider key while an app-managed
-                server is already up. The server inherited the OLD env at spawn and won't see
-                the new key until restart. Lives under the row, not inside the setup card, so
-                it is seen whether or not the setup is open. */}
-            <Collapse open={!!restartHint}>
-              <div className="pb-3">
-                <SettingsNotice tone={tones.warn} icon={<AlertCircle size={14} />} className="">
-                  {t('You just saved a new')} <span className="font-medium">{restartHint?.provider}</span> {t('key, but the running Hindsight server still has the old one. Quit and relaunch Natively, or toggle autoStart off and on to restart the server.')}
-                </SettingsNotice>
-              </div>
-            </Collapse>
+                <div className="space-y-4 border-t border-border-subtle pt-4">
+                  {/* One stack child, so the hint and the Cloud key field can grow and fold
+                      inside it: a Collapse that is itself a spaced-stack child keeps its
+                      16px margin while its height animates, then drops it in one jump. */}
+                  <div>
+                    <label className="block">
+                      <span className={`${SETTINGS_FIELD_LABEL} mb-2`}>{t('Server address')}</span>
+                      <input
+                        type="text"
+                        value={baseUrl}
+                        onChange={(e) => { baseUrlTouched.current = true; setBaseUrl(e.target.value); scheduleAutoSave(); }}
+                        placeholder="http://localhost:8888"
+                        className={SETTINGS_INPUT}
+                      />
+                    </label>
+                    <Collapse open={!!cfg?.synthetic && baseUrl === 'http://localhost:8888'}>
+                      <p className="pt-2 text-xs text-text-secondary">
+                        {t('Local default. Enter a Hindsight Cloud address to switch to Cloud.')}
+                      </p>
+                    </Collapse>
 
-            <Collapse open={showSetup}>
-              <div className="pb-3">
-                <div className={`${SETTINGS_WELL} p-4 space-y-4`}>
-                  {/* Mode-aware setup. Local: 3-step pip-install + start + paste (the user does
-                      nothing because we auto-spawn). Cloud: 2-step paste URL + paste key. No
-                      `pip install` for Cloud (the server is user-managed). */}
-                  <ol className="space-y-3 text-xs leading-relaxed text-text-secondary">
-                    {cloudSetup ? (
-                      // CLOUD FLOW — no install, just paste URL + key
-                      <>
-                        <li>
-                          <span className="font-semibold text-text-primary">{t('1. Paste your Hindsight Cloud address below.')}</span> {t("If you don’t have one, sign up at")}{' '}
-                          <button type="button" onClick={() => openExternal('https://hindsight.vectorize.io')} className="text-accent-primary hover:underline">hindsight.vectorize.io</button>.
-                        </li>
-                        <li>
-                          <span className="font-semibold text-text-primary">{t('2. Paste your Cloud account key.')}</span> {t('Found in your Hindsight Cloud dashboard. The app saves it automatically — no Apply needed.')}
-                        </li>
-                      </>
-                    ) : (
-                      // LOCAL FLOW — 3 steps. Step 3 is fully automatic when the companion is installed.
-                      <>
-                        <li>
-                          <span className="font-semibold text-text-primary">{t('1. Install the companion app.')}</span> {t('In your Terminal, run:')}
-                          <CopyBlock text="pip install hindsight-all" />
-                          <span className="mt-1.5 block">{t('Requires Python 3.11 or later.')}</span>
-                        </li>
-                        <li>
-                          <span className="font-semibold text-text-primary">{t('2. Start it.')}</span>{' '}
-                          {t('From the Natively project folder, run the bundled launcher and keep it running while you use the app:')}
-                          <CopyBlock text="bash scripts/hindsight-start.sh" />
-                          <span className="mt-1.5 block">
-                            {t('Starts the embedded memory server on port 8888.')}
+                    {/* Cloud is the alternative to running local software. The API key here is
+                        the Hindsight Cloud ACCOUNT key — explicitly NOT the user's AI provider
+                        key, which already lives in the AI Providers screen and is forwarded
+                        automatically. Hidden for local mode to reduce noise — it grows in once
+                        the address is a non-localhost URL. */}
+                    <Collapse open={cloudSetup}>
+                      <label className="block pt-4">
+                        <span className={`${SETTINGS_FIELD_LABEL} mb-2`}>
+                          {t('Hindsight Cloud account key')}{' '}
+                          <span className="normal-case tracking-normal">
+                            {t('(not your AI key)')}
+                            {cfg?.hasApiKey ? t(' — saved, leave blank to keep') : ''}
                           </span>
-                          <span className="mt-1 block">
-                            <span className="font-medium text-text-primary">{t('If you start it from inside Natively')}</span> {t('(autoStart toggle ON below), your AI provider key from the AI Providers screen is forwarded to the server automatically — nothing else to do.')}
-                          </span>
-                          <span className="mt-1 block">
-                            <span className="font-medium text-text-primary">{t('If you run the script yourself')}</span> {t('in a Terminal, also export your AI provider key so the server can use it (the script reads your shell environment, not the app’s stored credentials):')}
-                          </span>
-                          {detectedProvider && detectedProvider !== 'other' && detectedProvider !== 'litellm' ? (
-                            // Auto-detected: show the env-var snippet that matches the user's
-                            // configured AI provider. Prevents the "wrong env var name → silent
-                            // failure" footgun. The label tells them which provider this is for.
-                            <>
-                              <CopyBlock
-                                text={`export ${PROVIDER_ENV_HINTS[detectedProvider].env}=your-key-here`}
-                                label={PROVIDER_ENV_HINTS[detectedProvider].snippetLabel}
-                              />
-                              <span className="mt-1.5 block">
-                                {t('We detected your AI Providers key for')} <span className="font-medium text-text-primary">{PROVIDER_ENV_HINTS[detectedProvider].label}</span> {t('— the env var name above is the one the launcher reads.')}
-                              </span>
-                            </>
-                          ) : detectedProvider === 'litellm' ? (
-                            // User is routing through their own LiteLLM gateway (a base URL is set in
-                            // AI Providers, no direct provider key). Render a single LiteLLM-specific
-                            // snippet instead of the 5-block fallback — the gateway is already
-                            // configured and the launcher reads LITELLM_BASE_URL.
-                            <>
-                              <CopyBlock
-                                text="export LITELLM_BASE_URL=your-gateway-url"
-                                label="LiteLLM gateway:"
-                              />
-                              <span className="mt-1.5 block">
-                                {t('We detected a LiteLLM gateway URL in AI Providers. The launcher forwards it automatically when started from inside Natively; if you run the script yourself, also export the URL above.')}
-                              </span>
-                            </>
-                          ) : detectedProvider === 'other' ? (
-                            // No provider configured yet (or unrecognized) — render every supported
-                            // env var name as its own copyable line so the user can pick the right
-                            // one for whatever key they save. Each is a one-click copy.
-                            <>
-                              <span className="mt-1.5 block">
-                                {t('No AI provider key is configured yet. Save one in the AI Providers screen, then copy the matching line below:')}
-                              </span>
-                              <div className="mt-2">
-                                <span className={SETTINGS_FIELD_LABEL}>{t('Pick the one that matches your key')}</span>
-                                {(Object.keys(PROVIDER_ENV_HINTS) as Array<keyof typeof PROVIDER_ENV_HINTS>).map((k) => (
-                                  <CopyBlock
-                                    key={k}
-                                    text={`export ${PROVIDER_ENV_HINTS[k].env}=your-key-here`}
-                                    label={PROVIDER_ENV_HINTS[k].snippetLabel}
-                                  />
-                                ))}
-                              </div>
-                            </>
-                          ) : (
-                            // Still loading (detectedProvider === null). Show a neutral placeholder so
-                            // the panel doesn't pop in empty; replaced on the next render once the
-                            // credentials IPC resolves.
-                            <CopyBlock text="export GEMINI_API_KEY=your-key-here" label={t("Loading provider…")} />
-                          )}
-                        </li>
-                        <li>
-                          <span className="font-semibold text-text-primary">{t('3. Paste the address below')}</span> {t('(the local default is already filled in). The app connects automatically — no Apply needed.')}
-                        </li>
-                      </>
-                    )}
-                  </ol>
-                  <button type="button" onClick={() => openExternal('https://hindsight.vectorize.io/developer/installation')} className="text-xs font-medium text-accent-primary hover:underline">
-                    {t('Full setup guide & troubleshooting →')}
-                  </button>
-
-                  <div className="space-y-4 border-t border-border-subtle pt-4">
-                    {/* One stack child, so the hint and the Cloud key field can grow and fold
-                        inside it: a Collapse that is itself a spaced-stack child keeps its
-                        16px margin while its height animates, then drops it in one jump. */}
-                    <div>
-                      <label className="block">
-                        <span className={`${SETTINGS_FIELD_LABEL} mb-2`}>{t('Server address')}</span>
+                        </span>
                         <input
-                          type="text"
-                          value={baseUrl}
-                          onChange={(e) => { baseUrlTouched.current = true; setBaseUrl(e.target.value); scheduleAutoSave(); }}
-                          placeholder="http://localhost:8888"
+                          type="password"
+                          value={apiKey}
+                          onChange={(e) => { setApiKey(e.target.value); scheduleAutoSave(); }}
+                          placeholder={cfg?.hasApiKey ? t('••••••••  saved') : t('Required for Hindsight Cloud')}
                           className={SETTINGS_INPUT}
                         />
+                        <span className="block pt-2 text-xs text-text-secondary">
+                          {t('Your AI provider key stays on this device and is used separately.')}
+                        </span>
                       </label>
-                      <Collapse open={!!cfg?.synthetic && baseUrl === 'http://localhost:8888'}>
-                        <p className="pt-2 text-xs text-text-secondary">
-                          {t('Local default. Enter a Hindsight Cloud address to switch to Cloud.')}
-                        </p>
-                      </Collapse>
+                    </Collapse>
+                  </div>
 
-                      {/* Cloud is the alternative to running local software. The API key here is
-                          the Hindsight Cloud ACCOUNT key — explicitly NOT the user's AI provider
-                          key, which already lives in the AI Providers screen and is forwarded
-                          automatically. Hidden for local mode to reduce noise — it grows in once
-                          the address is a non-localhost URL. */}
-                      <Collapse open={cloudSetup}>
-                        <label className="block pt-4">
-                          <span className={`${SETTINGS_FIELD_LABEL} mb-2`}>
-                            {t('Hindsight Cloud account key')}{' '}
-                            <span className="normal-case tracking-normal">
-                              {t('(not your AI key)')}
-                              {cfg?.hasApiKey ? t(' — saved, leave blank to keep') : ''}
-                            </span>
-                          </span>
-                          <input
-                            type="password"
-                            value={apiKey}
-                            onChange={(e) => { setApiKey(e.target.value); scheduleAutoSave(); }}
-                            placeholder={cfg?.hasApiKey ? t('••••••••  saved') : t('Required for Hindsight Cloud')}
-                            className={SETTINGS_INPUT}
-                          />
-                          <span className="block pt-2 text-xs text-text-secondary">
-                            {t('Your AI provider key stays on this device and is used separately.')}
-                          </span>
-                        </label>
-                      </Collapse>
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-text-primary">{t('Start memory server automatically at launch')}</p>
+                      <p className="text-xs text-text-secondary mt-0.5">
+                        {t('Starts the companion with Natively and passes it your AI provider key.')}
+                      </p>
                     </div>
+                    <SettingsSwitch
+                      checked={autoStart}
+                      onChange={() => { autoStartTouched.current = true; setAutoStart((v) => !v); scheduleAutoSave(); }}
+                      label={t('Start memory server automatically at launch')}
+                    />
+                  </div>
 
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold text-text-primary">{t('Start memory server automatically at launch')}</p>
-                        <p className="text-xs text-text-secondary mt-0.5">
-                          {t('Starts the companion with Natively and passes it your AI provider key.')}
-                        </p>
-                      </div>
-                      <SettingsSwitch
-                        checked={autoStart}
-                        onChange={() => { autoStartTouched.current = true; setAutoStart((v) => !v); scheduleAutoSave(); }}
-                        label={t('Start memory server automatically at launch')}
-                      />
-                    </div>
+                  {/* Privacy disclosure ABOVE the Save action so it's seen before any data is sent. */}
+                  <SettingsNotice tone={tones.warn} icon={<ShieldAlert size={14} />} className="">
+                    {t('Local keeps memory on this device. Choosing Cloud sends meeting summaries, and what you type in search, to Hindsight’s servers — a privacy trade-off for an otherwise local-first app.')}
+                  </SettingsNotice>
 
-                    {/* Privacy disclosure ABOVE the Save action so it's seen before any data is sent. */}
-                    <SettingsNotice tone={tones.warn} icon={<ShieldAlert size={14} />} className="">
-                      {t('Local keeps memory on this device. Choosing Cloud sends meeting summaries, and what you type in search, to Hindsight’s servers — a privacy trade-off for an otherwise local-first app.')}
-                    </SettingsNotice>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      {/* Save → spinner → check, as an icon swap in one fixed slot, with the
-                          label swapping beside it; min-width keeps the pill from resizing
-                          between "Apply now" and "Applied". */}
-                      <LiquidGlassButton
-                        variant="action"
-                        className="lg-sm min-w-[118px]"
-                        onClick={onSaveHindsight}
-                        disabled={saving}
-                        icon={
-                          <Presence kind="icon" id={savingShown ? 'busy' : savedAt ? 'done' : 'idle'}>
-                            {savingShown ? <Loader2 size={14} className="animate-spin" /> : savedAt ? <Check size={14} /> : <Save size={14} />}
-                          </Presence>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Save → spinner → check, as an icon swap in one fixed slot, with the
+                        label swapping beside it; min-width keeps the pill from resizing
+                        between "Apply now" and "Applied". */}
+                    <LiquidGlassButton
+                      variant="action"
+                      className="lg-sm min-w-[118px]"
+                      onClick={onSaveHindsight}
+                      disabled={saving}
+                      icon={
+                        <Presence kind="icon" id={savingShown ? 'busy' : savedAt ? 'done' : 'idle'}>
+                          {savingShown ? <Loader2 size={14} className="animate-spin" /> : savedAt ? <Check size={14} /> : <Save size={14} />}
+                        </Presence>
+                      }
+                    >
+                      <Presence kind="text" id={savedAt ? 'applied' : 'apply'}>
+                        {savedAt ? t('Applied') : t('Apply now')}
+                      </Presence>
+                    </LiquidGlassButton>
+                    <button type="button" onClick={onTest} disabled={testing || !baseUrl.trim()} className={SETTINGS_BTN}>
+                      <Presence kind="icon" id={testingShown ? 'busy' : 'idle'}>
+                        {testingShown ? <Loader2 size={14} className="animate-spin" /> : <Wifi size={14} />}
+                      </Presence>
+                      {t('Test connection')}
+                    </button>
+                    {/* "Don't use Hindsight" opt-out — sets the explicit-disable sentinel so the
+                        synthetic default can't silently re-enable Hindsight on next launch. */}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (window.electronAPI?.disableHindsight) {
+                          await window.electronAPI.disableHindsight();
+                          await refresh();
                         }
-                      >
-                        <Presence kind="text" id={savedAt ? 'applied' : 'apply'}>
-                          {savedAt ? t('Applied') : t('Apply now')}
-                        </Presence>
-                      </LiquidGlassButton>
-                      <button type="button" onClick={onTest} disabled={testing || !baseUrl.trim()} className={SETTINGS_BTN}>
-                        <Presence kind="icon" id={testingShown ? 'busy' : 'idle'}>
-                          {testingShown ? <Loader2 size={14} className="animate-spin" /> : <Wifi size={14} />}
-                        </Presence>
-                        {t('Test connection')}
-                      </button>
-                      {/* "Don't use Hindsight" opt-out — sets the explicit-disable sentinel so the
-                          synthetic default can't silently re-enable Hindsight on next launch. */}
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (window.electronAPI?.disableHindsight) {
-                            await window.electronAPI.disableHindsight();
-                            await refresh();
-                          }
-                        }}
-                        className="ml-auto text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
-                      >
-                        {t("Don't use Hindsight at all")}
-                      </button>
-                    </div>
+                      }}
+                      className="ml-auto text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+                    >
+                      {t("Don't use Hindsight at all")}
+                    </button>
                   </div>
                 </div>
               </div>
-            </Collapse>
-          </SettingsRow>
+            </div>
+          </Collapse>
+        </SettingsRow>
 
-          {flagRows('memory')}
-        </SettingsPlaque>
-      </section>
-
-      {/* ── Notes & answers. About you leads it: it is the bio every meeting
-          summary reads. It sat alone above Memory while it was the first thing
-          on the page; under Skills a row with no heading read as one more skill. ── */}
-      <section>
-        <SettingsPlaque
-          title={t('Notes & answers')}
-          subtitle={t('How meeting notes are written and live answers are checked.')}
-        >
-          <AboutYouSettings />
-          {flagRows('notes')}
-        </SettingsPlaque>
+        {flagRows('memory')}
       </section>
 
       {/* What Natively has learned about each provider's speed, and what it does
@@ -1109,20 +1111,15 @@ export const IntelligenceSettings: React.FC = () => {
       {/* Developer options — diagnostics only, General's ADVANCED disclosure at the foot. */}
       {byGroup.dev.length ? (
         <section>
-          {/* The chevron hangs in the gutter so the label starts on the plaques' text edge. */}
-          <div className="pl-[13px]">
-            <SettingsDisclosureButton
-              open={showDev}
-              onToggle={() => setShowDev((v) => !v)}
-              label={t('Developer options')}
-            />
-          </div>
+          <SettingsDisclosureButton
+            open={showDev}
+            onToggle={() => setShowDev((v) => !v)}
+            label={t('Developer options')}
+          />
           <Disclosure open={showDev}>
-            <div className="pt-3">
-              <SettingsPlaque>
-                {flagRows('dev')}
-                <ContextDebugSection />
-              </SettingsPlaque>
+            <div className="mt-1">
+              {flagRows('dev')}
+              <ContextDebugSection />
             </div>
           </Disclosure>
         </section>
