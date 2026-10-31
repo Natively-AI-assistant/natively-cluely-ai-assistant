@@ -642,7 +642,7 @@ export const CalendarSettings: React.FC = () => {
           {linked ? (
             <button
               type="button"
-              className={`cp-pill cp-pill--sm cp-pill--danger${asking ? ' is-armed' : ''}`}
+              className={`cp-pill cp-pill--sm cp-pill--flat cp-pill--danger${asking ? ' is-armed' : ''}`}
               onClick={() => disconnectSource(src.id)}
               disabled={busy !== null}
             >
