@@ -308,10 +308,10 @@ describe('each note template has its own icon in the gallery (2026-10-21)', () =
         assert.match(css, /\.np-search:focus-within \{/);
         const light = css.match(/\.notepad \.np-lavender \{([^}]*)\}/)?.[1] ?? '';
         const dark = css.match(/\.notepad\[data-np-theme="dark"\] \.np-lavender \{([^}]*)\}/)?.[1] ?? '';
-        assert.match(light, /--np-surface: #faf8fe;/);
-        assert.match(light, /--np-ink: #2e2a38;/);
-        assert.match(light, /--np-ring: #ded4eb;/);
-        assert.match(light, /--np-cta: #8050d4;/);
+        assert.match(light, /--np-surface: #fcfcfd;/);
+        assert.match(light, /--np-ink: #1d1d1f;/);
+        assert.match(light, /--np-ring: #e3e3e8;/);
+        assert.match(light, /--np-cta: #4a5bd4;/);
         for (const v of ['surface', 'ink', 'ring', 'wash', 'tile', 'tile-ink', 'card', 'cta', 'cta-ink', 'scrim']) {
             assert.match(light, new RegExp(`--np-${v}:`), `light ${v}`);
             assert.match(dark, new RegExp(`--np-${v}:`), `dark ${v}`);

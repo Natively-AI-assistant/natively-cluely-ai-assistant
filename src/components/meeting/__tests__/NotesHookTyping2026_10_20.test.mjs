@@ -70,7 +70,7 @@ test('main: keys go only to the session\'s window; the notes window is never act
   assert.match(helper, /win\.on\('focus', \(\) => \{\s*this\.stealthTyping\(\)\?\.stopIfTarget\('overlay'\)/);
 });
 
-test("laid out like Granola's: serif title, Today + people chip, folder button, Write notes, a listening pill with stop beside Ask anything", () => {
+test("laid out like Granola's: neutral with pastel accents, serif title, Today + people chip, folder button, Write notes, a listening pill with stop beside Ask anything", () => {
   const page = read('src/components/NotesWindow.tsx');
   const heading = read('src/components/notes/NotesHeading.tsx');
   assert.match(heading, /font-plex-serif/);
@@ -86,18 +86,31 @@ test("laid out like Granola's: serif title, Today + people chip, folder button, 
   // Pause moved into the ⋯ menu; a paused pill reads Resume.
   assert.match(page, /role="menu"[\s\S]*togglePause\(\)[\s\S]*Pause transcription/);
   assert.match(page, /\{paused && \([\s\S]{0,200}onClick=\{togglePause\}[\s\S]{0,200}Resume/);
-  // The look comes from Granola's tokens, scoped to the notepad.
+  // The look comes from the notepad tokens: neutral surfaces, pastel accents.
   assert.match(page, /className=\{`notepad /);
-  assert.match(read('src/index.css'), /\.notepad\[data-np-theme="dark"\] \{[\s\S]{0,200}--np-surface: #292929;/);
-  // Transcript open: the panel holds the listening controls and the mic / sound / language row.
-  assert.match(page, /\{listeningControls\}\s*\{showTranscript && <TranscriptControls \/>\}/);
-  // Granola's floating panel: plate springs in, the space above the pills grows, the edge drags the height.
-  assert.match(page, /const PANEL_SPRING = \{ type: 'spring', duration: 0\.2, bounce: 0\.2 \}/);
+  assert.match(read('src/index.css'), /\.notepad \{[\s\S]{0,200}--np-surface: #f9f9fb;/);
+  assert.match(read('src/index.css'), /\.notepad\[data-np-theme="dark"\] \{[\s\S]{0,200}--np-surface: #1c1c1f;/);
+  // Transcript open: the panel holds the listening controls and the mic / language row.
+  assert.match(page, /<AnimatePresence initial=\{false\}>\s*\{showTranscript && \(/);
+  // The floating panel: plate springs in, the space above the pills grows, the edge drags the height.
+  // Slow, unbouncy springs (2026-10-30): the transcript .55 s open / .45 s close, Ask's row .4 / .3.
+  assert.match(page, /const PANEL_OPEN = \{ type: 'spring', duration: 0\.55, bounce: 0 \}/);
+  assert.match(page, /const PANEL_CLOSE = \{ type: 'spring', duration: 0\.45, bounce: 0 \}/);
+  assert.match(page, /const ROW_CLOSE = \{ type: 'spring', duration: 0\.3, bounce: 0 \}/);
+  assert.match(page, /transition=\{panelMotion\}/);
+  // Ask and the transcript's mic / language share one slot and crossfade; Ask is never unmounted.
+  assert.match(page, /<motion\.form[\s\S]{0,400}inert=\{showTranscript\}/);
+  assert.match(page, /key="transcript-controls"[\s\S]{0,1200}<TranscriptControls \/>/);
+  // Ask opening folds the listening pill away (no unmount, so Ask widens instead of jumping), inert while folded.
+  assert.match(page, /inert=\{askOpen\}/);
+  assert.match(page, /\{ width: 0, opacity: 0, marginRight: -8, overflow: 'hidden' \}/);
+  // Ask keeps its fill while open, so the page never shows through before the plate arrives.
+  assert.match(read('src/index.css'), /\.np-ask \{ background: var\(--np-elevated\);/);
   assert.match(page, /animate=\{\{ opacity: panelKind \? 1 : 0, scale: panelKind \? 1 : 0\.98 \}\}/);
   assert.match(page, /animate=\{\{ height: panelKind \? contentHeight : 0 \}\}/);
   assert.match(page, /onPointerDown=\{startResize\}/);
   // Ask open: one card, two recipes and All recipes over the field; a press outside closes it.
-  assert.match(page, /visibleRecipes\(SUGGESTIONS, false\)\.map\(recipeButton\)[\s\S]{0,1500}All recipes[\s\S]{0,800}<NpPop open=\{askOpen && allRecipes && turns\.length === 0\} origin="bottom right" role="menu" aria-label="All recipes"/);
+  assert.match(page, /\{chipRecipes\.map\(recipeButton\)\}[\s\S]{0,1500}All recipes[\s\S]{0,800}<NpPop open=\{askOpen && allRecipes && turns\.length === 0 && slashQuery === null\} origin="bottom right" role="menu" aria-label="All recipes"/);
   assert.match(page, /askCardRef\.current\?\.contains\(e\.target as Node\)\) return;\s*setAskEngaged\(false\);/);
   const controls = read('src/components/notes/TranscriptControls.tsx');
   assert.match(controls, /localStorage\.setItem\(SAVED_INPUT_KEY, id\)/);
@@ -165,4 +178,16 @@ test('note templates in the notepad: "/" before Stop sets the meeting\'s, the ga
   assert.match(enhanced, /req\.kind === 'template' \? \{ noteTemplateId: req\.id \} : req\.kind === 'mode' \? \{ modeId: req\.id \} : \{\}/);
   assert.match(enhanced, /<NotesTemplateMenu/);
   assert.doesNotMatch(read('src/components/notes/NotesTemplateMenu.tsx') + read('src/components/notes/NoteTemplateGallery.tsx'), /Sparkles/);
+});
+
+test('recipes in Granola\'s shapes (2026-10-31): a quote reads as its line; recipes come from the shared catalogue and Retry reruns them', async () => {
+  const { plainAnswerText } = await import('../notesView.ts');
+  assert.equal(plainAnswerText('You could say:\n\n> The midpoint method gives 0.73.'), 'You could say:\n\nThe midpoint method gives 0.73.');
+  assert.equal(plainAnswerText('**To do:**\n- Read chapter 6'), 'To do:\n- Read chapter 6');
+  const win = read('src/components/NotesWindow.tsx');
+  // Granola's chips: the live helpers while live, then the follow-up email and todos (electron/llm/noteRecipes.ts).
+  assert.match(win, /const CHIP_IDS: Record<'live' \| 'ended', string\[\]> = \{ live: \['what-did-i-miss', 'sound-smart'\], ended: \['follow-up-email', 'todos'\] \};/);
+  // The turn shows the recipe's name; Retry runs the same recipe with what was typed after it.
+  assert.match(win, /const label = extra \? `\$\{recipe\.label\} \$\{extra\}` : recipe\.label;/);
+  assert.match(win, /if \(recipe\) runRecipe\(recipe, turn\.extra \?\? ''\);/);
 });

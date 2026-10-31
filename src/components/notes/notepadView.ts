@@ -103,11 +103,51 @@ export function eventTimeRange(start: string | null | undefined, end: string | n
 }
 
 interface DetailedLike {
+    schemaVersion?: number;
     overview?: string;
     tldr?: string[];
     sectionsV3?: Array<{ title: string; bullets: Array<{ text: string; fromUserNotes?: boolean }> }>;
     keyPoints?: string[];
     actionItems?: string[];
+    decisions?: Array<{ text?: string; fromUserNotes?: boolean; evidence?: unknown[] }>;
+    actionItemsV3?: Array<{ text?: string; owner?: string; deadline?: string; fromUserNotes?: boolean; evidence?: unknown[] }>;
+}
+
+export interface FallbackNoteSection {
+    id: string;
+    title: string;
+    bullets: Array<{ id: string; text: string; fromUserNotes?: boolean; evidence?: any[] }>;
+}
+
+/** An action as the exports write it (notesDocument.actionItemLine): "May: Fix the crash (by November 9)". */
+export function actionLine(a: { text?: string; owner?: string; deadline?: string }): string {
+    const text = (a.text ?? '').trim();
+    const owner = (a.owner ?? '').trim();
+    const deadline = (a.deadline ?? '').trim();
+    return `${owner ? `${owner}: ` : ''}${text}${deadline ? ` (by ${deadline})` : ''}`;
+}
+
+/**
+ * The sections of a version 3 note written with no template (no mode active and
+ * none picked in the notepad, 2026-10-31): Decisions and Action items, from the
+ * structured lists the notes call wrote anyway. Without them the page showed only
+ * the overview and the Summary, and every owner and date the call found stayed
+ * hidden (the Granola benchmark: 21 of 21 meetings, e.g. six owned, dated actions
+ * in a release planning call). Empty when the note has template sections.
+ */
+export function fallbackNoteSections(detailed: DetailedLike | null | undefined): FallbackNoteSection[] {
+    if (!detailed || detailed.schemaVersion !== 3) return [];
+    if ((detailed.sectionsV3 ?? []).some((s) => s && Array.isArray(s.bullets) && s.bullets.length > 0)) return [];
+    const out: FallbackNoteSection[] = [];
+    const decisions = (detailed.decisions ?? [])
+        .filter((d) => typeof d?.text === 'string' && d.text.trim())
+        .map((d, i) => ({ id: `decision-${i}`, text: d.text!.trim(), fromUserNotes: !!d.fromUserNotes, evidence: Array.isArray(d.evidence) ? d.evidence : undefined }));
+    if (decisions.length) out.push({ id: 'fallback-decisions', title: 'Decisions', bullets: decisions });
+    const actions = (detailed.actionItemsV3 ?? [])
+        .filter((a) => typeof a?.text === 'string' && a.text.trim())
+        .map((a, i) => ({ id: `action-${i}`, text: actionLine(a), fromUserNotes: !!a.fromUserNotes, evidence: Array.isArray(a.evidence) ? a.evidence : undefined }));
+    if (actions.length) out.push({ id: 'fallback-actions', title: 'Action items', bullets: actions });
+    return out;
 }
 
 export interface EnhancedSection { title: string; lines: Array<{ text: string; mine: boolean }> }
@@ -116,19 +156,30 @@ export interface EnhancedSection { title: string; lines: Array<{ text: string; m
  * The notes to show after Stop, in the meeting page's order: Summary, then the
  * template's sections (a line built on the user's own notes is "mine", drawn
  * in the primary ink). Older notes (no sections) fall back to key points and
- * action items. Empty when there are no notes yet.
+ * action items. Version 3 notes never do: their key points only mirror the
+ * Summary for older readers, so a v3 note with no sections showed the Summary
+ * twice (2026-10-31), and the meeting page doesn't show them either. When the
+ * template has its own Summary section (the General mode seeded on new installs
+ * does), that section is the Summary and the tldr isn't drawn as a second one.
+ * A v3 note with no template gets Decisions and Action items instead
+ * (fallbackNoteSections). Empty when there are no notes yet.
  */
+/** A template section that is itself the Summary: "Summary", "TL;DR" (not "Study summary"). */
+export function isSummaryTitle(title: string | null | undefined): boolean {
+    return /^\s*(?:summary|tl;?\s*dr)\s*:?\s*$/i.test(title ?? '');
+}
+
 export function enhancedSections(detailed: DetailedLike | null | undefined): EnhancedSection[] {
     if (!detailed) return [];
     const out: EnhancedSection[] = [];
     const tldr = (detailed.tldr ?? []).filter((t) => typeof t === 'string' && t.trim());
-    if (tldr.length) out.push({ title: 'Summary', lines: tldr.map((text) => ({ text, mine: false })) });
-    const sections = (detailed.sectionsV3 ?? []).filter((s) => s && Array.isArray(s.bullets) && s.bullets.length > 0);
+    const templated = (detailed.sectionsV3 ?? []).filter((s) => s && Array.isArray(s.bullets) && s.bullets.length > 0);
+    const sections = templated.length ? templated : fallbackNoteSections(detailed);
+    if (tldr.length && !sections.some((s) => isSummaryTitle(s.title))) out.push({ title: 'Summary', lines: tldr.map((text) => ({ text, mine: false })) });
     for (const s of sections) {
         out.push({ title: s.title, lines: s.bullets.filter((b) => b?.text?.trim()).map((b) => ({ text: b.text, mine: !!b.fromUserNotes })) });
     }
-    if (sections.length === 0) {
-        if (!tldr.length && detailed.overview?.trim()) out.push({ title: 'Summary', lines: [{ text: detailed.overview.trim(), mine: false }] });
+    if (sections.length === 0 && detailed.schemaVersion !== 3) {
         const kp = (detailed.keyPoints ?? []).filter((t) => typeof t === 'string' && t.trim());
         if (kp.length) out.push({ title: 'Key points', lines: kp.map((text) => ({ text, mine: false })) });
         const ai = (detailed.actionItems ?? []).filter((t) => typeof t === 'string' && t.trim());
@@ -137,9 +188,26 @@ export function enhancedSections(detailed: DetailedLike | null | undefined): Enh
     return out.filter((s) => s.lines.length > 0);
 }
 
-/** The enhanced notes as markdown, for Copy. */
-export function enhancedNotesMarkdown(title: string, sections: EnhancedSection[]): string {
-    const parts = [`# ${title}`];
+/**
+ * The overview the meeting page shows above the Summary (2026-10-31), as plain
+ * paragraphs: the notepad draws no markdown, so heading lines and bold/italic
+ * markers are dropped and soft line breaks joined.
+ */
+export function enhancedOverview(detailed: DetailedLike | null | undefined): string[] {
+    const raw = typeof detailed?.overview === 'string' ? detailed.overview : '';
+    return raw
+        .split(/\n\s*\n/)
+        .map((p) => p
+            .replace(/^#{1,6}\s.*$/gm, '')
+            .replace(/(^|[^\w])(\*\*|__|\*|_)(\S(?:.*?\S)?)\2(?!\w)/g, '$1$3')
+            .replace(/\s*\n\s*/g, ' ')
+            .trim())
+        .filter(Boolean);
+}
+
+/** The enhanced notes as markdown, for Copy: title, overview, then the sections. */
+export function enhancedNotesMarkdown(title: string, sections: EnhancedSection[], overview: string[] = []): string {
+    const parts = [`# ${title}`, ...overview];
     for (const s of sections) parts.push(`## ${s.title}\n${s.lines.map((l) => `- ${l.text}`).join('\n')}`);
     return parts.join('\n\n');
 }
@@ -159,6 +227,43 @@ export function findInTranscript(lines: Array<{ text: string; at: number }>, que
         for (let i = hay.indexOf(q); i !== -1; i = hay.indexOf(q, i + q.length)) hits.push({ at: l.at, from: i, to: i + q.length });
     }
     return hits;
+}
+
+/**
+ * The live transcript (2026-10-31). Each speaker keeps its own words in
+ * progress, so you and the call heard at once grow side by side instead of
+ * taking turns in one slot (which flipped the bubble between speakers and let
+ * one side's final wipe the other's words). A line keeps the time its first
+ * words arrived, and lines and words in progress are shown in that order, so
+ * a line stays where it is when it is finalised. Words in progress not heard
+ * from for `staleMs` are dropped, since a side can fall silent without a final.
+ */
+export interface LivePartial extends TranscriptLine { seen: number }
+export interface LiveTranscript { lines: TranscriptLine[]; partials: LivePartial[] }
+export const EMPTY_LIVE_TRANSCRIPT: LiveTranscript = { lines: [], partials: [] };
+const byStart = (a: { at: number }, b: { at: number }) => a.at - b.at;
+export function applyTranscriptEvent(
+    state: LiveTranscript,
+    ev: { speaker: string; text: string; at: number; final: boolean },
+    now: number,
+    keep = 600,
+    staleMs = 8000,
+): LiveTranscript {
+    const own = state.partials.find((p) => p.speaker === ev.speaker);
+    const others = state.partials.filter((p) => p.speaker !== ev.speaker && now - p.seen <= staleMs);
+    const at = own?.at ?? ev.at;
+    if (ev.final) {
+        const lines = [...state.lines, { speaker: ev.speaker, text: ev.text, at }].sort(byStart).slice(-keep);
+        return { lines, partials: others };
+    }
+    return { lines: state.lines, partials: [...others, { speaker: ev.speaker, text: ev.text, at, seen: now }].sort(byStart) };
+}
+/** Lines and words in progress, in the order they started; `partial` marks the latter. */
+export function liveTranscriptRows(state: LiveTranscript): Array<TranscriptLine & { partial: boolean }> {
+    return [
+        ...state.lines.map((l) => ({ ...l, partial: false })),
+        ...state.partials.map(({ speaker, text, at }) => ({ speaker, text, at, partial: true })),
+    ].sort(byStart);
 }
 
 /**
@@ -199,12 +304,13 @@ export function notepadLanguageChoices(
     return Object.entries(languages)
         .filter(([key, l]) => !!l && typeof l.label === 'string' && offered(key))
         .sort(([ka, a], [kb, b]) => rank(ka, a) - rank(kb, b) || a.label.localeCompare(b.label))
-        .map(([key, l]) => ({ key, label: l.label }));
+        // Settings' "Auto Detect" reads as just "Auto" here, as on the button.
+        .map(([key, l]) => ({ key, label: key === 'auto' ? 'Auto' : l.label }));
 }
 
-/** The language button's word: the language's name ("English"), or "Auto detect". */
+/** The language button's word: the language's name ("English"), or "Auto". */
 export function languageButtonLabel(key: string, languages: Record<string, LanguageEntry>): string {
-    if (!key || key === 'auto') return 'Auto detect';
+    if (!key || key === 'auto') return 'Auto';
     const l = languages[key];
     if (!l) return 'Language';
     return l.group && l.group !== 'Auto' ? l.group : l.label;

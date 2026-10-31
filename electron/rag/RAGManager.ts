@@ -12,6 +12,7 @@ import { EmbeddingPipeline } from './EmbeddingPipeline';
 import { RAGRetriever } from './RAGRetriever';
 import { LiveRAGIndexer } from './LiveRAGIndexer';
 import { buildRAGPrompt, NO_CONTEXT_FALLBACK, NO_GLOBAL_CONTEXT_FALLBACK } from './prompts';
+import { loadWholeMeetingContext } from './wholeMeetingContext';
 import type { ProviderDataScopePolicy } from '../llm/ProviderRouter';
 import { isSpokenSavedLine } from '../intelligence/savedTranscriptOrigin';
 import { buildSummaryTextForSearch } from './summaryTextForSearch';
@@ -341,6 +342,16 @@ export class RAGManager {
             throw new Error('LLM helper not initialized');
         }
 
+        // A finished meeting that fits goes to the model whole: its notes (which name the
+        // people) and the full transcript, not only the chunks that matched (wholeMeetingContext.ts).
+        if (this.liveIndexer.getActiveMeetingId() !== meetingId) {
+            const whole = loadWholeMeetingContext(this.db, meetingId);
+            if (whole) {
+                yield* this.streamMeetingAnswer(buildRAGPrompt(query, whole, 'meeting', this.retriever.detectIntent(query)), abortSignal);
+                return;
+            }
+        }
+
         // Check if meeting has embeddings (post-meeting RAG)
         const hasEmbeddings = this.vectorStore.hasEmbeddings(meetingId);
 
@@ -366,7 +377,11 @@ export class RAGManager {
 
         // Build prompt with intent hint
         const prompt = buildRAGPrompt(query, context.formattedContext, 'meeting', context.intent);
+        yield* this.streamMeetingAnswer(prompt, abortSignal);
+    }
 
+    private async *streamMeetingAnswer(prompt: string, abortSignal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+        if (!this.llmHelper) throw new Error('LLM helper not initialized');
         // Stream response
         const streamOutcome: { incomplete?: boolean } = {};
         const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true, undefined, streamOutcome);
@@ -385,6 +400,16 @@ export class RAGManager {
         if (streamOutcome.incomplete && !abortSignal?.aborted) {
             yield RAG_STREAM_INCOMPLETE_CODA;
         }
+    }
+
+    /** Whether queryMeeting reads this meeting whole: finished, short enough, chunked, with a model to ask. No embeddings needed. */
+    canReadWholeMeeting(meetingId: string): boolean {
+        return !!this.llmHelper && this.liveIndexer.getActiveMeetingId() !== meetingId && loadWholeMeetingContext(this.db, meetingId) !== null;
+    }
+
+    /** A finished meeting for a notepad recipe: notes and transcript, the transcript cut at `budget` tokens when longer. */
+    getMeetingRecipeContext(meetingId: string, budget: number): string | null {
+        return loadWholeMeetingContext(this.db, meetingId, budget, 'cut');
     }
 
     /**

@@ -16684,6 +16684,83 @@ export function initializeIpcHandlers(appState: AppState): void {
     }, (r: any) => !r || r.text === null || r.text === undefined);
   });
 
+  // Notepad recipes (llm/noteRecipes.ts, 2026-10-31): Granola's recipe list. A
+  // finished meeting is read whole (notes + transcript, as its Ask does); a live
+  // one is its transcript so far plus what the user typed in the notepad.
+  // Step 1 of the stepped recipes (the meeting's commitments) is the same for todos, tldr
+  // and the email: kept for the last few contexts, so a second recipe on the same meeting
+  // makes one model call, not two. A live meeting's context changes as it goes, so it misses.
+  const recipeCommitmentsCache = new Map<string, import('./llm/recipePipeline').CommitmentsJson>();
+  const recipeCommitmentsKey = (context: string) => require('node:crypto').createHash('sha1').update(context).digest('hex') as string;
+  const rememberRecipeCommitments = (key: string, value: import('./llm/recipePipeline').CommitmentsJson) => {
+    recipeCommitmentsCache.delete(key);
+    recipeCommitmentsCache.set(key, value);
+    while (recipeCommitmentsCache.size > 8) recipeCommitmentsCache.delete(recipeCommitmentsCache.keys().next().value as string);
+  };
+
+  safeHandle('note-recipe:run', async (_, input: unknown) => {
+    const { recipeId, extra, meetingId, phase, notes } = (input && typeof input === 'object' ? input : {}) as
+      { recipeId?: unknown; extra?: unknown; meetingId?: unknown; phase?: unknown; notes?: unknown };
+    const { noteRecipeById, recipeSystemPrompt, recipeUserPrompt, liveRecipeContext, calendarLine } = require('./llm/noteRecipes') as typeof import('./llm/noteRecipes');
+    const recipe = typeof recipeId === 'string' ? noteRecipeById(recipeId) : undefined;
+    if (!recipe?.instruction) return { text: null, error: 'unknown_recipe' };
+    const llmHelper = appState.processingHelper?.getLLMHelper?.();
+    if (!llmHelper) return { text: null, error: 'no_model' };
+    let context: string | null = null;
+    if (phase === 'ended' && typeof meetingId === 'string' && meetingId) {
+      context = appState.getRAGManager()?.getMeetingRecipeContext(meetingId, 30000) ?? null;
+    } else {
+      const { isSpokenSavedLine } = require('./intelligence/savedTranscriptOrigin') as typeof import('./intelligence/savedTranscriptOrigin');
+      context = liveRecipeContext(
+        (appState.getIntelligenceManager()?.getCurrentMeetingFullTranscript?.() ?? []).filter((l) => isSpokenSavedLine(l)),
+        typeof notes === 'string' ? notes : '',
+      );
+    }
+    if (!context) return { text: null, error: 'no_transcript' };
+    const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const userName = appState.getUserName?.() ?? null;
+    const system = recipeSystemPrompt({ userName, today, calendar: calendarLine(new Date()) });
+    const extraText = typeof extra === 'string' ? extra.slice(0, 500) : '';
+    const chat = (s: string, u: string) => llmHelper.chat(u, undefined, undefined, s, true /* skipModeInjection */);
+    return _tracked(async () => {
+      let recipeContext = context!;
+      // Todos, tldr and the follow-up email run in steps (llm/recipePipeline.ts): the model
+      // lists the commitments, code checks each one's ME/THEM line, and code writes the fixed
+      // shape. A failed step falls back to the one-prompt recipe below, with the checked
+      // list of who does what when step 1 worked.
+      const pipeline = require('./llm/recipePipeline') as typeof import('./llm/recipePipeline');
+      if (pipeline.isSteppedRecipe(recipe.id)) {
+        try {
+          const startMs = phase === 'ended' && typeof meetingId === 'string' ? DatabaseManager.getInstance().getMeetingTimes(meetingId)?.startMs : 0;
+          // A finished meeting whose other side was told apart by voice: "THEM (Noah): ..."
+          // lines, so a promise is credited to the person who made it.
+          if (phase === 'ended' && typeof meetingId === 'string') {
+            const details: any = DatabaseManager.getInstance().getMeetingDetails(meetingId);
+            recipeContext = pipeline.withVoiceTranscript(recipeContext, details?.transcript, details?.detailedSummary?.speakerLabels ?? details?.speakerLabels);
+          }
+          const key = recipeCommitmentsKey(recipeContext);
+          const result = await pipeline.runSteppedRecipe({
+            recipeId: recipe.id,
+            context: recipeContext,
+            meetingDate: startMs ? new Date(startMs) : new Date(),
+            userName,
+            shape: pipeline.canWriteEnglishShape(extraText, llmHelper.getAiResponseLanguage?.(), recipeContext),
+            chat,
+            commitments: recipeCommitmentsCache.get(key) ?? null,
+          });
+          if (result.commitments) rememberRecipeCommitments(key, result.commitments);
+          if (result.text) return { text: result.text };
+          if (result.facts) recipeContext = `${recipeContext}\n\n${result.facts}`;
+        } catch (e: any) {
+          console.warn('[note-recipe] stepped recipe failed, using the one-prompt recipe:', e?.message || e);
+        }
+      }
+      const user = recipeUserPrompt({ recipe, extra: extraText, context: recipeContext });
+      const text = (await chat(system, user))?.trim() || null;
+      return { text };
+    }, (r: any) => !r || !r.text);
+  });
+
   // Settings › Overlay › Your buttons (llm/customButtons.ts). Saving a button
   // rewrites the user's description into a contract in the style of the
   // built-in buttons; a model that is missing or fails leaves the fallback
@@ -17637,8 +17714,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     'rag:query-meeting',
     async (event, { meetingId, query }: { meetingId: string; query: string }) => {
       const ragManager = appState.getRAGManager();
+      // A finished meeting that fits is read whole (rag/wholeMeetingContext.ts): it needs neither
+      // the embedding model nor this meeting's embeddings, so its Ask never waits on them.
+      const readsWhole = !!ragManager?.canReadWholeMeeting(meetingId);
 
-      if (!ragManager || !ragManager.isReady()) {
+      if (!ragManager || (!readsWhole && !ragManager.isReady())) {
         // Fallback to regular chat if RAG not available
         console.log('[RAG] Not ready, falling back to regular chat');
         return { fallback: true };
@@ -17647,6 +17727,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // For completed meetings, check if post-meeting RAG is processed.
       // For live meetings with JIT indexing, let RAGManager.queryMeeting() decide.
       if (
+        !readsWhole &&
         !ragManager.isMeetingProcessed(meetingId) &&
         !ragManager.isLiveIndexingActive(meetingId)
       ) {

@@ -557,6 +557,8 @@ interface ElectronAPI {
   ) => Promise<{ refined: string | null; intent: string }>;
   generateRecap: () => Promise<{ summary: string | null }>;
   generateLiveHelper: (action: 'catch_me_up' | 'define' | 'sound_smart' | 'follow_up_questions', opts?: { sinceMs?: number }) => Promise<{ text: string | null }>;
+  /** A notepad recipe (electron/llm/noteRecipes.ts) over the live or finished meeting. */
+  runNoteRecipe: (input: { recipeId: string; extra?: string; meetingId?: string | null; phase: 'live' | 'ended'; notes?: string }) => Promise<{ text: string | null; error?: string }>;
   compileCustomButton: (input: { name: string; description: string }) => Promise<{ instruction: string; source: 'model' | 'fallback' }>;
   generateCustomButton: (input: { name: string; instruction: string; imagePaths?: string[]; readMinutes?: number }) => Promise<{ text: string | null; error?: string }>;
   submitManualQuestion: (question: string) => Promise<{ answer: string | null; question: string }>;
@@ -2305,6 +2307,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   generateRecap: () => ipcRenderer.invoke('generate-recap'),
   generateLiveHelper: (action: 'catch_me_up' | 'define' | 'sound_smart' | 'follow_up_questions', opts?: { sinceMs?: number }) =>
     ipcRenderer.invoke('generate-live-helper', action, opts),
+  runNoteRecipe: (input: { recipeId: string; extra?: string; meetingId?: string | null; phase: 'live' | 'ended'; notes?: string }) =>
+    ipcRenderer.invoke('note-recipe:run', input),
   compileCustomButton: (input: { name: string; description: string }) =>
     ipcRenderer.invoke('custom-button:compile', input),
   generateCustomButton: (input: { name: string; instruction: string; imagePaths?: string[]; readMinutes?: number }) =>

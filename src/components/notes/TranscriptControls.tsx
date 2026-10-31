@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, Languages, SlidersVertical } from 'lucide-react';
+import { Check, ChevronDown, Languages } from 'lucide-react';
 import { isInternalCaptureDevice } from '../../../electron/audio/audioDeviceSelection.mjs';
 import { isRecognitionLanguageOffered } from '../../../electron/config/languages';
 import { NpPop } from './NpPop';
@@ -7,14 +7,15 @@ import { languageButtonLabel, micButtonLabel, notepadLanguageChoices, type Langu
 
 /**
  * The transcript panel's bottom row (2026-10-20), as Granola's: the mic the
- * meeting hears, the sound settings, and the transcript's language.
+ * meeting hears and the transcript's language. (The sound-settings button
+ * was removed 2026-10-30; the language button still opens Settings › Audio
+ * when the list depends on the provider.)
  *
  *  - Mic: the system's input devices (Natively's own capture devices left
  *    out, as Settings › Audio does). A pick is saved as Settings saves it
  *    (`preferredInputDeviceId`, read at the next Start) and switches the
  *    running meeting at once (main's reconfigureAudio, CoreAudio on macOS,
  *    WASAPI on Windows). A device main could not open shows what it used.
- *  - Sound settings: Settings › Audio.
  *  - Language: applied to the running transcript at once. Speech providers
  *    whose languages depend on the model or machine (see
  *    LANGUAGE_RESTRICTED_PROVIDERS) open Settings › Audio instead, where the
@@ -100,9 +101,6 @@ export const TranscriptControls: React.FC = () => {
             >
                 <span className="truncate max-w-[150px]">{micLabel}</span>
                 <ChevronDown className="w-3.5 h-3.5 shrink-0" strokeWidth={2} />
-            </button>
-            <button type="button" aria-label="Sound settings" title="Sound settings" onClick={openAudioSettings} className="w-8 h-8 shrink-0 rounded-full flex items-center justify-center transition-colors np-wash" style={ink('--np-ink-secondary')}>
-                <SlidersVertical className="w-4 h-4" strokeWidth={1.75} />
             </button>
             <button
                 type="button"

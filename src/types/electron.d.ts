@@ -492,6 +492,7 @@ export interface ElectronAPI {
   generateRecap: () => Promise<{ summary: string | null }>
   /** The overlay's live helpers: What did I miss?, Define, Sound smart. Streams like Recap and Clarify. */
   generateLiveHelper?: (action: LiveHelperAction, opts?: { sinceMs?: number }) => Promise<{ text: string | null }>
+  runNoteRecipe?: (input: { recipeId: string; extra?: string; meetingId?: string | null; phase: 'live' | 'ended'; notes?: string }) => Promise<{ text: string | null; error?: string }>
   /** Settings › Overlay › Your buttons: rewrite the user's description into the button's contract (a fallback when no model answers). */
   compileCustomButton?: (input: { name: string; description: string }) => Promise<{ instruction: string; source: 'model' | 'fallback' }>
   /** A press of a custom button: runs like a live helper and streams into Recap's card. */

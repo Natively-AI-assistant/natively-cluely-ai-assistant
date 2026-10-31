@@ -12789,60 +12789,72 @@ html[data-tooltips='off'] .t-tt {
 @keyframes notes-hook-caret { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .notes-editor .notes-hook-caret { animation: none; } }
 
-/* ── The notepad in Granola's look (2026-10-20) ─────────────────────────────
-   Values read from Granola 7.663's own stylesheet (tokens, editor, bottom bar)
-   and measured against its live notes window at 500×923. Scoped to the
-   notepad (NotesWindow root `.notepad`); the meeting page keeps Natively's. */
+/* ── The notepad in Natively's colours (2026-10-30) ─────────────────────────
+   Was Granola's cream and olive (2026-10-20). Layout and sizes are unchanged;
+   only the tokens moved, so every part of the notepad follows from here.
+   Both modes are NEUTRAL: the owner rejected lavender-tinted surfaces in dark,
+   then in light ("the tint", 10-30). Light = Apple greys (#F9F9FB page,
+   white raised, #1D1D1F / #6E6E73 / #A1A1A6 ink, #E3E3E8 rules); dark =
+   #1C1C1F, raised #28272C. Colour lives only on accents, in pastel
+   periwinkle / blueberry / lavender ("i like pastel colors", 10-30):
+   periwinkle #A9B8FF checkboxes and focus (dark #B8C6FF), the three
+   listening bars one of each, your lines on periwinkle #DFE5FF with
+   blueberry ink #2A3480, theirs on lavender #F3EEFD, ticks and accent text
+   deep blueberry #4A5BD4 (5.9:1). Pastel fills carry dark ink, never white.
+   Find highlights stay yellow; red still means 3 s of silence.
+   Scoped to the notepad (NotesWindow root `.notepad`). */
 .notepad {
-  --np-surface: #f7f7f2; --np-elevated: #ffffff; --np-ink: #292929; --np-ink-strong: #1e1e1e;
-  --np-ink-secondary: #72726e; --np-ink-tertiary: #acada8; --np-placeholder: #acada8; --np-title-placeholder: #acada8;
-  --np-hairline: #47432a33; --np-ring: #47432a33; --np-wash: #625a220f; --np-wash-strong: #625a221a;
-  --np-caret: #5b6f00; --np-selection: #5b6f0033; --np-accent: #5b6f00; --np-focus: #5b6f00; --np-focus-ring: #788c1533;
-  --np-green: #74bd00; --np-red: #bd4a30; --np-chevron: #72726e; --np-stop: #72726e; --np-ask-placeholder: #72726e;
-  --np-marker: #72726e; --np-track: #f2f2ec; --np-thumb-border: #d2cfc6; --np-grip: #eaebe5;
-  --np-bubble-me: #b2c24866; --np-bubble-me-ink: #313225; --np-bubble-them: #f2f2ec; --np-bubble-them-ink: #292929;
-  --np-highlight-faint: #625a220a; --np-shadow-pill: 0px 4px 6px -2px #0000000d;
-  --np-shadow-pop: 0 10px 15px -3px #0000001a, 0 4px 6px -4px #0000001a;
-  --np-event: #a855f7;
-  /* Note templates gallery (2026-10-21), measured on Granola's: labels, the
-     section text, the icon tiles and the scrim behind the dialog. */
-  --np-label: #72726e; --np-ink-soft: #292929e6; --np-tile: #625a221a; --np-scrim: #0000004d;
+  --np-surface: #f9f9fb; --np-elevated: #ffffff; --np-ink: #1d1d1f; --np-ink-strong: #111113;
+  --np-ink-secondary: #6e6e73; --np-ink-tertiary: #a1a1a6; --np-placeholder: #a1a1a6; --np-title-placeholder: #a1a1a6;
+  --np-hairline: #e3e3e8; --np-ring: #dcdce2; --np-wash: #0000000a; --np-wash-strong: #00000012;
+  --np-caret: #6b7ff0; --np-selection: #b8c6ff80; --np-accent: #4a5bd4; --np-focus: #a9b8ff; --np-focus-ring: #c9d3ff73;
+  --np-green: #9db0ff; --np-red: #d70015; --np-chevron: #6e6e73; --np-stop: #6e6e73; --np-ask-placeholder: #8e8e93;
+  --np-marker: #a1a1a6; --np-track: #f2f2f7; --np-thumb-border: #dcdce1;
+  --np-bubble-me: #dfe5ff; --np-bubble-me-ink: #2a3480; --np-bubble-them: #f3eefd; --np-bubble-them-ink: #1d1d1f;
+  --np-highlight-faint: #00000008; --np-shadow-pill: 0 1px 2px #0000000d, 0 6px 16px -6px #00000024;
+  --np-shadow-pop: 0 16px 32px -12px #0000002e, 0 4px 8px -4px #00000014;
+  --np-event: #c4b3fb; --np-check: #a9b8ff; --np-check-ink: #2a3480;
+  --np-bar-1: #9db0ff; --np-bar-2: #7086f0; --np-bar-3: #c4b3fb; --np-jump: #ffffffcc; --np-jump-hover: #f2f2f7cc;
+  /* Note templates gallery: labels, the section text, the icon tiles and the
+     scrim behind the dialog. */
+  --np-label: #6e6e73; --np-ink-soft: #1d1d1fe0; --np-tile: #f2f2f7; --np-scrim: #0000004d;
   background: var(--np-surface); color: var(--np-ink);
 }
 .notepad[data-np-theme="dark"] {
-  --np-surface: #292929; --np-elevated: #363635; --np-ink: #eaebe5; --np-ink-strong: #ffffff;
-  --np-ink-secondary: #9e9e99; --np-ink-tertiary: #818179; --np-placeholder: #72726e; --np-title-placeholder: #818179;
-  --np-hairline: #ffffff33; --np-ring: #ffffff26; --np-wash: #ffffff0f; --np-wash-strong: #ffffff14;
-  --np-caret: #d1e043; --np-selection: #b2c24833; --np-accent: #b2c248; --np-focus: #788c15; --np-focus-ring: #788c1533;
-  --np-chevron: #acada8; --np-stop: #9e9e99; --np-ask-placeholder: #acada8;
-  --np-marker: #acada8; --np-track: #212121; --np-thumb-border: #424242; --np-grip: #72726e;
-  --np-bubble-me: #292929; --np-bubble-me-ink: #f2f6e1; --np-bubble-them: #4e4d4b; --np-bubble-them-ink: #fcfcf8;
-  --np-highlight-faint: #ffffff0a;
-  --np-label: #acada8; --np-ink-soft: #eaebe5e6; --np-tile: #ffffff1f; --np-scrim: #00000099;
+  --np-surface: #1c1c1f; --np-elevated: #28272c; --np-ink: #ececf0; --np-ink-strong: #ffffff;
+  --np-ink-secondary: #a3a2ab; --np-ink-tertiary: #75747d; --np-placeholder: #75747d; --np-title-placeholder: #75747d;
+  --np-hairline: #ffffff1a; --np-ring: #ffffff17; --np-wash: #ffffff0d; --np-wash-strong: #ffffff14;
+  --np-caret: #b8c6ff; --np-selection: #a9b8ff40; --np-accent: #b8c6ff; --np-focus: #a9b8ffa6; --np-focus-ring: #a9b8ff26;
+  --np-green: #a9b8ff; --np-red: #ff6b6b; --np-chevron: #a3a2ab; --np-stop: #a3a2ab; --np-ask-placeholder: #8a8992;
+  --np-marker: #8a8992; --np-track: #151517; --np-thumb-border: #3a393f;
+  --np-bubble-me: #a9b8ff33; --np-bubble-me-ink: #e4e9ff; --np-bubble-them: #34333a; --np-bubble-them-ink: #ececf0;
+  --np-highlight-faint: #ffffff0a; --np-shadow-pill: 0 4px 10px -4px #00000059;
+  --np-shadow-pop: 0 16px 32px -12px #000000a6, 0 4px 8px -4px #00000059;
+  --np-event: #c9b8fb; --np-check: #b8c6ff; --np-check-ink: #1c1c1f;
+  --np-bar-1: #a9b8ff; --np-bar-2: #8ea2ff; --np-bar-3: #c9b8fb; --np-jump: #28272ccc; --np-jump-hover: #36353bcc;
+  --np-label: #a3a2ab; --np-ink-soft: #ececf0e0; --np-tile: #ffffff12; --np-scrim: #000000a6;
 }
-/* The Note templates gallery in Natively's own colours (2026-10-21), not
-   Granola's cream: lavender paper, violet ink, lavender rules and washes, white
-   cards, a periwinkle Apply (the website's colour doc: paper #FAF8FE, ink
-   #2E2A38 / #6B5F7D / #9C90AC, rule #DED4EB, core #9C6FF3, periwinkle #8050D4).
-   Only the gallery takes these; the notepad around it keeps its own. */
+/* The Note templates gallery: the notepad's neutral greys, white cards and a
+   deep blueberry Apply. A dialog over the notepad, so in dark it sits one
+   step lighter than the page. (Class name kept from its lavender days.) */
 .notepad .np-lavender {
-  --np-surface: #faf8fe; --np-elevated: #ffffff; --np-ink: #2e2a38; --np-ink-strong: #241f33;
-  --np-ink-secondary: #6b5f7d; --np-ink-tertiary: #9c90ac; --np-placeholder: #9c90ac; --np-label: #6b5f7d;
-  --np-ink-soft: #2e2a38e0; --np-hairline: #ded4eb; --np-ring: #ded4eb;
-  --np-wash: #9c6ff314; --np-wash-strong: #9c6ff324; --np-accent: #8050d4;
-  --np-tile: #efe6fd; --np-tile-ink: #643ea6;
-  --np-card: linear-gradient(176deg, #ffffff 0%, #fcfaff 60%, #f8f5fe 100%);
-  --np-cta: #8050d4; --np-cta-ink: #ffffff; --np-scrim: #241f3352;
-  --np-search-fill: #f1ecfb; --np-search-hover: #ebe4f9; --np-search-lift: 0 2px 8px -2px #4c2e7a1f;
-  --np-shadow-pop: 0 24px 60px -24px #4c2e7a59, 0 4px 12px -4px #4c2e7a1f;
+  --np-surface: #fcfcfd; --np-elevated: #ffffff; --np-ink: #1d1d1f; --np-ink-strong: #111113;
+  --np-ink-secondary: #6e6e73; --np-ink-tertiary: #a1a1a6; --np-placeholder: #a1a1a6; --np-label: #6e6e73;
+  --np-ink-soft: #1d1d1fe0; --np-hairline: #e3e3e8; --np-ring: #e3e3e8;
+  --np-wash: #0000000a; --np-wash-strong: #00000012; --np-accent: #4a5bd4;
+  --np-tile: #eef0ff; --np-tile-ink: #4a5bd4;
+  --np-card: #ffffff;
+  --np-cta: #4a5bd4; --np-cta-ink: #ffffff; --np-scrim: #0000004d;
+  --np-search-fill: #f2f2f7; --np-search-hover: #ebebf0; --np-search-lift: 0 2px 8px -2px #0000001f;
+  --np-shadow-pop: 0 24px 60px -24px #00000047, 0 4px 12px -4px #0000001a;
 }
 .notepad[data-np-theme="dark"] .np-lavender {
-  --np-surface: #241f33; --np-elevated: #2e2843; --np-ink: #ece7f6; --np-ink-strong: #ffffff;
-  --np-ink-secondary: #a99ebd; --np-ink-tertiary: #7d7291; --np-placeholder: #7d7291; --np-label: #a99ebd;
-  --np-ink-soft: #ece7f6e0; --np-hairline: #ffffff1f; --np-ring: #ffffff1a;
-  --np-wash: #b9a1f61a; --np-wash-strong: #b9a1f629; --np-accent: #b9a1f6;
-  --np-tile: #b9a1f624; --np-tile-ink: #cdbdf9;
-  --np-card: #1c1829; --np-cta: #b9a1f6; --np-cta-ink: #241f33; --np-scrim: #000000a6;
+  --np-surface: #232227; --np-elevated: #2c2b31; --np-ink: #ececf0; --np-ink-strong: #ffffff;
+  --np-ink-secondary: #a3a2ab; --np-ink-tertiary: #75747d; --np-placeholder: #75747d; --np-label: #a3a2ab;
+  --np-ink-soft: #ececf0e0; --np-hairline: #ffffff1a; --np-ring: #ffffff17;
+  --np-wash: #ffffff0d; --np-wash-strong: #ffffff14; --np-accent: #b9a1f6;
+  --np-tile: #ffffff12; --np-tile-ink: #cdbdf9;
+  --np-card: #1c1c1f; --np-cta: #b9a1f6; --np-cta-ink: #1c1c1f; --np-scrim: #000000a6;
   --np-search-fill: #ffffff0f; --np-search-hover: #ffffff17; --np-search-lift: 0 2px 8px -2px #00000066;
 }
 /* The gallery's search: a filled pill, no outline at rest; typing lifts it to
@@ -12863,29 +12875,25 @@ html[data-tooltips='off'] .t-tt {
 @media (prefers-reduced-motion: reduce) { .np-search, .np-search-clear { transition: none; } }
 .notepad ::selection { background: var(--np-selection); }
 /* The pills, panels and popovers: the elevated surface with a 0.5px ring. */
-.np-elevated { background: var(--np-elevated); box-shadow: var(--np-shadow-pill), 0 0 0 0.5px var(--np-ring); }
+/* A full 1px ring: 0.5px vanishes at 1x scale (most Windows screens) and on the light page. */
+.np-elevated { background: var(--np-elevated); box-shadow: var(--np-shadow-pill), 0 0 0 1px var(--np-ring); transition: box-shadow 300ms cubic-bezier(0.22, 1, 0.36, 1); }
 .notepad[data-np-theme="dark"] .np-elevated { box-shadow: var(--np-shadow-pill), inset 0 0 0 0.5px var(--np-ring); }
-.np-pop { background: var(--np-elevated); border-radius: 12px; box-shadow: var(--np-shadow-pop), 0 0 0 0.5px var(--np-ring); transform-origin: top left; animation: np-pop-in 75ms ease-out; }
+.np-pop { background: var(--np-elevated); border-radius: 12px; box-shadow: var(--np-shadow-pop), 0 0 0 1px var(--np-ring); transform-origin: top left; animation: np-pop-in 75ms ease-out; }
 @keyframes np-pop-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
 /* Granola's popups leave as they came: 75 ms back to .95 and out. */
 .np-pop[data-closing] { animation: np-pop-out 75ms ease-in forwards; pointer-events: none; }
 @keyframes np-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes np-pop-out { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
-/* The floating panel's plate (Granola's m5): the pills sit on it once a panel opens. */
-.np-plate { background: var(--np-elevated); box-shadow: var(--np-shadow-pill), 0 0 0 0.5px var(--np-ring); }
+/* The floating panel's plate: the pills sit on it once a panel opens. */
+.np-plate { background: var(--np-elevated); box-shadow: var(--np-shadow-pill), 0 0 0 1px var(--np-ring); }
 .notepad[data-np-theme="dark"] .np-plate { box-shadow: var(--np-shadow-pill), inset 0 0 0 0.5px var(--np-ring); }
 /* A pill on the open plate drops its own ring and shadow (Granola: ring only when idle). */
-.np-elevated.np-flat { box-shadow: none; }
-/* The panel's top edge drags its height: hidden, half on the panel's hover, full on its own. */
-.np-grip > span { opacity: 0; background: var(--np-grip); transition: opacity 150ms, background-color 150ms; }
-.np-shell:hover .np-grip > span { opacity: 0.5; }
-.np-grip:hover > span, .np-grip[data-resizing] > span { opacity: 1; }
-.np-grip[data-resizing] > span { background: var(--np-ink-tertiary); }
+.np-elevated.np-flat, .notepad[data-np-theme="dark"] .np-elevated.np-flat { box-shadow: none; }
 /* Find in the transcript (Granola's): every match yellow, the current one amber with a short blink. */
 .np-hit { background: #fde047; color: #18181b; border-radius: 0.25rem; box-shadow: -1px 0 #fde047, 1px 0 #fde047; }
 .np-hit[data-current] { background: #f59e0b; box-shadow: -1px 0 #f59e0b, 1px 0 #f59e0b; animation: np-beep 200ms ease-in-out; }
 @keyframes np-beep { from { box-shadow: 1px 0 0 4px #f59e0b, -1px 0 0 4px #f59e0b; } to { box-shadow: -1px 0 #f59e0b, 1px 0 #f59e0b; } }
-/* Words still being heard: three dots, 1 s, a quarter second apart. */
+/* Ask's "Thinking": three dots, 1 s, a quarter second apart. (Live transcript lines dropped theirs 2026-10-31.) */
 .np-dots > span { width: 4px; height: 4px; border-radius: 9999px; background: currentColor; animation: np-jump 1s infinite; }
 .np-dots > span:nth-child(2) { animation-delay: 250ms; }
 .np-dots > span:nth-child(3) { animation-delay: 500ms; }
@@ -12897,14 +12905,12 @@ html[data-tooltips='off'] .t-tt {
 .np-glow { position: relative; isolation: isolate; }
 .np-glow::before {
   content: ''; position: absolute; inset: 0; border-radius: inherit; z-index: -1; pointer-events: none; opacity: 0; transition: opacity 300ms;
-  background: radial-gradient(1024px circle at var(--np-x, 50%) var(--np-y, 50%), hsla(0, 0%, 100%, 0.05) 0, transparent 500px);
+  background: radial-gradient(1024px circle at var(--np-x, 50%) var(--np-y, 50%), color-mix(in srgb, var(--np-focus) 7%, transparent) 0, transparent 500px);
 }
 .np-glow:hover::before { opacity: 1; }
 /* Back to the newest line, over the transcript. */
-.np-jump { background: #fcfcf8cc; box-shadow: 0 10px 15px -3px #0000001a, 0 4px 6px -4px #0000001a, 0 0 0 0.5px var(--np-ring); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); transition: background-color 150ms; }
-.np-jump:hover { background: #eaebe5cc; }
-.notepad[data-np-theme="dark"] .np-jump { background: #4e4d4b80; }
-.notepad[data-np-theme="dark"] .np-jump:hover { background: #72726e80; }
+.np-jump { background: var(--np-jump); box-shadow: var(--np-shadow-pop), 0 0 0 0.5px var(--np-ring); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); transition: background-color 150ms; }
+.np-jump:hover { background: var(--np-jump-hover); }
 .np-outline { box-shadow: inset 0 0 0 0.5px var(--np-hairline); }
 .np-wash:hover, .np-wash[aria-expanded="true"] { background: var(--np-wash); }
 /* The chip and folder button paint their hover 3px inside the hairline, as Granola's do. */
@@ -12914,6 +12920,10 @@ html[data-tooltips='off'] .t-tt {
 /* Listening bars: 3 bars 3px wide, 2px apart, in a 13×20 box; red after 3s of silence. */
 .notepad .notes-listening-bars { height: 20px; width: 13px; gap: 2px; }
 .notepad .notes-listening-bars > span { width: 3px; border-radius: 9999px; background: var(--np-green); transition: background-color 300ms; }
+/* One pastel per bar: periwinkle, blueberry, lavender. Silence and pause still repaint all three. */
+.notepad .notes-listening-bars > span:nth-child(1) { --np-green: var(--np-bar-1); }
+.notepad .notes-listening-bars > span:nth-child(2) { --np-green: var(--np-bar-2); }
+.notepad .notes-listening-bars > span:nth-child(3) { --np-green: var(--np-bar-3); }
 .notepad .notes-listening-bars.np-silent > span { background: var(--np-red); }
 .notepad .notes-listening-bars.np-paused > span { background: var(--np-ink-tertiary); animation: none; transform: scaleY(0.55); }
 .notepad .notes-listening-bars.notes-level > span { transition: transform 300ms ease-in-out, background-color 300ms; }
@@ -12939,9 +12949,9 @@ html[data-tooltips='off'] .t-tt {
   appearance: none; -webkit-appearance: none; width: 16px; height: 16px; margin: 0; border-radius: 5px;
   background: var(--np-elevated); box-shadow: inset 0 0 0 1px var(--np-hairline); display: grid; place-content: center; cursor: pointer;
 }
-.notepad .notes-editor input[type="checkbox"]:checked { background: var(--np-ink); box-shadow: none; }
+.notepad .notes-editor input[type="checkbox"]:checked { background: var(--np-check); box-shadow: none; }
 .notepad .notes-editor input[type="checkbox"]:checked::after {
-  content: ''; width: 9px; height: 5px; border-left: 1.75px solid var(--np-surface); border-bottom: 1.75px solid var(--np-surface);
+  content: ''; width: 9px; height: 5px; border-left: 1.75px solid var(--np-check-ink, var(--np-surface)); border-bottom: 1.75px solid var(--np-check-ink, var(--np-surface));
   transform: translateY(-1px) rotate(-45deg);
 }
 .notepad .notes-editor a { color: inherit; text-decoration-color: var(--np-ink-tertiary); }
@@ -12957,8 +12967,12 @@ html[data-tooltips='off'] .t-tt {
 .np-fade-top { background: linear-gradient(to bottom, var(--np-surface), transparent); }
 .np-fade-bottom { background: linear-gradient(to top, var(--np-surface) 40%, transparent); }
 /* The Ask field's focus (a hook-typed field shows it too: the window has no focus then). */
-.np-ask { box-shadow: inset 0 0 0 1px transparent; transition: box-shadow 150ms; }
-.np-ask[data-engaged="true"] { box-shadow: inset 0 0 0 1px var(--np-focus), 0 0 0 3px var(--np-focus-ring); }
+/* Ask keeps its fill while open, so the page never shows through as the plate fades in behind it.
+   Every ring is an outer shadow, so the closed pill's edge eases into the focus ring (250 ms) and back (150 ms). */
+.np-ask { background: var(--np-elevated); box-shadow: 0 0 0 1px transparent; transition: box-shadow 150ms cubic-bezier(0.22, 1, 0.36, 1); }
+.np-ask[data-engaged="true"] { box-shadow: 0 0 0 1px var(--np-focus), 0 0 0 3px var(--np-focus-ring); transition-duration: 250ms; }
+/* The closed Ask pill keeps the pill's ring and shadow; .np-ask above would otherwise wipe them (it read as no edge on the light page). */
+.np-ask.np-elevated:not([data-engaged="true"]) { box-shadow: var(--np-shadow-pill), 0 0 0 1px var(--np-ring); }
 /* After Stop: the My notes / Enhanced / Transcript switch, its thumb sliding. */
 .np-track { background: var(--np-track); box-shadow: inset 0 0 0 0.5px var(--np-ring); }
 .np-thumb { background: var(--np-elevated); box-shadow: inset 0 0 0 0.5px var(--np-thumb-border); transition: left 260ms cubic-bezier(.16,1,.3,1), width 260ms cubic-bezier(.16,1,.3,1); }

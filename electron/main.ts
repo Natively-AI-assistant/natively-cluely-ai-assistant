@@ -3905,6 +3905,11 @@ export class AppState {
   }
 
   /** The user's name: the active résumé's, else the connected Calendar account's. */
+  /** The user's name for recipes that sign as them (notepad recipes, 2026-10-31). */
+  public getUserName(): string | null {
+    return this.currentUserName();
+  }
+
   private currentUserName(): string | null {
     try {
       const orchestrator = this.knowledgeOrchestrator ?? this.processingHelper?.getLLMHelper?.()?.getKnowledgeOrchestrator?.();

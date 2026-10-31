@@ -3,7 +3,7 @@ import { Check, Copy, ExternalLink } from 'lucide-react';
 import { ShareMenu } from '../meeting/ShareMenu';
 import { notesLabel, notesWereEdited } from '../meeting/notesView';
 import { templatePickerOptions } from '../meeting/notesFeedback';
-import { enhancedNotesMarkdown, enhancedSections } from './notepadView';
+import { enhancedNotesMarkdown, enhancedOverview, enhancedSections } from './notepadView';
 import { NotesTemplateMenu, type TemplatePick } from './NotesTemplateMenu';
 
 /**
@@ -62,7 +62,8 @@ export const NotesEnhanced = forwardRef<NotesEnhancedHandle, {
     }, []);
 
     const sections = enhancedSections(details?.detailedSummary);
-    const ready = sections.length > 0;
+    const overview = enhancedOverview(details?.detailedSummary);
+    const ready = sections.length > 0 || overview.length > 0;
     // The notes land some seconds after Stop: ask again until they do.
     useEffect(() => {
         if (ready) return;
@@ -114,7 +115,7 @@ export const NotesEnhanced = forwardRef<NotesEnhancedHandle, {
     };
 
     const copy = async (): Promise<boolean> => {
-        const res = await window.electronAPI?.notesWindowCopyText?.(enhancedNotesMarkdown(title, sections));
+        const res = await window.electronAPI?.notesWindowCopyText?.(enhancedNotesMarkdown(title, sections, overview));
         const ok = !!res?.success;
         if (ok) {
             setCopied(true);
@@ -176,6 +177,13 @@ export const NotesEnhanced = forwardRef<NotesEnhancedHandle, {
             {notice && <p className="mt-3 text-[12px] leading-4" style={ink('--np-ink-secondary')}>{notice}</p>}
 
             <div className={`mt-5 space-y-5 select-text ${regenerating ? 'opacity-50' : ''}`}>
+                {overview.length > 0 && (
+                    <div className="space-y-2">
+                        {overview.map((p, i) => (
+                            <p key={i} className="text-[15px] leading-[1.5]" style={ink('--np-ink-secondary')}>{p}</p>
+                        ))}
+                    </div>
+                )}
                 {sections.map((s, i) => (
                     <section key={`${s.title}-${i}`}>
                         <h2 className="text-[15px] leading-[1.5] font-semibold" style={ink('--np-ink-strong')}>{s.title}</h2>

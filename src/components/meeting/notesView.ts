@@ -244,8 +244,8 @@ export function applyTypedKeyAtEnd(value: string, key: { keyCode: number; chars:
  * A chat answer as plain reading text for the notes window's answer panel
  * (2026-10-20). The notes window is a light route with no markdown renderer,
  * so the marks a model writes are taken out: `**bold**`, `__bold__`, `*em*`,
- * `` `code` ``, heading hashes and code fences. Points ("- ", "1. ") stay as
- * they read fine as text.
+ * `` `code` ``, heading hashes, code fences and "> " quote marks. Points
+ * ("- ", "1. ") stay as they read fine as text.
  */
 export function plainAnswerText(markdown: string): string {
     return markdown
@@ -256,6 +256,8 @@ export function plainAnswerText(markdown: string): string {
         .replace(/(^|[^*\w])\*(?!\s)([^*\n]+?)\*(?!\w)/g, '$1$2')
         .replace(/`([^`\n]+)`/g, '$1')
         .replace(/^\s*[*+]\s+/gm, '- ')
+        // A "> " quote (Make me sound smart's line to say) reads as the line itself.
+        .replace(/^[ \t]*>[ \t]?/gm, '')
         .replace(/\n{3,}/g, '\n\n')
         .trim();
 }

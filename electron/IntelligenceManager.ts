@@ -220,8 +220,8 @@ export class IntelligenceManager extends EventEmitter {
     }
 
     /** The running meeting's whole transcript (kept across the reset shortcut), for in-meeting search. */
-    getCurrentMeetingFullTranscript(): Array<{ speaker: string; text: string; timestamp: number }> {
-        return this.session.getPersistableTranscript().map(s => ({ speaker: s.speaker, text: s.text, timestamp: s.timestamp }));
+    getCurrentMeetingFullTranscript(): Array<{ speaker: string; text: string; timestamp: number; origin?: string }> {
+        return this.session.getPersistableTranscript().map(s => ({ speaker: s.speaker, text: s.text, timestamp: s.timestamp, origin: s.origin }));
     }
 
     /** `imagePaths`: the screenshots the answer used; the Usage tab shows previews of them. */
