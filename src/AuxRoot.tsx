@@ -69,7 +69,7 @@ const PanelShell: React.FC<{ context: string; className: string; children: React
   // Mirrors App's handling: the attribute is read at mount and refreshed on the
   // same two signals App listens to, so a theme change still lands here.
   const [theme, setTheme] = React.useState<MeetingInterfaceTheme>(getMeetingInterfaceTheme);
-  // What the overlay paints for the pick: Default is Lavender in light mode.
+  // What the overlay paints for the pick: Default is Lavender.
   const painted = resolveMeetingInterfaceTheme(theme, useResolvedTheme());
   React.useEffect(() => {
     const onStorage = () => setTheme(getMeetingInterfaceTheme());

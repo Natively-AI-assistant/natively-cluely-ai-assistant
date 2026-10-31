@@ -36,13 +36,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const src = path.resolve(__dirname, '../..');
 const read = (rel) => fs.readFileSync(path.join(src, rel), 'utf8');
 
-describe('Default is Lavender in light mode', () => {
+describe('Default is Lavender in light and dark mode', () => {
   test('a Default pick paints Lavender under the light app theme', () => {
     assert.equal(resolveMeetingInterfaceTheme('default', 'light'), 'lavender');
   });
 
-  test('a Default pick keeps its own dark panel under the dark app theme', () => {
-    assert.equal(resolveMeetingInterfaceTheme('default', 'dark'), 'default');
+  test('a Default pick paints dark Lavender under the dark app theme (2026-10-31)', () => {
+    assert.equal(resolveMeetingInterfaceTheme('default', 'dark'), 'lavender');
   });
 
   test('every other pick paints itself under both app themes', () => {
@@ -225,5 +225,119 @@ describe('contrast on the panel', () => {
   test('inline code: 700 on 100', () => {
     const ratio = contrast(hexToRgb(scale[700]), hexToRgb(scale[100]));
     assert.ok(ratio >= AA_TEXT, ratio.toFixed(2));
+  });
+});
+
+// ── Lavender in the dark (2026-10-31) ───────────────────────────────────────
+
+describe('Lavender in the dark', () => {
+  const PART4 = css.indexOf('Part 4: Lavender in the dark');
+  // From the opening of Part 4's comment, so comments strip cleanly.
+  const dark = css.slice(css.lastIndexOf('/*', PART4));
+  const darkToken = (name) => {
+    const m = dark.match(new RegExp(`--${name}:\\s*([^;]+);`));
+    assert.ok(m, `dark --${name} is declared`);
+    return m[1].trim();
+  };
+
+  test('every dark rule sits under the app\'s dark theme', () => {
+    assert.ok(PART4 > PART2, 'Part 4 comes after the light colour system');
+    const selectors = dark.replace(/\/\*[\s\S]*?\*\//g, '').match(/[^{}]+(?=\{)/g)
+      .flatMap((s) => s.split(','))
+      .map((s) => s.trim())
+      .filter((s) => s && !s.startsWith('@'));
+    assert.ok(selectors.length > 20);
+    for (const s of selectors) assert.match(s, /^\[data-theme='dark'\] \[data-interface-theme="lavender"\]/, s);
+  });
+
+  test('it keeps Default dark\'s see-through curve', () => {
+    assert.equal(darkToken('lv-body'), 'rgb(var(--lv-glass) / calc(0.12 + 0.88 * var(--lv-n)))');
+    assert.equal(darkToken('lv-blur'), 'calc(6px + 14px * var(--lv-n))');
+  });
+
+  // The owner (2026-10-31): less purple, the notepad's dark body. Its
+  // surface, ink and periwinkle accent (index.css .notepad dark).
+  test('the body, ink and accent are the notepad\'s dark ones', () => {
+    assert.equal(darkToken('lv-glass'), '28 28 31');
+    assert.equal(darkToken('lv-ink'), '#ECECF0');
+    assert.equal(darkToken('lv-accent'), '#B8C6FF');
+    // The question card and gist: "Midnight indigo" (2026-10-31, owner pick from
+    // eight side by side). Send and the open click-through pill: the
+    // Settings switch periwinkle, no longer Apple's blue.
+    assert.equal(darkToken('lv-q-bg'), '#2B2A52');
+    assert.equal(darkToken('lv-q-edge'), 'rgba(160, 165, 255, 0.22)');
+    assert.equal(darkToken('lv-q-ink'), '#D6D8FF');
+    assert.equal(darkToken('lv-send'), 'var(--periwinkle-500)');
+    assert.equal(darkToken('lv-send-ink'), '#FFFFFF');
+    assert.doesNotMatch(dark, /#007AFF;|--lv-blue/);
+    assert.match(dark, /--toggle-on: var\(--lavender-500\)/);
+  });
+
+  test('no violet on the edges, chips or code', () => {
+    const rules = dark.replace(/\/\*[\s\S]*?\*\//g, '');
+    assert.doesNotMatch(rules, /rgba\(156, 111, 243|rgba\(196, 179, 251|26 21 40|14 11 24/);
+    assert.equal(darkToken('lv-chip-tint'), 'rgba(255, 255, 255, 0)');
+    assert.equal(darkToken('lv-hairline'), '0 0 0 1px rgba(255, 255, 255, 0.10)');
+  });
+
+  test('the question card and gist are one solid face with no coloured glow in the dark', () => {
+    const q = dark.slice(dark.indexOf('.hero-bubble {'), dark.indexOf('.overlay-gist-chip::before'));
+    assert.doesNotMatch(q, /0 14px 30px -12px rgba\((37|59|156)/);
+    assert.equal(q.match(/background: var\(--lv-q-bg\);/g)?.length, 2);
+  });
+
+
+  test('the top pill has no sheen in the dark', () => {
+    assert.match(dark, /\.overlay-resize-toggle-surface::before,\s*\[data-theme='dark'\] \[data-interface-theme="lavender"\] \.overlay-icon-surface::before \{\s*opacity: 0;/);
+  });
+
+  // Over a dark desktop and fully opaque. Over a white page at a low opacity
+  // the dark glass gives up contrast for transparency, as Default dark does.
+  const AA_TEXT = 4.5;
+  const AA_UI = 3;
+  const WHITE = [255, 255, 255];
+  const BLACK = [0, 0, 0];
+  const glass = darkToken('lv-glass').split(/\s+/).map(Number);
+  const n = (0.7 - 0.35) / 0.65;
+  const ink = hexToRgb(darkToken('lv-ink'));
+  const alphaOf = (name) => Number(darkToken(name).match(/\/\s*([\d.]+)\)/)[1]);
+  const bodies = {
+    'the dark body at 0.70 over black': over(glass, 0.12 + 0.88 * n, BLACK),
+    'the dark body fully opaque': glass,
+  };
+  for (const [where, body] of Object.entries(bodies)) {
+    test(`text on ${where}`, () => {
+      for (const [label, fg] of [
+        ['ink', ink],
+        ['ink-2', over(ink, alphaOf('lv-ink-2'), body)],
+        ['ink-3', over(ink, alphaOf('lv-ink-3'), body)],
+        ['accent', hexToRgb(darkToken('lv-accent'))],
+      ]) {
+        const ratio = contrast(fg, body);
+        assert.ok(ratio >= AA_TEXT, `${label} on ${where}: ${ratio.toFixed(2)}`);
+      }
+    });
+
+    test(`a neutral button and the question on ${where}`, () => {
+      const face = over(WHITE, 0.08, body);
+      assert.ok(contrast(ink, face) >= AA_TEXT, `label ${contrast(ink, face).toFixed(2)}`);
+      assert.ok(contrast(over(ink, alphaOf('lv-ink-3'), face), face) >= AA_UI, 'icon');
+      // The question card: solid deep indigo, so the body under it does
+      // not matter.
+      const qInk = hexToRgb(darkToken('lv-q-ink'));
+      const card = hexToRgb(darkToken('lv-q-bg'));
+      assert.ok(contrast(qInk, card) >= AA_TEXT, `ink on the question card: ${contrast(qInk, card).toFixed(2)}`);
+      // Send's white arrow on the switch periwinkle #6688F5 (3.3:1, a
+      // glyph: the 3:1 UI floor).
+      assert.ok(contrast(hexToRgb(darkToken('lv-send-ink')), hexToRgb('#6688F5')) >= AA_UI, 'send arrow');
+    });
+
+    test(`a switch on ${where}`, () => {
+      assert.ok(contrast(hexToRgb(scale[500]), body) >= AA_UI, contrast(hexToRgb(scale[500]), body).toFixed(2));
+    });
+  }
+
+  test('the surface follows the app and the overlay picks its code theme from it', () => {
+    assert.match(read('lib/meetingInterfaceTheme.ts'), /if \(theme === 'liquid-glass' \|\| theme === 'modern'\) return 'dark';\s*return appTheme;/);
   });
 });

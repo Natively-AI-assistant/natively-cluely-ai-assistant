@@ -1430,13 +1430,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   overlayOpacity = OVERLAY_OPACITY_DEFAULT,
   interfaceTheme = 'default',
 }) => {
-  // Lavender paints a light panel under the dark app theme too, so every
-  // light/dark class choice below follows the panel, not the app.
-  // The hook runs on every render: behind `||` it was skipped while the theme
+  // Every style but glass and modern follows the app's light or dark theme
+  // (Lavender too since 2026-10-31). The hook runs on every render: behind `||` it was skipped while the theme
   // was Lavender, and flipping in or out of Lavender changed the hook order
   // and crashed the overlay ("Should have a queue").
   const resolvedTheme = useResolvedTheme();
-  const isLightTheme = interfaceTheme === 'lavender' || resolvedTheme === 'light';
+  const isLightTheme = resolvedTheme === 'light';
   const isGlassTheme = interfaceTheme === 'liquid-glass';
   const isModernTheme = interfaceTheme === 'modern';
   // Lavender draws its buttons with the website hero's own button
@@ -2403,11 +2402,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     };
   }, []);
 
-  // Glass and modern keep a dark panel under the light app theme and lavender
-  // a light one under the dark theme; only default follows the app.
+  // Glass and modern keep a dark panel under the light app theme; default and
+  // lavender follow the app.
   const isLightSurface = interfaceThemeSurface(interfaceTheme, isLightTheme ? 'light' : 'dark') === 'light';
-  // Lavender's code sits in a light well of its own glass (2026-10-30), so it
-  // takes the light code theme like every other light panel.
+  // Lavender's code sits in a well of its own glass (2026-10-30), light or
+  // dark with the app (2026-10-31), so it takes the matching code theme.
   const useDarkCodeTheme = !isLightSurface;
   const codeTheme = useDarkCodeTheme ? vividDarkCodeTheme : oneLight;
   const codeLineNumberColor = useDarkCodeTheme ? VIVID_DARK_LINE_NUMBER_COLOR : 'rgba(24,24,24,0.4)';

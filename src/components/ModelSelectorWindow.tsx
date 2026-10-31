@@ -37,7 +37,7 @@ const ModelSelectorWindow = () => {
     // actual live-configured value — the same gap SettingsPopup.tsx's
     // already-committed fix (7c4f3bd2) closed for that window.
     const [chosenInterfaceTheme, setInterfaceTheme] = useState<MeetingInterfaceTheme>(() => getMeetingInterfaceTheme());
-    // What the overlay paints for that pick (Default is Lavender in light mode).
+    // What the overlay paints for that pick (Default is Lavender).
     const interfaceTheme = resolveMeetingInterfaceTheme(chosenInterfaceTheme, isLight ? 'light' : 'dark');
     const [overlayOpacity, setOverlayOpacity] = useState<number>(() => {
         const stored = localStorage.getItem('natively_overlay_opacity');

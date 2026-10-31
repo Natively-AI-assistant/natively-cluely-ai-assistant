@@ -1234,7 +1234,7 @@ const App: React.FC = () => {
     setIsProcessingMeeting(true);
   };
 
-  // What the overlay paints for the pick: Default is Lavender in light mode.
+  // What the overlay paints for the pick: Default is Lavender.
   const paintedInterfaceTheme = resolveMeetingInterfaceTheme(meetingInterfaceTheme, isLight ? 'light' : 'dark');
   const interfaceThemeAttribute = paintedInterfaceTheme === 'default' ? undefined : paintedInterfaceTheme;
 

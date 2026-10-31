@@ -15,7 +15,9 @@ const SHORT_CIRCUITED_HOOK = /(\|\||&&|\?)\s*use[A-Z][A-Za-z]*\(/;
 
 test('the overlay reads the resolved theme on every render', () => {
   const ni = read('src/components/NativelyInterface.tsx');
-  assert.match(ni, /const resolvedTheme = useResolvedTheme\(\);\s*const isLightTheme = interfaceTheme === 'lavender' \|\| resolvedTheme === 'light';/);
+  // Since Lavender's dark set (2026-10-31) every style but glass and modern
+  // follows the app, so the panel's light/dark is the app's.
+  assert.match(ni, /const resolvedTheme = useResolvedTheme\(\);\s*const isLightTheme = resolvedTheme === 'light';/);
 });
 
 test('no hook call sits behind ||, && or ? in the overlay or Settings', () => {

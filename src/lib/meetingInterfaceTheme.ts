@@ -19,28 +19,32 @@ export function isCssOwnedInterfaceTheme(theme: MeetingInterfaceTheme): boolean 
 
 /**
  * The panel the style paints, whatever the app's colour theme: liquid glass
- * and modern are always dark, lavender always light, default follows the app.
+ * and modern are always dark; lavender and default follow the app (lavender
+ * has had a dark set since 2026-10-31, overlayLavenderTheme.css Part 4).
  */
 export function interfaceThemeSurface(theme: MeetingInterfaceTheme, appTheme: 'light' | 'dark'): 'light' | 'dark' {
     if (theme === 'liquid-glass' || theme === 'modern') return 'dark';
-    if (theme === 'lavender') return 'light';
     return appTheme;
 }
 
 /**
- * The style a window paints for the user's pick. Default is Lavender under the
- * light app theme (the owner, 2026-10-30: Lavender replaces the light Default)
- * and keeps its own dark panel under the dark one. Every other pick paints
- * itself. The stored pick stays 'default', so Settings still shows Default
+ * The style a window paints for the user's pick. Default is Lavender under
+ * both app themes (the owner: Lavender replaced the light Default on
+ * 2026-10-30, and dark mode shows Lavender's dark set since 2026-10-31, not
+ * the old dark panel). Every other pick paints itself. The stored pick stays 'default', so Settings still shows Default
  * chosen; only what is drawn changes. Every window that draws the overlay or
  * a preview of it resolves through here, so they never disagree.
  */
-export function resolveMeetingInterfaceTheme(theme: MeetingInterfaceTheme, appTheme: 'light' | 'dark'): MeetingInterfaceTheme {
-    return theme === 'default' && appTheme === 'light' ? 'lavender' : theme;
+export function resolveMeetingInterfaceTheme(theme: MeetingInterfaceTheme, _appTheme: 'light' | 'dark'): MeetingInterfaceTheme {
+    return theme === 'default' ? 'lavender' : theme;
 }
 
 export function getMeetingInterfaceTheme(): MeetingInterfaceTheme {
     const stored = localStorage.getItem(STORAGE_KEY) as MeetingInterfaceTheme | null;
+    // Lavender left the picker on 2026-10-31 (Default paints it in both app
+    // themes). A saved Lavender pick reads as Default, so Settings shows it
+    // chosen and nothing on screen changes.
+    if (stored === 'lavender') return 'default';
     // Reject unknown / legacy values so forward/backward compat can't poison the UI.
     if (stored && VALID_THEMES.has(stored)) {
         return stored;

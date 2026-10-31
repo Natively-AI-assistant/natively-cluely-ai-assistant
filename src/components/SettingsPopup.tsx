@@ -86,7 +86,7 @@ const SettingsPopup = () => {
     const [chosenInterfaceTheme, setInterfaceTheme] = useState<MeetingInterfaceTheme>(() => {
         return getMeetingInterfaceTheme();
     });
-    // What the overlay paints for that pick (Default is Lavender in light mode).
+    // What the overlay paints for that pick (Default is Lavender).
     const interfaceTheme = resolveMeetingInterfaceTheme(chosenInterfaceTheme, isLightTheme ? 'light' : 'dark');
 
     // Overlay opacity — same localStorage key + init logic SettingsOverlay.tsx

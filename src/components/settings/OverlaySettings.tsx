@@ -46,10 +46,11 @@ const SLIDE = 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)';
 const LIFT = 'scale(1.05)';
 
 const THEMES: { mode: MeetingInterfaceTheme; label: string; description: string }[] = [
-    { mode: 'default', label: 'Default', description: 'Default overlay appearance' },
+    // Default is Lavender in light and dark (resolveMeetingInterfaceTheme), so
+    // Lavender has no entry of its own since 2026-10-31.
+    { mode: 'default', label: 'Default', description: 'Lavender glass, light or dark with the app' },
     { mode: 'liquid-glass', label: 'Liquid Glass', description: 'Liquid glass — Apple-inspired transparent overlay' },
     { mode: 'modern', label: 'Modern', description: 'Modern — polished dark glass with cobalt accents' },
-    { mode: 'lavender', label: 'Lavender', description: 'Lavender glass from the website, light even in dark mode' },
 ];
 
 type Drag = {
@@ -625,8 +626,8 @@ export const OverlaySettings: React.FC<{
     // Custom buttons sit after the built-in ones in the default order.
     const isDefaultOrder = sameOverlayButtonOrder(saved, normalizeOverlayButtonOrder(DEFAULT_OVERLAY_BUTTON_ORDER));
     const style = THEMES.find((o) => o.mode === theme) ?? THEMES[0];
-    // The preview draws what the meeting will paint (Default is Lavender in
-    // light mode); the picker keeps the pick itself.
+    // The preview draws what the meeting will paint (Default is Lavender);
+    // the picker keeps the pick itself.
     const paintedTheme = resolveMeetingInterfaceTheme(theme, useResolvedTheme());
     const [surface, setSurface] = useMeetingSurface();
     const switcher = <SurfaceSwitch value={surface ?? 'overlay'} onChange={setSurface} disabled={surface === null} />;
