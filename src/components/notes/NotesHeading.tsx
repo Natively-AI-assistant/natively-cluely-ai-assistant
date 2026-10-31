@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { CalendarDays, Check, Folder, Link2, Plus, Users, X } from 'lucide-react';
+import { CalendarDays, Check, Link2, Plus, Users, X } from 'lucide-react';
 import { NpPop } from './NpPop';
 import { eventTimeRange, groupAttendees, type Attendee } from './notepadView';
 
@@ -11,13 +11,11 @@ import { eventTimeRange, groupAttendees, type Attendee } from './notepadView';
  *    at 24/28px, 32px in, wrapping. A click renames it (the meeting is saved
  *    under it); Enter keeps it, Esc goes back.
  *  - The chip row, 14px under it: a 28px pill with the day and the people
- *    (0.5px hairline, its hover painted 3px inside), and Granola's round
- *    "Add to folder" button beside it.
+ *    (0.5px hairline, its hover painted 3px inside). No folder button: folders
+ *    have no view of their own since the launcher dropped it (2026-11-01).
  *  - The chip's popover (280px, 12px corners): the event with its colour
  *    square and time, Join, the people by company (add or take someone off,
  *    for this meeting's notes only), and a way to link a different event.
- *  - The folder popover: the folders, ticked when the meeting is in one, and a
- *    new one by name. A live meeting's choice is held until Stop saves it.
  *
  * Its text fields are typed through NotesWindow's keyboard hook like the page:
  * the window owns their text and routes the keys.
@@ -31,23 +29,15 @@ export interface HeadingInfo {
     attendees: Attendee[];
     selfEmail: string | null;
 }
-export interface FolderChoice { id: string; name: string; inFolder: boolean }
 type Candidate = { id: string; title: string; startTime: string; endTime: string; people: number };
 
 const ink = (v: string): React.CSSProperties => ({ color: `var(${v})` });
 
-/** A folder with a plus at its lower right corner, as Granola's "Add to folder" draws it. */
-const FolderAddIcon: React.FC = () => (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path d="M8 13H3a1.5 1.5 0 0 1-1.5-1.5v-7A1.5 1.5 0 0 1 3 3h2.6l1.4 1.5H13a1.5 1.5 0 0 1 1.5 1.5v2.5" />
-        <path d="M12.5 10.25v4.5M10.25 12.5h4.5" />
-    </svg>
-);
 
 export const NotesHeading: React.FC<{
     info: HeadingInfo;
     fallbackTitle: string;
-    /** Live: the event and people can be changed. Ended: the title and folders. */
+    /** Live: the event and people can be changed. Ended: the title. */
     live: boolean;
     showChip: boolean;
     editingTitle: boolean;
@@ -64,22 +54,14 @@ export const NotesHeading: React.FC<{
     onAddAttendee: () => void;
     onRemoveAttendee: (email: string) => void;
     onLinkEvent: (eventId: string | null) => void;
-    /** The folder button; null hides it (no folders in this build). */
-    folders: FolderChoice[] | null;
-    onOpenFolders: () => void;
-    onToggleFolder: (folderId: string, inFolder: boolean) => void;
-    folderDraft: string;
-    setFolderDraft: (v: string) => void;
-    onEngageFolder: (e: React.MouseEvent<HTMLElement>) => void;
-    onCreateFolder: () => void;
     hookField: string | null;
     preview?: boolean;
 }> = ({
     info, fallbackTitle, live, showChip, editingTitle, titleDraft, setTitleDraft, onStartTitle, titleFocusBlocked, onCommitTitle, onCancelTitle,
     attendeeDraft, setAttendeeDraft, onEngageAttendee, onAddAttendee, onRemoveAttendee, onLinkEvent,
-    folders, onOpenFolders, onToggleFolder, folderDraft, setFolderDraft, onEngageFolder, onCreateFolder, hookField, preview,
+    hookField, preview,
 }) => {
-    const [open, setOpen] = useState<'event' | 'folder' | null>(null);
+    const [open, setOpen] = useState<'event' | null>(null);
     const [candidates, setCandidates] = useState<Candidate[] | null>(null);
     const rootRef = useRef<HTMLDivElement>(null);
     const title = info.title ?? fallbackTitle;
@@ -104,7 +86,6 @@ export const NotesHeading: React.FC<{
     const groups = groupAttendees(info.attendees, info.selfEmail);
     const range = eventTimeRange(info.event?.startTime, info.event?.endTime);
     const typing = (f: string) => hookField === f;
-    const inFolders = (folders ?? []).filter((f) => f.inFolder);
     const row = 'w-full flex items-center gap-2 h-8 px-2 rounded-lg text-[13px] text-left transition-colors np-wash';
 
     return (
@@ -162,22 +143,6 @@ export const NotesHeading: React.FC<{
                             </span>
                         )}
                     </button>
-                    {folders && !preview && (
-                        <button
-                            type="button"
-                            aria-label="Add to folder"
-                            aria-haspopup="dialog"
-                            aria-expanded={open === 'folder'}
-                            title={inFolders.length ? inFolders.map((f) => f.name).join(', ') : 'Add to folder'}
-                            onClick={() => { const next = open === 'folder' ? null : 'folder'; setOpen(next); if (next) onOpenFolders(); }}
-                            className={`np-chip np-outline h-7 rounded-full inline-flex items-center justify-center ${inFolders.length ? 'gap-1.5 pl-2.5 pr-3 text-[13px] font-[430]' : 'w-7'}`}
-                            style={ink('--np-ink-secondary')}
-                        >
-                            {inFolders.length ? <Folder className="w-4 h-4" strokeWidth={1.5} /> : <FolderAddIcon />}
-                            {inFolders.length > 0 && <span className="max-w-32 truncate">{inFolders[0].name}</span>}
-                            {inFolders.length > 1 && <span style={ink('--np-ink-tertiary')}>+{inFolders.length - 1}</span>}
-                        </button>
-                    )}
 
                         <NpPop open={open === 'event'} origin="top left" role="dialog" aria-label="Event details" className="absolute left-7 top-8 z-30 w-[280px] max-h-[70vh] overflow-y-auto text-[13px]">
                             {info.event ? (
@@ -289,36 +254,6 @@ export const NotesHeading: React.FC<{
                                     )}
                                 </div>
                             )}
-                        </NpPop>
-
-                        <NpPop open={open === 'folder' && !!folders} origin="top left" role="dialog" aria-label="Folders" className="absolute left-[148px] top-8 z-30 w-[240px] p-1 text-[13px]">
-                            <div className="max-h-[240px] overflow-y-auto">
-                                {(folders ?? []).map((f) => (
-                                    <button key={f.id} type="button" onClick={() => onToggleFolder(f.id, !f.inFolder)} className={row} style={ink('--np-ink')}>
-                                        <Folder className="w-4 h-4 shrink-0" strokeWidth={1.75} style={ink('--np-ink-secondary')} />
-                                        <span className="flex-1 min-w-0 truncate">{f.name}</span>
-                                        {f.inFolder && <Check className="w-4 h-4 shrink-0" strokeWidth={2} style={ink('--np-ink-secondary')} />}
-                                    </button>
-                                ))}
-                            </div>
-                            <form
-                                className="h-8 flex items-center gap-2 px-2"
-                                style={folders?.length ? { borderTop: '0.5px solid var(--np-ring)', marginTop: 4 } : undefined}
-                                onSubmit={(e) => { e.preventDefault(); onCreateFolder(); }}
-                            >
-                                <Plus className="w-4 h-4 shrink-0" strokeWidth={1.75} style={ink('--np-ink-tertiary')} />
-                                <input
-                                    aria-label="New folder"
-                                    value={folderDraft}
-                                    onChange={(e) => setFolderDraft(e.target.value)}
-                                    onMouseDown={onEngageFolder}
-                                    data-hook-typing={typing('folder') ? 'true' : undefined}
-                                    placeholder="New folder"
-                                    maxLength={80}
-                                    className="flex-1 min-w-0 bg-transparent text-[13px] outline-none placeholder:text-[color:var(--np-ink-tertiary)]"
-                                    style={ink('--np-ink')}
-                                />
-                            </form>
                         </NpPop>
                 </div>
             )}

@@ -70,13 +70,14 @@ test('main: keys go only to the session\'s window; the notes window is never act
   assert.match(helper, /win\.on\('focus', \(\) => \{\s*this\.stealthTyping\(\)\?\.stopIfTarget\('overlay'\)/);
 });
 
-test("laid out like Granola's: neutral with pastel accents, serif title, Today + people chip, folder button, Write notes, a listening pill with stop beside Ask anything", () => {
+test("laid out like Granola's: neutral with pastel accents, serif title, Today + people chip, no folder button, Write notes, a listening pill with stop beside Ask anything", () => {
   const page = read('src/components/NotesWindow.tsx');
   const heading = read('src/components/notes/NotesHeading.tsx');
   assert.match(heading, /font-plex-serif/);
   assert.match(heading, /text-\[24px\] leading-\[28px\]/);
   assert.match(heading, /Today\s*\{info\.people > 0 &&/);
-  assert.match(heading, /aria-label="Add to folder"/);
+  // Folders have no view since the launcher dropped it (22d35e0d), so the notepad offers none.
+  assert.doesNotMatch(heading + page, /Add to folder|liveNotesFolders/);
   // Granola's live page: no toolbar on a selection, three "/" items.
   assert.doesNotMatch(read('src/components/notes/NotesEditor.tsx'), /BubbleMenu/);
   assert.match(page, /liveNotesMeetingInfo/);
@@ -138,8 +139,8 @@ test("laid out like Granola's: neutral with pastel accents, serif title, Today +
 
 test('the notepad as a preview: talks to nothing, no drag handle, takes no clicks', () => {
   const page = read('src/components/NotesWindow.tsx');
-  // Every effect that talks to main (state, info, transcript, status, stream, hook, keys, ping, title, folders, template) returns early.
-  assert.equal((page.match(/if \(preview\b|if \(phase !== 'live' \|\| preview\)|if \(preview \|\|/g) ?? []).length, 11);
+  // Every effect that talks to main (state, info, transcript, status, stream, hook, keys, ping, title, template) returns early.
+  assert.equal((page.match(/if \(preview\b|if \(phase !== 'live' \|\| preview\)|if \(preview \|\|/g) ?? []).length, 10);
   assert.match(page, /preview \? '' : 'drag-region '/);
   assert.match(page, /inert=\{preview \? true : undefined\}/);
 });

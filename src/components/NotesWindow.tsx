@@ -7,7 +7,7 @@ import { useLastTimeRecap } from './assist/useLastTimeRecap';
 import { shouldBlockFocus, shouldFireStealthTapStart } from '../lib/overlayStealthFocusGuards.mjs';
 import { editCommand, editShortcutLetter, paste } from '../lib/stealthEdit.mjs';
 import { NotesEditor, type NotesEditorHandle } from './notes/NotesEditor';
-import { NotesHeading, type FolderChoice, type HeadingInfo } from './notes/NotesHeading';
+import { NotesHeading, type HeadingInfo } from './notes/NotesHeading';
 import { NotesEnhanced, type NotesEnhancedHandle } from './notes/NotesEnhanced';
 import { NoteTemplateGallery } from './notes/NoteTemplateGallery';
 import { noteTemplateById } from '../../electron/services/meeting/noteTemplates';
@@ -23,7 +23,7 @@ import { NOTEPAD_DEMO_STILL_MS, notepadDemoFrame, sameDemoContent, type NotepadD
  *
  *  - Heading (notes/NotesHeading.tsx): the title in the serif, renamed by a
  *    click; a chip with the day and people that opens the event (Join, people
- *    by company, add or remove someone, link a different event); Add to folder.
+ *    by company, add or remove someone, link a different event).
  *  - The page (notes/NotesEditor.tsx): headings, lists, checkboxes, bold and
  *    the rest, a "/" menu, Find. Markdown underneath.
  *  - While the meeting runs, Granola's floating bottom bar: one pill with bars
@@ -65,7 +65,7 @@ import { NOTEPAD_DEMO_STILL_MS, notepadDemoFrame, sameDemoContent, type NotepadD
  */
 
 type Phase = 'idle' | 'live' | 'ended';
-type Field = 'notes' | 'ask' | 'title' | 'find' | 'search' | 'attendee' | 'folder' | 'template';
+type Field = 'notes' | 'ask' | 'title' | 'find' | 'search' | 'attendee' | 'template';
 /** `recipeId`/`extra`: the recipe a turn ran and what was typed after it, for Retry. */
 type Turn = AskTurn & { kind: 'chat' | 'helper'; recipeId?: string; extra?: string; errorText?: string };
 type HelperAction = 'catch_me_up' | 'define' | 'sound_smart' | 'follow_up_questions';
@@ -183,8 +183,6 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     const [editingTitle, setEditingTitle] = useState(false);
     const [titleDraft, setTitleDraftState] = useState('');
     const [attendeeDraft, setAttendeeDraftState] = useState('');
-    const [folderDraft, setFolderDraftState] = useState('');
-    const [folders, setFolders] = useState<FolderChoice[] | null>(null);
     const [findOpen, setFindOpen] = useState(false);
     const [findQuery, setFindQueryState] = useState('');
     const [findPos, setFindPos] = useState({ index: 0, count: 0 });
@@ -224,14 +222,11 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     const askTextRef = useRef(ask);
     const titleDraftRef = useRef(titleDraft);
     const attendeeDraftRef = useRef(attendeeDraft);
-    const folderDraftRef = useRef(folderDraft);
-    const createFolderRef = useRef<() => void>(() => {});
     const findQueryRef = useRef(findQuery);
     const searchRef = useRef(search);
     const setAsk = useCallback((v: string) => { askTextRef.current = v; setAskState(v); }, []);
     const setTitleDraft = useCallback((v: string) => { titleDraftRef.current = v; setTitleDraftState(v); }, []);
     const setAttendeeDraft = useCallback((v: string) => { attendeeDraftRef.current = v; setAttendeeDraftState(v); }, []);
-    const setFolderDraft = useCallback((v: string) => { folderDraftRef.current = v; setFolderDraftState(v); }, []);
     const setSearch = useCallback((v: string) => { searchRef.current = v; setSearchState(v); }, []);
     const setFindQuery = useCallback((v: string) => {
         findQueryRef.current = v;
@@ -612,7 +607,6 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
         ask: { get: () => askTextRef.current, set: setAsk, submit: () => askSubmitRef.current() },
         title: { get: () => titleDraftRef.current, set: setTitleDraft, submit: () => commitTitleRef.current() },
         attendee: { get: () => attendeeDraftRef.current, set: setAttendeeDraft, submit: () => addAttendeeRef.current() },
-        folder: { get: () => folderDraftRef.current, set: setFolderDraft, submit: () => createFolderRef.current() },
         find: { get: () => findQueryRef.current, set: setFindQuery, submit: () => stepFind(false) },
         search: { get: () => searchRef.current, set: setSearch, submit: () => {} },
         template: { get: () => galleryQueryRef.current, set: setGalleryQuery, submit: () => {} },
@@ -635,7 +629,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     useEffect(() => {
         const sel = fieldSelRef.current;
         if (sel && (!hookTyping || field !== sel.field || !fieldSelected(sel.field))) setFieldSel(null);
-    }, [hookTyping, field, ask, titleDraft, attendeeDraft, folderDraft, findQuery, search, galleryQuery, fieldSelected, setFieldSel]);
+    }, [hookTyping, field, ask, titleDraft, attendeeDraft, findQuery, search, galleryQuery, fieldSelected, setFieldSel]);
     // The window has no focus while the hook types, so an input's own
     // selection would not paint: draw it behind the text instead.
     useLayoutEffect(() => {
@@ -832,29 +826,6 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
         window.electronAPI?.setTranscriptionPaused?.(next).then((r) => { if (r) setPaused(r.paused); }).catch(() => setPaused(!next));
     };
 
-    // The folder button (Granola's "Add to folder"): main holds a live meeting's
-    // choice and files it at Stop; after Stop it files at once.
-    const readFolders = useCallback(() => {
-        window.electronAPI?.liveNotesFolders?.().then((list) => { if (Array.isArray(list)) setFolders(list); }).catch(() => {});
-    }, []);
-    useEffect(() => {
-        if (preview || phase === 'idle' || !window.electronAPI?.liveNotesFolders) return;
-        readFolders();
-    }, [phase, meetingId, readFolders]);
-    const toggleFolder = (folderId: string, inFolder: boolean) => {
-        setFolders((prev) => prev?.map((f) => (f.id === folderId ? { ...f, inFolder } : f)) ?? prev);
-        void window.electronAPI?.liveNotesSetFolder?.(folderId, inFolder).then(readFolders).catch(readFolders);
-    };
-    const createFolder = useCallback(() => {
-        const name = folderDraftRef.current.trim();
-        if (!name) return;
-        void window.electronAPI?.liveNotesCreateFolder?.(name).then((f) => {
-            if (!f) return;
-            setFolderDraft('');
-            return window.electronAPI?.liveNotesSetFolder?.(f.id, true);
-        }).then(readFolders).catch(() => {});
-    }, [readFolders, setFolderDraft]);
-    createFolderRef.current = createFolder;
 
     // Ask stays open while the pointer works inside its card (Copy, Say more,
     // a recipe); a press anywhere else closes it, as Granola's does.
@@ -1167,13 +1138,6 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                 onAddAttendee={addAttendee}
                 onRemoveAttendee={(email) => { void window.electronAPI?.liveNotesSetAttendees?.({ remove: email }).then(() => readInfo()).catch(() => {}); }}
                 onLinkEvent={(id) => { void window.electronAPI?.liveNotesLinkEvent?.(id).then(() => readInfo()).catch(() => {}); }}
-                folders={folders}
-                onOpenFolders={readFolders}
-                onToggleFolder={toggleFolder}
-                folderDraft={folderDraft}
-                setFolderDraft={setFolderDraft}
-                onEngageFolder={engage('folder')}
-                onCreateFolder={createFolder}
                 hookField={hookTyping ? field : null}
                 preview={!!preview}
             />
