@@ -61,6 +61,9 @@ export class WindowHelper {
   private launcherWindow: BrowserWindow | null = null;
   private overlayWindow: BrowserWindow | null = null;
   private isWindowVisible: boolean = false;
+  // Stop with the notepad open (2026-10-31): launcher mode is entered but its
+  // window waits until the notepad is closed (switchToLauncher's `hidden`).
+  private launcherShowOwed = false;
   // Position/Size tracking for Launcher
   private launcherPosition: { x: number; y: number } | null = null;
   private launcherSize: { width: number; height: number } | null = null;
@@ -2612,6 +2615,7 @@ export class WindowHelper {
     // A hidden switch holds the overlay down against its own renderer's show
     // requests (isOverlayHeldHidden); any real show releases it.
     this.overlayHeldHidden = !!opts?.hidden;
+    this.launcherShowOwed = false;
     KeybindManager.getInstance().setMode('overlay'); // Adapted from public PR #123 — verify premium interaction
 
     // Show Overlay FIRST
@@ -2793,15 +2797,20 @@ export class WindowHelper {
     return this.overlayHeldHidden;
   }
 
-  public switchToLauncher(inactive?: boolean): void {
+  public switchToLauncher(inactive?: boolean, opts?: { hidden?: boolean }): void {
     this.overlayHeldHidden = false;
     const requestedInactive = !!inactive;
-    console.log(`[WindowHelper] Switching to LAUNCHER (inactive: ${requestedInactive})`);
+    // `hidden`: enter launcher mode (keys, overlay down) but show no window yet;
+    // the launcher is owed until showOwedLauncher() or any later show here.
+    const hidden = !!opts?.hidden;
+    console.log(`[WindowHelper] Switching to LAUNCHER (inactive: ${requestedInactive}${hidden ? ', hidden' : ''})`);
     // Leaving the overlay (end meeting, etc.) must disengage stealth typing —
     // otherwise the hook keeps swallowing keystrokes with the overlay hidden.
     // No-op if not engaged, or at cold-start where this fires with no session.
     this.stopStealthTyping();
-    const wasLauncher = this.currentWindowMode === 'launcher';
+    // An owed show still counts as leaving the overlay, so it gets the app
+    // activation below exactly as the Stop it was deferred from would have.
+    const wasLauncher = this.currentWindowMode === 'launcher' && !this.launcherShowOwed;
     this.currentWindowMode = 'launcher';
     KeybindManager.getInstance().setMode('launcher'); // Adapted from public PR #123 — verify premium interaction
 
@@ -2840,8 +2849,13 @@ export class WindowHelper {
     // is still up until the "Hide Overlay SECOND" block below.
     this.applyOverlayAuxVisibility(false);
 
-    // Show Launcher FIRST
-    if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
+    // Show Launcher FIRST (a hidden switch shows nothing: another window, the
+    // notepad, is still up, so there is no no-window gap to guard against)
+    if (hidden) {
+      this.launcherShowOwed = true;
+      this.isWindowVisible = false;
+    } else if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
+      this.launcherShowOwed = false;
       if (process.platform === 'win32' && this.contentProtection) {
         // Opacity Shield: Show at 0 opacity first
         this.launcherWindow.setOpacity(0);
@@ -2895,6 +2909,7 @@ export class WindowHelper {
     if (
       process.platform === 'darwin' &&
       !inactive &&
+      !hidden &&
       !wasLauncher &&
       !this.appState.getUndetectable()
     ) {
@@ -2924,10 +2939,17 @@ export class WindowHelper {
     }
   }
 
+  /** Show the launcher a hidden switchToLauncher held back; false when none is owed. */
+  public showOwedLauncher(inactive?: boolean): boolean {
+    if (!this.launcherShowOwed || this.currentWindowMode !== 'launcher') return false;
+    this.switchToLauncher(inactive);
+    return true;
+  }
+
   // Simplified setWindowMode that just calls switchers
   public setWindowMode(mode: 'launcher' | 'overlay', inactive?: boolean, opts?: { hidden?: boolean }): void {
     if (mode === 'launcher') {
-      this.switchToLauncher(inactive);
+      this.switchToLauncher(inactive, opts);
     } else {
       this.switchToOverlay(inactive, opts);
     }

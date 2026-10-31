@@ -1450,7 +1450,7 @@ import { acceptsLocalSpeechEndHint } from './intelligence/autoAnswer/SimpleAutoA
 import { NativeOomTrace } from './utils/NativeOomTrace'
 import { setStealthHookAvailabilityProvider } from './utils/windowsFocusPolicy'
 import { hasLiveRenderer } from './utils/rendererLiveness'
-import { DEFAULT_MEETING_SURFACE, planMeetingStart } from './utils/meetingSurface'
+import { DEFAULT_MEETING_SURFACE, planMeetingStart, planMeetingResume, planNotesClosed, type MeetingSurface } from './utils/meetingSurface'
 import {
   shouldPromoteToRegularAtStartup,
   planDisguiseTitleWrites,
@@ -1835,6 +1835,16 @@ export class AppState {
     // The overlay's Notes button shows whether the window is open.
     this.notesWindowHelper.onVisibilityChange((visible) => {
       this.sendToWindow(this.windowHelper.getOverlayWindow(), 'notes-window-visibility', visible);
+    });
+    // Closing the notepad never leaves the screen empty (utils/meetingSurface.ts):
+    // after a Stop it brings up the launcher Stop held back (endMeeting); during
+    // a notepad meeting it goes home, as the overlay's logo does, and the
+    // launcher's "Meeting ongoing" brings the notepad back (resumeMeetingSurface).
+    this.notesWindowHelper.onClosedByUser(() => {
+      const inactive = this.isUndetectable ? true : undefined;
+      const action = planNotesClosed(this.isMeetingActive, this.windowHelper.isOverlayHeldHidden());
+      if (action === 'owed-launcher') this.windowHelper.showOwedLauncher(inactive);
+      else if (action === 'launcher') this.windowHelper.setWindowMode('launcher', inactive);
     });
 
     if (process.platform === 'win32' || process.platform === 'darwin') {
@@ -3878,6 +3888,20 @@ export class AppState {
   /** The user's name, for the assist features (services/assist): who "you" is in the notes. */
   public getCurrentUserName(): string | null {
     return this.currentUserName();
+  }
+
+  /** The surface the running meeting started on (startMeeting). */
+  private meetingSurface: MeetingSurface = DEFAULT_MEETING_SURFACE;
+
+  /**
+   * The launcher's "Meeting ongoing" (set-window-mode 'overlay' mid-meeting):
+   * back to the meeting's own surface, the notepad for a notepad meeting
+   * (utils/meetingSurface.planMeetingResume), the overlay otherwise.
+   */
+  public resumeMeetingSurface(inactive?: boolean): void {
+    const plan = planMeetingResume(this.meetingSurface);
+    this.windowHelper.setWindowMode('overlay', inactive, { hidden: plan.overlayHidden });
+    if (plan.openNotes) this.notesWindowHelper.open({ activate: false });
   }
 
   /** The user's name: the active résumé's, else the connected Calendar account's. */
@@ -7584,6 +7608,9 @@ export class AppState {
     // overlay hidden, and the notepad opens below once the page is this meeting's.
     let startPlan = planMeetingStart(DEFAULT_MEETING_SURFACE, false);
     try { startPlan = planMeetingStart(SettingsManager.getInstance().get('meetingSurface'), this.notesWindowHelper.wasLeftOpen()); } catch { /* the overlay, as always */ }
+    // Kept for the launcher's "Meeting ongoing" (resumeMeetingSurface): a
+    // switch in Settings mid-meeting does not move this meeting.
+    this.meetingSurface = startPlan.overlayHidden ? 'notepad' : 'overlay';
 
     // ─── WINDOW SWAP BEFORE STATE BROADCAST ───────────────────────────────
     // Switch to the overlay BEFORE flipping `isMeetingActive` to true. If we
@@ -8073,7 +8100,10 @@ export class AppState {
     // centerAndShowWindow pattern) — the user often stops transcription while
     // the proctored test continues, and an activating show would blur the
     // test page. Normal mode is unchanged (active show + focus).
-    this.windowHelper.setWindowMode('launcher', this.isUndetectable ? true : undefined);
+    //
+    // The notepad open at Stop (2026-10-31): its notes are written now, so it
+    // stays in front and the launcher waits until it is closed (onClosedByUser).
+    this.windowHelper.setWindowMode('launcher', this.isUndetectable ? true : undefined, { hidden: this.notesWindowHelper.isVisible() });
 
     // ─── CLEAR THE OVERLAY TREE WHILE IT IS HIDDEN ─────────────────────────
     // The overlay BrowserWindow is PERSISTENT — created once with show:false

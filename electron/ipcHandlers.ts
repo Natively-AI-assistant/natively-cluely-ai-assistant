@@ -1587,6 +1587,12 @@ export function initializeIpcHandlers(appState: AppState): void {
   // transparent-window re-raster. See NativelyInterface.startTransition.
 
   safeHandle('set-window-mode', async (event, mode: 'launcher' | 'overlay', inactive?: boolean) => {
+    // Mid-meeting, 'overlay' is the launcher's "Meeting ongoing": back to the
+    // meeting's surface, the notepad for a notepad meeting (main.resumeMeetingSurface).
+    if (mode === 'overlay' && appState.getIsMeetingActive()) {
+      appState.resumeMeetingSurface(inactive);
+      return { success: true };
+    }
     appState.getWindowHelper().setWindowMode(mode, inactive);
     return { success: true };
   });

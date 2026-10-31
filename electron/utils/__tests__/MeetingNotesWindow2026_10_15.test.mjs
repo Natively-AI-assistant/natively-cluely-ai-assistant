@@ -288,6 +288,32 @@ describe('wiring (source contracts)', () => {
         assert.match(helper, /reopenForMeeting\(open: boolean\): void \{\s*if \(this\.isVisible\(\) \|\| !open\) return\s*this\.open\(\{ activate: false \}\)/);
     });
 
+    // Closing the notepad (2026-10-31): a notepad meeting closed by its X left no window at all.
+    test('closing the notepad goes home mid-meeting (as the overlay logo), the owed launcher after Stop', () => {
+        assert.equal(surface.planNotesClosed(false, false), 'owed-launcher');
+        assert.equal(surface.planNotesClosed(false, true), 'owed-launcher');
+        assert.equal(surface.planNotesClosed(true, true), 'launcher', 'a notepad meeting: home, the meeting goes on');
+        assert.equal(surface.planNotesClosed(true, false), 'none', 'the overlay is up, or the user hid it with Cmd/Ctrl+B');
+        assert.match(main, /planNotesClosed\(this\.isMeetingActive, this\.windowHelper\.isOverlayHeldHidden\(\)\)/);
+        assert.match(main, /action === 'owed-launcher'\) this\.windowHelper\.showOwedLauncher\(inactive\);/);
+        assert.match(main, /action === 'launcher'\) this\.windowHelper\.setWindowMode\('launcher', inactive\);/);
+        // Every user close goes through hide(true), which tells main; a screenshot's hide(false) does not.
+        assert.match(helper, /if \(byUser\) \{\s*this\.saveState\(\{ open: false \}\)\s*this\.closedByUserListener\?\.\(\)/);
+        assert.match(helper, /win\.on\('close', \(e\) => \{\s*if \(this\.quitting\) return\s*e\.preventDefault\(\)\s*this\.hide\(true\)/);
+    });
+
+    test('"Meeting ongoing" goes back to the surface the meeting started on', () => {
+        assert.deepEqual(surface.planMeetingResume('notepad'), { overlayHidden: true, openNotes: true });
+        assert.deepEqual(surface.planMeetingResume('overlay'), { overlayHidden: false, openNotes: false });
+        assert.deepEqual(surface.planMeetingResume(undefined), { overlayHidden: false, openNotes: false });
+        assert.match(main, /this\.meetingSurface = startPlan\.overlayHidden \? 'notepad' : 'overlay';/);
+        assert.match(main, /const plan = planMeetingResume\(this\.meetingSurface\);\s*this\.windowHelper\.setWindowMode\('overlay', inactive, \{ hidden: plan\.overlayHidden \}\);\s*if \(plan\.openNotes\) this\.notesWindowHelper\.open\(\{ activate: false \}\);/);
+        const ipc = fs.readFileSync(path.join(repoRoot, 'electron/ipcHandlers.ts'), 'utf8');
+        assert.match(ipc, /if \(mode === 'overlay' && appState\.getIsMeetingActive\(\)\) \{\s*appState\.resumeMeetingSurface\(inactive\);/);
+        const launcher = fs.readFileSync(path.join(repoRoot, 'src/components/Launcher.tsx'), 'utf8');
+        assert.match(launcher, /if \(isMeetingActive\) \{[\s\S]{0,900}window\.electronAPI\?\.setWindowMode\?\.\('overlay', true\);/);
+    });
+
     // Settings › Overlay's switcher: what a meeting opens (2026-10-20, utils/meetingSurface.ts).
     test('the overlay or the notepad: a notepad meeting hides the overlay and opens the notepad', () => {
         assert.deepEqual(surface.planMeetingStart('overlay', false), { overlayHidden: false, openNotes: false });
@@ -308,7 +334,7 @@ describe('wiring (source contracts)', () => {
         // Held down against the overlay renderer's own show requests until the user shows it.
         assert.match(sw, /this\.overlayHeldHidden = !!opts\?\.hidden;/);
         assert.match(sw, /if \(!opts\?\.hidden\) \{\s*this\.appState\.recordNativeOomOutboundIpc\(this\.overlayWindow\.webContents\.id, 'ensure-expanded', \[\]\);\s*this\.overlayWindow\.webContents\.send\('ensure-expanded'\);/);
-        assert.match(wh, /public switchToLauncher\(inactive\?: boolean\): void \{\s*this\.overlayHeldHidden = false;/);
+        assert.match(wh, /public switchToLauncher\(inactive\?: boolean, opts\?: \{ hidden\?: boolean \}\): void \{\s*this\.overlayHeldHidden = false;/);
         assert.match(wh, /public showMainWindow\(inactive\?: boolean\): void \{[\s\S]{0,160}this\.switchToOverlay\(inactive\);/, 'Cmd/Ctrl+B shows through a plain switch, which releases it');
         const ipc = fs.readFileSync(path.join(repoRoot, 'electron/ipcHandlers.ts'), 'utf8');
         assert.match(ipc, /safeHandle\('show-window', async \(event, inactive\?: boolean\) => \{[\s\S]{0,260}if \(wh\.isOverlayHeldHidden\(\) && wh\.getOverlayWindow\(\)\?\.webContents\.id === event\.sender\.id\) return;/);

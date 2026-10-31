@@ -34,3 +34,32 @@ export function planMeetingStart(surface: unknown, notesLeftOpen: boolean): Meet
     const notepad = normalizeMeetingSurface(surface) === 'notepad';
     return { overlayHidden: notepad, openNotes: notepad || notesLeftOpen };
 }
+
+/**
+ * The user closed the notepad (its X, Cmd+W, Alt+F4; 2026-10-31): what comes
+ * up so Natively never leaves the screen empty.
+ *
+ *   no meeting         'owed-launcher': the launcher a notepad Stop held back
+ *                      (WindowHelper.showOwedLauncher; nothing when none is owed).
+ *   notepad meeting    'launcher': home, as the overlay's logo does mid-meeting.
+ *                      Its "Meeting ongoing" goes back to the notepad
+ *                      (planMeetingResume). Before this the meeting ran with
+ *                      no window at all.
+ *   overlay meeting    'none': the overlay is up, or the user hid it with
+ *                      Cmd/Ctrl+B, and it stays as it is.
+ */
+export type NotesClosedAction = 'owed-launcher' | 'launcher' | 'none';
+
+export function planNotesClosed(meetingActive: boolean, overlayHeldHidden: boolean): NotesClosedAction {
+    if (!meetingActive) return 'owed-launcher';
+    return overlayHeldHidden ? 'launcher' : 'none';
+}
+
+/**
+ * The launcher's "Meeting ongoing" (2026-10-31): back to the surface the
+ * meeting started on. A notepad meeting reopens the notepad with the overlay
+ * still hidden; an overlay meeting shows the overlay and leaves the notepad as it is.
+ */
+export function planMeetingResume(meetingSurface: unknown): MeetingStartPlan {
+    return planMeetingStart(meetingSurface, false);
+}

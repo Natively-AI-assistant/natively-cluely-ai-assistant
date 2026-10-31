@@ -36,6 +36,7 @@ export class NotesWindowHelper {
     private quitting = false
     private saveTimer: NodeJS.Timeout | null = null
     private visibilityListener: ((visible: boolean) => void) | null = null
+    private closedByUserListener: (() => void) | null = null
 
     constructor() {
         app.once('before-quit', () => {
@@ -55,6 +56,11 @@ export class NotesWindowHelper {
 
     public onVisibilityChange(listener: ((visible: boolean) => void) | null): void {
         this.visibilityListener = listener
+    }
+
+    /** The user closed the window (not a screenshot's brief hide): main shows a launcher Stop held back. */
+    public onClosedByUser(listener: (() => void) | null): void {
+        this.closedByUserListener = listener
     }
 
     /**
@@ -94,7 +100,10 @@ export class NotesWindowHelper {
         // A session typing into it ends with it (the hook swallows keys).
         this.stealthTyping()?.stopIfTarget('notes')
         win.hide()
-        if (byUser) this.saveState({ open: false })
+        if (byUser) {
+            this.saveState({ open: false })
+            this.closedByUserListener?.()
+        }
     }
 
     /** Whether the user left the window open (a meeting start opens it again). */
