@@ -707,12 +707,18 @@ export class GoogleSTT extends EventEmitter {
 
                 // A credential failure reaches main.ts as the worded, coded error
                 // (so the channel shows as failed with something the user can act
-                // on); everything else is passed through untouched.
+                // on). Any other permanent failure (PERMISSION_DENIED: API or
+                // billing off; INVALID_ARGUMENT after the downgrade) is marked
+                // terminal: main used to count it as one retryable error while
+                // this stream never retried again, leaving "reconnecting" up for
+                // the rest of the meeting. Everything else passes through.
                 this.emit(
                     'error',
                     GoogleSTT.isAuthResolutionFailure(err, grpcCode)
                         ? GoogleSTT.credentialsUnavailableError(err)
-                        : err,
+                        : isPermanent
+                            ? Object.assign(err instanceof Error ? err : new Error(String((err as any)?.message ?? err)), { terminal: true })
+                            : err,
                 );
             })
             .on('end', () => {

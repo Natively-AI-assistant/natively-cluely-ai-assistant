@@ -14,12 +14,34 @@ const SUPPORTED_LANGUAGES = new Set([
     'no', 'pl', 'sv',
 ]);
 
+/**
+ * DashScope error codes that are a verdict on the key or the account:
+ * InvalidApiKey, Arrearage (account in arrears / out of credit), AccessDenied
+ * (and AccessDenied.Unpurchased, Model.AccessDenied). Retrying cannot help.
+ */
+const QWEN_TERMINAL_ERROR = /invalidapikey|invalid_api_key|arrearage|accessdenied|unpurchased|insufficient_quota/i;
+
+/**
+ * A realtime `error` event as an Error. The DashScope code used to be dropped
+ * (only the message was passed on), so an empty account looped through retries
+ * and 30 s cooldowns for the whole meeting under "reconnecting".
+ */
+export function qwenEventError(error: { code?: string; type?: string; message?: string } | undefined): Error {
+    const code = String(error?.code || error?.type || '').trim();
+    const text = String(error?.message || '').trim() || 'Qwen ASR rejected the request';
+    const terminal = QWEN_TERMINAL_ERROR.test(code);
+    return Object.assign(new Error(code ? `Qwen ASR ${code}: ${text}` : text), {
+        ...(code ? { code } : {}),
+        terminal,
+    });
+}
+
 interface QwenEvent {
     type: string;
     text?: string;
     stash?: string;
     transcript?: string;
-    error?: { code?: string; message?: string };
+    error?: { code?: string; type?: string; message?: string };
 }
 
 export class QwenRealtimeSTT extends EventEmitter {
@@ -136,14 +158,17 @@ export class QwenRealtimeSTT extends EventEmitter {
         ws.on('unexpected-response', (_request, response) => {
             refused = true;
             const status = response.statusCode ?? 0;
-            const keyRefused = status === 401 || status === 403;
+            // 402: payment required, as final as a refused key.
+            const keyRefused = status === 401 || status === 402 || status === 403;
             if (keyRefused) this.terminalFailure = true;
             if (this.active && this.socket === ws) {
                 // main.ts shows `${status} ${statusText}`; "authentication" makes a
                 // 403 terminal too, in main and in sttFailover's isTerminalSttError.
-                const message = keyRefused
-                    ? `Qwen ASR authentication failed (HTTP ${status})`
-                    : `Qwen ASR returned HTTP ${status}`;
+                const message = status === 402
+                    ? 'Qwen ASR account is out of credit (insufficient_funds)'
+                    : keyRefused
+                        ? `Qwen ASR authentication failed (HTTP ${status})`
+                        : `Qwen ASR returned HTTP ${status}`;
                 this.emit('error', Object.assign(new Error(message), {
                     response: { status, statusText: response.statusMessage ?? '' },
                 }));
@@ -185,7 +210,14 @@ export class QwenRealtimeSTT extends EventEmitter {
                 if (this.active) this.emit('endpoint', { type: 'speech_final', confidence: 1 });
             } else if (event.type === 'error') {
                 if (this.active && this.socket === ws) {
-                    this.emit('error', new Error(event.error?.message || 'Qwen ASR rejected the request'));
+                    const err = qwenEventError(event.error);
+                    if ((err as any).terminal) {
+                        // No reconnect, no cooldown revive: the close handler
+                        // returns on terminalFailure, so main's "failed" stays.
+                        this.terminalFailure = true;
+                        try { ws.close(); } catch { /* already closing */ }
+                    }
+                    this.emit('error', err);
                 }
             }
         });

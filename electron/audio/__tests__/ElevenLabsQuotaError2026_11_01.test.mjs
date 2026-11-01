@@ -63,14 +63,14 @@ test('the provider emits wrapped errors, never the raw message', () => {
     assert.equal((src.match(/this\.emit\('error', elevenLabsServerError\(msg\)\)/g) || []).length, 1, 'one emit, in handleServerError');
 });
 
-test("main's STT error handler normalises non-Error payloads before reading .message", () => {
+test("main's STT error handler normalises non-Error payloads before classifying", () => {
     const src = fs.readFileSync(path.join(REPO, 'electron/main.ts'), 'utf8');
     const at = src.indexOf("stt.on('error', (raw: unknown) => {");
     assert.ok(at > 0, 'handler takes unknown');
     const head = src.slice(at, at + 2000);
-    const firstRead = head.search(/err\.message(\s*\|\||\.toLowerCase)/);
-    assert.ok(firstRead > 0, 'found the first code read of err.message');
-    assert.ok(head.indexOf('raw instanceof Error') < firstRead, 'normalised before first read');
+    const classify = head.indexOf('classifySttError(err)');
+    assert.ok(classify > 0, 'classifies the normalised error');
+    assert.ok(head.indexOf('raw instanceof Error') < classify, 'normalised before it is read');
 });
 
 test('terminal types are exactly the ones a reconnect cannot fix', () => {
@@ -114,12 +114,12 @@ test('the provider wires those decisions, and backoff resets only after a health
     assert.ok(handler.indexOf('this.shouldReconnect = false') < handler.indexOf("this.emit('error'"), 'latched before main sees the error');
 });
 
-test('main treats a terminal non-quota error as final, quota keeps its stand-in branch', () => {
-    const src = fs.readFileSync(path.join(REPO, 'electron/main.ts'), 'utf8');
-    const at = src.indexOf("stt.on('error', (raw: unknown) => {");
-    const body = src.slice(at, at + 6000);
-    assert.match(body, /\(\(err as any\)\?\.terminal === true && !isQuotaError\)/);
-    assert.ok(body.indexOf('const isQuotaError') < body.indexOf('const isAuthError'), 'quota computed first');
+test('a terminal non-quota error is final, quota keeps its stand-in branch', async () => {
+    const { classifySttError } = await import(path.join(REPO, 'electron/audio/sttErrorClassifier.mjs'));
+    assert.equal(classifySttError(elevenLabsServerError({ message_type: 'auth_error', error: 'Invalid API key' })).kind, 'auth');
+    assert.equal(classifySttError(elevenLabsServerError({ message_type: 'unaccepted_terms', error: 'Accept the terms' })).kind, 'auth');
+    assert.equal(classifySttError(elevenLabsServerError({ message_type: 'quota_exceeded', error: 'You have exceeded your quota.' })).kind, 'quota');
+    assert.equal(classifySttError(elevenLabsServerError({ message_type: 'rate_limited', error: 'slow down' })).kind, 'retry');
 });
 
 test('overlay copy: ElevenLabs quota reads as out of credits, auth_error as auth', () => {

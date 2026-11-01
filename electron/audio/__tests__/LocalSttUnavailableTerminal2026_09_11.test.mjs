@@ -24,8 +24,11 @@ const preload = read('../../preload.ts');
 const capture = read('../SystemAudioCapture.ts');
 const whisper = read('../LocalWhisperSTT.ts');
 
-test('main classifies local_stt_unavailable as terminal (failed), not reconnecting', () => {
-  assert.match(main, /const isLocalSttUnavailable = \(err as any\)\?\.code === 'local_stt_unavailable';/);
+test('main classifies local_stt_unavailable as terminal (failed), not reconnecting', async () => {
+  // Classification moved to sttErrorClassifier.mjs (2026-11-01).
+  const { classifySttError } = await import(new URL('../sttErrorClassifier.mjs', import.meta.url).href);
+  assert.equal(classifySttError(Object.assign(new Error('x'), { code: 'local_stt_unavailable' })).kind, 'local_unavailable');
+  assert.match(main, /const isLocalSttUnavailable = verdict\.kind === 'local_unavailable';/);
   assert.match(main, /if \(isAuthError \|\| isLocalSttUnavailable\) \{/);
   assert.match(whisper, /export const LOCAL_STT_UNAVAILABLE_CODE = 'local_stt_unavailable';/);
 });

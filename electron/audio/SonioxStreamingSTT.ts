@@ -69,7 +69,13 @@ export const SONIOX_SILENCE_TAIL_MS = 1200;
  * write() drops every chunk once isActive is false, and nothing else restarts
  * it. Live 2026-10-16 (France, natively_debug 15): a 408 after 20 s of a silent
  * call left the interviewer side deaf. Auth, config and billing errors still
- * end the session, so a bad key cannot reconnect on every chunk.
+ * end the session, so a bad key cannot reconnect on every chunk; their error
+ * frame is terminal (sonioxServerError), so main shows "failed".
+ *
+ * A clean close with NO error frame (a finished session never reaches here:
+ * closeFinishedSession detaches it first) used to be 'inactive' too: the
+ * channel went silent with nothing emitted. It now backs off, bounded by
+ * RECONNECT_MAX_ATTEMPTS, whose exhaustion is reported (2026-11-01).
  */
 export function sonioxCloseAction(
     shouldReconnect: boolean,
@@ -79,8 +85,26 @@ export function sonioxCloseAction(
     if (!shouldReconnect) return 'inactive';
     if (code !== 1000) return 'backoff';
     if (lastServerErrorCode === 408) return 'lazy';   // idle timeout: no audio, nothing to transcribe
-    if (lastServerErrorCode === 429 || (lastServerErrorCode !== null && lastServerErrorCode >= 500 && lastServerErrorCode < 600)) return 'backoff';
+    if (lastServerErrorCode === null) return 'backoff';
+    if (lastServerErrorCode === 429 || (lastServerErrorCode >= 500 && lastServerErrorCode < 600)) return 'backoff';
     return 'inactive';
+}
+
+/**
+ * A Soniox error frame as an Error. Its error_code is an HTTP status (400 bad
+ * config, 401 key, 402 balance, 403, 408 idle, 429, 5xx). The ones that end
+ * the session (sonioxCloseAction 'inactive') are terminal: they used to reach
+ * main as one ordinary error, which left the overlay on "reconnecting".
+ */
+export function sonioxServerError(errorCode: unknown, errorMessage: unknown): Error {
+    const status = Number(errorCode) || 0;
+    const text = typeof errorMessage === 'string' && errorMessage.trim() ? errorMessage.trim() : 'error';
+    const terminal = status !== 0 && sonioxCloseAction(true, 1000, status) === 'inactive';
+    return Object.assign(new Error(`${status || errorCode} Soniox: ${text}`), {
+        code: `soniox_${status || 'error'}`,
+        ...(status ? { httpStatus: status } : {}),
+        terminal,
+    });
 }
 
 export class SonioxStreamingSTT extends EventEmitter {
@@ -487,7 +511,7 @@ export class SonioxStreamingSTT extends EventEmitter {
                 if (msg.error_code) {
                     if (ws === this.ws) this.lastServerErrorCode = Number(msg.error_code) || null;
                     console.error(`[SonioxStreaming] Server error: ${msg.error_code} - ${msg.error_message}`);
-                    this.emit('error', new Error(`Soniox: ${msg.error_code} - ${msg.error_message}`));
+                    this.emit('error', sonioxServerError(msg.error_code, msg.error_message));
                     return;
                 }
 
@@ -621,7 +645,9 @@ export class SonioxStreamingSTT extends EventEmitter {
             // rest of the meeting. start() also resets this for a manual restart.
             this.shouldReconnect = false;
             this.reconnectExhaustedAt = Date.now();
-            this.emit('error', new Error('SonioxStreamingSTT: max reconnect attempts exceeded'));
+            // terminal: main shows "failed" now; a revive on resumed audio
+            // that transcribes again flips it back to connected.
+            this.emit('error', Object.assign(new Error('SonioxStreamingSTT: max reconnect attempts exceeded'), { terminal: true }));
             return;
         }
 

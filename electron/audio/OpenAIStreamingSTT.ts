@@ -15,6 +15,7 @@
 
 import { EventEmitter } from 'events';
 import WebSocket from 'ws';
+import { restAccountVerdict } from './sttErrorClassifier.mjs';
 import { safeDetachAndClose } from './wsSafeTeardown';
 import axios from 'axios';
 import FormData from 'form-data';
@@ -110,6 +111,36 @@ const NUM_CHANNELS        = 1;
 type Mode = 'ws' | 'rest';
 
 // ─── Class ────────────────────────────────────────────────────────────────────
+
+/**
+ * The terminal error for a refused realtime handshake, or null when the
+ * refusal may pass (5xx, a plain 429 rate limit): those keep the normal
+ * retry and model fallback. 401 bad key, 403 region or project access, and a
+ * 429 whose body says insufficient_quota (no credits) are final for every
+ * model and for the REST fallback, which use the same key.
+ */
+export function openAiHandshakeVerdict(status: number, body: string): Error | null {
+    let message = '';
+    let type = '';
+    try {
+        const parsed = JSON.parse(body);
+        message = String(parsed?.error?.message ?? '').trim();
+        type = String(parsed?.error?.code || parsed?.error?.type || '').trim();
+    } catch {
+        message = body.trim().slice(0, 200);
+    }
+    const outOfCredits = /insufficient_quota|credit_balance_exhausted/i.test(`${type} ${body}`);
+    if (status === 429 && outOfCredits) {
+        return Object.assign(new Error(`insufficient_quota: ${message || 'OpenAI account has no credits left'}`), {
+            code: 'insufficient_quota', httpStatus: 429, terminal: true,
+        });
+    }
+    if (status !== 401 && status !== 403) return null;
+    const what = status === 401 ? 'OpenAI rejected the API key (invalid API key)' : 'OpenAI refused access';
+    return Object.assign(new Error(message ? `${what}: ${message}` : what), {
+        code: type || `openai_${status}`, httpStatus: status, terminal: true,
+    });
+}
 
 export class OpenAIStreamingSTT extends EventEmitter {
     // Public config
@@ -391,7 +422,9 @@ export class OpenAIStreamingSTT extends EventEmitter {
             }
             this._sendWsAudioChunk(chunk);
         } else {
-            // REST mode — accumulate for batch upload
+            // REST mode — accumulate for batch upload. Not once the key or
+            // account was refused: every upload would fail the same way.
+            if (this.outOfCredits) return;
             this.restChunks.push(chunk);
             this.restTotalBytes += chunk.length;
         }
@@ -529,6 +562,24 @@ export class OpenAIStreamingSTT extends EventEmitter {
         }) as WebSocket.ClientOptions);
         this.ws = ws;
 
+        // A refused handshake (bad key, region, no credit) used to reach only
+        // the 'error' log below: three models x three attempts ran with no
+        // status (~20 s), then a REST fallback that failed the same way.
+        ws.on('unexpected-response', (_req: unknown, res: any) => {
+            if (ws !== this.ws) return;
+            const status = Number(res?.statusCode) || 0;
+            let body = '';
+            let handled = false;
+            const finish = () => {
+                if (handled) return;
+                handled = true;
+                this._handleRefusedHandshake(ws, status, body);
+            };
+            res.on('data', (chunk: Buffer) => { if (body.length < 4000) body += chunk.toString(); });
+            res.on('end', finish);
+            res.on('error', finish);
+        });
+
         // 10-second connection timeout to prevent hanging on dropped networks
         this.connectionTimeoutTimer = setTimeout(() => {
             console.warn(`[OpenAIStreaming] WebSocket connection timed out after 10s (attempt=${this.reconnectAttempts + 1})`);
@@ -606,6 +657,23 @@ export class OpenAIStreamingSTT extends EventEmitter {
             this.ws = null;
             this._handleWsClose(code, reason);
         });
+    }
+
+    private _handleRefusedHandshake(ws: WebSocket, status: number, body: string): void {
+        if (ws === this.ws && this.isActive) {
+            const verdict = openAiHandshakeVerdict(status, OpenAIStreamingSTT._scrubBearerTokens(body));
+            if (verdict) {
+                console.error(`[OpenAIStreaming] ${verdict.message} — not reconnecting`);
+                // Every model and the REST fallback use the same key/account.
+                this.shouldReconnect = false;
+                if ((verdict as any).code === 'insufficient_quota') this.outOfCredits = true;
+                this.emit('error', verdict);
+            }
+        }
+        // With an 'unexpected-response' listener ws leaves the request open;
+        // terminate() ends it and runs 'close' (which stops on !shouldReconnect
+        // or carries on with the usual model fallback).
+        try { ws.terminate(); } catch { /* already closed */ }
     }
 
     /** The session.update sent on open, per model (the live model's shape differs). */
@@ -1246,6 +1314,14 @@ export class OpenAIStreamingSTT extends EventEmitter {
             }
         } catch (err) {
             console.error('[OpenAIStreaming][REST] Upload error:', err);
+            if (restAccountVerdict(err)) {
+                // No credits or a refused key: the same for every later upload.
+                // outOfCredits stops write() from buffering for this meeting
+                // (start() re-arms); terminal makes main show "failed" now.
+                this.outOfCredits = true;
+                this.emit('error', Object.assign(err instanceof Error ? err : new Error(String(err)), { terminal: true }));
+                return;
+            }
             this.emit('error', err instanceof Error ? err : new Error(String(err)));
         } finally {
             this.restIsUploading = false;

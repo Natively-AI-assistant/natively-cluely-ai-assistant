@@ -13,11 +13,28 @@ import { deepgramHintParams, getSttContextTerms } from './sttContextTerms';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { RealtimeSilenceTail } from './realtimeSilenceTail';
 import { isEnglishOnlySttModel, sttModelRejectsLanguage, resolveSttModel } from './sttModelCatalog';
+import { probeDeepgramHandshake, deepgramHandshakeVerdict } from './deepgramHandshakeProbe';
 
 const RECONNECT_BASE_DELAY_MS = 1000;
 const RECONNECT_MAX_DELAY_MS = 30000;
 const RECONNECT_MAX_ATTEMPTS = 10;
 const KEEPALIVE_INTERVAL_MS = 8000;
+
+/**
+ * The SDK's Error event as an Error. It passes the WebSocket's error event (or
+ * `{ event, message, error }` for a parse failure), not an Error, and
+ * `new Error(String(event))` put "[object Event]" in the overlay.
+ */
+export function deepgramEventError(err: any): Error {
+    if (err instanceof Error) return err;
+    const inner = err?.error instanceof Error ? err.error : null;
+    const text = [err?.message, inner?.message, err?.reason]
+        .find((v) => typeof v === 'string' && v.trim() && !/^\[object /.test(v)) as string | undefined;
+    const message = text
+        ? `Deepgram: ${text.trim()}`
+        : `Deepgram connection error${typeof err?.type === 'string' ? ` (${err.type})` : ''}`;
+    return Object.assign(new Error(message), inner && (inner as any).code ? { code: (inner as any).code } : {});
+}
 // Real-time silence streamed after the local VAD's speech end. endpointing
 // (300 ms, below) already fires inside the native hangover (>= 500 ms), but
 // UtteranceEnd needs a 1000 ms gap after the last word — at the keepalive
@@ -47,6 +64,8 @@ export class DeepgramStreamingSTT extends EventEmitter {
     // session and clobber its reconnectAttempts to 0, defeating the
     // exponential backoff cap on a rapid-reconnect storm.
     private stabilityTimer: NodeJS.Timeout | null = null;
+    /** One handshake probe per start(): see deepgramHandshakeProbe.ts. */
+    private handshakeProbed = false;
     private keepAliveInterval: NodeJS.Timeout | null = null;
     private buffer: Buffer[] = [];
     private isConnecting = false;
@@ -141,6 +160,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
         this.isActive = true;
         this.shouldReconnect = true;
         this.reconnectAttempts = 0;
+        this.handshakeProbed = false;
         this.connect();
     }
 
@@ -255,9 +275,11 @@ export class DeepgramStreamingSTT extends EventEmitter {
             // feed), and clearing the live keepalive timers so Deepgram
             // idle-closes it. Mirrors NativelyProSTT's documented pattern.
             const live = this.live;
+            let opened = false;
 
             this.live.on(LiveTranscriptionEvents.Open, () => {
                 if (live !== this.live) return; // F-203 stale-connection guard
+                opened = true;
                 this.isConnecting = false;
                 this.isOpen = true;
                 console.log('[DeepgramStreaming] Connected');
@@ -346,7 +368,7 @@ export class DeepgramStreamingSTT extends EventEmitter {
             this.live.on(LiveTranscriptionEvents.Error, (err: any) => {
                 if (live !== this.live) return; // F-203 stale-connection guard
                 console.error('[DeepgramStreaming] Error:', err);
-                this.emit('error', err instanceof Error ? err : new Error(String(err)));
+                this.emit('error', deepgramEventError(err));
             });
 
             this.live.on(LiveTranscriptionEvents.Close, (event: any) => {
@@ -359,6 +381,12 @@ export class DeepgramStreamingSTT extends EventEmitter {
                 this.isConnecting = false;
                 this.clearTimers();
 
+                // Never opened: find out once whether the key or account was
+                // refused, which the built-in WebSocket does not say.
+                if (!opened && this.shouldReconnect && !this.handshakeProbed) {
+                    this.handshakeProbed = true;
+                    void this.diagnoseRefusedHandshake();
+                }
                 if (this.shouldReconnect && code !== 1000) {
                     this.scheduleReconnect();
                 }
@@ -380,7 +408,11 @@ export class DeepgramStreamingSTT extends EventEmitter {
 
         if (this.reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
             console.error(`[DeepgramStreaming] Max reconnect attempts reached — giving up`);
-            this.emit('error', new Error('DeepgramStreamingSTT: max reconnect attempts exceeded'));
+            // Latch off: sendAudio()'s lazy connect used to start a new
+            // handshake on every chunk after this, with no backoff, emitting
+            // this error again each time. start() re-arms it.
+            this.shouldReconnect = false;
+            this.emit('error', Object.assign(new Error('DeepgramStreamingSTT: max reconnect attempts exceeded'), { terminal: true }));
             return;
         }
 
@@ -396,6 +428,19 @@ export class DeepgramStreamingSTT extends EventEmitter {
             this.reconnectTimer = null;
             if (this.shouldReconnect) this.connect();
         }, delay);
+    }
+
+    private async diagnoseRefusedHandshake(): Promise<void> {
+        const verdict = deepgramHandshakeVerdict(await probeDeepgramHandshake(this.apiKey, this.model));
+        // Stopped, restarted or already given up meanwhile: nothing to report.
+        if (!verdict || !this.isActive || !this.shouldReconnect) return;
+        console.error(`[DeepgramStreaming] ${verdict.message} — not reconnecting`);
+        this.shouldReconnect = false;
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+        this.emit('error', verdict);
     }
 
     private clearTimers(): void {

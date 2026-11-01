@@ -77,6 +77,20 @@ interface ResolvedTarget {
 }
 
 /**
+ * A relay error frame as an Error. `code` is the relay's error code, which the
+ * overlay maps to its copy (src/lib/sttErrorMapper.ts); the relay's human text
+ * ("Renew at ...") follows it. `terminal` tells main the provider has stopped
+ * reconnecting: trial_expired, subscription_inactive, account_suspended and
+ * auth_required used to reach main as bare codes it did not recognise, so the
+ * overlay sat on "reconnecting" for the rest of the meeting.
+ */
+export function nativelyProServerError(msg: any, terminal: boolean): Error {
+    const code = String(msg?.error ?? 'error');
+    const detail = typeof msg?.message === 'string' && msg.message.trim() ? `: ${msg.message.trim()}` : '';
+    return Object.assign(new Error(`${code}${detail}`), { code, terminal });
+}
+
+/**
  * NativelyProSTT
  *
  * Connects to the Natively API WebSocket transcription endpoint.
@@ -646,7 +660,11 @@ export class NativelyProSTT extends EventEmitter {
 
                 if (msg.error) {
                     console.error('[NativelyProSTT] Server error:', msg.error, msg.message || '');
-                    this.emit('error', new Error(msg.error));
+                    // A relay token rejection is not a verdict on the user's key
+                    // (carve-out below), so it is never terminal.
+                    const relayTokenRejected = msg.error === 'invalid_key_format' && this.isOnRelayTarget(connectUrl);
+                    const fatal = NativelyProSTT.FATAL_SERVER_ERRORS.has(String(msg.error)) && !relayTokenRejected;
+                    this.emit('error', nativelyProServerError(msg, fatal));
 
                     // RELAY token-fatal carve-out (Phase 7/8): on a RELAY url an
                     // `invalid_key_format` means a bad/expired SESSION TOKEN, not
@@ -656,7 +674,7 @@ export class NativelyProSTT extends EventEmitter {
                     // the next rung (alternate relay → Railway), where legacy auth
                     // re-validates the real key. We let the socket close naturally
                     // and the close handler walk the ladder.
-                    if (msg.error === 'invalid_key_format' && this.isOnRelayTarget(connectUrl)) {
+                    if (relayTokenRejected) {
                         console.warn(`[NativelyProSTT:${this.channel}] Relay token rejected (invalid_key_format on relay) — advancing to next fallback rung.`);
                         clearCachedSession(this.channel);
                         this.forceAdvanceTarget(connectUrl, 'token_fatal');
@@ -669,7 +687,7 @@ export class NativelyProSTT extends EventEmitter {
                     // trial_expired must be here: without it the client retries every 1.5-30s
                     // forever, hammering auth DB calls while the server rejects every attempt.
                     // (On the Railway url, invalid_key_format remains fatal exactly as today.)
-                if (NativelyProSTT.FATAL_SERVER_ERRORS.has(String(msg.error))) {
+                if (fatal) {
                     console.warn(`[NativelyProSTT:${this.channel}] ${msg.error} is a verdict on the credential — not reconnecting`);
                     this.isActive = false;
                 }

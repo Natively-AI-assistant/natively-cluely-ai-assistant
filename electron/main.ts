@@ -22,6 +22,7 @@ import fs from "fs"
 import os from "os"
 import { windowsMicBlocker, windowsMicPage } from '../src/lib/micPermissionPolicy.mjs'
 import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier.mjs"
+import { classifySttError } from "./audio/sttErrorClassifier.mjs"
 import { OutputRouteMismatchDetector } from "./audio/outputRouteMismatch.mjs"
 import { FatalMainProcessCoordinator } from "./utils/fatalMainProcess"
 import { installResilientDnsLookup } from "./utils/resilientDnsLookup"
@@ -4384,63 +4385,27 @@ export class AppState {
       const err: Error = raw instanceof Error
         ? raw
         : Object.assign(new Error(typeof raw === 'string' ? raw : ((raw as any)?.message || (raw as any)?.error || JSON.stringify(raw) || 'Unknown STT error')), { code: (raw as any)?.code });
-      // Google streamingRecognize's 10s silence timeout closes the stream
-      // with gRPC code 11 ("Audio Timeout Error"). GoogleSTT already
-      // swallows this case before it reaches us, but other providers may
-      // surface a similar idle-timeout that the lazy-reconnect path
-      // recovers from cleanly. Downgrade to a one-liner here as well so
-      // a stray bubble-up doesn't cascade into stack-trace noise.
-      const grpcCode = (err as any)?.code;
-      if (grpcCode === 11 || /Audio Timeout Error/i.test(err.message || '')) {
+      // Read by sttErrorClassifier.mjs (pure, tested): auth/account verdicts
+      // and providers that have stopped (`terminal`) end as "failed" at once;
+      // quota may hand over to a stand-in; the rest reconnect.
+      const verdict = classifySttError(err);
+      if (verdict.kind === 'idle') {
+        // A provider's no-audio limit (Google's gRPC 11 silence timeout): the
+        // lazy-reconnect path recovers on the next chunk. One line, no trace.
         console.warn(`[Main] STT (${speaker}) idle-timed-out (provider's no-audio limit), reconnecting on next chunk.`);
         return;
       }
 
       console.error(`[Main] STT (${speaker}) Error:`, err);
 
-      // Extract richer error info from Axios errors (RestSTT)
-      let errorMessage = err.message;
-      // Node's socket/TLS code (UNABLE_TO_VERIFY_LEAF_SIGNATURE, ECONNRESET…)
-      // travels with the message so the overlay can tell an intercepted or
-      // blocked connection from a bad key (src/lib/sttErrorMapper.ts).
-      const nodeCode = typeof grpcCode === 'string' && /^[A-Z][A-Z0-9_]{2,}$/.test(grpcCode) ? grpcCode : '';
-      if (nodeCode && !errorMessage.includes(nodeCode)) errorMessage = `${errorMessage} (${nodeCode})`;
-      const axiosErr = err as any;
-      const httpStatus = axiosErr?.response?.status || 0;
-      if (axiosErr?.response?.data?.error) {
-        const respErr = axiosErr.response.data.error;
-        const respMsg = typeof respErr === 'string' ? respErr : (respErr.message || respErr.code || JSON.stringify(respErr));
-        errorMessage = httpStatus ? `${httpStatus} ${respMsg}` : respMsg;
-      } else if (httpStatus) {
-        errorMessage = `${httpStatus} ${axiosErr.response.statusText}`;
-      }
-
-      const isQuotaError = err.message.toLowerCase().includes('transcription_quota_exceeded')
-        || err.message.toLowerCase().includes('quota');
-
-      // Immediately fatal: auth/account problems — no amount of retrying helps
-      const isAuthError = httpStatus === 401
-        // A provider that knows the failure is final (ElevenLabs auth_error,
-        // unaccepted_terms, invalid_request) and has stopped reconnecting.
-        // Quota keeps its own branch below so a stand-in can take over.
-        || ((err as any)?.terminal === true && !isQuotaError)
-        || err.message.toLowerCase().includes('auth_timeout')
-        || err.message.toLowerCase().includes('invalid_key')
-        || err.message.toLowerCase().includes('invalid api')
-        || err.message.toLowerCase().includes('authentication')
-        // Google STT with no usable Service Account JSON. GoogleSTT has already
-        // disabled the channel and opens no stream until a new key is set
-        // (GoogleSTT.CREDENTIALS_UNAVAILABLE_CODE), so it is terminal by code,
-        // not by whatever words the message happens to contain.
-        || (err as any)?.code === 'google_stt_credentials_unavailable';
-
-
+      const errorMessage = verdict.errorMessage;
+      const isQuotaError = verdict.kind === 'quota';
+      const isAuthError = verdict.kind === 'auth';
       // A local STT worker that could not start (no ONNX slot within 20s, or
       // the model never reported ready) is terminal for this meeting: nothing
       // restarts a LocalWhisperSTT instance, so "reconnecting" would be a lie
-      // the user stares at until they end the call. Surface the actionable
-      // message as a failure instead (LocalWhisperSTT.LOCAL_STT_UNAVAILABLE_CODE).
-      const isLocalSttUnavailable = (err as any)?.code === 'local_stt_unavailable';
+      // the user stares at until they end the call (LOCAL_STT_UNAVAILABLE_CODE).
+      const isLocalSttUnavailable = verdict.kind === 'local_unavailable';
 
       if (isAuthError || isLocalSttUnavailable) {
         _consecutiveErrors = 0;

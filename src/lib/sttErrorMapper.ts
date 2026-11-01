@@ -109,11 +109,44 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
         };
     }
 
+    // 3a. Natively Pro account states the relay ends the stream on
+    // (NativelyProSTT.FATAL_SERVER_ERRORS). Each used to fall through to the
+    // generic provider error.
+    if (lower.includes('subscription_inactive')) {
+        return {
+            title: 'Subscription Inactive',
+            body: 'Your Natively Pro subscription is not active. Renew it, or choose another transcription provider in Settings.',
+            category: 'auth',
+        };
+    }
+    if (lower.includes('account_suspended')) {
+        return {
+            title: 'Account Suspended',
+            body: 'Your Natively account is suspended. Contact support, or choose another transcription provider in Settings.',
+            category: 'auth',
+        };
+    }
+    if (lower.includes('auth_required')) {
+        return {
+            title: 'Sign In Required',
+            body: 'Sign in to Natively again to use Natively transcription, or choose another provider in Settings.',
+            category: 'auth',
+        };
+    }
+
     // 3b. Out of credits: the provider account itself (OpenAI's
     // insufficient_quota). Before 4, whose "for this period" would be wrong.
     // ElevenLabs quota_exceeded is the plan's credits running out (it closes
-    // with reason insufficient_funds), not a per-period cap.
-    if (lower.includes('insufficient_quota') || lower.includes('credit_balance_exhausted') || lower.includes('elevenlabs quota_exceeded')) {
+    // with reason insufficient_funds), not a per-period cap. 402 Payment
+    // Required (Deepgram, Soniox, Qwen) and DashScope's Arrearage mean the same.
+    if (
+        lower.includes('insufficient_quota')
+        || lower.includes('credit_balance_exhausted')
+        || lower.includes('elevenlabs quota_exceeded')
+        || lower.includes('insufficient_funds')
+        || lower.includes('arrearage')
+        || rawError.startsWith('402 ')
+    ) {
         return {
             title: 'Out of Credits',
             body: 'Your provider account has no credits left. Add credits, then start a new meeting.',

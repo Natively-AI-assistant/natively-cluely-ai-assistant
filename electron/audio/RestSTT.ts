@@ -14,6 +14,7 @@
 
 import { EventEmitter } from 'events';
 import axios from 'axios';
+import { restAccountVerdict } from './sttErrorClassifier.mjs';
 import FormData from 'form-data';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { isValidSttRegion } from '../utils/curlUtils';
@@ -233,6 +234,8 @@ export class RestSTT extends EventEmitter {
     private totalBufferedBytes = 0;
     private safetyNetTimer: NodeJS.Timeout | null = null;
     private isActive = false;
+    /** Set when an upload was refused for the key or account (restAccountVerdict). */
+    private accountRefused: 'credits' | 'refused' | null = null;
     private isUploading = false;
     private flushPending = false;  // Bug #2 fix: queue flush when upload in progress
     /** Per-20 ms-frame RMS of the buffered audio, in order (chunk ends). */
@@ -329,6 +332,7 @@ export class RestSTT extends EventEmitter {
 
         console.log(`[RestSTT] Starting (${this.provider})...`);
         this.isActive = true;
+        this.accountRefused = null;
         this.chunks = [];
         this.totalBufferedBytes = 0;
         this.lastUploadAt = 0;
@@ -542,6 +546,15 @@ export class RestSTT extends EventEmitter {
         // non-null in some race window. Bailing here closes both holes.
         if (!this.isActive) return;
 
+        // The key or account was refused (see the upload catch): every upload
+        // would fail the same way until a new meeting. Drop the audio.
+        if (this.accountRefused) {
+            this.chunks = [];
+            this.totalBufferedBytes = 0;
+            this.resetFrames();
+            return;
+        }
+
         // Skip if no data
         if (this.chunks.length === 0 || this.totalBufferedBytes < MIN_BUFFER_BYTES) return;
 
@@ -627,6 +640,16 @@ export class RestSTT extends EventEmitter {
         } catch (err) {
             console.error(`[RestSTT] Upload error:`, err);
             const response = (err as { response?: { status?: number; headers?: Record<string, unknown> } })?.response;
+            const verdict = restAccountVerdict(err);
+            if (verdict) {
+                // No credits (OpenAI says so with a 429 insufficient_quota, which
+                // used to be held and retried as a rate limit forever) or a
+                // refused key: stop uploading and tell main it is final.
+                this.accountRefused = verdict;
+                this.lastUploadAt = previousUploadAt;
+                this.emit('error', Object.assign(err instanceof Error ? err : new Error(String(err)), { terminal: true }));
+                return;
+            }
             if (response?.status === 429 && this.isActive) {
                 this.holdForRateLimit(currentChunks, currentBytes, retryAfterMs(response.headers?.['retry-after']));
             } else {

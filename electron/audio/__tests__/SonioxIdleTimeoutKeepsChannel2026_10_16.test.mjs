@@ -99,8 +99,11 @@ describe('what the close after a server error does', () => {
   test('auth, config and billing errors still end the session', () => {
     for (const code of [400, 401, 402, 403]) assert.equal(sonioxCloseAction(true, 1000, code), 'inactive', String(code));
   });
-  test('a clean close with no error frame is still final', () => {
-    assert.equal(sonioxCloseAction(true, 1000, null), 'inactive');
+  test('a clean close with no error frame backs off instead of going silent (2026-11-01)', () => {
+    // Was 'inactive': the channel stopped with nothing emitted. A finished
+    // session never reaches the close handler (closeFinishedSession detaches
+    // it), so this close is unexplained; retry, bounded by the max attempts.
+    assert.equal(sonioxCloseAction(true, 1000, null), 'backoff');
   });
   test('an unexpected close reconnects as before', () => {
     assert.equal(sonioxCloseAction(true, 1006, null), 'backoff');
