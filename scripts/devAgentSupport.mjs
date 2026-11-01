@@ -81,3 +81,29 @@ export function electronArgs(root, cdpPort, userDataDir) {
   if (!userDataDir) throw new Error('electronArgs: an agent instance needs its own userData dir');
   return [root, `--remote-debugging-port=${cdpPort}`, `--user-data-dir=${userDataDir}`];
 }
+
+/**
+ * The CDP port a previous launch wrote to agent-browser.json, or null when the
+ * file is missing, unreadable, or holds no usable port. The launcher then asks
+ * that port whether an instance is still running there (isLiveDevToolsReply):
+ * two launches in one worktree share agent-browser.json and the userData
+ * profile, so a second launch silently took the file over and the first
+ * session's agent-browser commands went to the wrong app (2026-10-31).
+ */
+export function previousCdpPort(configText) {
+  if (typeof configText !== 'string' || !configText.trim()) return null;
+  let parsed;
+  try { parsed = JSON.parse(configText); } catch { return null; }
+  const port = Number(parsed?.cdp);
+  return Number.isInteger(port) && port > 0 && port < 65536 && !isReservedPort(port) ? port : null;
+}
+
+/**
+ * Whether a /json/version reply comes from a running DevTools endpoint (an
+ * Electron or Chromium browser), not from an unrelated program that happens
+ * to have reused the port after the old instance exited.
+ */
+export function isLiveDevToolsReply(status, body) {
+  if (status !== 200 || !body || typeof body !== 'object') return false;
+  return typeof body.webSocketDebuggerUrl === 'string' && /^ws:\/\/127\.0\.0\.1:\d+\/devtools\/browser\//.test(body.webSocketDebuggerUrl);
+}
