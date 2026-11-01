@@ -510,21 +510,30 @@ export const SkillsSettings: React.FC = () => {
                         subtitle={t('Instructions the chat follows. Start a message with /name or $name to use one.')}
                     />
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
-                    <button type="button" className={SETTINGS_BTN} onClick={() => { void openFolder(); }}>
+                {/* Icon only (Evin, 2026-11-01: two labelled buttons beside the
+                    heading read as cluttered). The name moves to the tooltip
+                    and the accessible label. */}
+                <div className="flex shrink-0 items-center gap-1.5">
+                    <button
+                        type="button"
+                        className={`${SETTINGS_BTN} !p-0 w-[30px] h-[30px]`}
+                        onClick={() => { void openFolder(); }}
+                        aria-label={t('Open folder')}
+                        title={t('Open folder')}
+                    >
                         <FolderOpen size={14} />
-                        {t('Open folder')}
                     </button>
                     <button
                         type="button"
-                        className={SETTINGS_BTN}
+                        className={`${SETTINGS_BTN} !p-0 w-[30px] h-[30px]`}
+                        aria-label={t('Upload')}
+                        title={t('Upload')}
                         disabled={uploading}
                         onClick={() => { void pickAndUpload(); }}
                     >
                         <Presence kind="icon" id={uploadingShown ? 'busy' : 'idle'}>
                             {uploadingShown ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
                         </Presence>
-                        {t('Upload')}
                     </button>
                 </div>
             </div>
