@@ -79,6 +79,8 @@ export interface BuildNotesOptions {
 }
 
 const NEXT_STEPS_TITLE = /^(?:\s*next\s*steps?\b|\s*what\s+happens\s+next\b)/i;
+// A template section that is itself the Summary, so the tldr isn't sent as a second one (2026-10-31).
+const SUMMARY_TITLE = /^\s*(?:summary|tl;?\s*dr)\s*:?\s*$/i;
 
 export function plainTitle(raw: unknown): string {
     const t = String(raw ?? '')
@@ -170,18 +172,28 @@ export function buildNotesDocument(meeting: MeetingLike, opts: BuildNotesOptions
 
     if (d.schemaVersion === 3) {
         const tldr = (Array.isArray(d.tldr) ? d.tldr : []).map(clean).filter(Boolean);
-        if (tldr.length) sections.push({ heading: 'Summary', bullets: tldr });
-        else if (clean(d.overview)) sections.push({ heading: 'Summary', paragraph: clean(d.overview), bullets: [] });
         const v3 = Array.isArray(d.sectionsV3) ? [...d.sectionsV3] : [];
+        const ownSummary = v3.some((s: any) => SUMMARY_TITLE.test(clean(s?.title)) && Array.isArray(s?.bullets) && s.bullets.length > 0);
+        if (!ownSummary && tldr.length) sections.push({ heading: 'Summary', bullets: tldr });
+        else if (!ownSummary && clean(d.overview)) sections.push({ heading: 'Summary', paragraph: clean(d.overview), bullets: [] });
         v3.sort((a: any, b: any) => (a?.order ?? 0) - (b?.order ?? 0));
         for (const s of v3) {
             const heading = clean(s?.title);
             if (!heading || NEXT_STEPS_TITLE.test(heading)) continue;
+            // Notes without a template end with their action items as a section
+            // (MeetingSummaryReducer); the export lists them itself, below.
+            if (s?.id === 'auto_action_items') continue;
             const bullets = (Array.isArray(s.bullets) ? s.bullets : [])
                 .map((b: any) => clean(typeof b === 'string' ? b : b?.text))
                 .filter(Boolean);
             if (bullets.length) sections.push({ heading, bullets });
         }
+        // No template (no mode active, none picked in the notepad): the decisions stand in for
+        // the template's sections, as on the meeting page and in the notepad (fallbackNoteSections).
+        // The action items follow below either way.
+        const templated = v3.some((s: any) => Array.isArray(s?.bullets) && s.bullets.length > 0);
+        const decisions = (Array.isArray(d.decisions) ? d.decisions : []).map((x: any) => clean(typeof x === 'string' ? x : x?.text)).filter(Boolean);
+        if (!templated && decisions.length) sections.push({ heading: 'Decisions', bullets: decisions });
         const items = Array.isArray(d.actionItemsV3) && d.actionItemsV3.length
             ? d.actionItemsV3
             : (Array.isArray(d.actionItemsStructured) ? d.actionItemsStructured : []);

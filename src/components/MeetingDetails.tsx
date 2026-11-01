@@ -38,6 +38,7 @@ import { useGenieAnimationEnabled } from '../lib/genieAnimationSetting';
 import { ShareMenu } from './meeting/ShareMenu';
 import { followUpChanges, settleFollowUpSave, type FollowUpText } from './meeting/outputsView';
 import { NotesVersionTabs } from './meeting/NotesVersionTabs';
+import { fallbackNoteSections } from './notes/notepadView';
 import { NoteSource } from './meeting/NoteSource';
 import { NotesRating } from './meeting/NotesRating';
 import { NotesTemplatePicker } from './meeting/NotesTemplatePicker';
@@ -999,6 +1000,11 @@ const participantsSummary = (names: string[]): string => {
     return `${names.slice(0, 2).join(', ')} and ${names.length - 2} others`;
 };
 
+// A template section that is itself the Summary ("Summary", "TL;DR"; not "Study
+// summary"). The General mode seeded on new installs has one, so drawing the tldr
+// as its own Summary above it showed two (2026-10-31). Same test as notepadView.
+const isSummarySectionTitle = (title?: string | null): boolean => /^\s*(?:summary|tl;?\s*dr)\s*:?\s*$/i.test(title || '');
+
 const isNextStepsSectionTitle = (title?: string | null): boolean => {
     const t = (title || '').trim();
     if (!t) return false;
@@ -1939,7 +1945,8 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         let timer: ReturnType<typeof setTimeout> | undefined;
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.key !== 'Escape' || e.defaultPrevented || isChatOpen) return;
-            const el = e.target as HTMLElement | null;
+            // A synthetic Escape dispatched on window has no element target.
+            const el = e.target instanceof Element ? e.target : null;
             if (el?.closest('input, textarea, select, [contenteditable="true"]')) return;
             if (document.querySelector('[role="dialog"], [aria-modal="true"]')) return;
             timer = setTimeout(() => { if (!e.defaultPrevented) onBack(); }, 0);
@@ -1971,6 +1978,13 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const v3Questions = meeting.detailedSummary?.openQuestions || [];
     const v3Risks = meeting.detailedSummary?.risks || [];
     const v3Tldr = meeting.detailedSummary?.tldr || [];
+    const templateHasSummary = (meeting.detailedSummary?.sectionsV3 || []).some((s) => s.bullets?.length > 0 && isSummarySectionTitle(s.title));
+    // The notes' sections: the template's, or with no template (no mode active, none picked in
+    // the notepad) Decisions and Action items from the call's own lists (fallbackNoteSections).
+    const templateSections = meeting.detailedSummary?.sectionsV3 || [];
+    const noteSections: typeof templateSections = templateSections.length > 0
+        ? templateSections
+        : fallbackNoteSections(meeting.detailedSummary as any) as unknown as typeof templateSections;
     const v3WhatChanged = meeting.detailedSummary?.whatChanged || [];
     const v3Mode = meeting.detailedSummary?.mode;
     const v3SummaryStatus = meeting.summaryStatus;
@@ -3360,7 +3374,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                 ); })()}
 
                                 {/* Summary on top — outcome-first, grounded. Then the mode's template sections below. */}
-                                {isV3Summary && v3Tldr.length > 0 && (() => { const h = revealBlock(); return (
+                                {isV3Summary && v3Tldr.length > 0 && !templateHasSummary && (() => { const h = revealBlock(); return (
                                     <section className="mb-8">
                                         <h2 className={`text-lg font-semibold text-text-primary mb-4${h.cls}`} style={h.style} data-rw={h['data-rw']}>{t('Summary')}</h2>
                                         <ul className="space-y-3">
@@ -3384,10 +3398,10 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
 
                                 {/* The mode's note-section TEMPLATE — the primary notes layout (e.g. Questions and
                                     responses, Discovery, Action items). Rendered right under Summary, in template order.
-                                    Empty sections are dropped server-side. */}
-                                {isV3Summary && meeting.detailedSummary?.sectionsV3 && meeting.detailedSummary.sectionsV3.length > 0 && (
+                                    Empty sections are dropped server-side. With no template, Decisions and Action items. */}
+                                {isV3Summary && noteSections.length > 0 && (
                                     <>
-                                        {meeting.detailedSummary.sectionsV3
+                                        {noteSections
                                             .filter(section => SHOW_NEXT_STEPS || !isNextStepsSectionTitle(section.title))
                                             .map((section) => {
                                             const h = revealBlock();

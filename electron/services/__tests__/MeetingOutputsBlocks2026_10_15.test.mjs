@@ -66,6 +66,34 @@ describe('notes document', () => {
         assert.equal(d.durationLabel, '45 min');
         assert.equal(d.dateLabel, 'Wednesday, October 14, 2026');
     });
+    test('a template with its own Summary section sends one Summary, the template\'s (2026-10-31)', () => {
+        const own = (title) => v3Meeting({ detailedSummary: { schemaVersion: 3, tldr: ['From the tldr'], sectionsV3: [
+            { id: 's1', title, order: 1, bullets: [{ text: 'From the template' }] },
+            { id: 's2', title: 'Action items', order: 2, bullets: [{ text: 'Send it' }] },
+        ] } });
+        for (const title of ['Summary', 'summary', 'TL;DR', 'TLDR']) {
+            const d = notes.buildNotesDocument(own(title), { timeZone: 'UTC' });
+            assert.deepEqual(d.sections.map((s) => s.heading), [title, 'Action items'], title);
+            assert.deepEqual(d.sections[0].bullets, ['From the template']);
+        }
+        // Not the Summary: the tldr still leads.
+        assert.deepEqual(notes.buildNotesDocument(own('Study summary'), { timeZone: 'UTC' }).sections.map((s) => s.heading), ['Summary', 'Study summary', 'Action items']);
+        // An empty template Summary doesn't hide the tldr.
+        const empty = v3Meeting({ detailedSummary: { schemaVersion: 3, tldr: ['From the tldr'], sectionsV3: [{ id: 's1', title: 'Summary', order: 1, bullets: [] }] } });
+        assert.deepEqual(notes.buildNotesDocument(empty, { timeZone: 'UTC' }).sections.map((s) => [s.heading, s.bullets]), [['Summary', ['From the tldr']]]);
+    });
+
+    test('no template: the decisions stand in for its sections; a template keeps them out (2026-10-31)', () => {
+        const bare = v3Meeting({ detailedSummary: { schemaVersion: 3, tldr: ['Plan agreed'], sectionsV3: [],
+            decisions: [{ text: 'Dark mode moves to 4.13' }, { text: '' }],
+            actionItemsV3: [{ text: 'Fix the crash', owner: 'Ananya', deadline: 'November 9' }] } });
+        const d = notes.buildNotesDocument(bare, { timeZone: 'UTC' });
+        assert.deepEqual(d.sections.map((s) => [s.heading, s.bullets]), [['Summary', ['Plan agreed']], ['Decisions', ['Dark mode moves to 4.13']]]);
+        assert.deepEqual(d.actionItems, [{ text: 'Fix the crash', owner: 'Ananya', deadline: 'November 9', done: false }]);
+        const withTemplate = v3Meeting({ detailedSummary: { ...v3Meeting().detailedSummary, decisions: [{ text: 'Hidden behind the template' }] } });
+        assert.deepEqual(notes.buildNotesDocument(withTemplate, { timeZone: 'UTC' }).sections.map((s) => s.heading), ['Summary', 'Pricing', 'Risks']);
+    });
+
     test('transcript speakers named like the meeting page; offsets from the first line; attendees deduped and lowercased', () => {
         const d = notes.buildNotesDocument(v3Meeting(), { selfName: 'Evin' });
         assert.deepEqual(d.transcript.map((l) => [l.speaker, l.offsetMs]), [['Evin', 0], ['Speaker 1', 5000], ['Priya', 65000]]);

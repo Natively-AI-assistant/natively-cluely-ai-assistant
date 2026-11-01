@@ -14,7 +14,7 @@
 import type { LLMHelper } from '../../LLMHelper';
 import { MEETING_TITLE_RULE, isEmptyListPlaceholder, isEmptyPlaceholder, isEmptySessionTitle, type ActionItem, type DecisionItem, type MeetingNoteSection, type RiskItem } from './MeetingSummaryV3';
 import { generateStructured, NOTE_CALL_TIMEOUT_MS } from './generateStructured';
-import { INCLUDE_NEXT_STEPS, getOverviewBand } from './MeetingSummaryReducer';
+import { INCLUDE_NEXT_STEPS, capAtSentence, getOverviewBand } from './MeetingSummaryReducer';
 import { renderNotesPromptContext, type NotesPromptContext } from './meetingNotesContext';
 
 export interface PolishSummaryParams {
@@ -224,7 +224,8 @@ ${grounded}`;
           return { ok: false, errors: ['missing/short overview'], repaired: false };
         }
         const words = text.split(/\s+/);
-        const clipped = words.length > band.maxWords ? words.slice(0, band.maxWords).join(' ') : text;
+        // Over the band: end on the last whole sentence (2026-10-31), not mid-clause.
+        const clipped = words.length > band.maxWords ? capAtSentence(words.slice(0, band.maxWords).join(' ')) : text;
         const offending = newSignificantTokens(clipped, reference);
         if (offending.length > 0) {
           keepTitle(offending);

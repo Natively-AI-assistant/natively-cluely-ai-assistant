@@ -63,12 +63,20 @@ export class MeetingSummaryReducer {
     const topics = dedupeStrings(flatMap(atoms, atom => atom.topics)).slice(0, 20);
     const people = mergePeople(flatMap(atoms, atom => atom.people)).slice(0, 20);
     const sectionWarnings: string[] = [];
+    const templated = (params.modeNoteSections || []).length > 0;
     const sections = buildSections(params.modeNoteSections || [], atoms, sectionWarnings);
     const timeline = buildTimeline(atoms, decisions, actionItems, risks);
     // "Summary" (rendered at the top of the notes) = outcome-first, grounded, no filler.
     const tldr = buildSummary(decisions, actionItems, risks, atoms, sections, params.modeTemplateType);
     const whatChanged = buildWhatChanged(atoms, decisions).slice(0, 6);
     const overview = buildOverview(tldr, atoms, decisions, sections, params.modeTemplateType, params.normalizedTranscript.totalTokensEstimate);
+    // No template: the topics the model named, then the action items (owner, date) as
+    // the notes' last section, where Granola's default notes put Next Steps. Added after
+    // the Summary and overview are built, which keep action items out (NotesQuality 2026-08-24).
+    if (!templated) {
+      const actionsSection = buildActionItemsSection(actionItems, sections.length);
+      if (actionsSection) sections.push(actionsSection);
+    }
     const actionConfidence = deriveActionConfidence(actionItems);
     const transcriptCoverage = Math.max(0, Math.min(1, typeof params.transcriptCoverage === 'number' ? params.transcriptCoverage : (params.normalizedTranscript.totalChars > 0 ? 1 : 0)));
     // Order matters: sourceQuality.warnings is capped downstream (sanitizeStringArray keeps
@@ -196,6 +204,22 @@ function buildSections(modeSections: MeetingModeSectionInput[], atoms: ChunkMeet
 
   for (const section of modeSections) ensure(section.title);
 
+  // No template: the headings are the model's own (ChunkSummaryGenerator.autoHeadingsTask).
+  // Chunks that name the same topic land in one section; generic headings are left out, and
+  // an "Action items" / "Next steps" heading too, since the action items get their own
+  // section (buildActionItemsSection).
+  if (modeSections.length === 0) {
+    for (const atom of atoms) {
+      for (const title of Object.keys(atom.modeSpecificFindings || {})) {
+        const clean = title.replace(/\s+/g, ' ').trim();
+        if (!clean || GENERIC_AUTO_HEADING.test(clean) || isNextStepsSectionTitle(clean)) continue;
+        if ([...sectionMap.values()].some(s => normalize(s.title) === normalize(clean))) continue;
+        if (sectionMap.size >= AUTO_SECTION_CAP) { warnings.push(`More than ${AUTO_SECTION_CAP} topic headings; "${clean}" was left out.`); continue; }
+        ensure(clean);
+      }
+    }
+  }
+
   // Only route findings into PRE-DECLARED mode sections — the validator already drops
   // invented keys, but this is a second guard so the output never contains a section the
   // user's template didn't define.
@@ -243,6 +267,31 @@ function buildSections(modeSections: MeetingModeSectionInput[], atoms: ChunkMeet
     // notes, the follow-up draft inputs, or any recipe built from `sections`.
     .filter(section => INCLUDE_NEXT_STEPS || !isNextStepsSectionTitle(section.title))
     .sort((a, b) => a.order - b.order);
+}
+
+/** Most headings notes without a template keep (the prompt asks for at most 8). */
+const AUTO_SECTION_CAP = 10;
+/** Headings that name no topic. */
+const GENERIC_AUTO_HEADING = /^(?:topic heading|section title|summary|tl;?\s*dr|notes?|key points?|discussion|overview|general|other|misc(?:ellaneous)?|decisions?|action items?|actions?|to-?dos?)$/i;
+/** The id of the action items section notes without a template end with; exports skip it (they list action items themselves). */
+export const AUTO_ACTION_ITEMS_SECTION_ID = 'auto_action_items';
+
+/** "May: Fix the crash (by November 9)", as notesDocument.actionItemLine writes it. */
+function actionItemLineText(a: ActionItem): string {
+  return `${a.owner ? `${a.owner}: ` : ''}${a.text}${a.deadline ? ` (by ${a.deadline})` : ''}`;
+}
+
+function buildActionItemsSection(actionItems: ActionItem[], order: number): MeetingNoteSection | null {
+  const bullets: NoteBullet[] = actionItems
+    .filter(a => a.text?.trim())
+    .map(a => ({
+      id: `bullet_${a.id || crypto.randomUUID()}`,
+      text: actionItemLineText(a),
+      ...(a.evidence?.length ? { evidence: a.evidence } : {}),
+      confidence: a.confidence,
+      ...(a.fromUserNotes ? { fromUserNotes: true } : {}),
+    }));
+  return bullets.length ? { id: AUTO_ACTION_ITEMS_SECTION_ID, title: 'Action items', bullets, order } : null;
 }
 
 function buildTimeline(atoms: ChunkMeetingAtoms[], decisions: DecisionItem[], actionItems: ActionItem[], risks: RiskItem[]): TimelineItem[] {
@@ -407,7 +456,20 @@ function buildOverview(summary: string[], atoms: ChunkMeetingAtoms[], decisions:
   const text = parts.join(' ').replace(/\s+/g, ' ').trim();
   const words = text.split(/\s+/);
   const maxWords = getOverviewBand(totalTokensEstimate ?? 0).maxWords;
-  return words.length > maxWords ? words.slice(0, maxWords).join(' ') : text;
+  return words.length > maxWords ? capAtSentence(words.slice(0, maxWords).join(' ')) : text;
+}
+
+/**
+ * Text cut to a word cap, ended on its last whole sentence (2026-10-31): the plain
+ * slice left the overview stopping mid-clause ("the Android 15 crash, 1.8% against"),
+ * which the Natively vs Granola graders marked as cut off. With no sentence end in
+ * the second half of the text, the cut stands with an ellipsis.
+ */
+export function capAtSentence(cut: string): string {
+  const ends = [...cut.matchAll(/[.!?](?=\s|$)/g)].map(m => m.index! + 1);
+  const last = ends.at(-1);
+  if (last !== undefined && last >= cut.length / 2) return cut.slice(0, last).trim();
+  return `${cut.replace(/[\s,;:–—-]+$/, '')}…`;
 }
 
 // Deterministic follow-up body (fallback used when the LLM follow-up generator is
