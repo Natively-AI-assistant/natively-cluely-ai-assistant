@@ -87,8 +87,17 @@ function makeTracker({ tmpUserData, handlers, consoleLog = () => {} }) {
       if (!marker.quitReason) record('before-quit', 'user-quit');
       else record('before-quit', marker.quitReason, marker.quitMeta);
     });
+    // Process deaths the app survives go to lastIncident; the quit reason is
+    // left alone (2026-10-31, see SURVIVABLE_PROCESS_EVENTS in the source).
+    const noteIncident = (event, meta) => {
+      marker.lastEvent = event;
+      marker.lastEventAt = new Date().toISOString();
+      marker.lastIncident = { event, at: marker.lastEventAt, meta };
+      writeMarker();
+      consoleLog(`[Lifecycle] ${event} (app keeps running; quit reason unchanged)`);
+    };
     wire('render-process-gone', (_e, wc, details) => {
-      record('render-process-gone', 'renderer-gone', {
+      noteIncident('render-process-gone', {
         reason: details.reason,
         exitCode: details.exitCode,
         webContentsId: wc.id,
@@ -96,7 +105,7 @@ function makeTracker({ tmpUserData, handlers, consoleLog = () => {} }) {
       });
     });
     wire('child-process-gone', (_e, details) => {
-      record('child-process-gone', 'child-process-gone', {
+      noteIncident('child-process-gone', {
         type: details.type,
         reason: details.reason,
         exitCode: details.exitCode,
@@ -104,7 +113,7 @@ function makeTracker({ tmpUserData, handlers, consoleLog = () => {} }) {
       });
     });
     wire('gpu-process-crashed', (_e, killed) => {
-      record('gpu-process-crashed', 'gpu-process-crashed', { killed });
+      noteIncident('gpu-process-crashed', { killed });
     });
   }
 
@@ -265,7 +274,7 @@ test('install() wires all expected lifecycle events', () => {
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-test('render-process-gone records reason=renderer-gone with safe url', () => {
+test('render-process-gone is kept as the last incident and leaves the quit reason alone', () => {
   const tmp = freshTmp();
   const { handlers, webContents } = makeElectronStub(tmp);
   const tracker = makeTracker({ tmpUserData: tmp, handlers });
@@ -277,13 +286,14 @@ test('render-process-gone records reason=renderer-gone with safe url', () => {
 
   const m = tracker._getMarker();
   assert.equal(m.lastEvent, 'render-process-gone');
-  assert.equal(m.quitReason, 'renderer-gone');
-  assert.equal(m.quitMeta.reason, 'crashed');
-  assert.equal(m.quitMeta.exitCode, 1);
+  assert.equal(m.quitReason, null);
+  assert.equal(m.lastIncident.event, 'render-process-gone');
+  assert.equal(m.lastIncident.meta.reason, 'crashed');
+  assert.equal(m.lastIncident.meta.exitCode, 1);
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-test('child-process-gone records reason=child-process-gone', () => {
+test('child-process-gone is kept as the last incident and leaves the quit reason alone', () => {
   const tmp = freshTmp();
   const { handlers } = makeElectronStub(tmp);
   const tracker = makeTracker({ tmpUserData: tmp, handlers });
@@ -294,19 +304,21 @@ test('child-process-gone records reason=child-process-gone', () => {
   );
 
   const m = tracker._getMarker();
-  assert.equal(m.quitReason, 'child-process-gone');
-  assert.equal(m.quitMeta.serviceName, 'local-embedding');
+  assert.equal(m.quitReason, null);
+  assert.equal(m.lastIncident.event, 'child-process-gone');
+  assert.equal(m.lastIncident.meta.serviceName, 'local-embedding');
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-test('gpu-process-crashed records reason=gpu-process-crashed', () => {
+test('gpu-process-crashed is kept as the last incident and leaves the quit reason alone', () => {
   const tmp = freshTmp();
   const { handlers } = makeElectronStub(tmp);
   const tracker = makeTracker({ tmpUserData: tmp, handlers });
   tracker.install();
 
   (handlers['gpu-process-crashed'] || []).forEach((h) => h({}, true));
-  assert.equal(tracker._getMarker().quitReason, 'gpu-process-crashed');
+  assert.equal(tracker._getMarker().quitReason, null);
+  assert.equal(tracker._getMarker().lastIncident.event, 'gpu-process-crashed');
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 

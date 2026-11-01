@@ -10543,7 +10543,8 @@ async function initializeApp() {
       console.warn(
         `[Lifecycle] previous session ended unexpectedly: ` +
         `pid=${prev.pid} lastEvent=${prev.lastEvent} reason=${prev.quitReason ?? 'unknown'} ` +
-        `startedAt=${prev.startedAt} lastEventAt=${prev.lastEventAt}`
+        `startedAt=${prev.startedAt} lastEventAt=${prev.lastEventAt}` +
+        (prev.lastIncident ? ` lastIncident=${prev.lastIncident.event}@${prev.lastIncident.at}` : '')
       );
     }
   } catch (err) {
