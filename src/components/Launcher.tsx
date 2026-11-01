@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useT } from '../i18n';
-import { ToggleLeft, ToggleRight, Search, Calendar, Globe, Clock, ChevronRight, LayoutGrid, RefreshCw, Eye, EyeOff, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Bell, DownloadCloud, CheckCircle, AlertCircle, User, Sparkles, ArrowUpRight } from 'lucide-react';
+import { ToggleLeft, ToggleRight, Search, Calendar, Globe, Clock, ChevronRight, LayoutGrid, RefreshCw, Eye, EyeOff, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Check, Bell, DownloadCloud, CheckCircle, AlertCircle, User, Sparkles, ArrowUpRight } from 'lucide-react';
 import { ProfileIntelligenceIcon } from './ProfileIntelligenceIcon';
 import icon from "./icon.png";
 import mainui from "../UI_comp/mainui.png";
@@ -18,6 +18,7 @@ import { FeatureSpotlight } from './FeatureSpotlight';
 import './LauncherCta.css';
 import { analytics } from '../lib/analytics/analytics.service'; // Added analytics import
 import { useShortcuts } from '../hooks/useShortcuts';
+import { MEETING_SURFACES, useMeetingSurface, type MeetingSurface } from '../hooks/useMeetingSurface';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { isMac } from '../utils/platformUtils';
 import { APP_FEATURE_VERSION } from '../utils/appVersion';
@@ -99,6 +100,82 @@ const formatTime = (dateStr: string) => {
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
 };
 
+/**
+ * Start Natively's menu: what meetings open, the overlay or the notepad
+ * (hooks/useMeetingSurface.ts, the same choice as Settings › Overlay's
+ * switcher). Picking one only remembers it; the pill starts the meeting.
+ */
+const StartSurfaceMenu: React.FC<{
+    value: MeetingSurface;
+    onChoose: (s: MeetingSurface) => void;
+    onClose: () => void;
+    onOpenSettings: () => void;
+}> = ({ value, onChoose, onClose, onOpenSettings }) => {
+    const t = useT();
+    const reduceMotion = useReducedMotion();
+    const isLight = useResolvedTheme() === 'light';
+    const rowHover = isLight ? 'hover:bg-black/[0.05] focus-visible:bg-black/[0.05]' : 'hover:bg-white/[0.07] focus-visible:bg-white/[0.07]';
+    const listRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        listRef.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.focus();
+    }, []);
+    const onKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Escape') { e.preventDefault(); onClose(); return; }
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        e.preventDefault();
+        const items = Array.from(listRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? []);
+        const at = items.indexOf(document.activeElement as HTMLElement);
+        items[(at + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus();
+    };
+    return (
+        <motion.div
+            ref={listRef}
+            role="menu"
+            aria-label={t('What meetings open')}
+            onKeyDown={onKeyDown}
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.1 } }}
+            transition={{ duration: 0.16, ease: [0.25, 1, 0.5, 1] }}
+            style={{ transformOrigin: 'top right' }}
+            // The launcher's glass popover (the Profile Intel pill's recipe).
+            className={`absolute right-0 top-full mt-2 w-max z-50 rounded-[20px] p-1.5 backdrop-blur-[40px] saturate-[180%] transform-gpu ${
+                isLight
+                    ? 'bg-white/70 shadow-[0_8px_30px_rgb(0,0,0,0.12),0_0_0_1px_rgba(0,0,0,0.04),inset_0_1px_0_rgba(255,255,255,0.8)]'
+                    : 'bg-[#18181A]/70 shadow-[0_8px_30px_rgb(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.08),inset_0_1px_0_rgba(255,255,255,0.06)]'
+            }`}
+        >
+            <p className="px-3 pt-1.5 pb-1 text-[11px] font-medium uppercase tracking-wide text-text-tertiary">{t('Meetings open')}</p>
+            {MEETING_SURFACES.map(({ id, label, hint, Icon }) => (
+                <button
+                    key={id}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={value === id}
+                    onClick={() => { onChoose(id); onClose(); }}
+                    className={`w-full flex items-start gap-3 rounded-[14px] px-3 py-2.5 text-left transition-colors focus-visible:outline-none ${rowHover}`}
+                >
+                    <Icon size={18} strokeWidth={1.75} className="mt-0.5 shrink-0 text-text-secondary" aria-hidden="true" />
+                    <span className="flex-1 min-w-0">
+                        <span className="block text-sm font-medium text-text-primary">{t(label)}</span>
+                        <span className="block text-xs text-text-secondary whitespace-nowrap">{t(hint)}</span>
+                    </span>
+                    <Check size={16} strokeWidth={2} className={`mt-0.5 shrink-0 text-accent-primary ${value === id ? '' : 'invisible'}`} aria-hidden="true" />
+                </button>
+            ))}
+            <div className={`mx-3 my-1 border-t ${isLight ? 'border-black/[0.06]' : 'border-white/[0.08]'}`} />
+            <button
+                type="button"
+                role="menuitem"
+                onClick={() => { onClose(); onOpenSettings(); }}
+                className={`w-full rounded-[14px] px-3 py-2 text-left text-xs text-text-secondary transition-colors hover:text-text-primary focus-visible:outline-none ${rowHover}`}
+            >
+                {t('More in Settings › Overlay')}
+            </button>
+        </motion.div>
+    );
+};
+
 const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSettings, onOpenProfile, onOpenModes, onPageChange, ollamaPullStatus = 'idle', ollamaPullPercent = 0, ollamaPullMessage = '' }) => {
     const t = useT();
     const [meetings, setMeetings] = useState<Meeting[]>([]);
@@ -168,6 +245,19 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
     // Keybinds
     const { isShortcutPressed } = useShortcuts();
     const isLight = useResolvedTheme() === 'light';
+    const [meetingSurface, chooseMeetingSurface] = useMeetingSurface();
+    const [surfaceMenuOpen, setSurfaceMenuOpen] = useState(false);
+    const ctaRef = useRef<HTMLDivElement>(null);
+    const surfaceToggleRef = useRef<HTMLButtonElement>(null);
+    const SurfaceIcon = (MEETING_SURFACES.find((o) => o.id === meetingSurface) ?? MEETING_SURFACES[0]).Icon;
+    const closeSurfaceMenu = useCallback(() => { setSurfaceMenuOpen(false); surfaceToggleRef.current?.focus(); }, []);
+    // The menu closes on a click outside it; a meeting starting takes it away.
+    useEffect(() => {
+        if (!surfaceMenuOpen) return;
+        const onDown = (e: MouseEvent) => { if (!ctaRef.current?.contains(e.target as Node)) setSurfaceMenuOpen(false); };
+        document.addEventListener('mousedown', onDown);
+        return () => document.removeEventListener('mousedown', onDown);
+    }, [surfaceMenuOpen]);
     useEffect(() => {
         let mounted = true;
         console.log("Launcher mounted");
@@ -1095,23 +1185,12 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                             no fly-in or fade-up. The label swap (idle ↔ meeting-active) still
                                             crossfades via AnimatePresence mode="wait" — exit 0.14s, enter 0.22s
                                             with apple-ease — which reads as a soft label change, not a fly. */}
-                                        <button
-                                            onClick={() => {
-                                                if (isMeetingActive) {
-                                                    // inactive=true: overlay appears on top but doesn't activate
-                                                    // the Natively app or steal OS focus — preserves stealth.
-                                                    // setWindowMode (not showWindow) is required because
-                                                    // logo-click set currentWindowMode='launcher', so showWindow()
-                                                    // would re-show the launcher rather than switch to overlay.
-                                                    window.electronAPI?.setWindowMode?.('overlay', true);
-                                                    analytics.trackCommandExecuted('resume_meeting_from_launcher');
-                                                } else {
-                                                    emitOrchestratorEvent({ type: 'turn:done', surface: 'meeting' });
-                                                    onStartMeeting();
-                                                    analytics.trackCommandExecuted('start_natively_cta');
-                                                }
-                                            }}
-                                            className="launcher-cta relative overflow-hidden text-white px-6 py-3 rounded-full font-celeb font-medium tracking-normal flex items-center justify-center gap-3 backdrop-blur-xl shrink-0"
+                                        {/* Start Natively and, beside it, what meetings open (StartSurfaceMenu). The pill is
+                                            a div holding two buttons, so a press on either side gives the whole pill the
+                                            press in LauncherCta.css; the menu sits outside it, past the overflow clip. */}
+                                        <div ref={ctaRef} className="relative shrink-0">
+                                        <div
+                                            className="launcher-cta relative overflow-hidden text-white rounded-full font-celeb font-medium tracking-normal flex items-stretch backdrop-blur-xl"
                                             // Hover, press and the shadow all live in LauncherCta.css. Only the
                                             // bloom colour is set here: no inline `transition`, which would
                                             // override the stylesheet's and make the hover jump again.
@@ -1142,7 +1221,25 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                                 220ms exit fade to finish — shape and content move together instead
                                                 of resize-then-fade. `layout` on each variant div prevents the text
                                                 from visibly stretching/squishing while the parent's width tweens. */}
-                                            <div className="relative z-20 flex items-center gap-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    if (isMeetingActive) {
+                                                        // inactive=true: overlay appears on top but doesn't activate
+                                                        // the Natively app or steal OS focus — preserves stealth.
+                                                        // setWindowMode (not showWindow) is required because
+                                                        // logo-click set currentWindowMode='launcher', so showWindow()
+                                                        // would re-show the launcher rather than switch to overlay.
+                                                        window.electronAPI?.setWindowMode?.('overlay', true);
+                                                        analytics.trackCommandExecuted('resume_meeting_from_launcher');
+                                                    } else {
+                                                        emitOrchestratorEvent({ type: 'turn:done', surface: 'meeting' });
+                                                        onStartMeeting();
+                                                        analytics.trackCommandExecuted('start_natively_cta');
+                                                    }
+                                                }}
+                                                className={`relative z-20 flex items-center gap-3 py-3 pl-6 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70 ${isMeetingActive ? 'pr-6' : 'pr-4'}`}
+                                            >
                                                 <AnimatePresence mode="wait" initial={false}>
                                                     {isMeetingActive ? (
                                                         <motion.div
@@ -1180,8 +1277,35 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                                         </motion.div>
                                                     )}
                                                 </AnimatePresence>
-                                            </div>
-                                        </button>
+                                            </button>
+                                            {!isMeetingActive && (
+                                                    <button
+                                                        ref={surfaceToggleRef}
+                                                        type="button"
+                                                        aria-haspopup="menu"
+                                                        aria-expanded={surfaceMenuOpen}
+                                                        aria-label={t('What meetings open')}
+                                                        title={t(meetingSurface === 'notepad' ? 'Opens the Natively notepad' : 'Opens the Natively overlay')}
+                                                        disabled={meetingSurface === null}
+                                                        onClick={() => setSurfaceMenuOpen((o) => !o)}
+                                                        className="relative z-20 flex items-center gap-1 pl-3 pr-4 border-l border-white/25 rounded-r-full transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70"
+                                                    >
+                                                        <SurfaceIcon size={16} strokeWidth={2} aria-hidden="true" className="opacity-90" />
+                                                        <ChevronDown size={14} strokeWidth={2.25} aria-hidden="true" className={`opacity-80 transition-transform duration-200 ${surfaceMenuOpen ? 'rotate-180' : ''}`} />
+                                                    </button>
+                                            )}
+                                        </div>
+                                        <AnimatePresence>
+                                            {surfaceMenuOpen && !isMeetingActive && meetingSurface !== null && (
+                                                <StartSurfaceMenu
+                                                    value={meetingSurface}
+                                                    onChoose={(next) => { chooseMeetingSurface(next); analytics.trackCommandExecuted(`meeting_surface_${next}_from_launcher`); }}
+                                                    onClose={closeSurfaceMenu}
+                                                    onOpenSettings={() => onOpenSettings('overlay')}
+                                                />
+                                            )}
+                                        </AnimatePresence>
+                                        </div>
                                     </div>
 
                                     {/* 2. Hero Section Cards */}

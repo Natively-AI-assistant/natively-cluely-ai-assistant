@@ -133,10 +133,19 @@ test('the notepad as a preview: talks to nothing, no drag handle, takes no click
 
 test('Settings › Overlay: the switcher at the top picks what meetings open, and the notepad side shows the real page', () => {
   const settings = read('src/components/settings/OverlaySettings.tsx');
-  assert.match(settings, /label: 'Natively overlay'/);
-  assert.match(settings, /label: 'Natively notepad'/);
+  const hook = read('src/hooks/useMeetingSurface.ts');
+  assert.match(hook, /label: 'Natively overlay'/);
+  assert.match(hook, /label: 'Natively notepad'/);
   assert.match(settings, /role="radiogroup"/);
-  assert.match(settings, /window\.electronAPI\?\.setMeetingSurface\?\.\(next\)/);
+  assert.match(settings, /useMeetingSurface\(\)/);
+  assert.match(hook, /window\.electronAPI\?\.setMeetingSurface\?\.\(next\)/);
+  // The launcher's Start Natively menu sets the same choice, and each place hears the other's.
+  const launcher = read('src/components/Launcher.tsx');
+  assert.match(launcher, /useMeetingSurface\(\)/);
+  assert.match(launcher, /<StartSurfaceMenu[\s\S]*onChoose=\{\(next\) => \{ chooseMeetingSurface\(next\)/);
+  assert.match(launcher, /aria-haspopup="menu"/);
+  assert.match(hook, /addEventListener\(CHANGED/);
+  assert.match(hook, /dispatchEvent\(new CustomEvent\(CHANGED/);
   assert.match(settings, /<NotesWindow preview=\{NOTEPAD_SAMPLE\} \/>/);
   // Each side keeps its own settings.
   assert.match(settings, /surface === 'notepad'[\s\S]*<NotepadPreview \/>[\s\S]*\{opacityControl\}/);

@@ -6,7 +6,8 @@
 // overlayButtonOrder.ts, which every window follows.
 //
 // A switcher at the top (2026-10-20) picks what every meeting opens
-// (utils/meetingSurface.ts): the Natively overlay (all of the above) or the
+// (utils/meetingSurface.ts; hooks/useMeetingSurface.ts, shared with the
+// launcher's Start Natively menu): the Natively overlay (all of the above) or the
 // Natively notepad (the notes window, drawn here by NotesWindow itself with
 // sample notes), and the page shows that one.
 //
@@ -16,7 +17,8 @@
 // and buttons slide to their new places with a FLIP transform.
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { AppWindow, ChevronDown, Layout, NotebookPen, RotateCcw } from 'lucide-react';
+import { ChevronDown, Layout, RotateCcw } from 'lucide-react';
+import { MEETING_SURFACES, useMeetingSurface, type MeetingSurface } from '../../hooks/useMeetingSurface';
 import NotesWindow, { type NotesWindowPreview } from '../NotesWindow';
 import { useT } from '../../i18n';
 import type { MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
@@ -398,34 +400,8 @@ const StylePicker: React.FC<{ theme: MeetingInterfaceTheme; onChange: (theme: Me
     );
 };
 
-type Surface = 'overlay' | 'notepad';
-const SURFACES: { id: Surface; label: string; Icon: typeof AppWindow }[] = [
-    { id: 'overlay', label: 'Natively overlay', Icon: AppWindow },
-    { id: 'notepad', label: 'Natively notepad', Icon: NotebookPen },
-];
-/**
- * What meetings open, saved in main and read at every meeting start. Shown
- * first, then saved; a refused write puts the switch back.
- */
-function useMeetingSurface(): [Surface | null, (next: Surface) => void] {
-    const [surface, setSurface] = useState<Surface | null>(null);
-    useEffect(() => {
-        let live = true;
-        window.electronAPI?.getMeetingSurface?.()
-            .then((value) => { if (live) setSurface(value === 'notepad' ? 'notepad' : 'overlay'); })
-            .catch(() => { if (live) setSurface('overlay'); });
-        return () => { live = false; };
-    }, []);
-    const choose = (next: Surface) => {
-        const was = surface;
-        if (was === null || was === next) return;
-        setSurface(next);
-        window.electronAPI?.setMeetingSurface?.(next)
-            .then((r) => { if (!r?.success) setSurface(was); })
-            .catch(() => setSurface(was));
-    };
-    return [surface, choose];
-}
+type Surface = MeetingSurface;
+const SURFACES = MEETING_SURFACES;
 
 /** Overlay | Notepad, centred at the top: a track with a pill that slides to the chosen side. */
 const SurfaceSwitch: React.FC<{ value: Surface; onChange: (s: Surface) => void; disabled?: boolean }> = ({ value, onChange, disabled }) => {
