@@ -3751,13 +3751,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         // profile (release 2026-06-07c). A provided `context` string counts as prior
         // context, so a follow-up with pasted context still flows normally.
         //
-        // SAFETY ORDERING (code-review 2026-06-07c): this runs BEFORE the stealth/
-        // safety route, which is sound because `isBareFollowUp` only matches
-        // content-free single fragments ("why", "and", "continue", "explain") — a
-        // stealth/evasion ask is necessarily multi-word ("how do I stay undetected"),
-        // so it can never be classified bare and short-circuited here. The emitted
+        // ORDERING NOTE: this runs early because `isBareFollowUp` only matches
+        // content-free single fragments ("why", "and", "continue", "explain") —
+        // any multi-word question passes through to normal routing. The emitted
         // clarification is a fixed safe string. If `isBareFollowUp` is ever broadened,
-        // re-verify it cannot swallow a stealth ask.
+        // re-verify it cannot swallow a multi-word ask.
         // Manual regression 2026-06-12: the gate previously checked only the
         // explicit `context` param — the rolling transcript snapshot captured
         // above was IGNORED, so "why?" / "explain" mid-lecture emitted a generic
@@ -4299,11 +4297,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
 
         // Answer types whose deterministic TEMPLATE carries non-negotiable
-        // behavior the model MUST follow — the safety decline (stealth/evasion),
-        // the no-invented-link rule, the no-hallucinated-source-code rule, and the
-        // grounded product-about rule. For these we inject the answer contract into
-        // the prompt (like coding) so the template reaches the model, and we drop
-        // the rolling 100s context (it would dilute the contract). Release 2026-06-06b.
+        // behavior the model MUST follow — the no-invented-link rule, the
+        // no-hallucinated-source-code rule, and the grounded product-about rule.
+        // For these we inject the answer contract into the prompt (like coding)
+        // so the template reaches the model, and we drop the rolling 100s context
+        // (it would dilute the contract). Release 2026-06-06b.
         const CONTRACT_ENFORCED_TYPES = new Set([
           'project_link_answer',
           'source_code_evidence_answer', 'project_about_answer',
@@ -4968,9 +4966,9 @@ export function initializeIpcHandlers(appState: AppState): void {
           // processQuestion, cache create, provider connect) lazily on the first
           // `for await` pull — so the gap between this mark and first_useful_token
           // below is exactly the pre-work + provider TTFT we're hunting.
-          // A pure SAFETY answer (stealth/evasion decline) must not run the
-          // knowledge intercept at all — no profile, no intro, no candidate
-          // grounding belongs in a policy redirect (release 2026-06-06b).
+          // A coding answer must not run the knowledge intercept at all — no
+          // profile, no intro, no candidate grounding belongs in a policy redirect
+          // (release 2026-06-06b).
           const ignoreKnowledge = isCodingChat || !manualProfileIntelligenceAllowed ? true : options?.ignoreKnowledgeMode;
           iTrace.lifecycle('evidence_selected', {
             selectedEvidenceCount: selectedProfileEvidence?.items.length ?? 0,
