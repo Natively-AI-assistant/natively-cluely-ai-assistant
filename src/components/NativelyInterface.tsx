@@ -371,10 +371,20 @@ import {
   REVEAL_WORD_CLASS,
 } from '../lib/textRevealAnimation.mjs';
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism-light';
-import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { oneLight as oneLightBase } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { vividDarkCodeTheme, VIVID_DARK_LINE_NUMBER_COLOR } from '../lib/codeTheme';
 
 registerPrismLanguages();
+
+// oneLight paints hsl(230,1%,98%) on the <pre> and <code>. customStyle only
+// clears the <pre>; the <code> kept its fill, and in the streaming view (one
+// inline highlighter per line) that showed as a white bar behind every line.
+// The code block's own card is the background, so the theme's must go.
+const oneLight = {
+  ...oneLightBase,
+  'code[class*="language-"]': { ...oneLightBase['code[class*="language-"]'], background: 'transparent' },
+  'pre[class*="language-"]': { ...oneLightBase['pre[class*="language-"]'], background: 'transparent' },
+};
 // import { ModelSelector } from './ui/ModelSelector'; // REMOVED
 import 'katex/dist/katex.min.css';
 import DOMPurify from 'dompurify';
