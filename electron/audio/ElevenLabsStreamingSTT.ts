@@ -37,6 +37,25 @@ export const ELEVENLABS_SILENCE_TAIL_MS = 600;
 // keepalive cadence took ~1.25 s to fill.
 export const ELEVENLABS_SEND_THRESHOLD_SAMPLES = 1600;
 
+/**
+ * A server message that carries an error (auth_error, quota_exceeded,
+ * insufficient_funds, ...) as an Error, with the message type as `code`.
+ * The raw message used to be emitted as-is: a string or a plain object with
+ * no `.message`, so main's STT error handler threw on `err.message
+ * .toLowerCase()`, the throw was swallowed as "Failed to parse message", and
+ * an out-of-credit key just went quiet with no "quota" status (user log
+ * 2026-11-01, Windows 2.9.2).
+ */
+export function elevenLabsServerError(msg: any): Error {
+    const raw = msg?.error ?? msg?.message ?? msg?.detail;
+    const text = typeof raw === 'string' && raw.trim()
+        ? raw.trim()
+        : (raw && typeof raw === 'object' && typeof raw.message === 'string' ? raw.message : '');
+    const code = typeof (msg?.message_type ?? msg?.type) === 'string' ? (msg.message_type ?? msg.type) : 'error';
+    const message = text ? `ElevenLabs ${code}: ${text}` : `ElevenLabs ${code}`;
+    return Object.assign(new Error(message), { code });
+}
+
 export class ElevenLabsStreamingSTT extends EventEmitter {
     private apiKey: string;
     private ws: WebSocket | null = null;
@@ -391,7 +410,7 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
 
                     case 'auth_error':
                         console.error('[ElevenLabsStreaming] Auth error — check key scope/permissions in ElevenLabs dashboard:', msg);
-                        this.emit('error', msg);
+                        this.emit('error', elevenLabsServerError(msg));
                         // Stop reconnection loops for auth failures to save API credits.
                         // Also clear any queued reconnect timer (write()'s lazy-connect or
                         // a prior close-handler enqueue) so we don't get a stray connect()
@@ -410,7 +429,7 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
                         // Log other messages for debugging (e.g. metadata or unknowns)
                         if (msg.error) {
                             console.error('[ElevenLabsStreaming] Server error:', msg.error);
-                            this.emit('error', msg.error);
+                            this.emit('error', elevenLabsServerError(msg));
                         } else {
                             console.log('[ElevenLabsStreaming] Received message:', msgType, Object.keys(msg));
                         }

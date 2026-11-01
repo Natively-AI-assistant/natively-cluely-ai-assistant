@@ -4374,7 +4374,13 @@ export class AppState {
     // implied a recovery state from the get-go.
     let _lastState: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing' = 'awaiting-audio';
 
-    stt.on('error', (err: Error) => {
+    stt.on('error', (raw: unknown) => {
+      // Every check below reads err.message; a provider that emits a bare
+      // string or object (ElevenLabs did, for quota/auth) made this handler
+      // throw before any status reached the overlay.
+      const err: Error = raw instanceof Error
+        ? raw
+        : Object.assign(new Error(typeof raw === 'string' ? raw : ((raw as any)?.message || (raw as any)?.error || JSON.stringify(raw) || 'Unknown STT error')), { code: (raw as any)?.code });
       // Google streamingRecognize's 10s silence timeout closes the stream
       // with gRPC code 11 ("Audio Timeout Error"). GoogleSTT already
       // swallows this case before it reaches us, but other providers may
