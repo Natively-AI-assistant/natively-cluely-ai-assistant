@@ -7,7 +7,8 @@ import { buildQuickActionTurn, responseLanguageIsPinned, type QuickActionContext
  *
  *   catch_me_up  "What did I miss?": what was said since the user last
  *                touched the overlay (at least the last 3 minutes, at most
- *                the last 20), in four short lines at most
+ *                the last 20), as two or three plain bullets (Granola's
+ *                shape, 2026-10-31)
  *   define       "Define": the last term, acronym or name that may be
  *                unfamiliar, explained in a sentence or two
  *   sound_smart  "Sound smart": one specific point or question the user could
@@ -71,16 +72,15 @@ export const LIVE_HELPER_EMPTY: Record<LiveHelperAction, string> = {
 // Used when the v2 prompt system is off. Natively's own wording.
 const LEGACY_PROMPTS: Record<LiveHelperAction, string> = {
     follow_up_questions: `You suggest follow-up questions during a live conversation.
-Read the last few minutes of the transcript and give the two or three most useful questions the user could ask next: ones that clear up something vague, pin down an owner or a date, or surface a risk nobody has named. One line each, in the words the user would actually say. No preamble, no numbering commentary, nothing invented.`,
+Read the last few minutes of the transcript and give the four or five most useful questions the user could ask next: ones that clear up something vague, pin down an owner or a date, test a claim against its own numbers, or surface a risk nobody has named. Start with one short line naming the setting ("Questions that would sharpen the plan:", "For your conversation with Lina, I'd ask:"), then one "- " bullet per question: a one- or two-word topic, a colon, then the question in the words the user would actually say, naming the specific detail it is about ("- Renewal: What does Lars need to see before approving the extension?"). At most one short line after the list on which to ask first. Nothing invented.`,
     catch_me_up: `You help someone who looked away from a live conversation for a few minutes and wants to rejoin it.
-Read only the transcript you are given. Say what they missed, in this order when present: the topic now on the table, anything decided, anything asked of them or waiting on them.
-Write at most four short lines, each starting with its label ("Now:", "Decided:", "Asked of you:", "Also:"). Keep names, numbers and dates exactly as said. If nothing of substance was said, say that in one line.
+Read only the transcript you are given. Tell them what was said, as two or three "- " bullets in the order it happened, the newest last: one or two plain sentences each, carrying the exact figures, names, dates and terms said. Name people as the transcript names them, or "they"; never "the interviewer" or "the speaker". No labels, headings or bold. Include what was decided and anything asked of them. If the last line breaks off mid-thought, end with a bullet saying someone had just started to raise another point. If nothing of substance was said, say that in one line.
 Never add anything the transcript does not say.`,
     define: `You explain an unfamiliar word during a live conversation.
 Find the most recent term, acronym, product or name in the transcript that a listener might not know. Start with the term, then explain in at most two short sentences what it is and what it means in this conversation.
 If the transcript says what it means, use that. Otherwise give its standard meaning and never invent a company-specific one.`,
     sound_smart: `You give someone in a live conversation one thing worth saying next.
-Write one specific, insightful point or question that builds on a detail that was just said, in their own voice, ready to say aloud: one or two sentences, no quotation marks, no preamble.
+Write one short lead line ("You could say:", "Here's a sharper way to say it:"), then one specific, insightful point that builds on the figures, names and terms just said, as a "> " quote in their own voice, ready to say aloud: two to four sentences (it may end with a question). At most one short line after it on how to use it. Nothing else.
 Never generic praise, never a summary of the conversation, and nothing the transcript does not support.`,
 };
 
@@ -121,5 +121,5 @@ const LEGACY_TASK_LINE: Record<LiveHelperAction, string> = {
     catch_me_up: 'Task: tell me what I missed in the transcript above.',
     define: 'Task: explain the most recent unfamiliar term in the transcript above.',
     sound_smart: 'Task: give me one specific point or question I could say next.',
-    follow_up_questions: 'Task: give me the two or three most useful follow-up questions I could ask now, one per line.',
+    follow_up_questions: 'Task: give me the four or five most useful follow-up questions I could ask now.',
 };

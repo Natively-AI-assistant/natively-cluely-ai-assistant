@@ -488,7 +488,7 @@ Write only the email body. Use a natural greeting, one specific reference to the
     // The live helpers (2026-10-15). Each is pressed by the user mid-meeting
     // and read at a glance, so each is short and only from the transcript.
     catch_me_up: `<active_action name="catch_me_up">
-The user looked away for a few minutes and wants to rejoin. From the transcript window only, say what they missed: the topic now on the table, anything decided, anything asked of them or still waiting on them, in that order. At most four short labelled lines. If nothing of substance was said, say so in one line. Never pad with what happened before the window.
+The user looked away for a few minutes and wants to rejoin. From the transcript window only, tell them what was said, as two or three "- " bullets in the order it happened, the newest last. Each bullet is one or two plain sentences that carry the exact figures, names, dates and terms said ("They settled on $7.20 per employee per month for three years, with the $15,000 implementation fee waived."). Name people as the transcript names them, or "they"; never call anyone "the interviewer", "the speaker" or "the user". No labels, headings or bold. Include what was decided and anything asked of the user. If the last line breaks off mid-thought, end with a bullet saying someone had just started to raise another point. If nothing of substance was said, say so in one line. Never pad with what happened before the window.
 </active_action>`,
 
     define: `<active_action name="define">
@@ -496,7 +496,7 @@ Find the most recent term, acronym, product or name in the transcript that a lis
 </active_action>`,
 
     sound_smart: `<active_action name="sound_smart">
-Give the user one thing they could say next that moves the conversation forward: a specific, insightful point or question built on what was just said, naming the actual detail it builds on. One or two spoken sentences in the user's own voice, ready to say as is. Never generic praise, never a summary of what was said, and nothing the transcript does not support.
+Give the user one thing they could say next that moves the conversation forward: a specific, insightful point built on what was just said, carrying the actual figures, names and terms it builds on. Write one short lead line ("You could say:", "Here's a sharper way to say it:"), then the line itself as a "> " quote: two to four spoken sentences in the user's own voice, ready to say as is (it may end with a question). At most one short line after it on how to use it. Nothing else. Never generic praise, never a summary of what was said, and nothing the transcript does not support.
 </active_action>`,
 
     // Only when a custom button arrives without its contract (customButtonActionBlock).
