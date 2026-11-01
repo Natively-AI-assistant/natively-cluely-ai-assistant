@@ -452,11 +452,11 @@ const SurfaceSwitch: React.FC<{ value: Surface; onChange: (s: Surface) => void; 
                 role="radiogroup"
                 aria-label={t('What meetings open')}
                 onKeyDown={onKeyDown}
-                className="relative grid grid-cols-2 p-1 rounded-full border border-border-subtle bg-bg-input"
+                className="surface-switch relative grid grid-cols-2 p-1 rounded-full"
             >
                 <motion.div
                     aria-hidden="true"
-                    className="absolute top-1 bottom-1 left-1 rounded-full bg-bg-elevated border border-border-subtle shadow-sm"
+                    className="surface-switch-thumb absolute top-1 bottom-1 left-1 rounded-full"
                     style={{ width: 'calc(50% - 4px)' }}
                     initial={false}
                     animate={{ x: `${index * 100}%` }}

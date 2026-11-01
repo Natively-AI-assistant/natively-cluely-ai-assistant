@@ -2301,6 +2301,19 @@
    ─────────────────────────────────────────────────────────────────────── */
 
 /* Level 1 — Cards sitting on the canvas */
+/* Settings › Overlay's Overlay | Notepad switch (2026-10-31), as Apple's segmented control: the
+   chosen side is a lifted pill. Dark used --bg-elevated (#151515), darker than its own track, so the
+   pick read as a hole; dark now lifts it with a white tint, light keeps the white pill on grey. */
+.surface-switch { background: color-mix(in srgb, var(--text-primary) 6%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 6%, transparent); }
+.surface-switch-thumb { background: color-mix(in srgb, var(--text-primary) 16%, transparent); box-shadow: 0 1px 2px #0000004d, inset 0 0.5px 0 color-mix(in srgb, var(--text-primary) 12%, transparent); }
+[data-theme='light'] .surface-switch { background: var(--bg-input); box-shadow: inset 0 0 0 1px var(--border-subtle); }
+[data-theme='light'] .surface-switch-thumb { background: var(--bg-elevated); box-shadow: 0 1px 3px #0000001f, 0 0 0 0.5px #0000000f; }
+/* Dark settings cards (2026-10-31): the row icon tile (#27272A) and the dropdowns (#262626) are neutral
+   grey on a blue-grey card (#242429), so they read as darker holes. Lift both a step in the card's own
+   hue instead. Light is untouched. */
+:root:not([data-theme='light']) .bg-bg-card .bg-bg-item-surface.w-10.h-10,
+:root:not([data-theme='light']) .bg-bg-card .bg-bg-component.hover\:bg-bg-elevated { background: color-mix(in srgb, var(--text-primary) 5%, var(--bg-card)); }
+:root:not([data-theme='light']) .bg-bg-card .bg-bg-component.hover\:bg-bg-elevated:hover { background: color-mix(in srgb, var(--text-primary) 9%, var(--bg-card)); }
 [data-theme='light'] .bg-bg-card {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
 }
