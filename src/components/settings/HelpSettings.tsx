@@ -347,6 +347,14 @@ const HelpPane: React.FC<{
         { label: t('Speech'), done: status.loaded ? stepDone(status.speech) : null },
         { label: t('AI model'), done: status.loaded ? stepDone(status.model) : null },
     ];
+    // The meter is for someone still setting up. Once every step is done it says
+    // nothing new, so an install that opens the pane fully set up never sees it
+    // (nor a "Checking…" card that then vanishes). It appears once a step reads
+    // as to do, and stays for the visit: finishing the last step here fills the
+    // track and says Ready rather than yanking the card away mid-glance.
+    const meterIncomplete = meter.some((s) => s.done === false);
+    const [showMeter, setShowMeter] = useState(false);
+    if (meterIncomplete && !showMeter) setShowMeter(true);
 
     // ── Guides ──────────────────────────────────────────────────────────────
     // One list, grouped by when you need it. Each guide carries the words a
@@ -1107,12 +1115,14 @@ const HelpPane: React.FC<{
                     subtitle={t('Natively needs permissions, a speech provider and an AI model.')}
                 />
                 <SettingsMotionReady.Provider value={setupReady}>
-                <HelpSetupMeter
-                    steps={meter}
-                    readyText={t('Ready for your first meeting')}
-                    leftText={(left) => (left === 1 ? t('One step left before your first meeting') : `${left} ${t('steps left before your first meeting')}`)}
-                    checkingText={t('Checking this computer…')}
-                />
+                {showMeter && (
+                    <HelpSetupMeter
+                        steps={meter}
+                        readyText={t('Ready for your first meeting')}
+                        leftText={(left) => (left === 1 ? t('One step left before your first meeting') : `${left} ${t('steps left before your first meeting')}`)}
+                        checkingText={t('Checking this computer…')}
+                    />
+                )}
                 <div className={ROW_GROUP}>
                     <SettingsRow
                         icon={<NativelyGlyph size={20} />}
