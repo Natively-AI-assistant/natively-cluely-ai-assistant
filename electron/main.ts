@@ -8598,15 +8598,6 @@ export class AppState {
       else this.sendToWindow(win, 'intelligence-recap', { summary: text })
     })
 
-    this.intelligenceManager.on('manual_answer_started', () => {
-      // The hotkey/click commits whatever Auto Answer was offering — and,
-      // inside the feedback window, says the automatic answer missed.
-      this.simpleAutoAnswer.onManualAnswerStarted();
-      const win = mainWindow()
-      this.sendToWindow(win, 'intelligence-manual-started')
-    })
-
-    this.intelligenceManager.on('manual_answer_result', (answer: string, question: string) => {
     // The user's own buttons (llm/customButtons.ts) are shown in Recap's card,
     // like Define and What did I miss?.
     this.intelligenceManager.on('custom_button_token', (token: string) => {
@@ -8618,6 +8609,15 @@ export class AppState {
       this.sendToWindow(mainWindow(), 'intelligence-recap', { summary: text })
     })
 
+    this.intelligenceManager.on('manual_answer_started', () => {
+      // The hotkey/click commits whatever Auto Answer was offering — and,
+      // inside the feedback window, says the automatic answer missed.
+      this.simpleAutoAnswer.onManualAnswerStarted();
+      const win = mainWindow()
+      this.sendToWindow(win, 'intelligence-manual-started')
+    })
+
+    this.intelligenceManager.on('manual_answer_result', (answer: string, question: string) => {
       const win = mainWindow()
       this.sendToWindow(win, 'intelligence-manual-result', { answer, question })
 
