@@ -225,7 +225,7 @@ test('main wires it on both channels, never on an auth error, and keeps gap reco
         assert.match(main, new RegExp(`this\\._sttFailover\\.${ch}\\?\\.notifySpeechEnded\\(\\)`), `${ch} speech end`);
     }
     // The error handler: auth/terminal returns before any failover; engage only past the policy.
-    const handler = main.slice(main.indexOf("stt.on('error', (err: Error) => {"));
+    const handler = main.slice(main.indexOf("stt.on('error', (raw: unknown) => {"));
     const authReturn = handler.indexOf('if (isAuthError || isLocalSttUnavailable) {');
     const activeGuard = handler.indexOf('if (failover.active) return;');
     const gapError = handler.indexOf('this.sttGap.onProviderError(gapSource);');

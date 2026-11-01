@@ -4412,8 +4412,15 @@ export class AppState {
         errorMessage = `${httpStatus} ${axiosErr.response.statusText}`;
       }
 
+      const isQuotaError = err.message.toLowerCase().includes('transcription_quota_exceeded')
+        || err.message.toLowerCase().includes('quota');
+
       // Immediately fatal: auth/account problems — no amount of retrying helps
       const isAuthError = httpStatus === 401
+        // A provider that knows the failure is final (ElevenLabs auth_error,
+        // unaccepted_terms, invalid_request) and has stopped reconnecting.
+        // Quota keeps its own branch below so a stand-in can take over.
+        || ((err as any)?.terminal === true && !isQuotaError)
         || err.message.toLowerCase().includes('auth_timeout')
         || err.message.toLowerCase().includes('invalid_key')
         || err.message.toLowerCase().includes('invalid api')
@@ -4424,8 +4431,6 @@ export class AppState {
         // not by whatever words the message happens to contain.
         || (err as any)?.code === 'google_stt_credentials_unavailable';
 
-      const isQuotaError = err.message.toLowerCase().includes('transcription_quota_exceeded')
-        || err.message.toLowerCase().includes('quota');
 
       // A local STT worker that could not start (no ONNX slot within 20s, or
       // the model never reported ready) is terminal for this meeting: nothing

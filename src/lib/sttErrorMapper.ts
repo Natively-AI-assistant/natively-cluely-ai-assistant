@@ -111,7 +111,9 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
 
     // 3b. Out of credits: the provider account itself (OpenAI's
     // insufficient_quota). Before 4, whose "for this period" would be wrong.
-    if (lower.includes('insufficient_quota') || lower.includes('credit_balance_exhausted')) {
+    // ElevenLabs quota_exceeded is the plan's credits running out (it closes
+    // with reason insufficient_funds), not a per-period cap.
+    if (lower.includes('insufficient_quota') || lower.includes('credit_balance_exhausted') || lower.includes('elevenlabs quota_exceeded')) {
         return {
             title: 'Out of Credits',
             body: 'Your provider account has no credits left. Add credits, then start a new meeting.',
