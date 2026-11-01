@@ -8,6 +8,7 @@ import { AccordionPanel } from '../ui/AccordionSection';
 import { getLicenseSnapshot, setLicenseSnapshot } from '../../lib/licenseCache';
 import { BEAT, EASE_ENTER, EASE_LEAVE, INK, SETTLE } from '../../lib/plansMotion';
 import { SwapLabel } from './SettingsRow';
+import { LIFETIME_LIST, LIFETIME_SALE, lifetimeSaleLabel } from '../../lib/lifetimeSale.mjs';
 
 // ─── Strong cubic-bezier easings (per emil-design-eng) ───────
 // Never use the weak default `ease` / `ease-in` for UI motion.
@@ -635,9 +636,15 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
     // or a checkout link is an app release; that was already the case.
     const lifetimeUrl = 'https://checkout.dodopayments.com/buy/pdt_0NbHo6EnXlNPqNcZ14OTi';
     const yearlyUrl = 'https://checkout.dodopayments.com/buy/pdt_0NcM4QBwy0CDcPV9CXaNP';
-    // $39 / $79 from 2026-10-30, as the website's /pricing has shown since 2026-10-13.
+    // $39 yearly from 2026-10-30. Lifetime $60 from 2026-11-01, shown against
+    // a struck $79 only during a named sale (lib/lifetimeSale.mjs, same
+    // windows as the website's /pricing).
     const yearlyPriceText = '$39';
-    const lifetimePriceText = '$79';
+    const lifetimePriceText = `$${LIFETIME_SALE}`;
+    const lifetimeListText = `$${LIFETIME_LIST}`;
+    // Read once per mount: Settings is reopened far more often than a sale
+    // window turns over.
+    const lifetimeSale = useMemo(() => lifetimeSaleLabel(new Date()), []);
 
     // Parse numeric prices once. Used both for the "Save N%" chip on the
     // toggle and for the live "Save $X over 3 years" copy under the
@@ -1109,18 +1116,27 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                                     weighted alternatives, which pushes the choice
                                     back onto the visitor. `.badge-best-value` was
                                     already defined in index.css and unused. */}
+                                {/* One row, always: the card must not grow for the
+                                    sale. The label never wraps; in a very narrow
+                                    window the pill truncates instead. */}
                                 <div className="relative flex items-center justify-between gap-2" style={{ transformStyle: 'preserve-3d', transform: 'translateZ(12px)' }}>
-                                    <span className="badge-tier-label inline-flex items-center px-2 py-0.5 rounded-full text-text-primary text-[10px] font-semibold" style={{ letterSpacing: '0.02em' }}>
+                                    <span className="badge-tier-label inline-flex items-center px-2 py-0.5 rounded-full text-text-primary text-[10px] font-semibold whitespace-nowrap" style={{ letterSpacing: '0.02em' }}>
                                         Pro · Lifetime
                                     </span>
-                                    <span className="badge-best-value inline-flex items-center px-2 py-0.5 rounded-full text-[9.5px] font-bold shrink-0" style={{ letterSpacing: '0.06em' }}>
-                                        BEST VALUE
+                                    {/* The season's sale while one runs, else the
+                                        recommendation. Uppercased here so the
+                                        label stays readable in the source. */}
+                                    <span className="badge-best-value min-w-0 px-2 py-0.5 rounded-full text-[9.5px] font-bold whitespace-nowrap overflow-hidden text-ellipsis" style={{ letterSpacing: '0.06em' }} title={lifetimeSale ?? undefined}>
+                                        {(lifetimeSale ?? 'Best value').toUpperCase()}
                                     </span>
                                 </div>
 
-                                {/* Price block: anchor (3y) + current */}
+                                {/* Price block: the struck list price + the sale
+                                    price. The 3-year comparison lives in the
+                                    line under the CTA. */}
                                 <div className="relative mt-4 flex items-baseline gap-2 flex-wrap" style={{ transformStyle: 'preserve-3d', transform: 'translateZ(20px)' }}>
-                                    {yearlyPrice !== null && lifetimePrice !== null && (
+                                    {/* Struck only while a named sale runs. */}
+                                    {lifetimeSale !== null && (
                                         <span
                                             className="pricing-card-original-price text-[17px] font-normal"
                                             style={{
@@ -1131,7 +1147,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                                                 letterSpacing: '-0.02em',
                                             }}
                                         >
-                                            ${yearlyPrice * 3}
+                                            {lifetimeListText}
                                         </span>
                                     )}
                                     <span

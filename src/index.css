@@ -8336,6 +8336,13 @@ html[data-platform="linux"][data-window="launcher"] body {
 }
 
 /* 2. Text and Price Overrides in Light Mode */
+/* Dark: the struck list price had no colour of its own and inherited a dark
+   ink that vanished on the navy card. The light rule below overrides it. */
+.pricing-card-original-price {
+  color: rgba(255, 255, 255, 0.5);
+  text-decoration-color: rgba(255, 255, 255, 0.45);
+}
+
 [data-theme='light'] .pricing-card-original-price {
   color: rgba(15, 23, 42, 0.42) !important;
   text-decoration-color: rgba(15, 23, 42, 0.28) !important;
