@@ -1038,31 +1038,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     return escapeXmlText(clipped);
   };
 
-  /**
-   * Returns true if the user has an active premium license OR an unexpired free trial.
-   * Used to gate profile intelligence features (resume upload, JD upload, company research, etc.).
-   */
+  // Pro or an unexpired trial (services/proAccess.ts): gates Profile
+  // Intelligence features (resume upload, JD upload, company research, etc.).
   const isProOrTrialActive = (): boolean => {
-    // 1. Full premium license (Dodo / Gumroad / Natively API subscription)
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      if (LicenseManager.getInstance().isPremium()) return true;
-    } catch {
-      /* premium module not available */
-    }
-
-    // 2. Active free trial (token present and not expired)
-    try {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const cm = CredentialsManager.getInstance();
-      const token = cm.getTrialToken();
-      if (!token) return false;
-      const expiresAt = cm.getTrialExpiresAt();
-      if (!expiresAt) return false;
-      return new Date(expiresAt).getTime() > Date.now();
-    } catch {
-      return false;
-    }
+    const { isProOrTrialActive: check } = require('./services/proAccess') as typeof import('./services/proAccess');
+    return check();
   };
 
   // Clears premium-only context when the pro license is lost.
@@ -2411,6 +2391,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             })();
 
             const composed = await buildV3Prompt({
+              // "About you" (Cue Cards, Pro): every surface, every mode.
+              userBio: (require('./services/proAccess') as typeof import('./services/proAccess')).userBioForAnswers(),
               surface: 'manual-chat',
               readingSurface: answerSurface === 'chat',
               diagramTurn: v3DiagramTurn(manualDiagramTurn),
@@ -14470,11 +14452,16 @@ export function initializeIpcHandlers(appState: AppState): void {
   // People sharing the microphone (Settings, Audio): diarize the mic channel and
   // split its voices at save (services/meeting/roomSpeakers.ts). Takes effect
   // from the next meeting; the STT instance is built when a meeting starts.
-  // "About you" (Settings): a few lines the meeting notes prompt reads as the user's own bio.
+  // "About you" (Profile Intelligence › Cue Cards, Pro): a few lines the meeting
+  // notes prompt reads as the user's own bio. Get stays open so a lapsed user
+  // still sees their text (read-only) under the upgrade gate.
   safeHandle('user-bio-get', async () => ({ bio: String(SettingsManager.getInstance().get('userBio') ?? '') }));
   safeHandle('user-bio-set', async (_, bio: unknown) => {
     if (typeof bio !== 'string') return { success: false, error: 'invalid' };
     const clean = bio.replace(/\r\n?/g, '\n').trim().slice(0, 600);
+    // Pro (Profile Intelligence › Cue Cards), like the Cue Card answers beside it.
+    // Clearing is always allowed: a lapsed user can still delete their own text.
+    if (clean && !isProOrTrialActive()) return { success: false, error: 'pro_required' };
     return SettingsManager.getInstance().set('userBio', clean) ? { success: true, bio: clean } : { success: false, error: 'settings_store_degraded' };
   });
   // The notes window's "Attach image": a picture kept with the running meeting

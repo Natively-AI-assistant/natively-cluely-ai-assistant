@@ -191,9 +191,10 @@ export interface AppSettings {
      *  the browser is using, when the user has not pinned one. Off by default;
      *  macOS 14+ only (the OS names the app's device there). */
     followMeetingAppMicDevice?: boolean;
-    /** "About you": a few lines in the user's own words (role, team, what they
-     *  care about) that the meeting notes prompt reads, like Granola's bio.
-     *  At most 600 characters; empty = not used. */
+    /** "About you" (Profile Intelligence › Cue Cards): a few lines in the user's
+     *  own words (role, team, what they care about) that the meeting notes prompt
+     *  reads, like Granola's bio. At most 600 characters; empty = not used. Pro or
+     *  trial only (services/proAccess.ts); a free user's text is kept, not read. */
     userBio?: string;
     // Phase 6 — TelemetryService toggle. Defaults to true (local-only JSONL).
     // When false, no telemetry is written to disk and no sinks fire.

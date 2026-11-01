@@ -166,7 +166,7 @@ export interface ElectronAPI {
   // cast, so only the two read APIs SettingsOverlay calls are declared here.
   localWhisperGetModels?: () => Promise<{ models: any[]; activeModelId: string }>
   /** People sharing the microphone: diarize the mic channel and split its voices at save. */
-  /** "About you": a few lines the meeting notes prompt reads as the user's own bio. */
+  /** "About you" (Profile Intelligence › Cue Cards, Pro): a few lines the meeting notes prompt reads as the user's own bio. */
   userBioGet?: () => Promise<{ bio: string }>
   userBioSet?: (bio: string) => Promise<{ success: boolean; bio?: string; error?: string }>
   /** The notes window's "Shorten": the tightened line, or null when it must not replace the original. */

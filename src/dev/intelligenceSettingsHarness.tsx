@@ -142,10 +142,7 @@ const later = <T,>(v: T, ms = 400) => new Promise<T>((r) => setTimeout(() => r(v
     diagnostics.secondaryStreams = [];
   },
   providerPerformanceCalibrate: async () => later({ ok: true, result: { skippedReason: 'flag_off' } }, 600),
-  // Settings › Intelligence also holds About you and Skills. skills=none shows
-  // the empty state.
-  userBioGet: async () => ({ bio: '' }),
-  userBioSet: async (bio: string) => ({ success: true, bio }),
+  // Settings › Intelligence also holds Skills. skills=none shows the empty state.
   skillsRefresh: async () => later(skills.map((s) => ({ ...s })), 200),
   skillsDelete: async (id: string) => { skills = skills.filter((s) => s.id !== id); return { success: true }; },
   skillsOpenFolder: async () => ({ success: true, path: '/Users/you/Library/Application Support/Natively/skills' }),

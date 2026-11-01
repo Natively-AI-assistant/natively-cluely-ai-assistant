@@ -10,7 +10,6 @@ import { useT } from '../../i18n';
 import { Disclosure } from '../ui/AccordionSection';
 import { ProviderPerformanceSettings } from './ProviderPerformanceSettings';
 import { SkillsSettings } from './SkillsSettings';
-import { AboutYouSettings } from './AboutYouSettings';
 import { LiquidGlassBadge } from '../../ui-components/LiquidGlassBadge';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
 import {
@@ -792,14 +791,13 @@ export const IntelligenceSettings: React.FC = () => {
       </section>
 
       {/* ── Notes & answers, right under Skills and above Memory (owner's order,
-          2026-10-31). About you leads it: it is the bio every meeting summary
-          reads; under Skills a row with no heading read as one more skill. ── */}
+          2026-10-31). "About you" moved to Profile Intelligence › Cue Cards on
+          2026-11-01 (Pro, owner's call for conversion). ── */}
       <section>
         <SettingsSectionHeading
           title={t('Notes & answers')}
           subtitle={t('How meeting notes are written and live answers are checked.')}
         />
-        <AboutYouSettings />
         {flagRows('notes')}
       </section>
 

@@ -26,6 +26,7 @@ import { telemetryService } from './services/telemetry/TelemetryService';
 import type { ProviderDataScopePolicy } from './llm/ProviderRouter';
 import { LiveMeetingJournal, type LiveJournalSnapshot, type MeetingRecoveryMeta } from './services/meeting/LiveMeetingJournal';
 import { getUserDictionary } from './audio/userDictionary';
+import { bioForNotes, isProOrTrialActive } from './services/proAccess';
 import { isArchivableNotes } from './services/meeting/notesVersions';
 import { applyNoteTemplate, noteTemplateById, type NoteTemplate } from './services/meeting/noteTemplates';
 const crypto = require('crypto');
@@ -607,6 +608,11 @@ export class MeetingPersistence {
         }
     }
 
+    /** "About you" is Pro (Cue Cards); a method so a test can supply it. */
+    protected bioAllowed(): boolean {
+        return isProOrTrialActive();
+    }
+
     /**
      * The user's current role and company from Profile Intelligence, for the
      * notes' meeting context. Only when Profile Intelligence is on (knowledge
@@ -619,10 +625,10 @@ export class MeetingPersistence {
             const sm = SettingsManager.getInstance();
             const scopes = sm.get('providerDataScopes') as ProviderDataScopePolicy | undefined;
             if (scopes?.profile_history === false || scopes?.post_call_summary === false) return undefined;
-            // "About you" (Settings): the user's own words, used whenever set, with
-            // or without a résumé profile; the profile below adds role and company.
-            const bioRaw = sm.get('userBio');
-            const bio = typeof bioRaw === 'string' ? bioRaw.replace(/\s+/g, ' ').trim().slice(0, 600) : '';
+            // "About you" (Profile Intelligence › Cue Cards): the user's own words,
+            // used whenever set and the user is Pro or on a trial, with or without a
+            // résumé profile; the profile below adds role and company.
+            const bio = bioForNotes(sm.get('userBio'), this.bioAllowed());
             const withBio = (p: { role?: string; company?: string } | undefined) => (bio ? { ...(p ?? {}), bio } : p);
             const orchestrator = (this.llmHelper as any)?.getKnowledgeOrchestrator?.();
             const on = typeof orchestrator?.isKnowledgeMode === 'function' ? orchestrator.isKnowledgeMode() : sm.get('knowledgeMode') === true;

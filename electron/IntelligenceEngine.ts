@@ -4220,6 +4220,8 @@ export class IntelligenceEngine extends EventEmitter {
                     const _ctx = this.v3ModeRetrievalContext(_screenDescription);
                     if (!_ctx) return undefined;
                     const _v3 = await buildV3Prompt({
+                        // "About you" (Cue Cards, Pro): every surface, every mode.
+                        userBio: (require('./services/proAccess') as typeof import('./services/proAccess')).userBioForAnswers(),
                         surface: 'what-to-answer',
                         // The user's own spoken line was chosen above: its "we" is theirs.
                         questionSpeaker: questionSpokenByUser && !question?.trim() ? 'user' : 'other',
@@ -7728,6 +7730,8 @@ export class IntelligenceEngine extends EventEmitter {
             if (!ctx) return null;
             const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
             const _v3 = await buildV3Prompt({
+                // "About you" (Cue Cards, Pro): every surface, every mode.
+                userBio: (require('./services/proAccess') as typeof import('./services/proAccess')).userBioForAnswers(),
                 surface: pinned?.surface ?? 'assist',
                 // Low-confidence query rewrite: the user's fast model, 1.5 s hard cap.
                 // Not for Brainstorm, which only wants the evidence: a model
@@ -8531,6 +8535,8 @@ export class IntelligenceEngine extends EventEmitter {
                     const _ctx = this.v3ModeRetrievalContext();
                     if (!_ctx) return null;
                     return await buildV3Prompt({
+                        // "About you" (Cue Cards, Pro): every surface, every mode.
+                        userBio: (require('./services/proAccess') as typeof import('./services/proAccess')).userBioForAnswers(),
                         surface: 'manual-chat',
                         diagramTurn: (() => {
                             try {

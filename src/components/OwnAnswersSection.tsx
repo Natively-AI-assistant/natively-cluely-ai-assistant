@@ -7,6 +7,14 @@ import { AlertCircle, Check, RefreshCw } from 'lucide-react';
 // edit. A meeting reads an answer only once it is saved, which is what Use and
 // Save do: a draft on screen is a proposal, not yet the user's words.
 //
+// "About you" leads the cards (moved here from Settings › Intelligence on
+// 2026-11-01, so it is Pro like the rest of the panel): a few lines in the
+// user's own words that every meeting summary and every live answer reads
+// (services/proAccess.ts). Stored in SettingsManager.userBio, not with the
+// answers; main refuses to save it, and notes and answers skip it, without Pro
+// or a trial. No caption under the label (owner, 2026-11-01): the placeholder
+// says what goes in it.
+//
 // Rendered inside ProfileIntelligenceSettings, so it uses that panel's .pi-*
 // classes and --pi-* tokens and adds no styles of its own.
 
@@ -32,6 +40,90 @@ function AnswerBox({ minRows, ...props }: React.TextareaHTMLAttributes<HTMLTextA
         el.style.height = `${el.scrollHeight}px`;
     }, [props.value]);
     return <textarea ref={ref} rows={minRows} className="pi-textarea" style={{ display: 'block', overflow: 'hidden' }} {...props} />;
+}
+
+const BIO_MAX = 600;
+
+/** "About you": the bio meeting summaries and live answers read. Saved on blur, Save or ⌘/Ctrl+Enter, like a Cue Card. */
+function AboutYouCard({ hasAccess }: { hasAccess: boolean }) {
+    const [value, setValue] = useState('');
+    const [saved, setSaved] = useState('');
+    const [justSaved, setJustSaved] = useState(false);
+    const [error, setError] = useState('');
+    const live = useRef(true);
+    // What is in the box now: a save that returns after the user typed on must
+    // not put the older text back over what they typed.
+    const valueRef = useRef(value);
+    valueRef.current = value;
+
+    useEffect(() => {
+        live.current = true;
+        void api()?.userBioGet?.().then((r: { bio?: string } | undefined) => {
+            if (live.current && r && typeof r.bio === 'string') { setValue(r.bio); setSaved(r.bio); }
+        }).catch(() => {});
+        return () => { live.current = false; };
+    }, []);
+
+    // The text is handed in by the caller (the box's own value), as for the answers.
+    const save = async (next: string) => {
+        const clean = next.trim().slice(0, BIO_MAX);
+        if (clean === saved) { setValue(saved); return; }
+        setError('');
+        const res = await api()?.userBioSet?.(clean).catch(() => undefined);
+        if (!live.current) return;
+        if (!res?.success) { setError(res?.error === 'pro_required' ? 'About you needs Pro.' : 'That could not be saved.'); return; }
+        const stored = String(res.bio ?? clean);
+        setSaved(stored);
+        if (valueRef.current.trim().slice(0, BIO_MAX) === clean) setValue(stored);
+        if (stored) { setJustSaved(true); window.setTimeout(() => { if (live.current) setJustSaved(false); }, 1200); }
+    };
+
+    const dirty = value.trim() !== saved;
+    // Not "Saved" without access: the text is kept but nothing reads it.
+    const isSaved = !!saved && !dirty && hasAccess;
+    const remaining = BIO_MAX - value.length;
+
+    return (
+        <div className="pi-section-card" data-own-answer="about_you" data-status={dirty ? 'edited' : saved ? 'saved' : 'empty'}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+                <label htmlFor="own-answer-about-you" className="pi-section-header-label">About you</label>
+                {isSaved && (
+                    <span className={justSaved ? 'pi-save-pulse' : undefined} style={{ fontSize: 11, color: 'var(--pi-tertiary)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Check size={11} /> Saved
+                    </span>
+                )}
+            </div>
+            <div className="pi-content-box">
+                <AnswerBox
+                    id="own-answer-about-you"
+                    minRows={3}
+                    maxLength={BIO_MAX}
+                    value={value}
+                    disabled={!hasAccess}
+                    placeholder="Head of Product at Acme. I run the weekly roadmap review and care most about customer commitments and dates."
+                    onChange={(e) => setValue(e.target.value.slice(0, BIO_MAX))}
+                    onBlur={(e) => { if (dirty) void save(e.currentTarget.value); }}
+                    onKeyDown={(e) => {
+                        // Esc puts back what was saved; ⌘↵ / Ctrl+↵ saves, as a blur does (as in Settings before).
+                        if (e.key === 'Escape') { e.preventDefault(); setValue(saved); }
+                        else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); e.currentTarget.blur(); }
+                    }}
+                />
+            </div>
+            {(dirty || error || remaining <= COUNT_FROM_REMAINING) && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8, minHeight: 28 }}>
+                    <span role={error ? 'alert' : undefined} style={{ fontSize: 11, color: error ? 'var(--pi-danger)' : 'var(--pi-tertiary)' }}>
+                        {error || (remaining <= COUNT_FROM_REMAINING ? `${remaining} characters left` : '')}
+                    </span>
+                    {dirty && (
+                        <button className="pi-pill-btn pi-pill-btn--primary pi-press" disabled={!hasAccess} onMouseDown={(e) => e.preventDefault()} onClick={() => void save(value)}>
+                            Save
+                        </button>
+                    )}
+                </div>
+            )}
+        </div>
+    );
 }
 
 export function OwnAnswersSection({ hasResume, hasAccess }: { hasResume: boolean; hasAccess: boolean }) {
@@ -149,6 +241,8 @@ export function OwnAnswersSection({ hasResume, hasAccess }: { hasResume: boolean
                     <AlertCircle size={12} style={{ flexShrink: 0 }} /> {error}
                 </div>
             )}
+
+            <AboutYouCard hasAccess={hasAccess} />
 
             {loaded && draftKeys.length > 0 && (
                 <p style={{ fontSize: 11, color: 'var(--pi-secondary)', margin: '0 0 14px', lineHeight: 1.5 }}>

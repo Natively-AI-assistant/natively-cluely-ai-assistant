@@ -158,6 +158,13 @@ export interface BridgeInput {
   deferDebugCompletion?: boolean;
   /** The USER's standing instructions only — binding on presentation, cannot widen authorization (§19.2). */
   realtimeInstruction?: string;
+  /**
+   * "About you" (Profile Intelligence › Cue Cards, Pro): a few lines the user
+   * wrote about themselves. Read by the caller (services/proAccess.ts
+   * userBioForAnswers, which applies the Pro gate); dropped here when the
+   * "Profile and history" provider scope is off. See ComposeInput.userBio.
+   */
+  userBio?: string;
   /** The APP's per-turn length default — see ComposeInput.defaultLengthDirective. Never concatenate it onto realtimeInstruction. */
   defaultLengthDirective?: string;
   /**
@@ -561,6 +568,14 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
     const auditWithheldScopes = new Set<ProviderDataScope>(withheldScopes);
     if (historyScreenWithheld && convoSummary) auditWithheldScopes.add('screenshots');
 
+    // "About you" is profile data: it leaves with the profile_history scope or
+    // not at all, the same scope the meeting notes check before reading it.
+    // Audit-only when withheld: it is not evidence, so the composer's
+    // withheld-evidence notices must not describe it.
+    const userBioText = input.userBio?.trim() ?? '';
+    const userBio = userBioText && !isScopeDenied('profile_history', scopePolicy) ? userBioText : undefined;
+    if (userBioText && !userBio) auditWithheldScopes.add('profile_history');
+
     // Persona resolution must never break a turn: a throwing factory or a null
     // return simply composes without one (today's behaviour).
     let personaBase: string | undefined;
@@ -591,6 +606,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       withheldScopes: [...withheldScopes],
       realtimeInstruction: input.realtimeInstruction,
       defaultLengthDirective: input.defaultLengthDirective,
+      userBio,
       diagramTurn,
       conversationSummary: convoSummary,
       // What-to-answer answers the OTHER person's question: their "I" is theirs.
@@ -619,6 +635,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
     );
     if (convoSummary) packedDataScopes.add('transcript');
     if (diagramDesignAllowed) packedDataScopes.add('transcript');
+    if (userBio) packedDataScopes.add('profile_history');
     // Declared separately from `transcript`: an audit that asks "did screen
     // content leave the device this turn?" must not have to know that screen
     // text is smuggled inside the conversation summary.

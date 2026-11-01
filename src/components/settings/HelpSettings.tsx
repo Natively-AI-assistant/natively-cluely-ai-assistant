@@ -579,7 +579,8 @@ const HelpPane: React.FC<{
                     </p>
                     <p>
                         Cue Cards hold the answers only you can give, such as why you left a job or your salary range. Natively drafts the
-                        ones your résumé suggests; a meeting uses an answer once you save it.
+                        ones your résumé suggests; a meeting uses an answer once you save it. About you sits at the top: a few lines on
+                        who you are that meeting summaries and live answers read.
                     </p>
                 </>
             ),
@@ -1084,7 +1085,7 @@ const HelpPane: React.FC<{
                     <HelpDefinitions
                         items={[
                             { term: 'Skills', detail: 'Instructions the chat follows. Start a message with /name or $name to use one.' },
-                            { term: 'Notes & answers', detail: 'About you, and how notes are written: meeting type, speaker labels, diagrams and charts.' },
+                            { term: 'Notes & answers', detail: 'How notes are written: meeting type, speaker labels, diagrams and charts.' },
                             { term: 'Memory', detail: 'Key points kept from meetings, search across past meetings, and chat history. Long-term memory is in beta.' },
                             { term: 'Provider performance', detail: 'Learns how fast each provider answers from normal use. Run calibration measures it now, with small requests on your API key.' },
                         ]}

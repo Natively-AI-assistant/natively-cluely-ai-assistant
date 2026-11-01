@@ -71,7 +71,7 @@ export interface MeetingPeopleContextInput {
   /** The connected calendar account: name and address. */
   user?: { name?: string; email?: string } | null;
   /** From Profile Intelligence, only when the caller's privacy gates allow it. */
-  /** Role and company from the résumé profile; `bio` is the user's own "About you" text (Settings). */
+  /** Role and company from the résumé profile; `bio` is the user's own "About you" text (Profile Intelligence › Cue Cards, Pro). */
   profile?: { role?: string; company?: string; bio?: string } | null;
   /** Names the meeting app reported for the people in the call (Companion extension). */
   callParticipants?: string[];
@@ -89,7 +89,7 @@ export interface MeetingPeopleContext {
   organizer?: string;
   user?: string;
   userRole?: string;
-  /** The user's "About you" text, in their own words (Settings). */
+  /** The user's "About you" text, in their own words (Profile Intelligence › Cue Cards, Pro). */
   userBio?: string;
   /** True when the invite was split by the user's company domain. */
   split: boolean;
