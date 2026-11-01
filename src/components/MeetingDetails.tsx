@@ -2966,7 +2966,15 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                     Kept inside <main> (rather than hoisted above it) so it shares the scroll box's
                     content width: a two-container split would offset this column from the one below
                     by the scrollbar width on platforms with classic (non-overlay) scrollbars. */}
-                <div className={`sticky top-0 z-20 ${isLight ? 'bg-bg-secondary' : 'bg-bg-elevated'}`}>
+                {/* The header's paint fades out over its last 24px (inside the empty pb-8 strip
+                    below the tabs), so notes scrolling under it dissolve instead of being cut at
+                    a hard edge. A background gradient rather than a mask: a mask would also clip
+                    the Share / calendar popovers that open out of this box. At rest the strip has
+                    no content behind it, so the page looks unchanged until you scroll. */}
+                <div
+                    className="sticky top-0 z-20"
+                    style={{ backgroundImage: `linear-gradient(to bottom, var(${isLight ? '--bg-secondary' : '--bg-elevated'}) calc(100% - 24px), transparent)` }}
+                >
                     {/* No entrance of its own (nor on the body below): Launcher's page
                         transition brings the whole page in, and a second fade + 10px lift
                         under it multiplied the two opacities, so the page arrived dimmer
