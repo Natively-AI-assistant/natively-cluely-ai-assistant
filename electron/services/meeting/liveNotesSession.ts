@@ -19,10 +19,6 @@
  * text); a state broadcast carries `text` only when it changed under the
  * window (a new meeting cleared it).
  *
- * Folders (2026-10-20): the notepad's folder button, as Granola's beside its
- * chip. A meeting has no id until Stop saves it, so a folder picked while it
- * runs is held and filed when it is saved; after Stop it is filed at once.
- *
  * Pure: persistence, broadcast and timers injected
  * (MeetingNotesWindow2026_10_15.test.mjs).
  */
@@ -53,8 +49,6 @@ export interface LiveNotesSessionDeps {
     clearTimeout?: (handle: unknown) => void;
     /** Delay before an edit after the meeting reaches its saved copy. */
     endedSaveDelayMs?: number;
-    /** Put a saved meeting in a folder or take it out (OrganiseStore, by the user). */
-    fileInFolder?(meetingId: string, folderId: string, inFolder: boolean): boolean;
 }
 
 export const LIVE_NOTES_MAX_CHARS = 50_000;
@@ -62,8 +56,6 @@ export const LIVE_NOTES_MAX_CHARS = 50_000;
 export class LiveNotesSession {
     private state: LiveNotesState = { phase: 'idle', meetingId: null, text: '' };
     private pending: unknown = null;
-    /** The folders the meeting goes in: held while live, filed at save. */
-    private folders = new Set<string>();
 
     constructor(private readonly deps: LiveNotesSessionDeps) {}
 
@@ -90,7 +82,6 @@ export class LiveNotesSession {
         if (this.state.phase === 'ended') this.state.text = '';
         this.state.phase = 'live';
         this.state.meetingId = null;
-        this.folders.clear();
         this.deps.setLive(this.state.text);
         this.deps.broadcast({ phase: 'live', meetingId: null, ...(cleared ? { text: '' } : {}) });
     }
@@ -109,40 +100,7 @@ export class LiveNotesSession {
         if (meetingId && this.state.text.trim() && this.state.text !== takenText) {
             try { this.deps.saveEnded(meetingId, this.state.text); } catch { /* the window still holds it */ }
         }
-        if (meetingId) {
-            for (const folderId of this.folders) {
-                try { this.deps.fileInFolder?.(meetingId, folderId, true); } catch { /* the meeting page can still file it */ }
-            }
-        }
         this.deps.broadcast({ phase: 'ended', meetingId });
-    }
-
-    /** The folders this meeting is in (or will be, once saved). */
-    getFolders(): string[] {
-        return [...this.folders];
-    }
-
-    /**
-     * The folder button: while live the choice is held for the save; after Stop
-     * it files the saved meeting now. Returns whether it took.
-     */
-    setFolder(folderId: unknown, inFolder: unknown): boolean {
-        if (typeof folderId !== 'string' || !folderId || folderId.length > 200 || typeof inFolder !== 'boolean') return false;
-        if (this.state.phase === 'live') {
-            if (inFolder) this.folders.add(folderId);
-            else this.folders.delete(folderId);
-            return true;
-        }
-        if (this.state.phase === 'ended' && this.state.meetingId && this.deps.fileInFolder) {
-            let ok = false;
-            try { ok = this.deps.fileInFolder(this.state.meetingId, folderId, inFolder); } catch { ok = false; }
-            if (ok) {
-                if (inFolder) this.folders.add(folderId);
-                else this.folders.delete(folderId);
-            }
-            return ok;
-        }
-        return false;
     }
 
     /** Write a pending after-the-meeting edit now (quit). */

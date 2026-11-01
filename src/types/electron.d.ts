@@ -1092,9 +1092,6 @@ export interface ElectronAPI {
   liveNotesSetTemplate?: (id: string | null) => Promise<{ success: boolean; error?: 'pro_required' | 'unknown_template' }>
   liveNotesGetTemplate?: () => Promise<string | null>
   /** The notepad's folder button: every folder and whether this meeting is in it (held until Stop saves it). */
-  liveNotesFolders?: () => Promise<Array<{ id: string; name: string; inFolder: boolean }>>
-  liveNotesSetFolder?: (folderId: string, inFolder: boolean) => Promise<{ success: boolean }>
-  liveNotesCreateFolder?: (name: string) => Promise<{ id: string; name: string } | null>
   /** The calendar's events around now, for "Link a different event". */
   liveNotesCalendarCandidates?: () => Promise<Array<{ id: string; title: string; startTime: string; endTime: string; people: number }>>
   liveNotesLinkEvent?: (eventId: string | null) => Promise<{ success: boolean }>

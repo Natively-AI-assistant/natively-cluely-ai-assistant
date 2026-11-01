@@ -2379,8 +2379,6 @@ export class AppState {
       setLive: (text) => this.intelligenceManager.setLiveUserNotes(text),
       saveEnded: (meetingId, text) => { DatabaseManager.getInstance().setMeetingUserNotes(meetingId, text); },
       broadcast: (state) => this.sendToWindow(this.notesWindowHelper.getWindow(), 'live-notes-state', state),
-      // The notepad's folder button (services/organise), as "Move to folder" on the meeting page.
-      fileInFolder: (meetingId, folderId, inFolder) => this.fileMeetingInFolder(meetingId, folderId, inFolder),
     })
 
     // Initialize ThemeManager
@@ -2570,17 +2568,6 @@ export class AppState {
     if (!this.nativeOomTraceTimer) return;
     clearInterval(this.nativeOomTraceTimer);
     this.nativeOomTraceTimer = null;
-  }
-
-  // The notepad's folder button (LiveNotesSession.fileInFolder). Every list of
-  // meetings refreshes, as "Move to folder" on the meeting page does.
-  private fileMeetingInFolder(meetingId: string, folderId: string, inFolder: boolean): boolean {
-    const { organiseStore } = require('./services/organise/organiseService');
-    const store = organiseStore();
-    if (!store) return false;
-    const ok = inFolder ? store.addMeetingToFolder(meetingId, folderId, 'user') : store.removeMeetingFromFolder(meetingId, folderId);
-    if (ok) for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send('meetings-updated');
-    return ok;
   }
 
   private sendToWindow(win: BrowserWindow | null | undefined, channel: string, ...args: any[]): boolean {

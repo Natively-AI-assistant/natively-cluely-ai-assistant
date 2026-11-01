@@ -982,9 +982,6 @@ interface ElectronAPI {
   /** The note template for the running (or next) meeting's notes; null clears. */
   liveNotesSetTemplate: (id: string | null) => Promise<{ success: boolean; error?: 'pro_required' | 'unknown_template' }>;
   liveNotesGetTemplate: () => Promise<string | null>;
-  liveNotesFolders: () => Promise<Array<{ id: string; name: string; inFolder: boolean }>>;
-  liveNotesSetFolder: (folderId: string, inFolder: boolean) => Promise<{ success: boolean }>;
-  liveNotesCreateFolder: (name: string) => Promise<{ id: string; name: string } | null>;
   /** The calendar's events around now, for "Link a different event". */
   liveNotesCalendarCandidates: () => Promise<Array<{ id: string; title: string; startTime: string; endTime: string; people: number }>>;
   liveNotesLinkEvent: (eventId: string | null) => Promise<{ success: boolean }>;
@@ -3101,9 +3098,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   liveNotesSetTitle: (title: string) => ipcRenderer.invoke('live-notes:set-title', title),
   liveNotesSetTemplate: (id: string | null) => ipcRenderer.invoke('live-notes:set-template', id),
   liveNotesGetTemplate: () => ipcRenderer.invoke('live-notes:get-template'),
-  liveNotesFolders: () => ipcRenderer.invoke('live-notes:folders'),
-  liveNotesSetFolder: (folderId: string, inFolder: boolean) => ipcRenderer.invoke('live-notes:set-folder', { folderId, inFolder }),
-  liveNotesCreateFolder: (name: string) => ipcRenderer.invoke('live-notes:create-folder', name),
   liveNotesCalendarCandidates: () => ipcRenderer.invoke('live-notes:calendar-candidates'),
   liveNotesLinkEvent: (eventId: string | null) => ipcRenderer.invoke('live-notes:link-event', { eventId }),
   liveNotesSetAttendees: (change: { add?: string; remove?: string }) => ipcRenderer.invoke('live-notes:set-attendees', change),

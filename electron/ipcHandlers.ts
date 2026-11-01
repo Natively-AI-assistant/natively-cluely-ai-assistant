@@ -17273,29 +17273,6 @@ export function initializeIpcHandlers(appState: AppState): void {
       speakers,
     };
   });
-  // The heading's title, typed by the user: the meeting is saved under it (the
-  // calendar linker and the notes' own title never replace a title it did not set).
-  // The folder button beside the chip: the folders and which this meeting is in (held until it is saved).
-  safeHandle('live-notes:folders', async () => {
-    const { organiseStore } = require('./services/organise/organiseService');
-    const folders = organiseStore()?.listFolders?.() ?? [];
-    const live = appState.getLiveNotes();
-    let mine = new Set<string>(live.getFolders());
-    const { phase, meetingId } = live.getState();
-    if (phase === 'ended' && meetingId) {
-      try { mine = new Set(organiseStore()?.foldersOfMeeting?.(meetingId) ?? [...mine]); } catch { /* the held set */ }
-    }
-    return folders.map((f: any) => ({ id: f.id, name: f.name, inFolder: mine.has(f.id) }));
-  });
-  safeHandle('live-notes:set-folder', async (_event, args: { folderId?: unknown; inFolder?: unknown }) => {
-    return { success: appState.getLiveNotes().setFolder(args?.folderId, args?.inFolder) };
-  });
-  safeHandle('live-notes:create-folder', async (_event, name: unknown) => {
-    if (typeof name !== 'string' || !name.trim()) return null;
-    const { organiseStore } = require('./services/organise/organiseService');
-    const folder = organiseStore()?.createFolder?.(name.trim().slice(0, 80)) ?? null;
-    return folder ? { id: folder.id, name: folder.name } : null;
-  });
   // The notepad's template ("/" › Templates, All templates…): the sections the
   // running (or next) meeting's notes are written in. Notes only, live answers
   // keep the mode. Pro or a live trial, as Regenerate in a template; clearing
@@ -17311,6 +17288,8 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: mgr.setLiveNoteTemplate(id as string) };
   });
   safeHandle('live-notes:get-template', async () => appState.getIntelligenceManager()?.getLiveNoteTemplate() ?? null);
+  // The heading's title, typed by the user: the meeting is saved under it (the
+  // calendar linker and the notes' own title never replace a title it did not set).
   safeHandle('live-notes:set-title', async (_event, title: unknown) => {
     if (!appState.getIsMeetingActive() || typeof title !== 'string') return { success: false };
     const next = title.replace(/\s+/g, ' ').trim().slice(0, 120);
