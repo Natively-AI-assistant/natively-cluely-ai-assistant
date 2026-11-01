@@ -115,7 +115,6 @@ describe('classifyTargetSpeakability — tier classification (signal-based)', ()
     ['jd_fit_answer', 'default', 'walk me through your background in detail', 'STRUCTURED_FULL'],
     ['technical_concept_answer', 'default', 'explain caching step by step', 'STRUCTURED_FULL'],
     // SPOKEN_FULL — still spoken, needs room.
-    ['ethical_usage_answer', 'default', 'is it ok to use this in an interview', 'SPOKEN_FULL'],
     ['negotiation_answer', 'default', 'they lowballed my salary, how do I push back', 'SPOKEN_FULL'],
     ['behavioral_interview_answer', 'default', 'tell me about a time you had conflict', 'SPOKEN_FULL'],
     // A behavioral story with a leadership/recall cue needs room (code-review LOW 2026-06-16).
@@ -149,7 +148,6 @@ describe('SPOKEN_FULL tier — never trimmed (soft 180, prompt-only)', () => {
   const fullCases = [
     ['negotiation', 'negotiation_answer', 'they lowballed my salary, how do I push back'],
     ['behavioral with context', 'behavioral_interview_answer', 'tell me about a time you had conflict'],
-    ['ethical/safety', 'ethical_usage_answer', 'is it ok to use this in an interview'],
     ['tradeoff', 'jd_fit_answer', 'what are the tradeoffs here'],
   ];
   for (const [label, type, q] of fullCases) {

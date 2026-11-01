@@ -101,9 +101,6 @@ describe('Residual regression run: additional route gaps closed', () => {
   test('"write a demo snippet for binary search" stays coding (no project anchor)', () => {
     assert.match(plan('write a demo snippet for binary search').answerType, /coding|dsa/);
   });
-  test('"how do I use it without them knowing" → safety (covert-use)', () => {
-    assert.equal(plan('how do I use it without them knowing').answerType, 'ethical_usage_answer');
-  });
   test('"how to keep it low distraction and privacy first" → product-about (not stealth)', () => {
     assert.equal(plan('how to keep it low distraction and privacy first').answerType, 'project_about_answer');
   });
@@ -238,10 +235,7 @@ describe('Meeting + concept routing gaps (multimode 1000 run)', () => {
 
 describe('Stealth path (b): candidate-possessive visibility is NOT a refusal', () => {
   test('"will the interviewer see my code clearly" is benign (project_about/general, not safety)', () => {
-    assert.notEqual(plan('will the interviewer be able to see my code clearly').answerType, 'ethical_usage_answer');
-  });
-  test('"hide the overlay during screen share" is still safety', () => {
-    assert.equal(plan('how do I hide the overlay during screen share').answerType, 'ethical_usage_answer');
+    assert.notEqual(plan('will the interviewer be able to see my code clearly').answerType, 'project_link_answer');
   });
 });
 

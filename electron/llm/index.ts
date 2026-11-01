@@ -38,7 +38,7 @@ export { checkAnswerRelevance } from "./AnswerRelevanceChecker";
 export type { AnswerRelevanceResult } from "./AnswerRelevanceChecker";
 export { planNextAssistantAction } from "./PlannerDecision";
 export type { PlannerDecision, PlannerDecisionKind, PlannerInput } from "./PlannerDecision";
-export { planAnswer, formatAnswerPlanForPrompt, shapedCodingTemplate, isCodingAnswerType, shouldScaffold, isStealthEvasionQuestion, isJdFactualLookupNotNegotiationAdvice } from "./AnswerPlanner";
+export { planAnswer, formatAnswerPlanForPrompt, shapedCodingTemplate, isCodingAnswerType, shouldScaffold, isJdFactualLookupNotNegotiationAdvice } from "./AnswerPlanner";
 export { detectAnswerStyle, styleSuppressesScaffold } from "./answerStyle";
 export type { AnswerStyle, AnswerStyleResult } from "./answerStyle";
 export { detectExplicitCodingContract, isCodingContinuation, isBareCodeRequest, looksLikeCodingAnswer, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode } from "./codingFollowup";

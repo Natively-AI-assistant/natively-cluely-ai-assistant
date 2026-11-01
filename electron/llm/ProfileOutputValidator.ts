@@ -129,7 +129,6 @@ const PROFILE_FORBIDDEN_OUTPUT_TYPES: ReadonlySet<AnswerType> = new Set<AnswerTy
   'coding_question_answer', 'dsa_question_answer', 'technical_concept_answer',
   'system_design_answer', 'debugging_question_answer', 'sales_answer',
   'product_candidate_mix_answer', 'lecture_answer', 'general_meeting_answer',
-  'ethical_usage_answer',
 ]);
 // The PRODUCT "Natively" vs the English ADVERB "natively" ("Python natively
 // supports heapq", "runs natively on the GPU"). The product is a CAPITALIZED proper

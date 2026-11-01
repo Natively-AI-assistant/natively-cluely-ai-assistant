@@ -65,8 +65,6 @@ function isCoordinatorInScopeKinds(requiredEvidenceKinds) {
 function shouldRunMultiFamilyCoordinator(input) {
   return !input.isCodingChat
     && !input.selectedProfileEvidence
-    && !input.isStealthChat
-    && input.answerPlan?.answerType !== 'ethical_usage_answer'
     && Boolean(input.turnContract)
     && Boolean(input.manualTurnSourceDecision)
     && isCoordinatorInScopeKinds(input.manualTurnSourceDecision?.requiredEvidenceKinds)
@@ -493,8 +491,6 @@ describe('Context OS — multi-family coordinator admission predicate (2026-07-1
       { ...baseInput, selectedProfileEvidence: { placeholder: true },
         flags: { contextOsEvidencePackEnabled: true, contextOsMultiFamilyEvidenceEnabled: true } },
       { ...baseInput, isStealthChat: true,
-        flags: { contextOsEvidencePackEnabled: true, contextOsMultiFamilyEvidenceEnabled: true } },
-      { ...baseInput, answerPlan: { answerType: 'ethical_usage_answer' },
         flags: { contextOsEvidencePackEnabled: true, contextOsMultiFamilyEvidenceEnabled: true } },
       { ...baseInput, turnContract: null,
         flags: { contextOsEvidencePackEnabled: true, contextOsMultiFamilyEvidenceEnabled: true } },

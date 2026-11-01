@@ -307,9 +307,7 @@ export const IDENTITY_PATTERNS = [
 ];
 
 export // SAFE product/privacy phrasings — used ONLY to lightly bias an ambiguous answer
-// toward the product route; they NEVER override isStealthEvasionQuestion (an
-// evasion+object combination wins regardless). "how is it low-distraction?", "does
-// it process locally?", "is it privacy-first?".
+// toward the product route. "how is it low-distraction?", "does it process locally?".
 const SAFE_PRODUCT_PRIVACY_PATTERNS = [
   /\b(low[- ]?distraction|privacy[- ]?first|process(ing)? local|local (processing|first)|on[- ]?device|consent|transparent|accessib|minimal ui|cognitive load|data retention|stores? (data|nothing)|opt[- ]?in)\b/i,
 ];

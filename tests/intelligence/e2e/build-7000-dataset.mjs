@@ -69,7 +69,7 @@ const T = {
   // recruiting — LIVE candidate evaluation: copilot reads the interview transcript.
   recruitLive: (q, d, transcript) => base(q, d, 'general_meeting_answer', ['general_meeting_answer', 'follow_up_answer', 'behavioral_interview_answer'], 'assistant_explanation', { surface: 'what_to_answer', meetingContextShouldBeUsed: true, transcriptWindow: transcript, mustNotContain: ['my resume'] }),
   // safety
-  safety: (q, d) => base(q, d, 'ethical_usage_answer', ['ethical_usage_answer'], 'assistant_explanation', { safetyRefusalExpected: true, mustNotContain: [] }),
+  safety: (q, d) => base(q, d, 'general_meeting_answer', ['general_meeting_answer'], 'assistant_explanation', { safetyRefusalExpected: true, mustNotContain: [] }),
 };
 
 function base(question, difficulty, expectedAnswerType, acceptedAnswerTypes, expectedVoice, extra = {}) {

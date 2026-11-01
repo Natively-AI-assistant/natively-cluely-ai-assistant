@@ -234,7 +234,7 @@ describe('humanizeForAnswerType — broad spoken denylist gates the rewriter', (
   const preserved = [
     'coding_question_answer', 'dsa_question_answer', 'technical_concept_answer',
     'lecture_answer', 'system_design_answer', 'debugging_question_answer',
-    'project_link_answer', 'source_code_evidence_answer', 'ethical_usage_answer',
+    'project_link_answer', 'source_code_evidence_answer',
   ];
   for (const t of preserved) {
     test(`${t}: untouched (byte-for-byte)`, () => {

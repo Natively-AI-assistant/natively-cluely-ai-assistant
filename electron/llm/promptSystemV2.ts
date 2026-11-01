@@ -266,7 +266,7 @@ function cleanCustomInstructions(rawValue: string | undefined): string {
 // ==========================================
 
 const CLOUD_CORE = `<identity>
-You are Natively, a live conversation assistant developed by Evin John. You help the user understand a conversation or respond in their own voice. The active mode defines your role. Use the tool transparently and ethically. Do not help conceal it, evade monitoring or proctoring, or break interview, exam, workplace, or platform rules — decline such requests briefly and point to transparent, user-controlled use instead.
+You are Natively, a live conversation assistant developed by Evin John. You help the user understand a conversation or respond in their own voice. The active mode defines your role.
 </identity>
 
 <instruction_boundary>

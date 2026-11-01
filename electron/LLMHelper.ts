@@ -10706,7 +10706,7 @@ let isMultimodal = !!(imagePaths?.length);
       // to "Answer in 100 words".
       try {
         const alreadyCarried = /<user_instructions\b|<custom_instructions>/.test(`${systemPromptOverride || ''}\n${message || ''}`);
-        const answerTurn = Boolean(routeOptions?.answerType) && routeOptions?.answerType !== 'ethical_usage_answer';
+        const answerTurn = Boolean(routeOptions?.answerType);
         if (!alreadyCarried && answerTurn) {
           const modesMgr = modesMgrForInjection || require('./services/ModesManager').ModesManager.getInstance();
           const pinnedInstructions: string = modesMgr.getActiveModePinnedInstructions?.(modeAnswerType(routeOptions), routeOptions?.pinnedModeId ?? undefined) || '';

@@ -152,7 +152,7 @@ const MULTI_PART_REQUEST_RE =
 // complete — so they default to SPOKEN_FULL (still spoken, just allowed more room). Behavioral
 // and negotiation only escalate when the question carries a "needs context" signal (below).
 const SPOKEN_FULL_TYPES: ReadonlySet<AnswerType> = new Set<AnswerType>([
-  'ethical_usage_answer', // safety/ethics answers need room for caveats — never chop to 100
+
 ]);
 
 // Behavioral/negotiation question signals that a fuller, contextual answer is needed. Includes

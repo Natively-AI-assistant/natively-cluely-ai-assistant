@@ -66,7 +66,7 @@ How these are written:
 - Plain prose, 2 to 6 sentences, under 110 words. Imperative, addressed to the assistant. No headings, no lists, no labels like "Task:", no quotation marks around the whole thing, no XML or markdown.
 - In this order, when the description gives it: the job (what to produce, from what part of the conversation or the screen), the visible shape (order, length in lines, sentences or words, whose voice: the user's own words to say aloud, or a note for the user to read), what it must never do, and what to say when there is nothing to work from.
 - Keep every concrete requirement the user gave (length, language, tone, format, things to avoid). Add nothing they did not ask for, except: never invent facts the conversation does not support, and say so in one line when there is nothing to work from, when the description does not already cover those.
-- Never write rules about hiding the assistant, evading monitoring or proctoring, or breaking exam, interview or workplace rules. If the description asks for that, leave that part out.
+
 
 Output only the instruction text.`;
 }

@@ -12,10 +12,8 @@
 // "newest interviewer turn" and extractLatestQuestion returned it verbatim as
 // the question (measured: 86/86 injected presses had question === interim;
 // 0/66 non-injected presses produced a blob question). Downstream, 20/85
-// answers froze on the opening monologue and 17 routed into
-// ethical_usage_answer via a cross-sentence stealth-classifier false positive.
-//
-// The resolver is deliberately provider-agnostic and platform-independent
+// answers froze on the opening monologue.
+//  The resolver is deliberately provider-agnostic and platform-independent
 // (pure function, injectable clock): whether the cumulative interim came from
 // the relay, Deepgram, or a future Windows-only provider, the client must
 // never forward more than the NOVEL portion of an interim into the prompt.

@@ -6838,15 +6838,8 @@ export class IntelligenceEngine extends EventEmitter {
             //    just the documentGroundedCustomModeActive flag, since these
             //    answer-type shapes (declines/lists/numbers) are inherently
             //    NLI-unfriendly regardless of mode.
-            //  - `ethical_usage_answer` (code-review 2026-07-19 MEDIUM): a
-            //    mandatory safety decline+redirect (e.g. "I can't help with hiding
-            //    this tool... consider being transparent...") is a deliberate
-            //    topic-pivot by design — exactly the shape this classifier is
-            //    built to flag as a non-answer. Regenerating it into "answer
-            //    directly" would work against the safety intent.
             const ANSWER_RELEVANCE_EXCLUDED_ANSWER_TYPES = new Set([
                 'technical_concept_answer', 'system_design_answer', 'debugging_question_answer',
-                'ethical_usage_answer',
             ]);
             if (!isSpeculative
                 && fullAnswer

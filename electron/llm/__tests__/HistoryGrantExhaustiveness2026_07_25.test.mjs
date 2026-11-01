@@ -47,7 +47,7 @@ const ALL_ANSWER_TYPES = [
   'lecture_answer', 'definitional_answer', 'list_answer', 'exact_numeric_answer',
   'document_structure_answer', 'document_absent_fact_refusal', 'document_followup_answer',
   'follow_up_answer', 'unknown_answer', 'general_meeting_answer',
-  'project_link_answer', 'source_code_evidence_answer', 'ethical_usage_answer',
+  'project_link_answer', 'source_code_evidence_answer',
   'project_about_answer',
 ];
 

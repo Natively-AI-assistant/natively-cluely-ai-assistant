@@ -54,7 +54,7 @@ import { registerAssistIpc } from './services/assist/assistIpc';
 import { registerOutputsIpc } from './services/outputs/outputsIpc';
 import { registerOrganiseIpc, reindexOrganisePeople, organiseFolderMeetingIds, organiseScopeMeetingIds } from './services/organise/organiseIpc';
 import { isBareCodeRequest, looksLikeCodingAnswer, buildPriorCodingContextBlock as buildPriorCodingBlockForV3 } from './llm/codingFollowup';
-import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, totalHardTimeoutMs, repairDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, CODING_REGEN_ABORT_CHARS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, acceptRepairedAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
+import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, totalHardTimeoutMs, repairDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, CODING_REGEN_ABORT_CHARS, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, acceptRepairedAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
 
 /**
  * First-token budget for a post-answer repair/regeneration stream.
@@ -3852,7 +3852,6 @@ export function initializeIpcHandlers(appState: AppState): void {
         // source-aware evidence, but it must NOT write the final user-visible answer.
         // Selected evidence is packed into a compact prompt block and the provider
         // writes the final answer below through the normal streamChat path.
-        const isStealthChat = isStealthEvasionQuestion(message);
 
         // ── CONTEXT OS CLARIFICATION SHORT-CIRCUIT (Phase 4, invariant 14) ──
         // When the kernel resolves sourceOwner='clarify' (a general/ambiguous
@@ -3875,7 +3874,6 @@ export function initializeIpcHandlers(appState: AppState): void {
             && require('./intelligence/context-os').clarificationShortCircuitEnabled()
             && !isCodingChat
             && !imagePaths?.length
-            && !isStealthChat
             // A clarify born of a reference-bound mode with ZERO files is not
             // actionable — nothing to disambiguate into (2026-08-11). Same
             // predicate as the WTA twin; see refusalPolicy.ts.
@@ -4124,8 +4122,6 @@ export function initializeIpcHandlers(appState: AppState): void {
           && isIntelligenceFlagEnabled('contextOsMultiFamilyEvidenceEnabled');
         const profileEvidenceEligible = !imagePaths?.length && !isCodingChat
           && !isAssistantIdentityQuestion(message)
-          && !isStealthChat
-          && answerPlan.answerType !== 'ethical_usage_answer'
           && answerPlan.answerType !== 'project_link_answer'
           && answerPlan.answerType !== 'source_code_evidence_answer'
           && answerPlan.answerType !== 'project_about_answer'
@@ -4146,7 +4142,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         // it must not contain profile facts and is not authoritative memory.
         if (manualOwnership?.shouldClarifyInsteadOfProfile && !_ownerEnforcementOff
             && require('./intelligence/context-os').clarificationShortCircuitEnabled()
-            && !isCodingChat && !imagePaths?.length && !isStealthChat) {
+            && !isCodingChat && !imagePaths?.length) {
           try {
             const { buildSourceSwitchClarification } = require('./llm/sourceOwnership');
             const clarify = buildSourceSwitchClarification(
@@ -4309,7 +4305,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         // the prompt (like coding) so the template reaches the model, and we drop
         // the rolling 100s context (it would dilute the contract). Release 2026-06-06b.
         const CONTRACT_ENFORCED_TYPES = new Set([
-          'ethical_usage_answer', 'project_link_answer',
+          'project_link_answer',
           'source_code_evidence_answer', 'project_about_answer',
         ]);
         const isContractEnforced = CONTRACT_ENFORCED_TYPES.has(answerPlan.answerType);
@@ -4680,8 +4676,6 @@ export function initializeIpcHandlers(appState: AppState): void {
         let coordinatorGovernedProfileEvidence = false;
         if (!isCodingChat
             && !selectedProfileEvidence
-            && !isStealthChat
-            && answerPlan.answerType !== 'ethical_usage_answer'
             && turnContract
             && manualTurnSourceDecision
             && coordinatorInScopeKinds
@@ -4977,11 +4971,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           // A pure SAFETY answer (stealth/evasion decline) must not run the
           // knowledge intercept at all — no profile, no intro, no candidate
           // grounding belongs in a policy redirect (release 2026-06-06b).
-          const isSafetyAnswer = answerPlan.answerType === 'ethical_usage_answer';
-          // A mode without Profile Intelligence never runs the knowledge
-          // intercept either (LLMHelper re-checks the same rule; this keeps the
-          // decision visible in the trace line below).
-          const ignoreKnowledge = isCodingChat || isSafetyAnswer || !manualProfileIntelligenceAllowed ? true : options?.ignoreKnowledgeMode;
+          const ignoreKnowledge = isCodingChat || !manualProfileIntelligenceAllowed ? true : options?.ignoreKnowledgeMode;
           iTrace.lifecycle('evidence_selected', {
             selectedEvidenceCount: selectedProfileEvidence?.items.length ?? 0,
             renderedEvidenceCount: selectedProfileEvidence?.items.length ?? 0,
@@ -5006,7 +4996,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             context,
             systemPromptOverride,
             ignoreKnowledge,
-            isCodingChat || isSafetyAnswer, // skipModeInjection; safety/coding must not pull active-mode resume/JD/reference context
+            isCodingChat, // skipModeInjection; coding must not pull active-mode resume/JD/reference context
             [],    // extraDataScopes
             myController.signal,
             // Coding gets a small reasoning budget (correctness); everything else
