@@ -809,6 +809,17 @@ export const isScaffoldRegenerationEligible = (answerType: AnswerType, answer: s
   return true;
 };
 
+/**
+ * Detects whether the model produced a refusal specifically declining to solve
+ * a coding, algorithm, or technical problem on the grounds of an assessment,
+ * contest, exam, or live test (e.g. HackerRank / LeetCode refusal).
+ */
+export const isAssessmentRefusal = (text: string): boolean => {
+  if (!text) return false;
+  return /\b(?:can(?:not|['’]t)\s+provide\s+(?:a\s+)?solutions?|cannot\s+solve|can['’]t\s+solve|not\s+allowed\s+to\s+solve|unable\s+to\s+provide\s+solutions?)\b[\s\S]*?\b(?:live|active)?\s*(?:hackerrank|leetcode|codesignal|codility|assessment|test|contest|exam)\b/i.test(text)
+    || /\b(?:live|active)\s+(?:hackerrank|leetcode|codesignal|codility|assessment|test|contest)\b[\s\S]*?\b(?:can(?:not|['’]t)\s+provide|cannot\s+solve|can['’]t\s+solve|not\s+allowed\s+to\s+solve)\b/i.test(text);
+};
+
 export const validateAnswerStructure = (
   answerType: AnswerType,
   answer: string,
@@ -834,6 +845,15 @@ export const validateAnswerStructure = (
       missingSections: [],
       hasCodeBlock: hasCodeBlock(answer),
       hasComplexity: hasComplexity(answer),
+    };
+  }
+
+  if (isAssessmentRefusal(answer)) {
+    return {
+      ok: false,
+      missingSections: ['Code'],
+      hasCodeBlock: false,
+      hasComplexity: false,
     };
   }
 
@@ -866,6 +886,9 @@ export const validateAnswerStructure = (
  */
 const validateShapedCodingAnswer = (answer: string): AnswerValidationResult => {
   const trimmed = (answer || '').trim();
+  if (isAssessmentRefusal(trimmed)) {
+    return { ok: false, missingSections: ['Code'], hasCodeBlock: false, hasComplexity: false };
+  }
   if (!extractFirstCodeBlock(trimmed)) {
     return { ok: true, missingSections: [], hasCodeBlock: false, hasComplexity: hasComplexity(trimmed) };
   }
