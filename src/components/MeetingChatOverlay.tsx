@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useStreamBuffer } from '../hooks/useStreamBuffer';
 
 import { X } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { chatScrimMotion, chatSheetMotion } from './chatSheetMotion';
 import { genMessageId } from '../utils/messageId';
 import { NativelyWordmark } from './NativelyWordmark';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
@@ -150,6 +151,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
     // Match the modes manager's `--mm-bg` exactly so the expanded chat
     // card looks like the same dark grey surface.
     const isLightTheme = useResolvedTheme() === 'light';
+    const reduceMotion = useReducedMotion() ?? false;
     const chatWindowBg = isLightTheme ? '#f9f9f9' : '#111111';
 
     // Submit initial query when overlay opens
@@ -525,30 +527,21 @@ ${contextString}`;
             {isOpen && (
                 <motion.div
                     key="meeting-chat-modal"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.16 }}
                     className="fixed inset-0 z-[300] flex flex-col justify-end"
                     onClick={handleBackdropClick}
                 >
-                    {/* Backdrop — dims only; the parent's opacity fade brings it in. The
-                        same dim as Settings and the Modes Manager (GenieModal's
-                        backdropClassName in SettingsOverlay / App): 6% in light, 60%
-                        in dark, no blur. */}
-                    <div data-chat-scrim="" className={`absolute inset-0 ${isLightTheme ? 'bg-black/[0.06]' : 'bg-black/60'}`} />
+                    {/* Backdrop — dims only. It fades on its own, not via the wrapper, so
+                        closing does not hide the sheet before it slides down
+                        (chatSheetMotion.ts). The same dim as Settings and the Modes
+                        Manager (GenieModal's backdropClassName in SettingsOverlay / App):
+                        6% in light, 60% in dark, no blur. */}
+                    <motion.div {...chatScrimMotion(reduceMotion)} data-chat-scrim="" className={`absolute inset-0 ${isLightTheme ? 'bg-black/[0.06]' : 'bg-black/60'}`} />
 
                     {/* Chat Window - extends to bottom, leaves room for input */}
                     <motion.div
                         ref={chatWindowRef}
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "85vh", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{
-                            height: { type: "spring", stiffness: 300, damping: 30, mass: 0.8 },
-                            opacity: { duration: 0.2 }
-                        }}
-                        className={`relative mx-auto w-full max-w-[680px] mb-0 rounded-t-[24px] border-t border-x border-border-subtle ${isLightTheme ? 'shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_-20px_48px_-12px_rgba(0,0,0,0.16)]' : 'shadow-2xl'} overflow-hidden flex flex-col`}
+                        {...chatSheetMotion(reduceMotion)}
+                        className={`relative mx-auto w-full max-w-[680px] h-[85vh] mb-0 rounded-t-[24px] border-t border-x border-border-subtle ${isLightTheme ? 'shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_-20px_48px_-12px_rgba(0,0,0,0.16)]' : 'shadow-2xl'} overflow-hidden flex flex-col`}
                         style={{ backgroundColor: chatWindowBg }}
                         onClick={(e) => e.stopPropagation()}
                     >
