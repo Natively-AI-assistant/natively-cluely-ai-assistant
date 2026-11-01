@@ -1419,10 +1419,10 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
             <div className="aip-card p-5">
                 <div className="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
                     <div className="min-w-0 flex-1">
-                        <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">
+                        <label className="block text-sm font-bold mb-0 aip-hero">
                             {t('Active Reranker Model')}
                         </label>
-                        <p className="text-[10px] aip-muted mt-0.5">
+                        <p className="text-xs aip-muted mt-0.5">
                             {activeDetail}
                         </p>
                     </div>
@@ -1467,7 +1467,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
             <div className="aip-card p-5">
                 <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1 space-y-1">
-                        <span className="block text-xs font-medium uppercase tracking-wide aip-hero">
+                        <span className="block text-sm font-bold aip-hero">
                             {t('Fall back to the local reranker')}
                         </span>
                         {/* One line (404px of 472 in the 574px column). The switch
@@ -1476,7 +1476,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                             reranker" covers them all. Naming each one ("If Natively,
                             OpenRouter, Jina AI or Voyage AI fails…") wrapped to two
                             lines and grew with every provider added. */}
-                        <p className="text-[10px] aip-muted">
+                        <p className="text-xs aip-muted">
                             {t('If a hosted reranker fails, rerank on this device instead of keeping the original order.')}
                         </p>
                     </div>
@@ -1818,7 +1818,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                     {(filterTab === 'all' || filterTab === 'installed') && !modelQuery && (
                         <section className="space-y-1.5">
                             <header className="flex items-baseline justify-between gap-3 px-1">
-                                <h5 className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--aip-secondary)' }}>
+                                <h5 className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--aip-secondary)' }}>
                                     {t('Bundled with Natively')}
                                 </h5>
                                 <span className="text-[10px] tabular-nums" style={{ color: 'var(--aip-tertiary)' }}>1/1</span>
@@ -1856,7 +1856,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                     {filteredOnnxModels.length > 0 && (
                         <section className="space-y-1.5">
                             <header className="flex items-baseline justify-between gap-3 px-1">
-                                <h5 className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--aip-secondary)' }}>
+                                <h5 className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--aip-secondary)' }}>
                                     {t('Hugging Face ONNX Models')}
                                 </h5>
                                 <span className="text-[10px] tabular-nums" style={{ color: 'var(--aip-tertiary)' }}>
@@ -1873,7 +1873,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
                     {filteredGgufModels.length > 0 && (
                         <section className="space-y-1.5">
                             <header className="flex items-baseline justify-between gap-3 px-1">
-                                <h5 className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--aip-secondary)' }}>
+                                <h5 className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--aip-secondary)' }}>
                                     {t('Extension Rerankers (GGUF)')}
                                 </h5>
                                 <span className="text-[10px] tabular-nums" style={{ color: 'var(--aip-tertiary)' }}>
@@ -2363,10 +2363,10 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
             <div className="aip-card p-5 space-y-3">
                 <div className="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
                     <div>
-                        <label className="block text-xs font-medium uppercase tracking-wide aip-hero">
+                        <label className="block text-sm font-bold aip-hero">
                             {t('Candidates to rerank')}
                         </label>
-                        <p className="text-[10px] aip-muted mt-0.5">
+                        <p className="text-xs aip-muted mt-0.5">
                             {t(candidateControlRationale(status.effective.kind)
                                 || 'Number of initial retrieved passages scored by the reranker.')}
                         </p>

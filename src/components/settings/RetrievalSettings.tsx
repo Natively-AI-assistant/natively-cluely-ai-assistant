@@ -150,7 +150,7 @@ const RetrievalLayout: React.FC<RetrievalLayoutProps> = ({ embedding, reranker, 
             <header className="space-y-1">
                 <h3 className="aip-title">{t('Retrieval')}</h3>
                 <p className="aip-subtitle">
-                    {t('Two models decide what Natively finds in your documents: the embedding model indexes them and retrieves candidate passages, and the reranker decides which of those actually answer the question. Both are chosen separately from your AI model, and changing the embedding model re-indexes your project.')}
+                    {t('The embedding model indexes your documents and finds passages. The reranker picks the ones that answer the question. Changing the embedding model re-indexes your project.')}
                 </p>
             </header>
 

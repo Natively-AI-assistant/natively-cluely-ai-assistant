@@ -1442,7 +1442,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
         models.length > 0 && (
             <section className="space-y-1.5">
                 <header className="flex items-baseline justify-between gap-3 px-1">
-                    <h5 className="text-[10px] font-bold uppercase tracking-wider text-[var(--aip-secondary)]">
+                    <h5 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--aip-secondary)]">
                         {title}
                     </h5>
                     <span className="text-[10px] tabular-nums text-[var(--aip-tertiary)]">
@@ -1570,10 +1570,10 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
             <div className="aip-card p-5">
                 <div className="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
                     <div className="min-w-0 flex-1">
-                        <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">
+                        <label className="block text-sm font-bold mb-0 aip-hero">
                             {t('Active Embedding Model')}
                         </label>
-                        <p className="text-[10px] aip-muted mt-0.5">
+                        <p className="text-xs aip-muted mt-0.5">
                             {active.configured && activeModelDetails
                                 ? `${activeModelDetails.dims} dimensions · ${t('Changing model re-indexes your project')}`
                                 : active.configured

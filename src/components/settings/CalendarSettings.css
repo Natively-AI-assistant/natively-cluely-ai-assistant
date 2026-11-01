@@ -54,15 +54,16 @@
 }
 
 /* ── Page label (PI .pi-section-label) ── */
+/* "Upcoming" is a section heading: General's 18px/700 (text-lg font-bold). */
 .cp-label {
-  font-size: 14px;
-  line-height: 1.3;
-  font-weight: 600;
+  font-size: 18px;
+  line-height: 28px;
+  font-weight: 700;
   color: var(--cp-hero);
   margin: 0;
 }
 .cp-desc {
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--cp-secondary);
   margin: 4px 0 0;
@@ -146,11 +147,12 @@
   color: var(--cp-secondary);
   flex-shrink: 0;
 }
+/* Card titles are row titles: General's 14px/700 (text-sm font-bold), above
+   the 12px description, not below it. */
 .cp-card-label {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--cp-hero);
-  letter-spacing: -0.01em;
   margin: 0;
 }
 .cp-card-daynum {

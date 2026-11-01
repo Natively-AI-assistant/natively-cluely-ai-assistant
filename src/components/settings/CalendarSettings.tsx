@@ -3,7 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { AlertCircle, ArrowUpRight, Bell, CalendarDays, CalendarRange, Check, Info, Link2, Loader2, PhoneOff, RefreshCw, ScreenShare, Video } from 'lucide-react';
 import { useLanguage, useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
-import { Collapse, CollapseItem, Presence, SettingsMotionReady, SwapLabel, useMotionReadyAfter, useSettledFlag } from './SettingsRow';
+import { Collapse, CollapseItem, Presence, SettingsMotionReady, SettingsSectionHeading, SwapLabel, useMotionReadyAfter, useSettledFlag } from './SettingsRow';
 import { SettingsToggle } from './SettingsToggle';
 import { readCalendarSnapshot, unfinishedEvents, writeCalendarSnapshot } from '../../lib/calendarSnapshot.mjs';
 import './CalendarSettings.css';
@@ -682,8 +682,12 @@ export const CalendarSettings: React.FC = () => {
       <div className="cal-pane space-y-6 animated fadeIn" data-theme={theme} data-entered={entered || undefined} data-settings-stagger>
         {/* ── The calendars ── */}
         <section>
-          <h3 className="cp-label">{t('Calendars')}</h3>
-          <p className="cp-desc">{t('Your next meetings, here and in the Launcher, ready to join. A meeting in two calendars shows once.')}</p>
+          {/* The pane title, General's 18px/700 + 12px (SettingsSectionHeading).
+              .cp-label stays for the smaller "Upcoming" label below. */}
+          <SettingsSectionHeading
+            title={t('Calendars')}
+            subtitle={t('Your next meetings, here and in the Launcher, ready to join. A meeting in two calendars shows once.')}
+          />
           {status === null ? null : (
             <div className={`pt-4 cp-sources${reduceMotion ? ' cp-fade-in' : ''}`}>
               {sourceList.map(sourceRow)}
