@@ -5,7 +5,7 @@ import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion } fr
 import { ShareMenu } from '../meeting/ShareMenu';
 import { notesLabel, notesWereEdited } from '../meeting/notesView';
 import { templatePickerOptions } from '../meeting/notesFeedback';
-import { enhancedNotesMarkdown, enhancedOverview, enhancedSections } from './notepadView';
+import { enhancedNotesMarkdown, enhancedOverview, enhancedSections, notesOutcome } from './notepadView';
 import { NotesTemplateMenu, type TemplatePick } from './NotesTemplateMenu';
 
 /**
@@ -106,7 +106,7 @@ export interface NotesEnhancedHandle {
 /** What a rewrite is asked in: the same notes, a note template, or a mode. */
 type Rewrite = { kind: 'rewrite' } | { kind: 'template'; id: string; name: string } | { kind: 'mode'; id: string; name: string };
 
-type Details = { id: string; title?: string; detailedSummary?: any; transcript?: unknown[] } | null;
+type Details = { id: string; title?: string; detailedSummary?: any; transcript?: unknown[]; summaryStatus?: string } | null;
 
 export const NotesEnhanced = forwardRef<NotesEnhancedHandle, {
     meetingId: string;
@@ -122,6 +122,9 @@ export const NotesEnhanced = forwardRef<NotesEnhancedHandle, {
     const stopRef = React.useRef(stopPx);
     stopRef.current = stopPx;
     const [details, setDetails] = useState<Details>(null);
+    // The first answer about this meeting is back (saved or not yet). Until then nothing is
+    // drawn: the pill flashed up and away on a meeting that was already done (2026-11-01).
+    const [loaded, setLoaded] = useState(false);
     const still = useReducedMotion() ?? false;
     const sweepLines = React.useMemo(() => notesSweepLines(myNotes ?? ''), [myNotes]);
     const [modes, setModes] = useState<Array<{ id: string; name: string; templateType: string }>>([]);
@@ -133,10 +136,11 @@ export const NotesEnhanced = forwardRef<NotesEnhancedHandle, {
 
     const load = useCallback(() => {
         window.electronAPI?.getMeetingDetails?.(meetingId).then((d: any) => {
+            setLoaded(true);
             if (!d || typeof d !== 'object') return;
             setDetails(d);
             if (typeof d.title === 'string' && d.title.trim()) onTitle(d.title.trim());
-        }).catch(() => { /* not saved yet */ });
+        }).catch(() => { setLoaded(true); /* not saved yet */ });
     }, [meetingId, onTitle]);
 
     useEffect(() => {
@@ -154,6 +158,9 @@ export const NotesEnhanced = forwardRef<NotesEnhancedHandle, {
     const sections = enhancedSections(details?.detailedSummary);
     const overview = enhancedOverview(details?.detailedSummary);
     const ready = sections.length > 0 || overview.length > 0;
+    // Main finished and wrote nothing (no speech, too little said, or a failed pass):
+    // say so instead of waiting on the pill for good (notesOutcome, 2026-11-01).
+    const outcome = notesOutcome(ready, details?.summaryStatus);
     // The notepad's demand (FunnelTelemetry.notepadUsed), after Stop: action names only.
     const npTrack = (action: string) => {
         window.electronAPI?.funnelTrack?.('notepad_used', { action, phase: 'ended' })?.catch?.(() => {});
@@ -266,7 +273,9 @@ export const NotesEnhanced = forwardRef<NotesEnhancedHandle, {
     const [pendingReveal, setPendingReveal] = useState(false);
     // The pill's words: a step every 2.2s while waiting, "Writing your notes" once lines come.
     const rewriting = regenerating || pendingReveal;
-    const waitingForNotes = (!ready || rewriting) && !revealing;
+    // Nothing came, and no rewrite of it is under way: the page says so (below).
+    const unwritten = (outcome === 'nothing' || outcome === 'failed') && !rewriting;
+    const waitingForNotes = ((!ready && !unwritten) || rewriting) && !revealing;
     const [labelStep, setLabelStep] = useState(0);
     useEffect(() => {
         if (!waitingForNotes) return;
@@ -334,10 +343,10 @@ export const NotesEnhanced = forwardRef<NotesEnhancedHandle, {
     }, [pendingReveal]);
     // The notes land some seconds after Stop: ask again until they do.
     useEffect(() => {
-        if (ready) return;
+        if (ready || unwritten) return;
         const timer = setInterval(load, 4_000);
         return () => clearInterval(timer);
-    }, [load, ready]);
+    }, [load, ready, unwritten]);
     const title = (typeof details?.title === 'string' && details.title.trim()) || 'Meeting notes';
 
     const regenerate = async (req: Rewrite, confirmed = false) => {
@@ -404,7 +413,7 @@ export const NotesEnhanced = forwardRef<NotesEnhancedHandle, {
     // Granola's grey sweep (.np-sweep-text). Owner: "copy the granola notes generation
     // animation, that pill sweep". One element from Stop until the notes have swept in,
     // so it does not blink when they arrive.
-    const showPill = !ready || regenerating || pendingReveal || revealing;
+    const showPill = (!ready && !unwritten && loaded) || regenerating || pendingReveal || revealing;
     // Lines in page order: the overview, then each heading and its points.
     let lineNo = 0;
     const reveal = (): { out: boolean; className: string; line: number } => {
@@ -535,9 +544,41 @@ export const NotesEnhanced = forwardRef<NotesEnhancedHandle, {
                 )}
             </AnimatePresence>
 
+            {/* Main finished with nothing to show (notesOutcome): no speech, too little said,
+                or a failed pass. It takes the pill's place as the pill leaves, with the panel
+                tokens (250ms smooth-out, 8px, 2px blur); a failed pass can be tried again,
+                as the meeting page offers ("Notes couldn't be generated"). */}
+            <AnimatePresence initial={false}>
+                {!ready && unwritten && (
+                    <motion.div
+                        key="unwritten"
+                        role="status"
+                        initial={still ? { opacity: 0 } : { opacity: 0, y: 8, filter: 'blur(2px)' }}
+                        animate={still ? { opacity: 1 } : { opacity: 1, y: 0, filter: 'blur(0px)' }}
+                        exit={{ opacity: 0, transition: { duration: 0.15, ease: [0.22, 1, 0.36, 1] } }}
+                        transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                        className="max-w-[41.5rem]"
+                    >
+                        <p className="text-[15px] font-medium leading-[1.4]" style={ink('--np-ink')}>
+                            {outcome === 'failed' ? 'Your notes couldn’t be written' : 'No notes to write'}
+                        </p>
+                        <p className="mt-1 text-[13px] leading-[1.5]" style={ink('--np-ink-secondary')}>
+                            {outcome === 'failed' ? 'The transcript is saved, so you can try again.' : 'Not enough was said in this meeting to write notes from.'}
+                            {sweepLines.length > 0 ? ' Your own notes are under My notes.' : ''}
+                        </p>
+                        {outcome === 'failed' && (
+                            <button type="button" onClick={() => { void regenerate({ kind: 'rewrite' }); }} className={`${softBtn} mt-3`} style={ink('--np-ink')}>
+                                Try again
+                            </button>
+                        )}
+                        {notice && <p className="mt-3 text-[12px] leading-4" style={ink('--np-ink-secondary')}>{notice}</p>}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Your notes clear (150ms, 2px blur) as the written ones start, not cut. */}
             <AnimatePresence initial={false}>
-            {!ready && (
+            {!ready && !unwritten && loaded && (
                 /* Granola keeps the user's own notes on screen while it writes, every line
                    carrying the grey sweep 140ms after the one above, so the sweep runs down
                    the page (its X6 grayscalePulse: animationDelay = line × 140ms). */

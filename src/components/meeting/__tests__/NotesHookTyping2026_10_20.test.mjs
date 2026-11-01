@@ -285,14 +285,14 @@ test('notepad telemetry: every action the notepad reports is in the catalogue, a
 test('notepad: the notes are written down the page behind the pill, as in the owner\'s Granola recording (2026-11-01)', async () => {
   const notes = read('src/components/notes/NotesEnhanced.tsx');
   // One pill from Stop until the last line has settled, then it leaves.
-  assert.match(notes, /const showPill = !ready \|\| regenerating \|\| pendingReveal \|\| revealing;/);
+  assert.match(notes, /const showPill = \(!ready && !unwritten && loaded\) \|\| regenerating \|\| pendingReveal \|\| revealing;/);
   // Lines come out one at a time: `shown` counts them, null = all.
   assert.match(notes, /const \[shown, setShown\] = useState<number \| null>\(null\);/);
   assert.match(notes, /return \{ out: i < shown, className: 'np-write-line', line: i \};/);
   assert.match(notes, /revealTick\.current = setInterval\(\(\) => \{\s*out \+= 1;\s*setShown\(out\);/);
   // The pill comes AFTER the written lines (the write head), above your notes before that.
-  const order = ['{ready && (\n                <div className={`mt-5 space-y-5', '<AnimatePresence mode="popLayout">', '{!ready && ('].map((m) => notes.indexOf(m));
-  assert.ok(order.every((n) => n > 0) && order[0] < order[1] && order[1] < order[2], String(order));
+  const order = ['{ready && (\n                <div className={`mt-5 space-y-5', '<AnimatePresence mode="popLayout">', '{!ready && unwritten && (', '{!ready && !unwritten && loaded && ('].map((m) => notes.indexOf(m));
+  assert.ok(order.every((n) => n > 0) && order[0] < order[1] && order[1] < order[2] && order[2] < order[3], String(order));
   assert.match(notes, /\$\{ready \? 'np-write-head' : ''\}/);
   // Its ride is a velocity-keeping spring on a motion value (FLIP from a layout marker), not a
   // retargeted tween (that lurched: 10–20px a frame, then stops).
@@ -390,4 +390,22 @@ test('notepad: the page fades out under the heading once scrolled, instead of be
   assert.match(css, /\.np-fade-top \{ background: linear-gradient\(to bottom, var\(--np-surface\), transparent\); \}/);
   assert.match(css, /\.np-page-fade \{ opacity: 0; transition: opacity 150ms ease-out; \}\s*\.np-page-fade\[data-shown="true"\] \{ opacity: 1; \}/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{ \.np-page-fade \{ transition: none; \} \}/);
+});
+
+test('the notepad stops waiting when main finished with no notes (2026-11-01)', () => {
+    const src = readFileSync(new URL('../../notes/NotesEnhanced.tsx', import.meta.url), 'utf8');
+    assert.match(src, /const outcome = notesOutcome\(ready, details\?\.summaryStatus\)/);
+    assert.match(src, /const unwritten = \(outcome === 'nothing' \|\| outcome === 'failed'\) && !rewriting/);
+    // The pill, its label timer and the 4s reload all stop; the sweep over your notes too.
+    assert.match(src, /const showPill = \(!ready && !unwritten && loaded\) \|\| regenerating/);
+    assert.match(src, /const waitingForNotes = \(\(!ready && !unwritten\) \|\| rewriting\)/);
+    assert.match(src, /if \(ready \|\| unwritten\) return;\s*const timer = setInterval\(load/);
+    assert.match(src, /\{!ready && !unwritten && loaded && \(/);
+    // Nothing until the meeting's first load is back: no pill flashing on a finished meeting.
+    assert.match(src, /getMeetingDetails\?\.\(meetingId\)\.then\(\(d: any\) => \{\s*setLoaded\(true\);/);
+    assert.match(src, /\.catch\(\(\) => \{ setLoaded\(true\);/);
+    // It says so, and a failed pass can be tried again.
+    assert.match(src, /'No notes to write'/);
+    assert.match(src, /'Your notes couldn’t be written'/);
+    assert.match(src, /outcome === 'failed' && \(\s*<button type="button" onClick=\{\(\) => \{ void regenerate\(\{ kind: 'rewrite' \}\); \}\}[\s\S]{0,120}Try again/);
 });

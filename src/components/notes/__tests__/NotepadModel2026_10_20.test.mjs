@@ -7,7 +7,7 @@ import { filterSlashItems, findMatchRanges, readableNotesMarkdown, slashQuery, s
 import {
     answerSources, askContext, companyOfEmail, contentWords, enhancedNotesMarkdown, enhancedOverview, enhancedSections, groupAttendees, findInTranscript, listeningBarHeights,
     LANGUAGE_RESTRICTED_PROVIDERS, RECIPES_SHOWN, languageButtonLabel, micButtonLabel, notepadLanguageChoices, visibleRecipes,
-    applyTranscriptEvent, EMPTY_LIVE_TRANSCRIPT, liveTranscriptRows, isSummaryTitle, fallbackNoteSections, actionLine,
+    applyTranscriptEvent, EMPTY_LIVE_TRANSCRIPT, liveTranscriptRows, isSummaryTitle, fallbackNoteSections, actionLine, notesOutcome,
 } from '../notepadView.ts';
 
 test('"/" asks for the menu only at the start of a line, up to 20 letters', () => {
@@ -249,4 +249,19 @@ test('a v3 note with no template shows its decisions and action items (2026-10-3
     assert.deepEqual(fallbackNoteSections(templated), []);
     // Older notes keep their own fallback (key points and action items).
     assert.deepEqual(fallbackNoteSections({ keyPoints: ['A'], decisions: [{ text: 'B' }] }), []);
+});
+
+test('notes after Stop: main finishing with nothing ends the wait (2026-11-01)', () => {
+    // Notes on the page win, whatever the status says.
+    assert.equal(notesOutcome(true, 'completed'), 'ready');
+    assert.equal(notesOutcome(true, 'failed'), 'ready');
+    assert.equal(notesOutcome(true, undefined), 'ready');
+    // No speech or too little said: main saves "completed" with empty notes.
+    assert.equal(notesOutcome(false, 'completed'), 'nothing');
+    // A failed pass with nothing to fall back on.
+    assert.equal(notesOutcome(false, 'failed'), 'failed');
+    // Still being saved or written: keep waiting.
+    for (const s of [undefined, null, 'queued', 'chunking', 'summarizing_chunks', 'reducing', 'validating', 'something-new']) {
+        assert.equal(notesOutcome(false, s), 'writing', String(s));
+    }
 });

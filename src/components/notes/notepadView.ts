@@ -164,6 +164,22 @@ export interface EnhancedSection { title: string; lines: Array<{ text: string; m
  * A v3 note with no template gets Decisions and Action items instead
  * (fallbackNoteSections). Empty when there are no notes yet.
  */
+/**
+ * Where the notes after Stop stand, from the saved meeting's summaryStatus
+ * (MeetingPersistence). Main can finish with nothing to show: no speech to
+ * write from (it skips the summary and saves "completed" with empty notes),
+ * too little said, or a failed pass ("failed"). The notepad waited on the
+ * pill forever in those cases (2026-11-01). Any other status, or none yet
+ * (the meeting is still being saved), is still writing.
+ */
+export type NotesOutcome = 'ready' | 'writing' | 'nothing' | 'failed';
+export function notesOutcome(hasNotes: boolean, summaryStatus: unknown): NotesOutcome {
+    if (hasNotes) return 'ready';
+    if (summaryStatus === 'completed') return 'nothing';
+    if (summaryStatus === 'failed') return 'failed';
+    return 'writing';
+}
+
 /** A template section that is itself the Summary: "Summary", "TL;DR" (not "Study summary"). */
 export function isSummaryTitle(title: string | null | undefined): boolean {
     return /^\s*(?:summary|tl;?\s*dr)\s*:?\s*$/i.test(title ?? '');
