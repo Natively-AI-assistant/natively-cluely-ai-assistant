@@ -3,7 +3,6 @@ import { useT } from '../i18n';
 import { ToggleLeft, ToggleRight, Search, Calendar, Globe, Clock, ChevronRight, LayoutGrid, RefreshCw, Eye, EyeOff, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Bell, DownloadCloud, CheckCircle, AlertCircle, User, Sparkles, ArrowUpRight } from 'lucide-react';
 import { ProfileIntelligenceIcon } from './ProfileIntelligenceIcon';
 import { NativelyWordmark } from './NativelyWordmark';
-import icon from "./icon.png";
 import mainui from "../UI_comp/mainui.png";
 import UpcomingCalendarCard from './ui/UpcomingCalendarCard';
 import AssistToday from './assist/AssistToday';
@@ -1180,9 +1179,16 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                                             transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
                                                             className="flex items-center gap-3"
                                                         >
-                                                            <img
-                                                                src={icon} alt="Logo" className="w-[18px] h-[18px] object-contain brightness-0 invert drop-shadow-[0_1px_2px_rgba(0,0,0,0.1)] opacity-90"
-                                                            />
+                                                            {/* The brand mark (brand/natively-mark-white.svg) drawn
+                                                                inline: its ring and strokes are heavier than icon.png's,
+                                                                which read thin at 18px on this button. icon.png stays
+                                                                as it is for the other screens that use it. */}
+                                                            <svg
+                                                                viewBox="106 106 812 812" aria-hidden
+                                                                className="w-[18px] h-[18px] shrink-0 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.1)] opacity-90"
+                                                            >
+                                                                <path fill="currentColor" d="M512 106 A406 406 0 1 1 512 918 A406 406 0 1 1 512 106 Z M512 181 A331 331 0 1 0 512 843 A331 331 0 1 0 512 181 Z M288 194.91 H363 V829.09 H288 Z M661 194.91 H736 V829.09 H661 Z M269.75 211 L359.44 211 L754.25 813 L664.56 813 Z" />
+                                                            </svg>
                                                             <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)] text-[20px] leading-none">
                                                                 {t('Start Natively')}
                                                             </span>

@@ -930,7 +930,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                 title={showTranscript ? 'Hide transcript' : 'Show transcript'}
                 aria-expanded={showTranscript}
                 onClick={() => { setShowTranscript((s) => !s); setHighlightAt(null); }}
-                className="h-full min-w-12 shrink-0 flex items-center pl-[13.5px] pr-[7.75px] rounded-l-3xl rounded-r-lg transition-colors duration-75 np-wash"
+                className="h-full min-w-12 shrink-0 flex items-center pl-[13.5px] pr-[5.25px] rounded-l-3xl rounded-r-lg transition-colors duration-75 np-wash"
                 style={showTranscript ? { background: 'var(--np-wash)' } : undefined}
             >
                 <span className={`notes-listening-bars${bars ? ' notes-level' : ''}${paused ? ' np-paused' : silent ? ' np-silent' : ''}`} aria-hidden>
@@ -952,7 +952,11 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                 aria-label="Stop transcript"
                 title="Stop transcript"
                 onClick={() => { void window.electronAPI?.endMeeting?.(); }}
-                className="h-full shrink-0 flex items-center pl-[5.5px] pr-[13px] rounded-l-lg rounded-r-3xl transition-colors duration-75 np-wash"
+                // The mic's mirror: a 24px round end (concentric with the pill's 28px end). At
+                // 34.5px wide that curve took most of the button and hovered as a lopsided blob,
+                // so Stop takes 2.5px from the mic's right padding (37px): the pill keeps its
+                // size. 8px corners read as a square (2026-11-01, Evin).
+                className="h-full shrink-0 flex items-center pl-[8px] pr-[13px] rounded-l-lg rounded-r-3xl transition-colors duration-75 np-wash"
                 style={ink('--np-stop')}
             >
                 <span className="w-4 h-4 flex items-center justify-center"><span className="w-3 h-3 rounded-[2.6px] bg-current" /></span>

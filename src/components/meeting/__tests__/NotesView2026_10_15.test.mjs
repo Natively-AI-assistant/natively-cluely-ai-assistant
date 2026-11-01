@@ -198,9 +198,10 @@ describe('wiring (source contracts)', () => {
     test('the notes window sends every change, pings typing, and never focuses itself', () => {
         assert.match(NOTES_WINDOW, /liveNotesSetText\?\.\(next\)/);
         assert.match(NOTES_WINDOW, /meetingAutoStopTyping\?\.\(\)/);
-        // After Stop the notepad shows the enhanced notes (2026-10-20), with Open meeting.
+        // After Stop the notepad shows the enhanced notes (2026-10-20); the Open meeting
+        // logo button beside Share was removed 2026-11-01.
         assert.match(NOTES_WINDOW, /<NotesEnhanced ref=\{enhancedRef\} meetingId=\{meetingId!\}/);
-        assert.match(live(read('../../notes/NotesEnhanced.tsx')), /notesWindowOpenMeeting\?\.\(meetingId\)/);
+        assert.doesNotMatch(live(read('../../notes/NotesEnhanced.tsx')), /notesWindowOpenMeeting/);
         assert.doesNotMatch(NOTES_WINDOW, /\.focus\(/);
         // The editor focuses only for a mouse pick, never while the hook types.
         const EDITOR = live(read('../../notes/NotesEditor.tsx'));

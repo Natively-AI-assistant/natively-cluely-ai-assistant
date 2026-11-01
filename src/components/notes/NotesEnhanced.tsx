@@ -1,5 +1,5 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react';
-import { Check, Copy, ExternalLink } from 'lucide-react';
+import { Check, Copy } from 'lucide-react';
 import { ShareMenu } from '../meeting/ShareMenu';
 import { notesLabel, notesWereEdited } from '../meeting/notesView';
 import { templatePickerOptions } from '../meeting/notesFeedback';
@@ -153,16 +153,6 @@ export const NotesEnhanced = forwardRef<NotesEnhancedHandle, {
                     {copied ? 'Copied' : 'Copy'}
                 </button>
                 <ShareMenu meetingId={meetingId} disabled={regenerating} hasTranscript={(details?.transcript?.length ?? 0) > 0} onCopy={copy} />
-                <button
-                    type="button"
-                    aria-label="Open meeting"
-                    title="Open meeting"
-                    onClick={() => { void window.electronAPI?.notesWindowOpenMeeting?.(meetingId); }}
-                    className="np-wash w-7 h-7 shrink-0 rounded-full flex items-center justify-center transition-colors"
-                    style={ink('--np-ink-secondary')}
-                >
-                    <ExternalLink className="w-4 h-4" strokeWidth={1.75} />
-                </button>
             </div>
 
             {confirm && (
