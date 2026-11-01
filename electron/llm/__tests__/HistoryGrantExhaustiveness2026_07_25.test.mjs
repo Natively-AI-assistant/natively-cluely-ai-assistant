@@ -18,7 +18,7 @@
 // specifically to make this exhaustive, direct iteration possible (see their
 // export comments) — reverse-engineering a question per AnswerType via
 // planAnswer would be fragile and indirect for a check that needs to cover
-// every one of the 38 real AnswerType values.
+// every one of the 37 real AnswerType values.
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -67,7 +67,7 @@ function buildPlan(answerType, documentGroundedCustomModeActive = false) {
 
 describe('exhaustiveness: isLayerAllowed(plan, "prior_assistant_responses") is decisive for every real AnswerType', () => {
   test('the literal ALL_ANSWER_TYPES list matches AnswerPlanner.ts\'s real union size (38) — a drift guard for this file itself', () => {
-    assert.equal(ALL_ANSWER_TYPES.length, 38, 'update this list if AnswerType gains/loses members in AnswerPlanner.ts');
+    assert.equal(ALL_ANSWER_TYPES.length, 37, 'update this list if AnswerType gains/loses members in AnswerPlanner.ts');
   });
 
   for (const answerType of ALL_ANSWER_TYPES) {

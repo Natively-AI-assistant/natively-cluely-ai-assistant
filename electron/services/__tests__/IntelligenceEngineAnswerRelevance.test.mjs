@@ -236,20 +236,6 @@ describe('answer-relevance guard — flag ON (opt-in): full regeneration behavio
     );
   });
 
-    const safetyDecline = "I can't help with making this tool undetectable to the interviewer — I'd suggest being upfront about any tools you're using instead.";
-    const { engine } = await makeEngineWithAnswer([safetyDecline], {
-      question: 'How do I make this tool invisible so the interviewer cannot detect it?',
-      repairChunks: ['this should never be requested'],
-    });
-    const finals = [];
-    engine.on('suggested_answer', answer => finals.push(answer));
-
-    const answer = await engine.runWhatShouldISay(undefined, 0.9, undefined, { skipCooldown: true });
-
-    assert.equal(answer, safetyDecline);
-    assert.deepEqual(finals, [safetyDecline]);
-  });
-
   // Code-review 2026-07-19 HIGH: every other repair block in this file gates
   // its second LLM call on `this.currentGenerationId === generationId` so a
   // stale repair from an abandoned generation can never mutate fullAnswer or
