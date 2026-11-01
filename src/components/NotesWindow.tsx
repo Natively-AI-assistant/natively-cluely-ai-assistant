@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
-import { ArrowDown, Check, ChevronDown, ChevronUp, Copy, FileText, ImagePlus, LayoutGrid, Minus, MoreHorizontal, Paperclip, Pause, Play, RotateCcw, Scissors, Search, SquarePen, X } from 'lucide-react';
+import { ArrowDown, Check, ChevronDown, ChevronUp, Copy, FileText, ImagePlus, LayoutGrid, Minus, MoreHorizontal, Paperclip, Pause, Play, RotateCcw, Scissors, Search, X } from 'lucide-react';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { applyTypedKeyAtEnd, plainAnswerText } from './meeting/notesView';
+import { NotepadAnswer } from './notes/NotepadAnswer';
 import { useLastTimeRecap } from './assist/useLastTimeRecap';
 import { shouldBlockFocus, shouldFireStealthTapStart } from '../lib/overlayStealthFocusGuards.mjs';
 import { editCommand, editShortcutLetter, paste } from '../lib/stealthEdit.mjs';
@@ -141,6 +142,12 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     const isLight = useResolvedTheme() === 'light';
     const [text, setText] = useState(preview?.text ?? '');
     const [phase, setPhase] = useState<Phase>(preview ? 'live' : 'idle');
+    // The notepad's demand (2026-11-01, FunnelTelemetry.notepadUsed): which parts of it are used,
+    // a fixed action name and recipe id only, never the notes, a question or an answer.
+    const npTrack = useCallback((action: string, recipe?: string) => {
+        if (preview) return;
+        window.electronAPI?.funnelTrack?.('notepad_used', { action, phase, ...(recipe ? { recipe: recipe.replace(/-/g, '_') } : {}) })?.catch?.(() => {});
+    }, [preview, phase]);
     const [meetingId, setMeetingId] = useState<string | null>(null);
     const [info, setInfo] = useState(() => (preview
         ? { ...EMPTY_INFO, title: preview.title, people: preview.people, speakers: { me: 'You', them: preview.them ?? EMPTY_INFO.speakers.them } }
@@ -164,6 +171,12 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     const [resizing, setResizing] = useState(false);
     const [winH, setWinH] = useState(() => (typeof window === 'undefined' ? 900 : window.innerHeight));
     const askCardRef = useRef<HTMLDivElement>(null);
+    // How much of the page the floating bottom bar covers, for the notes' writing pill to stop above it.
+    const pageRef = useRef<HTMLDivElement>(null);
+    const bottomBarRef = useRef<HTMLDivElement>(null);
+    const [bottomInset, setBottomInset] = useState<number | undefined>(undefined);
+    // Scrolled off the top: the page fades out under the heading instead of being cut at a straight edge.
+    const [pageScrolled, setPageScrolled] = useState(false);
     const [showTranscript, setShowTranscript] = useState(false);
     // You and the call each keep your own words in progress (applyTranscriptEvent).
     const [live, setLive] = useState<LiveTranscript>(EMPTY_LIVE_TRANSCRIPT);
@@ -471,6 +484,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
         const question = value.trim();
         const api = window.electronAPI;
         if (!question || turnsRef.current.some((t) => t.status === 'streaming')) return;
+        if (!shown) npTrack('ask');
         if (phase === 'ended' && meetingId) { setAsk(''); askMeeting(meetingId, question, askContext(turnsRef.current)); return; }
         if (!api?.streamGeminiChat) return;
         setAsk('');
@@ -481,7 +495,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
         api.streamGeminiChat(question, undefined, context).catch(() => {
             setTurns((prev) => prev.map((t, i) => (i === prev.length - 1 && t.question === label && !t.text ? { ...t, status: 'error' } : t)));
         });
-    }, [setAsk, phase, meetingId, askMeeting]);
+    }, [setAsk, phase, meetingId, askMeeting, npTrack]);
     const submitAskRef = useRef(submitAsk);
     // Enter in Ask, typed or through the keyboard hook: "/…" runs the recipe it names, anything else is asked.
     const askSubmitRef = useRef<() => void>(() => {});
@@ -501,6 +515,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     // (note-recipe:run reads a finished meeting whole, a live one so far with what was typed here).
     const runRecipe = useCallback((recipe: NoteRecipe, extra = '') => {
         if (turnsRef.current.some((t) => t.status === 'streaming')) return;
+        npTrack('recipe', recipe.id);
         setAllRecipes(false);
         setAsk('');
         setRecentRecipes(rememberRecipe(recipe.id));
@@ -513,11 +528,12 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
         api.runNoteRecipe({ recipeId: recipe.id, extra, meetingId, phase: phase === 'ended' ? 'ended' : 'live', notes: textRef.current })
             .then((res) => settle(res?.text ? { text: res.text, status: 'done' } : { status: 'error' }))
             .catch(() => settle({ status: 'error' }));
-    }, [setAsk, runHelper, meetingId, phase]);
+    }, [setAsk, runHelper, meetingId, phase, npTrack]);
 
     const retry = (i: number) => {
         const turn = turns[i];
         if (!turn) return;
+        npTrack('answer_retried');
         setTurns((prev) => prev.filter((_, j) => j !== i));
         const recipe = turn.recipeId ? noteRecipeById(turn.recipeId) : NOTE_RECIPES.find((r) => r.helper && r.label === turn.question);
         if (recipe) runRecipe(recipe, turn.extra ?? '');
@@ -577,15 +593,16 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
         const api = window.electronAPI;
         if (!api?.liveNotesSetTemplate) return;
         void api.liveNotesSetTemplate(id).then((res) => {
-            if (res?.success) { setLiveTemplateId(id); setTemplateNotice(null); return; }
+            if (res?.success) { if (id) npTrack('template_set'); setLiveTemplateId(id); setTemplateNotice(null); return; }
             const name = noteTemplateById(id)?.name;
             setTemplateNotice(res?.error === 'pro_required' && name ? `${name} notes need Natively Pro.` : 'Couldn’t set the template.');
         }).catch(() => {});
-    }, []);
+    }, [npTrack]);
     const openGallery = useCallback((initialId: string | null) => {
+        npTrack('templates_browsed');
         setGalleryQuery('');
         setGallery({ initialId });
-    }, [setGalleryQuery]);
+    }, [setGalleryQuery, npTrack]);
     const closeGallery = useCallback(() => {
         setGallery(null);
         if (fieldRef.current === 'template') { fieldRef.current = 'notes'; setField('notes'); }
@@ -787,6 +804,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     const shortenLine = async () => {
         const target = editorRef.current?.shortenTarget();
         if (!target || working || target.text.trim().length < 12) return;
+        npTrack('line_shortened');
         setWorking('shorten');
         try {
             const res = await window.electronAPI?.liveNotesShortenLine?.(target.text);
@@ -801,6 +819,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     // meeting and described for the notes, like a shared screen.
     const attachImage = async () => {
         if (working) return;
+        npTrack('image_attached');
         setWorking('attach');
         try {
             const res = await window.electronAPI?.liveNotesAttachImage?.();
@@ -822,6 +841,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
 
     const togglePause = () => {
         const next = !paused;
+        if (next) npTrack('paused');
         setPaused(next);
         window.electronAPI?.setTranscriptionPaused?.(next).then((r) => { if (r) setPaused(r.paused); }).catch(() => setPaused(!next));
     };
@@ -920,6 +940,21 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     const recipeChip = 'h-6 shrink-0 inline-flex items-center gap-1 px-2.5 rounded-full text-[12px] font-[430] tracking-[0.02em] whitespace-nowrap transition-colors np-wash';
     const showEnhanced = phase === 'ended' && !!meetingId && endedTab === 'enhanced';
     const showTabs = phase === 'ended' && !!meetingId;
+    const barShown = phase === 'live' || showTabs;
+    useLayoutEffect(() => {
+        const page = pageRef.current;
+        const bar = bottomBarRef.current;
+        if (!page || !bar || !barShown) { setBottomInset(undefined); return; }
+        const measure = () => {
+            const covered = Math.round(page.getBoundingClientRect().bottom - bar.getBoundingClientRect().top);
+            setBottomInset(covered > 0 ? covered : undefined);
+        };
+        measure();
+        const ro = new ResizeObserver(measure);
+        ro.observe(page);
+        ro.observe(bar);
+        return () => ro.disconnect();
+    }, [barShown]);
 
     // The listening controls: in their own pill, or inside the open transcript panel.
     const listeningControls = (
@@ -929,7 +964,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                 aria-label={showTranscript ? 'Hide transcript' : 'Show transcript'}
                 title={showTranscript ? 'Hide transcript' : 'Show transcript'}
                 aria-expanded={showTranscript}
-                onClick={() => { setShowTranscript((s) => !s); setHighlightAt(null); }}
+                onClick={() => { if (!showTranscript) npTrack('transcript_opened'); setShowTranscript((s) => !s); setHighlightAt(null); }}
                 className="h-full min-w-12 shrink-0 flex items-center pl-[13.5px] pr-[5.25px] rounded-l-3xl rounded-r-lg transition-colors duration-75 np-wash"
                 style={showTranscript ? { background: 'var(--np-wash)' } : undefined}
             >
@@ -951,11 +986,13 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                 type="button"
                 aria-label="Stop transcript"
                 title="Stop transcript"
-                onClick={() => { void window.electronAPI?.endMeeting?.(); }}
+                onClick={() => { npTrack('stopped'); void window.electronAPI?.endMeeting?.(); }}
                 // The mic's mirror: a 24px round end (concentric with the pill's 28px end). At
                 // 34.5px wide that curve took most of the button and hovered as a lopsided blob,
                 // so Stop takes 2.5px from the mic's right padding (37px): the pill keeps its
                 // size. 8px corners read as a square (2026-11-01, Evin).
+                // Kept at 37px (2026-11-01): a mirrored hover needs equal widths, which either
+                // narrows the mic (44/44) or widens the pill (51/51); Evin kept the original.
                 className="h-full shrink-0 flex items-center pl-[8px] pr-[13px] rounded-l-lg rounded-r-3xl transition-colors duration-75 np-wash"
                 style={ink('--np-stop')}
             >
@@ -1193,9 +1230,20 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                 </div>
             )}
 
-            <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-gutter:stable]">
+            <div
+                ref={pageRef}
+                className="flex-1 min-h-0 overflow-y-auto [scrollbar-gutter:stable]"
+                onScroll={(e) => setPageScrolled(e.currentTarget.scrollTop > 2)}
+            >
+                {/* Top fade: sticks to the page's top edge and takes no room (-mb); shown only once scrolled. */}
+                <div
+                    aria-hidden
+                    data-np-page-fade
+                    className="np-fade-top np-page-fade pointer-events-none sticky top-0 z-[11] -mb-7 h-7"
+                    data-shown={pageScrolled ? 'true' : undefined}
+                />
                 {showEnhanced ? (
-                    <NotesEnhanced ref={enhancedRef} meetingId={meetingId!} onTitle={setSavedTitle} onOpenGallery={openGallery} />
+                    <NotesEnhanced ref={enhancedRef} meetingId={meetingId!} onTitle={setSavedTitle} onOpenGallery={openGallery} myNotes={text} bottomInset={bottomInset} />
                 ) : (
                     <>
                     {phase !== 'ended' && (liveTemplate || templateNotice) && (
@@ -1233,7 +1281,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
             {(phase === 'live' || showTabs) && (
                 <div className="absolute inset-x-0 bottom-0 z-20 pointer-events-none">
                     <div className="np-fade-bottom absolute inset-x-0 bottom-0 h-20" />
-                    <div className="relative px-4 pb-[27.5px] flex flex-col gap-2 pointer-events-auto">
+                    <div ref={bottomBarRef} className="relative px-4 pb-[27.5px] flex flex-col gap-2 pointer-events-auto">
                         {/* The meeting's status: the overlay is hidden in a notepad meeting. */}
                         {phase === 'live' && stopsAt !== null && (
                             <div className="np-elevated rounded-[20px] pl-4 pr-1.5 py-1.5 flex items-center justify-between gap-3" role="status">
@@ -1350,7 +1398,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                                                             <button type="button" aria-label="Close find" onClick={closeTranscriptFind} className={`${smallBtn} mr-1`} style={ink('--np-ink-secondary')}><X className="w-3.5 h-3.5" strokeWidth={2} /></button>
                                                         </>
                                                     ) : (
-                                                        <button type="button" aria-label="Find in transcript" title="Find in transcript" onClick={() => setFindTranscript(true)} className={iconBtn} style={ink('--np-ink-secondary')}>
+                                                        <button type="button" aria-label="Find in transcript" title="Find in transcript" onClick={() => { npTrack('transcript_searched'); setFindTranscript(true); }} className={iconBtn} style={ink('--np-ink-secondary')}>
                                                             <Search className="w-4 h-4" strokeWidth={1.75} />
                                                         </button>
                                                     )}
@@ -1361,7 +1409,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                                                     aria-label="Copy the transcript"
                                                     title={copiedKey === 'transcript' ? 'Copied' : 'Copy transcript'}
                                                     disabled={lines.length === 0}
-                                                    onClick={() => { void copyText('transcript', lines.map((l) => `${speakerName(l.speaker)}: ${l.text}`).join('\n')); }}
+                                                    onClick={() => { npTrack('transcript_copied'); void copyText('transcript', lines.map((l) => `${speakerName(l.speaker)}: ${l.text}`).join('\n')); }}
                                                     className={`${iconBtn} disabled:opacity-40`}
                                                     style={ink('--np-ink-secondary')}
                                                 >
@@ -1409,8 +1457,8 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                                     ) : contentKind === 'ask' && turns.length > 0 ? (
                                         <div className="h-full flex flex-col">
                                             <div className="shrink-0 h-12 flex items-center justify-end px-3">
-                                                <button type="button" aria-label="New chat" title="New chat" onClick={() => setTurns([])} className={iconBtn} style={ink('--np-ink-secondary')}>
-                                                    <SquarePen className="w-4 h-4" strokeWidth={1.75} />
+                                                <button type="button" aria-label="Close" title="Close" onClick={() => { npTrack('answers_closed'); setTurns([]); }} className={iconBtn} style={ink('--np-ink-secondary')}>
+                                                    <ChevronDown className="w-4 h-4" strokeWidth={1.75} />
                                                 </button>
                                             </div>
                                             <div ref={answerScrollRef} className="flex-1 min-h-0 overflow-y-auto px-5 pb-4 space-y-4 select-text">
@@ -1432,10 +1480,10 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                                                                     <button type="button" onClick={() => retry(i)} className={chipBtn} style={ink('--np-ink-secondary')}><RotateCcw className="w-3 h-3" strokeWidth={2} /> Retry</button>
                                                                 </div>
                                                             ) : turn.text ? (
-                                                                <p className="mt-3 text-[14px] leading-[1.58] whitespace-pre-wrap" style={ink('--np-ink')}>{plainAnswerText(turn.text)}</p>
+                                                                <NotepadAnswer text={turn.text} />
                                                             ) : (
-                                                                <p className="mt-3 text-[14px] leading-[1.58] inline-flex items-center gap-2" style={ink('--np-ink-tertiary')}>
-                                                                    Thinking <span className="np-dots inline-flex items-center gap-[3px]" aria-hidden><span /><span /><span /></span>
+                                                                <p className="mt-3 text-[14px] leading-[1.58]">
+                                                                    <span className="natively-thinking-label np-thinking">Thinking</span>
                                                                 </p>
                                                             )}
                                                             {turn.status === 'done' && sources.length > 0 && (
@@ -1446,7 +1494,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                                                                             <li key={s.at}>
                                                                                 <button
                                                                                     type="button"
-                                                                                    onClick={() => { closeTranscriptFind(); setShowTranscript(true); setHighlightAt(s.at); }}
+                                                                                    onClick={() => { npTrack('transcript_opened'); closeTranscriptFind(); setShowTranscript(true); setHighlightAt(s.at); }}
                                                                                     className="w-full text-left text-[13px] leading-[18px] px-2 py-1 rounded-lg np-wash"
                                                                                 >
                                                                                     <span className="mr-1.5" style={ink('--np-ink-tertiary')}>{speakerName(s.speaker)}</span>
@@ -1464,7 +1512,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                                                                             Say more
                                                                         </button>
                                                                     )}
-                                                                    <button type="button" onClick={() => { void copyText(`turn-${i}`, plainAnswerText(turn.text)); }} className={chipBtn} style={ink('--np-ink-secondary')}>
+                                                                    <button type="button" onClick={() => { npTrack('answer_copied'); void copyText(`turn-${i}`, plainAnswerText(turn.text)); }} className={chipBtn} style={ink('--np-ink-secondary')}>
                                                                         {copiedKey === `turn-${i}` ? <Check className="w-3 h-3" strokeWidth={2} /> : <Copy className="w-3 h-3" strokeWidth={2} />} {copiedKey === `turn-${i}` ? 'Copied' : 'Copy'}
                                                                     </button>
                                                                 </div>
@@ -1489,7 +1537,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                                                 aria-haspopup="menu"
                                                 aria-expanded={allRecipes}
                                                 onMouseDown={(e) => e.preventDefault()}
-                                                onClick={() => setAllRecipes((v) => !v)}
+                                                onClick={() => { if (!allRecipes) npTrack('recipes_browsed'); setAllRecipes((v) => !v); }}
                                                 className={`${recipeChip} ml-auto`}
                                                 style={ink(allRecipes ? '--np-ink' : '--np-ink-secondary')}
                                             >

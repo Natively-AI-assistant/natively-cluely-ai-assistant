@@ -91,6 +91,50 @@ export const ANSWER_FAILURE_CAUSES = Object.freeze([
   'app',           // a fault of the app's own
 ])
 
+/**
+ * What a meeting opens (Settings › Overlay's switcher, electron/utils/meetingSurface.ts):
+ * the overlay, or the notepad (the Granola-style notes window).
+ */
+export const MEETING_SURFACES = Object.freeze(['overlay', 'notepad'])
+
+/**
+ * The notepad's recipes, by id with "-" written "_" (enum values are [a-z0-9_]).
+ * Mirrors NOTE_RECIPES in electron/llm/noteRecipes.ts (funnelCatalogParity.test.mjs
+ * fails when a recipe is added there and not here).
+ */
+export const NOTE_RECIPE_IDS = Object.freeze([
+  'what_did_i_miss', 'sound_smart', 'suggest_questions', 'define', 'tldr', 'follow_up_email',
+  'todos', 'notes_shorter', 'notes_longer', 'affirm', 'content_plan', 'help_doc', 'build_brief',
+  'tickets', 'linkedin_brief', 'schedule_follow_up', 'help_me_decide',
+])
+
+/** What someone did in the notepad. Added 2026-11-01 to see whether the notepad is worth more work. */
+export const NOTEPAD_ACTIONS = Object.freeze([
+  'opened',            // the window came up
+  'closed',            // the user closed it
+  'notes_typed',       // typed into the page
+  'ask',               // asked a question of their own in Ask
+  'recipe',            // ran a recipe (chip, All recipes or "/"); `recipe` says which
+  'recipes_browsed',   // opened All recipes
+  'answer_copied',     // copied an Ask answer
+  'answer_retried',    // Retry on an answer that failed
+  'answers_closed',    // put the answers away (the down chevron)
+  'transcript_opened', // opened the live transcript
+  'transcript_searched',
+  'transcript_copied',
+  'image_attached',    // the ⋯ menu's Attach image
+  'line_shortened',    // the ⋯ menu's Shorten
+  'paused',            // paused transcription from the notepad
+  'stopped',           // ended the meeting from the notepad
+  'template_set',      // chose a note template ("/" or the gallery)
+  'templates_browsed', // opened the template gallery
+  'notes_written',     // the notes after Stop arrived in the notepad
+  'notes_rewritten',   // rewrote them in another template or mode
+  'notes_copied',
+  'share_opened',
+  'meeting_opened',    // Open meeting: the meeting's page in the launcher
+])
+
 /** What the user did with a card. Mirrors OUTCOMES in the same file. */
 export const CARD_OUTCOMES = Object.freeze(['shown', 'acted', 'later', 'never', 'interrupted'])
 
@@ -108,11 +152,15 @@ export const FUNNEL_CATALOG = Object.freeze({
     has_api_key: BOOL,
     has_pro: BOOL,
     meetings_total: INT,
+    // What a meeting opens on this install today (Settings › Overlay).
+    surface: MEETING_SURFACES,
   },
   meeting_started: {
     first: BOOL,
     // Whose AI answers: ours (a plan or the trial), the user's own, or nobody's.
     ai: ['natively', 'own', 'none'],
+    // What it opened on: the overlay or the notepad.
+    surface: MEETING_SURFACES,
   },
   meeting_ended: {
     minutes: INT,
@@ -120,6 +168,14 @@ export const FUNNEL_CATALOG = Object.freeze({
     // How many answers the assistant gave in it. A count, never the answers: a
     // meeting with none is someone who started the app and got nothing from it.
     answers: INT,
+    // The notepad in this meeting: what it opened on, whether the notepad was
+    // up at any point, whether anything was typed in it, and how many questions
+    // and recipes Ask ran. Counts and yes/no only, never the notes.
+    surface: MEETING_SURFACES,
+    notepad_open: BOOL,
+    notes_typed: BOOL,
+    asks: INT,
+    recipes: INT,
   },
 
   // A meeting the app never saw end: it was closed or it crashed while one was
@@ -209,6 +265,23 @@ export const FUNNEL_CATALOG = Object.freeze({
   },
   paywall_hit: {
     feature: ['modes', 'profile_intelligence'],
+  },
+
+  // ── The notepad ──────────────────────────────────────────────────────────
+  // Added 2026-11-01: is the notepad worth more work? Who picks it over the
+  // overlay, and what they do in it. Never the notes, a question or an answer.
+  // Someone switched what a meeting opens, in Settings › Overlay.
+  meeting_surface_set: {
+    to: MEETING_SURFACES,
+  },
+  // At most once per action (and recipe) per phase per local day per install:
+  // which parts of the notepad someone used that day, not how often. How often
+  // is counted per meeting, on meeting_ended.
+  notepad_used: {
+    action: NOTEPAD_ACTIONS,
+    recipe: NOTE_RECIPE_IDS,
+    // No meeting, a meeting running, or after Stop.
+    phase: ['idle', 'live', 'ended'],
   },
 })
 

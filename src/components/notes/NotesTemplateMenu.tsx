@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, FileText, LayoutGrid, RotateCw } from 'lucide-react';
+import { NP_PILL } from './npPill';
 import { quickNoteTemplates } from '../../../electron/services/meeting/noteTemplates';
 import type { TemplateOption } from '../meeting/notesFeedback';
 import { NpPop } from './NpPop';
@@ -57,7 +58,7 @@ export const NotesTemplateMenu: React.FC<{
                 aria-label={`Notes template: ${currentName}`}
                 disabled={disabled}
                 onClick={() => setOpen((o) => !o)}
-                className="np-outline np-wash h-7 shrink-0 inline-flex items-center gap-1.5 text-[13px] font-[430] pl-3 pr-2 rounded-full transition-colors disabled:opacity-50"
+                className={`${NP_PILL} justify-center disabled:opacity-50`}
                 style={ink('--np-ink')}
             >
                 <span className="truncate max-w-[180px]">{currentName}</span>

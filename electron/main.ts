@@ -1835,12 +1835,15 @@ export class AppState {
     // The overlay's Notes button shows whether the window is open.
     this.notesWindowHelper.onVisibilityChange((visible) => {
       this.sendToWindow(this.windowHelper.getOverlayWindow(), 'notes-window-visibility', visible);
+      // The notepad's demand (FunnelTelemetry.notepadUsed): it came up.
+      if (visible) { try { require('./services/FunnelTelemetry').funnelTelemetry.notepadUsed('opened'); } catch { /* analytics only */ } }
     });
     // Closing the notepad never leaves the screen empty (utils/meetingSurface.ts):
     // after a Stop it brings up the launcher Stop held back (endMeeting); during
     // a notepad meeting it goes home, as the overlay's logo does, and the
     // launcher's "Meeting ongoing" brings the notepad back (resumeMeetingSurface).
     this.notesWindowHelper.onClosedByUser(() => {
+      try { require('./services/FunnelTelemetry').funnelTelemetry.notepadUsed('closed'); } catch { /* analytics only */ }
       const inactive = this.isUndetectable ? true : undefined;
       const action = planNotesClosed(this.isMeetingActive, this.windowHelper.isOverlayHeldHidden());
       if (action === 'owed-launcher') this.windowHelper.showOwedLauncher(inactive);
@@ -7654,7 +7657,9 @@ export class AppState {
       if (provider !== 'none' && !LOCAL_STT_PROVIDERS.has(provider)) this.sttGap.startMeeting();
       else this.sttGap.endMeeting();
     } catch { /* recovery is extra; the meeting runs without it */ }
-    try { require('./services/FunnelTelemetry').funnelTelemetry.meetingStarted(this.intelligenceManager.getAnswerCount()); } catch { /* analytics never blocks a meeting */ }
+    // What it opened on, and whether the notepad is up from the start (a notepad
+    // meeting, or the user left it open), for the notepad's demand (2026-11-01).
+    try { require('./services/FunnelTelemetry').funnelTelemetry.meetingStarted(this.intelligenceManager.getAnswerCount(), this.meetingSurface, startPlan.openNotes || this.notesWindowHelper.isVisible()); } catch { /* analytics never blocks a meeting */ }
     // No AI set up: the free trial starts by itself. Below the funnel line on
     // purpose, so `meeting_started.ai` still says what the meeting began with.
     // Fire and forget: the overlay is told when it starts or cannot.

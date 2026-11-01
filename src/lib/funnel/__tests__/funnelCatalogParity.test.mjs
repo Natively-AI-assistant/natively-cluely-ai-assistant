@@ -339,3 +339,11 @@ test('a token for one install is refused for another by the real server', { skip
   assert.equal(srv.verifyToken(token, '3f2b8c1e-9a4d-4e6f-8b2a-1c3d5e7f9a0b').ok, true);
   assert.equal(srv.verifyToken(token, 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb').error, 'install_token_mismatch');
 });
+
+test('every notepad recipe is in the catalogue (ids with "-" as "_")', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'electron/llm/noteRecipes.ts'), 'utf8');
+  const start = src.indexOf('export const NOTE_RECIPES');
+  const ids = [...src.slice(start).matchAll(/\bid: '([a-z0-9-]+)'/g)].map((m) => m[1].replace(/-/g, '_'));
+  assert.deepEqual([...client.NOTE_RECIPE_IDS].sort(), ids.sort(),
+    'a recipe was added to or removed from noteRecipes.ts: update NOTE_RECIPE_IDS in BOTH catalogue files, server first');
+});

@@ -13099,7 +13099,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Events only the renderer can see: a card on screen, a locked feature opened.
   // The event name is checked against this list and its properties against the
   // catalogue, so the renderer cannot send anything the catalogue does not hold.
-  const RENDERER_FUNNEL_EVENTS = new Set(['trial_card', 'trial_notice', 'upgrade_prompt', 'paywall_hit', 'onboarding_stage', 'feature_used', 'answer_failed']);
+  const RENDERER_FUNNEL_EVENTS = new Set(['trial_card', 'trial_notice', 'upgrade_prompt', 'paywall_hit', 'onboarding_stage', 'feature_used', 'answer_failed', 'notepad_used']);
   safeHandle('funnel:track', async (_, eventType: unknown, props: unknown) => {
     if (typeof eventType !== 'string' || !RENDERER_FUNNEL_EVENTS.has(eventType)) return { ok: false, error: 'unknown_event' };
     const checked = checkFunnelProps(eventType, props);
@@ -13108,6 +13108,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     // carry them out; the renderer may only say the card appeared or was closed.
     if (eventType === 'trial_card' && checked.props.action !== 'shown' && checked.props.action !== 'dismissed') {
       return { ok: false, error: 'bad_prop:action' };
+    }
+    // The notepad: counted into the running meeting, reported once per action a day.
+    if (eventType === 'notepad_used') {
+      const { action, recipe, phase } = checked.props as { action: string; recipe?: string; phase?: 'idle' | 'live' | 'ended' };
+      return { ok: true, result: funnelTelemetry.notepadUsed(action, { recipe, phase }) };
     }
     // Once per feature per day, however often the renderer says it.
     if (eventType === 'feature_used') return { ok: true, result: funnelTelemetry.featureUsed(String(checked.props.feature)) };
@@ -17205,7 +17210,9 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('meeting-surface:get', async () => normalizeMeetingSurface(SettingsManager.getInstance().get('meetingSurface')));
   safeHandle('meeting-surface:set', async (_, surface: unknown) => {
     if (surface !== 'overlay' && surface !== 'notepad') return { success: false };
+    const before = normalizeMeetingSurface(SettingsManager.getInstance().get('meetingSurface'));
     if (!SettingsManager.getInstance().set('meetingSurface', surface)) return { success: false, error: 'settings_store_degraded' };
+    try { funnelTelemetry.meetingSurfaceSet(before, surface); } catch { /* analytics only */ }
     return { success: true };
   });
   safeHandle('live-notes:get-state', async () => appState.getLiveNotes().getState());
@@ -17362,6 +17369,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeOn('live-notes:set-text', (_event, text: unknown) => {
     if (typeof text !== 'string') return;
     appState.getLiveNotes().setText(text);
+    // That something was typed, never what (FunnelTelemetry keeps it in memory after the first).
+    if (text.trim()) { try { funnelTelemetry.notepadUsed('notes_typed'); } catch { /* analytics only */ } }
   });
   // Copy from a window that never takes focus: the notepad, and the overlay on
   // Windows (WS_EX_NOACTIVATE). The page's clipboard API needs a focused

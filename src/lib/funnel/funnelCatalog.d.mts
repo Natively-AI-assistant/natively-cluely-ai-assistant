@@ -17,6 +17,10 @@ export type FunnelSurface =
 export const ANSWER_FAILURE_CAUSES: readonly string[];
 
 export const CARD_IDS: readonly string[];
+
+export const MEETING_SURFACES: readonly ['overlay', 'notepad'];
+export const NOTE_RECIPE_IDS: readonly string[];
+export const NOTEPAD_ACTIONS: readonly string[];
 export const CARD_OUTCOMES: readonly string[];
 
 export const FUNNEL_CATALOG: Readonly<Record<string, Readonly<Record<string, FunnelRule>>>>;
