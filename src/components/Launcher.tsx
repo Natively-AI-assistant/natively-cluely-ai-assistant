@@ -957,7 +957,11 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                 className={`relative h-full w-full ${meetingChatOpen ? '!transform-none' : ''}`}
                                 variants={contentVariants}
                             >
+                                {/* Keyed by meeting: the page copies its meeting into state once, so
+                                    opening another meeting over an open page (the notes window's
+                                    "Open meeting", a search hit) kept the old page and its Ask. */}
                                 <MeetingDetails
+                                    key={selectedMeeting.id}
                                     meeting={selectedMeeting}
                                     initialMomentMs={selectedMomentMs ?? undefined}
                                     onBack={handleBack}

@@ -8,6 +8,7 @@ import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism-light';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { mapLanguageForPrism, isBlockCode } from '../utils/prismLanguage';
 import { registerPrismLanguages } from '../utils/registerPrismLanguages';
+import { normalizeFinalizedMarkdownMath } from '../lib/streamingMarkdown';
 
 registerPrismLanguages();
 
@@ -20,6 +21,11 @@ registerPrismLanguages();
  * was given the same rendering. Owner: "the response structure is so bad for
  * both". Pass as DiagramAwareMarkdown's renderMarkdown; a ```mermaid block is
  * still drawn by the shared diagram card.
+ *
+ * Dollar amounts are escaped first, as the overlay and the meeting page's
+ * answers already are: "$175,000 ... $160,000" paired up as inline math and the
+ * words between came out as KaTeX italics (found by the Granola benchmark,
+ * 2026-10-31).
  */
 export const renderChatMarkdown = (chunk: string, key: React.Key) => (
     <ReactMarkdown
@@ -79,6 +85,6 @@ export const renderChatMarkdown = (chunk: string, key: React.Key) => (
             },
         }}
     >
-        {chunk}
+        {normalizeFinalizedMarkdownMath(chunk)}
     </ReactMarkdown>
 );

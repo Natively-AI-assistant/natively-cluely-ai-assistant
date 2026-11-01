@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useStreamBuffer } from '../hooks/useStreamBuffer';
+
 import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { genMessageId } from '../utils/messageId';
@@ -12,6 +13,9 @@ import '../ui-components/LiquidGlassButton.css';
 
 import { DiagramAwareMarkdown } from './diagram/DiagramAwareMarkdown';
 import { renderChatMarkdown } from './chatMarkdown';
+
+/** How long the chat waits for a stream's done event after its query call returns. */
+const STREAM_SETTLE_MS = 3000;
 
 
 // ============================================
@@ -259,6 +263,13 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
         // top of submitQuestion silently drops every subsequent message
         // (no user-message push, no response).
         let activeCleanups: Array<() => void> = [];
+        // Resolved by the stream's own done/error event. The ipc reply to the query can
+        // reach the page before the last chunks and the done event (they travel apart),
+        // and tearing the listeners down then left the answer cut mid-sentence ("$7.20 per
+        // employee per month on a"; Natively vs Granola benchmark 2026-10-31).
+        let settle: () => void = () => {};
+        const settled = new Promise<void>((resolve) => { settle = resolve; });
+        const awaitSettled = () => Promise.race([settled, new Promise<void>((r) => setTimeout(r, STREAM_SETTLE_MS))]);
 
         try {
             // Add typing indicator delay (200ms) - makes the AI feel "thoughtful"
@@ -306,6 +317,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
                 tokenCleanup?.();
                 doneCleanup?.();
                 errorCleanup?.();
+                settle();
             });
 
             const errorCleanup = window.electronAPI?.onRAGStreamError((data: { error: string }) => {
@@ -318,6 +330,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
                 tokenCleanup?.();
                 doneCleanup?.();
                 errorCleanup?.();
+                settle();
             });
 
             if (tokenCleanup) activeCleanups.push(tokenCleanup);
@@ -330,6 +343,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
             if (meetingId) {
                 // Use RAG-powered meeting query
                 const result = await window.electronAPI?.ragQueryMeeting(meetingId, question);
+                if (result?.success && !result?.fallback) await awaitSettled();
 
                 // If RAG not available (or failed), fall back to context-window chat
                 if (result?.fallback) {
@@ -448,6 +462,7 @@ ${contextString}`;
                     oldTokenCleanup?.();
                     oldDoneCleanup?.();
                     oldErrorCleanup?.();
+                    settle();
                 });
 
                 const oldErrorCleanup = window.electronAPI?.onGeminiStreamError((error: string, meta?: { streamId?: number | null; source?: string }) => {
@@ -461,6 +476,7 @@ ${contextString}`;
                     oldTokenCleanup?.();
                     oldDoneCleanup?.();
                     oldErrorCleanup?.();
+                    settle();
                 });
 
                 if (oldTokenCleanup) activeCleanups.push(oldTokenCleanup);
@@ -473,6 +489,7 @@ ${contextString}`;
                     systemPrompt,
                     { skipSystemPrompt: true }
                 );
+                await awaitSettled();
             }
 
         } catch (error) {
@@ -481,6 +498,15 @@ ${contextString}`;
             setErrorMessage("Something went wrong. Please try again.");
             setChatState('error');
         } finally {
+            // Text that streamed in but never got its done event: keep it, never drop it.
+            const pending = streamBuffer.getBufferedContent();
+            if (pending) {
+                setMessages(prev => prev.map(msg =>
+                    msg.id === assistantMessageId && msg.isStreaming
+                        ? { ...msg, content: pending, isStreaming: false }
+                        : msg
+                ));
+            }
             // Always remove listeners and reset chatState — even if the
             // IPC done/error callbacks never fired. Without this, a single
             // hung stream leaves chatState stuck and silently drops every
