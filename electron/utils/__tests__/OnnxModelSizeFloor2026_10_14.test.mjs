@@ -104,6 +104,14 @@ test('a refused reading is rounded DOWN, so it never prints as enough', () => {
   }
 });
 
+test('exact cents print exactly (0.57 * 100 is 56.999… in floating point)', () => {
+  for (const [gb, shown] of [[0.57, '0.57'], [1.15, '1.15'], [0.29, '0.29'], [1.81, '1.81']]) {
+    assert.equal(describeModelMemoryShortfall({ ok: false, availableGB: gb, floorGB: 2 }), `${shown}GB available, this model needs 2GB`);
+  }
+  // …while a reading a hair under the floor still prints below it.
+  assert.equal(describeModelMemoryShortfall({ ok: false, availableGB: 0.6199999999, floorGB: 0.62 }), '0.61GB available, this model needs 0.62GB');
+});
+
 test('a measurement that threw has no figure to print, only the floor', () => {
   assert.equal(describeModelMemoryShortfall({ ok: true, availableGB: null, floorGB: 0.62 }), 'this model needs 0.62GB');
 });

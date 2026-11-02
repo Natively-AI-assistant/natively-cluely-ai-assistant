@@ -22,7 +22,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const gate = await import(pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/utils/onnxThreadConfig.js')).href);
-const { measureAvailableMemory, getAvailableMemoryReading, checkMemoryForModelSize, checkMemoryForOnnxSession, describeModelMemoryShortfall } = gate;
+const { measureAvailableMemory, getAvailableMemoryReading, checkMemoryForModelSize, checkMemoryForOnnxSession, hasEnoughMemoryForModelSize, hasEnoughMemoryForOnnxSession, describeModelMemoryShortfall, __setAvailableMemoryProbesForTests } = gate;
 
 const GiB = 1024 ** 3;
 const VM_STAT = [
@@ -45,6 +45,7 @@ const boom = () => { throw new Error('probe failed'); };
 
 afterEach(() => {
   delete process.env.NATIVELY_ONNX_AVAILABLE_MEM_GB;
+  __setAvailableMemoryProbesForTests(null, null);
 });
 
 test('darwin: free + inactive + speculative pages from vm_stat', () => {
@@ -53,9 +54,9 @@ test('darwin: free + inactive + speculative pages from vm_stat', () => {
   assert.ok(Math.abs(r.gb - 2.0) < 1e-9, String(r.gb));
 });
 
-test('win32: os.freemem() (GlobalMemoryStatusEx ullAvailPhys)', () => {
-  const r = measureAvailableMemory('win32', probes({ vmStat: boom, meminfo: boom }));
-  assert.deepEqual(r, { gb: 1.5, source: 'freemem' });
+test('win32: os.freemem() (GlobalMemoryStatusEx ullAvailPhys), never vm_stat or meminfo', () => {
+  // Valid vm_stat/meminfo on offer: a branch mix-up would read 2 or 3 GB.
+  assert.deepEqual(measureAvailableMemory('win32', probes()), { gb: 1.5, source: 'freemem' });
 });
 
 test('linux: MemAvailable from /proc/meminfo', () => {
@@ -106,4 +107,33 @@ test('the shared-floor gate (embedder, reranker) reports the same shape and word
   assert.equal(checkMemoryForOnnxSession(-3).floorGB, 2);
   process.env.NATIVELY_ONNX_AVAILABLE_MEM_GB = '2';
   assert.equal(checkMemoryForOnnxSession().ok, true);
+});
+
+// End to end through the gates, with the OS reads injected.
+test('win32, memory unmeasurable: every gate admits, warns once, and does not re-probe per call', (t) => {
+  let reads = 0;
+  __setAvailableMemoryProbesForTests('win32', probes({ freemem: () => { reads++; return 0; } }));
+  const warn = t.mock.method(console, 'warn', () => {});
+  assert.deepEqual(checkMemoryForModelSize(60), { ok: true, availableGB: null, source: null, floorGB: 0.62 });
+  for (let i = 0; i < 5; i++) {
+    assert.equal(hasEnoughMemoryForModelSize(670), true);
+    assert.equal(hasEnoughMemoryForOnnxSession(0.5), true);
+  }
+  assert.equal(reads, 1, 'the failed measurement is cached like a real one');
+  const lines = warn.mock.calls.map((c) => String(c.arguments[0])).filter((l) => l.includes('could not be measured'));
+  assert.equal(lines.length, 1, 'one warning per failure streak');
+  assert.match(lines[0], /on win32/);
+});
+
+test('darwin, vm_stat failing: os.freemem() still decides, so low memory still refuses', () => {
+  __setAvailableMemoryProbesForTests('darwin', probes({ vmStat: boom, freemem: () => 0.3 * GiB }));
+  assert.deepEqual(checkMemoryForModelSize(60), { ok: false, availableGB: 0.3, source: 'freemem', floorGB: 0.62 });
+});
+
+test('win32, real low memory: refused, with the figure Windows reported', () => {
+  __setAvailableMemoryProbesForTests('win32', probes({ freemem: () => 0.6151 * GiB }));
+  const c = checkMemoryForModelSize(60);
+  assert.equal(c.ok, false);
+  assert.equal(c.source, 'freemem');
+  assert.equal(describeModelMemoryShortfall(c), '0.61GB available, this model needs 0.62GB');
 });

@@ -401,7 +401,14 @@ export interface AvailableMemoryReading {
     gb: number;
     source: AvailableMemorySource;
 }
-let availMemCache: { reading: AvailableMemoryReading; at: number } | null = null;
+// A failed measurement (null) is cached too: re-probing on every gate call
+// would run vm_stat synchronously on the main thread each time.
+let availMemCache: { reading: AvailableMemoryReading | null; at: number } | null = null;
+/** The last measurement failed — logged once per failure streak, not per gate call. */
+let availMemUnmeasured = false;
+/** Test-only stand-ins for process.platform and the OS reads (see __setAvailableMemoryProbesForTests). */
+let testMemoryPlatform: NodeJS.Platform | null = null;
+let testMemoryProbes: AvailableMemoryProbes | null = null;
 
 /** The OS reads behind measureAvailableMemory(); injectable so every platform branch is testable on any host. */
 export interface AvailableMemoryProbes {
@@ -564,13 +571,19 @@ export function getAvailableMemoryReading(): AvailableMemoryReading {
     }
 
     const now = Date.now();
+    let reading: AvailableMemoryReading | null;
     if (availMemCache && now - availMemCache.at < AVAIL_MEM_CACHE_TTL_MS) {
-        return availMemCache.reading;
+        reading = availMemCache.reading;
+    } else {
+        const platform = testMemoryPlatform ?? process.platform;
+        reading = measureAvailableMemory(platform, testMemoryProbes ?? SYSTEM_MEMORY_PROBES);
+        availMemCache = { reading, at: now };
+        if (!reading && !availMemUnmeasured) {
+            console.warn(`[OnnxGate] Available memory could not be measured on ${platform}; local models load without the memory check until it can be.`);
+        }
+        availMemUnmeasured = !reading;
     }
-
-    const reading = measureAvailableMemory(process.platform);
     if (!reading) throw new Error('available memory could not be measured');
-    availMemCache = { reading, at: now };
     return reading;
 }
 
@@ -686,9 +699,15 @@ function checkAvailableMemoryAgainst(floorGB: number): ModelMemoryCheck {
  * "0.62GB available, this model needs 0.62GB" for a 0.6151 GB refusal.
  */
 export function describeModelMemoryShortfall(check: ModelMemoryCheck): string {
-    if (check.availableGB == null) return `this model needs ${check.floorGB}GB`;
-    const shown = (Math.floor(check.availableGB * 100) / 100).toFixed(2);
-    return `${shown}GB available, this model needs ${check.floorGB}GB`;
+    const { availableGB, floorGB } = check;
+    if (availableGB == null) return `this model needs ${floorGB}GB`;
+    // The epsilon keeps exact cents exact (0.57 * 100 is 56.999… in floating
+    // point, which floored to "0.56"). It can only push a reading a hair under
+    // the floor up onto it, so a refused reading falls back to the plain floor.
+    let shown = Math.floor(availableGB * 100 + 1e-6) / 100;
+    if (availableGB < floorGB && shown >= floorGB) shown = Math.floor(availableGB * 100) / 100;
+    if (availableGB < floorGB && shown >= floorGB) shown = Math.max(0, floorGB - 0.01);
+    return `${shown.toFixed(2)}GB available, this model needs ${floorGB}GB`;
 }
 
 /**
@@ -721,6 +740,17 @@ export function getHighPriorityOnnxBudget(): number {
 
 export function getMaxConcurrentOnnxSessions(): number {
     return readMaxConcurrent();
+}
+
+/**
+ * Test-only: measure with this platform and these OS reads instead of the real
+ * ones (null restores them). Clears the cached reading either way.
+ */
+export function __setAvailableMemoryProbesForTests(platform: NodeJS.Platform | null, probes: AvailableMemoryProbes | null): void {
+    testMemoryPlatform = platform;
+    testMemoryProbes = probes;
+    availMemCache = null;
+    availMemUnmeasured = false;
 }
 
 /**
