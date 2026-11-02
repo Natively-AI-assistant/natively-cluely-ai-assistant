@@ -447,8 +447,18 @@ export class IntelligenceManager extends EventEmitter {
     }
 
     /** A meeting started: its transcript is kept on disk as it grows (LiveMeetingJournal). */
-    beginLiveMeeting(startedAt?: number): string {
-        return this.persistence.beginLiveMeeting(startedAt);
+    beginLiveMeeting(startedAt?: number, opts?: Parameters<MeetingPersistence['beginLiveMeeting']>[1]): string {
+        return this.persistence.beginLiveMeeting(startedAt, opts);
+    }
+
+    /** A saved meeting, read for a resume (MeetingPersistence.loadResumeBase). */
+    loadResumeBase(meetingId: string): ReturnType<MeetingPersistence['loadResumeBase']> {
+        return this.persistence.loadResumeBase(meetingId);
+    }
+
+    /** The saved meeting the running session continues, or null. */
+    get resumedMeetingId(): string | null {
+        return this.persistence.resumedMeetingId;
     }
 
     /**

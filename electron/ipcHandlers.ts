@@ -8,6 +8,7 @@ import { app, BrowserWindow, clipboard, dialog, desktopCapturer, ipcMain, native
 import { startChatWebSearch } from './services/webSearch/chatWebSearch';
 import { setOpenAtLogin, getOpenAtLogin } from './utils/windowsTaskbarPolicy';
 import { normalizeMeetingSurface } from './utils/meetingSurface';
+import { openInNotepadBlockReason, resumeBlockReason } from './services/meeting/meetingResume';
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import { resolveMacScreenStatus } from '../src/lib/permissionAttentionPolicy.mjs';
 import { hasOwnAiKey, resolveExpiredTrial } from '../src/lib/trialPolicy.mjs';
@@ -17391,6 +17392,46 @@ export function initializeIpcHandlers(appState: AppState): void {
       launcherWin.focus();
     }
     return { success: true };
+  });
+
+  // The meeting page's notepad button (2026-11-02): the notepad opens on a
+  // saved meeting, its notes on the page (liveNotesSession.openSaved). Not
+  // while a meeting runs: the notepad belongs to that meeting then.
+  safeHandle('notes-window:open-saved-meeting', async (_event, meetingId: unknown) => {
+    if (typeof meetingId !== 'string' || !meetingId) return { success: false, code: 'not-found' };
+    const db = DatabaseManager.getInstance();
+    const block = openInNotepadBlockReason({ exists: !!db.getMeetingTiming(meetingId), meetingActive: appState.getIsMeetingActive() });
+    if (block) return { success: false, code: block };
+    if (!appState.getLiveNotes().openSaved(meetingId, db.getMeetingUserNotes(meetingId))) return { success: false, code: 'meeting-running' };
+    // Without focus, as every notepad show (NotesWindowHelper.open): it floats
+    // above the launcher, and a click in the page starts typing through the
+    // keyboard hook. The same call on macOS (panel) and Windows (notesWindowPolicy).
+    appState.notesWindowHelper.open({ activate: false });
+    return { success: true };
+  });
+
+  // Resume (2026-11-02, services/meeting/meetingResume.ts): recording again
+  // into a saved meeting, under its id. Through startMeeting, so it queues and
+  // coalesces with every other start; main opens what the meeting was taken on.
+  safeHandle('meeting:resume', async (_event, meetingId: unknown, request?: { audio?: { inputDeviceId?: unknown; outputDeviceId?: unknown }; doNotPersist?: unknown }) => {
+    if (typeof meetingId !== 'string' || !meetingId) return { success: false, code: 'not-found' };
+    const details = DatabaseManager.getInstance().getMeetingDetails(meetingId);
+    // A start already queued or under way counts as running: startMeeting would
+    // join it (or replace a queued one, such as a calendar auto-start).
+    const block = resumeBlockReason({ exists: !!details, meetingActive: appState.getIsMeetingActive() || appState.hasPendingMeetingStart() });
+    if (block) return { success: false, code: block };
+    const deviceId = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
+    try {
+      await appState.startMeeting({
+        resumeMeetingId: meetingId,
+        audio: { inputDeviceId: deviceId(request?.audio?.inputDeviceId), outputDeviceId: deviceId(request?.audio?.outputDeviceId) },
+        doNotPersist: request?.doNotPersist === true,
+      });
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error resuming meeting:', error);
+      return { success: false, error: error?.message, code: error?.code };
+    }
   });
 
   // Earlier versions of a meeting's notes (one tab each on the meeting page)

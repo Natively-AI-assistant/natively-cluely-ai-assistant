@@ -1107,6 +1107,8 @@ export interface ElectronAPI {
   onLiveNotesState?: (callback: (state: { phase: 'idle' | 'live' | 'ended'; meetingId: string | null; text?: string }) => void) => () => void
   /** "Open meeting" in the notes window: the launcher opens that meeting. */
   notesWindowOpenMeeting?: (meetingId: string) => Promise<{ success: boolean }>
+  notesWindowOpenSavedMeeting?: (meetingId: string) => Promise<{ success: boolean; code?: string }>
+  resumeMeeting?: (meetingId: string, request?: { audio?: { inputDeviceId: string | null; outputDeviceId: string | null }; doNotPersist?: boolean }) => Promise<{ success: boolean; error?: string; code?: string }>
   onLauncherOpenMeeting?: (callback: (meetingId: string) => void) => () => void
   /** Earlier versions of a meeting's notes, oldest first. */
   getMeetingNotesVersions?: (meetingId: string) => Promise<Array<{ id: number; label: string; createdAt: number; templateType: string | null; detailedSummary: any }>>

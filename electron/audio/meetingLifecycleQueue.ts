@@ -66,6 +66,15 @@ export class MeetingLifecycleQueue {
         return this.state;
     }
 
+    /**
+     * A start is queued or running that a new start() would join (or whose
+     * runner it would replace). Resume (2026-11-02) checks this so it is never
+     * folded into another start, such as a calendar auto-start.
+     */
+    hasPendingStart(): boolean {
+        return this.startRequest !== null && this.lastRequestDirection === 'starting';
+    }
+
     /** Request a meeting start. Returns the transition the caller should await. */
     start(run: () => Promise<void>): Promise<void> {
         // Join an in-flight start only when nothing has since asked to stop —

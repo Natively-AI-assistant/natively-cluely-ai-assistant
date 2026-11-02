@@ -88,7 +88,7 @@ describe('BUG-MODE-BLEEDING: Async post-call summary mode snapshot', () => {
     const source = fs.readFileSync(sourcePath, 'utf8');
 
     // processAndSaveMeeting call must include modeSnapshot
-    const processCallIndex = source.indexOf('this.processAndSaveMeeting(snapshot, meetingId, metadataSnapshot, modeSnapshot)');
+    const processCallIndex = source.indexOf('this.processAndSaveMeeting(snapshot, meetingId, metadataSnapshot, modeSnapshot, writer)');
     assert.ok(processCallIndex >= 0,
       'processAndSaveMeeting must be called with modeSnapshot as 4th argument');
   });

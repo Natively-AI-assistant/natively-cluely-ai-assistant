@@ -97,6 +97,8 @@ export class FunnelTelemetry {
     private state: StoredState | null = null;
     private meetingStartedAt: number | null = null;
     private meetingWasFirst = false;
+    // The running meeting is a Resume of a saved one (2026-11-02).
+    private meetingWasResumed = false;
     /** The running meeting's notepad, for meeting_ended: counts and yes/no only, never the notes. */
     private meetingNotepad: { surface: MeetingSurface; open: boolean; typed: boolean; asks: number; recipes: number } | null = null;
     /** notepad_used keys already queued today, in memory, so a keystroke never reads the state file. */
@@ -385,14 +387,16 @@ export class FunnelTelemetry {
     /**
      * @param surface what this meeting opened on (main's start plan), the overlay or the notepad.
      * @param notepadOpen whether the notepad is up as it starts (its 'show' can fire before this).
+     * @param resumed a Resume of a saved meeting: reported as such, never the first, not counted again.
      */
-    public meetingStarted(answersSoFar = 0, surface?: MeetingSurface, notepadOpen?: boolean): void {
+    public meetingStarted(answersSoFar = 0, surface?: MeetingSurface, notepadOpen?: boolean, resumed = false): void {
         try {
             if (!this.isEnabled()) return;
             const st = this.loadState();
-            st.meetings += 1;
+            // A resume continues a meeting already counted.
+            if (!resumed) st.meetings += 1;
             this.meetingStartedAt = Date.now();
-            const first = st.newInstall && st.meetings === 1;
+            const first = !resumed && st.newInstall && st.meetings === 1;
             // Written down so a meeting the app never sees end is still counted
             // (reportLifecycle, at the next launch). A note left by an earlier
             // launch is reported before it is replaced.
@@ -402,10 +406,12 @@ export class FunnelTelemetry {
             this.saveState();
             this.answersAtMeetingStart = Number.isInteger(answersSoFar) && answersSoFar > 0 ? answersSoFar : 0;
             this.meetingWasFirst = first;
+            this.meetingWasResumed = resumed === true;
             const meetingSurface = surface ?? this.currentSurface();
             // A notepad meeting opens the notepad at the start: it was open.
             this.meetingNotepad = { surface: meetingSurface, open: meetingSurface === 'notepad' || notepadOpen === true, typed: false, asks: 0, recipes: 0 };
-            this.track('meeting_started', { first: this.meetingWasFirst, ai: this.snapshot?.().meetingAi ?? 'none', surface: meetingSurface });
+            // `resumed` only on a resume, so every other meeting_started is exactly as before.
+            this.track('meeting_started', { first: this.meetingWasFirst, ai: this.snapshot?.().meetingAi ?? 'none', surface: meetingSurface, ...(this.meetingWasResumed ? { resumed: true } : {}) });
         } catch { /* never into a meeting */ }
     }
 
@@ -417,7 +423,8 @@ export class FunnelTelemetry {
             this.meetingStartedAt = null;
             // The meeting ended where the app could see it: nothing to recover.
             try { const st = this.loadState(); if (st.openMeeting) { st.openMeeting = null; this.saveState(); } } catch { /* best effort */ }
-            const props: FunnelProps = { minutes, first: this.meetingWasFirst };
+            const props: FunnelProps = { minutes, first: this.meetingWasFirst, ...(this.meetingWasResumed ? { resumed: true } : {}) };
+            this.meetingWasResumed = false;
             const np = this.meetingNotepad;
             this.meetingNotepad = null;
             if (np) {

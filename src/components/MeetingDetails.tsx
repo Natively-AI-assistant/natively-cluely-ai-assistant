@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useId, useMemo } from 'react';
 import { useT } from '../i18n';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
-import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight, RefreshCw, Info, Eye, EyeOff, History, Pencil, X, ChevronRight, ChevronLeft, FileText, Columns2 } from 'lucide-react';
+import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight, RefreshCw, Info, Eye, EyeOff, History, Pencil, X, ChevronRight, ChevronLeft, FileText, Columns2, NotebookPen } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { genMessageId } from '../utils/messageId';
@@ -47,6 +47,8 @@ import { readableNotesMarkdown } from './notes/notesEditorModel';
 import { comparePair, shouldPromptRating, templatePickerOptions } from './meeting/notesFeedback';
 import { noteLineTime, notesContentKey, notesLabel, notesWereEdited, versionTabs, type VersionKey } from './meeting/notesView';
 import { copyText } from '../lib/copyText';
+import { resumeSpot } from '../../electron/services/meeting/meetingResume';
+import { resumeSavedMeeting } from '../lib/startMeetingRequest';
 
 registerPrismLanguages();
 
@@ -1092,6 +1094,8 @@ interface Meeting {
     summaryStatus?: MeetingSummaryStatus;
     /** What the user typed in the notes window during the meeting, exactly as typed. */
     userNotes?: string;
+    /** What it was taken on (2026-11-02): decides where Resume lives (meetingResume.ts). None on older meetings. */
+    surface?: 'overlay' | 'notepad';
 }
 
 // Mirrors SummaryStatus in electron/services/meeting/MeetingSummaryV3.ts. The
@@ -2362,6 +2366,76 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         } catch { /* swallow */ }
     };
 
+    // Back to the notepad, and Resume (2026-11-02, services/meeting/meetingResume.ts).
+    // Both wait while another meeting runs: it owns the notepad and the microphone.
+    const [meetingRunning, setMeetingRunning] = useState(false);
+    useEffect(() => {
+        const api = window.electronAPI;
+        let cancelled = false;
+        api?.getMeetingActive?.().then((active) => { if (!cancelled) setMeetingRunning(!!active); }).catch(() => { /* assume none */ });
+        const off = api?.onMeetingStateChanged?.((d) => setMeetingRunning(!!d?.isActive));
+        return () => { cancelled = true; off?.(); };
+    }, []);
+    // A resumed meeting is saved again under this id at its Stop: pick up the new
+    // notes being written (the generation poll above takes it from there) and the
+    // earlier notes kept as a version.
+    useEffect(() => {
+        if (isSummaryGenerating) return;
+        const off = window.electronAPI?.onMeetingsUpdated?.(async () => {
+            try {
+                const fresh = await window.electronAPI?.getMeetingDetails?.(meeting.id) as Meeting | undefined;
+                if (fresh && SUMMARY_IN_PROGRESS.has(fresh.summaryStatus ?? '')) {
+                    setMeeting(fresh);
+                    void loadNotesVersions();
+                }
+            } catch { /* the page keeps what it shows */ }
+        });
+        return () => { off?.(); };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isSummaryGenerating, meeting.id]);
+    const [resumeBusy, setResumeBusy] = useState(false);
+    const [resumeNotice, setResumeNotice] = useState<string | null>(null);
+    useEffect(() => {
+        if (!resumeNotice) return;
+        const timer = setTimeout(() => setResumeNotice(null), 4_000);
+        return () => clearTimeout(timer);
+    }, [resumeNotice]);
+    const resumeProblem = (code?: string): string => (
+        code === 'meeting-running' ? t('Stop the meeting that is running first.')
+            : code === 'not-found' ? t('This meeting could not be found.')
+                    : code === 'mic-permission-denied' ? t('Natively needs microphone access to record.')
+                        : t('Could not resume this meeting.')
+    );
+    // Overlay meetings resume here; a notepad meeting resumes in the notepad (and
+    // older meetings, which never stored it, count as overlay meetings).
+    const resumeOnPage = resumeSpot(baseMeeting.surface) === 'page';
+    // Notes still being written do not hold Resume back: the resumed Stop writes
+    // them over the whole meeting (meetingResume.resumeBlockReason).
+    const resumeDisabled = meetingRunning || resumeBusy;
+    const resumeHint = meetingRunning ? t('Stop the meeting that is running first')
+        : t('Keep recording into this meeting');
+    const resumeMeeting = async () => {
+        if (resumeDisabled) return;
+        setResumeBusy(true);
+        try {
+            const result = await resumeSavedMeeting(meeting.id);
+            if (!result.success) setResumeNotice(resumeProblem(result.code));
+        } catch {
+            setResumeNotice(resumeProblem());
+        } finally {
+            setResumeBusy(false);
+        }
+    };
+    const openInNotepad = async () => {
+        if (meetingRunning) return;
+        try {
+            const result = await window.electronAPI?.notesWindowOpenSavedMeeting?.(meeting.id);
+            if (result && !result.success) setResumeNotice(result.code === 'meeting-running' ? t('Stop the meeting that is running first.') : t('Could not open the notepad.'));
+        } catch {
+            setResumeNotice(t('Could not open the notepad.'));
+        }
+    };
+
     // Set when regenerating AS the auto-detected mode was refused because that mode
     // needs Pro (the same gate as switching to it) — the suggestion then says so
     // instead of spinning and silently doing nothing.
@@ -3038,8 +3112,20 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                         {/* Follow-up email — a meeting-level action, so it sits by the title
                             rather than at the foot of the notes. It opens the draft in a dialog
                             (FollowUpDialog below) and writes one first if there is none yet. */}
-                        {meeting.detailedSummary && (
-                            <div className="shrink-0">
+                        <div className="shrink-0 flex items-center gap-2">
+                            {/* Back to the notepad (2026-11-02): the notepad opens on this
+                                meeting. Icon only, so the header stays one quiet action wide. */}
+                            <LiquidGlassButton
+                                variant="clear"
+                                className="lg-sm mn-generate mn-icon-btn"
+                                onClick={() => { void openInNotepad(); }}
+                                disabled={meetingRunning}
+                                aria-label={t('Open in notepad')}
+                                title={meetingRunning ? t('Stop the meeting that is running first') : t('Open in notepad')}
+                            >
+                                <NotebookPen className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden />
+                            </LiquidGlassButton>
+                            {meeting.detailedSummary && (
                                 <LiquidGlassButton
                                     variant="clear"
                                     className="lg-sm mn-generate"
@@ -3050,8 +3136,8 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                 >
                                     {t('Follow-up email')}
                                 </LiquidGlassButton>
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </div>
 
                     {/* Tabs */}
@@ -3974,7 +4060,48 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                 `fixed inset-0 z-[300]` in a8c1ac82 (the sheet-style dimming); at the old
                 z-50 the bar vanished under it the moment a chat opened. z-[310] clears it.
                 Same stacking context: neither is portaled. */}
-            <div className={`absolute bottom-0 left-0 right-0 p-6 flex justify-center pointer-events-none ${isChatOpen ? 'z-[310]' : 'z-20'}`}>
+            <div className={`absolute bottom-0 left-0 right-0 p-6 flex justify-center items-center gap-2.5 pointer-events-none ${isChatOpen ? 'z-[310]' : 'z-20'}`}>
+                {resumeNotice && (
+                    <p role="status" className="absolute left-0 right-0 bottom-[84px] text-center text-[12px] leading-4 text-text-secondary pointer-events-none">{resumeNotice}</p>
+                )}
+                {/* Resume (2026-11-02), Granola's: recording again into this meeting.
+                    Overlay meetings only; a notepad meeting resumes in the notepad.
+                    The same glass as the Ask bar, three still bars like the
+                    notepad's listening pill. Steps aside while the chat is open:
+                    the bar is the chat's input then. */}
+                {resumeOnPage && !isChatOpen && (
+                    <GlassSurface
+                        width="auto"
+                        height={ASK_BAR_HEIGHT}
+                        borderRadius={ASK_BAR_HEIGHT / 2}
+                        borderWidth={ASK_BAR_EDGE}
+                        blur={ASK_BAR_MAP_BLUR}
+                        brightness={60}
+                        opacity={0.9}
+                        distortionScale={isLight ? ASK_BAR_DISTORTION_LIGHT : ASK_BAR_DISTORTION_DARK}
+                        redOffset={0}
+                        greenOffset={0}
+                        blueOffset={0}
+                        yChannel="B"
+                        displace={0.5}
+                        tint={isLight ? ASK_BAR_TINT_LIGHT : ASK_BAR_TINT_DARK}
+                        saturation={isLight ? ASK_BAR_SATURATION_LIGHT : ASK_BAR_SATURATION_DARK}
+                        className="shrink-0 pointer-events-auto"
+                        contentClassName="glass-surface__content--bare"
+                    >
+                        <button
+                            type="button"
+                            onClick={() => { void resumeMeeting(); }}
+                            disabled={resumeDisabled}
+                            aria-busy={resumeBusy || undefined}
+                            title={resumeHint}
+                            className="mn-resume h-full pl-4 pr-[18px] flex items-center gap-[9px] rounded-full text-sm font-medium text-text-primary disabled:opacity-50 disabled:cursor-default"
+                        >
+                            <span className="mn-resume-bars" aria-hidden><span /><span /><span /></span>
+                            {t('Resume')}
+                        </button>
+                    </GlassSurface>
+                )}
                 {/* Refractive glass, not a blurred pane. The pill floats over the
                     scrolling notes, so the material is only readable as glass if
                     what passes behind it BENDS — a plain backdrop-blur reads as

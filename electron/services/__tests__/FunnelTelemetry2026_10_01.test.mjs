@@ -214,6 +214,24 @@ describe('FunnelTelemetry', { skip: HAVE_BUILD ? false : 'run `npm run build:ele
     assert.equal(h.state().meetings, 2);
   });
 
+  test('a Resume (2026-11-02) is reported as one, never first, and not counted as another meeting', async () => {
+    const h = load({ packaged: true });
+    h.ft.setSnapshotResolver(() => SNAPSHOT);
+    await h.ft.tick(); // a new install
+    h.ft.meetingStarted(0, 'notepad', true, true); // the very first start is a resume
+    h.ft.meetingEnded();
+    h.ft.meetingStarted(0, 'notepad');               // then a new meeting
+    h.ft.meetingEnded();
+    const events = h.queue().map((e) => [e.event_type, e.props]);
+    assert.deepEqual(events, [
+      ['meeting_started', { first: false, ai: 'own', surface: 'notepad', resumed: true }],
+      ['meeting_ended', { minutes: 0, first: false, resumed: true, surface: 'notepad', notepad_open: true, notes_typed: false, asks: 0, recipes: 0 }],
+      ['meeting_started', { first: true, ai: 'own', surface: 'notepad' }],
+      ['meeting_ended', { minutes: 0, first: true, surface: 'notepad', notepad_open: true, notes_typed: false, asks: 0, recipes: 0 }],
+    ], 'resumed only on the resume, so other meetings send what they always did');
+    assert.equal(h.state().meetings, 1, 'the resume continued a meeting; only the new one counts');
+  });
+
   test('an install that upgraded into this code never has a "first" meeting', () => {
     const h = load({ packaged: true, state: { firstRunSent: true, lastActiveDay: '', meetings: 0 } });
     h.ft.setSnapshotResolver(() => SNAPSHOT);

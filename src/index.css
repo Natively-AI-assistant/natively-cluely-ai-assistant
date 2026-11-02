@@ -10312,6 +10312,33 @@ html[data-platform="linux"][data-window="launcher"] body {
 .mn-ask-send .lg-content,
 .mn-ask-send .lg-label { display: flex; align-items: center; justify-content: center; }
 .mn-ask-send .lg-content { height: 100%; width: 100%; }
+/* The meeting page's "Open in notepad" (MeetingDetails header, 2026-11-02): the
+   Follow-up email button's clear glass as a 30px circle, icon only, so the
+   header gains a quiet action rather than a second label. Rim stops are lengths,
+   as on the send orb: the whole button is cap. */
+.lg-button.lg-sm.mn-icon-btn {
+  width: var(--lg-pill-h);
+  padding: 0;
+  --lg-cap-0: 2px;
+  --lg-cap-1: 6px;
+  --lg-cap-2: calc(var(--lg-pill-h) / 2);
+}
+.mn-icon-btn .lg-content,
+.mn-icon-btn .lg-label { display: flex; align-items: center; justify-content: center; }
+.mn-icon-btn .lg-content { height: 100%; width: 100%; }
+
+/* Resume beside the Ask bar (MeetingDetails, 2026-11-02): the notepad's
+   listening pill at rest, three still grey bars and the word (Evin chose this
+   over a record mark and a play icon). A quiet wash on hover, as the ask bar's
+   own surface; nothing moves, the bars are still on purpose. */
+.mn-resume { transition: background-color 150ms ease-out; }
+.mn-resume:not(:disabled):hover { background-color: rgba(255, 255, 255, .06); }
+[data-theme='light'] .mn-resume:not(:disabled):hover { background-color: rgba(17, 17, 26, .04); }
+.mn-resume:focus-visible { outline: 2px solid var(--accent-primary, #6B74F0); outline-offset: 2px; }
+.mn-resume-bars { display: inline-flex; align-items: center; gap: 2px; height: 18px; }
+.mn-resume-bars > span { width: 3px; height: 10px; border-radius: 2px; background: #636366; }
+.mn-resume-bars > span:nth-child(2) { height: 18px; }
+[data-theme='light'] .mn-resume-bars > span { background: #A1A1A6; }
 /* Empty box: grey, and not pressable (disabled). Owner: "greyed out if nothing
    is typed in, if typed in the periwinkle tint". Only background-COLOR changes
    (the sheen image stays), so the base .lg-button background-color transition
@@ -13034,6 +13061,12 @@ html[data-tooltips='off'] .t-tt {
 .notepad .notes-listening-bars.np-silent > span { background: var(--np-red); }
 .notepad .notes-listening-bars.np-paused > span { background: var(--np-ink-tertiary); animation: none; transform: scaleY(0.55); }
 .notepad .notes-listening-bars.notes-level > span { transition: transform 300ms ease-in-out, background-color 300ms; }
+/* Resume on a saved notepad meeting (NotesWindow, 2026-11-02): the listening
+   pill's bars at rest, still and grey, beside the word. Same shape as the
+   meeting page's (.mn-resume-bars). */
+.notepad .np-resume-bars { display: inline-flex; align-items: center; gap: 2px; height: 18px; }
+.notepad .np-resume-bars > span { width: 3px; height: 10px; border-radius: 9999px; background: var(--np-ink-tertiary); }
+.notepad .np-resume-bars > span:nth-child(2) { height: 18px; }
 /* The editor: 15px, line height 1.5, no space between paragraphs; headings at body size. */
 .notepad .notes-editor { font-size: 15px; line-height: 1.5; color: var(--np-ink); caret-color: var(--np-caret); }
 .notepad .notes-editor > * + * { margin-top: 0; }

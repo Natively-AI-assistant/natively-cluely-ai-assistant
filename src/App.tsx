@@ -31,7 +31,7 @@ import { OrchestratorProvider, OrchestratedToasterHost, setUserState as setOrche
 // unmounting the whole tree — the black-screen root cause. Do not remove
 // the extension.
 import { getOrchestrator } from "./lib/onboarding/orchestrator.ts"
-import { isInternalCaptureDevice } from "../electron/audio/audioDeviceSelection.mjs"
+import { savedMeetingAudio } from "./lib/startMeetingRequest"
 import { ProviderChangeNotice, type EmbeddingDegradedNotice } from "./components/ProviderChangeNotice"
 import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
 import { getMeetingInterfaceTheme, resolveMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
@@ -1121,38 +1121,10 @@ const App: React.FC = () => {
   const handleStartMeeting = async (calendar?: { title: string; calendarEventId: string }) => {
     const linked = calendar && typeof calendar === 'object' && typeof calendar.calendarEventId === 'string' ? calendar : undefined;
     try {
-      // Self-heal a poisoned preference. Until the picker started filtering
-      // them, Natively's own system-audio tap aggregate could be enumerated as
-      // an input device (private CoreAudio aggregates are hidden from other
-      // processes, not from ours) and saved here. It is not a microphone and
-      // never exists at mic-start time, so every meeting failed with
-      // "Input device 'NativelySystemAudioTap' not found". Main falls back to
-      // the default either way; dropping the key stops the stale value from
-      // being shown as the user's choice in Settings forever.
-      let inputDeviceId = localStorage.getItem('preferredInputDeviceId');
-      if (isInternalCaptureDevice(inputDeviceId)) {
-        console.warn(`[App] Discarding saved input device "${inputDeviceId}" — it is one of Natively's own capture devices, not a microphone.`);
-        localStorage.removeItem('preferredInputDeviceId');
-        inputDeviceId = null;
-      }
-      let outputDeviceId = localStorage.getItem('preferredOutputDeviceId');
-      // SCK is a macOS-only backend (ScreenCaptureKit + CoreAudio Process Tap
-      // live in the Rust speaker module under #[cfg(target_os = "macos")]).
-      // F-003 hid the toggle UI on Windows, but the localStorage key can be
-      // present on a Windows machine via cross-OS sync or restored backup —
-      // routing "sck" as an outputDeviceId then hands the Windows speaker
-      // module an unknown WASAPI device id and silently breaks system audio.
-      // Defense-in-depth: also require isMac at the consumer.
-      const useExperimentalSck = isMac && localStorage.getItem('useExperimentalSckBackend') === 'true';
-
-      // Override output device ID to force SCK if experimental mode is enabled
-      // Default to CoreAudio unless experimental is enabled
-      if (useExperimentalSck) {
-        console.log("[App] Using ScreenCaptureKit backend (Experimental).");
-        outputDeviceId = "sck";
-      } else if (isMac) {
-        console.log("[App] Using CoreAudio backend (Default).");
-      }
+      // The saved microphone and speaker, as Resume asks for them too
+      // (lib/startMeetingRequest.ts: drops Natively's own tap aggregate saved
+      // as a microphone, and 'sck' only on macOS with the experimental switch).
+      const { inputDeviceId, outputDeviceId } = savedMeetingAudio();
 
       const meetingRetention = await window.electronAPI.getMeetingRetention?.().catch(() => 'forever');
       const result = await window.electronAPI.startMeeting({

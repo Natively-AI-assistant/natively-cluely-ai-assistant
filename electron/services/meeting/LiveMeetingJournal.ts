@@ -51,6 +51,16 @@ export interface MeetingRecoveryMeta {
     userNotes?: string;
     /** The note template picked in the notepad (noteTemplates.ts), so recovery writes the notes in it. */
     noteTemplateId?: string;
+    /** What the meeting was taken on (2026-11-02), so a recovered meeting keeps where its Resume lives. */
+    surface?: 'overlay' | 'notepad';
+    /**
+     * A resumed meeting (meetingResume.ts): the live copy holds the whole
+     * meeting, saved lines included, so recovery replaces the saved row and
+     * keeps the original start and the earlier running time.
+     */
+    resumed?: { startTime: number; priorDurationMs: number };
+    /** A resumed meeting: what its saved notes carry into the new ones (speaker names, people, screens, a follow-up draft). */
+    resumeCarry?: import('./meetingResume').ResumeCarry;
 }
 
 export interface LiveJournalRow {

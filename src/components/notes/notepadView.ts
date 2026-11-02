@@ -351,3 +351,27 @@ export const RECIPES_SHOWN = 2;
 export function visibleRecipes<T>(recipes: readonly T[], showAll: boolean): T[] {
     return showAll ? [...recipes] : recipes.slice(0, RECIPES_SHOWN);
 }
+
+/**
+ * The heading of a saved meeting opened in the notepad (2026-11-02, the meeting
+ * page's notepad button): its title, its calendar event and people, from the
+ * saved row (getMeetingDetails). The live heading comes from the running
+ * session instead; this fills it when the page was not that meeting's own.
+ */
+export function savedMeetingHeading(d: unknown): { title: string | null; people: number; event: { id: string; title: string | null; startTime: string | null; endTime: string | null; link: string | null } | null; attendees: Attendee[] } {
+    const m = (d && typeof d === 'object' ? d : {}) as { title?: unknown; calendarEvent?: any };
+    const title = typeof m.title === 'string' && m.title.trim() ? m.title.trim() : null;
+    const ev = m.calendarEvent && typeof m.calendarEvent === 'object' && typeof m.calendarEvent.id === 'string' ? m.calendarEvent : null;
+    const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
+    const attendees: Attendee[] = Array.isArray(ev?.attendees)
+        ? ev.attendees
+            .filter((a: any) => a && typeof a.email === 'string' && a.email)
+            .map((a: any) => ({ email: a.email as string, name: typeof a.name === 'string' && a.name.trim() ? a.name.trim() : null }))
+        : [];
+    return {
+        title,
+        people: attendees.length,
+        event: ev ? { id: ev.id, title: str(ev.title), startTime: str(ev.startTime), endTime: str(ev.endTime), link: str(ev.link) } : null,
+        attendees,
+    };
+}

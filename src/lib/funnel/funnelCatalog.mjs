@@ -161,6 +161,10 @@ export const FUNNEL_CATALOG = Object.freeze({
     ai: ['natively', 'own', 'none'],
     // What it opened on: the overlay or the notepad.
     surface: MEETING_SURFACES,
+    // Added 2026-11-02: Resume on a saved meeting (recording again into the
+    // same meeting). Sent only on a resume, which is not counted as a meeting
+    // of its own (meetings_total) and is never the first.
+    resumed: BOOL,
   },
   meeting_ended: {
     minutes: INT,
@@ -176,6 +180,8 @@ export const FUNNEL_CATALOG = Object.freeze({
     notes_typed: BOOL,
     asks: INT,
     recipes: INT,
+    // The resumed part of a meeting (meeting_started.resumed); `minutes` is that part's.
+    resumed: BOOL,
   },
 
   // A meeting the app never saw end: it was closed or it crashed while one was

@@ -86,8 +86,11 @@ describe('Phase 9 — Retention & doNotPersist gate in MeetingPersistence', () =
     // Per-meeting toggle.
     assert.match(src, /doNotPersist/, 'must support per-meeting doNotPersist');
     // Early-return code path: no DB save, no processAndSaveMeeting call.
-    const window = src.slice(src.indexOf('public async stopMeeting'), src.indexOf('public async stopMeeting') + 3000);
-    assert.match(window, /this\.session\.reset\(\);\s*\n\s*return null;/, 'do-not-persist path must reset and return null without saving');
+    // 4000: the function grew with Resume (2026-11-02); the early return is still near its top.
+    const window = src.slice(src.indexOf('public async stopMeeting'), src.indexOf('public async stopMeeting') + 4000);
+    // A resumed meeting (2026-11-02) returns its already-saved id instead of null, still without
+    // saving; if the resume stopped notes still being written, they are finished from the saved copy.
+    assert.match(window, /this\.session\.reset\(\);\s*\n(?:\s*\/\/[^\n]*\n)?(?:\s*if \(resumed\) this\.finishNotesAfterDroppedResume\(resumed\.meetingId\);\n)?\s*return (?:null|resumed \? \{ meetingId: resumed\.meetingId, memoryEligibleCount: 0 \} : null);/, 'do-not-persist path must reset and return null without saving');
   });
 
   test('do-not-persist still emits a sanitized meeting_stop telemetry event', () => {

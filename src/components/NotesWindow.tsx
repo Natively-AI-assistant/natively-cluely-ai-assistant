@@ -12,7 +12,9 @@ import { NotesHeading, type HeadingInfo } from './notes/NotesHeading';
 import { NotesEnhanced, type NotesEnhancedHandle } from './notes/NotesEnhanced';
 import { NoteTemplateGallery } from './notes/NoteTemplateGallery';
 import { noteTemplateById } from '../../electron/services/meeting/noteTemplates';
-import { answerSources, applyTranscriptEvent, askContext, EMPTY_LIVE_TRANSCRIPT, findInTranscript, listeningBarHeights, liveTranscriptRows, type AskTurn, type LiveTranscript, type TranscriptHit, type TranscriptLine } from './notes/notepadView';
+import { answerSources, applyTranscriptEvent, askContext, EMPTY_LIVE_TRANSCRIPT, findInTranscript, listeningBarHeights, liveTranscriptRows, savedMeetingHeading, type AskTurn, type LiveTranscript, type TranscriptHit, type TranscriptLine } from './notes/notepadView';
+import { resumeSpot } from '../../electron/services/meeting/meetingResume';
+import { resumeSavedMeeting } from '../lib/startMeetingRequest';
 import { TranscriptControls } from './notes/TranscriptControls';
 import { NpPop } from './notes/NpPop';
 import { NOTE_RECIPES, noteRecipeById, parseSlashCommand, recipesFor, searchRecipes, type NoteRecipe } from '../../electron/llm/noteRecipes';
@@ -153,6 +155,16 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
         ? { ...EMPTY_INFO, title: preview.title, people: preview.people, speakers: { me: 'You', them: preview.them ?? EMPTY_INFO.speakers.them } }
         : EMPTY_INFO));
     const [savedTitle, setSavedTitle] = useState<string | null>(null);
+    // The saved meeting on the page after Stop, or opened from its meeting page
+    // (2026-11-02): what it was taken on (a notepad meeting resumes here).
+    // Resume does not wait for notes still being written (the resumed Stop
+    // writes them; MeetingPersistence.claimWriter).
+    const [savedSurface, setSavedSurface] = useState<'overlay' | 'notepad' | null>(null);
+    const [resumeBusy, setResumeBusy] = useState(false);
+    const [resumeNotice, setResumeNotice] = useState<string | null>(null);
+    // The phase the page was in before, to tell the page a Stop left (its heading
+    // is the live one) from a saved meeting opened onto it (heading from the row).
+    const prevPhaseRef = useRef<Phase>(phase);
     const [ask, setAskState] = useState('');
     const [askEngaged, setAskEngaged] = useState(false);
     const [allRecipes, setAllRecipes] = useState(false);
@@ -294,19 +306,42 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     }, [phase, readInfo]);
     // After Stop the notes call names the meeting. Read the saved title whichever tab is open: it
     // used to arrive only through NotesEnhanced, so on My notes the heading never changed (2026-10-31).
+    // A saved meeting opened onto the page (not the one a Stop just left) takes its whole heading from the row.
     useEffect(() => {
+        const from = prevPhaseRef.current;
+        prevPhaseRef.current = phase;
         if (phase !== 'ended' || !meetingId || preview) return;
+        const opened = from !== 'live';
+        if (opened) {
+            setInfo(EMPTY_INFO);
+            setSavedTitle(null);
+            setEndedTab('enhanced');
+            setTurns([]);
+        }
+        setSavedSurface(null);
         const api = window.electronAPI;
+        let cancelled = false;
         const read = () => {
             api?.getMeetingDetails?.(meetingId).then((d: any) => {
+                if (cancelled || !d) return;
                 const title = typeof d?.title === 'string' ? d.title.trim() : '';
                 if (title) setSavedTitle(title);
+                setSavedSurface(d.surface === 'notepad' ? 'notepad' : 'overlay');
+                if (opened) {
+                    const h = savedMeetingHeading(d);
+                    setInfo((prev) => ({ ...prev, title: h.title, people: h.people, event: h.event, attendees: h.attendees }));
+                }
             }).catch(() => { /* not saved yet */ });
         };
         read();
         const off = api?.onMeetingsUpdated?.(read);
-        return () => { off?.(); };
+        return () => { cancelled = true; off?.(); };
     }, [phase, meetingId, preview]);
+    useEffect(() => {
+        if (!resumeNotice) return;
+        const timer = setTimeout(() => setResumeNotice(null), 4_000);
+        return () => clearTimeout(timer);
+    }, [resumeNotice]);
 
     // The ^ panel's transcript (main sends it here only while the window is open).
     useEffect(() => {
@@ -938,6 +973,24 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
         grip.addEventListener('pointercancel', up);
     };
     const recipeChip = 'h-6 shrink-0 inline-flex items-center gap-1 px-2.5 rounded-full text-[12px] font-[430] tracking-[0.02em] whitespace-nowrap transition-colors np-wash';
+    // Resume shows here only for a meeting taken in the notepad; an overlay meeting resumes from its page.
+    const showResume = phase === 'ended' && !!meetingId && !preview && savedSurface !== null && resumeSpot(savedSurface) === 'notepad';
+    const resumeHere = async () => {
+        if (!meetingId || resumeBusy) return;
+        setResumeBusy(true);
+        try {
+            const result = await resumeSavedMeeting(meetingId);
+            if (!result.success) {
+                setResumeNotice(result.code === 'meeting-running' ? 'Stop the meeting that is running first.'
+                        : result.code === 'mic-permission-denied' ? 'Natively needs microphone access to record.'
+                            : 'Could not resume this meeting.');
+            }
+        } catch {
+            setResumeNotice('Could not resume this meeting.');
+        } finally {
+            setResumeBusy(false);
+        }
+    };
     const showEnhanced = phase === 'ended' && !!meetingId && endedTab === 'enhanced';
     const showTabs = phase === 'ended' && !!meetingId;
     const barShown = phase === 'live' || showTabs;
@@ -1575,6 +1628,32 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                                                 {listeningControls}
                                             </div>
                                         </motion.div>}
+                                        {/* Resume (2026-11-02, meetingResume.ts): a notepad meeting records
+                                            again into itself from here, in the listening pill's place. It
+                                            folds away as Ask opens, as the listening pill does. */}
+                                        {showResume && <motion.div
+                                            className="shrink-0 rounded-[28px]"
+                                            inert={askOpen}
+                                            aria-hidden={askOpen || undefined}
+                                            initial={false}
+                                            animate={askOpen
+                                                ? { width: 0, opacity: 0, marginRight: -8, overflow: 'hidden' }
+                                                : { width: 'auto', opacity: 1, marginRight: 0, transitionEnd: { overflow: 'visible' } }}
+                                            transition={askOpen ? ROW_OPEN : ROW_CLOSE}
+                                        >
+                                            <button
+                                                type="button"
+                                                onClick={() => { void resumeHere(); }}
+                                                disabled={resumeBusy}
+                                                aria-busy={resumeBusy || undefined}
+                                                title="Keep recording into this meeting"
+                                                className={`np-elevated${panelKind ? ' np-flat' : ''} h-14 w-max flex items-center gap-[9px] pl-4 pr-[18px] rounded-[28px] text-[14px] font-medium transition-colors np-wash disabled:opacity-50 disabled:cursor-default`}
+                                                style={ink('--np-ink')}
+                                            >
+                                                <span className="np-resume-bars" aria-hidden><span /><span /><span /></span>
+                                                Resume
+                                            </button>
+                                        </motion.div>}
                                         {/* One slot beside the pill: Ask, or the transcript's mic and language. They
                                             crossfade in place through a 2px blur, so neither pops in or out. */}
                                         <div className="grid grow basis-3/5 min-w-0 h-14">
@@ -1630,6 +1709,9 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                                 </div>
                             </div>
                             </MotionConfig>
+                        )}
+                        {resumeNotice && (
+                            <p className="-mt-1 text-center text-[12px] leading-4" style={ink('--np-ink-secondary')} role="status">{resumeNotice}</p>
                         )}
                         {phase === 'live' && paused && !showTranscript && !askOpen && (
                             <p className="-mt-1 text-center text-[12px] leading-4" style={ink('--np-ink-secondary')}>Transcription paused</p>

@@ -411,7 +411,7 @@ describe('funnel telemetry hooks in main.ts', () => {
 
   test('a meeting start and a meeting end are each reported once, inside a try', () => {
     // With what the meeting opened on and whether the notepad is up (2026-11-01).
-    assert.match(body('startMeetingTransition'), /^\s*try \{ require\('\.\/services\/FunnelTelemetry'\)\.funnelTelemetry\.meetingStarted\(this\.intelligenceManager\.getAnswerCount\(\), this\.meetingSurface, startPlan\.openNotes \|\| this\.notesWindowHelper\.isVisible\(\)\); \} catch/m);
+    assert.match(body('startMeetingTransition'), /^\s*try \{ require\('\.\/services\/FunnelTelemetry'\)\.funnelTelemetry\.meetingStarted\(this\.intelligenceManager\.getAnswerCount\(\), this\.meetingSurface, startPlan\.openNotes \|\| this\.notesWindowHelper\.isVisible\(\), !!resumeBase\); \} catch/m);
     assert.match(body('endMeetingTransition'), /^\s*try \{ require\('\.\/services\/FunnelTelemetry'\)\.funnelTelemetry\.meetingEnded\(this\.intelligenceManager\.getAnswerCount\(\)\); \} catch/m);
     assert.equal((main.match(/funnelTelemetry\.meetingStarted\(/g) || []).length, 1);
     // Twice: where a meeting ends, and where the app quits with one still

@@ -283,7 +283,7 @@ describe('wiring (source contracts)', () => {
     });
 
     test('a meeting start reopens it inactive; Stop hands the text over', () => {
-        assert.match(main, /this\.liveNotes\.meetingStarted\(\);\s*this\.notesWindowHelper\.reopenForMeeting\(startPlan\.openNotes\);/);
+        assert.match(main, /this\.liveNotes\.meetingStarted\(resumeBase \? \{ meetingId: resumeBase\.meetingId, text: resumeBase\.userNotes \?\? '' \} : undefined\);\s*this\.notesWindowHelper\.reopenForMeeting\(startPlan\.openNotes\);/);
         assert.match(main, /this\.liveNotes\.meetingEnded\(meetingId\)/);
         assert.match(helper, /reopenForMeeting\(open: boolean\): void \{\s*if \(this\.isVisible\(\) \|\| !open\) return\s*this\.open\(\{ activate: false \}\)/);
     });
@@ -323,7 +323,7 @@ describe('wiring (source contracts)', () => {
         for (const v of [undefined, null, '', 'both', 1]) {
             assert.deepEqual(surface.planMeetingStart(v, false), { overlayHidden: false, openNotes: false });
         }
-        assert.match(main, /planMeetingStart\(SettingsManager\.getInstance\(\)\.get\('meetingSurface'\), this\.notesWindowHelper\.wasLeftOpen\(\)\)/);
+        assert.match(main, /planMeetingStart\(resumeBase \? resumeBase\.surface : SettingsManager\.getInstance\(\)\.get\('meetingSurface'\), this\.notesWindowHelper\.wasLeftOpen\(\)\)/);
         assert.match(main, /this\.windowHelper\.setWindowMode\('overlay', undefined, \{ hidden: startPlan\.overlayHidden \}\);/);
         // Hidden: overlay mode set up as a shown switch, nothing shown (Cmd/Ctrl+B's state), launcher still hidden.
         const wh = fs.readFileSync(path.join(repoRoot, 'electron/WindowHelper.ts'), 'utf8');

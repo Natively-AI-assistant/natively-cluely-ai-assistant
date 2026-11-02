@@ -98,6 +98,13 @@ export interface Meeting {
      * words with it. saveMeeting writes it only when given.
      */
     userNotes?: string | null;
+    /**
+     * What the meeting was taken on (2026-11-02): the overlay or the notepad
+     * (utils/meetingSurface.ts). Decides where its Resume button lives
+     * (services/meeting/meetingResume.ts). Own column (meeting_surface);
+     * saveMeeting writes it only when given; older meetings have none.
+     */
+    surface?: 'overlay' | 'notepad';
 }
 
 /**
@@ -3788,6 +3795,30 @@ export class DatabaseManager {
         // Same reasoning: written only when the save carries it, so the final
         // save after the notes (which does not) keeps what Stop wrote.
         if (typeof meeting.userNotes === 'string') this.setMeetingUserNotes(meeting.id, meeting.userNotes);
+        if (meeting.surface === 'overlay' || meeting.surface === 'notepad') this.setMeetingSurface(meeting.id, meeting.surface);
+    }
+
+    /** Store what a meeting was taken on (the overlay or the notepad). */
+    public setMeetingSurface(id: string, surface: 'overlay' | 'notepad'): boolean {
+        if (!this.db) return false;
+        try {
+            return this.db.prepare('UPDATE meetings SET meeting_surface = ? WHERE id = ?').run(surface === 'notepad' ? 'notepad' : 'overlay', id).changes > 0;
+        } catch (e: any) {
+            console.warn(`[DatabaseManager] the meeting's surface was not stored for ${id}:`, e?.message);
+            return false;
+        }
+    }
+
+    /** A saved meeting's true start and how long it ran (ms), for a resume to continue from. */
+    public getMeetingTiming(id: string): { startTime: number; durationMs: number } | null {
+        if (!this.db) return null;
+        try {
+            const row = this.db.prepare('SELECT start_time, duration_ms FROM meetings WHERE id = ?').get(id) as { start_time: number | null; duration_ms: number | null } | undefined;
+            if (!row) return null;
+            return { startTime: Number(row.start_time) || 0, durationMs: Number(row.duration_ms) || 0 };
+        } catch {
+            return null;
+        }
     }
 
     // ============================================
@@ -3803,6 +3834,7 @@ export class DatabaseManager {
     private ensureMeetingNotesSchema(): void {
         if (!this.db) return;
         try { this.db.exec('ALTER TABLE meetings ADD COLUMN user_notes TEXT'); } catch (e) { /* Column already exists */ }
+        try { this.db.exec('ALTER TABLE meetings ADD COLUMN meeting_surface TEXT'); } catch (e) { /* Column already exists */ }
         try {
             this.db.exec(`
                 CREATE TABLE IF NOT EXISTS meeting_notes_versions (
@@ -4154,14 +4186,17 @@ export class DatabaseManager {
      * transaction: saved as `meeting` (a placeholder) with its recovery
      * metadata, and its live row deleted. A meeting already saved under the id
      * (Stop got that far before the app went) is kept as it is; only the live
-     * row goes. Returns whether a meeting was created.
+     * row goes — unless `replaceExisting`: a RESUMED meeting's live copy holds
+     * the whole meeting (the saved lines and the new ones), so it replaces the
+     * saved row (2026-11-02, services/meeting/meetingResume.ts). Returns
+     * whether a meeting was written.
      */
-    public promoteLiveMeeting(meeting: Meeting, startTimeMs: number, durationMs: number): boolean {
+    public promoteLiveMeeting(meeting: Meeting, startTimeMs: number, durationMs: number, opts?: { replaceExisting?: boolean }): boolean {
         if (!this.db) return false;
         const exists = this.db.prepare('SELECT 1 FROM meetings WHERE id = ?');
         let created = false;
         this.db.transaction(() => {
-            if (!exists.get(meeting.id)) {
+            if (opts?.replaceExisting || !exists.get(meeting.id)) {
                 this.saveMeeting(meeting, startTimeMs, durationMs);
                 created = true;
             }
@@ -4706,6 +4741,7 @@ export class DatabaseManager {
             transcript: transcript,
             usage: usage,
             ...(typeof meetingRow.user_notes === 'string' && meetingRow.user_notes ? { userNotes: meetingRow.user_notes } : {}),
+            ...(meetingRow.meeting_surface === 'notepad' || meetingRow.meeting_surface === 'overlay' ? { surface: meetingRow.meeting_surface } : {}),
         };
     }
 

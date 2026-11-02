@@ -1452,6 +1452,8 @@ import { NativeOomTrace } from './utils/NativeOomTrace'
 import { setStealthHookAvailabilityProvider, setNoActivateClickDelivery } from './utils/windowsFocusPolicy'
 import { hasLiveRenderer } from './utils/rendererLiveness'
 import { DEFAULT_MEETING_SURFACE, planMeetingStart, planMeetingResume, planNotesClosed, type MeetingSurface } from './utils/meetingSurface'
+import { resumeMetadata, type ResumeBase } from './services/meeting/meetingResume'
+import { isDefaultMeetingTitle } from './MeetingPersistence'
 import {
   shouldPromoteToRegularAtStartup,
   planDisguiseTitleWrites,
@@ -2746,6 +2748,11 @@ export class AppState {
 
   public getIsMeetingActive(): boolean {
     return this.isMeetingActive;
+  }
+
+  /** A meeting start is queued or under way (MeetingLifecycleQueue.hasPendingStart). */
+  public hasPendingMeetingStart(): boolean {
+    return this._meetingLifecycle.hasPendingStart();
   }
 
   /** The microphone the last meeting asked for (dictation opens the same one), or undefined for the default. */
@@ -7508,6 +7515,20 @@ export class AppState {
       this._pendingTeardown = null;
     }
 
+    // Resume (2026-11-02, services/meeting/meetingResume.ts): this meeting
+    // continues a saved one under its id. Read after the teardown above, so a
+    // meeting stopped a moment ago is already saved.
+    const resumeId = typeof metadata?.resumeMeetingId === 'string' && metadata.resumeMeetingId ? metadata.resumeMeetingId as string : null;
+    let resumeBase: ResumeBase | null = null;
+    if (resumeId) {
+      resumeBase = this.intelligenceManager.loadResumeBase(resumeId);
+      if (!resumeBase) {
+        const err = new Error('That meeting could not be found.') as Error & { code?: string };
+        err.code = 'resume-not-found';
+        throw err;
+      }
+    }
+
     // PR #173: Reset audio recovery state for fresh session
     this._systemAudioRecoveryInProgress = false;
     this._systemAudioRecoveryAttempts = 0;
@@ -7588,7 +7609,8 @@ export class AppState {
     // utils/meetingSurface.ts). A notepad meeting is in overlay mode with the
     // overlay hidden, and the notepad opens below once the page is this meeting's.
     let startPlan = planMeetingStart(DEFAULT_MEETING_SURFACE, false);
-    try { startPlan = planMeetingStart(SettingsManager.getInstance().get('meetingSurface'), this.notesWindowHelper.wasLeftOpen()); } catch { /* the overlay, as always */ }
+    // A resumed meeting opens what it was taken on, whatever the switcher says now.
+    try { startPlan = planMeetingStart(resumeBase ? resumeBase.surface : SettingsManager.getInstance().get('meetingSurface'), this.notesWindowHelper.wasLeftOpen()); } catch { /* the overlay, as always */ }
     // Kept for the launcher's "Meeting ongoing" (resumeMeetingSurface): a
     // switch in Settings mid-meeting does not move this meeting.
     this.meetingSurface = startPlan.overlayHidden ? 'notepad' : 'overlay';
@@ -7611,11 +7633,12 @@ export class AppState {
     try { setSttDictionaryTerms(getUserDictionary()); } catch { /* a hint, never a blocker */ }
     // The transcript goes to disk as it grows, so a quit or crash mid-meeting
     // is recovered at the next launch (services/meeting/LiveMeetingJournal.ts).
-    try { this.intelligenceManager.beginLiveMeeting(); } catch (e) { console.warn('[Main] live meeting journal unavailable:', (e as Error)?.message); }
+    try { this.intelligenceManager.beginLiveMeeting(undefined, { surface: this.meetingSurface, resume: resumeBase }); } catch (e) { console.warn('[Main] live meeting journal unavailable:', (e as Error)?.message); }
     // The notes window's page belongs to this meeting now; someone who keeps
-    // the window open gets it back, without it taking focus.
+    // the window open gets it back, without it taking focus. A resume keeps
+    // the meeting's notes on the page.
     try {
-      this.liveNotes.meetingStarted();
+      this.liveNotes.meetingStarted(resumeBase ? { meetingId: resumeBase.meetingId, text: resumeBase.userNotes ?? '' } : undefined);
       this.notesWindowHelper.reopenForMeeting(startPlan.openNotes);
     } catch (e) { console.warn('[Main] notes window not reopened:', (e as Error)?.message); }
     this.transcriptionPause.setPaused(false);
@@ -7634,13 +7657,22 @@ export class AppState {
     } catch { /* recovery is extra; the meeting runs without it */ }
     // What it opened on, and whether the notepad is up from the start (a notepad
     // meeting, or the user left it open), for the notepad's demand (2026-11-01).
-    try { require('./services/FunnelTelemetry').funnelTelemetry.meetingStarted(this.intelligenceManager.getAnswerCount(), this.meetingSurface, startPlan.openNotes || this.notesWindowHelper.isVisible()); } catch { /* analytics never blocks a meeting */ }
+    try { require('./services/FunnelTelemetry').funnelTelemetry.meetingStarted(this.intelligenceManager.getAnswerCount(), this.meetingSurface, startPlan.openNotes || this.notesWindowHelper.isVisible(), !!resumeBase); } catch { /* analytics never blocks a meeting */ }
     // No AI set up: the free trial starts by itself. Below the funnel line on
     // purpose, so `meeting_started.ai` still says what the meeting began with.
     // Fire and forget: the overlay is told when it starts or cannot.
     try { this.autoStartTrialForMeeting?.(); } catch { /* a trial never blocks a meeting */ }
     this.broadcastMeetingState()
-    if (metadata) {
+    if (resumeBase) {
+      // The saved meeting's title and calendar link: already linked, so no
+      // new link and no "last time" lookup (it would find this very meeting).
+      this.intelligenceManager.setMeetingMetadata({
+        ...resumeMetadata(resumeBase, isDefaultMeetingTitle),
+        resumedFrom: resumeBase.meetingId,
+        // Retention "never" still holds for the new part (MeetingPersistence.mustNotPersist).
+        ...(metadata?.doNotPersist === true ? { doNotPersist: true } : {}),
+      });
+    } else if (metadata) {
       this.intelligenceManager.setMeetingMetadata(metadata);
       // Which calendar event this is (title, attendees, 1:1 speaker names,
       // follow-up recipients). Decides at once from the cached list; never
@@ -7651,7 +7683,8 @@ export class AppState {
       try { getAssistService()?.noteMeetingStarted(metadata, () => this.isMeetingActive && this._meetingGeneration === meetingGeneration); } catch { /* a recap never blocks a start */ }
     }
     // Zoom / Teams read-only signals: who speaks, the meeting ID, mute, a shared screen.
-    this.startDesktopCallSpeakers(metadata ?? null, meetingGeneration);
+    // A resume's metadata is the session's own (set above), not the start request.
+    this.startDesktopCallSpeakers(resumeBase ? null : (metadata ?? null), meetingGeneration);
     // Every meeting gets its own conversation history, whether or not a mode
     // is active (the dynamic-action session id below exists only WITH a mode,
     // and without one every meeting shared one history — 2026-09-24).
