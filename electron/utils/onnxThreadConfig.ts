@@ -386,19 +386,42 @@ export async function acquireOnnxSlot(priority: OnnxSlotPriority = 'normal', wei
 // Activity Monitor / `top` mean by "available":
 //   - macOS:  vm_stat → (free + inactive + speculative) * page_size
 //   - Linux:  /proc/meminfo → MemAvailable
-//   - other:  fall back to os.freemem() (best effort; Windows os.freemem() is
-//             already closer to "available" than macOS's).
+//   - Windows: os.freemem(), which libuv reads as GlobalMemoryStatusEx
+//             ullAvailPhys — already Task Manager's "Available".
+//   - other:  fall back to os.freemem() (best effort).
 //
 // Measurement is cached briefly (the value only needs to gate a burst of model
 // loads at ingest/boot; spawning `vm_stat` per chunk would be wasteful).
 
 const AVAIL_MEM_CACHE_TTL_MS = 1000;
-let availMemCache: { gb: number; at: number } | null = null;
+
+/** Which probe produced a reading. The figures are not equivalent across OSes, so logs name it. */
+export type AvailableMemorySource = 'override' | 'vm_stat' | 'meminfo' | 'freemem';
+export interface AvailableMemoryReading {
+    gb: number;
+    source: AvailableMemorySource;
+}
+let availMemCache: { reading: AvailableMemoryReading; at: number } | null = null;
+
+/** The OS reads behind measureAvailableMemory(); injectable so every platform branch is testable on any host. */
+export interface AvailableMemoryProbes {
+    /** `vm_stat` output (macOS). */
+    vmStat(): string;
+    /** /proc/meminfo contents (Linux). */
+    meminfo(): string;
+    /** os.freemem() in bytes. */
+    freemem(): number;
+}
+
+const SYSTEM_MEMORY_PROBES: AvailableMemoryProbes = {
+    // execFileSync (no shell) — args are fixed literals, no injection surface.
+    vmStat: () => execFileSync('vm_stat', [], { encoding: 'utf8', timeout: 1000 }),
+    meminfo: () => fs.readFileSync('/proc/meminfo', 'utf8'),
+    freemem: () => os.freemem(),
+};
 
 /** macOS: parse `vm_stat` into available GB (free + inactive + speculative). */
-function readMacAvailableGB(): number | null {
-    // execFileSync (no shell) — args are fixed literals, no injection surface.
-    const out = execFileSync('vm_stat', [], { encoding: 'utf8', timeout: 1000 });
+function parseVmStatAvailableGB(out: string): number | null {
     // "Mach Virtual Memory Statistics: (page size of 16384 bytes)"
     const pageSize = Number.parseInt(out.match(/page size of (\d+) bytes/)?.[1] || '4096', 10);
     const pages = (label: string): number => {
@@ -414,11 +437,46 @@ function readMacAvailableGB(): number | null {
 }
 
 /** Linux: read MemAvailable (kB) from /proc/meminfo. */
-function readLinuxAvailableGB(): number | null {
-    const meminfo = fs.readFileSync('/proc/meminfo', 'utf8');
+function parseMeminfoAvailableGB(meminfo: string): number | null {
     const kb = Number.parseInt(meminfo.match(/^MemAvailable:\s+(\d+)\s+kB/m)?.[1] || '', 10);
     if (!Number.isFinite(kb)) return null;
     return (kb * 1024) / 1024 ** 3;
+}
+
+/**
+ * One uncached measurement of AVAILABLE memory for `platform`, or null when
+ * nothing usable could be read.
+ *
+ * A reading of 0 counts as "could not measure", never "no memory": libuv
+ * reports a failed GlobalMemoryStatusEx (Windows) as 0 bytes, and a vm_stat
+ * whose labels did not parse sums to 0 pages. A running machine never has
+ * 0 bytes available, and refusing on that would block every local model for no
+ * real reason — the gates fail OPEN on a failed measurement instead.
+ */
+export function measureAvailableMemory(
+    platform: NodeJS.Platform,
+    probes: AvailableMemoryProbes = SYSTEM_MEMORY_PROBES,
+): AvailableMemoryReading | null {
+    let gb: number | null = null;
+    let source: AvailableMemorySource = 'freemem';
+    try {
+        if (platform === 'darwin') { gb = parseVmStatAvailableGB(probes.vmStat()); source = 'vm_stat'; }
+        else if (platform === 'linux') { gb = parseMeminfoAvailableGB(probes.meminfo()); source = 'meminfo'; }
+    } catch {
+        gb = null;
+    }
+    if (gb != null && Number.isFinite(gb) && gb > 0) return { gb, source };
+    // Windows' primary probe, and the macOS/Linux fallback when theirs failed:
+    // there os.freemem() is a conservative (low) estimate, so the gate leans
+    // toward refusing, as it always has.
+    let bytes: number;
+    try {
+        bytes = probes.freemem();
+    } catch {
+        return null;
+    }
+    if (!Number.isFinite(bytes) || bytes <= 0) return null;
+    return { gb: bytes / 1024 ** 3, source: 'freemem' };
 }
 
 /** One-line picture of who holds the gate, for logs and actionable errors. */
@@ -487,42 +545,38 @@ export function acquireOnnxSlotWithin(
 }
 
 /**
- * Best-effort AVAILABLE (not merely free) system memory in GB. Falls back to
- * `os.freemem()` when the platform-specific probe is unavailable or throws.
- * Cached for AVAIL_MEM_CACHE_TTL_MS to avoid spawning vm_stat per model load.
+ * Best-effort AVAILABLE (not merely free) system memory, with the probe that
+ * produced it. See measureAvailableMemory() for the per-OS probes and the
+ * os.freemem() fallback. Successful readings are cached for
+ * AVAIL_MEM_CACHE_TTL_MS to avoid spawning vm_stat per model load.
  *
  * Override for tests / incident tuning with NATIVELY_ONNX_AVAILABLE_MEM_GB
  * (a fixed value forces the gate deterministically).
+ *
+ * Throws when memory could not be measured at all; every gate catches that
+ * and fails OPEN.
  */
-export function getAvailableMemoryGB(): number {
+export function getAvailableMemoryReading(): AvailableMemoryReading {
     const override = process.env.NATIVELY_ONNX_AVAILABLE_MEM_GB;
     if (override) {
         const n = Number.parseFloat(override);
-        if (Number.isFinite(n) && n >= 0) return n;
+        if (Number.isFinite(n) && n >= 0) return { gb: n, source: 'override' };
     }
 
     const now = Date.now();
     if (availMemCache && now - availMemCache.at < AVAIL_MEM_CACHE_TTL_MS) {
-        return availMemCache.gb;
+        return availMemCache.reading;
     }
 
-    let gb: number | null = null;
-    try {
-        if (process.platform === 'darwin') gb = readMacAvailableGB();
-        else if (process.platform === 'linux') gb = readLinuxAvailableGB();
-    } catch {
-        gb = null;
-    }
-    // Fallback: os.freemem(). On Windows this is already reasonable; on
-    // macOS/Linux it only lands here if the probe failed, and it's a
-    // conservative (low) estimate — the gate fails toward refusing, which is
-    // the pre-existing behavior, so we never regress.
-    if (gb == null || !Number.isFinite(gb)) {
-        gb = os.freemem() / 1024 ** 3;
-    }
+    const reading = measureAvailableMemory(process.platform);
+    if (!reading) throw new Error('available memory could not be measured');
+    availMemCache = { reading, at: now };
+    return reading;
+}
 
-    availMemCache = { gb, at: now };
-    return gb;
+/** getAvailableMemoryReading() in GB. Throws when memory could not be measured. */
+export function getAvailableMemoryGB(): number {
+    return getAvailableMemoryReading().gb;
 }
 
 /**
@@ -594,6 +648,8 @@ export interface ModelMemoryCheck {
     ok: boolean;
     /** null when the measurement threw (the gate then fails OPEN). */
     availableGB: number | null;
+    /** The probe behind availableGB; null with it. */
+    source: AvailableMemorySource | null;
     floorGB: number;
 }
 
@@ -604,13 +660,13 @@ export interface ModelMemoryCheck {
  */
 export function checkMemoryForModelSize(modelSizeMb: number | undefined | null): ModelMemoryCheck {
     const floorGB = getMinFreeGBForModelSize(modelSizeMb);
-    let availableGB: number;
+    let reading: AvailableMemoryReading;
     try {
-        availableGB = getAvailableMemoryGB();
+        reading = getAvailableMemoryReading();
     } catch {
-        return { ok: true, availableGB: null, floorGB };
+        return { ok: true, availableGB: null, source: null, floorGB };
     }
-    return { ok: availableGB >= floorGB, availableGB, floorGB };
+    return { ok: reading.gb >= floorGB, availableGB: reading.gb, source: reading.source, floorGB };
 }
 
 /**

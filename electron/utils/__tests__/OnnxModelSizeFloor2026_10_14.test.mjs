@@ -77,7 +77,7 @@ test('the operator override still sets the ceiling, including "off"', () => {
 // message cannot drift from it when the 1s measurement cache expires.
 test('the check returns the reading it decided on and the floor it used', () => {
   process.env.NATIVELY_ONNX_AVAILABLE_MEM_GB = '0.6151';
-  assert.deepEqual(checkMemoryForModelSize(60), { ok: false, availableGB: 0.6151, floorGB: 0.62 });
+  assert.deepEqual(checkMemoryForModelSize(60), { ok: false, availableGB: 0.6151, source: 'override', floorGB: 0.62 });
   assert.equal(hasEnoughMemoryForModelSize(60), false);
   process.env.NATIVELY_ONNX_AVAILABLE_MEM_GB = '0.62';
   assert.equal(checkMemoryForModelSize(60).ok, true, 'exactly the floor is enough');
