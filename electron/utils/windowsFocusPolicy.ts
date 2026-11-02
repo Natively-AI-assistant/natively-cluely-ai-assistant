@@ -98,7 +98,13 @@ export function attachNoActivate(
   if (!win || win.isDestroyed()) return false;
   managed.add(win);
   win.setFocusable(false);
-  try { clickDelivery(win); } catch { /* clicks still work while a window of ours is active */ }
+  try {
+    clickDelivery(win);
+  } catch (e) {
+    // Clicks still work while a window of ours is the thread's active window;
+    // log so a "notes window ignores clicks" report can be traced to this.
+    console.warn('[windowsFocusPolicy] click delivery not applied:', (e as Error)?.message ?? e);
+  }
   // Defensive re-assert: if anything ever flips focusable on (a stray focus(),
   // an Electron internal), losing focus or hiding restores the non-activating
   // state, so the next meeting click can never steal foreground focus.

@@ -1818,7 +1818,9 @@ export class AppState {
       const { loadNativeModule } = require('./audio/nativeModuleLoader');
       const native = loadNativeModule();
       if (typeof native?.deliverClicksWithoutActivation !== 'function') return;
-      native.deliverClicksWithoutActivation((win as BrowserWindow).getNativeWindowHandle());
+      if (!native.deliverClicksWithoutActivation((win as BrowserWindow).getNativeWindowHandle())) {
+        console.warn('[AppState] could not subclass a no-activate window; its clicks may be eaten when no Natively window is active');
+      }
     });
 
     // 2. Initialize Helpers with loaded state
