@@ -49,7 +49,7 @@ import { clearLoadSentinel, modelPreloader, writeLoadSentinel } from './whisper/
 import { buildWorkerInitMessage } from './whisper/inferenceConfig';
 import { resolveWhisperWorkerPath } from './whisper/workerPathResolver';
 import type { WhisperModelId, WorkerOutMessage } from './whisper/types';
-import { acquireOnnxSlotWithin, hasEnoughMemoryForModelSize, getMinFreeGBForModelSize } from '../utils/onnxThreadConfig';
+import { acquireOnnxSlotWithin, getAvailableMemoryGB, hasEnoughMemoryForModelSize, getMinFreeGBForModelSize } from '../utils/onnxThreadConfig';
 import { retireOnnxWorker, trackOnnxWorker } from '../utils/onnxWorkerShutdown';
 import { classifyLocalModelLoadFailure, describeLocalModelLoadFailure } from './whisper/loadFailure';
 import { listMissingVcRuntimeDlls, resolveOnnxBindingDir } from './whisper/windowsVcRuntime';
@@ -101,11 +101,17 @@ export const LOCAL_STT_BEHIND_CODE = 'local_stt_behind';
  * the phrase "insufficient available memory" (pinned by
  * LocalWhisperSpawnFailTeardown2026_07_10) and must NOT contain "unavailable",
  * which sttErrorMapper titles "Service Unavailable ... Trying to reconnect".
+ *
+ * It reports the measured figure the gate refused on, not only the floor:
+ * "under 2GB free" alone could not tell a machine 50 MB short from one with
+ * nothing left (issue #707, a 16 GB Windows PC). getAvailableMemoryGB() is
+ * cached for 1s, so this is the same reading hasEnoughMemoryForModelSize used.
  */
 function localSttMemoryRefusal(modelSizeMb: number | undefined): Error {
     const heapGB = (process.memoryUsage().heapUsed / 1024 ** 3).toFixed(1);
+    const availableGB = getAvailableMemoryGB().toFixed(2);
     return markLocalSttUnavailable(new Error(
-        `Local STT could not start: insufficient available memory (under ${getMinFreeGBForModelSize(modelSizeMb)}GB free, app heap ${heapGB}GB). ` +
+        `Local STT could not start: insufficient available memory (${availableGB}GB available, this model needs ${getMinFreeGBForModelSize(modelSizeMb)}GB, app heap ${heapGB}GB). ` +
         `Close other apps to free memory, choose a smaller local model, or use a cloud STT provider.`,
     ));
 }
