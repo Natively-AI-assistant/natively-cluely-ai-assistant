@@ -1310,6 +1310,7 @@ import { currentWhisperGlossaryPrompt, nameTerms, setSttContextTerms, setSttDict
 import { getUserDictionary } from "./audio/userDictionary"
 import { LOCAL_STT_PROVIDERS, SttGapRecoveryCoordinator, type RecoveredSegment, type SttSource } from "./audio/sttGapRecovery"
 import { SttFailover, failoverNotice, type FailoverStatus } from "./audio/sttFailover"
+import { MicEchoGate, micEchoGateEnabledFor } from "./audio/micEchoGate"
 import { resolveAutoAnswerThresholds } from "./context-intelligence/policies/mode-policy-registry"
 import type { SpeechEdge } from "./audio/speechEdge"
 import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
@@ -3688,6 +3689,20 @@ export class AppState {
    * user set up carries the live stream until it is back.
    */
   private readonly _sttFailover: Record<SttSource, SttFailover | null> = { mic: null, system: null };
+  /**
+   * Issue #710: with laptop speakers and the built-in mic, the mic transcribes
+   * the meeting's own audio as "Me". Mic segments that repeat what the meeting
+   * audio just said are dropped before anything reads them (onSegment). On for
+   * Windows, where nothing else filters the mic (audio/micEchoGate.ts).
+   */
+  private readonly micEchoGate = new MicEchoGate({
+    enabled: micEchoGateEnabledFor(process.platform),
+    onDrop: ({ text, final, containment }) => {
+      if (this.contentTraceEnabled()) {
+        console.log(`[MicEcho] dropped ${final ? 'final' : 'interim'} (containment ${containment.toFixed(2)}): ${text}`);
+      }
+    },
+  });
   private readonly sttGap = new SttGapRecoveryCoordinator({
     transcribers: (source) => {
       const { buildRecoveryTranscribers } = require('./audio/sttRecoveryTranscribers');
@@ -4235,11 +4250,25 @@ export class AppState {
       // Any text proves the connection works: closes an open outage (sttGapRecovery.ts).
       this.sttGap.onTranscript(gapSource, segment.text, segment.isFinal);
 
+      // Everything below reads the words. A mic segment that only repeats the
+      // meeting audio (speaker bleed, issue #710) stops at the echo gate; one
+      // it holds a moment keeps the time it arrived.
+      const at = Date.now();
+      if (speaker === 'interviewer') {
+        // A held mic final that this does not prove an echo leaves first: it arrived first.
+        this.micEchoGate.noteMeetingAudio(segment.text, segment.isFinal);
+        deliverSegment(segment, sttId, speakerId, at);
+      } else {
+        this.micEchoGate.submitMic(segment, () => deliverSegment(segment, sttId, speakerId, at));
+      }
+    };
+
+    const deliverSegment = (segment: { text: string, isFinal: boolean, confidence: number }, sttId: string, speakerId: string | undefined, at: number) => {
       this.intelligenceManager.handleTranscript({
         speaker: speaker,
         ...(speakerId ? { speakerId } : {}),
         text: segment.text,
-        timestamp: Date.now(),
+        timestamp: at,
         final: segment.isFinal,
         confidence: segment.confidence,
         // Defect B (2026-08-01): this is the ONLY real spoken-audio seam —
@@ -4266,7 +4295,7 @@ export class AppState {
         this.simpleAutoAnswer.ingest({
           speaker,
           text: segment.text,
-          timestamp: Date.now(),
+          timestamp: at,
           final: segment.isFinal,
           confidence: segment.confidence,
           origin: 'stt',
@@ -4280,7 +4309,7 @@ export class AppState {
         this.ragManager.feedLiveTranscript([{
           speaker: speaker,
           text: segment.text,
-          timestamp: Date.now()
+          timestamp: at
         }]);
       }
 
@@ -4288,7 +4317,7 @@ export class AppState {
         speaker: speaker,
         ...(speakerId ? { speakerId } : {}),
         text: segment.text,
-        timestamp: Date.now(),
+        timestamp: at,
         final: segment.isFinal,
         confidence: segment.confidence
       };
@@ -7390,6 +7419,9 @@ export class AppState {
    * wait uses this to decide between its short grace and its full window.
    */
   public finalizeMicSTT(): { pending: boolean } {
+    // The dictated question's last final must not sit out the echo gate's hold
+    // past the renderer's short tail grace (answerTailWait.mjs).
+    this.micEchoGate.expedite();
     // We only want to finalize the user microphone, because the context is Manual Answer
     if (this.googleSTT_User?.finalize) {
       console.log('[Main] Finalizing STT');
@@ -7620,6 +7652,7 @@ export class AppState {
     } catch (e) { console.warn('[Main] notes window not reopened:', (e as Error)?.message); }
     this.transcriptionPause.setPaused(false);
     this.audioLevelMeter.reset();
+    this.micEchoGate.reset();
     this.meetingAutoStop.start({ ambientChat: this._ambientChatEnabled, undetectable: this.isUndetectable });
     // A "meeting detected" offer still up (panel, notification, countdown) is answered.
     try { require('./services/meetingDetection/wireMeetingDetection').getMeetingOffers()?.clear('meeting started'); } catch { /* nothing offered */ }
@@ -8262,6 +8295,12 @@ export class AppState {
         // 2. Tear down STT sockets now that finals have arrived.
         this.googleSTT?.stop();
         this.googleSTT_User?.stop();
+        // 2a. Mic lines the echo gate still holds are judged now, so the saved
+        //     transcript has them (issue #710).
+        this.micEchoGate.flush();
+        if (this.micEchoGate.isEnabled) {
+          console.log(`[MicEcho] ${this.micEchoGate.droppedCount} mic segment(s) dropped as speaker echo this meeting`);
+        }
 
         // 3. Snapshot transcript + persist placeholder + queue title/summary LLM.
         //    intelligenceManager.stopMeeting itself runs LLM in background.
@@ -8302,6 +8341,7 @@ export class AppState {
       } finally {
         this._isDraining = false;
         this.clearTranscriptThrottle();
+        this.micEchoGate.reset();
       }
     })();
     // endMeeting returns NOW — the IPC handler resolves and the renderer's
