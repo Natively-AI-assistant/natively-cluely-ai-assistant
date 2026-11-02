@@ -9,8 +9,9 @@
 // Windows has no panel concept. The equivalent is the WS_EX_NOACTIVATE
 // extended style, which Electron applies via BrowserWindow.setFocusable(false):
 // the window still receives every mouse event (buttons, hover, wheel,
-// app-region drags all work), but a click no longer activates the HWND — the
-// foreground app (Zoom, browser, IDE) keeps focus and never fires blur.
+// app-region drags all work — button-downs only with the native click delivery
+// below), but a click no longer activates the HWND — the foreground app (Zoom,
+// browser, IDE) keeps focus and never fires blur.
 //
 // The window stays non-activating PERMANENTLY — it is never focused. This is a
 // stricter, simpler policy than an earlier "focus only while typing" attempt:
@@ -58,6 +59,21 @@ export function setStealthHookAvailabilityProvider(fn: () => boolean): void {
   hookAvailabilityProvider = fn;
 }
 
+// setFocusable(false) makes Chromium answer WM_MOUSEACTIVATE with
+// MA_NOACTIVATEANDEAT, which DISCARDS the button-down. Windows only asks when
+// none of our windows is the thread's active window — after the launcher's
+// Start hid the launcher, a notepad meeting is exactly that — and then hover
+// works but nothing can be clicked (2026-11-02, the notes window). The native
+// side subclasses the window to answer MA_NOACTIVATE instead: still never
+// activated, click delivered (native-module/src/no_activate_window.rs).
+// Injected like the hook provider; the default does nothing.
+let clickDelivery: (win: NoActivateWindowLike) => void = () => {};
+
+/** Register how a no-activate window is made to deliver its clicks (main.ts). */
+export function setNoActivateClickDelivery(fn: (win: NoActivateWindowLike) => void): void {
+  clickDelivery = fn;
+}
+
 // Windows currently under the no-activate policy. WeakSet: entries die with
 // their window. Membership gates the hover-gate's setFocusable(true) so it
 // cannot silently re-arm click-activation on a managed window.
@@ -82,6 +98,7 @@ export function attachNoActivate(
   if (!win || win.isDestroyed()) return false;
   managed.add(win);
   win.setFocusable(false);
+  try { clickDelivery(win); } catch { /* clicks still work while a window of ours is active */ }
   // Defensive re-assert: if anything ever flips focusable on (a stray focus(),
   // an Electron internal), losing focus or hiding restores the non-activating
   // state, so the next meeting click can never steal foreground focus.

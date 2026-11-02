@@ -582,6 +582,7 @@ module.exports.SystemAudioCapture = nativeBinding.SystemAudioCapture
 module.exports.applyStealthToWindow = nativeBinding.applyStealthToWindow
 module.exports.calendarAuthorizationStatus = nativeBinding.calendarAuthorizationStatus
 module.exports.deactivateDodoKey = nativeBinding.deactivateDodoKey
+module.exports.deliverClicksWithoutActivation = nativeBinding.deliverClicksWithoutActivation
 module.exports.getCalendarEvents = nativeBinding.getCalendarEvents
 module.exports.getDefaultInputDeviceId = nativeBinding.getDefaultInputDeviceId
 module.exports.getDefaultOutputDeviceId = nativeBinding.getDefaultOutputDeviceId

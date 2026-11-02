@@ -268,6 +268,13 @@ export interface CapturedKey {
 export declare function deactivateDodoKey(licenseKey: string, instanceId: string): Promise<unknown>
 
 /**
+ * Make the BrowserWindow whose handle is passed in (getNativeWindowHandle())
+ * answer WM_MOUSEACTIVATE with MA_NOACTIVATE. Idempotent. Returns whether the
+ * window is now subclassed.
+ */
+export declare function deliverClicksWithoutActivation(handle: Buffer): boolean
+
+/**
  * The occurrences overlapping [start_ms, end_ms]; null without full access or
  * on another OS. Runs on a worker thread.
  */
