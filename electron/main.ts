@@ -1449,7 +1449,7 @@ import { nativePromptsBlocked } from './services/stealthPromptGate'
 import { createForeignWindowCaptureGuard, wrapAsyncDialogs, type ForeignWindowCaptureGuard } from './services/foreignWindowCaptureGuard'
 import { acceptsLocalSpeechEndHint } from './intelligence/autoAnswer/SimpleAutoAnswer'
 import { NativeOomTrace } from './utils/NativeOomTrace'
-import { setStealthHookAvailabilityProvider } from './utils/windowsFocusPolicy'
+import { setStealthHookAvailabilityProvider, setNoActivateClickDelivery } from './utils/windowsFocusPolicy'
 import { hasLiveRenderer } from './utils/rendererLiveness'
 import { DEFAULT_MEETING_SURFACE, planMeetingStart, planMeetingResume, planNotesClosed, type MeetingSurface } from './utils/meetingSurface'
 import {
@@ -1810,6 +1810,16 @@ export class AppState {
         return StealthKeyboardManager.getInstance().isAvailable();
       } catch {
         return false;
+      }
+    });
+    setNoActivateClickDelivery((win) => {
+      if (process.platform !== 'win32') return;
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { loadNativeModule } = require('./audio/nativeModuleLoader');
+      const native = loadNativeModule();
+      if (typeof native?.deliverClicksWithoutActivation !== 'function') return;
+      if (!native.deliverClicksWithoutActivation((win as BrowserWindow).getNativeWindowHandle())) {
+        console.warn('[AppState] could not subclass a no-activate window; its clicks may be eaten when no Natively window is active');
       }
     });
 

@@ -63,6 +63,10 @@ pub mod edit_shortcut;
 #[cfg(target_os = "windows")]
 pub mod keyboard_hook_windows;
 
+// Windows: a no-activate window's clicks are delivered, not eaten (MA_NOACTIVATE).
+#[cfg(target_os = "windows")]
+pub mod no_activate_window;
+
 use crate::audio_config::{CHUNK_BATCH_COUNT, CHUNK_BATCH_TIMEOUT_MS, DSP_POLL_MS};
 use crate::resampler::Resampler;
 use crate::silence_suppression::{FrameAction, SilenceSuppressionConfig, SilenceSuppressor, SpeechEdge};

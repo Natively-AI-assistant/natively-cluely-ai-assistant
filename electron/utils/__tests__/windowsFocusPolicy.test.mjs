@@ -30,6 +30,7 @@ const {
   attachNoActivate,
   isNoActivateManaged,
   setStealthHookAvailabilityProvider,
+  setNoActivateClickDelivery,
 } = require(path.join(repoRoot, 'dist-electron/electron/utils/windowsFocusPolicy.js'));
 
 // The availability provider is module-level state. Default it back to "hook
@@ -370,6 +371,52 @@ test('main registers the hook-availability provider before creating windows (dea
     /StealthKeyboardManager[\s\S]{0,80}isAvailable\(\)/,
     'BUG: the provider must report actual native-hook availability via StealthKeyboardManager.isAvailable().',
   );
+});
+
+// 2026-11-02: setFocusable(false) makes Chromium answer WM_MOUSEACTIVATE with
+// MA_NOACTIVATEANDEAT. With no window of ours active (Start in the launcher
+// hid it; a notepad meeting shows only the notes window, inactive) every
+// button-down was eaten: hover worked, nothing could be clicked or typed.
+test('win32: attach makes the window deliver its clicks; darwin and the no-hook fallback do not', () => {
+  const delivered = [];
+  setNoActivateClickDelivery((w) => delivered.push(w));
+  try {
+    const win = fakeWindow();
+    attachNoActivate(win, 'win32');
+    assert.deepEqual(delivered, [win], 'BUG: a no-activate window must get native click delivery.');
+
+    const mac = fakeWindow();
+    attachNoActivate(mac, 'darwin');
+    withHookAvailable(false, () => attachNoActivate(fakeWindow(), 'win32'));
+    assert.deepEqual(delivered, [win], 'only windows actually put under the policy are subclassed');
+  } finally {
+    setNoActivateClickDelivery(() => {});
+  }
+});
+
+test('win32: a failing click delivery never stops the policy from applying', () => {
+  setNoActivateClickDelivery(() => { throw new Error('native module missing'); });
+  try {
+    const win = fakeWindow();
+    assert.equal(attachNoActivate(win, 'win32'), true);
+    assert.deepEqual(win.calls, [['setFocusable', false]]);
+  } finally {
+    setNoActivateClickDelivery(() => {});
+  }
+});
+
+test('the native side answers MA_NOACTIVATE (deliver), and main wires it before windows exist', () => {
+  const rust = read('native-module/src/no_activate_window.rs');
+  assert.match(rust, /WM_MOUSEACTIVATE[\s\S]{0,40}MA_NOACTIVATE as isize/,
+    'BUG: WM_MOUSEACTIVATE must return MA_NOACTIVATE, not Chromium\'s MA_NOACTIVATEANDEAT.');
+  assert.match(rust, /WM_NCDESTROY/, 'the original window procedure is restored on destroy');
+  assert.match(read('native-module/src/lib.rs'), /#\[cfg\(target_os = "windows"\)\]\s*pub mod no_activate_window;/,
+    'Windows-only module: macOS keeps its NSPanel path');
+  const providerIdx = mainSource.indexOf('setNoActivateClickDelivery(');
+  const windowIdx = mainSource.indexOf('this.windowHelper = new WindowHelper(this)');
+  assert.ok(providerIdx > 0 && providerIdx < windowIdx,
+    'BUG: click delivery must be registered before the first no-activate window is created.');
+  assert.match(mainSource.slice(providerIdx, providerIdx + 500), /deliverClicksWithoutActivation\([\s\S]{0,40}getNativeWindowHandle\(\)/);
 });
 
 test('the Windows native hook stops stealth on a click outside Natively (outside-click parity)', () => {
