@@ -44,6 +44,27 @@ export function killPlan(platform, pid) {
 }
 
 /**
+ * How a child the launcher started ended, as the launcher reports it
+ * (2026-11-02). A process ended from outside (macOS freeing memory, a kill,
+ * the shell that started it closing) has no exit code, only a signal; the
+ * launcher used to turn that into exit 0 and print nothing, so a killed app
+ * looked like a clean quit. Windows: a process ended by taskkill reports an
+ * exit code (1) and no signal, so it reads as a failure, never as clean.
+ *
+ * @param {string} name
+ * @param {number|null} code
+ * @param {string|null} signal
+ * @returns {{ exitCode: number, message: string|null }}
+ */
+export function childExitReport(name, code, signal) {
+  if (signal) {
+    return { exitCode: 1, message: `[dev:agent] ${name} was ended from outside by ${signal} (no quit ran: likely the OS freeing memory, or a kill)` };
+  }
+  const exitCode = Number.isInteger(code) ? code : 1;
+  return { exitCode, message: exitCode === 0 ? null : `[dev:agent] ${name} exited (${exitCode})` };
+}
+
+/**
  * The renderer dev-server port the main process should use. Mirrors
  * electron/devServerUrl.ts, which is the consumer — both must agree that a
  * junk value falls back rather than pointing every window at port 0.

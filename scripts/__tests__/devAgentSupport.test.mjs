@@ -2,7 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  electronArgs, isLiveDevToolsReply, isReservedPort, killPlan, previousCdpPort, resolveDevPort, RESERVED_PORTS,
+  childExitReport, electronArgs, isLiveDevToolsReply, isReservedPort, killPlan, previousCdpPort, resolveDevPort, RESERVED_PORTS,
 } from '../devAgentSupport.mjs';
 
 describe('reserved ports', () => {
@@ -120,5 +120,23 @@ describe('a second launch in the same worktree', () => {
     assert.equal(isLiveDevToolsReply(200, { hello: 'world' }), false);
     assert.equal(isLiveDevToolsReply(200, null), false);
     assert.equal(isLiveDevToolsReply(200, { webSocketDebuggerUrl: 'ws://10.0.0.5:57119/devtools/browser/abc' }), false);
+  });
+});
+
+describe('how the app ended (childExitReport)', () => {
+  test('macOS: ended from outside by a signal is reported, never as a clean exit', () => {
+    // The 2026-11-02 run: the app was killed (no quit ran) and the launcher said exit 0.
+    for (const signal of ['SIGKILL', 'SIGTERM']) {
+      const r = childExitReport('the app', null, signal);
+      assert.equal(r.exitCode, 1);
+      assert.match(r.message, new RegExp(signal));
+    }
+  });
+  test('Windows: taskkill shows up as exit code 1 and no signal, a failure', () => {
+    assert.deepEqual(childExitReport('the app', 1, null), { exitCode: 1, message: '[dev:agent] the app exited (1)' });
+  });
+  test('both: a clean quit stays quiet; a missing code is not clean', () => {
+    assert.deepEqual(childExitReport('the app', 0, null), { exitCode: 0, message: null });
+    assert.equal(childExitReport('the app', null, null).exitCode, 1);
   });
 });

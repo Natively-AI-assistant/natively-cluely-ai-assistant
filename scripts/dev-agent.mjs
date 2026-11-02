@@ -30,7 +30,7 @@ import { connect } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import electronPath from 'electron';
-import { electronArgs, isLiveDevToolsReply, isReservedPort, killPlan, previousCdpPort } from './devAgentSupport.mjs';
+import { childExitReport, electronArgs, isLiveDevToolsReply, isReservedPort, killPlan, previousCdpPort } from './devAgentSupport.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const AGENT_DIR = path.join(ROOT, '.agent');
@@ -174,7 +174,12 @@ async function main() {
     '--strictPort',
   ], { cwd: ROOT, stdio: 'inherit', shell: false });
   children.push(vite);
-  vite.on('exit', (code) => { if (!shuttingDown) { console.error(`[dev:agent] vite exited (${code})`); shutdown(code ?? 1); } });
+  vite.on('exit', (code, signal) => {
+    if (shuttingDown) return;
+    const r = childExitReport('the renderer dev server', code, signal);
+    console.error(r.message ?? '[dev:agent] the renderer dev server stopped');
+    shutdown(r.exitCode);
+  });
 
   await waitForPort(rendererPort);
 
@@ -194,7 +199,12 @@ async function main() {
   children.push(app);
 
   console.log(`[dev:agent] ready — agent-browser tab`);
-  app.on('exit', (code) => { if (!shuttingDown) shutdown(code ?? 0); });
+  app.on('exit', (code, signal) => {
+    if (shuttingDown) return;
+    const r = childExitReport('the app', code, signal);
+    if (r.message) console.error(r.message);
+    shutdown(r.exitCode);
+  });
 }
 
 main().catch((err) => {
