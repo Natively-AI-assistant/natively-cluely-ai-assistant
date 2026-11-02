@@ -589,16 +589,48 @@ export function getMinFreeGBForModelSize(modelSizeMb: number | undefined | null)
     return Math.min(shared, Math.round(needed * 100) / 100);
 }
 
+/** One reading of the local-STT memory gate: the figure compared, and the floor it was compared to. */
+export interface ModelMemoryCheck {
+    ok: boolean;
+    /** null when the measurement threw (the gate then fails OPEN). */
+    availableGB: number | null;
+    floorGB: number;
+}
+
+/**
+ * The model-size gate, returning the reading it decided on so a refusal can
+ * report that exact figure instead of measuring again (the 1s cache can expire
+ * between the check and the message). Fails OPEN on a measurement error.
+ */
+export function checkMemoryForModelSize(modelSizeMb: number | undefined | null): ModelMemoryCheck {
+    const floorGB = getMinFreeGBForModelSize(modelSizeMb);
+    let availableGB: number;
+    try {
+        availableGB = getAvailableMemoryGB();
+    } catch {
+        return { ok: true, availableGB: null, floorGB };
+    }
+    return { ok: availableGB >= floorGB, availableGB, floorGB };
+}
+
+/**
+ * "0.61GB available, this model needs 0.62GB" for a refused check (issue #707).
+ * The reading is rounded DOWN: the floor is already on a 0.01 GB grid, so a
+ * refused reading always prints below it. Plain rounding printed
+ * "0.62GB available, this model needs 0.62GB" for a 0.6151 GB refusal.
+ */
+export function describeModelMemoryShortfall(check: ModelMemoryCheck): string {
+    if (check.availableGB == null) return `this model needs ${check.floorGB}GB`;
+    const shown = (Math.floor(check.availableGB * 100) / 100).toFixed(2);
+    return `${shown}GB available, this model needs ${check.floorGB}GB`;
+}
+
 /**
  * `hasEnoughMemoryForOnnxSession` for one specific local STT model. Fails OPEN
  * on a measurement error, exactly like the shared check.
  */
 export function hasEnoughMemoryForModelSize(modelSizeMb: number | undefined | null): boolean {
-    try {
-        return getAvailableMemoryGB() >= getMinFreeGBForModelSize(modelSizeMb);
-    } catch {
-        return true;
-    }
+    return checkMemoryForModelSize(modelSizeMb).ok;
 }
 
 /** Negative, NaN or non-finite headroom must never LOWER the shared floor. */

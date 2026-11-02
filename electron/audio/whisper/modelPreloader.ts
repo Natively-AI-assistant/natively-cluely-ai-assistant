@@ -28,7 +28,7 @@ import { retireOnnxWorker, trackOnnxWorker } from '../../utils/onnxWorkerShutdow
 // per-channel ids ('mic' / 'system'), so it occupies its own registry slot and
 // its engine instance is never mistaken for an audio channel's.
 const NEMOTRON_WARM_CHANNEL_ID = 'preload-warm';
-import { acquireOnnxSlot, hasEnoughMemoryForModelSize, getMinFreeGBForModelSize, isHighPriorityOnnxBudgetExhausted } from '../../utils/onnxThreadConfig';
+import { acquireOnnxSlot, checkMemoryForModelSize, describeModelMemoryShortfall, isHighPriorityOnnxBudgetExhausted } from '../../utils/onnxThreadConfig';
 import { getModelSizeMb, isCorruptModelError, purgeCorruptModel } from './modelManager';
 import type { WhisperModelId } from './types';
 import {
@@ -161,8 +161,9 @@ class ModelPreloader {
             this.recordFailure(modelId);
             return;
         }
-        if (!hasEnoughMemoryForModelSize(getModelSizeMb(modelId))) {
-            console.warn(`[ModelPreloader] Skipping Nemotron warm — under ${getMinFreeGBForModelSize(getModelSizeMb(modelId))}GB free`);
+        const memory = checkMemoryForModelSize(getModelSizeMb(modelId));
+        if (!memory.ok) {
+            console.warn(`[ModelPreloader] Skipping Nemotron warm — ${describeModelMemoryShortfall(memory)}`);
             return;
         }
         const initMsg = buildWorkerInitMessage(modelId);
@@ -249,9 +250,10 @@ class ModelPreloader {
         // cooldown above would block future preloads. The user can retry by
         // toggling Settings → Audio when memory frees up. Acquire the slot
         // at HIGH priority (Whisper is latency-critical).
-        if (!hasEnoughMemoryForModelSize(getModelSizeMb(modelId))) {
+        const memory = checkMemoryForModelSize(getModelSizeMb(modelId));
+        if (!memory.ok) {
             console.warn(
-                `[ModelPreloader] skipping preload for ${modelId} — free memory below ${getMinFreeGBForModelSize(getModelSizeMb(modelId))}GB floor (silent skip, not a worker error)`,
+                `[ModelPreloader] skipping preload for ${modelId} — ${describeModelMemoryShortfall(memory)} (silent skip, not a worker error)`,
             );
             return;
         }

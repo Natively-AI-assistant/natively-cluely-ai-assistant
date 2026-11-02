@@ -49,7 +49,7 @@ import { clearLoadSentinel, modelPreloader, writeLoadSentinel } from './whisper/
 import { buildWorkerInitMessage } from './whisper/inferenceConfig';
 import { resolveWhisperWorkerPath } from './whisper/workerPathResolver';
 import type { WhisperModelId, WorkerOutMessage } from './whisper/types';
-import { acquireOnnxSlotWithin, getAvailableMemoryGB, hasEnoughMemoryForModelSize, getMinFreeGBForModelSize } from '../utils/onnxThreadConfig';
+import { acquireOnnxSlotWithin, checkMemoryForModelSize, describeModelMemoryShortfall, type ModelMemoryCheck } from '../utils/onnxThreadConfig';
 import { retireOnnxWorker, trackOnnxWorker } from '../utils/onnxWorkerShutdown';
 import { classifyLocalModelLoadFailure, describeLocalModelLoadFailure } from './whisper/loadFailure';
 import { listMissingVcRuntimeDlls, resolveOnnxBindingDir } from './whisper/windowsVcRuntime';
@@ -104,14 +104,13 @@ export const LOCAL_STT_BEHIND_CODE = 'local_stt_behind';
  *
  * It reports the measured figure the gate refused on, not only the floor:
  * "under 2GB free" alone could not tell a machine 50 MB short from one with
- * nothing left (issue #707, a 16 GB Windows PC). getAvailableMemoryGB() is
- * cached for 1s, so this is the same reading hasEnoughMemoryForModelSize used.
+ * nothing left (issue #707, a 16 GB Windows PC). It formats the check it is
+ * handed, never a fresh measurement, so the figure is the one that refused.
  */
-function localSttMemoryRefusal(modelSizeMb: number | undefined): Error {
+function localSttMemoryRefusal(check: ModelMemoryCheck): Error {
     const heapGB = (process.memoryUsage().heapUsed / 1024 ** 3).toFixed(1);
-    const availableGB = getAvailableMemoryGB().toFixed(2);
     return markLocalSttUnavailable(new Error(
-        `Local STT could not start: insufficient available memory (${availableGB}GB available, this model needs ${getMinFreeGBForModelSize(modelSizeMb)}GB, app heap ${heapGB}GB). ` +
+        `Local STT could not start: insufficient available memory (${describeModelMemoryShortfall(check)}, app heap ${heapGB}GB). ` +
         `Close other apps to free memory, choose a smaller local model, or use a cloud STT provider.`,
     ));
 }
@@ -1252,7 +1251,8 @@ export class LocalWhisperSTT extends EventEmitter {
             // warm-worker path is also skipped entirely for Nemotron (see
             // modelPreloader.preload's own Nemotron guard) so there is never
             // a warm worker to take here in the first place.
-            if (!hasEnoughMemoryForModelSize(modelSizeMb)) throw localSttMemoryRefusal(modelSizeMb);
+            const memory = checkMemoryForModelSize(modelSizeMb);
+            if (!memory.ok) throw localSttMemoryRefusal(memory);
             const channelId = this.channelLabel || `nemotron-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             this.nemotronChannelId = channelId;
             const initMsg = buildWorkerInitMessage(this.modelId);
@@ -1378,7 +1378,8 @@ export class LocalWhisperSTT extends EventEmitter {
         // Cold path. Acquire the shared ONNX slot at HIGH priority — Whisper
         // is latency-critical (~750ms real-time streaming) and would deadlock
         // behind a queued embedding batch.
-        if (!hasEnoughMemoryForModelSize(modelSizeMb)) throw localSttMemoryRefusal(modelSizeMb);
+        const memory = checkMemoryForModelSize(modelSizeMb);
+        if (!memory.ok) throw localSttMemoryRefusal(memory);
 
         // Bounded: an unbounded wait here was a silent dead channel — the local
         // embedding + reranker workers hold the whole default gate (cap 2) for
