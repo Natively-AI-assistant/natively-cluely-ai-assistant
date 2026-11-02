@@ -22,7 +22,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const gate = await import(pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/utils/onnxThreadConfig.js')).href);
-const { measureAvailableMemory, getAvailableMemoryReading, checkMemoryForModelSize } = gate;
+const { measureAvailableMemory, getAvailableMemoryReading, checkMemoryForModelSize, checkMemoryForOnnxSession, describeModelMemoryShortfall } = gate;
 
 const GiB = 1024 ** 3;
 const VM_STAT = [
@@ -94,4 +94,16 @@ test('this host: a real reading is cached, so the gate and its message see the s
   assert.ok(a.gb > 0 && Number.isFinite(a.gb));
   assert.notEqual(a.source, 'override');
   assert.equal(b, a, 'a second read inside the TTL returns the same cached reading');
+});
+
+test('the shared-floor gate (embedder, reranker) reports the same shape and wording', () => {
+  process.env.NATIVELY_ONNX_AVAILABLE_MEM_GB = '1.996';
+  const plain = checkMemoryForOnnxSession();
+  assert.deepEqual(plain, { ok: false, availableGB: 1.996, source: 'override', floorGB: 2 });
+  assert.equal(describeModelMemoryShortfall(plain), '1.99GB available, this model needs 2GB');
+  // A heavier model's headroom raises the floor; bad headroom never lowers it.
+  assert.equal(checkMemoryForOnnxSession(0.5).floorGB, 2.5);
+  assert.equal(checkMemoryForOnnxSession(-3).floorGB, 2);
+  process.env.NATIVELY_ONNX_AVAILABLE_MEM_GB = '2';
+  assert.equal(checkMemoryForOnnxSession().ok, true);
 });

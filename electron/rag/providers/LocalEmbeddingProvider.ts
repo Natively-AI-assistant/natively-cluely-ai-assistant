@@ -24,7 +24,7 @@ import { Worker } from 'worker_threads';
 import { app } from 'electron';
 import { IEmbeddingProvider } from './IEmbeddingProvider';
 import { embeddingSpaceKey } from '../embeddingSpace';
-import { acquireOnnxSlot, acquireOnnxSlotWithin, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession } from '../../utils/onnxThreadConfig';
+import { acquireOnnxSlot, acquireOnnxSlotWithin, checkMemoryForOnnxSession, describeModelMemoryShortfall } from '../../utils/onnxThreadConfig';
 import { retireOnnxWorkerAndWait, trackOnnxWorker } from '../../utils/onnxWorkerShutdown';
 import {
     clearLoadSentinel as clearOnnxLoadSentinel,
@@ -581,9 +581,10 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     // behavior); a later, less-pressured moment will retry automatically.
     // MODEL-AWARE since 2026-09-22: the shared floor plus this model's own
     // extra footprint (the floor alone is blind to model size).
-    if (!hasEnoughMemoryForOnnxSession(this.extraMemoryHeadroomGB)) {
+    const memory = checkMemoryForOnnxSession(this.extraMemoryHeadroomGB);
+    if (!memory.ok) {
       throw new Error(
-        `insufficient available memory (<${getMinFreeGBForOnnxSession(this.extraMemoryHeadroomGB)}GB for ${this.hfModelId}) — skipping local embedder load`,
+        `insufficient available memory (${describeModelMemoryShortfall(memory)} for ${this.hfModelId}, measured by ${memory.source}) — skipping local embedder load`,
       );
     }
 

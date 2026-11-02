@@ -44,9 +44,8 @@ import { retireOnnxWorkerAndWait, trackOnnxWorker } from '../utils/onnxWorkerShu
 import { app } from 'electron';
 import {
     acquireOnnxSlot,
-    hasEnoughMemoryForOnnxSession,
-    getMinFreeGBForOnnxSession,
-    getAvailableMemoryGB,
+    checkMemoryForOnnxSession,
+    describeModelMemoryShortfall,
 } from '../utils/onnxThreadConfig';
 import {
     clearLoadSentinel as clearOnnxLoadSentinel,
@@ -450,10 +449,10 @@ class LocalRerankerImpl {
         // retriever falls back to cosine top-K ordering. We do NOT latch
         // `loadFailed = true` on a gate refusal (that's reserved for actual
         // load errors); a later, less-pressured moment can retry.
-        if (!hasEnoughMemoryForOnnxSession()) {
-            const availGB = getAvailableMemoryGB().toFixed(1);
+        const memory = checkMemoryForOnnxSession();
+        if (!memory.ok) {
             throw new Error(
-                `insufficient available memory (${availGB}GB < ${getMinFreeGBForOnnxSession()}GB) — skipping reranker load`,
+                `insufficient available memory (${describeModelMemoryShortfall(memory)}, measured by ${memory.source}) — skipping reranker load`,
             );
         }
 

@@ -589,11 +589,17 @@ export function getAvailableMemoryGB(): number {
  * a measurement failure would block the app for no real reason.
  */
 export function hasEnoughMemoryForOnnxSession(extraGB: number = 0): boolean {
-    try {
-        return getAvailableMemoryGB() >= readMinFreeGB() + sanitizeExtraGB(extraGB);
-    } catch {
-        return true;
-    }
+    return checkMemoryForOnnxSession(extraGB).ok;
+}
+
+/**
+ * The shared-floor gate (plus the caller's model headroom), returning the
+ * reading it decided on — the same shape as checkMemoryForModelSize(), so
+ * every ONNX loader reports a refusal through describeModelMemoryShortfall().
+ * Fails OPEN on a measurement error.
+ */
+export function checkMemoryForOnnxSession(extraGB: number = 0): ModelMemoryCheck {
+    return checkAvailableMemoryAgainst(getMinFreeGBForOnnxSession(extraGB));
 }
 
 /**
@@ -659,7 +665,10 @@ export interface ModelMemoryCheck {
  * between the check and the message). Fails OPEN on a measurement error.
  */
 export function checkMemoryForModelSize(modelSizeMb: number | undefined | null): ModelMemoryCheck {
-    const floorGB = getMinFreeGBForModelSize(modelSizeMb);
+    return checkAvailableMemoryAgainst(getMinFreeGBForModelSize(modelSizeMb));
+}
+
+function checkAvailableMemoryAgainst(floorGB: number): ModelMemoryCheck {
     let reading: AvailableMemoryReading;
     try {
         reading = getAvailableMemoryReading();
@@ -671,6 +680,7 @@ export function checkMemoryForModelSize(modelSizeMb: number | undefined | null):
 
 /**
  * "0.61GB available, this model needs 0.62GB" for a refused check (issue #707).
+ * The one wording for every local ONNX loader (STT, embedder, reranker).
  * The reading is rounded DOWN: the floor is already on a 0.01 GB grid, so a
  * refused reading always prints below it. Plain rounding printed
  * "0.62GB available, this model needs 0.62GB" for a 0.6151 GB refusal.
