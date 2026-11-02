@@ -151,6 +151,45 @@ describe('Resume is never folded into another start (MeetingLifecycleQueue.hasPe
     });
 });
 
+describe('the resumed part numbers its new people past the saved part (pure)', () => {
+    const part = { startTime: 1000, durationMs: 500 };
+    test('the ids the saved part uses: call ids, kept names, numbered room voices; not the resumed part\'s', () => {
+        const used = resume.savedPartSpeakerIds([
+            { speaker: 'Speaker 1', speakerId: 'speaker_1', timestamp: 10 },
+            { speaker: 'Speaker 3', timestamp: 20 },
+            { speaker: 'user', timestamp: 30 },
+            { speaker: 'Speaker 7', speakerId: 'speaker_7', timestamp: 1200 },
+        ], part, { speaker_4: 'Lars' });
+        assert.deepEqual([...used].sort(), ['speaker_1', 'speaker_3', 'speaker_4']);
+        assert.equal(resume.isSavedPartLine({ timestamp: 999 }, part), true);
+        assert.equal(resume.isSavedPartLine({ timestamp: 1000 }, part), false);
+        assert.equal(resume.isSavedPartLine({ timestamp: 999 }, null), false, 'not a resume: no saved part');
+        assert.equal(resume.isResumePart(part), true);
+        assert.equal(resume.isResumePart({ startTime: 0, durationMs: 1 }), false);
+    });
+    test('call names: a person the saved part named keeps their id (and rename); a new person gets a free id', () => {
+        const full = [
+            { speaker: 'interviewer', speakerId: 'speaker_2', timestamp: 10 },
+            { speaker: 'interviewer', timestamp: 1100 },
+            { speaker: 'interviewer', timestamp: 1200 },
+            // A provider voice id that is no name here, but equals the id Sam moves to.
+            { speaker: 'interviewer', speakerId: 'speaker_5', timestamp: 1300 },
+        ];
+        const named = {
+            // nameCallLines over the resumed lines numbers from scratch.
+            transcript: [{ ...full[1], speakerId: 'speaker_2' }, { ...full[2], speakerId: 'speaker_3' }, full[3]],
+            labels: { speaker_2: 'Sam', speaker_3: 'Priya' },
+            confidence: { speaker_2: 0.9, speaker_3: 0.8 },
+            participants: ['Sam', 'Priya'],
+        };
+        const out = resume.fitResumedCallNames(full, [1, 2, 3], named, new Set(['speaker_2']), { speaker_2: 'Priya (PM)', speaker_5: 'sam' });
+        assert.deepEqual(out.transcript.map((l) => l.speakerId), ['speaker_2', 'speaker_5', 'speaker_3', undefined], 'Sam = saved speaker_5; Priya new → speaker_3 (free); a bare provider id clashing with a name is dropped');
+        assert.deepEqual(out.labels, { speaker_5: 'Sam', speaker_3: 'Priya' });
+        assert.deepEqual(out.confidence, { speaker_5: 0.9, speaker_3: 0.8 });
+        assert.equal(out.transcript[0], full[0], 'the saved line is untouched');
+    });
+});
+
 describe('which earlier notes are kept as a version (pure)', () => {
     test('a resume keeps V3 notes and the older short notes; Regenerate stays V3-only', () => {
         const older = { overview: 'Launch moves to Nov 18.', keyPoints: ['Billing fix first'], actionItems: [] };
@@ -610,6 +649,43 @@ describe('resuming a saved meeting (database)', () => {
         endPass();
         assert.ok(await waitFor(() => processed(id)), 'then writes the notes');
         assert.equal(DatabaseManager.getInstance().getMeetingDetails(id).title, 'Busy recovery');
+    });
+
+    test('a new voice on the mic in the resumed part never takes a saved person\'s number (or rename)', async () => {
+        const { SettingsManager } = require(dist('services/SettingsManager.js'));
+        SettingsManager.getInstance().set('roomSpeakersEnabled', true);
+        try {
+            const mic = (start, rows) => rows.map(([voice, text], i) => ({ speaker: 'user', speakerId: voice, text, timestamp: start + 1000 * (i + 1), origin: 'stt', final: true }));
+            const talk = [['speaker_0', 'So the launch plan is the main thing today and we should go through it'], ['speaker_1', 'I can take the billing part of the launch plan'], ['speaker_0', 'Good, then pricing after that and the release notes too'], ['speaker_1', 'Billing needs two more days to finish properly'], ['speaker_0', 'Then the eighteenth works for everyone here I think'], ['speaker_1', 'Yes the eighteenth works for billing as well']];
+            const start = Date.now() - 600_000;
+            const first = new MeetingPersistence(fakeSession(start, mic(start, talk), { title: 'Room sync' }), llm());
+            const id = first.beginLiveMeeting(start, { surface: 'overlay' });
+            await first.stopMeeting();
+            assert.ok(await waitFor(() => processed(id)));
+            const db = DatabaseManager.getInstance();
+            assert.ok(db.getMeetingDetails(id).transcript.some((l) => l.speaker === 'Speaker 2'), 'the first part found a second voice');
+            // The user names that voice.
+            db.replaceDetailedSummary(id, { ...db.getMeetingDetails(id).detailedSummary, speakerLabels: { speaker_2: 'Lars' } });
+
+            // The resumed part: the provider numbers voices from scratch, and a different colleague talks.
+            const resumeAt = Date.now() - 20_000;
+            const session = fakeSession(resumeAt, [], null);
+            const mp = new MeetingPersistence(session, llm());
+            mp.beginLiveMeeting(resumeAt, { resume: mp.loadResumeBase(id) });
+            for (const l of mic(resumeAt, talk)) session.push(l);
+            await mp.stopMeeting();
+            assert.ok(await waitFor(() => processed(id)));
+            const after = db.getMeetingDetails(id);
+            const resumed = after.transcript.filter((l) => l.timestamp >= resumeAt);
+            const saved = after.transcript.filter((l) => l.timestamp < resumeAt);
+            assert.ok(saved.some((l) => l.speaker === 'Speaker 2'), 'the saved part keeps its Speaker 2');
+            assert.ok(resumed.some((l) => l.speaker === 'Speaker 3'), 'the new voice is Speaker 3');
+            assert.ok(!resumed.some((l) => l.speaker === 'Speaker 2'), 'not Speaker 2 (Lars)');
+            assert.equal(after.detailedSummary.speakerLabels?.speaker_2, 'Lars');
+            assert.equal(after.detailedSummary.speakerLabels?.speaker_3, undefined);
+        } finally {
+            SettingsManager.getInstance().set('roomSpeakersEnabled', false);
+        }
     });
 
     test('a new meeting after a resume gets a new id (no carry-over)', async () => {

@@ -208,3 +208,100 @@ export function resumeMetadata(base: ResumeBase, isPlaceholderTitle: (t: string)
     if (base.source) meta.source = base.source;
     return meta;
 }
+
+/**
+ * Where the resumed part starts (2026-11-02): its own start and running time,
+ * not the whole meeting's (whose start is the first part's and whose time
+ * leaves out the gap between the parts). Lines from before it are the saved
+ * part: they keep the speaker ids they were saved with.
+ */
+export interface ResumePart {
+    startTime: number;
+    durationMs: number;
+}
+
+export function isResumePart(v: unknown): v is ResumePart {
+    const p = v as ResumePart;
+    return !!p && typeof p === 'object' && Number.isFinite(p.startTime) && p.startTime > 0 && Number.isFinite(p.durationMs) && p.durationMs >= 0;
+}
+
+/** A line saved before the resume (it was said before the resumed part started). */
+export function isSavedPartLine(line: { timestamp?: unknown } | null | undefined, part: ResumePart | null | undefined): boolean {
+    if (!part) return false;
+    const ts = Number(line?.timestamp);
+    return !(Number.isFinite(ts) && ts >= part.startTime);
+}
+
+const SPEAKER_N = /^Speaker (\d+)$/i;
+
+/**
+ * Every speaker id the saved part already uses: its call ids, the ids its
+ * names are kept under, and the room voices it numbered ("Speaker 3" is
+ * speaker_3). The resumed part numbers its new people past these, so a new
+ * voice never takes a number someone in the first part has (and that the user
+ * may have renamed).
+ */
+export function savedPartSpeakerIds(lines: Array<{ speaker?: unknown; speakerId?: unknown; timestamp?: unknown }>, part: ResumePart | null | undefined, savedLabels?: Record<string, string> | null): Set<string> {
+    const used = new Set<string>(Object.keys(savedLabels ?? {}));
+    for (const l of lines) {
+        if (!isSavedPartLine(l, part)) continue;
+        if (typeof l.speakerId === 'string' && l.speakerId) used.add(l.speakerId);
+        const m = typeof l.speaker === 'string' ? SPEAKER_N.exec(l.speaker.trim()) : null;
+        if (m) used.add(`speaker_${m[1]}`);
+    }
+    return used;
+}
+
+const nextFree = (used: Set<string>): string => {
+    let n = 2;
+    while (used.has(`speaker_${n}`)) n++;
+    return `speaker_${n}`;
+};
+
+/**
+ * The resumed part's call names (nameCallLines over its lines only) fitted to
+ * the saved part's: a person the saved meeting already names keeps that id
+ * (and so the user's rename of it); anyone new gets an id no saved line uses.
+ * Returns the whole meeting's lines, the saved part's untouched.
+ */
+export function fitResumedCallNames<T extends { speakerId?: string }>(
+    full: T[],
+    resumedIndexes: number[],
+    named: { transcript: T[]; labels: Record<string, string>; confidence: Record<string, number>; participants: string[] },
+    reserved: Set<string>,
+    savedLabels?: Record<string, string> | null,
+): { transcript: T[]; labels: Record<string, string>; confidence: Record<string, number>; participants: string[] } {
+    const key = (name: string) => name.trim().toLowerCase();
+    const savedIdOf = new Map<string, string>();
+    for (const [id, name] of Object.entries(savedLabels ?? {})) {
+        if (typeof name === 'string' && name.trim() && !savedIdOf.has(key(name))) savedIdOf.set(key(name), id);
+    }
+    const used = new Set(reserved);
+    const idFor = new Map<string, string>();
+    for (const [id, name] of Object.entries(named.labels)) {
+        const same = typeof name === 'string' ? savedIdOf.get(key(name)) : undefined;
+        const target = same ?? (used.has(id) ? nextFree(used) : id);
+        used.add(target);
+        idFor.set(id, target);
+    }
+    const labels: Record<string, string> = {};
+    const confidence: Record<string, number> = {};
+    for (const [id, name] of Object.entries(named.labels)) labels[idFor.get(id)!] = name;
+    for (const [id, c] of Object.entries(named.confidence)) if (idFor.has(id)) confidence[idFor.get(id)!] = c;
+    const targets = new Set(idFor.values());
+    const transcript = [...full];
+    resumedIndexes.forEach((fullIndex, i) => {
+        const line = named.transcript[i];
+        const id = line?.speakerId;
+        if (id && idFor.has(id)) { transcript[fullIndex] = { ...line, speakerId: idFor.get(id)! } as T; return; }
+        // A provider voice id that equals a name's new id would read as that
+        // person (nameCallLines drops the same clash): the line keeps its channel.
+        if (id && (targets.has(id) || reserved.has(id))) {
+            const { speakerId: _clash, ...rest } = line as T & { speakerId?: string };
+            transcript[fullIndex] = rest as T;
+            return;
+        }
+        transcript[fullIndex] = line;
+    });
+    return { transcript, labels, confidence, participants: named.participants };
+}

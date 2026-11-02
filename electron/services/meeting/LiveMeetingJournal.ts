@@ -61,6 +61,8 @@ export interface MeetingRecoveryMeta {
     resumed?: { startTime: number; priorDurationMs: number };
     /** A resumed meeting: what its saved notes carry into the new ones (speaker names, people, screens, a follow-up draft). */
     resumeCarry?: import('./meetingResume').ResumeCarry;
+    /** A resumed meeting: the resumed part's own start and running time. */
+    resumePart?: import('./meetingResume').ResumePart;
 }
 
 export interface LiveJournalRow {

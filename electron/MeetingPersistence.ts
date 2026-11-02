@@ -28,7 +28,7 @@ import { LiveMeetingJournal, type LiveJournalSnapshot, type MeetingRecoveryMeta 
 import { getUserDictionary } from './audio/userDictionary';
 import { bioForNotes, isProOrTrialActive } from './services/proAccess';
 import { isArchivableEarlierNotes, isArchivableNotes } from './services/meeting/notesVersions';
-import { applyResumeCarry, isNotesPendingStatus, mergeResumedMeeting, resumeBaseFrom, resumeCarryFrom, resumedSharedScreens, resumeMetadata, type MeetingSurfaceKind, type ResumeBase, type ResumeCarry } from './services/meeting/meetingResume';
+import { applyResumeCarry, fitResumedCallNames, isNotesPendingStatus, isResumePart, isSavedPartLine, mergeResumedMeeting, resumeBaseFrom, resumeCarryFrom, resumedSharedScreens, resumeMetadata, savedPartSpeakerIds, type MeetingSurfaceKind, type ResumeBase, type ResumeCarry, type ResumePart } from './services/meeting/meetingResume';
 import { applyNoteTemplate, noteTemplateById, type NoteTemplate } from './services/meeting/noteTemplates';
 const crypto = require('crypto');
 
@@ -341,6 +341,8 @@ type ProcessMetadata = {
     noteTemplateId?: string;
     /** A resumed meeting: what the saved notes carry into the new ones (meetingResume.ResumeCarry). */
     resumeCarry?: ResumeCarry;
+    /** A resumed meeting: the resumed part's own start and time (its lines are named; the saved part's keep their ids). */
+    resumePart?: ResumePart;
 };
 
 /**
@@ -386,6 +388,7 @@ export function recoveryMetadataFor(
     if (typeof userNotes === 'string' && userNotes.trim()) metadata.userNotes = userNotes;
     if (noteTemplateById(saved?.noteTemplateId)) metadata.noteTemplateId = saved!.noteTemplateId;
     if (saved?.resumeCarry && typeof saved.resumeCarry === 'object') metadata.resumeCarry = saved.resumeCarry;
+    if (isResumePart(saved?.resumePart)) metadata.resumePart = saved!.resumePart;
     const mode = saved?.mode && typeof saved.mode.id === 'string' ? saved.mode : null;
     return { metadata: Object.keys(metadata).length > 0 ? metadata : null, mode };
 }
@@ -941,6 +944,8 @@ export class MeetingPersistence {
             context: this.session.getFullSessionContext(),
             memoryEligibleCount,
         };
+        // This part's own start and time, before the merge makes them the whole meeting's.
+        const resumePart: ResumePart | undefined = resumed ? { startTime: snapshot.startTime, durationMs: snapshot.durationMs } : undefined;
         if (resumed) {
             // The whole meeting: the saved part, then this one. Notes are
             // written over all of it, so the earlier part's lines count too.
@@ -971,7 +976,7 @@ export class MeetingPersistence {
             }
         }
         const sessionMetadata = resumed
-            ? { ...resumeMetadata(resumed, isDefaultMeetingTitle), ...(this.session.getMeetingMetadata() || {}), ...(resumeCarry ? { resumeCarry } : {}) }
+            ? { ...resumeMetadata(resumed, isDefaultMeetingTitle), ...(this.session.getMeetingMetadata() || {}), ...(resumeCarry ? { resumeCarry } : {}), resumePart }
             : this.session.getMeetingMetadata();
         const metadataSnapshot = userNotes || noteTemplateId
             ? { ...(sessionMetadata || {}), ...(userNotes ? { userNotes } : {}), ...(noteTemplateId ? { noteTemplateId } : {}) }
@@ -1111,11 +1116,15 @@ export class MeetingPersistence {
             if (Array.isArray(metadata.sharedScreens) && metadata.sharedScreens.length > 0) meta.sharedScreens = metadata.sharedScreens;
             if (noteTemplateById(metadata.noteTemplateId)) meta.noteTemplateId = metadata.noteTemplateId;
             if (metadata.resumeCarry && typeof metadata.resumeCarry === 'object') meta.resumeCarry = metadata.resumeCarry;
+            if (isResumePart(metadata.resumePart)) meta.resumePart = metadata.resumePart;
             if (typeof metadata.callKey === 'string') {
                 meta.callKey = metadata.callKey;
                 try {
                     const { callRoster } = require('./services/meetingDetection/callRoster') as typeof import('./services/meetingDetection/callRoster');
-                    const snap = callRoster.snapshot(metadata.callKey, startTime, startTime + durationMs + 30_000);
+                    // A resumed meeting: the call's record of the resumed part (the
+                    // whole meeting's time leaves out the gap between the parts).
+                    const win = isResumePart(metadata.resumePart) ? metadata.resumePart : { startTime, durationMs };
+                    const snap = callRoster.snapshot(metadata.callKey, win.startTime, win.startTime + win.durationMs + 30_000);
                     if (snap.participants.length > 0 || snap.spans.length > 0) meta.callRoster = snap;
                 } catch { /* no roster: names come from the calendar only */ }
             }
@@ -1168,6 +1177,9 @@ export class MeetingPersistence {
         const stillWriter = () => { if (superseded()) throw new SupersededWrite(meetingId); };
         // A resumed meeting: the notes are written from both parts' screens.
         const resumeCarry = metadata?.resumeCarry;
+        // A resumed meeting: where the resumed part starts, and the speaker ids the saved part uses.
+        const resumePart = isResumePart(metadata?.resumePart) ? metadata!.resumePart! : null;
+        const savedSpeakerIds = resumePart ? savedPartSpeakerIds(data.transcript, resumePart, resumeCarry?.speakerLabels) : new Set<string>();
         if (metadata && resumeCarry?.sharedScreens?.length) {
             metadata = { ...metadata, sharedScreens: resumedSharedScreens(resumeCarry, metadata.sharedScreens) };
         }
@@ -1322,14 +1334,24 @@ export class MeetingPersistence {
                 // A recovered meeting: the app's roster was lost with the old
                 // process, so the call's record comes from what was saved.
                 let roster: import('./services/meetingDetection/callRoster').CallRoster | undefined;
+                // A resumed meeting: only the resumed part's lines are named, over its
+                // own time; the saved part keeps the ids it was saved with.
+                const win = resumePart ?? { startTime: data.startTime, durationMs: data.durationMs };
                 if (metadata.callRoster) {
                     const { CallRoster, callRoster } = require('./services/meetingDetection/callRoster') as typeof import('./services/meetingDetection/callRoster');
                     if (!callRoster.has(metadata.callKey)) {
                         roster = new CallRoster();
-                        roster.restore(metadata.callKey, metadata.callRoster, data.startTime, data.startTime + data.durationMs);
+                        roster.restore(metadata.callKey, metadata.callRoster, win.startTime, win.startTime + win.durationMs);
                     }
                 }
-                const named = nameCallLines(data.transcript, metadata.callKey, data.startTime, data.durationMs, roster);
+                let named: import('./services/meetingDetection/nameCallLines').NamedCall<(typeof data.transcript)[number]> | null;
+                if (resumePart) {
+                    const resumedIndexes = data.transcript.map((_l, i) => i).filter((i) => !isSavedPartLine(data.transcript[i], resumePart));
+                    const part = nameCallLines(resumedIndexes.map((i) => data.transcript[i]), metadata.callKey, win.startTime, win.durationMs, roster);
+                    named = part ? fitResumedCallNames(data.transcript, resumedIndexes, part, savedSpeakerIds, resumeCarry?.speakerLabels) : null;
+                } else {
+                    named = nameCallLines(data.transcript, metadata.callKey, data.startTime, data.durationMs, roster);
+                }
                 if (named) {
                     storedTranscript = named.transcript;
                     callParticipants = named.participants;
@@ -1361,7 +1383,8 @@ export class MeetingPersistence {
             const { SettingsManager } = require('./services/SettingsManager');
             if (SettingsManager.getInstance().get('roomSpeakersEnabled') === true) {
                 const { splitRoomSpeakers } = require('./services/meeting/roomSpeakers') as typeof import('./services/meeting/roomSpeakers');
-                const split = splitRoomSpeakers(storedTranscript, { usedIds: Object.keys(callLabels || {}) });
+                // A resumed meeting: past every number the saved part uses, too.
+                const split = splitRoomSpeakers(storedTranscript, { usedIds: [...Object.keys(callLabels || {}), ...savedSpeakerIds] });
                 if (split.voices > 0) {
                     storedTranscript = split.transcript;
                     llmTranscript = llmTranscript.map((seg, i) => (split.renamed.has(i) ? { ...seg, speaker: split.renamed.get(i)! } : seg));
@@ -1374,8 +1397,9 @@ export class MeetingPersistence {
 
         // Only the call's named ids are stored: an STT provider's own voice ids
         // (diarization) stay in-session, as they always have.
+        // A resumed meeting's saved lines keep theirs: they were stored as call ids.
         storedTranscript = storedTranscript.map((seg: any) => {
-            if (!seg?.speakerId || (callLabels && callLabels[seg.speakerId])) return seg;
+            if (!seg?.speakerId || (callLabels && callLabels[seg.speakerId]) || isSavedPartLine(seg, resumePart)) return seg;
             const { speakerId: _unnamed, ...rest } = seg;
             return rest;
         });
@@ -2165,6 +2189,8 @@ export class MeetingPersistence {
                 const savedLines = Array.isArray(saved?.transcript) ? saved!.transcript.length : 0;
                 const replaceExisting = !!resumedFrom && row.transcript.length > savedLines;
                 if (replaceExisting) {
+                    // The resumed part: the live copy's own start and time.
+                    placeholder.recoveryMeta = { ...(placeholder.recoveryMeta as MeetingRecoveryMeta), resumePart: { startTime: row.startedAt, durationMs: liveDurationMs } };
                     try {
                         const before = saved?.detailedSummary;
                         const carry = saved?.isProcessed
