@@ -305,3 +305,47 @@ export function fitResumedCallNames<T extends { speakerId?: string }>(
     });
     return { transcript, labels, confidence, participants: named.participants };
 }
+
+/** A voice the resumed part found that may be someone from the saved part. */
+export interface SpeakerMergeSuggestion {
+    /** The resumed part's new voice (speaker_N). */
+    id: string;
+    /** People from the saved part it may be, earliest first (their ids; the page shows their current names). */
+    candidates: string[];
+}
+
+/** A room voice line: "Speaker N" (N ≥ 2) on a line the call left without an id. */
+const roomVoiceId = (line: { speaker?: unknown; speakerId?: unknown }): string | null => {
+    if (typeof line?.speakerId === 'string' && line.speakerId) return null;
+    const m = typeof line?.speaker === 'string' ? SPEAKER_N.exec(line.speaker.trim()) : null;
+    return m && Number(m[1]) >= 2 ? `speaker_${m[1]}` : null;
+};
+
+/**
+ * After a resume (2026-11-02): the provider numbers voices afresh, and a
+ * voice cannot be matched across recordings by its words, so someone on the
+ * microphone who talks again after the resume comes back under a new number.
+ * Each such voice the user has not named is offered the saved part's room
+ * voices not heard again; joining is the user's one click on the meeting page
+ * (a rename to that person's name). Nothing here is decided for them.
+ */
+export function resumeMergeSuggestions(
+    lines: Array<{ speaker?: unknown; speakerId?: unknown; timestamp?: unknown }>,
+    part: ResumePart | null | undefined,
+    labels?: Record<string, string> | null,
+): SpeakerMergeSuggestion[] {
+    if (!part) return [];
+    const saved: string[] = [];
+    const resumed: string[] = [];
+    for (const l of lines) {
+        const id = roomVoiceId(l);
+        if (!id) continue;
+        const list = isSavedPartLine(l, part) ? saved : resumed;
+        if (!list.includes(id)) list.push(id);
+    }
+    const candidates = saved.filter((id) => !resumed.includes(id));
+    if (candidates.length === 0) return [];
+    return resumed
+        .filter((id) => !saved.includes(id) && !(labels && typeof labels[id] === 'string' && labels[id].trim()))
+        .map((id) => ({ id, candidates }));
+}

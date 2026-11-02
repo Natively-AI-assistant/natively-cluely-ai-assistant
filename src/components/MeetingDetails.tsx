@@ -49,6 +49,7 @@ import { noteLineTime, notesContentKey, notesLabel, notesWereEdited, versionTabs
 import { copyText } from '../lib/copyText';
 import { resumeSpot } from '../../electron/services/meeting/meetingResume';
 import { resumeSavedMeeting } from '../lib/startMeetingRequest';
+import { joinSpeakers, mergeOffers, renameSpeaker, speakerChips, type SpeakerChip } from '../lib/speakerMerge';
 
 registerPrismLanguages();
 
@@ -1047,6 +1048,8 @@ interface Meeting {
         speakerConfidence?: Record<string, number>;
         /** Names proposed after the meeting for a voice left unnamed; the rename field starts from one. */
         speakerSuggestions?: Array<{ id: string; name: string; certainty?: string; applied?: boolean }>;
+        /** After a Resume: voices that came back under a new number, and who from the first part they may be (lib/speakerMerge.ts). */
+        speakerMerges?: Array<{ id: string; candidates: string[] }>;
         crossMeeting?: { stillOpen?: string[] };
         recipes?: Record<string, string>;
         /** Set when the user edited these notes by hand (Regenerate asks first). */
@@ -2711,10 +2714,11 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         void handleRegenerateFollowUp(followUpTone);
     };
 
-    const handleSaveSpeakerLabel = async (speakerId: string, name: string) => {
-        const existing = meeting.detailedSummary?.speakerLabels || {};
-        const next = { ...existing, [speakerId]: name.trim() };
-        if (!name.trim()) delete next[speakerId];
+    // A rename covers every id the person was saved under (one chip, lib/speakerMerge.ts).
+    const handleSaveSpeakerLabel = async (chip: SpeakerChip, name: string) => {
+        await saveSpeakerLabels(renameSpeaker(meeting.detailedSummary?.speakerLabels, chip, name));
+    };
+    const saveSpeakerLabels = async (next: Record<string, string>) => {
         setMeeting(prev => ({ ...prev, detailedSummary: { ...(prev.detailedSummary as any), speakerLabels: next } }));
         setEditingSpeaker(null);
         try {
@@ -3863,6 +3867,18 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                         .filter(e => !['system', 'ai', 'assistant', 'model'].includes((e.speaker || '').toLowerCase()))
                                         .map(e => e.speaker)));
                                     if (speakers.length === 0) return null;
+                                    const speakerIdOf = (sp: string) => (sp || '').toLowerCase().replace(/^(user|me)$/, 'me').replace(/^(interviewer|them|other|system|assistant)$/, 'speaker_1').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'unknown';
+                                    const rawOf = new Map<string, string>();
+                                    for (const sp of speakers) { const sid = speakerIdOf(sp); if (!rawOf.has(sid)) rawOf.set(sid, sp); }
+                                    const labelsNow = meeting.detailedSummary?.speakerLabels;
+                                    // Ids saved under the same name are one person (a voice joined after a Resume).
+                                    const chips = speakerChips([...rawOf.keys()], labelsNow);
+                                    const chipOf = (sid: string): SpeakerChip => chips.find(c => c.ids.includes(sid)) ?? { id: sid, ids: [sid] };
+                                    const nameOf = (sid: string) => resolveSpeakerName(rawOf.get(sid) ?? sid);
+                                    const join = (chip: SpeakerChip, target: string) => {
+                                        setEditingSpeaker(null);
+                                        void saveSpeakerLabels(joinSpeakers(labelsNow, chip, chipOf(target), nameOf(target)));
+                                    };
                                     // Leaving the field (Save, Cancel, Enter, Esc) hands its on-screen
                                     // width to the chip that replaces it, so the pill eases back down
                                     // rather than snapping. offsetWidth, not a rect: layout width,
@@ -3870,7 +3886,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     const endSpeakerEdit = (id: string, save: boolean, from: Element) => {
                                         const field = from.closest<HTMLElement>('[data-speaker-editor]');
                                         if (field) setChipMorph({ id, from: field.offsetWidth });
-                                        if (save) handleSaveSpeakerLabel(id, speakerDraft);
+                                        if (save) handleSaveSpeakerLabel(chipOf(id), speakerDraft);
                                         else setEditingSpeaker(null);
                                     };
                                     return (
@@ -3881,9 +3897,11 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                 -out, index.css) and eases to its own, and the chips after it are
                                                 pushed along by that width in normal flow. It used to swap in a
                                                 single frame to a pill about four times the chip's width. */}
-                                            {speakers.map((sp) => {
-                                                const display = resolveSpeakerName(sp);
-                                                const id = (sp || '').toLowerCase().replace(/^(user|me)$/, 'me').replace(/^(interviewer|them|other|system|assistant)$/, 'speaker_1').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'unknown';
+                                            {chips.map((chip) => {
+                                                const id = chip.id;
+                                                const display = nameOf(id);
+                                                // After a Resume: who from the first part this voice may be.
+                                                const offers = mergeOffers(chip, meeting.detailedSummary?.speakerMerges, labelsNow);
                                                 const morphFrom = chipMorph?.id === id ? chipMorph.from : null;
                                                 const morphStyle = morphFrom != null ? { '--mn-chip-from-w': `${morphFrom}px` } as React.CSSProperties : undefined;
                                                 if (editingSpeaker === id) {
@@ -3930,12 +3948,28 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                                     <X className="w-3 h-3" strokeWidth={2.5} />
                                                                 </motion.button>
                                                             </span>
+                                                            {offers.length > 0 && (
+                                                                <span className="inline-flex items-center gap-1 pl-1 border-l border-border-subtle">
+                                                                    {offers.map(c => (
+                                                                        <button
+                                                                            key={c}
+                                                                            type="button"
+                                                                            onMouseDown={e => e.preventDefault()}
+                                                                            onClick={() => join(chip, c)}
+                                                                            className="inline-flex items-center h-5 px-2 rounded-full text-[11px] text-text-secondary hover:text-text-primary hover:bg-white/[0.08] transition-colors"
+                                                                            title={`${t('Same person as')} ${nameOf(c)}`}
+                                                                        >
+                                                                            {nameOf(c)}
+                                                                        </button>
+                                                                    ))}
+                                                                </span>
+                                                            )}
                                                         </span>
                                                     );
                                                 }
                                                 return (
+                                                    <React.Fragment key={id}>
                                                     <motion.button
-                                                        key={id}
                                                         type="button"
                                                         onClick={e => {
                                                             setChipMorph({ id, from: e.currentTarget.offsetWidth });
@@ -3957,6 +3991,25 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                             <Pencil className="w-2.5 h-2.5 text-text-tertiary" strokeWidth={2} />
                                                         </span>
                                                     </motion.button>
+                                                    {offers.length > 0 && (
+                                                        // One person from the first part: one click joins them. Several: the
+                                                        // rename field opens with each of them to pick from.
+                                                        <button
+                                                            type="button"
+                                                            onClick={e => {
+                                                                if (offers.length === 1) { join(chip, offers[0]); return; }
+                                                                const chipEl = e.currentTarget.previousElementSibling as HTMLElement | null;
+                                                                if (chipEl) setChipMorph({ id, from: chipEl.offsetWidth });
+                                                                setEditingSpeaker(id);
+                                                                setSpeakerDraft(display);
+                                                            }}
+                                                            className="-ml-1 inline-flex items-center h-7 px-2 rounded-full text-[11px] text-text-tertiary hover:text-text-primary hover:bg-white/[0.06] transition-colors"
+                                                            title={t('The same person as someone before the Resume')}
+                                                        >
+                                                            {offers.length === 1 ? `${t('Same as')} ${nameOf(offers[0])}?` : t('Same as…?')}
+                                                        </button>
+                                                    )}
+                                                    </React.Fragment>
                                                 );
                                             })}
                                         </div>

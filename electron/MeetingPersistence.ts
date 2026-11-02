@@ -28,7 +28,7 @@ import { LiveMeetingJournal, type LiveJournalSnapshot, type MeetingRecoveryMeta 
 import { getUserDictionary } from './audio/userDictionary';
 import { bioForNotes, isProOrTrialActive } from './services/proAccess';
 import { isArchivableEarlierNotes, isArchivableNotes } from './services/meeting/notesVersions';
-import { applyResumeCarry, fitResumedCallNames, isNotesPendingStatus, isResumePart, isSavedPartLine, mergeResumedMeeting, resumeBaseFrom, resumeCarryFrom, resumedSharedScreens, resumeMetadata, savedPartSpeakerIds, type MeetingSurfaceKind, type ResumeBase, type ResumeCarry, type ResumePart } from './services/meeting/meetingResume';
+import { applyResumeCarry, fitResumedCallNames, isNotesPendingStatus, isResumePart, isSavedPartLine, mergeResumedMeeting, resumeMergeSuggestions, resumeBaseFrom, resumeCarryFrom, resumedSharedScreens, resumeMetadata, savedPartSpeakerIds, type MeetingSurfaceKind, type ResumeBase, type ResumeCarry, type ResumePart } from './services/meeting/meetingResume';
 import { applyNoteTemplate, noteTemplateById, type NoteTemplate } from './services/meeting/noteTemplates';
 const crypto = require('crypto');
 
@@ -1838,6 +1838,11 @@ export class MeetingPersistence {
                 if (screens.length > 0) summaryData = { ...summaryData, sharedScreens: screens };
                 // A resumed meeting keeps what its saved notes had (names, people, a follow-up draft).
                 summaryData = applyResumeCarry(summaryData, resumeCarry);
+                // Voices on the mic that came back under a new number: the meeting
+                // page offers to join each to someone from the saved part.
+                const merges = resumeMergeSuggestions(storedTranscript, resumePart, summaryData.speakerLabels);
+                if (merges.length > 0) summaryData = { ...summaryData, speakerMerges: merges };
+                else if (summaryData.speakerMerges) { const { speakerMerges: _old, ...rest } = summaryData; summaryData = rest; }
             }
 
             const meetingData: Meeting = {
@@ -2687,6 +2692,8 @@ function followUpSenderFirstName(): string | undefined {
 function buildV3DetailedSummary(v3: import('./services/meeting/types').MeetingSummaryV3, prev?: any): any {
     return {
         ...(prev && typeof prev === 'object' ? { speakerLabels: prev.speakerLabels } : {}),
+        // A resumed meeting's offers to join a voice to someone from its first part.
+        ...(prev && typeof prev === 'object' && Array.isArray(prev.speakerMerges) ? { speakerMerges: prev.speakerMerges } : {}),
         schemaVersion: 3,
         title: v3.title,
         tldr: v3.tldr,

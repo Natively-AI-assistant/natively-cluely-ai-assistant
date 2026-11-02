@@ -190,6 +190,23 @@ describe('the resumed part numbers its new people past the saved part (pure)', (
     });
 });
 
+describe('a voice that came back under a new number is offered a join (pure)', () => {
+    const part = { startTime: 1000, durationMs: 500 };
+    const at = (speaker, timestamp, speakerId) => ({ speaker, timestamp, ...(speakerId ? { speakerId } : {}) });
+    test('each new unnamed room voice is offered the saved room voices not heard again', () => {
+        const lines = [at('user', 1), at('Speaker 2', 2), at('Speaker 3', 3), at('Speaker 1', 4), at('interviewer', 5, 'speaker_4'),
+            at('Speaker 3', 1100), at('Speaker 5', 1200), at('Speaker 6', 1300), at('interviewer', 1400, 'speaker_7')];
+        assert.deepEqual(resume.resumeMergeSuggestions(lines, part, { speaker_6: 'Ana' }), [{ id: 'speaker_5', candidates: ['speaker_2'] }],
+            'Speaker 3 is heard in both parts; Ana is named; call and system lines are not room voices');
+    });
+    test('nothing to offer: not a resume, no saved room voice, or every new one named', () => {
+        const lines = [at('Speaker 2', 2), at('Speaker 3', 1100)];
+        assert.deepEqual(resume.resumeMergeSuggestions(lines, null, {}), []);
+        assert.deepEqual(resume.resumeMergeSuggestions([at('user', 2), at('Speaker 3', 1100)], part, {}), []);
+        assert.deepEqual(resume.resumeMergeSuggestions(lines, part, { speaker_3: 'Lars' }), []);
+    });
+});
+
 describe('which earlier notes are kept as a version (pure)', () => {
     test('a resume keeps V3 notes and the older short notes; Regenerate stays V3-only', () => {
         const older = { overview: 'Launch moves to Nov 18.', keyPoints: ['Billing fix first'], actionItems: [] };
@@ -683,6 +700,7 @@ describe('resuming a saved meeting (database)', () => {
             assert.ok(!resumed.some((l) => l.speaker === 'Speaker 2'), 'not Speaker 2 (Lars)');
             assert.equal(after.detailedSummary.speakerLabels?.speaker_2, 'Lars');
             assert.equal(after.detailedSummary.speakerLabels?.speaker_3, undefined);
+            assert.deepEqual(after.detailedSummary.speakerMerges, [{ id: 'speaker_3', candidates: ['speaker_2'] }], 'the page offers "Same as Lars?"');
         } finally {
             SettingsManager.getInstance().set('roomSpeakersEnabled', false);
         }
