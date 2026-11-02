@@ -1,0 +1,27 @@
+[package]
+name = "win-aec-probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Issue #710: does opening the Windows mic in communications mode cancel speaker echo?"
+
+# Standalone: not part of native-module or any parent workspace.
+[workspace]
+
+# Same windows crate version native-module already links, so a positive result
+# carries straight over to the real capture path.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.52.0", features = [
+    "Win32_Foundation",
+    "Win32_Media_Audio",
+    "Win32_Media_KernelStreaming",
+    "Win32_Media_Multimedia",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
+    "Win32_Devices_FunctionDiscovery",
+    "Win32_UI_Shell_PropertiesSystem",
+] }
+
+[profile.release]
+opt-level = 3
