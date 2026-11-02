@@ -27,6 +27,7 @@ export type SttErrorCategoryId =
     | 'invalid_config'
     | 'session_conflict'
     | 'secure_connection_blocked'
+    | 'local_model'
     | 'provider_error';
 
 /**
@@ -51,6 +52,33 @@ const SECURE_CONNECTION_BLOCKED = [
 ];
 
 /**
+ * Why an on-device model (LocalWhisperSTT) could not transcribe, read from the
+ * messages it raises (LocalWhisperSTT.ts, whisper/loadFailure.ts,
+ * whisper/onnxMacSupport.ts). Null for anything that is not a local model.
+ *   'memory'   the memory gate refused it, or loading ran out of memory
+ *   'download' the model is not on disk yet and its download stalled or failed
+ *   'model'    any other local failure (not loaded in time, engine stopped,
+ *              damaged files, a runtime or OS it needs)
+ * Issue #707: every one of these used to read as a provider fault, and the
+ * banner told a local-only user to check a key they do not have.
+ */
+function localModelCause(lower: string): 'memory' | 'download' | 'model' | null {
+    const isLocal = lower.includes('local stt')
+        || lower.includes('local model')
+        || lower.includes('local speech model')
+        || lower.includes('downloaded model files')
+        || lower.includes('onnx session slot');
+    if (!isLocal) return null;
+    if (lower.includes('insufficient available memory') || lower.includes('ran out of memory')) return 'memory';
+    if (lower.includes('is still downloading') || lower.includes('could not be downloaded')) return 'download';
+    return 'model';
+}
+
+const LOCAL_MEMORY_ADVICE = 'Close other apps, or choose a smaller local model in Settings → Audio.';
+const LOCAL_DOWNLOAD_BODY = 'The local model has not finished downloading. Check your internet connection, or choose a cloud provider in Settings → Audio.';
+const LOCAL_MODEL_BODY = 'The local speech model stopped. Restart the meeting, or choose another local model or a cloud provider in Settings → Audio.';
+
+/**
  * Categorize a raw STT error message into a user-friendly display.
  * Returns the first matching category based on error content patterns.
  */
@@ -71,6 +99,35 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
             body: 'Google speech-to-text needs a Service Account JSON, and a Gemini key cannot transcribe. To transcribe free on this device, choose Local Models in Audio Settings, or add a Service Account JSON there.',
             category: 'auth',
         };
+    }
+
+    // 0b. An on-device model that could not run. Before everything else: its
+    // messages mention downloads, connections and "unavailable", and none of
+    // that is a provider or a key.
+    const local = localModelCause(lower);
+    if (local === 'memory') {
+        // The gate's own figures (LocalWhisperSTT localSttMemoryRefusal):
+        // "(0.61GB available, this model needs 0.62GB)".
+        const figures = rawError.match(/(\d+(?:\.\d+)?GB) available, this model needs (\d+(?:\.\d+)?GB)/);
+        return {
+            title: 'Not Enough Memory',
+            body: figures
+                ? `This computer has ${figures[1]} available and the local model needs ${figures[2]}. ${LOCAL_MEMORY_ADVICE}`
+                : `There is not enough free memory for the local model. ${LOCAL_MEMORY_ADVICE}`,
+            category: 'local_model',
+        };
+    }
+    if (local === 'download') {
+        return { title: 'Local Model Not Downloaded', body: LOCAL_DOWNLOAD_BODY, category: 'local_model' };
+    }
+    if (local === 'model') {
+        // A runtime or OS the models need: that message already names what to
+        // install for THIS platform (the Visual C++ runtime on Windows, a macOS
+        // update on a Mac), so it is shown as written.
+        if (lower.startsWith('local speech models need')) {
+            return { title: 'Local Model Cannot Run', body: rawError.trim(), category: 'local_model' };
+        }
+        return { title: 'Local Model Stopped', body: LOCAL_MODEL_BODY, category: 'local_model' };
     }
 
     // 1. Authentication errors — immediately fatal
@@ -270,5 +327,18 @@ export function sttConnectionCause(rawErrors: ReadonlyArray<string>): 'secure-co
     const categories = rawErrors.filter(Boolean).map((raw) => categorizeSttError(raw).category);
     if (categories.includes('secure_connection_blocked')) return 'secure-connection';
     if (categories.includes('connection_lost') || categories.includes('timed_out')) return 'unreachable';
+    return null;
+}
+
+/**
+ * Why an on-device model stopped, across the given raw errors (most specific
+ * first: memory, then download, then any other local failure). Null when none
+ * of them is a local model, so the banner keeps its provider advice.
+ */
+export function sttLocalModelCause(rawErrors: ReadonlyArray<string>): 'memory' | 'download' | 'model' | null {
+    const causes = rawErrors.filter(Boolean).map((raw) => localModelCause(raw.toLowerCase()));
+    if (causes.includes('memory')) return 'memory';
+    if (causes.includes('download')) return 'download';
+    if (causes.includes('model')) return 'model';
     return null;
 }

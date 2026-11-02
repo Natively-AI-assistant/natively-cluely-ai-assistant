@@ -87,13 +87,14 @@ test('the banner cause: intercepted, unreachable, or neither', () => {
 
 test('the overlay banner picks its advice from the cause', () => {
   const src = read('components/NativelyInterface.tsx');
-  assert.match(src, /import \{ categorizeSttError, sttConnectionCause \} from '\.\.\/lib\/sttErrorMapper';/);
+  assert.match(src, /import \{ categorizeSttError, sttConnectionCause, sttLocalModelCause \} from '\.\.\/lib\/sttErrorMapper';/);
   const start = src.indexOf('const sttConnectionAdvice');
   const end = src.indexOf('// Whether the vision chip will render', start);
   assert.ok(start > 0 && end > start, 'banner block found');
   const block = src.slice(start, end);
   assert.match(block, /sttConnectionCause\(\[/);
-  assert.match(block, /sttConnectionAdvice \?\? t\('Check your transcription provider and its key in Settings\.'\)/);
+  // A local model (issue #707) has no key to check: its advice comes before the key advice.
+  assert.match(block, /sttConnectionAdvice \?\? sttLocalModelAdvice \?\? t\('Check your transcription provider and its key in Settings\.'\)/);
   assert.match(block, /sttConnectionAdvice \?\? t\('Retrying\.'\)/);
 });
 

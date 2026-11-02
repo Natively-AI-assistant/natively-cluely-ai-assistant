@@ -28,7 +28,7 @@ import {
   mergeRollingTranscriptFinal,
   mergeRollingTranscriptPartial,
 } from '../../electron/utils/rollingTranscriptState.ts';
-import { categorizeSttError, sttConnectionCause } from '../lib/sttErrorMapper';
+import { categorizeSttError, sttConnectionCause, sttLocalModelCause } from '../lib/sttErrorMapper';
 import { splitGistLine, splitGistLineStreaming, collapseBlockGaps } from '../lib/displayMarkup';
 
 import type { SkillSummary } from '../types/electron';
@@ -11392,6 +11392,19 @@ Provide only the answer, nothing else.`;
     if (cause === 'unreachable') return t('Natively cannot reach the transcription service. Check your internet connection, and allow Natively in your firewall and antivirus.');
     return null;
   })();
+  // An on-device model has no key and no provider to check (issue #707: a
+  // Windows user whose local model was refused for memory was told to check
+  // its key). A local failure is terminal, so only a failed channel counts.
+  const sttLocalModelAdvice = (() => {
+    const cause = sttLocalModelCause([
+      sttUserStatus === 'failed' ? sttUserError : '',
+      sttInterviewerStatus === 'failed' ? sttInterviewerError : '',
+    ]);
+    if (cause === 'memory') return t('There is not enough free memory for the local model. Close other apps, or choose a smaller local model in Settings → Audio.');
+    if (cause === 'download') return t('The local model has not finished downloading. Check your internet connection, or choose a cloud provider in Settings → Audio.');
+    if (cause === 'model') return t('The local speech model stopped. Restart the meeting, or choose another local model or a cloud provider in Settings → Audio.');
+    return null;
+  })();
   const sttStatusBanner: { tone: 'warning' | 'error'; title: string; message: string } | null =
     sttNotConfigured
       ? null
@@ -11408,7 +11421,7 @@ Provide only the answer, nothing else.`;
                 : sttUserStatus === 'failed'
                   ? t('Your microphone is no longer being transcribed.')
                   : t('Interviewer audio is no longer being transcribed.')
-            } ${sttConnectionAdvice ?? t('Check your transcription provider and its key in Settings.')}`,
+            } ${sttConnectionAdvice ?? sttLocalModelAdvice ?? t('Check your transcription provider and its key in Settings.')}`,
           }
         : sttReconnecting && !sttFailed
           ? {

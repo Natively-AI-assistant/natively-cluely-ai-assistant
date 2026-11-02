@@ -74,6 +74,25 @@ const ROWS: Record<string, Row> = {
     'Natively が文字起こしサービスに接続できません。インターネット接続を確認し、ファイアウォールとウイルス対策ソフトで Natively を許可してください。',
     'Natively no puede conectarse al servicio de transcripción. Revisa tu conexión a internet y permite Natively en tu firewall y antivirus.',
   ],
+  // An on-device model (issue #707): no key and no provider to check.
+  'There is not enough free memory for the local model. Close other apps, or choose a smaller local model in Settings → Audio.': [
+    'Для локальной модели не хватает свободной памяти. Закройте другие приложения или выберите модель поменьше в «Настройки» → «Аудио».',
+    '本地模型所需的可用内存不足。请关闭其他应用，或在“设置”→“音频”中选择更小的本地模型。',
+    'ローカルモデルに必要な空きメモリが足りません。他のアプリを閉じるか、「設定」→「オーディオ」でより小さいローカルモデルを選んでください。',
+    'No hay suficiente memoria libre para el modelo local. Cierra otras aplicaciones o elige un modelo local más pequeño en Ajustes → Audio.',
+  ],
+  'The local model has not finished downloading. Check your internet connection, or choose a cloud provider in Settings → Audio.': [
+    'Локальная модель ещё не загрузилась. Проверьте подключение к интернету или выберите облачный сервис в «Настройки» → «Аудио».',
+    '本地模型尚未下载完成。请检查您的网络连接，或在“设置”→“音频”中选择云端服务。',
+    'ローカルモデルのダウンロードが完了していません。インターネット接続を確認するか、「設定」→「オーディオ」でクラウドのサービスを選んでください。',
+    'El modelo local no ha terminado de descargarse. Revisa tu conexión a internet o elige un proveedor en la nube en Ajustes → Audio.',
+  ],
+  'The local speech model stopped. Restart the meeting, or choose another local model or a cloud provider in Settings → Audio.': [
+    'Локальная модель распознавания речи остановилась. Перезапустите встречу или выберите другую локальную модель или облачный сервис в «Настройки» → «Аудио».',
+    '本地语音模型已停止。请重新开始会议，或在“设置”→“音频”中选择其他本地模型或云端服务。',
+    'ローカルの音声モデルが停止しました。会議をやり直すか、「設定」→「オーディオ」で別のローカルモデルかクラウドのサービスを選んでください。',
+    'El modelo de voz local se detuvo. Reinicia la reunión o elige otro modelo local o un proveedor en la nube en Ajustes → Audio.',
+  ],
 };
 
 function column(i: 0 | 1 | 2 | 3): Record<string, string> {
