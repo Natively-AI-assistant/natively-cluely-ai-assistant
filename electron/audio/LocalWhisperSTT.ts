@@ -106,11 +106,15 @@ export const LOCAL_STT_BEHIND_CODE = 'local_stt_behind';
  * "under 2GB free" alone could not tell a machine 50 MB short from one with
  * nothing left (issue #707, a 16 GB Windows PC). It formats the check it is
  * handed, never a fresh measurement, so the figure is the one that refused.
+ *
+ * The probe and the main-process heap go to the log only: they help triage
+ * but mean nothing to the user, who quoted "app heap 0.0GB" back as a clue.
  */
 function localSttMemoryRefusal(check: ModelMemoryCheck): Error {
     const heapGB = (process.memoryUsage().heapUsed / 1024 ** 3).toFixed(1);
+    console.warn(`[LocalWhisperSTT] Memory refusal: ${describeModelMemoryShortfall(check)} (measured by ${check.source ?? 'nothing'}; main heap ${heapGB}GB)`);
     return markLocalSttUnavailable(new Error(
-        `Local STT could not start: insufficient available memory (${describeModelMemoryShortfall(check)}, app heap ${heapGB}GB). ` +
+        `Local STT could not start: insufficient available memory (${describeModelMemoryShortfall(check)}). ` +
         `Close other apps to free memory, choose a smaller local model, or use a cloud STT provider.`,
     ));
 }

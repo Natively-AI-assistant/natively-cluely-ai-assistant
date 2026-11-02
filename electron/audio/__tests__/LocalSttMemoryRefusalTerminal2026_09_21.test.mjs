@@ -97,5 +97,8 @@ for (const [label, modelId] of [
     const msg = String(errors[0].message);
     assert.match(msg, /0\.10GB available/);
     assert.match(msg, /this model needs \d+(\.\d+)?GB/);
+    // The main-process heap and the probe name are triage detail for the log,
+    // not for the user (the #707 reporter quoted "app heap 0.0GB" back).
+    assert.doesNotMatch(msg, /heap|vm_stat|freemem|meminfo|override/i);
   });
 }

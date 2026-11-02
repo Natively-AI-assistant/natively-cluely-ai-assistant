@@ -163,7 +163,7 @@ class ModelPreloader {
         }
         const memory = checkMemoryForModelSize(getModelSizeMb(modelId));
         if (!memory.ok) {
-            console.warn(`[ModelPreloader] Skipping Nemotron warm — ${describeModelMemoryShortfall(memory)}`);
+            console.warn(`[ModelPreloader] Skipping Nemotron warm — ${describeModelMemoryShortfall(memory)} (measured by ${memory.source})`);
             return;
         }
         const initMsg = buildWorkerInitMessage(modelId);
@@ -253,7 +253,7 @@ class ModelPreloader {
         const memory = checkMemoryForModelSize(getModelSizeMb(modelId));
         if (!memory.ok) {
             console.warn(
-                `[ModelPreloader] skipping preload for ${modelId} — ${describeModelMemoryShortfall(memory)} (silent skip, not a worker error)`,
+                `[ModelPreloader] skipping preload for ${modelId} — ${describeModelMemoryShortfall(memory)}, measured by ${memory.source} (silent skip, not a worker error)`,
             );
             return;
         }
