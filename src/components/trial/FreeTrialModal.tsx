@@ -103,7 +103,8 @@ const ITEM = {
 // ─────────────────────────────────────────────────────────────
 
 interface TrialModalProps {
-  usage:      TrialUsage;
+  /** The trial's last seen usage; null when none was seen (the sentence is left out). */
+  usage:      TrialUsage | null;
   /** force: end the trial even if the wipe keeps failing. Says whether data was left behind. */
   onByok:     (opts?: { force?: boolean }) => Promise<{ wipeIncomplete?: boolean } | void>;
   onStandard?: () => Promise<void>;
@@ -207,7 +208,7 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
     setOpen(false);
   };
 
-  const sttMin = (usage.stt_seconds / 60).toFixed(1);
+  const sttMin = ((usage?.stt_seconds ?? 0) / 60).toFixed(1);
   // `usage.search` is the CREDIT counter (2026-09-21): /v1/search bills each
   // query at its true Tavily cost, so one company research is ~20, not 1.
   // Round UP: a partially spent run has already consumed a run slot from the
@@ -216,8 +217,8 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
     ?? plans?.standard?.research_credits_per_run
     ?? 0;
   const researchRunsUsed = creditsPerRun > 0
-    ? Math.ceil((usage.search ?? 0) / creditsPerRun)
-    : (usage.search ?? 0);
+    ? Math.ceil((usage?.search ?? 0) / creditsPerRun)
+    : (usage?.search ?? 0);
 
   const item = ITEM;
   const ctaDur = ctaActive ? CTA_IN : CTA_OUT;
@@ -338,11 +339,15 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
                     {' still left. '}
                   </>
                 )}
-                You{isActiveTrial ? '’ve used' : ' used'} {formatCompact(usage.ai_tokens ?? 0)} AI tokens, {sttMin} min
-                of voice and {researchRunsUsed} research {researchRunsUsed === 1 ? 'run' : 'runs'}.
+                {usage && (
+                  <>
+                    You{isActiveTrial ? '’ve used' : ' used'} {formatCompact(usage.ai_tokens ?? 0)} AI tokens, {sttMin} min
+                    of voice and {researchRunsUsed} research {researchRunsUsed === 1 ? 'run' : 'runs'}.{' '}
+                  </>
+                )}
                 {isActiveTrial
-                  ? ' Nothing here ends your trial. Pick a plan when you are ready, or close this and carry on.'
-                  : ' Pick a plan to carry on, or bring your own keys.'}
+                  ? 'Nothing here ends your trial. Pick a plan when you are ready, or close this and carry on.'
+                  : 'Pick a plan to carry on, or bring your own keys.'}
               </motion.p>
 
               <motion.div variants={item} style={{

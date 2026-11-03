@@ -17,6 +17,7 @@ import { useTrialExpiry }       from "./components/trial/useTrialExpiry"
 import { TrialMeterToaster }    from "./components/trial/TrialMeterToaster"
 import type { TrialUsage, TrialLimits } from './types/nativelyUsage';
 import { FreeTrialModal }       from "./components/trial/FreeTrialModal"
+import { usageForEndedCard }    from "./lib/trial/endedTrialUsage.mjs"
 import { OrchestratorProvider, OrchestratedToasterHost, setUserState as setOrchestratorUserState, emitOrchestratorEvent } from "./components/onboarding/OrchestratedToasterHost"
 // NOTE: explicit `.ts` extension is load-bearing. Vite's default resolver
 // tries `.mjs` before `.ts` (see DEFAULT_EXTENSIONS in vite/dist/node/constants.js),
@@ -469,6 +470,11 @@ const App: React.FC = () => {
   const [showTrialExpiredModal, setShowTrialExpiredModal] = useState(() =>
     import.meta.env.DEV && new URLSearchParams(window.location.search).has('forceTrialEnded')
   );
+  // The last live trial the launcher saw, kept past its end for the ended
+  // card's usage sentence, and what ended it.
+  const lastSeenTrialRef = useRef<typeof activeTrial>(null);
+  useEffect(() => { if (activeTrial) lastSeenTrialRef.current = activeTrial; }, [activeTrial]);
+  const [trialEndedReason, setTrialEndedReason] = useState<'clock' | 'allowance'>('clock');
   // The card is due (expired at launch) but still inside its 10 s delay: it
   // already owns the card slot, so no other card can open under it.
   const [trialEndedDue, setTrialEndedDue] = useState(false);
@@ -852,6 +858,7 @@ const App: React.FC = () => {
       // endTrialForUsedAllowance): the same end as at 30 minutes, card included,
       // now rather than at the next poll.
       if (data?.choice === 'allowance') {
+        setTrialEndedReason('allowance');
         if (data.showEndedCard && ownsTrialClock) setShowTrialExpiredModal(true);
         if (trialEndedTimer) { clearTimeout(trialEndedTimer); trialEndedTimer = null; }
         if (trialPollId) { clearInterval(trialPollId); trialPollId = null; }
@@ -1541,7 +1548,9 @@ const App: React.FC = () => {
         {/* Post-trial upgrade modal — shown when trial expires */}
         {!isolateModals && (isLauncherWindow || isDefault) && showTrialExpiredModal && (
           <FreeTrialModal
-            usage={activeTrial?.usage ?? { ai: 0, ai_tokens: 0, stt_seconds: 0, search: 0 }}
+            // activeTrial is already cleared when the card opens: the last
+            // figures seen, never zeros (src/lib/trial/endedTrialUsage.mjs).
+            usage={activeTrial?.usage ?? usageForEndedCard(lastSeenTrialRef.current, trialEndedReason)}
             onByok={async (opts) => {
               // A wipe that did not finish must not read as "All set": the card
               // shows the error with Try again (toaster policy §5 row 5). After
