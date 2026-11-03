@@ -20,20 +20,18 @@ import {
 describe('FLUXION_REFERRAL_URL', () => {
   const u = new URL(FLUXION_REFERRAL_URL);
 
-  test('is an https link to the Fluxion registration page', () => {
+  test('is an https link to the Sidrune registration page', () => {
     assert.equal(u.protocol, 'https:');
-    assert.equal(u.hostname, 'fluxionai.world');
+    assert.equal(u.hostname, 'global.sidrune.ai');
     assert.equal(u.pathname, '/register');
   });
 
-  test('is unchanged by the Sidrune AI rebrand, character for character', () => {
-    assert.equal(FLUXION_REFERRAL_URL, 'https://fluxionai.world/register?source=github&campaign=natively&promo=NATIVELY');
+  test('is the sign-up link Evin gave (2026-11-03), character for character', () => {
+    assert.equal(FLUXION_REFERRAL_URL, 'https://global.sidrune.ai/register?promo=NATIVELY');
   });
 
   test("carries Natively's attribution parameters", () => {
     assert.deepEqual(Object.fromEntries(u.searchParams), {
-      source: 'github',
-      campaign: 'natively',
       promo: 'NATIVELY',
     });
   });

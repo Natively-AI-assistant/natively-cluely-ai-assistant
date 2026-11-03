@@ -2,10 +2,12 @@
  * Sidrune AI (formerly Fluxion AI) sponsors Natively. This is Natively's own
  * partner link: sign-ups through it get $3 in API credit. It backs both the
  * launcher's sponsor card and the Fluxion provider card's "Get API key".
- * The rebrand kept this link exactly as it was, parameters included, at the
- * sponsor's request; the name stays FLUXION_ to match the provider id.
+ * Since 2026-11-03 it is Sidrune's own sign-up page with the NATIVELY promo
+ * (Evin; the http link he gave redirects here). The API itself is still
+ * served from fluxionai.world (LLMHelper). The name stays FLUXION_ to match
+ * the provider id.
  */
-export const FLUXION_REFERRAL_URL = 'https://fluxionai.world/register?source=github&campaign=natively&promo=NATIVELY';
+export const FLUXION_REFERRAL_URL = 'https://global.sidrune.ai/register?promo=NATIVELY';
 
 /**
  * AgentRouter's "Get API key" link on its provider card — Natively's own
