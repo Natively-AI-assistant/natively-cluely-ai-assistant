@@ -140,6 +140,8 @@ pub struct MicrophoneStream {
     stream: Option<Stream>,
     consumer: Option<HeapCons<f32>>,
     sample_rate: u32,
+    /// Channels the device delivers (one is kept; see ChannelChooser).
+    channels: u16,
     is_running: Arc<AtomicBool>,
     /// Condvar for DSP thread to wait on audio data
     data_ready: Arc<(Mutex<bool>, Condvar)>,
@@ -268,6 +270,7 @@ impl MicrophoneStream {
             stream: Some(stream),
             consumer: Some(consumer),
             sample_rate,
+            channels: channels.min(u16::MAX as usize) as u16,
             is_running,
             data_ready,
             err_signal,
@@ -301,6 +304,11 @@ impl MicrophoneStream {
     /// Get the input sample rate
     pub fn sample_rate(&self) -> u32 {
         self.sample_rate
+    }
+
+    /// Channels the device delivers before one is kept (diagnostics).
+    pub fn channels(&self) -> u16 {
+        self.channels
     }
 
     /// Take ownership of the consumer for the DSP thread

@@ -12,6 +12,11 @@ export declare class MicrophoneCapture {
    * diagnostics and HFP/Bluetooth-degradation detection only.
    */
   getNativeSampleRate(): number
+  /**
+   * Channels the device delivers before one is kept (2-4 on many laptop
+   * mic arrays) — diagnostics only; the emitted PCM is always mono.
+   */
+  getChannelCount(): number
   start(callback: ((err: Error | null, arg: Buffer) => any), onSpeechEnded?: (((err: Error | null, arg: boolean) => any)) | undefined | null, onSpeechEdge?: (((err: Error | null, arg: SpeechEdgeEvent) => any)) | undefined | null): void
   stop(): void
 }

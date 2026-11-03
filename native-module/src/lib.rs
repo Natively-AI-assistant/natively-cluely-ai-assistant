@@ -538,6 +538,8 @@ pub struct MicrophoneCapture {
     sample_rate: Arc<AtomicU32>,
     /// Shared atomic NATIVE hardware rate — diagnostics / HFP detection only.
     native_sample_rate: Arc<AtomicU32>,
+    /// Channels the device delivers (one is kept) — diagnostics only.
+    channel_count: Arc<AtomicU32>,
     /// Stores the requested device ID for recreation on restart.
     device_id: Option<String>,
     /// Holds the live CPAL stream. Recreated on each start().
@@ -569,6 +571,7 @@ impl MicrophoneCapture {
             capture_thread: None,
             sample_rate: Arc::new(AtomicU32::new(emitted_rate)),
             native_sample_rate: Arc::new(AtomicU32::new(native_rate)),
+            channel_count: Arc::new(AtomicU32::new(input.channels() as u32)),
             device_id,
             input: Some(input),
         })
@@ -586,6 +589,13 @@ impl MicrophoneCapture {
     #[napi]
     pub fn get_native_sample_rate(&self) -> u32 {
         self.native_sample_rate.load(Ordering::Acquire)
+    }
+
+    /// Channels the device delivers before one is kept (2-4 on many laptop
+    /// mic arrays) — diagnostics only; the emitted PCM is always mono.
+    #[napi]
+    pub fn get_channel_count(&self) -> u32 {
+        self.channel_count.load(Ordering::Acquire)
     }
 
     #[napi]
@@ -611,6 +621,7 @@ impl MicrophoneCapture {
                 Ok(i) => {
                     let rate = i.sample_rate();
                     self.native_sample_rate.store(rate, Ordering::Release);
+                    self.channel_count.store(i.channels() as u32, Ordering::Release);
                     let emitted = if rate == CANONICAL_STT_RATE { rate } else { CANONICAL_STT_RATE };
                     self.sample_rate.store(emitted, Ordering::Release);
                     self.input = Some(i);
@@ -635,6 +646,8 @@ impl MicrophoneCapture {
 
         let native_rate = input_ref.sample_rate();
         self.native_sample_rate.store(native_rate, Ordering::Release);
+        // The DSP thread publishes the rate it really emits (see below).
+        let sample_rate_shared = self.sample_rate.clone();
 
         let mut consumer = input_ref
             .take_consumer()
@@ -662,6 +675,13 @@ impl MicrophoneCapture {
                 }
             };
             let emitted_rate = if resampler.is_some() { CANONICAL_STT_RATE } else { native_rate };
+            // Declare what is really emitted, as SystemAudioCapture does. A
+            // failed resampler passed native-rate PCM while get_sample_rate()
+            // still said 16000: STT then heard 48 kHz audio as 16 kHz — three
+            // times slow — and ElevenLabs returned Cyrillic nonsense for
+            // English (measured 2026-11-03: "Ага." for an English sentence).
+            // Stored before the first chunk, so JS reads it on chunk one.
+            sample_rate_shared.store(emitted_rate, Ordering::Release);
 
             let mut suppressor = SilenceSuppressor::new(SilenceSuppressionConfig {
                 native_sample_rate: emitted_rate,

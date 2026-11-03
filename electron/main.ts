@@ -29,6 +29,7 @@ import { installResilientDnsLookup } from "./utils/resilientDnsLookup"
 import { trustSystemCertificates } from "./utils/systemCertificates"
 import { resolveDebugLogPath } from "./utils/debugLogPath.mjs"
 import { MeetingLifecycleQueue, type MeetingLifecycleState } from "./audio/meetingLifecycleQueue"
+import { describeMicRate } from "./audio/micRateDiagnostics"
 import { systemAudioGrant, systemAudioRecordingBlocked, zeroFillMeansScreenRecordingLost, zeroFillMeansSystemAudioRecordingDenied } from "./audio/systemAudioPermission"
 import { defaultInputDecision } from "./audio/defaultInputFollow"
 import { autoUpdater } from "electron-updater"
@@ -4964,6 +4965,14 @@ export class AppState {
         this._sttFailover.mic?.setAudioChannelCount(1);
         this._micSttRateApplied = true;
         console.log(`${prefix}User STT rate locked from first mic chunk: ${rate}Hz`);
+        // The native module prints its device format to stdout only; this puts
+        // it in natively_debug.log (see micRateDiagnostics.ts for why).
+        const micFormat = describeMicRate({
+          emittedRate: rate,
+          nativeRate: capture.getNativeSampleRate(),
+          channels: capture.getChannelCount(),
+        });
+        (micFormat.unusual ? console.warn : console.log)(`${prefix}${micFormat.line}`);
       }
 
       // HFP-degradation backstop. The proactive reconfigureAudio check handles

@@ -98,6 +98,19 @@ export class MicrophoneCapture extends EventEmitter {
     }
 
     /**
+     * Channels the device delivers before one is kept (2-4 on many laptop mic
+     * arrays). Diagnostics only; the emitted PCM is always mono. 0 when the
+     * monitor cannot say (an older native build, the Chromium fallback).
+     */
+    public getChannelCount(): number {
+        if (this.monitor && typeof this.monitor.getChannelCount === 'function') {
+            const n = this.monitor.getChannelCount();
+            return Number.isFinite(n) ? n : 0;
+        }
+        return 0;
+    }
+
+    /**
      * Re-point this wrapper at a different input device.
      *
      * Exists for the "saved device is gone" retry: because init is LAZY, a bad
