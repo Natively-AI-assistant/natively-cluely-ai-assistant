@@ -272,6 +272,20 @@ test('review fix: the old words of a crossed-over line are taken out again', () 
   assert.match(swap, /useEffect\(\(\) => \(\) => \{ if \(leaveTimer\.current\) clearTimeout\(leaveTimer\.current\); \}, \[\]\);/, 'cleared when the line itself goes');
 });
 
+test('review fix: a line that changes twice in one update still comes into view', () => {
+  // Seen live (2026-11-03, macOS): "Transcription Stopped" in the overlay with
+  // no words, its swap span stuck at is-enter-start (opacity 0). A banner title
+  // that changes twice in one update asks the crossed-over swap to enter while
+  // it is already entering: the phase does not change, the layout effect that
+  // brings the words in does not run again, and they stay invisible until the
+  // next change. Reproduced in Electron with React 19; the sequential swap
+  // recovers by itself and is unaffected.
+  const swap = read('src/components/ui/SwapText.tsx');
+  assert.ok(swap.includes('const [enterSeq, setEnterSeq] = useState(0);'));
+  assert.equal((swap.match(/setPhase\('enter'\);\s*setEnterSeq\(\(n\) => n \+ 1\);/g) || []).length, 2, 'every enter starts a new one, both swaps');
+  assert.match(swap, /void ref\.current\?\.offsetHeight;[^]*?setPhase\('idle'\);\s*\}, \[phase, enterSeq\]\);/, 'the enter runs again for each one');
+});
+
 test('Settings words every refusal and remembers none of them against the device', () => {
   const settings = read('src/components/settings/NativelyApiSettings.tsx');
   assert.ok(settings.includes('setTrialError(trialRefusal(res?.error).message);'));
