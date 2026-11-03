@@ -234,7 +234,8 @@ test('review fixes: the overlay hook knows whether a meeting is on, and rests wh
   assert.ok(hook.includes('if (f.meetingActive && f.expiresAt !== null && f.expiresAt > now) f.liveThisMeeting = true;'), 'a trial is "live in this meeting" only in a meeting');
   // Reported only while a meeting is on, and again when one begins under a banner already computed.
   assert.match(hook, /if \(!view\.active \|\| !view\.banner \|\| reported\.current\.has\(view\.banner\)\) return;/);
-  assert.match(hook, /\}, \[view\.banner, view\.active\]\);/);
+  // (2026-11-03) The reason rides along with the report; still once per banner.
+  assert.match(hook, /\}, \[view\.banner, view\.active, view\.reason\]\);/);
   // The clock runs only while a trial is counting down or a start is in flight.
   assert.ok(hook.includes('const counting = f.pendingSince !== null || (f.expiresAt !== null && f.expiresAt > Date.now());'));
   assert.ok(!/const id = setInterval\(refresh, 1000\);/.test(hook), 'no unconditional interval');

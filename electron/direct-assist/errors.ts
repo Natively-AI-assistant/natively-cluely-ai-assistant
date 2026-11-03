@@ -75,6 +75,16 @@ export function normalizeDirectAssistError(error: unknown): DirectAssistError {
     return new DirectAssistError('CANCELLED', 'The request was cancelled.');
   }
 
+  // The Natively API refused for its trial or plan allowance (LLMHelper sets
+  // `nativelyLimit` on that refusal, and on every request it then holds back).
+  // Read before the status: as a 429 it would say "rate limited, try again".
+  const limit = candidate?.nativelyLimit;
+  if (limit && typeof limit === 'object') {
+    return limit.onTrial === true
+      ? new DirectAssistError('TRIAL_ENDED', 'Your free trial has ended.')
+      : new DirectAssistError('PLAN_LIMIT', "You've reached your Natively plan's limit.");
+  }
+
   const status = statusFrom(error);
   if (status === 401 || status === 403) {
     return new DirectAssistError('AUTH_FAILED', 'The selected provider rejected its credentials.');

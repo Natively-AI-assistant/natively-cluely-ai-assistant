@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { overlayTrialNotice } from '../../lib/trial/overlayTrialNotice.mjs';
-import type { OverlayTrialBanner, OverlayTrialChip } from '../../lib/trial/overlayTrialNotice.mjs';
+import type { OverlayTrialBanner, OverlayTrialChip, OverlayTrialEndReason } from '../../lib/trial/overlayTrialNotice.mjs';
 import { classifyAutoTrial } from '../../lib/trial/autoTrial.mjs';
 
 // ─── The free trial, as the meeting overlay sees it ──────────────────────────
@@ -20,6 +20,8 @@ export interface OverlayTrialView {
   chip: OverlayTrialChip | null;
   /** Minutes left while the trial is live (the started banner says them). */
   minutesLeft: number | null;
+  /** For the ending and ended banners: the clock, or the AI allowance. */
+  reason: OverlayTrialEndReason | null;
   /** Why the automatic start failed, while the manual one is on offer. */
   failure: Failure | null;
   /** The manual start is in flight. */
@@ -37,16 +39,20 @@ export interface OverlayTrial extends OverlayTrialView {
   startManually: () => void;
 }
 
-const EMPTY: OverlayTrialView = { banner: null, chip: null, minutesLeft: null, failure: null, starting: false, pending: false, active: false };
+const EMPTY: OverlayTrialView = { banner: null, chip: null, minutesLeft: null, reason: null, failure: null, starting: false, pending: false, active: false };
 /** A 'pending' with no answer is dropped after this long (two 10 s attempts and the wait between them). */
 const PENDING_MAX_MS = 30_000;
 
 const sameView = (a: OverlayTrialView, b: OverlayTrialView) =>
   a.banner === b.banner && a.failure === b.failure && a.starting === b.starting && a.pending === b.pending && a.active === b.active
-  && a.minutesLeft === b.minutesLeft && !a.chip === !b.chip && a.chip?.tone === b.chip?.tone;
+  && a.minutesLeft === b.minutesLeft && a.reason === b.reason && !a.chip === !b.chip && a.chip?.tone === b.chip?.tone;
 
-const track = (state: OverlayTrialBanner, action: 'shown' | 'own_keys' | 'plans' | 'start' | 'dismissed') => {
-  try { window.electronAPI?.funnelTrack?.('trial_notice', { state, action })?.catch?.(() => {}); } catch { /* analytics never breaks the overlay */ }
+// `reason` goes with ending and ended only (catalogue, 2026-11-03): the funnel
+// can then tell a trial whose AI allowance ran out from one whose clock did.
+const track = (state: OverlayTrialBanner, action: 'shown' | 'own_keys' | 'plans' | 'start' | 'dismissed', reason?: OverlayTrialEndReason | null) => {
+  const props: Record<string, string> = { state, action };
+  if (reason && (state === 'ending' || state === 'ended')) props.reason = reason;
+  try { window.electronAPI?.funnelTrack?.('trial_notice', props)?.catch?.(() => {}); } catch { /* analytics never breaks the overlay */ }
 };
 
 export function useOverlayTrial(): OverlayTrial {
@@ -61,6 +67,10 @@ export function useOverlayTrial(): OverlayTrial {
     // How long a trial lasts, from the server's own two times: it caps what a
     // clock running behind the server would otherwise show.
     durationMs: null as number | null,
+    // The AI allowance is in its last quarter (main, from the status poll),
+    // and what ended the trial when main said so.
+    allowanceLow: false,
+    endedBy: null as OverlayTrialEndReason | null,
     // Assumed on only where it cannot be asked (an older preload).
     meetingActive: (typeof window !== 'undefined' && !window.electronAPI?.getMeetingActive) as boolean,
   });
@@ -80,11 +90,14 @@ export function useOverlayTrial(): OverlayTrial {
       startFailed: f.startFailed,
       dismissed: f.dismissed,
       durationMs: f.durationMs,
+      allowanceLow: f.allowanceLow,
+      endedBy: f.endedBy,
     });
     const next: OverlayTrialView = {
       banner: notice.banner,
       chip: notice.chip,
       minutesLeft: notice.minutesLeft,
+      reason: notice.reason,
       failure: f.startFailed,
       starting: f.starting,
       pending: f.pendingSince !== null,
@@ -96,7 +109,7 @@ export function useOverlayTrial(): OverlayTrial {
   useEffect(() => {
     const f = facts.current;
     const api = window.electronAPI;
-    const forgetTrial = () => { f.expiresAt = null; f.announcedAt = null; f.liveThisMeeting = false; f.durationMs = null; };
+    const forgetTrial = () => { f.expiresAt = null; f.announcedAt = null; f.liveThisMeeting = false; f.durationMs = null; f.allowanceLow = false; f.endedBy = null; };
     const lengthOf = (startedAt?: string, expiresAt?: string, limitMs?: number) => {
       if (typeof limitMs === 'number' && limitMs > 0) return limitMs;
       const span = Date.parse(expiresAt ?? '') - Date.parse(startedAt ?? '');
@@ -145,6 +158,8 @@ export function useOverlayTrial(): OverlayTrial {
         f.durationMs = lengthOf(data?.startedAt, data?.expiresAt, data?.limits?.duration_ms);
         f.announcedAt = Date.now();
         f.startFailed = null;
+        f.allowanceLow = false;
+        f.endedBy = null;
         // The trial is announced BEFORE transcription is rebuilt for it, and
         // that rebuild takes seconds (it waits for the meeting's audio
         // start-up, stops the captures and builds them again). Until main says
@@ -183,8 +198,28 @@ export function useOverlayTrial(): OverlayTrial {
         if (f.pendingSince !== null && f.expiresAt !== null) { f.pendingSince = null; changed = true; }
         if (changed) update();
       }),
-      // Bought, keyed, or left through own keys: the trial is no longer the story.
-      api?.onTrialEnded?.(() => { forgetTrial(); f.startFailed = null; update(); }),
+      // The trial's AI allowance ran out before its clock: main moved the expiry
+      // to now, and this is the 30-minute end, "Free trial ended" with See plans,
+      // at the moment the answers stopped.
+      // Otherwise bought, keyed, or left through own keys: the trial is no longer the story.
+      api?.onTrialEnded?.((data) => {
+        const endedAt = Date.parse(data?.expiresAt ?? '');
+        if (data?.choice === 'allowance' && Number.isFinite(endedAt) && f.expiresAt !== null) {
+          f.expiresAt = Math.min(f.expiresAt, endedAt);
+          f.endedBy = 'allowance';
+        } else {
+          forgetTrial();
+        }
+        f.startFailed = null;
+        update();
+      }),
+      // About two answers left (main: the trial:status poll, every 30 s while
+      // it stays so): the same warning as five minutes before the clock.
+      api?.onTrialAllowanceLow?.(() => {
+        if (f.expiresAt === null || f.expiresAt <= Date.now() || f.allowanceLow) return;
+        f.allowanceLow = true;
+        update();
+      }),
       api?.onTrialAutoStart?.((data) => {
         if (data.state === 'pending') f.pendingSince = Date.now();
         else f.pendingSince = null;
@@ -216,10 +251,11 @@ export function useOverlayTrial(): OverlayTrial {
   useEffect(() => {
     if (!view.active || !view.banner || reported.current.has(view.banner)) return;
     reported.current.add(view.banner);
-    track(view.banner, 'shown');
-  }, [view.banner, view.active]);
+    track(view.banner, 'shown', view.reason);
+  }, [view.banner, view.active, view.reason]);
 
   const banner = view.banner;
+  const reason = view.reason;
   const actions = useMemo(() => ({
     dismiss: () => {
       // Only the started banner has a close.
@@ -229,11 +265,11 @@ export function useOverlayTrial(): OverlayTrial {
       refresh();
     },
     useOwnKeys: () => {
-      if (banner) track(banner, 'own_keys');
+      if (banner) track(banner, 'own_keys', reason);
       window.electronAPI?.openSettingsTab?.('ai-providers');
     },
     seePlans: () => {
-      if (banner) track(banner, 'plans');
+      if (banner) track(banner, 'plans', reason);
       window.electronAPI?.openSettingsTab?.('plans');
     },
     startManually: () => {
@@ -257,7 +293,7 @@ export function useOverlayTrial(): OverlayTrial {
         refresh();
       })();
     },
-  }), [banner, refresh]);
+  }), [banner, reason, refresh]);
 
   return useMemo(() => ({ ...view, ...actions }), [view, actions]);
 }

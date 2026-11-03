@@ -141,6 +141,9 @@ export const CARD_OUTCOMES = Object.freeze(['shown', 'acted', 'later', 'never', 
 const INT = 'int'
 const BOOL = 'bool'
 
+/** What ended a free trial, or is about to: its 30 minutes, or its AI allowance. */
+export const TRIAL_END_REASONS = Object.freeze(['clock', 'allowance'])
+
 export const FUNNEL_CATALOG = Object.freeze({
   // ── The install ──────────────────────────────────────────────────────────
   app_first_run: {},
@@ -235,12 +238,18 @@ export const FUNNEL_CATALOG = Object.freeze({
       'hwid_unavailable', 'network', 'server_error',
     ],
   },
-  trial_expired: {},
+  // What ended it (added 2026-11-03): its 30 minutes, or its AI allowance
+  // before them. Absent from builds before 2026-11-03.
+  trial_expired: {
+    reason: TRIAL_END_REASONS,
+  },
   // The meeting overlay's trial notice: it started by itself, it is about to
   // end, it has ended, or the automatic start failed and a manual one is offered.
   trial_notice: {
     state: ['started', 'ending', 'ended', 'failed'],
     action: ['shown', 'own_keys', 'plans', 'start', 'dismissed'],
+    // For ending and ended: the clock, or the AI allowance (added 2026-11-03).
+    reason: TRIAL_END_REASONS,
   },
   trial_card: {
     mode: ['active', 'expired'],

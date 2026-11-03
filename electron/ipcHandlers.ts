@@ -15,6 +15,8 @@ import { hasOwnAiKey, resolveExpiredTrial } from '../src/lib/trialPolicy.mjs';
 import { CARDS, OUTCOMES } from '../src/lib/cards/cardPolicy.mjs';
 import { TRIAL_CAMPAIGN, TRIAL_PROMO_ID, runTrialCampaignReset } from '../src/lib/trialCampaign.mjs';
 import { autoTrialFollowUp, runAutoTrial, shouldAutoStartTrial } from '../src/lib/trial/autoTrial.mjs';
+import { shouldEndTrialForUsedAllowance, isTrialAllowanceLow } from '../src/lib/trial/trialAllowance.mjs';
+import { onNativelyPlanLimit } from './llm/nativelyPlanLimitEvents';
 import { stripGistTrailer } from '../src/lib/displayMarkup';
 import { CardLedger } from './services/cards/CardLedger';
 import { funnelTelemetry } from './services/FunnelTelemetry';
@@ -1088,7 +1090,9 @@ export function initializeIpcHandlers(appState: AppState): void {
    * caller sees a key that is no longer the sentinel and returns immediately —
    * which is what keeps two reconfigureSttProvider() rebuilds from racing.
    */
-  const endExpiredTrialRuntime = async (reason: string): Promise<boolean> => {
+  // `endedBy` says what ended it, for the funnel: its 30 minutes, or its AI
+  // allowance before them (endTrialForUsedAllowance below).
+  const endExpiredTrialRuntime = async (reason: string, endedBy: 'clock' | 'allowance' = 'clock'): Promise<boolean> => {
     let sttNeedsRebuild = false;
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -1115,7 +1119,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         premium = LicenseManager.getInstance().isPremium();
       } catch { /* premium module absent — treat as not premium */ }
       if (!premium) clearActiveModeOnLicenseLoss();
-      funnelTelemetry.track('trial_expired');
+      funnelTelemetry.track('trial_expired', { reason: endedBy });
     } catch (e: any) {
       console.warn('[IPC] endExpiredTrialRuntime failed:', e?.message);
       return false;
@@ -1129,6 +1133,45 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
     return true;
   };
+
+  // ── The trial ends when its AI allowance does (2026-11-03) ────────────────
+  // A trial's 60,000 AI tokens ran out after eight or nine meeting answers,
+  // about eleven minutes before its clock (src/lib/trial/trialAllowance.mjs).
+  // The server refused every question after that while the overlay still
+  // counted down, and the answer failed as "check your API keys". Now the
+  // refusal ends the trial: its stored expiry moves to now, so every reader of
+  // that time agrees it is over (the status poll, the startup read, the
+  // overlay's clock), and the runtime stands down exactly as at 30 minutes.
+  // The broadcast puts up the "Free trial ended" card and banner at once
+  // rather than at the next 30 s poll. Idempotent: the expiry write is
+  // synchronous, so a second refusal in flight finds the trial already over.
+  const endTrialForUsedAllowance = async (limit: { code: string; onTrial: boolean }): Promise<void> => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      const token = cm.getTrialToken();
+      if (!shouldEndTrialForUsedAllowance({
+        code: limit.code,
+        onTrial: limit.onTrial,
+        hasTrialToken: !!token,
+        holdsTrialKey: cm.getNativelyApiKey() === TRIAL_SENTINEL_KEY,
+        expiresAt: cm.getTrialExpiresAt() ?? null,
+      })) return;
+      const endedAt = new Date().toISOString();
+      cm.setTrialToken(token, endedAt, cm.getTrialStartedAt() || endedAt);
+      console.log('[IPC] Trial AI allowance used: ending the trial now');
+      await endExpiredTrialRuntime('Trial AI allowance used', 'allowance');
+      const settled = settleExpiredTrial('trial AI allowance used');
+      // A licence or key superseded it: settleExpiredTrial has already said so.
+      if (!cm.getTrialToken()) return;
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send('trial-ended', { choice: 'allowance', expiresAt: endedAt, showEndedCard: settled.showEndedCard });
+      });
+    } catch (e: any) {
+      console.warn('[IPC] endTrialForUsedAllowance failed:', e?.message || e);
+    }
+  };
+  onNativelyPlanLimit((limit) => { void endTrialForUsedAllowance(limit); });
 
   // --- NEW Test Helper ---
   safeHandle('test-release-fetch', async () => {
@@ -12615,10 +12658,14 @@ export function initializeIpcHandlers(appState: AppState): void {
       const localExpiry = cm.getTrialExpiresAt();
       if (localExpiry && new Date(localExpiry).getTime() <= Date.now()) {
         await endExpiredTrialRuntime('Trial expired (local clock)');
-        settleExpiredTrial('status poll (local clock)');
+        const settled = settleExpiredTrial('status poll (local clock)');
         // A licence or key superseded it and the token is gone: answer now,
         // without asking the server about a token that no longer exists.
         if (!cm.getTrialToken()) return { ok: true, expired: true, showEndedCard: false };
+        // Over here is over: the runtime has already stood down. The server's
+        // clock says "not yet" for a trial whose AI allowance ended it early
+        // (endTrialForUsedAllowance), and its answer would bring the countdown back.
+        return { ok: true, expired: true, showEndedCard: settled.showEndedCard };
       }
 
       const res = await fetch(`${NATIVELY_API_BASE}/v1/trial/status`, {
@@ -12640,6 +12687,16 @@ export function initializeIpcHandlers(appState: AppState): void {
         const settled = settleExpiredTrial('status poll (server)', { serverExpired: true });
         // A superseded token is gone by now; the renderer then drops the card.
         return { ...data, showEndedCard: settled.showEndedCard };
+      }
+      // The AI allowance is in its last quarter (about two answers): every
+      // window hears it on each poll while it stays so, the overlay included,
+      // which says "Free trial is almost over" before the answers stop. Sent
+      // again each poll so an overlay opened since still hears it.
+      if (cm.getNativelyApiKey() === TRIAL_SENTINEL_KEY
+        && isTrialAllowanceLow({ used: data?.usage?.ai_tokens, limit: data?.limits?.ai_tokens })) {
+        BrowserWindow.getAllWindows().forEach((win) => {
+          if (!win.isDestroyed()) win.webContents.send('trial-allowance-low', { expiresAt: cm.getTrialExpiresAt() ?? null });
+        });
       }
       return data;
     } catch (error: any) {

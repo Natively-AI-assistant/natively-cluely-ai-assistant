@@ -29,7 +29,7 @@ test('both Natively call paths check the local block before any network call and
     const next = src.slice(at, at + 200);
     assert.ok(/this\.assertNativelyNotBlocked\(requestId\)/.test(next), `${tag} must be followed by assertNativelyNotBlocked`);
   }
-  assert.equal((src.match(/this\.noteNativelyPlanLimit\(response\.status, response\.headers, errData\)/g) || []).length, 2, 'JSON and stream HTTP-failure branches both record the limit');
+  assert.equal((src.match(/this\.noteNativelyPlanLimit\(response\.status, response\.headers, errData, nativelyKey === TRIAL_SENTINEL_KEY\)/g) || []).length, 2, 'JSON and stream HTTP-failure branches both record the limit');
 });
 
 test('the plan-limit pattern matches the server shapes and not a plain rate limit', () => {

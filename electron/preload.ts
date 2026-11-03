@@ -345,7 +345,9 @@ interface ElectronAPI {
   }>;
   convertTrial: (choice: string) => Promise<{ ok: boolean }>;
   endTrialByok: (opts?: { force?: boolean }) => Promise<{ success: boolean; wipeIncomplete?: boolean; error?: string }>;
-  onTrialEnded: (cb: (data: { choice: string }) => void) => () => void;
+  onTrialEnded: (cb: (data: { choice: string; expiresAt?: string; showEndedCard?: boolean }) => void) => () => void;
+  /** The trial's AI allowance is in its last quarter (main: trial:status poll). */
+  onTrialAllowanceLow: (cb: (data: { expiresAt?: string | null }) => void) => () => void;
   // Card ledger (toaster policy): shows, strikes and retirements per card.
   cardsGet: () => Promise<{ ok: boolean; ledger?: any; error?: string }>;
   cardsRecord: (id: string, outcome: string, meta?: { until?: number }) => Promise<{ ok: boolean; ledger?: any; error?: string }>;
@@ -1975,10 +1977,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getLocalTrial: () => ipcRenderer.invoke('trial:get-local'),
   convertTrial: (choice: string) => ipcRenderer.invoke('trial:convert', choice),
   endTrialByok: (opts?: { force?: boolean }) => ipcRenderer.invoke('trial:end-byok', opts),
-  onTrialEnded: (cb: (data: { choice: string }) => void) => {
+  onTrialEnded: (cb: (data: { choice: string; expiresAt?: string; showEndedCard?: boolean }) => void) => {
     const sub = (_: any, data: any) => cb(data);
     ipcRenderer.on('trial-ended', sub);
     return () => ipcRenderer.removeListener('trial-ended', sub);
+  },
+  onTrialAllowanceLow: (cb: (data: { expiresAt?: string | null }) => void) => {
+    const sub = (_: any, data: any) => cb(data);
+    ipcRenderer.on('trial-allowance-low', sub);
+    return () => ipcRenderer.removeListener('trial-allowance-low', sub);
   },
   cardsGet: () => ipcRenderer.invoke('cards:get'),
   cardsRecord: (id: string, outcome: string, meta?: { until?: number }) => ipcRenderer.invoke('cards:record', id, outcome, meta),

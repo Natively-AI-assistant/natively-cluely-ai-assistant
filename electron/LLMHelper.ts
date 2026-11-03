@@ -75,6 +75,7 @@ import { isPhoneImagePath, visionImageEdge } from './utils/phoneImage';
 import curl2Json from "@bany/curl-to-json";
 import { CustomProvider, CurlProvider } from './services/CredentialsManager';
 import { TRIAL_SENTINEL_KEY } from './config/constants';
+import { emitNativelyPlanLimit, nativelyLimitErrorMessage } from './llm/nativelyPlanLimitEvents';
 import axios from 'axios';
 import { createProviderRateLimiters, RateLimiter } from './services/RateLimiter';
 import { chatGptCompatibleModel, CodexCliConfig, CodexCliService, codexSignedOutMessage, DEFAULT_CODEX_CLI_CONFIG, getCodexAuthStatus } from './services/CodexCliService';
@@ -2269,6 +2270,11 @@ export class LLMHelper {
   }
 
   public setNativelyKey(key: string | null): void {
+    // A new key is a new allowance: a plan bought after the trial ran out must
+    // answer at once, not after the trial's refusal stops being remembered.
+    // Clearing the key (a trial that ended) keeps it, so later answers still
+    // say why there is nothing to answer them.
+    if (key && key !== this.nativelyKey) { this.nativelyQuotaBlockedUntil = 0; this.nativelyLimit = null; }
     this.nativelyKey = key || null;
     this.visionHealth.delete('natively'); // fresh key → its selection leads again at once
     console.log(`[LLMHelper] Natively key ${key ? 'set' : 'cleared'}`);
@@ -3927,12 +3933,17 @@ export class LLMHelper {
   // 4,137 refused requests in 33 h from one key. Remember the server's Retry-After
   // and fail fast, locally, until then — bounded so a plan upgrade is noticed.
   private nativelyQuotaBlockedUntil = 0;
+  // What the last plan-limit refusal was, while it holds (2026-11-03): an
+  // answer nothing else could give fails with it, instead of falling through
+  // to "No AI provider configured… add at least one API key", which the
+  // overlay and the funnel read as a rejected key.
+  private nativelyLimit: { code: string; onTrial: boolean } | null = null;
   private static readonly NATIVELY_QUOTA_BLOCK_MIN_MS = 60_000;
   private static readonly NATIVELY_QUOTA_BLOCK_MAX_MS = 6 * 60 * 60_000;
   private static readonly PLAN_LIMIT_RE = /\b(?:[a-z]+_)?(?:quota_exceeded|plan_limit|limit_exceeded|lifetime_exceeded)\b/;
 
   /** Records a plan-limit 429 from the Natively API. Returns true when it was one. */
-  private noteNativelyPlanLimit(status: number, headers: { get(name: string): string | null } | null | undefined, errData: any): boolean {
+  private noteNativelyPlanLimit(status: number, headers: { get(name: string): string | null } | null | undefined, errData: any, onTrial = false): boolean {
     if (status !== 429) return false;
     const code = String(errData?.error ?? errData?.code ?? '');
     if (!LLMHelper.PLAN_LIMIT_RE.test(code)) return false;
@@ -3941,16 +3952,35 @@ export class LLMHelper {
     const sec = Number.isFinite(bodySec) && bodySec > 0 ? bodySec : (Number.isFinite(headerSec) && headerSec > 0 ? headerSec : 0);
     const ms = Math.min(LLMHelper.NATIVELY_QUOTA_BLOCK_MAX_MS, Math.max(LLMHelper.NATIVELY_QUOTA_BLOCK_MIN_MS, sec * 1000));
     this.nativelyQuotaBlockedUntil = Date.now() + ms;
+    this.nativelyLimit = { code: (/^[a-z_]{1,64}$/.test(code) ? code : 'ai_quota_exceeded'), onTrial };
+    // A free trial's AI allowance ends the trial (ipcHandlers.ts listens).
+    emitNativelyPlanLimit(this.nativelyLimit);
     console.warn(`[NativelyAPI] plan allowance exhausted (${code}) — not calling the Natively API again for ${Math.round(ms / 60000)} min${errData?.resets_at ? ` (resets ${errData.resets_at})` : ''}`);
     return true;
+  }
+
+  /** The error for an answer nothing could give: the Natively limit while it
+   *  holds, else "no provider". */
+  private exhaustedChainError(): Error {
+    if (this.nativelyLimit && this.nativelyQuotaBlockedUntil > Date.now()) {
+      return new Error(nativelyLimitErrorMessage(this.nativelyLimit));
+    }
+    return new Error(this.noProviderAvailableMessage());
   }
 
   /** Throws the same quota error the server would, without a network round trip. */
   private assertNativelyNotBlocked(requestId: string): void {
     const until = this.nativelyQuotaBlockedUntil;
     if (until > Date.now()) {
-      throw new Error(`Natively API HTTP 429 requestId=${requestId}: ai_quota_exceeded (plan allowance exhausted; next check ${new Date(until).toISOString()})`);
+      throw this.withNativelyLimit(new Error(`Natively API HTTP 429 requestId=${requestId}: ai_quota_exceeded (plan allowance exhausted; next check ${new Date(until).toISOString()})`));
     }
+  }
+
+  /** Marks a refusal as Natively's own trial or plan limit, so Direct Assist
+   *  (direct-assist/errors.ts) says that instead of "rate limited". */
+  private withNativelyLimit<E extends Error>(error: E): E & { nativelyLimit?: { code: string; onTrial: boolean } } {
+    const limit = this.nativelyLimit ?? { code: 'ai_quota_exceeded', onTrial: false };
+    return Object.assign(error, { nativelyLimit: { ...limit } });
   }
   private static readonly CIRCUIT_429_THRESHOLD = 2;      // open after N consecutive 429s
   private static readonly CIRCUIT_COOLDOWN_MS = 60_000;   // skip the saturated model for 60s
@@ -6980,7 +7010,7 @@ let isMultimodal = !!(imagePaths?.length);
         const errText = await response.text().catch(() => '');
         let errData: any = {};
         try { errData = errText ? JSON.parse(errText) : {}; } catch { errData = {}; }
-        this.noteNativelyPlanLimit(response.status, response.headers, errData);
+        this.noteNativelyPlanLimit(response.status, response.headers, errData, nativelyKey === TRIAL_SENTINEL_KEY);
         console.error('[NativelyAPI] JSON HTTP failure', {
           requestId,
           serverRequestId,
@@ -12117,7 +12147,7 @@ let isMultimodal = !!(imagePaths?.length);
       }
     }
 
-    throw new Error(this.noProviderAvailableMessage());
+    throw this.exhaustedChainError();
   }
 
   /**
@@ -12415,7 +12445,7 @@ let isMultimodal = !!(imagePaths?.length);
       const errText = await response.text().catch(() => '');
       let errData: any = {};
       try { errData = errText ? JSON.parse(errText) : {}; } catch { errData = {}; }
-      this.noteNativelyPlanLimit(response.status, response.headers, errData);
+      const planLimit = this.noteNativelyPlanLimit(response.status, response.headers, errData, nativelyKey === TRIAL_SENTINEL_KEY);
       console.error('[NativelyAPI] stream HTTP failure', {
         requestId,
         serverRequestId,
@@ -12433,7 +12463,7 @@ let isMultimodal = !!(imagePaths?.length);
       if (directMode) {
         const error = new Error(`Natively API stream HTTP ${response.status}`) as Error & { status?: number };
         error.status = response.status;
-        throw error;
+        throw planLimit ? this.withNativelyLimit(error) : error;
       }
       throw new Error(`Natively API stream HTTP ${response.status} requestId=${requestId} serverRequestId=${serverRequestId || 'n/a'} endpoint=${endpointUrl}: ${errData.error || errText.slice(0, 300) || 'unknown'}`);
     }

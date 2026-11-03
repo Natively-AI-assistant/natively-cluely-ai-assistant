@@ -16,8 +16,8 @@ import './TrialNotice.css';
  *
  *  - started: it began, how long it lasts, and where the audio goes. One way
  *    out, and a close. Folds into the countdown by itself.
- *  - ending:  five minutes left, both ways to keep going. No close: it stays
- *    until the trial ends.
+ *  - ending:  five minutes left, or about two AI answers (its allowance), both
+ *    ways to keep going. No close: it stays until the trial ends.
  *  - ended:   it ran out in this meeting. No close: nothing answers until one
  *    of the two is chosen.
  *  - failed:  the automatic start could not reach Natively. The only place a
@@ -32,6 +32,9 @@ export const TrialNoticeBanner: React.FC<{ trial: OverlayTrial }> = ({ trial }) 
   const ownKeys = <OverlayBannerButton onClick={trial.useOwnKeys}>{t('Use my own keys')}</OverlayBannerButton>;
   const plans = <OverlayBannerButton variant="primary" onClick={trial.seePlans}>{t('See plans')}</OverlayBannerButton>;
   const keepGoing = t('Pick a plan or add your own keys to keep getting answers.');
+  // The AI allowance, not the clock, is what is running or ran out: the
+  // countdown still shows minutes, so the banner says why it warns anyway.
+  const byAllowance = trial.reason === 'allowance';
 
   switch (trial.banner) {
     case 'started':
@@ -54,7 +57,7 @@ export const TrialNoticeBanner: React.FC<{ trial: OverlayTrial }> = ({ trial }) 
           tone="warning"
           icon={<Timer strokeWidth={2.2} />}
           title={t('Free trial is almost over')}
-          message={keepGoing}
+          message={byAllowance ? t("The trial's AI answers are nearly used. Pick a plan or add your own keys to keep getting answers.") : keepGoing}
           actions={<>{plans}{ownKeys}</>}
         />
       );
@@ -65,7 +68,7 @@ export const TrialNoticeBanner: React.FC<{ trial: OverlayTrial }> = ({ trial }) 
           tone="error"
           icon={<TimerOff strokeWidth={2.2} />}
           title={t('Free trial ended')}
-          message={keepGoing}
+          message={byAllowance ? t("The trial's AI answers are used up. Pick a plan or add your own keys to keep getting answers.") : keepGoing}
           actions={<>{plans}{ownKeys}</>}
         />
       );

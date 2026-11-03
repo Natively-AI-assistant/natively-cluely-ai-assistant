@@ -209,13 +209,16 @@ export function directAssistFailureReason(failure, t = identity) {
 }
 
 function rowFor(failure, t) {
+  // Natively's own trial or plan (2026-11-03): one rung of a longer ladder
+  // still says that, not "rate limiting" from the refusal's 429.
+  const own = OWN_SENTENCE_BY_CODE[failure.code];
   return {
-    text: directAssistFailureReason(failure, t),
-    ...(failure.detail ? { detail: failure.detail } : {}),
+    text: own ? t(own) : directAssistFailureReason(failure, t),
+    ...(failure.detail && !own ? { detail: failure.detail } : {}),
   };
 }
 
-const isFixable = (failure) => CAUSE[causeOf(failure)].fixable === true;
+const isFixable = (failure) => !OWN_SENTENCE_BY_CODE[failure.code] && CAUSE[causeOf(failure)].fixable === true;
 
 const isProviderFailure = (failure) => Boolean(failure.provider) && PROVIDER_CODES.has(failure.code);
 

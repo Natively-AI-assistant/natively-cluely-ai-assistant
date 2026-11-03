@@ -848,6 +848,15 @@ const App: React.FC = () => {
     // Listen for trial-ended event (emitted by trial:end-byok IPC)
     const removeTrialListener = window.electronAPI?.onTrialEnded?.((data) => {
       setActiveTrial(null);
+      // The trial's AI allowance ran out before its clock (main:
+      // endTrialForUsedAllowance): the same end as at 30 minutes, card included,
+      // now rather than at the next poll.
+      if (data?.choice === 'allowance') {
+        if (data.showEndedCard && ownsTrialClock) setShowTrialExpiredModal(true);
+        if (trialEndedTimer) { clearTimeout(trialEndedTimer); trialEndedTimer = null; }
+        if (trialPollId) { clearInterval(trialPollId); trialPollId = null; }
+        return;
+      }
       // The BYOK exit is announced while its card is still Cleaning up; that
       // card closes itself once the user leaves "All set". Every other ending
       // (a licence or key superseded the trial) takes the card away.

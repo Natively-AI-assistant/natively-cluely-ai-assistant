@@ -383,7 +383,8 @@ export interface ElectronAPI {
   funnelTrack: (eventType: string, props?: Record<string, string | number | boolean>) => Promise<{ ok: boolean; result?: string; error?: string }>
   cardsImportLegacy: (legacy: import('../lib/cards/cardPolicy.mjs').LegacyCardHistory) => Promise<{ ok: boolean; ledger?: import('../lib/cards/cardPolicy.mjs').Ledger; error?: string }>
   onCardsChanged: (cb: (ledger: import('../lib/cards/cardPolicy.mjs').Ledger) => void) => () => void
-  onTrialEnded:   (cb: (data: { choice: string }) => void) => () => void
+  onTrialEnded:   (cb: (data: { choice: string; expiresAt?: string; showEndedCard?: boolean }) => void) => () => void
+  onTrialAllowanceLow?: (cb: (data: { expiresAt?: string | null }) => void) => () => void
   /** Emitted by `trial:start`, so a trial claimed mid-session unlocks Pro surfaces without a relaunch. */
   onTrialStarted: (cb: (data: { expiresAt: string; startedAt: string; usage?: { ai: number; ai_tokens?: number; stt_seconds: number; search: number }; limits?: { duration_ms: number; ai_requests: number; stt_minutes: number; search_requests: number } }) => void) => () => void
   /** A meeting with no AI is starting the free trial by itself. `pending`: on its way. `failed`: it could not (offline, rate limited), so the overlay offers the manual start. `settled`: done, one way or the other. */
