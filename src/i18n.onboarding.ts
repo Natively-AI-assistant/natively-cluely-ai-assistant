@@ -35,6 +35,7 @@ const ROWS: Record<string, Row> = {
     '30 分の無料時間は、最初のミーティングの開始とともに始まります。カードは不要です。',
     'Tus 30 minutos gratis empiezan con tu primera reunión. Sin tarjeta.',
   ],
+  'Watch a 9-minute demo': ['Смотреть 9-минутное демо', '观看 9 分钟演示', '9 分のデモを見る', 'Ver una demo de 9 minutos'],
   'By continuing, you agree to our {terms} and {privacy}.': [
     'Продолжая, вы принимаете наши {terms} и {privacy}.',
     '继续即表示你同意我们的{terms}和{privacy}。',

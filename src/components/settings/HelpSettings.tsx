@@ -1130,9 +1130,10 @@ const HelpPane: React.FC<{
                                 className="relative block w-full h-full rounded-[7px] overflow-hidden transition-opacity duration-150 hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-primary"
                             >
                                 <img src={demoVideoThumbnail} alt="" draggable={false}
-                                    className="block w-full h-full object-cover object-[72%_35%]" />
-                                <span aria-hidden="true" className="absolute inset-0 flex items-center justify-center bg-black/20">
-                                    <Play size={14} strokeWidth={0} fill="#fff" className="drop-shadow" />
+                                    className="block w-full h-full object-cover object-[88%_30%]" />
+                                {/* A small badge in the corner, clear of the face. */}
+                                <span aria-hidden="true" className="absolute left-[3px] bottom-[3px] w-[14px] h-[14px] rounded-full bg-black/60 flex items-center justify-center">
+                                    <Play size={7} strokeWidth={0} fill="#fff" className="translate-x-[0.5px]" />
                                 </span>
                             </button>
                         }

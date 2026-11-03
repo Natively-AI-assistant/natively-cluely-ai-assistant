@@ -1,5 +1,5 @@
 export type CardId =
-  | 'plans' | 'browser_extension' | 'trial_promo' | 'natively_api_new'
+  | 'plans' | 'browser_extension' | 'trial_promo' | 'natively_api_new' | 'demo_video'
   | 'max_ultra' | 'natively_api_existing' | 'profile_ad' | 'jd_ad' | 'review_prompt' | 'support';
 export type CardClass = 'onboarding' | 'promo';
 export type Outcome = 'shown' | 'acted' | 'later' | 'never' | 'interrupted';

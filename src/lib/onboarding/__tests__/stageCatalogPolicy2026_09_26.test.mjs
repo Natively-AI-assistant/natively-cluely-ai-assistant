@@ -32,10 +32,11 @@ test('catalog order and card links', () => {
     [
       ['permissions', 1, null],
       ['plans', 2, 'plans'],
-      ['natively_api_new', 3, 'natively_api_new'],
-      ['browser_extension', 4, 'browser_extension'],
-      ['profile_intelligence', 5, null],
-      ['modes_manager', 6, null],
+      ['demo_video', 3, 'demo_video'],
+      ['natively_api_new', 4, 'natively_api_new'],
+      ['browser_extension', 5, 'browser_extension'],
+      ['profile_intelligence', 6, null],
+      ['modes_manager', 7, null],
       ['max_ultra', 10, 'max_ultra'],
       ['natively_api_existing', 11, 'natively_api_existing'],
       ['profile_ad', 12, 'profile_ad'],
@@ -47,7 +48,7 @@ test('catalog order and card links', () => {
 });
 
 test('onboarding cards wait for permissions; promos wait for nothing', () => {
-  for (const id of ['plans', 'natively_api_new', 'browser_extension']) {
+  for (const id of ['plans', 'demo_video', 'natively_api_new', 'browser_extension']) {
     assert.deepEqual(byId[id].requiresStages, ['permissions'], id);
   }
   for (const id of ['max_ultra', 'natively_api_existing', 'profile_ad', 'jd_ad', 'review_prompt', 'support']) {
@@ -81,6 +82,18 @@ table('plans', [
   ['Max subscriber', { planTier: 'max' }, {}, false],
   ['Ultra subscriber', { planTier: 'ultra' }, {}, false],
   ['no premium module (it is not an ad)', { adsAvailable: false }, {}, true],
+]);
+
+// The demo film is help, not a sale: everyone, whatever their plan or keys.
+// The ledger alone ends it (watched here or from Welcome / Setup & Help).
+table('demo_video', [
+  ['free, no keys', {}, {}, true],
+  ['trial running', { hasTrialToken: true }, {}, true],
+  ['own AI key', { hasOwnAiKey: true }, {}, true],
+  ['Natively key', { hasNativelyKey: true }, {}, true],
+  ['paying', { isPremium: true }, {}, true],
+  ['Ultra subscriber', { planTier: 'ultra' }, {}, true],
+  ['no premium module', { adsAvailable: false }, {}, true],
 ]);
 
 // The free trial is not a card (2026-10-09): it starts by itself when a meeting

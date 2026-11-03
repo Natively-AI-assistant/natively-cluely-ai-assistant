@@ -52,7 +52,8 @@ export type ToasterId =
   | 'natively_api_existing'
   | 'profile_ad'
   | 'jd_ad'
-  | 'max_ultra';
+  | 'max_ultra'
+  | 'demo_video';
 
 export interface OrchestratorState {
   version: string;

@@ -59,7 +59,7 @@ export const SURFACES = Object.freeze([
  */
 export const CARD_IDS = Object.freeze([
   'plans', 'browser_extension', 'trial_promo', 'natively_api_new', 'max_ultra',
-  'natively_api_existing', 'profile_ad', 'jd_ad', 'review_prompt', 'support',
+  'natively_api_existing', 'profile_ad', 'jd_ad', 'review_prompt', 'support', 'demo_video',
 ])
 
 /**

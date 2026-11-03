@@ -80,9 +80,18 @@ function advance(ms) {
   now = target;
 }
 
+// These scenarios are about the cards after Plans and the demo film: the film
+// is already watched in every ledger they hand the orchestrator
+// (schedulerScenarios covers where it shows).
+const demoWatched = (ledger) => (ledger ? applyOutcome(ledger, 'demo_video', 'acted', epoch) : ledger);
+
 function launch(t, user = {}) {
   const orchestrator = new OnboardingOrchestrator();
   t.after(() => orchestrator.stop());
+  const setUserState = orchestrator.setUserState.bind(orchestrator);
+  orchestrator.setUserState = (patch) => setUserState(
+    patch && 'cardLedger' in patch ? { ...patch, cardLedger: demoWatched(patch.cardLedger) } : patch,
+  );
   orchestrator.setUserState({
     permsShown: true,
     extensionSupported: true,

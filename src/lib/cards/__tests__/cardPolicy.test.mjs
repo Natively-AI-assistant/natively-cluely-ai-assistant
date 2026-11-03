@@ -23,6 +23,7 @@ test('card classes and priorities match the spec', () => {
       browser_extension: ['onboarding', null],
       trial_promo: ['onboarding', null],
       natively_api_new: ['onboarding', null],
+      demo_video: ['onboarding', null],
       max_ultra: ['promo', 1],
       natively_api_existing: ['promo', 2],
       profile_ad: ['promo', 3],
