@@ -1321,7 +1321,7 @@ import { AutoAnswerUsageTelemetry } from "./intelligence/autoAnswer/AutoAnswerUs
 import { currentWhisperGlossaryPrompt, nameTerms, setSttContextTerms, setSttDictionaryTerms } from "./audio/sttContextTerms"
 import { getUserDictionary } from "./audio/userDictionary"
 import { LOCAL_STT_PROVIDERS, SttGapRecoveryCoordinator, type RecoveredSegment, type SttSource } from "./audio/sttGapRecovery"
-import { SttFailover, failoverNotice, type FailoverStatus } from "./audio/sttFailover"
+import { SttFailover, failoverNotice, type FailoverCause, type FailoverStatus } from "./audio/sttFailover"
 import { resolveAutoAnswerThresholds } from "./context-intelligence/policies/mode-policy-registry"
 import type { SpeechEdge } from "./audio/speechEdge"
 import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
@@ -4342,6 +4342,9 @@ export class AppState {
     // carries the live stream, until this one is back.
     this._sttFailover[gapSource]?.stop();
     const rawStop = stt.stop.bind(stt);
+    // Why the primary last handed over, for the notice: set just before
+    // engage(), which reports the stand-in synchronously.
+    let failoverCause: FailoverCause = 'other';
     const failover = new SttFailover({
       source: gapSource,
       primary: effectiveSttId,
@@ -4362,7 +4365,7 @@ export class AppState {
             state: 'connected',
             provider: sttProvider,
             channel: speaker,
-            fallback: { provider: st.fallback, notice: failoverNotice(effectiveSttId, st.fallback) },
+            fallback: { provider: st.fallback, notice: failoverNotice(effectiveSttId, st.fallback, failoverCause) },
           });
         } else if (st.reason === 'exhausted') {
           _lastState = 'failed';
@@ -4464,6 +4467,7 @@ export class AppState {
       if (_consecutiveErrors >= maxErrors || isQuotaError) {
         // Past the reconnect policy: another transcriber takes the live stream
         // when the user has one set up (it reports its own status).
+        failoverCause = isQuotaError ? 'quota' : 'other';
         if (failover.engage()) return;
         _lastState = 'failed';
         this.sendSttStatus( {

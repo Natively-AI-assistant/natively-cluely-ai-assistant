@@ -21,6 +21,7 @@ import {
   Pencil,
   Quote,
   RefreshCw,
+  Repeat2,
   SlidersHorizontal,
   X,
 } from 'lucide-react';
@@ -11405,12 +11406,16 @@ Provide only the answer, nothing else.`;
     if (cause === 'model') return t('The local speech model stopped. Restart the meeting, or choose another local model or a cloud provider in Settings → Audio.');
     return null;
   })();
-  const sttStatusBanner: { tone: 'warning' | 'error'; title: string; message: string } | null =
+  // kind picks the icon: only a live reconnect spins. The backup-provider
+  // banner used the same spinning arrows, and a user whose key was stopped for
+  // quota reported it as "transcription reconnecting" (user log 2026-11-03).
+  const sttStatusBanner: { tone: 'warning' | 'error'; kind: 'stopped' | 'reconnecting' | 'backup'; title: string; message: string } | null =
     sttNotConfigured
       ? null
       : sttFailed && !audioFailureBannerActive
         ? {
             tone: 'error',
+            kind: 'stopped',
             title: t('Transcription Stopped'),
             // Two lines: what stopped, then what to do. The provider's own
             // error (often a bare status like "401 Unauthorized") is not
@@ -11426,6 +11431,7 @@ Provide only the answer, nothing else.`;
         : sttReconnecting && !sttFailed
           ? {
               tone: 'warning',
+              kind: 'reconnecting',
               title: t('Transcription Reconnecting'),
               message: `${t('The connection to your speech-to-text provider dropped.')} ${sttConnectionAdvice ?? t('Retrying.')}`,
             }
@@ -11433,6 +11439,7 @@ Provide only the answer, nothing else.`;
             ? {
                 // Still transcribing, on a stand-in: a warning, not a failure.
                 tone: 'warning',
+                kind: 'backup',
                 title: t('Transcribing on a backup provider'),
                 message: sttInterviewerFallback || sttUserFallback,
               }
@@ -11988,7 +11995,11 @@ Provide only the answer, nothing else.`;
                 <OverlayBanner
                   className="mx-4"
                   tone={sttStatusBanner.tone}
-                  icon={sttStatusBanner.tone === 'error' ? <MicOff strokeWidth={2.2} /> : <RefreshCw strokeWidth={2.2} className="ov-banner-spin" />}
+                  icon={sttStatusBanner.kind === 'stopped'
+                    ? <MicOff strokeWidth={2.2} />
+                    : sttStatusBanner.kind === 'backup'
+                      ? <Repeat2 strokeWidth={2.2} />
+                      : <RefreshCw strokeWidth={2.2} className="ov-banner-spin" />}
                   title={sttStatusBanner.title}
                   message={sttStatusBanner.message}
                   actions={sttStatusBanner.tone === 'error' ? (

@@ -123,9 +123,27 @@ export function sttProviderName(id: string): string {
     return STT_PROVIDER_NAMES[id] ?? id;
 }
 
-/** "Transcribing with Deepgram while Soniox is down." */
-export function failoverNotice(primary: string, fallback: string): string {
-    return `Transcribing with ${sttProviderName(fallback)} while ${sttProviderName(primary)} is down.`;
+/** Why the primary handed over: 'quota' when its provider refused the key for credit or quota. */
+export type FailoverCause = 'quota' | 'other';
+
+/** Providers whose key the user brings, so "your key" and its credit limit are theirs to check. */
+const KEYLESS_STT_PROVIDERS = new Set(['natively', 'local-whisper', 'apple-speech']);
+
+/**
+ * "Transcribing with Deepgram while Soniox is down." — or, when the provider
+ * stopped the user's own key for quota, what happened and where to look.
+ * "Is down" for a quota stop read as the provider being broken: a user whose
+ * ElevenLabs key was cut off ~16 s into every session (restricted key, credit
+ * limit) reported it as both providers failing (user log 2026-11-03, Windows).
+ */
+export function failoverNotice(primary: string, fallback: string, cause: FailoverCause = 'other'): string {
+    const p = sttProviderName(primary);
+    const f = sttProviderName(fallback);
+    if (cause === 'quota' && !KEYLESS_STT_PROVIDERS.has(primary)) {
+        const lead = f.charAt(0).toUpperCase() + f.slice(1);
+        return `${p} stopped your key: it is out of quota. Check the key's credit limit in your ${p} account. ${lead} is transcribing until then.`;
+    }
+    return `Transcribing with ${f} while ${p} is down.`;
 }
 
 /**

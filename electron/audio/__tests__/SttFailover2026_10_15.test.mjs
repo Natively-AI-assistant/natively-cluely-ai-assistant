@@ -241,3 +241,24 @@ test('main wires it on both channels, never on an auth error, and keeps gap reco
     // Every teardown of the provider ends its stand-in.
     assert.match(main, /\(stt as any\)\.stop = \(\) => \{\s*failover\.stop\(\);\s*return rawStop\(\);/);
 });
+
+// User log 2026-11-03 (Windows 3.0.0): an ElevenLabs key cut off for quota ~16 s
+// into every session showed "while ElevenLabs is down", which read as the
+// provider failing. A quota stop on the user's own key now says so.
+test('a quota stop on the user\'s key says what happened and where to look', () => {
+    assert.equal(
+        failoverNotice('elevenlabs', 'deepgram', 'quota'),
+        "ElevenLabs stopped your key: it is out of quota. Check the key's credit limit in your ElevenLabs account. Deepgram is transcribing until then.",
+    );
+    assert.match(failoverNotice('openai', 'local-whisper', 'quota'), /\. The local model is transcribing until then\.$/);
+    // No key of the user's to check: Natively, and on-device engines.
+    assert.equal(failoverNotice('natively', 'deepgram', 'quota'), 'Transcribing with Deepgram while Natively is down.');
+    // Any other cause keeps the old line.
+    assert.equal(failoverNotice('elevenlabs', 'deepgram', 'other'), 'Transcribing with Deepgram while ElevenLabs is down.');
+});
+
+test('main passes the quota cause to the notice, set before engage()', () => {
+    const main = fs.readFileSync(path.join(REPO, 'electron/main.ts'), 'utf8');
+    assert.match(main, /failoverNotice\(effectiveSttId, st\.fallback, failoverCause\)/);
+    assert.match(main, /failoverCause = isQuotaError \? 'quota' : 'other';\s*\n\s*if \(failover\.engage\(\)\) return;/);
+});
