@@ -28,6 +28,7 @@ import { FatalMainProcessCoordinator } from "./utils/fatalMainProcess"
 import { installResilientDnsLookup } from "./utils/resilientDnsLookup"
 import { trustSystemCertificates } from "./utils/systemCertificates"
 import { resolveDebugLogPath } from "./utils/debugLogPath.mjs"
+import { startupLogAction, startupLogMarker, type StartupLogLock } from "./utils/startupLogPolicy"
 import { MeetingLifecycleQueue, type MeetingLifecycleState } from "./audio/meetingLifecycleQueue"
 import { describeMicRate } from "./audio/micRateDiagnostics"
 import { systemAudioGrant, systemAudioRecordingBlocked, zeroFillMeansScreenRecordingLost, zeroFillMeansSystemAudioRecordingDenied } from "./audio/systemAudioPermission"
@@ -704,15 +705,22 @@ function shouldTruncatePriorLog(): boolean {
 }
 
 let _didStartupLogReset = false;
+// Set right after requestSingleInstanceLock(), before the lock is logged: a
+// second launch must not wipe the running app's log (startupLogPolicy.ts).
+let _startupLogLock: StartupLogLock = 'unknown';
 function resetStartupLog(): void {
   if (_didStartupLogReset) return;
+  // Not known yet whether this process is the app or a second launch about to
+  // exit: append, and decide on the first write after the lock is asked for.
+  if (_startupLogLock === 'unknown') return;
   _didStartupLogReset = true;
   const logFile = getLogFile();
   if (!logFile) return;
   try { fs.mkdirSync(path.dirname(logFile), { recursive: true }); } catch { /* best-effort */ }
-  const truncate = shouldTruncatePriorLog();
+  const action = startupLogAction(_startupLogLock, shouldTruncatePriorLog);
+  const truncate = action === 'truncate';
   try {
-    if (fs.existsSync(logFile)) {
+    if (action !== 'append' && fs.existsSync(logFile)) {
       if (truncate) {
         // Clean prior session: blow away the previous log so the user only
         // sees current-session breadcrumbs. Old contents are GONE.
@@ -746,10 +754,13 @@ function resetStartupLog(): void {
   // Always write a marker line so the user (and we) can confirm what
   // happened to the prior log.
   try {
-    fs.appendFileSync(
-      logFile,
-      `${new Date().toISOString()} [STARTUP] log opened (prior=${truncate ? 'truncated' : 'rotated-to-prev'}) pid=${process.pid} version=${app.getVersion?.() ?? 'unknown'} platform=${process.platform} arch=${process.arch}\n`,
-    );
+    fs.appendFileSync(logFile, startupLogMarker(action, {
+      isoTime: new Date().toISOString(),
+      pid: process.pid,
+      version: app.getVersion?.() ?? 'unknown',
+      platform: process.platform,
+      arch: process.arch,
+    }));
   } catch { /* best-effort */ }
 }
 
@@ -10466,6 +10477,7 @@ if (agentUserData) {
 
 // Skipping the lock is what lets an agent instance run beside the developer's.
 const gotSingleInstanceLock = agentUserData ? true : app.requestSingleInstanceLock();
+_startupLogLock = gotSingleInstanceLock ? 'held' : 'lost';
 logStartupPhase('single-instance-lock', {
   gotLock: gotSingleInstanceLock,
   agentMode: Boolean(agentUserData),
