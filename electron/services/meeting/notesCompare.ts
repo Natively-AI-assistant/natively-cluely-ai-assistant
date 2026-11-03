@@ -16,6 +16,13 @@
  * table meeting_notes_comparisons (DatabaseManager.ensureMeetingNotesSchema).
  * Nothing is sent anywhere.
  *
+ * A pick also settles the tabs (2026-11-03, Evin): the version that lost is
+ * deleted with its tab. When an earlier version beats the current notes, it
+ * becomes the meeting's notes (keeping the meeting's own speaker names, memory
+ * record and shared screens) and the current notes are deleted. "About the
+ * same" deletes nothing. If either side changed since the comparison opened
+ * (a Regenerate in between), nothing is deleted.
+ *
  * Platform-independent; the store, the random source and the clock are injected.
  */
 import crypto from 'node:crypto';
@@ -34,7 +41,31 @@ export interface NotesComparisonStore {
     getMeetingDetails(id: string): { id: string; detailedSummary?: any } | null;
     getNotesVersions(meetingId: string): Array<{ id: number; label: string; createdAt: number; detailedSummary: any }>;
     saveNotesComparison(r: StoredComparison): boolean;
+    deleteNotesVersion(meetingId: string, versionId: number): boolean;
+    replaceDetailedSummary(meetingId: string, detailedSummary: any): boolean;
 }
+
+/** What a pick did to the tabs: the version deleted, and the earlier one that became the notes. */
+export interface PickSettlement {
+    meetingId: string;
+    removed: 'current' | number | null;
+    promoted: number | null;
+}
+
+/**
+ * What a pick should do (pure): the loser goes; when the loser is the current
+ * notes, the winner takes their place. Null for "About the same".
+ */
+export function settlePick(choice: CompareChoice, a: VersionRef, b: VersionRef): { drop: VersionRef; promote: number | null } | null {
+    if (choice !== 'A' && choice !== 'B') return null;
+    const winner = choice === 'A' ? a : b;
+    const loser = choice === 'A' ? b : a;
+    if (winner === loser) return null;
+    return { drop: loser, promote: loser === null ? winner : null };
+}
+
+/** Fields that belong to the meeting, not to one version of its notes: kept when an earlier version becomes the notes. */
+const MEETING_FIELDS = ['speakerLabels', 'meetingMemory', 'sharedScreens'];
 
 export interface ComparisonSide {
     /** 'current' or the earlier version's id. */
@@ -140,7 +171,7 @@ export class NotesComparisons {
      * The user's pick: stored, then which was which. Null for an unknown or
      * already answered comparison, or a choice that is not A, B or same.
      */
-    pick(id: string, choice: CompareChoice, reason?: string | null): { choice: CompareChoice; a: ComparisonSide; b: ComparisonSide; saved: boolean } | null {
+    pick(id: string, choice: CompareChoice, reason?: string | null): { choice: CompareChoice; a: ComparisonSide; b: ComparisonSide; saved: boolean } & PickSettlement | null {
         const c = this.open.get(id);
         if (!c || (choice !== 'A' && choice !== 'B' && choice !== 'same')) return null;
         this.open.delete(id);
@@ -161,6 +192,36 @@ export class NotesComparisons {
             reason: why || null,
             createdAt: this.now(),
         });
-        return { choice, a, b, saved };
+        return { choice, a, b, saved, ...this.settle(c, choice) };
+    }
+
+    /** Delete the loser (and promote an earlier winner). Never throws. */
+    private settle(c: OpenComparison, choice: CompareChoice): PickSettlement {
+        const none: PickSettlement = { meetingId: c.meetingId, removed: null, promoted: null };
+        const plan = settlePick(choice, c.a.ref, c.b.ref);
+        if (!plan) return none;
+        try {
+            const opened = (ref: VersionRef) => (c.a.ref === ref ? c.a.detailed : c.b.detailed);
+            const unchanged = (ref: VersionRef) => {
+                const now = this.notesFor(c.meetingId, ref);
+                return !!now && notesContentHash(now) === notesContentHash(opened(ref));
+            };
+            if (!unchanged(c.a.ref) || !unchanged(c.b.ref)) return none;
+            if (plan.drop !== null) {
+                return this.store.deleteNotesVersion(c.meetingId, plan.drop) ? { ...none, removed: plan.drop } : none;
+            }
+            if (plan.promote === null) return none;
+            const current = this.notesFor(c.meetingId, null);
+            const winner = this.notesFor(c.meetingId, plan.promote);
+            const next: Record<string, unknown> = { ...winner };
+            for (const f of MEETING_FIELDS) if (current?.[f] !== undefined) next[f] = current[f];
+            if (!this.store.replaceDetailedSummary(c.meetingId, next)) return none;
+            // The earlier version is the notes now: its own tab would be a duplicate.
+            this.store.deleteNotesVersion(c.meetingId, plan.promote);
+            return { ...none, removed: 'current', promoted: plan.promote };
+        } catch (e: any) {
+            console.warn('[notesCompare] the pick was kept but the versions were not settled:', e?.message);
+            return none;
+        }
     }
 }

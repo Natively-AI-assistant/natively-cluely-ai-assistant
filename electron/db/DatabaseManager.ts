@@ -3983,6 +3983,17 @@ export class DatabaseManager {
         }
     }
 
+    /** Delete one earlier version of a meeting's notes (a Compare pick it lost). */
+    public deleteNotesVersion(meetingId: string, versionId: number): boolean {
+        if (!this.db || !Number.isInteger(versionId)) return false;
+        try {
+            return this.db.prepare('DELETE FROM meeting_notes_versions WHERE id = ? AND meeting_id = ?').run(versionId, meetingId).changes > 0;
+        } catch (e: any) {
+            console.warn(`[DatabaseManager] a notes version was not deleted for ${meetingId}:`, e?.message);
+            return false;
+        }
+    }
+
     /** Earlier versions of a meeting's notes, oldest first, each with its notes. */
     public getNotesVersions(meetingId: string): Array<{ id: number; label: string; createdAt: number; templateType: string | null; detailedSummary: any }> {
         if (!this.db) return [];

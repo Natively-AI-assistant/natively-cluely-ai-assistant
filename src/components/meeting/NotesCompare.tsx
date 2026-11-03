@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X } from 'lucide-react';
 
 type Side = { version: 'current' | number; label: string; provider: string | null; model: string | null };
-export type CompareReveal = { choice: 'A' | 'B' | 'same'; saved: boolean; a: Side; b: Side };
+export type CompareReveal = { choice: 'A' | 'B' | 'same'; saved: boolean; a: Side; b: Side; removed?: 'current' | number | null };
 
 const texts = (v: unknown): string[] => (Array.isArray(v) ? v : [])
     .map((x: any) => (typeof x === 'string' ? x : String(x?.text ?? x?.item?.text ?? '')).trim())
@@ -108,7 +108,11 @@ export const NotesCompare: React.FC<{
                     />
                 </form>
             ) : (
-                <p className="mt-3 text-[12.5px] text-text-tertiary">{t('Thanks. Your pick is kept on this computer.')}</p>
+                <p className="mt-3 text-[12.5px] text-text-tertiary">
+                    {reveal.removed != null
+                        ? t('Thanks. The other version was removed.')
+                        : t('Thanks. Your pick is kept on this computer.')}
+                </p>
             )}
         </section>
     );

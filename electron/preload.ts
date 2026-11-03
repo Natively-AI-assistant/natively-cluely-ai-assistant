@@ -93,6 +93,9 @@ interface NotesComparePickResult {
   saved: boolean;
   a: { version: 'current' | number; label: string; provider: string | null; model: string | null };
   b: { version: 'current' | number; label: string; provider: string | null; model: string | null };
+  /** The version the pick deleted ('current': an earlier winner became the notes), or null. */
+  removed?: 'current' | number | null;
+  promoted?: number | null;
 }
 
 /** services/meetingDetection/meetingOffer.ts MeetingOfferView. */

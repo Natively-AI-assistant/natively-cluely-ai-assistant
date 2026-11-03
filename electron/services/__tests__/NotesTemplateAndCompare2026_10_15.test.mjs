@@ -20,7 +20,7 @@ const require = createRequire(import.meta.url);
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const dist = (p) => path.join(REPO, 'dist-electron/electron', p);
 const { regenerateGate } = require(dist('services/meeting/notesTemplateGate.js'));
-const { NotesComparisons, blindNotes, blindOrder } = require(dist('services/meeting/notesCompare.js'));
+const { NotesComparisons, blindNotes, blindOrder, settlePick } = require(dist('services/meeting/notesCompare.js'));
 
 const MODES = { m_general: 'general', m_sales: 'sales', m_tech: 'technical-interview' };
 const gateDeps = (pro) => ({ templateOfMode: (id) => MODES[id], isProOrTrialActive: () => pro });
@@ -63,10 +63,14 @@ describe('Compare: blind order and blind notes (pure)', () => {
         generation: { provider: 'openai', model }, speakerLabels: { s1: 'Dana' }, userEditedAt: 5,
     });
     const store = (current, versions) => ({
-        getMeetingDetails: (id) => (id === 'm1' ? { id, detailedSummary: current } : null),
-        getNotesVersions: (id) => (id === 'm1' ? versions : []),
+        current,
+        versions: [...versions],
+        getMeetingDetails(id) { return id === 'm1' ? { id, detailedSummary: this.current } : null; },
+        getNotesVersions(id) { return id === 'm1' ? this.versions : []; },
         saved: [],
         saveNotesComparison(r) { this.saved.push(r); return true; },
+        deleteNotesVersion(id, vid) { const n = this.versions.length; this.versions = this.versions.filter((v) => !(id === 'm1' && v.id === vid)); return this.versions.length < n; },
+        replaceDetailedSummary(id, d) { if (id !== 'm1') return false; this.current = d; return true; },
     });
 
     test('blindOrder follows the random source', () => {
@@ -127,6 +131,88 @@ describe('Compare: blind order and blind notes (pure)', () => {
         assert.equal(s.saved[0].aLabel, 'Sales call');
         assert.equal(s.saved[0].createdAt, 1234);
         assert.equal(c.pick('cmp', 'A'), null, 'answered once');
+        assert.equal(r.removed, 7, 'the current notes won: the earlier version and its tab are gone');
+        assert.equal(r.promoted, null);
+        assert.deepEqual(s.versions, []);
+        assert.equal(s.current, cur, 'the current notes are untouched');
+    });
+});
+
+describe('Compare: the pick settles the tabs (2026-11-03)', () => {
+    const notes = (name, tldr, extra = {}) => ({ schemaVersion: 3, tldr: [tldr], mode: { selectedModeName: name }, ...extra });
+    const store = (current, versions) => ({
+        current,
+        versions: [...versions],
+        getMeetingDetails(id) { return id === 'm1' ? { id, detailedSummary: this.current } : null; },
+        getNotesVersions(id) { return id === 'm1' ? this.versions : []; },
+        saveNotesComparison() { return true; },
+        deleteNotesVersion(id, vid) { const n = this.versions.length; this.versions = this.versions.filter((v) => v.id !== vid); return this.versions.length < n; },
+        replaceDetailedSummary(id, d) { this.current = d; return true; },
+    });
+    const v = (id, d, createdAt = id) => ({ id, label: d.mode.selectedModeName, createdAt, detailedSummary: d });
+
+    test('settlePick (pure): the loser goes; an earlier winner over the current notes is promoted; same does nothing', () => {
+        assert.deepEqual(settlePick('A', 7, null), { drop: null, promote: 7 });
+        assert.deepEqual(settlePick('B', 7, null), { drop: 7, promote: null });
+        assert.deepEqual(settlePick('A', null, 7), { drop: 7, promote: null });
+        assert.deepEqual(settlePick('B', null, 7), { drop: null, promote: 7 });
+        assert.deepEqual(settlePick('A', 3, 4), { drop: 4, promote: null });
+        assert.equal(settlePick('same', 7, null), null);
+        assert.equal(settlePick('A', 7, 7), null);
+    });
+
+    test('an earlier version beats the current notes: it becomes the notes, keeps the meeting\'s own fields, and its tab goes', () => {
+        const cur = notes('1 to 1', 'Current', { speakerLabels: { s1: 'Dana' }, sharedScreens: [{ at: 1 }], meetingMemory: { m: 1 } });
+        const old = notes('General', 'Older', { speakerLabels: { s1: 'speaker 1' } });
+        const other = notes('General', 'Oldest');
+        const s = store(cur, [v(1, other), v(2, old)]);
+        const c = new NotesComparisons(s, { random: () => 0.9, newId: () => 'x' });
+        c.start('m1', [2, null]);
+        const r = c.pick('x', 'A');
+        assert.equal(r.removed, 'current');
+        assert.equal(r.promoted, 2);
+        assert.equal(r.meetingId, 'm1');
+        assert.deepEqual(s.current.tldr, ['Older']);
+        assert.deepEqual(s.current.speakerLabels, { s1: 'Dana' }, 'renames made since stay');
+        assert.deepEqual(s.current.sharedScreens, [{ at: 1 }]);
+        assert.deepEqual(s.current.meetingMemory, { m: 1 });
+        assert.deepEqual(s.versions.map((x) => x.id), [1], 'the promoted tab is not left as a duplicate; other tabs stay');
+    });
+
+    test('About the same deletes nothing', () => {
+        const cur = notes('1 to 1', 'Current');
+        const s = store(cur, [v(2, notes('General', 'Older'))]);
+        const c = new NotesComparisons(s, { newId: () => 'x' });
+        c.start('m1', [2, null]);
+        const r = c.pick('x', 'same');
+        assert.equal(r.removed, null);
+        assert.equal(s.versions.length, 1);
+        assert.equal(s.current, cur);
+    });
+
+    test('notes changed since the comparison opened (a Regenerate in between): nothing is deleted', () => {
+        const cur = notes('1 to 1', 'Current');
+        const s = store(cur, [v(2, notes('General', 'Older'))]);
+        const c = new NotesComparisons(s, { random: () => 0.9, newId: () => 'x' });
+        c.start('m1', [2, null]);
+        s.current = notes('1 to 1', 'Regenerated meanwhile');
+        const r = c.pick('x', 'A');
+        assert.equal(r.removed, null);
+        assert.equal(r.saved, true, 'the pick itself is still kept');
+        assert.deepEqual(s.current.tldr, ['Regenerated meanwhile']);
+        assert.equal(s.versions.length, 1);
+    });
+
+    test('a store that fails to write keeps everything and never throws', () => {
+        const cur = notes('1 to 1', 'Current');
+        const s = store(cur, [v(2, notes('General', 'Older'))]);
+        s.replaceDetailedSummary = () => { throw new Error('disk'); };
+        const c = new NotesComparisons(s, { random: () => 0.9, newId: () => 'x' });
+        c.start('m1', [2, null]);
+        const r = c.pick('x', 'A');
+        assert.equal(r.removed, null);
+        assert.equal(s.versions.length, 1);
+        assert.equal(s.current, cur);
     });
 });
 
@@ -194,6 +280,15 @@ describe('Compare: stored locally beside the ratings (database)', () => {
         assert.equal(db.saveNotesComparison({ ...rows[0], choice: 'better' }), false);
         // Re-opening the database runs the schema again: idempotent, the row stays.
         assert.equal(readDb((d) => d.prepare("SELECT COUNT(*) AS n FROM meeting_notes_comparisons WHERE meeting_id = 'cmp-1'").get().n), 1);
+        assert.equal(db.getNotesVersions('cmp-1').length, 1, 'About the same keeps both');
+        // A second comparison the earlier version wins: it becomes the notes, its row goes.
+        const c2 = new NotesComparisons(db, { random: () => 0.9 });
+        const s2 = c2.start('cmp-1', [vid, null]);
+        const r2 = c2.pick(s2.id, 'A');
+        assert.equal(r2.removed, 'current');
+        assert.deepEqual(db.getMeetingDetails('cmp-1').detailedSummary.tldr, ['Sales summary']);
+        assert.equal(db.getNotesVersions('cmp-1').length, 0);
+        assert.equal(db.deleteNotesVersion('cmp-1', vid), false, 'already gone');
         assert.equal(db.deleteMeeting('cmp-1'), true);
         assert.equal(readDb((d) => d.prepare("SELECT COUNT(*) AS n FROM meeting_notes_comparisons WHERE meeting_id = 'cmp-1'").get().n), 0);
     });

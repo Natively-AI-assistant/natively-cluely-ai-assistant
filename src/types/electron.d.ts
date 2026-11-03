@@ -1118,7 +1118,7 @@ export interface ElectronAPI {
   getMeetingNotesRating?: (input: { meetingId: string; versionId?: number | null }) => Promise<{ rating: 'up' | 'down'; comment: string | null } | null>
   /** Compare two versions of the notes blind: A and B in a random order, named only after the pick. */
   compareMeetingNotesStart?: (input: { meetingId: string; versions: [number | 'current', number | 'current'] }) => Promise<{ id: string; a: any; b: any } | null>
-  compareMeetingNotesPick?: (input: { id: string; choice: 'A' | 'B' | 'same'; reason?: string }) => Promise<{ choice: 'A' | 'B' | 'same'; saved: boolean; a: { version: 'current' | number; label: string; provider: string | null; model: string | null }; b: { version: 'current' | number; label: string; provider: string | null; model: string | null } } | null>
+  compareMeetingNotesPick?: (input: { id: string; choice: 'A' | 'B' | 'same'; reason?: string }) => Promise<{ choice: 'A' | 'B' | 'same'; saved: boolean; a: { version: 'current' | number; label: string; provider: string | null; model: string | null }; b: { version: 'current' | number; label: string; provider: string | null; model: string | null }; removed?: 'current' | number | null; promoted?: number | null } | null>
   onMeetingAutoStopNotice?: (callback: (data: { stopsAt: number | null }) => void) => () => void
   /** A notification's Start (a detected call, the calendar reminder), relayed by main to the launcher. */
   onMeetingStartRequest?: (callback: (req: { title?: string; calendarEventId?: string; via?: 'detected' | 'reminder' }) => void) => () => void

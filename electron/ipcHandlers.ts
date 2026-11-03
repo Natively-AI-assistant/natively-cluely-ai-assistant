@@ -17532,7 +17532,18 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
   safeHandle('meeting-notes:compare-pick', async (_event, input: { id?: unknown; choice?: unknown; reason?: unknown }) => {
     if (!input || typeof input.id !== 'string' || (input.choice !== 'A' && input.choice !== 'B' && input.choice !== 'same')) return null;
-    return comparisons().pick(input.id, input.choice, typeof input.reason === 'string' ? input.reason : null);
+    const res = comparisons().pick(input.id, input.choice, typeof input.reason === 'string' ? input.reason : null);
+    // The losing version is gone (an earlier winner became the notes): the
+    // meeting list and search follow, like after a Regenerate. Connectors are
+    // not sent the notes again.
+    if (res && res.removed !== null) {
+      if (res.promoted !== null) {
+        appState.getRAGManager()?.indexMeetingSummary(res.meetingId).catch((e: any) =>
+          console.warn('[IPC] summary re-index after a Compare pick failed (non-fatal):', e?.message || e));
+      }
+      try { BrowserWindow.getAllWindows().forEach((w) => { if (!w.isDestroyed()) w.webContents.send('meetings-updated'); }); } catch { /* non-fatal */ }
+    }
+    return res;
   });
 
   safeHandle('calendar-refresh', async () => {

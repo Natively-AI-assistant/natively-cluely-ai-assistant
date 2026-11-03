@@ -2494,7 +2494,15 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         setCompareBusy(true);
         try {
             const res = await window.electronAPI.compareMeetingNotesPick({ id: compare.id, choice, ...(reason.trim() ? { reason: reason.trim() } : {}) });
-            if (res) setCompareReveal(res);
+            if (res) {
+                setCompareReveal(res);
+                // The losing version is gone (an earlier winner became the notes):
+                // show the current notes and the tabs that are left.
+                if (res.removed != null) {
+                    setVersionKey('current');
+                    await Promise.all([reloadMeeting(), loadNotesVersions()]);
+                }
+            }
         } catch { /* the pick stays open */ } finally { setCompareBusy(false); }
     };
 
