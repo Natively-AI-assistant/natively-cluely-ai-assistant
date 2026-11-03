@@ -39,16 +39,21 @@ test('account_suspended and subscription_inactive are fatal server errors', () =
   assert.ok(/this\.isActive = false;/.test(source), 'a fatal verdict must deactivate the client');
 });
 
-test('language_detected does not reconnect a Soniox session but still reconnects Deepgram', () => {
+// 2026-11-03: widened from Soniox to every provider. Auto follows the speaker;
+// a pin reconnect froze it on the first verdict (user log 2026-11-01: a mic
+// session stayed Russian after "hello" was heard as "Алло").
+test('in auto mode language_detected never reconnects, on any provider; a pinned language still does', () => {
   const stt = new NativelyProSTT('verdict-key', 'mic');
-  stt.connectedProvider = 'soniox';
-  assert.equal(stt.shouldReconnectForDetectedLanguage(), false);
+  stt.setRecognitionLanguage('auto');
+  for (const provider of ['soniox', 'deepgram', 'elevenlabs', 'google', null]) {
+    stt.connectedProvider = provider;
+    assert.equal(stt.shouldReconnectForDetectedLanguage(), false, `auto must not pin on ${provider}`);
+  }
+  stt.setRecognitionLanguage('spanish');
   stt.connectedProvider = 'deepgram';
-  assert.equal(stt.shouldReconnectForDetectedLanguage(), true);
-  stt.connectedProvider = null;   // unknown provider → historical behaviour
-  assert.equal(stt.shouldReconnectForDetectedLanguage(), true);
+  assert.equal(stt.shouldReconnectForDetectedLanguage(), true, 'a user-pinned language keeps the historical reconnect');
   assert.ok(/if \(!this\.shouldReconnectForDetectedLanguage\(\)\) \{/.test(source), 'the language_detected branch must consult shouldReconnectForDetectedLanguage');
-  // languageBcp47 is assigned only AFTER the Soniox check, so a Soniox session never pins.
+  // languageBcp47 is assigned only AFTER the check, so an auto session never pins.
   const idx = source.indexOf('if (!this.shouldReconnectForDetectedLanguage()) {');
   const assignIdx = source.indexOf('this.languageBcp47      = detected;', idx);
   assert.ok(idx > 0 && assignIdx > idx, 'languageBcp47 must only be pinned when a reconnect will follow');

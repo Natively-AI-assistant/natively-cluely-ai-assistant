@@ -740,7 +740,7 @@ export class NativelyProSTT extends EventEmitter {
                     console.log(`[NativelyProSTT] Auto-detected language: ${detected}`);
                     this.emit('languageDetected', detected);
                     if (!this.shouldReconnectForDetectedLanguage()) {
-                        console.log(`[NativelyProSTT:${this.channel}] ${this.connectedProvider} follows the detected language in auto mode — keeping the stream`);
+                        console.log(`[NativelyProSTT:${this.channel}] auto mode follows the speaker — ${detected} shown, not pinned (${this.connectedProvider})`);
                         return;
                     }
                     this.languageBcp47      = detected;
@@ -1210,13 +1210,22 @@ export class NativelyProSTT extends EventEmitter {
     }
 
     /**
-     * A `language_detected` frame pins the language by reconnecting. Soniox already
-     * transcribes every language per token in auto mode and reports switches as
-     * they happen; reconnecting it only loses ~1.5 s of stream and freezes an
-     * early guess. Deepgram/Google need the pin, so they keep the reconnect.
+     * Never: a `language_detected` frame is shown, not obeyed. Reconnecting with
+     * the detected code pinned froze Auto on the first verdict for the rest of
+     * the meeting, on every provider — Deepgram `multi`, Soniox per token,
+     * ElevenLabs, Google — all follow a speaker who switches only while left
+     * unpinned (Deepgram: "a specific language… will only attempt to transcribe
+     * speech in that specified language", developers.deepgram.com/docs/language).
+     * natively-api's server.js stopped sending it in auto mode (2026-10-29), but
+     * the regional relay (services/stt-relay session.js onLanguageDetected) still
+     * sends it once per session; a user log 2026-11-01 showed a Windows mic
+     * session that stayed Russian after "hello" was heard as "Алло".
+     *
+     * A pinned language never gets here as a change: the relay echoes the pin.
+     * Kept for that case (configured key not 'auto'), which reconnects as before.
      */
     private shouldReconnectForDetectedLanguage(): boolean {
-        return this.connectedProvider !== 'soniox';
+        return this.configuredLanguageKey !== 'auto';
     }
 
     private startLivenessWatch(ws: WebSocket): void {

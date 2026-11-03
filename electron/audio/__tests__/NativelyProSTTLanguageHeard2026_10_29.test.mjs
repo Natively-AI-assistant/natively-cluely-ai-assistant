@@ -72,3 +72,45 @@ for (const provider of ['deepgram', 'elevenlabs', 'soniox']) {
     }
   });
 }
+
+// 2026-11-03: the regional relay (natively-api services/stt-relay, session.js
+// onLanguageDetected) still sends the old `language_detected` once per session.
+// In auto mode it is shown and never obeyed: a reconnect would pin the first
+// verdict for the rest of the meeting (user log 2026-11-01, Windows: "hello"
+// heard as Russian "Алло", then every later English sentence came back Russian).
+for (const provider of ['deepgram', 'elevenlabs', 'google', 'soniox']) {
+  test(`${provider}: an old-relay language_detected in auto mode is reported, not pinned`, async () => {
+    const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+    await new Promise((r) => wss.on('listening', r));
+    const auths = [];
+    let sock;
+    wss.on('connection', (s) => {
+      sock = s;
+      s.once('message', (raw) => {
+        try { auths.push(JSON.parse(raw.toString())); } catch { auths.push(null); }
+        s.send(JSON.stringify({ status: 'connected', provider }));
+      });
+    });
+    const stt = new NativelyProSTT('natively-test-key', 'mic', { flags: { isRelayEnabled: () => false } });
+    stt.BACKEND_URL = `ws://127.0.0.1:${wss.address().port}/v1/transcribe`;
+    stt.setRecognitionLanguage('auto');
+    const heard = [];
+    stt.on('languageDetected', (lang) => heard.push(lang));
+    stt.on('error', () => {});
+    try {
+      stt.start();
+      await until(() => stt.isConnected === true, 5000, 'connect');
+      sock.send(JSON.stringify({ language_detected: 'ru-RU' }));
+      await until(() => heard.length >= 1, 3000, 'the report');
+      await new Promise((r) => setTimeout(r, 600));   // a pin reconnect fires after 250 ms
+      assert.deepEqual(heard, ['ru-RU']);
+      assert.equal(auths.length, 1, 'no reconnect for a detected language in auto mode');
+      assert.equal(stt.isConnected, true);
+      assert.equal(stt.languageBcp47, 'auto', 'the next handshake must still ask for auto');
+    } finally {
+      stt.stop();
+      try { sock?.terminate(); } catch {}
+      await new Promise((r) => wss.close(r));
+    }
+  });
+}
