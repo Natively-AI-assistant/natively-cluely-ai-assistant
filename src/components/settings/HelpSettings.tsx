@@ -32,6 +32,8 @@ import {
     contextUnlocked, modeStep, modelStep, nativelyStep, permissionsStep, profileStep, speechStep, type SetupStep,
 } from '../../lib/helpSetupStatus.mjs';
 import zoomCaptureModeScreenshot from '../../assets/zoom-capture-mode.png';
+import demoVideoThumbnail from '../../assets/demo-video-thumbnail.jpg';
+import { openDemoVideo } from '../../lib/demoVideo';
 
 // Settings → Setup & Help.
 //
@@ -618,7 +620,7 @@ const HelpPane: React.FC<{
                         When nothing has been said for a while, Natively says it stops in 1 minute; Keep going carries on.
                     </p>
                     <SettingsNotice tone={tones.warn} icon={<TriangleAlert size={14} />} className="mb-0">
-                        With Ambient AI Chat on, in <HelpPath parts={['General', 'Show advanced settings']} />, meetings start without
+                        With Ambient AI Chat on, in <HelpPath parts={['General']} />, meetings start without
                         listening and the overlay says Mic is off. Turn on mic starts it.
                     </SettingsNotice>
                 </>
@@ -1114,6 +1116,31 @@ const HelpPane: React.FC<{
                     title={t('Get started')}
                     subtitle={t('Natively needs permissions, a speech provider and an AI model.')}
                 />
+                {/* The whole setup, start to finish, on video — first, so someone
+                    who would rather watch than read finds it before the steps.
+                    The film's thumbnail is the row's tile, cropped to the
+                    presenter, so the row keeps the same rhythm as the steps. */}
+                <div className={ROW_GROUP}>
+                    <SettingsRow
+                        icon={
+                            <button
+                                type="button"
+                                onClick={openDemoVideo}
+                                aria-label={t('Watch the full setup & demo')}
+                                className="relative block w-full h-full rounded-[7px] overflow-hidden transition-opacity duration-150 hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-primary"
+                            >
+                                <img src={demoVideoThumbnail} alt="" draggable={false}
+                                    className="block w-full h-full object-cover object-[72%_35%]" />
+                                <span aria-hidden="true" className="absolute inset-0 flex items-center justify-center bg-black/20">
+                                    <Play size={14} strokeWidth={0} fill="#fff" className="drop-shadow" />
+                                </span>
+                            </button>
+                        }
+                        title={t('Watch the full setup & demo')}
+                        description={t('Video · 9 min. Opens on YouTube.')}
+                        control={<GoButton label={t('Watch')} onClick={openDemoVideo} />}
+                    />
+                </div>
                 <SettingsMotionReady.Provider value={setupReady}>
                 {showMeter && (
                     <HelpSetupMeter

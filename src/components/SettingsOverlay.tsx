@@ -2662,26 +2662,26 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     />
                                                 </div>
 
-                                                {/* Meeting Retention */}
-                                                <div className="flex items-start justify-between px-4 py-3 gap-4">
-                                                    <div className="flex items-start gap-4">
+                                                {/* Ambient AI Chat */}
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <div className="flex items-center gap-4">
                                                         <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
-                                                            <Shield size={20} />
+                                                            <MicOff size={20} />
                                                         </div>
-                                                        <div className="flex-1">
-                                                            <h3 className="text-sm font-bold text-text-primary">{t('Do not save meetings')}</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5 leading-normal">{t('Nothing is saved after the meeting ends')}</p>
+                                                        <div>
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('Ambient AI Chat')}</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Meetings start without capturing mic or system audio')}</p>
                                                         </div>
                                                     </div>
                                                     <SettingsToggle
-                                                        checked={meetingRetention === 'never'}
-                                                        label={t('Do not save meetings')}
+                                                        checked={ambientChatEnabled}
+                                                        label={t('Ambient AI Chat')}
                                                         onChange={() => {
-                                                            const nextRetention = meetingRetention === 'never' ? 'forever' : 'never';
-                                                            setMeetingRetention(nextRetention);
-                                                            window.electronAPI?.setMeetingRetention?.(nextRetention);
+                                                            const newState = !ambientChatEnabled;
+                                                            setAmbientChatEnabled(newState);
+                                                            window.electronAPI?.setAmbientChatEnabled?.(newState);
                                                         }}
-                                                        className={`mt-2 ${meetingRetention === 'never' ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        className={ambientChatEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
                                                     />
                                                 </div>
 
@@ -2890,26 +2890,26 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 </button>
                                                 <Disclosure open={showAdvancedSettings} unclipWhenOpen>
                                                 <div className="mt-1">
-                                                    {/* Ambient AI Chat */}
-                                                    <div className="flex items-center justify-between px-4 py-3">
-                                                        <div className="flex items-center gap-4">
+                                                    {/* Meeting Retention */}
+                                                    <div className="flex items-start justify-between px-4 py-3 gap-4">
+                                                        <div className="flex items-start gap-4">
                                                             <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
-                                                                <MicOff size={20} />
+                                                                <Shield size={20} />
                                                             </div>
-                                                            <div>
-                                                                <h3 className="text-sm font-bold text-text-primary">{t('Ambient AI Chat')}</h3>
-                                                                <p className="text-xs text-text-secondary mt-0.5">{t('Meetings start without capturing mic or system audio')}</p>
+                                                            <div className="flex-1">
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Do not save meetings')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5 leading-normal">{t('Nothing is saved after the meeting ends')}</p>
                                                             </div>
                                                         </div>
                                                         <SettingsToggle
-                                                            checked={ambientChatEnabled}
-                                                            label={t('Ambient AI Chat')}
+                                                            checked={meetingRetention === 'never'}
+                                                            label={t('Do not save meetings')}
                                                             onChange={() => {
-                                                                const newState = !ambientChatEnabled;
-                                                                setAmbientChatEnabled(newState);
-                                                                window.electronAPI?.setAmbientChatEnabled?.(newState);
+                                                                const nextRetention = meetingRetention === 'never' ? 'forever' : 'never';
+                                                                setMeetingRetention(nextRetention);
+                                                                window.electronAPI?.setMeetingRetention?.(nextRetention);
                                                             }}
-                                                            className={ambientChatEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                            className={`mt-2 ${meetingRetention === 'never' ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
                                                         />
                                                     </div>
 
