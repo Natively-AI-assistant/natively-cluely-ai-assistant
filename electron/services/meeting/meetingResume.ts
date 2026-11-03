@@ -177,6 +177,71 @@ export function resumeBaseFrom(
 }
 
 /**
+ * A resumed part that added nothing the notes are written from (2026-11-03,
+ * Evin): no new line, no new answer, no shared screen, the user's notes as
+ * they were and no other template picked. Its Stop keeps the saved meeting and
+ * its notes exactly as they were; anything new rewrites the notes over the
+ * whole meeting.
+ */
+export function resumedPartAddedNothing(input: {
+    lines: number;
+    answers: number;
+    sharedScreens: number;
+    userNotes: string | null | undefined;
+    savedUserNotes: string | null | undefined;
+    noteTemplatePicked: boolean;
+}): boolean {
+    const notes = (v: string | null | undefined) => (typeof v === 'string' ? v.trim() : '');
+    return input.lines <= 0
+        && input.answers <= 0
+        && input.sharedScreens <= 0
+        && !input.noteTemplatePicked
+        && notes(input.userNotes) === notes(input.savedUserNotes);
+}
+
+/** Earlier answers the overlay shows again when a meeting is resumed (the newest). */
+export const RESUMED_CHAT_MAX = 40;
+
+/** One earlier answer as the overlay needs it: no images, no bookkeeping. */
+export interface ResumedChatEntry {
+    type: string;
+    timestamp: number;
+    question: string;
+    answer: string;
+    source?: string;
+    synthetic?: boolean;
+    hasImages?: boolean;
+}
+
+/**
+ * The saved meeting's answers for the overlay, so a resumed meeting's chat
+ * carries on from where it stopped (2026-11-03): the newest RESUMED_CHAT_MAX,
+ * oldest first, each with a question and an answer.
+ */
+export function resumedChatFrom(usage: unknown): ResumedChatEntry[] {
+    if (!Array.isArray(usage)) return [];
+    const out: ResumedChatEntry[] = [];
+    for (const u of usage) {
+        if (!u || typeof u !== 'object') continue;
+        const answer = typeof (u as any).answer === 'string' ? (u as any).answer.trim() : '';
+        if (!answer) continue;
+        const question = typeof (u as any).question === 'string' ? (u as any).question.trim() : '';
+        const images = [(u as any).imagePaths, (u as any).images].some((v) => Array.isArray(v) && v.length > 0);
+        out.push({
+            type: typeof (u as any).type === 'string' ? (u as any).type : 'chat',
+            timestamp: Number((u as any).timestamp) || 0,
+            question,
+            answer,
+            ...(typeof (u as any).source === 'string' ? { source: (u as any).source } : {}),
+            ...((u as any).synthetic === true ? { synthetic: true } : {}),
+            ...(images ? { hasImages: true } : {}),
+        });
+    }
+    out.sort((a, b) => a.timestamp - b.timestamp);
+    return out.slice(-RESUMED_CHAT_MAX);
+}
+
+/**
  * The whole meeting at a resumed Stop: the saved lines, then the new ones
  * (oldest first, in case a clock moved), the answers likewise, the original
  * start, and the two running times added (the gap between them is not counted).

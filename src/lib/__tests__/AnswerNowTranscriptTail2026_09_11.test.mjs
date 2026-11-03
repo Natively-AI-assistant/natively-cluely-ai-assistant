@@ -134,7 +134,7 @@ test('source: handleAnswerNow keeps the recording ref open until the tail wait r
 });
 
 test('source: a session reset clears the dictation refs, not only the React state', () => {
-  const reset = section("window.electronAPI.onSessionReset(() => {", 'analytics.trackConversationStarted();');
+  const reset = section("window.electronAPI.onSessionReset((payload) => {", 'analytics.trackConversationStarted();');
   assert.match(reset, /voiceInputRef\.current = ''/, 'BUG: the merge reads voiceInputRef, so a stale ref prepends the previous meeting to the next question');
   assert.match(reset, /isRecordingRef\.current = false/);
   assert.match(reset, /answerStopInFlightRef\.current = false/);

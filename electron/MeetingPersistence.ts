@@ -28,7 +28,7 @@ import { LiveMeetingJournal, type LiveJournalSnapshot, type MeetingRecoveryMeta 
 import { getUserDictionary } from './audio/userDictionary';
 import { bioForNotes, isProOrTrialActive } from './services/proAccess';
 import { isArchivableEarlierNotes, isArchivableNotes } from './services/meeting/notesVersions';
-import { applyResumeCarry, fitResumedCallNames, isNotesPendingStatus, isResumePart, isSavedPartLine, mergeResumedMeeting, resumeMergeSuggestions, resumeBaseFrom, resumeCarryFrom, resumedSharedScreens, resumeMetadata, savedPartSpeakerIds, type MeetingSurfaceKind, type ResumeBase, type ResumeCarry, type ResumePart } from './services/meeting/meetingResume';
+import { applyResumeCarry, fitResumedCallNames, isNotesPendingStatus, resumedPartAddedNothing, isResumePart, isSavedPartLine, mergeResumedMeeting, resumeMergeSuggestions, resumeBaseFrom, resumeCarryFrom, resumedSharedScreens, resumeMetadata, savedPartSpeakerIds, type MeetingSurfaceKind, type ResumeBase, type ResumeCarry, type ResumePart } from './services/meeting/meetingResume';
 import { applyNoteTemplate, noteTemplateById, type NoteTemplate } from './services/meeting/noteTemplates';
 const crypto = require('crypto');
 
@@ -910,6 +910,36 @@ export class MeetingPersistence {
             // A resumed meeting is still saved as it was before the resume.
             if (resumed) this.finishNotesAfterDroppedResume(resumed.meetingId);
             return resumed ? { meetingId: resumed.meetingId, memoryEligibleCount: 0 } : null;
+        }
+
+        // A resumed part that added nothing (no line, answer or shared screen,
+        // the notes as they were): the saved meeting and its notes stay exactly
+        // as they were, as if Resume had not been pressed (2026-11-03).
+        if (resumed) {
+            let addedNothing = false;
+            try {
+                const screens = (this.session.getMeetingMetadata() as any)?.sharedScreens;
+                addedNothing = resumedPartAddedNothing({
+                    lines: this.session.getPersistableTranscript().length,
+                    answers: this.session.getPersistableUsage().length + this.liveUsageOverflow().length,
+                    sharedScreens: Array.isArray(screens) ? screens.length : 0,
+                    userNotes,
+                    savedUserNotes: resumed.userNotes,
+                    noteTemplatePicked: noteTemplateId !== undefined,
+                });
+            } catch { /* unsure: the notes are rewritten, as before */ }
+            if (addedNothing) {
+                console.log('[MeetingPersistence] the resumed part added nothing: the saved notes stay.');
+                this.liveJournal.end();
+                this.session.reset();
+                try { DatabaseManager.getInstance().removeLiveUsageOverflow(resumed.meetingId); } catch { /* nothing was written */ }
+                this.finishNotesAfterDroppedResume(resumed.meetingId);
+                try {
+                    const wins = require('electron').BrowserWindow.getAllWindows();
+                    wins.forEach((w: any) => w.webContents.send('meetings-updated'));
+                } catch { /* non-fatal */ }
+                return { meetingId: resumed.meetingId, memoryEligibleCount: 0 };
+            }
         }
 
         // ZERO-ELIGIBLE COUNT (deep-run 2 issue 11, 2026-08-01): computed HERE,

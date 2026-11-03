@@ -133,6 +133,50 @@ describe('what the saved notes carry into the resumed notes (pure)', () => {
     });
 });
 
+describe('a resumed part that added nothing keeps the notes (pure, 2026-11-03)', () => {
+    const nothing = { lines: 0, answers: 0, sharedScreens: 0, userNotes: '- a', savedUserNotes: '- a', noteTemplatePicked: false };
+    test('nothing new: kept', () => {
+        assert.equal(resume.resumedPartAddedNothing(nothing), true);
+        assert.equal(resume.resumedPartAddedNothing({ ...nothing, userNotes: ' - a \n', savedUserNotes: '- a' }), true, 'whitespace is not an edit');
+        assert.equal(resume.resumedPartAddedNothing({ ...nothing, userNotes: undefined, savedUserNotes: '' }), true);
+    });
+    test('any new line, answer, shared screen, notes edit or template pick: rewritten', () => {
+        assert.equal(resume.resumedPartAddedNothing({ ...nothing, lines: 1 }), false);
+        assert.equal(resume.resumedPartAddedNothing({ ...nothing, answers: 1 }), false);
+        assert.equal(resume.resumedPartAddedNothing({ ...nothing, sharedScreens: 1 }), false);
+        assert.equal(resume.resumedPartAddedNothing({ ...nothing, userNotes: '- a\n- b' }), false);
+        assert.equal(resume.resumedPartAddedNothing({ ...nothing, userNotes: '' }), false, 'notes cleared');
+        assert.equal(resume.resumedPartAddedNothing({ ...nothing, noteTemplatePicked: true }), false);
+    });
+});
+
+describe('the overlay\'s chat carries on after a resume (pure, 2026-11-03)', () => {
+    test('answers only, oldest first, without images or bookkeeping; the newest 40', () => {
+        const usage = [
+            { type: 'chat', timestamp: 30, question: 'Second?', answer: 'B', source: 'manual_chat', imagePaths: ['/x.png'] },
+            { type: 'assist', timestamp: 10, question: 'What to Answer', answer: 'A', images: [{ data: 'big' }] },
+            { type: 'chat', timestamp: 20, question: 'No answer', answer: '   ' },
+            null,
+            { type: 'chat', timestamp: 40, question: 'Recap Meeting', answer: 'R', source: 'generated_action', synthetic: true },
+        ];
+        const out = resume.resumedChatFrom(usage);
+        assert.deepEqual(out.map((e) => e.answer), ['A', 'B', 'R']);
+        assert.equal(out[0].hasImages, true);
+        assert.equal(out[1].hasImages, true);
+        assert.equal(out[2].synthetic, true);
+        assert.doesNotMatch(JSON.stringify(out), /big|x\.png/);
+        const many = Array.from({ length: 55 }, (_, i) => ({ type: 'chat', timestamp: i, question: `q${i}`, answer: `a${i}` }));
+        const last = resume.resumedChatFrom(many);
+        assert.equal(last.length, resume.RESUMED_CHAT_MAX);
+        assert.equal(last.at(-1).answer, 'a54');
+        assert.deepEqual(resume.resumedChatFrom(undefined), []);
+    });
+    test('main sends them with the start\'s session-reset, only on a resume', () => {
+        const src = fs.readFileSync(path.join(REPO, 'electron/main.ts'), 'utf8');
+        assert.match(src, /'session-reset', resumeBase \? \{ resumedChat: resumedChatFrom\(resumeBase\.usage\) \} : undefined\)/);
+    });
+});
+
 describe('Resume is never folded into another start (MeetingLifecycleQueue.hasPendingStart)', () => {
     const { MeetingLifecycleQueue } = require(dist('audio/meetingLifecycleQueue.js'));
     test('a start queued or under way is pending; once it is done, or a stop follows, it is not', async () => {
@@ -454,6 +498,45 @@ describe('resuming a saved meeting (database)', () => {
         const after = db.getMeetingDetails(id);
         assert.equal(after.transcript.length, before.transcript.length);
         assert.equal(after.summaryStatus, before.summaryStatus);
+    });
+
+    test('a resume that added nothing keeps the notes and the meeting exactly as they were (2026-11-03)', async () => {
+        const { id } = await savedNotepadMeeting('Idle resume');
+        const db = DatabaseManager.getInstance();
+        db.replaceDetailedSummary(id, v3Notes('Kept as it was.'));
+        const before = db.getMeetingDetails(id);
+        const timing = db.getMeetingTiming(id);
+        const resumeAt = Date.now() - 20_000;
+        const mp = new MeetingPersistence(fakeSession(resumeAt, [], null), llm());
+        mp.beginLiveMeeting(resumeAt, { resume: mp.loadResumeBase(id) });
+        const r = await mp.stopMeeting();
+        assert.equal(r.meetingId, id);
+        assert.equal(r.memoryEligibleCount, 0, 'nothing to index again');
+        await new Promise((res) => setTimeout(res, 150));
+        const after = db.getMeetingDetails(id);
+        assert.deepEqual(after.detailedSummary.tldr, ['Kept as it was.'], 'the notes are not rewritten');
+        assert.equal(after.summaryStatus, before.summaryStatus);
+        assert.equal(after.transcript.length, before.transcript.length);
+        assert.equal(after.userNotes, before.userNotes);
+        assert.deepEqual(db.getMeetingTiming(id), timing, 'the idle time is not added');
+        assert.equal(db.getNotesVersions(id).length, 0, 'no version: nothing was replaced');
+        assert.equal(mp.resumedMeetingId, null);
+    });
+
+    test('a resume where only the user\'s notes changed rewrites the notes (2026-11-03)', async () => {
+        const { id } = await savedNotepadMeeting('Notes-only resume');
+        const db = DatabaseManager.getInstance();
+        db.replaceDetailedSummary(id, v3Notes('Before the edit.'));
+        const resumeAt = Date.now() - 20_000;
+        const mp = new MeetingPersistence(fakeSession(resumeAt, [], null), llm());
+        mp.beginLiveMeeting(resumeAt, { resume: mp.loadResumeBase(id) });
+        mp.setLiveUserNotes('- launch date?\n- owner: Priya');
+        await mp.stopMeeting();
+        assert.ok(await waitFor(() => processed(id)));
+        const after = db.getMeetingDetails(id);
+        assert.equal(after.userNotes, '- launch date?\n- owner: Priya');
+        assert.notDeepEqual(after.detailedSummary.tldr, ['Before the edit.'], 'rewritten over the whole meeting');
+        assert.equal(db.getNotesVersions(id).length, 1, 'the earlier notes are a version');
     });
 
     test('a crash mid-resume recovers the whole meeting, under its id, with its start', async () => {

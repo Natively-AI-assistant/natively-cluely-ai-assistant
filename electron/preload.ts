@@ -87,6 +87,17 @@ type DirectAssistEvent =
   | { type: 'cancel'; requestId: string; sequence: number };
 
 // Types for the exposed Electron API
+/** A resumed meeting's earlier answer, for the overlay's chat (services/meeting/meetingResume.ts ResumedChatEntry). */
+interface SessionResumedChatEntry {
+  type: string;
+  timestamp: number;
+  question: string;
+  answer: string;
+  source?: string;
+  synthetic?: boolean;
+  hasImages?: boolean;
+}
+
 /** A blind notes comparison after the pick: which version was A, which was B. */
 interface NotesComparePickResult {
   choice: 'A' | 'B' | 'same';
@@ -2729,8 +2740,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('intelligence-error', subscription);
     };
   },
-  onSessionReset: (callback: () => void) => {
-    const subscription = () => callback();
+  onSessionReset: (callback: (payload?: { resumedChat?: SessionResumedChatEntry[] }) => void) => {
+    const subscription = (_event: unknown, payload?: { resumedChat?: SessionResumedChatEntry[] }) => callback(payload && typeof payload === 'object' ? payload : undefined);
     ipcRenderer.on('session-reset', subscription);
     return () => {
       ipcRenderer.removeListener('session-reset', subscription);

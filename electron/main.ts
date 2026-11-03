@@ -1464,7 +1464,7 @@ import { NativeOomTrace } from './utils/NativeOomTrace'
 import { setStealthHookAvailabilityProvider, setNoActivateClickDelivery } from './utils/windowsFocusPolicy'
 import { hasLiveRenderer } from './utils/rendererLiveness'
 import { DEFAULT_MEETING_SURFACE, planMeetingStart, planMeetingResume, planNotesClosed, type MeetingSurface } from './utils/meetingSurface'
-import { resumeMetadata, type ResumeBase } from './services/meeting/meetingResume'
+import { resumeMetadata, resumedChatFrom, type ResumeBase } from './services/meeting/meetingResume'
 import { isDefaultMeetingTitle } from './MeetingPersistence'
 import {
   shouldPromoteToRegularAtStartup,
@@ -7754,8 +7754,10 @@ export class AppState {
       });
     } catch { /* non-fatal */ }
 
-    // Emit session reset to clear UI state immediately
-    this.sendToWindow(this.getWindowHelper().getOverlayWindow(), 'session-reset');
+    // Emit session reset to clear UI state immediately. A resume hands the
+    // overlay the saved meeting's answers, so its chat carries on where it
+    // stopped (meetingResume.resumedChatFrom; renderer src/lib/resumedChat.mjs).
+    this.sendToWindow(this.getWindowHelper().getOverlayWindow(), 'session-reset', resumeBase ? { resumedChat: resumedChatFrom(resumeBase.usage) } : undefined);
     this.sendToWindow(this.getWindowHelper().getLauncherWindow(), 'session-reset');
 
     // LOCAL-MODEL WARMUP: if the active model is a local Ollama model, warm + pin

@@ -37,11 +37,11 @@ const sourcePath = path.resolve(__dirname, '../../components/NativelyInterface.t
 const source = readFileSync(sourcePath, 'utf8');
 
 // Extract the body of the onSessionReset callback: from the
-// `onSessionReset(() => {` opening to its matching close brace.
+// `onSessionReset((payload) => {` opening to its matching close brace.
 function extractOnSessionResetBody() {
-  const marker = 'onSessionReset(() => {';
+  const marker = 'onSessionReset((payload) => {';
   const idx = source.indexOf(marker);
-  assert.ok(idx >= 0, 'could not locate the onSessionReset(() => { handler in NativelyInterface.tsx');
+  assert.ok(idx >= 0, 'could not locate the onSessionReset((payload) => { handler in NativelyInterface.tsx');
   let i = idx + marker.length;
   let depth = 1;
   const start = i;

@@ -886,7 +886,8 @@ export interface ElectronAPI {
   onIntelligenceModeChanged: (callback: (data: { mode: string }) => void) => () => void
   onIntelligenceError: (callback: (data: { error: string, mode: string }) => void) => () => void;
   // Session Management
-  onSessionReset: (callback: () => void) => () => void;
+  /** With `resumedChat` when Resume continues a saved meeting: its earlier answers (src/lib/resumedChat.mjs). */
+  onSessionReset: (callback: (payload?: { resumedChat?: Array<{ type: string; timestamp: number; question: string; answer: string; source?: string; synthetic?: boolean; hasImages?: boolean }> }) => void) => () => void;
 
   // Streaming listeners
   streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean, liveQuestion?: boolean }) => Promise<void>

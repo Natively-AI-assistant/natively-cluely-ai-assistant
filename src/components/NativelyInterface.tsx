@@ -31,6 +31,7 @@ import {
 } from '../../electron/utils/rollingTranscriptState.ts';
 import { categorizeSttError, sttConnectionCause, sttLocalModelCause } from '../lib/sttErrorMapper';
 import { splitGistLine, splitGistLineStreaming, collapseBlockGaps } from '../lib/displayMarkup';
+import { resumedChatMessages, resumedDirectHistory } from '../lib/resumedChat.mjs';
 
 import type { SkillSummary } from '../types/electron';
 import { copyText } from '../lib/copyText';
@@ -5521,7 +5522,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // Session Reset Listener - Clears UI when a NEW meeting starts
   useEffect(() => {
     if (!window.electronAPI?.onSessionReset) return;
-    const unsubscribe = window.electronAPI.onSessionReset(() => {
+    const unsubscribe = window.electronAPI.onSessionReset((payload) => {
       console.log('[NativelyInterface] Resetting session state...');
       window.electronAPI?.cancelChatStream?.();
       chatStreamIdRef.current = null;
@@ -5615,6 +5616,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       setSttUserError('');
       setSttInterviewerError('');
       // Optionally reset connection status if needed, but connection persists
+
+      // A resumed meeting (2026-11-03): its earlier answers come back, so the
+      // chat carries on where it stopped; typed turns are Direct history too.
+      const earlier = resumedChatMessages(payload?.resumedChat);
+      if (earlier.length > 0) {
+        setMessages(earlier as Message[]);
+        directAssistHistoryRef.current = resumedDirectHistory(payload?.resumedChat);
+      }
 
       // Track new conversation/session if applicable?
       // Actually 'app_opened' is global, 'assistant_started' is overlay.
