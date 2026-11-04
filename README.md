@@ -511,48 +511,45 @@ While Natively is **free for personal, educational, research, and non-commercial
   </a>
 </p>
 
-### What's New in v3.0.0 (Latest Release)
+### What's New in v3.1.0 (Latest Release)
 
-**Four weeks of work since v2.9.2.** A notepad for every meeting, overlay buttons you write yourself, Connectors, notes you can share as a link, and follow-up emails in your own style.
+**Pick up where you left off.** Resume a saved meeting, a chat that carries on after Resume, a Compare that clears the losing version, and a 9-minute setup film.
 
 #### New
 
 | Feature | What it does |
 | :------ | :----------- |
-| **Notepad** | Type your own notes while Natively listens. Recipes like What did I miss, Write tldr and List my todos run from chips or "/" in Ask, a live transcript sits beside your notes, and Ask reads the whole meeting once it ends. |
-| **Your own overlay buttons** | Describe a button in plain sentences and Natively turns it into an overlay action beside the built-in ones. Pick the five buttons the overlay shows in **Settings → Overlay**. |
-| **Connectors** | Send notes to Gmail, Slack, Notion, Zapier, webhooks, HubSpot, Salesforce, Attio, Affinity and Pipedrive, with browser sign-in and auto-send rules, plus a local MCP server and API. In **Settings → Connectors**. |
-| **Share notes as a link** | One link to a meeting's notes and transcript, from the meeting's Share menu. |
-| **Follow-ups in your style** | A compose sheet in the meeting header writes the follow-up email in your tone when you click, for older meetings too. Set the style per mode in Modes Manager. |
-| **Knows your meeting app** | Reads Zoom and Teams for the meeting ID, the people on the call and whether you are muted, and follows the microphone the meeting app uses. |
-| **Room speakers** | Tells apart people sharing one microphone in the transcript and notes, on Natively, Deepgram and Soniox speech. |
-| **Live model catalogue** | Each provider's model list is fetched live, so new models show up without an app update. |
-| **More speech options** | Qwen realtime speech, Indian languages, and Parakeet v2 for English. On Apple Silicon Macs with macOS 14 or later, Parakeet runs on the Neural Engine. |
-| **Images in the overlay** | Paste or drop images into the overlay, and screenshots and page captures are remembered across hotkeys, quick actions and typed chat. |
+| **Resume a meeting** | Record more into a meeting that has already ended, and it stays one meeting. Resume is on the meeting page for overlay meetings and in the notepad for notepad meetings, and at Stop the notes are rewritten over the whole meeting. |
+| **Chat carries on after Resume** | The overlay reopens with the meeting's earlier answers, so the conversation picks up where it stopped. |
+| **Same speaker after Resume** | Someone who talks again after a Resume can come back as a new Speaker N. The meeting page asks "Same as Lars?" and one click gives them the saved name. |
+| **Open a meeting in the notepad** | A notepad button on the meeting page opens the notepad on that saved meeting, with its notes. |
+| **Setup & demo film** | A 9-minute film from setup to a live meeting, from the Welcome screen, **Settings → Setup & Help** or the card on Home. |
 
 #### Improved
 
-- **Stealth typing edits like a text field.** Ctrl/Cmd+V, A, C, X and word-by-word delete work in the overlay and the notes window.
-- **Lavender** is the new Default overlay style in light and dark, and the click-through button opens into a pill with its exit hotkey.
-- **Capture.** ⌘/Ctrl+Y keeps HackerRank's statement and formulas, and a refused screenshot answer is retried with the page cropped.
-- **Reference files.** Thirty or more PDFs index in batches and resume where they stopped, and Spanish searches match accented text.
-- **Long meetings** keep their whole transcript, and typed chat can search the web when you ask it to.
-- **Settings.** New Overlay and Connectors tabs, and Skills folded into Intelligence.
+- **Compare.** Picking a winner deletes the losing version and its tab. An older winner becomes the meeting's notes, and "About the same" keeps both.
+- **Free trial.** The trial ends when its AI allowance runs out as well as at 30 minutes, warns about two answers before, and a refused answer says the trial ended instead of "check your API keys".
+- **Backup speech.** When your provider stops your key for quota, the banner says so and names the provider transcribing in the meantime.
+- **Local speech models** say why they stopped: not enough memory (with the measured figures), not downloaded, or stopped.
+- **Pro lifetime** is $60, with $79 struck through during a named sale.
+- **Settings.** Ambient AI Chat is back in General, and Do not save meetings moves under Advanced. Meeting notes fade out under the pinned header.
 
 #### Fixed
 
-- **Windows system audio.** Capture that never started, went silent or played on another device works, and antivirus HTTPS scanning no longer blocks connections.
-- **Transcription.** Meetings with no words transcribed, local models on a fresh machine, and Soniox going deaf after a silent start are fixed.
-- **Groq speech** no longer bills far more than you used.
-- **Codex.** Answers the backend holds back are no longer cut off, and the default model works with a ChatGPT account.
-- **Windows.** Copy buttons work in the overlay, and the launcher no longer goes see-through after the splash.
+- **Speech language.** Auto follows the speaker for the whole meeting on Natively speech, instead of locking onto the first language it heard.
+- **Garbled transcripts.** English no longer comes back as nonsense in another alphabet on microphones whose audio could not be converted to 16 kHz.
+- **Windows notepad.** The notes window takes clicks again after a second notepad meeting.
+- **Overlay.** A banner whose text changed twice quickly no longer goes blank, and light-mode code blocks lose the white bar behind each line.
+- **Free trial.** The end-of-trial card shows what the trial used instead of zeros.
+- **Local models.** A memory reading the OS fails to take no longer blocks every local model.
+- **Debug log.** Opening Natively while it is already running no longer wipes the running app's log.
 
 #### Platform
 
-- The app is called Natively again in Activity Monitor and Task Manager. 2.9.2's system process names are gone, and the data folder moves back by itself. Process Disguise still presents the app as Terminal, System Settings or Activity Monitor.
-- Source maps are no longer shipped, so the download is smaller.
+- The native audio module builds on macOS 27 with Xcode 27, and the shipped module is stripped as before on macOS and Windows.
+- Electron 43.7.7 and Node 22.13 or later, unchanged from 3.0.0.
 
-> 📄 **[Read the full v3.0.0 release notes →](docs/releases/v3.0.0.md)**
+> 📄 **[Read the full v3.1.0 release notes →](docs/releases/v3.1.0.md)** · [v3.0.0 release notes](docs/releases/v3.0.0.md)
 
 ## Table of Contents
 
@@ -566,7 +563,7 @@ While Natively is **free for personal, educational, research, and non-commercial
 - [Why Natively wins](#why-natively-wins)
 - [AI Coding Assistant](#free-ai-coding-interview-assistant-undetectable-on-leetcode-hackerrank--coderpad)
 - [Natively Pro](#natively-pro)
-- [What's New in v3.0.0](#whats-new-in-v300-latest-release)
+- [What's New in v3.1.0](#whats-new-in-v310-latest-release)
 - [Privacy & Security](#privacy--security-core-design-principle)
 - [Installation](#installation-developers--contributors)
 - [AI Providers](#ai-providers)

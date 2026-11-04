@@ -1,4 +1,80 @@
-    # Changelog
+# Changelog
+
+## [3.1.0] - 2026-11-04
+
+Includes 3.0.0 (2026-11-01). Five weeks of work since v2.9.2: a meeting notepad, your own overlay buttons, Connectors, notes you can share as a link, follow-ups in your style, and Resume for a meeting that has ended. Full notes: [v3.1.0](docs/releases/v3.1.0.md) · [v3.0.0](docs/releases/v3.0.0.md).
+
+### Added
+
+- **Notepad** — type your own notes while Natively listens, with the live transcript beside them. Recipes such as What did I miss, Write tldr and List my todos run from chips or "/" in Ask, and after Stop your notes are written up line by line.
+- **Resume a meeting** — record more into a meeting that has ended, and it stays one meeting. Resume is on the meeting page for overlay meetings and in the notepad for notepad meetings; at Stop the notes are rewritten over the whole meeting.
+- **Chat carries on after Resume** — the overlay reopens with the meeting's earlier answers instead of starting empty.
+- **Same speaker after Resume** — a voice that comes back as a new Speaker N is offered its saved name ("Same as Lars?") in one click.
+- **Open a meeting in the notepad** — a notepad button on the meeting page opens the notepad on that saved meeting, with its notes.
+- **Your own overlay buttons** — describe a button in plain sentences and Natively turns it into an overlay action. Pick the five the overlay shows in Settings → Overlay.
+- **Connectors** — send meeting notes to Gmail, Slack, Notion, Zapier, webhooks and CRMs such as HubSpot and Salesforce, with browser sign-in and auto-send rules. In Settings → Connectors.
+- **MCP server and API** — a local MCP server and API let your own tools and AI assistants read your meetings. In Settings → Connectors.
+- **Share notes as a link** — a link to a meeting's notes and transcript, from the meeting's Share menu.
+- **Follow-ups in your style** — a compose sheet in the meeting header writes the follow-up email in your tone, for older meetings too. Style per mode in Modes Manager.
+- **Setup & Help, rebuilt** — 21 searchable guides in four groups, each with a new screen recording in dark and light, and a 9-minute setup & demo film from the Welcome screen, Setup & Help or the card on Home.
+- **Edit shortcuts while stealth typing** — Ctrl/Cmd+V, A, C, X and word-by-word delete in the overlay and the notes window.
+- **Click-through pill** — the click-through button opens into a pill that shows the hotkey to leave click-through.
+- **Lavender overlay style** — a new look, and the Default in light and dark.
+- **More speech options** — Qwen realtime speech, Indian languages in the picker, and Parakeet v2 for English. On Apple Silicon with macOS 14 or later, Parakeet runs on the Neural Engine.
+- **Shared screens** (off by default) — what someone shares in Zoom or Teams is described in the notes. In Settings → Calendar.
+- **Attendee details** (opt-in) — look up attendees' title and company. In Settings → Connectors.
+- **Web search in chat** — typed chat can look something up and show its sources. Live answers never search.
+
+### Improved
+
+- **Meeting apps** — Natively reads Zoom and Teams for the meeting ID, who is on the call and whether you are muted, follows the meeting app's microphone, and detects more meeting apps.
+- **Room speakers** — people sharing one microphone are told apart on Natively, Deepgram and Soniox speech.
+- **Model lists** — each provider's models are fetched live.
+- **Screenshots** — screenshots and page captures are remembered across hotkeys, quick actions and typed chat, and images can be pasted or dropped into the overlay.
+- **Long meetings** — the whole transcript is kept and no AI answer is lost.
+- **Meeting notes** — a short meeting title, the meeting app and the people on the call; an empty model reply is no longer saved as a summary; notes fade under the pinned header.
+- **Compare** — picking a winner deletes the losing version and its tab; an older winner becomes the meeting's notes; "About the same" keeps both.
+- **Resume** — a resume that adds nothing leaves the meeting and its notes exactly as they were.
+- **About you** — at the top of Profile Intelligence → Cue Cards, read by live answers in every mode. Pro or trial.
+- **Free trial** — starts by itself at a meeting with no AI set up; ends when its AI allowance runs out as well as at 30 minutes, with a "Free trial is almost over" warning; a refused answer says the trial ended instead of "check your API keys".
+- **Speech** — failover skips providers that cannot handle the meeting's language; when your provider stops your key for quota, the banner says so and names the backup; local speech models say why they stopped (memory, download or engine).
+- **Capture and screen answers** — Cmd/Ctrl+Y keeps HackerRank's statement and formulas, and a refused screenshot answer is retried with the page cropped.
+- **Code checks** — Go is checked on Windows too, and an answer the toolchain could not check is never "corrected".
+- **Reference files** — thirty or more PDFs index in batches and resume, and Spanish searches match accented text.
+- **Home** — the meeting list shows meeting names only, and a meeting is deleted with one click on a Delete pill.
+- **Settings** — a new Overlay tab, Connectors rebuilt, Skills folded into Intelligence, the Dictionary as word pills in Audio, one text size scale; Ambient AI Chat in General and Do not save meetings under Advanced.
+- **Chat sheets** slide in and close smoothly.
+- **Display** — restoring Natively brings it to the display under the pointer.
+- **Ambient AI Chat** — shows "Mic is off" when it hears nothing, with Turn on mic. Turned off once on upgrade to 3.0.
+- **Pro lifetime** — $60, with $79 struck through during a named sale.
+
+### Fixed
+
+- **Windows system audio** — capture that never started, went silent or played on another device works, and antivirus HTTPS scanning (Kaspersky and similar) no longer breaks connections.
+- **Transcription** — meetings with no words transcribed on macOS and Windows, local models on a fresh machine, and Soniox going deaf after a silent start.
+- **Speech language** — Auto follows the speaker for the whole meeting on Natively speech instead of locking onto the first language.
+- **Garbled transcripts** — English no longer comes back as nonsense in another alphabet on microphones whose audio could not be converted to 16 kHz.
+- **Speech errors** — a wrong key, expired plan or empty account says so and stops instead of "reconnecting"; ElevenLabs shows Out of Credits and no longer stays silent after a session ends.
+- **Groq speech** — longer pieces, so its per-request minimum no longer inflates your bill.
+- **Local models** — a memory reading the OS fails to take no longer blocks every local model.
+- **Overlay** — the first quick-action answer no longer leaves the window too short; copy buttons work on Windows; a banner whose text changed twice quickly no longer goes blank; light-mode code blocks lose the white bar behind each line.
+- **Windows** — the notes window takes clicks after a second notepad meeting; the launcher no longer goes see-through after the splash and keeps its rounded corners; overlay banner buttons open the right settings.
+- **Codex** — held-back answers are no longer cut off, and the default model works with a ChatGPT account.
+- **Phone Mirror** — the Answer chip shows while recording, and photos from the phone no longer pop the overlay up.
+- **Free trial** — the end-of-trial card shows what the trial used instead of zeros.
+- **Meetings** — meetings left in the old Natively folder are copied into the current one.
+- **Calendar** — a failed sign-in ends cleanly and says why.
+- **Follow-ups** — Shorten and Rephrase say why they failed instead of spinning.
+- **Debug log** — opening Natively while it is already running no longer wipes the running app's log.
+- **Sidrune** — Get API key opens the global sign-up with the NATIVELY promo.
+
+### Technical
+
+- The app is called Natively again on both platforms; 2.9.2's system process names are gone and the data folder moves back on first launch. Process Disguise still presents the app as Terminal, System Settings or Activity Monitor.
+- Source maps are no longer shipped inside the app.
+- The native audio module builds on macOS 27 with Xcode 27; the shipped module is stripped as before on macOS and Windows.
+- The debug log records the microphone format ("Mic format: declared X Hz, device Y Hz").
+- Electron 43.7.7 and Node 22.13 or later, unchanged from 2.9.2.
 
     ## [Unreleased]
 
