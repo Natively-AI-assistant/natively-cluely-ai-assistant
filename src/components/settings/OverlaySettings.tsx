@@ -17,11 +17,22 @@
 // and buttons slide to their new places with a FLIP transform.
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { AppWindow, ChevronDown, Layout, Monitor, NotebookPen, RotateCcw } from 'lucide-react';
+import { AppWindow, ChevronDown, Layout, Monitor, NotebookPen, RotateCcw, Type } from 'lucide-react';
 import NotesWindow, { type NotesWindowPreview } from '../NotesWindow';
 import { NOTEPAD_DEMO_PEOPLE, NOTEPAD_DEMO_TEMPLATE, NOTEPAD_DEMO_THEM, NOTEPAD_DEMO_TITLE } from '../notes/notepadDemo';
 import { useT } from '../../i18n';
 import { resolveMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
+import {
+    INTERVIEW_TEXT_SCALE_DEFAULT,
+    INTERVIEW_TEXT_SCALE_MAX,
+    INTERVIEW_TEXT_SCALE_MIN,
+    clampInterviewTextScale,
+    formatInterviewTextScale,
+    getInterviewTextScale,
+    setInterviewTextScale,
+    stepInterviewTextScale,
+    type InterviewTextScaleStep,
+} from '../../lib/interviewTextScale';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import type { OverlayAppearance } from '../../lib/overlayAppearance';
 import {
@@ -511,6 +522,46 @@ const NotepadPreview: React.FC = () => (
 type ScreenshotDisplay = { id: number; number: number; name: string; width: number; height: number; primary: boolean };
 
 /**
+ * Text size of the meeting overlay's messages (#673, src/lib/interviewTextScale.ts).
+ * Follows changes made from the overlay itself (View › Zoom In / Zoom Out).
+ */
+const TextSizeRow: React.FC = () => {
+    const t = useT();
+    const [scale, setScale] = useState(getInterviewTextScale);
+
+    useEffect(() => {
+        const sync = () => setScale(getInterviewTextScale());
+        window.addEventListener('storage', sync);
+        const unsubscribe = window.electronAPI?.onInterviewTextScaleChanged?.((next) => setScale(clampInterviewTextScale(next)));
+        return () => {
+            window.removeEventListener('storage', sync);
+            unsubscribe?.();
+        };
+    }, []);
+
+    const change = (step: InterviewTextScaleStep) => setScale(setInterviewTextScale(stepInterviewTextScale(scale, step)));
+    const button = 'bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary rounded-lg text-xs font-medium transition-colors disabled:opacity-40 disabled:pointer-events-none';
+
+    return (
+        <div className={SETTINGS_CARD}>
+            <SettingsRow
+                icon={<Type size={20} />}
+                title={t('Text size')}
+                description={t('Size of the questions and answers in the meeting overlay. The buttons and the input stay the same size.')}
+                control={
+                    <div className="flex items-center gap-1.5">
+                        <button type="button" aria-label={t('Smaller text')} onClick={() => change('decrease')} disabled={scale <= INTERVIEW_TEXT_SCALE_MIN} className={`${button} w-7 h-7`}>A−</button>
+                        <span className="w-11 text-center text-xs tabular-nums text-text-primary" aria-live="polite">{formatInterviewTextScale(scale)}</span>
+                        <button type="button" aria-label={t('Larger text')} onClick={() => change('increase')} disabled={scale >= INTERVIEW_TEXT_SCALE_MAX} className={`${button} w-7 h-7`}>A+</button>
+                        <button type="button" onClick={() => change('reset')} disabled={scale === INTERVIEW_TEXT_SCALE_DEFAULT} className={`${button} px-2.5 h-7`}>{t('Reset')}</button>
+                    </div>
+                }
+            />
+        </div>
+    );
+};
+
+/**
  * Which screen the screenshot shortcut captures (electron/screenshotDisplay.ts).
  * Shown only with more than one screen. The list is re-read when the menu
  * opens, so a monitor plugged in since Settings opened is there.
@@ -689,6 +740,8 @@ export const OverlaySettings: React.FC<{
             </div>
 
             {opacityControl}
+
+            <TextSizeRow />
 
             <ScreenshotScreenRow />
         </div>

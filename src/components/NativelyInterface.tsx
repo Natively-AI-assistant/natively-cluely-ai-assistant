@@ -1220,7 +1220,8 @@ const MessageRow = React.memo(
         ? 'max-w-[85%] p-0'
         : 'max-w-[85%] px-4 py-3';
     return (
-      <div className="w-full min-w-0" {...(isCodeMsg ? { 'data-code-msg': 'true' } : {})}>
+      // data-text-scale: Settings › Overlay › Text size (#673, index.css).
+      <div className="w-full min-w-0" data-text-scale="" {...(isCodeMsg ? { 'data-code-msg': 'true' } : {})}>
         <div
           className={`flex min-w-0 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
         >

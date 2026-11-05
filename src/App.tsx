@@ -36,6 +36,7 @@ import { savedMeetingAudio } from "./lib/startMeetingRequest"
 import { ProviderChangeNotice, type EmbeddingDegradedNotice } from "./components/ProviderChangeNotice"
 import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
 import { getMeetingInterfaceTheme, resolveMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
+import { clampInterviewTextScale, getInterviewTextScale, setInterviewTextScale, stepInterviewTextScale } from './lib/interviewTextScale'
 import { permissionsNeedAttention } from './lib/permissionAttentionPolicy.mjs'
 import { collectRendererLegacy } from './lib/cards/rendererLegacy.mjs'
 import { resetRendererTrialClaim } from './lib/trialCampaign.mjs'
@@ -426,6 +427,7 @@ const App: React.FC = () => {
   });
 
   const [meetingInterfaceTheme, setMeetingInterfaceThemeState] = useState<MeetingInterfaceTheme>(getMeetingInterfaceTheme);
+  const [interviewTextScale, setInterviewTextScaleState] = useState<number>(getInterviewTextScale);
 
   // Profile state for ad targeting
   const [hasProfile, setHasProfile] = useState(false);
@@ -1114,6 +1116,27 @@ const App: React.FC = () => {
     };
   }, []);
 
+  // Interview text size (#673), the same two channels as the theme above. The
+  // overlay also answers View › Zoom In / Zoom Out / Actual Size with it
+  // instead of page zoom, which cut the bottom of the window off.
+  useEffect(() => {
+    const handleStorage = () => setInterviewTextScaleState(getInterviewTextScale());
+    window.addEventListener('storage', handleStorage);
+    const unsubscribeChanged = window.electronAPI?.onInterviewTextScaleChanged?.((scale) => {
+      setInterviewTextScaleState(clampInterviewTextScale(scale));
+    });
+    const unsubscribeStep = isOverlayWindow
+      ? window.electronAPI?.onInterviewTextScaleStep?.((step) => {
+          setInterviewTextScaleState(setInterviewTextScale(stepInterviewTextScale(getInterviewTextScale(), step)));
+        })
+      : undefined;
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      unsubscribeChanged?.();
+      unsubscribeStep?.();
+    };
+  }, [isOverlayWindow]);
+
 
   // Handlers
   const handleReindex = async () => {
@@ -1297,6 +1320,7 @@ const App: React.FC = () => {
               <div
                 style={{
                   ['--overlay-opacity' as '--overlay-opacity']: String(overlayOpacity),
+                  ['--interview-text-scale' as '--interview-text-scale']: String(interviewTextScale),
                   transition: 'background-color 75ms ease, border-color 75ms ease, box-shadow 75ms ease'
                 } as React.CSSProperties}
               >

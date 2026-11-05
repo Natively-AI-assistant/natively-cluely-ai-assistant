@@ -849,6 +849,9 @@ export interface ElectronAPI {
   onMeetingInterfaceThemeChanged: (callback: (theme: string) => void) => () => void
   setGenieAnimationEnabled: (enabled: boolean) => void
   onGenieAnimationChanged: (callback: (enabled: boolean) => void) => () => void
+  setInterviewTextScale: (scale: number) => void
+  onInterviewTextScaleChanged: (callback: (scale: number) => void) => () => void
+  onInterviewTextScaleStep: (callback: (step: 'increase' | 'decrease' | 'reset') => void) => () => void
   setOverlayButtonOrder: (order: string[]) => void
   onOverlayButtonOrderChanged: (callback: (order: string[]) => void) => () => void
   setOverlayCustomButtons: (buttons: { id: string; name: string; prompt: string; instruction: string; screenshot: boolean }[]) => void
