@@ -12603,6 +12603,16 @@ html[data-tooltips='off'] .t-tt {
   color: inherit !important;
 }
 
+/* Settings › Overlay › Text size (#673). Each message row is zoomed, not the
+   page: CSS zoom changes layout size, so the overlay's ResizeObserver measures
+   the bigger text and the window grows to fit it (page zoom left the window
+   too short and cut the bottom off). Percent widths are not zoomed, so the
+   bubbles keep their column and the text reflows. The header, buttons and
+   input stay their usual size. App.tsx sets the variable. */
+[data-text-scale] {
+  zoom: var(--interview-text-scale, 1);
+}
+
 /* Your question lands. The bubble rises from the input side and settles.
    The tail corner is top-right, but the eye follows the send, so the scale
    grows out of the bottom-right. No blur: the bubble carries its own

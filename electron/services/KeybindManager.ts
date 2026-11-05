@@ -12,6 +12,7 @@ import { isRegisterableAccelerator, probeAccelerator } from './acceleratorValida
 import { buildChordTable, type Win32Chord } from './winChord';
 import { buildMacEditChordTable, type MacEditChord } from './macEditChord';
 import { SettingsManager } from './SettingsManager';
+import { buildZoomMenuItems } from './interviewTextScaleMenu';
 
 export interface KeybindConfig {
     id: string;
@@ -648,6 +649,19 @@ export class KeybindManager {
         }
     }
 
+    /**
+     * Zoom In / Zoom Out / Actual Size: text size in the meeting overlay,
+     * page zoom everywhere else (see interviewTextScaleMenu.ts, #673).
+     */
+    private zoomMenuItems() {
+        return buildZoomMenuItems(process.platform, (win) => {
+            const focused = (win as BrowserWindow | undefined) ?? BrowserWindow.getFocusedWindow() ?? undefined;
+            if (!focused || focused.isDestroyed() || !focused.webContents) return null;
+            const overlay: BrowserWindow | null = this.windowHelper?.getOverlayWindow?.() ?? null;
+            return { isOverlay: overlay === focused, webContents: focused.webContents };
+        });
+    }
+
     public updateMenu() {
         // On Windows/Linux, set a minimal menu (for shortcuts like DevTools)
         // but hide the menu bar from the UI
@@ -660,9 +674,7 @@ export class KeybindManager {
                         { role: 'forceReload' },
                         { role: 'toggleDevTools' },
                         { type: 'separator' },
-                        { role: 'resetZoom' },
-                        { role: 'zoomIn' },
-                        { role: 'zoomOut' },
+                        ...this.zoomMenuItems(),
                         { type: 'separator' },
                         { role: 'togglefullscreen' }
                     ]
@@ -732,9 +744,7 @@ export class KeybindManager {
                     { role: 'forceReload' },
                     { role: 'toggleDevTools' },
                     { type: 'separator' },
-                    { role: 'resetZoom' },
-                    { role: 'zoomIn' },
-                    { role: 'zoomOut' },
+                    ...this.zoomMenuItems(),
                     { type: 'separator' },
                     { role: 'togglefullscreen' }
                 ]

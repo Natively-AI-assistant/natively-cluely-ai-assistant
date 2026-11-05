@@ -1514,6 +1514,12 @@ interface ElectronAPI {
   // Settings → Advanced → "Genie animation", passed to every window the same way.
   setGenieAnimationEnabled: (enabled: boolean) => void;
   onGenieAnimationChanged: (callback: (enabled: boolean) => void) => () => void;
+  // Settings › Overlay › Text size (#673), passed to every window the same way.
+  // Channels: electron/services/interviewTextScaleMenu.ts.
+  setInterviewTextScale: (scale: number) => void;
+  onInterviewTextScaleChanged: (callback: (scale: number) => void) => () => void;
+  // View › Zoom In / Zoom Out / Actual Size pressed while the overlay is focused.
+  onInterviewTextScaleStep: (callback: (step: 'increase' | 'decrease' | 'reset') => void) => () => void;
   // Settings › Overlay: the meeting overlay's button order, passed to every window the same way.
   setOverlayButtonOrder: (order: string[]) => void;
   onOverlayButtonOrderChanged: (callback: (order: string[]) => void) => () => void;
@@ -3796,6 +3802,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('genie-animation:changed', handler);
     return () => {
       ipcRenderer.removeListener('genie-animation:changed', handler);
+    };
+  },
+  setInterviewTextScale: (scale: number) => {
+    ipcRenderer.send('interview-text-scale:set', scale);
+  },
+  onInterviewTextScaleChanged: (callback: (scale: number) => void) => {
+    const handler = (_evt: unknown, scale: number) => callback(scale);
+    ipcRenderer.on('interview-text-scale:changed', handler);
+    return () => {
+      ipcRenderer.removeListener('interview-text-scale:changed', handler);
+    };
+  },
+  onInterviewTextScaleStep: (callback: (step: 'increase' | 'decrease' | 'reset') => void) => {
+    const handler = (_evt: unknown, step: 'increase' | 'decrease' | 'reset') => callback(step);
+    ipcRenderer.on('interview-text-scale:step', handler);
+    return () => {
+      ipcRenderer.removeListener('interview-text-scale:step', handler);
     };
   },
   setOverlayButtonOrder: (order: string[]) => {

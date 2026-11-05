@@ -3,6 +3,11 @@
 import * as crypto from 'crypto';
 import { repairCapReached, endsInsideFence } from './llm/repairCap';
 import { AntigravityService, initializeAntigravityLifecycle } from './services/AntigravityService';
+import {
+  INTERVIEW_TEXT_SCALE_CHANGED_CHANNEL,
+  INTERVIEW_TEXT_SCALE_SET_CHANNEL,
+  sanitizeInterviewTextScale,
+} from './services/interviewTextScaleMenu';
 import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
 import { app, BrowserWindow, clipboard, dialog, desktopCapturer, ipcMain, nativeImage, screen, shell, systemPreferences } from 'electron';
 import { startChatWebSearch } from './services/webSearch/chatWebSearch';
@@ -9251,6 +9256,22 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (win.isDestroyed()) return;
       try {
         win.webContents.send('genie-animation:changed', enabled);
+      } catch {
+        // Renderer may be tearing down between isDestroyed() and send.
+      }
+    });
+  });
+
+  // Settings › Overlay › Text size, and the overlay's own Zoom In / Zoom Out
+  // (#673): the same cross-window hop, so the overlay and Settings agree.
+  // Only a number inside the allowed range is passed on.
+  safeOn(INTERVIEW_TEXT_SCALE_SET_CHANNEL, (_event, scale: unknown) => {
+    const safe = sanitizeInterviewTextScale(scale);
+    if (safe === null) return;
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (win.isDestroyed()) return;
+      try {
+        win.webContents.send(INTERVIEW_TEXT_SCALE_CHANGED_CHANNEL, safe);
       } catch {
         // Renderer may be tearing down between isDestroyed() and send.
       }
