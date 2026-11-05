@@ -8,7 +8,7 @@ import { AccordionPanel } from '../ui/AccordionSection';
 import { getLicenseSnapshot, setLicenseSnapshot } from '../../lib/licenseCache';
 import { BEAT, EASE_ENTER, EASE_LEAVE, INK, SETTLE } from '../../lib/plansMotion';
 import { SwapLabel } from './SettingsRow';
-import { LIFETIME_LIST, LIFETIME_SALE, lifetimeSaleLabel } from '../../lib/lifetimeSale.mjs';
+import { LIFETIME_LIST, LIFETIME_SALE, YEARLY_LIST, YEARLY_SALE, lifetimeSaleLabel, yearlySaleLabel } from '../../lib/lifetimeSale.mjs';
 
 // ─── Strong cubic-bezier easings (per emil-design-eng) ───────
 // Never use the weak default `ease` / `ease-in` for UI motion.
@@ -636,15 +636,17 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
     // or a checkout link is an app release; that was already the case.
     const lifetimeUrl = 'https://checkout.dodopayments.com/buy/pdt_0NbHo6EnXlNPqNcZ14OTi';
     const yearlyUrl = 'https://checkout.dodopayments.com/buy/pdt_0NcM4QBwy0CDcPV9CXaNP';
-    // $39 yearly from 2026-10-30. Lifetime $60 from 2026-11-01, shown against
-    // a struck $79 only during a named sale (lib/lifetimeSale.mjs, same
-    // windows as the website's /pricing).
-    const yearlyPriceText = '$39';
+    // Yearly $30 from 2026-11-06, lifetime $60 from 2026-11-01, each shown
+    // against a struck list price ($39, $79) only during a named sale
+    // (lib/lifetimeSale.mjs, same windows as the website's /pricing).
+    const yearlyPriceText = `$${YEARLY_SALE}`;
+    const yearlyListText = `$${YEARLY_LIST}`;
     const lifetimePriceText = `$${LIFETIME_SALE}`;
     const lifetimeListText = `$${LIFETIME_LIST}`;
     // Read once per mount: Settings is reopened far more often than a sale
     // window turns over.
     const lifetimeSale = useMemo(() => lifetimeSaleLabel(new Date()), []);
+    const yearlySale = useMemo(() => yearlySaleLabel(new Date()), []);
 
     // Parse numeric prices once. Used both for the "Save N%" chip on the
     // toggle and for the live "Save $X over 3 years" copy under the
@@ -1037,14 +1039,24 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                                 style={{ minHeight: 200, transformStyle: 'preserve-3d' }}
                                 glowColor="rgba(59, 130, 246, 0.28)"
                             >
-                                <div className="relative flex items-center justify-between" style={{ transformStyle: 'preserve-3d', transform: 'translateZ(12px)' }}>
-                                    <span className="badge-tier-label inline-flex items-center px-2 py-0.5 rounded-full text-text-primary text-[10px] font-semibold" style={{ letterSpacing: '0.02em' }}>
+                                {/* Same one-row label as Lifetime's: the season's
+                                    pill only while a sale runs, nothing after. */}
+                                <div className="relative flex items-center justify-between gap-2" style={{ transformStyle: 'preserve-3d', transform: 'translateZ(12px)' }}>
+                                    <span className="badge-tier-label inline-flex items-center px-2 py-0.5 rounded-full text-text-primary text-[10px] font-semibold whitespace-nowrap" style={{ letterSpacing: '0.02em' }}>
                                         Pro · Yearly
                                     </span>
+                                    {yearlySale !== null && (
+                                        <span className="badge-best-value badge-sale min-w-0 px-2 py-0.5 rounded-full text-[9.5px] font-bold whitespace-nowrap overflow-hidden text-ellipsis" style={{ letterSpacing: '0.06em' }} title={yearlySale}>
+                                            {yearlySale.toUpperCase()}
+                                        </span>
+                                    )}
                                 </div>
 
-                                {/* Price block. No strikethrough anchor here on
-                                    purpose. `yearlyOriginalText` is synthesized by
+                                {/* Price block: the struck $39 list price while a
+                                    named sale runs (lib/lifetimeSale.mjs), then
+                                    $30. That is Dodo's real list price and
+                                    discount, unlike the INSIDER20 anchor below.
+                                    History: `yearlyOriginalText` is synthesized by
                                     dividing the real price by 0.8, which only ever
                                     meant anything while the INSIDER20 coupon chip
                                     was on screen; that chip was removed at the
@@ -1058,6 +1070,20 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                                     is honest arithmetic and the line under the CTA
                                     says so. */}
                                 <div className="relative mt-4 flex items-baseline gap-2 flex-wrap" style={{ transformStyle: 'preserve-3d', transform: 'translateZ(20px)' }}>
+                                    {yearlySale !== null && (
+                                        <span
+                                            className="pricing-card-original-price text-[17px] font-normal"
+                                            style={{
+                                                textDecoration: 'line-through',
+                                                textDecorationThickness: '1px',
+                                                fontVariantNumeric: 'tabular-nums',
+                                                fontFeatureSettings: '"tnum"',
+                                                letterSpacing: '-0.02em',
+                                            }}
+                                        >
+                                            {yearlyListText}
+                                        </span>
+                                    )}
                                     <span
                                         className="pricing-card-price text-[44px] font-bold leading-none text-text-primary"
                                         style={{
@@ -1100,7 +1126,10 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                                     Get Pro
                                 </button>
                                 <p className="relative mt-2 text-center text-[10px] leading-snug text-text-secondary" style={{ transform: 'translateZ(6px)' }}>
-                                    Cancels anytime. Renews at {yearlyPriceText}/yr.
+                                    {/* No renewal amount: whether Dodo keeps the
+                                        product discount on renewal is unchecked
+                                        (no purchase since it was set, 2026-11-05). */}
+                                    Cancels anytime. Renews yearly.
                                 </p>
                             </InteractiveCard>
 
@@ -1126,7 +1155,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                                     {/* The season's sale while one runs, else the
                                         recommendation. Uppercased here so the
                                         label stays readable in the source. */}
-                                    <span className="badge-best-value min-w-0 px-2 py-0.5 rounded-full text-[9.5px] font-bold whitespace-nowrap overflow-hidden text-ellipsis" style={{ letterSpacing: '0.06em' }} title={lifetimeSale ?? undefined}>
+                                    <span className={`badge-best-value${lifetimeSale !== null ? ' badge-sale' : ''} min-w-0 px-2 py-0.5 rounded-full text-[9.5px] font-bold whitespace-nowrap overflow-hidden text-ellipsis`} style={{ letterSpacing: '0.06em' }} title={lifetimeSale ?? undefined}>
                                         {(lifetimeSale ?? 'Best value').toUpperCase()}
                                     </span>
                                 </div>

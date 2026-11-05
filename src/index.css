@@ -12150,6 +12150,24 @@ html[data-platform="linux"][data-window="launcher"] body {
   box-shadow: inset 0 0 0 1px rgba(38, 59, 175, 0.32);
 }
 
+/* The seasonal sale pill ("HALLOWEEN −24%") is flat on both cards (Evin,
+   2026-11-06): Lifetime's drops its blue tint and hairline while a sale runs
+   and wears the same plain violet fill as Yearly's, which never had them.
+   Outside a sale Lifetime's BEST VALUE pill keeps the rules above. The second
+   selector outranks the light-mode Lifetime rules, including the older one
+   near the top ("BEST VALUE" pill) that still adds a 1px border and a sheen. */
+[data-interface-theme] .pricing-card-lifetime .badge-best-value.badge-sale,
+[data-theme] [data-interface-theme] .pricing-card-lifetime .badge-best-value.badge-sale {
+  background: rgba(139, 92, 246, 0.15) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: inherit !important;
+}
+[data-interface-theme] .pricing-card-lifetime .badge-best-value.badge-sale::before,
+[data-theme] [data-interface-theme] .pricing-card-lifetime .badge-best-value.badge-sale::before {
+  box-shadow: none;
+}
+
 /* The teaser plaque is a smaller sibling of the two pricing cards, so it takes
    their texture too. It was given the noise in the round that rebuilt it, and
    leaving it there would make it the one surface in this tab still wearing the
