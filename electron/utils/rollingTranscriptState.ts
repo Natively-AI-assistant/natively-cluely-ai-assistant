@@ -97,6 +97,24 @@ export function mergeRollingTranscriptPartial(prev: string, partialText: string)
   return text;
 }
 
+/**
+ * The bar's text: the committed finals, then the one live partial.
+ *
+ * The partial replaces the previous one wholesale. mergeRollingTranscriptPartial
+ * can only tell a partial apart from a committed final when each partial
+ * extends the last, which cloud interims do. A local model (Moonshine, Whisper,
+ * Parakeet) re-decodes the whole segment every tick and rewrites it freely, so
+ * every rewrite read as a new utterance and stayed on the bar, next to the
+ * final (live-reproduced on Windows 2026-11-05 with Moonshine Tiny). Callers
+ * keep `committed` themselves: finals go through mergeRollingTranscriptFinal on
+ * it, partials never touch it.
+ */
+export function rollingTranscriptWithPartial(committed: string, partialText: string): string {
+  const text = partialText.trim();
+  if (!text) return committed;
+  return committed ? capRollingTranscript(committed + FINAL_SEPARATOR + text) : text;
+}
+
 /** Commit a final segment — replaces matching in-progress tail instead of duplicating. */
 export function mergeRollingTranscriptFinal(prev: string, finalText: string): string {
   const text = finalText.trim();
