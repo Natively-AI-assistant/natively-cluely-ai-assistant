@@ -14443,18 +14443,41 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // The models the two local STT channels load, as createSTTProvider picks them.
+  const effectiveLocalSttModels = (): string => {
+    const sm = SettingsManager.getInstance();
+    const global = sm.get('localWhisperModel') ?? 'Xenova/whisper-tiny.en';
+    const perChannel = !!sm.get('localWhisperPerChannelEnabled');
+    return `${(perChannel && sm.get('localWhisperModelSystem')) || global}|${(perChannel && sm.get('localWhisperModelMic')) || global}`;
+  };
+  // The STT instances are built once (pre-warmed at launch) and kept across
+  // meetings, so a saved model change alone never reached them: the old model
+  // ran until the app restarted (live-reproduced on Windows 2026-11-05 —
+  // Settings said Tiny English, every later meeting loaded Moonshine Tiny).
+  // Rebuilt the way a provider change is; only when a channel's model actually
+  // changed, so the panel filling in its defaults on open restarts nothing.
+  const applyLocalSttModelChange = async (before: string): Promise<void> => {
+    if (effectiveLocalSttModels() === before) return;
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    if (CredentialsManager.getInstance().getSttProvider() !== 'local-whisper') return;
+    try { await appState.reconfigureSttProvider(); }
+    catch (e: any) { console.warn('[IPC] Local STT rebuild after a model change failed:', e?.message); }
+  };
+
   safeHandle('local-whisper-set-model', async (_, modelId: string) => {
     try {
       const { MODEL_CATALOG_IDS } = require('./audio/whisper/modelManager');
       if (!MODEL_CATALOG_IDS.has(modelId)) {
         return { success: false, error: `Unknown local Whisper model: ${modelId}` };
       }
+      const before = effectiveLocalSttModels();
       if (!SettingsManager.getInstance().set('localWhisperModel', modelId)) {
         // R-24: the write was refused (degraded settings store). Returning
         // success — and broadcasting below — put every window on a value disk
         // never received, which silently reverted on the next launch.
         return { success: false, error: 'settings_store_degraded' };
       }
+      await applyLocalSttModelChange(before);
       return { success: true };
     } catch (e: any) {
       return { success: false, error: e.message };
@@ -14475,6 +14498,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const badGlobal = sm.get('localWhisperModel');
       const badMic = sm.get('localWhisperModelMic');
       const badSystem = sm.get('localWhisperModelSystem');
+      const before = effectiveLocalSttModels();
       if (!sm.set('localWhisperModel', DEFAULT_MODEL)) {
         // R-24: the write was refused (degraded settings store). Returning
         // success — and broadcasting below — put every window on a value disk
@@ -14494,6 +14518,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           }
         }
       } catch { /* advisory */ }
+      await applyLocalSttModelChange(before);
       return { success: true, modelId: DEFAULT_MODEL };
     } catch (e: any) {
       return { success: false, error: e.message };
@@ -14609,6 +14634,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         if (typeof cfg?.systemModelId === 'string' && cfg.systemModelId && !MODEL_CATALOG_IDS.has(cfg.systemModelId)) {
           return { success: false, error: `Unknown local Whisper system model: ${cfg.systemModelId}` };
         }
+        const before = effectiveLocalSttModels();
         if (typeof cfg?.enabled === 'boolean') sm.set('localWhisperPerChannelEnabled', cfg.enabled);
         if (typeof cfg?.micModelId === 'string') sm.set('localWhisperModelMic', cfg.micModelId);
         if (typeof cfg?.systemModelId === 'string')
@@ -14618,6 +14644,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             // never received, which silently reverted on the next launch.
             return { success: false, error: 'settings_store_degraded' };
           }
+        await applyLocalSttModelChange(before);
         return { success: true };
       } catch (e: any) {
         return { success: false, error: e.message };

@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import {
   mergeRollingTranscriptFinal,
-  mergeRollingTranscriptPartial,
+  rollingTranscriptWithPartial,
 } from '../../electron/utils/rollingTranscriptState.ts';
 import { categorizeSttError, sttConnectionCause, sttLocalModelCause } from '../lib/sttErrorMapper';
 import { splitGistLine, splitGistLineStreaming, collapseBlockGaps } from '../lib/displayMarkup';
@@ -2024,6 +2024,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // Debounce partial STT ticks so answer/solution rows are not drowned in re-renders.
   const rollingPartialDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRollingPartialRef = useRef<string | null>(null);
+  // The bar's committed finals; the live partial is drawn after them and never
+  // committed (see rollingTranscriptWithPartial).
+  const rollingCommittedRef = useRef('');
   const interviewerSpeakingRef = useRef(false);
   const pinAnswerPanelRef = useRef<() => void>(() => {});
   const [voiceInput, setVoiceInput] = useState(''); // Accumulated user voice input
@@ -5605,6 +5608,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         rollingPartialDebounceRef.current = null;
       }
       pendingRollingPartialRef.current = null;
+      rollingCommittedRef.current = '';
       setRollingTranscript('');
       setIsInterviewerSpeaking(false);
       interviewerSpeakingRef.current = false;
@@ -7589,7 +7593,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       const text = pendingRollingPartialRef.current;
       pendingRollingPartialRef.current = null;
       if (text == null) return;
-      setRollingTranscript((prev) => mergeRollingTranscriptPartial(prev, text));
+      setRollingTranscript(rollingTranscriptWithPartial(rollingCommittedRef.current, text));
     }, 80);
   }, []);
 
@@ -7601,7 +7605,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const text = pendingRollingPartialRef.current;
     pendingRollingPartialRef.current = null;
     if (text != null) {
-      setRollingTranscript((prev) => mergeRollingTranscriptPartial(prev, text));
+      setRollingTranscript(rollingTranscriptWithPartial(rollingCommittedRef.current, text));
     }
   }, []);
 
@@ -7685,7 +7689,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         flushRollingPartialPreview();
         interviewerSpeakingRef.current = false;
         setIsInterviewerSpeaking(false);
-        setRollingTranscript((prev) => mergeRollingTranscriptFinal(prev, transcript.text));
+        rollingCommittedRef.current = mergeRollingTranscriptFinal(rollingCommittedRef.current, transcript.text);
+        setRollingTranscript(rollingCommittedRef.current);
 
         setTimeout(() => {
           setIsInterviewerSpeaking(false);
@@ -8281,7 +8286,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // segments so a question split by punctuation/finalization stays intact,
         // while older meeting discussion cannot become the primary request.
         const directTranscriptSnapshot = pendingRollingPartialRef.current
-          ? mergeRollingTranscriptPartial(rollingTranscript, pendingRollingPartialRef.current)
+          ? rollingTranscriptWithPartial(rollingCommittedRef.current, pendingRollingPartialRef.current)
           : rollingTranscript;
         const interviewerRequest = directTranscriptSnapshot
           .split('  ·  ')
