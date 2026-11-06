@@ -122,7 +122,10 @@ test('the Plans tab reads every checkout link from CHECKOUT_URLS, none hardcoded
 test('Monthly is the default; a yearly key opens on Yearly and only matches Yearly', () => {
   assert.match(settingsCode, /usageCache\?\.billing_period === 'yearly' \? 'yearly' : 'monthly'/);
   assert.match(settingsCode, /keyCycle === billingCycle/);
-  assert.match(settingsCode, /role="radiogroup"[\s\S]*?aria-label="Billing"/);
+  assert.ok(settingsCode.includes('<BillingCycleSwitch value={billingCycle} onChange={setBillingCycle} />'));
+  const sw = stripComments(read('components/ui/BillingCycleSwitch.tsx'));
+  assert.match(sw, /role="radiogroup"[\s\S]*?aria-label="Billing"/);
+  assert.ok(sw.includes('surface-switch'), "Overlay's two-way switch, not a new control");
   assert.ok(settingsCode.includes("{yearly ? '/ year' : '/ month'}"));
 });
 

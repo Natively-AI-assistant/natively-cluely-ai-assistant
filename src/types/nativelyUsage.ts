@@ -94,6 +94,8 @@ export interface NativelyQuota {
 /** One row of the plan catalog, exactly as the server enforces it. */
 export interface NativelyPlanLimits {
   price_usd: number;
+  /** The yearly price (10x monthly); null on plans not sold yearly. Absent from servers before 2026-11-06. */
+  price_usd_yearly?: number | null;
   ai_tokens: number;
   transcription_minutes: number;
   embedding_tokens: number;

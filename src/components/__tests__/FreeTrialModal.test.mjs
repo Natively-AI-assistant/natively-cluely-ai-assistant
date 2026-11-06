@@ -21,9 +21,26 @@ const rendered = source
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/^[^\n]*?\/\/[^\n]*$/gm, '');
 
+const urls = readFileSync(resolve(__dirname, '../../config/urls.ts'), 'utf8');
+/** The Dodo product id a CHECKOUT_URLS key points at. */
+const productOf = (key) => new RegExp(`\\b${key}: 'https://checkout\\.dodopayments\\.com/buy/(pdt_[A-Za-z0-9]+)'`).exec(urls)?.[1];
+
 test('every plan opens its checkout and records the conversion', () => {
-  for (const id of ['pdt_0NbFixGmD8CSeawb5qvVl', 'pdt_0NcM6Aw0IWdspbsgUeCLA', 'pdt_0NcM7JElX4Af6LNVFS1Yf', 'pdt_0NcM7rC2kAb69TFKsZnUU']) {
-    assert.ok(source.includes(id), `checkout ${id} missing`);
+  // The links come from config/urls.ts, monthly and yearly, never a product id here.
+  assert.doesNotMatch(rendered, /pdt_0N/, 'a product id is hardcoded in the card');
+  const expected = {
+    apiStandard: 'pdt_0NbFixGmD8CSeawb5qvVl', apiPro: 'pdt_0NcM6Aw0IWdspbsgUeCLA',
+    apiMax: 'pdt_0NcM7JElX4Af6LNVFS1Yf', apiUltra: 'pdt_0NcM7rC2kAb69TFKsZnUU',
+    apiStandardYearly: 'pdt_0NrMWrUcsLyeGzOKbTBvg', apiProYearly: 'pdt_0NrMWybuENVytnwJcQqPi',
+    apiMaxYearly: 'pdt_0NrMWz1alVbZKPXvGjxz2', apiUltraYearly: 'pdt_0NrMWzLKdFcSU6HozUl55',
+    packLight: 'pdt_0NrMWztmLVYzyt4L9SQJd', packHeavy: 'pdt_0NrMX0EGK6xaJYhsWRIla',
+  };
+  for (const [key, id] of Object.entries(expected)) {
+    assert.equal(productOf(key), id, `CHECKOUT_URLS.${key}`);
+    assert.ok(rendered.includes(`CHECKOUT_URLS.${key}`), `the card never offers CHECKOUT_URLS.${key}`);
+  }
+  for (const tier of ['Standard', 'Pro', 'Max', 'Ultra']) {
+    assert.match(rendered, new RegExp(`url: CHECKOUT_URLS\\.api${tier},\\s*yearlyUrl: CHECKOUT_URLS\\.api${tier}Yearly`), `${tier}: monthly and yearly links`);
   }
   const handle = source.slice(source.indexOf('const handlePlan'), source.indexOf('const handleByok'));
   assert.ok(handle.includes('convertTrial?.(key)'));
@@ -85,4 +102,25 @@ test('toaster family: flat ground, hourglass panel, neutral outlined CTA, no glo
   assert.ok(!/backdropFilter|backdrop-blur|fm-ring|feTurbulence/.test(rendered), 'no ring, grain or blur');
   assert.ok(!/textTransform:\s*'uppercase'/.test(rendered), 'no tracked-out caps');
   for (const glyph of ['—', '–']) assert.ok(!rendered.includes(glyph), `rendered copy contains ${glyph}`);
+});
+
+test('Monthly / Yearly: the shared switch, Monthly by default, yearly price and link', () => {
+  assert.ok(rendered.includes("import { BillingCycleSwitch } from '../ui/BillingCycleSwitch';"));
+  assert.ok(rendered.includes("useState<BillingCycle>('monthly')"), 'Monthly by default');
+  assert.ok(rendered.includes('<BillingCycleSwitch value={cycle} onChange={setCycle}'));
+  assert.ok(rendered.includes('const url = yearly ? yearlyUrl : monthlyUrl;'));
+  assert.ok(rendered.includes('plans?.[key]?.price_usd_yearly ?? yearlyPrice'), 'the yearly price prefers the catalog too');
+  assert.ok(rendered.includes("const per = yearly ? 'yr' : 'mo';"));
+  // The main button follows the switch as well.
+  assert.ok(rendered.includes("handlePlan('pro', yearly ? CHECKOUT_URLS.apiProYearly : CHECKOUT_URLS.apiPro)"));
+});
+
+test('the packs open their checkout on the trial surface and are not reported as a tier choice', () => {
+  const pack = source.slice(source.indexOf('const handlePack'), source.indexOf('// Funnel: this card appeared'));
+  assert.ok(pack.includes("openExternal?.(url, { surface: 'trial_card' })"));
+  // /v1/trial/convert accepts byok / standard / pro / max / ultra only.
+  assert.ok(!pack.includes('convertTrial'), 'a pack is not a trial conversion choice');
+  assert.ok(rendered.includes('PRO_PACKS.map'));
+  assert.ok(rendered.includes('onClick={() => handlePack(PACK_URLS[p.id])}'));
+  assert.match(rendered, /PACK_URLS[^=]*= \{ pack_light: CHECKOUT_URLS\.packLight, pack_heavy: CHECKOUT_URLS\.packHeavy \}/);
 });

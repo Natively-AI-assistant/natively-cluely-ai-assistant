@@ -24,11 +24,9 @@ import {
   type NativelyPlanLimits, type TrialUsage,
 } from '../../types/nativelyUsage';
 import timerArt from '../../assets/cards/timer.jpg';
-
-const PLAN_STANDARD_URL = 'https://checkout.dodopayments.com/buy/pdt_0NbFixGmD8CSeawb5qvVl';
-const PLAN_PRO_URL      = 'https://checkout.dodopayments.com/buy/pdt_0NcM6Aw0IWdspbsgUeCLA';
-const PLAN_MAX_URL      = 'https://checkout.dodopayments.com/buy/pdt_0NcM7JElX4Af6LNVFS1Yf';
-const PLAN_ULTRA_URL    = 'https://checkout.dodopayments.com/buy/pdt_0NcM7rC2kAb69TFKsZnUU';
+import { CHECKOUT_URLS } from '../../config/urls';
+import { API_PLAN_PRICES, PRO_PACKS, type BillingCycle } from '../../lib/apiPlans.mjs';
+import { BillingCycleSwitch } from '../ui/BillingCycleSwitch';
 
 type PlanKey = 'pro' | 'max' | 'ultra' | 'standard';
 
@@ -39,12 +37,24 @@ type PlanKey = 'pro' | 'max' | 'ultra' | 'standard';
   Max 10M / 1,000, Ultra 14M / 1,500), the same figures MaxUltraUpgradeToaster
   quotes. Once the catalog is here the multiple is computed from it.
 */
-const PLANS: { key: PlanKey; name: string; price: number; times: number | null; url: string }[] = [
-  { key: 'pro',      name: 'Pro',      price: 15, times: 2,    url: PLAN_PRO_URL },
-  { key: 'max',      name: 'Max',      price: 25, times: 3,    url: PLAN_MAX_URL },
-  { key: 'ultra',    name: 'Ultra',    price: 35, times: 4.5,  url: PLAN_ULTRA_URL },
-  { key: 'standard', name: 'Standard', price: 8,  times: null, url: PLAN_STANDARD_URL },
+/*
+  Prices are fallbacks for the catalog (price_usd / price_usd_yearly), from
+  lib/apiPlans.mjs; yearly is 10x monthly and still refills monthly. Links are
+  config/urls.ts, never a product id here.
+*/
+const PLANS: { key: PlanKey; name: string; price: number; yearlyPrice: number; times: number | null; url: string; yearlyUrl: string }[] = [
+  { key: 'pro',      name: 'Pro',      price: API_PLAN_PRICES.pro.monthly,      yearlyPrice: API_PLAN_PRICES.pro.yearly,      times: 2,    url: CHECKOUT_URLS.apiPro,      yearlyUrl: CHECKOUT_URLS.apiProYearly },
+  { key: 'max',      name: 'Max',      price: API_PLAN_PRICES.max.monthly,      yearlyPrice: API_PLAN_PRICES.max.yearly,      times: 3,    url: CHECKOUT_URLS.apiMax,      yearlyUrl: CHECKOUT_URLS.apiMaxYearly },
+  { key: 'ultra',    name: 'Ultra',    price: API_PLAN_PRICES.ultra.monthly,    yearlyPrice: API_PLAN_PRICES.ultra.yearly,    times: 4.5,  url: CHECKOUT_URLS.apiUltra,    yearlyUrl: CHECKOUT_URLS.apiUltraYearly },
+  { key: 'standard', name: 'Standard', price: API_PLAN_PRICES.standard.monthly, yearlyPrice: API_PLAN_PRICES.standard.yearly, times: null, url: CHECKOUT_URLS.apiStandard, yearlyUrl: CHECKOUT_URLS.apiStandardYearly },
 ];
+
+/*
+  The one-time Pro packs, for someone not ready to subscribe. No convertTrial:
+  the server's trial `choice` is a tier name (byok / standard / pro / max /
+  ultra), and the checkout link itself carries the product for the funnel.
+*/
+const PACK_URLS: Record<string, string> = { pack_light: CHECKOUT_URLS.packLight, pack_heavy: CHECKOUT_URLS.packHeavy };
 
 /**
  * The tier against Standard, on whichever of AI tokens and voice minutes grows
@@ -144,6 +154,10 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
   const [ctaActive,  setCtaActive]  = useState(false);
   const [ctaPressed, setCtaPressed] = useState(false);
   const [planHover,  setPlanHover]  = useState<PlanKey | null>(null);
+  const [packHover,  setPackHover]  = useState<string | null>(null);
+  // Monthly by default, as in Settings › Plans & Billing.
+  const [cycle,      setCycle]      = useState<BillingCycle>('monthly');
+  const yearly = cycle === 'yearly';
   const reduced = useReducedMotion() ?? false;
   const isLight = useResolvedTheme() === 'light';
   const INK = isLight ? INK_LIGHT : INK_DARK;
@@ -160,6 +174,10 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
   const handlePlan = (key: PlanKey, url: string) => {
     window.electronAPI?.convertTrial?.(key)?.catch(() => {});
     if (key === 'standard' && onStandard) onStandard().catch(() => {});
+    (window.electronAPI as any)?.openExternal?.(url, { surface: 'trial_card' });
+  };
+
+  const handlePack = (url: string) => {
     (window.electronAPI as any)?.openExternal?.(url, { surface: 'trial_card' });
   };
 
@@ -350,13 +368,21 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
                   : 'Pick a plan to carry on, or bring your own keys.'}
               </motion.p>
 
+              <motion.div variants={item} style={{ margin: '18px 0 0' }}>
+                <BillingCycleSwitch value={cycle} onChange={setCycle} align="start" />
+              </motion.div>
+
               <motion.div variants={item} style={{
-                margin: '20px 0 0',
+                margin: '10px 0 0',
                 display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px',
               }}>
-                {PLANS.map(({ key, name, price, times, url }) => {
+                {PLANS.map(({ key, name, price, yearlyPrice, times, url: monthlyUrl, yearlyUrl }) => {
                   const on = planHover === key;
-                  const shownPrice = plans?.[key]?.price_usd ?? price;
+                  const url = yearly ? yearlyUrl : monthlyUrl;
+                  const shownPrice = yearly
+                    ? (plans?.[key]?.price_usd_yearly ?? yearlyPrice)
+                    : (plans?.[key]?.price_usd ?? price);
+                  const per = yearly ? 'yr' : 'mo';
                   const shownGist = planGist(key, timesStandard(plans?.[key], plans?.standard) ?? times);
                   const dur = on ? CTA_IN : CTA_OUT;
                   return (
@@ -368,7 +394,7 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
                       onPointerLeave={() => setPlanHover(null)}
                       onFocus={e => { if (e.currentTarget.matches(':focus-visible')) setPlanHover(key); }}
                       onBlur={() => setPlanHover(null)}
-                      aria-label={`${name}, $${shownPrice} a month: ${shownGist}. Opens checkout`}
+                      aria-label={`${name}, $${shownPrice} a ${yearly ? 'year' : 'month'}: ${shownGist}. Opens checkout`}
                       style={{
                         display: 'flex', flexDirection: 'column', gap: '6px',
                         padding: '12px 14px', borderRadius: '12px',
@@ -386,7 +412,7 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
                         <span style={{ fontSize: '14px', fontWeight: 600, letterSpacing: '-0.015em', color: INK.strong, whiteSpace: 'nowrap' }}>
                           {name}{' '}
                           <span style={{ fontWeight: 500, color: on ? INK.strong : INK.body, transition: `color ${dur}ms ${EASE_CSS}` }}>
-                            ${shownPrice}/mo
+                            ${shownPrice}/{per}
                           </span>
                         </span>
                         <ArrowRight
@@ -407,6 +433,54 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
                 })}
               </motion.div>
 
+              {/* The one-time packs: one quiet row under the plans, same outline
+                  language, half the height. The rule (hours or days, whichever
+                  ends first) is the line under it. */}
+              <motion.div variants={item} style={{ margin: '10px 0 0' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '10px' }}>
+                  {PRO_PACKS.map((p) => {
+                    const on = packHover === p.id;
+                    const dur = on ? CTA_IN : CTA_OUT;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => handlePack(PACK_URLS[p.id])}
+                        onPointerEnter={e => { if (e.pointerType === 'mouse') setPackHover(p.id); }}
+                        onPointerLeave={() => setPackHover(null)}
+                        onFocus={e => { if (e.currentTarget.matches(':focus-visible')) setPackHover(p.id); }}
+                        onBlur={() => setPackHover(null)}
+                        aria-label={`${p.name}, $${p.price} once: ${p.hours} hours of meetings within ${p.days} days. Opens checkout`}
+                        style={{
+                          display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0,
+                          padding: '8px 12px', borderRadius: '10px',
+                          border: `1px dashed ${isLight
+                            ? (on ? 'rgba(11,16,32,0.30)' : 'rgba(11,16,32,0.16)')
+                            : (on ? 'rgba(255,255,255,0.30)' : 'rgba(255,255,255,0.14)')}`,
+                          background: isLight
+                            ? (on ? 'rgba(11,16,32,0.03)' : 'rgba(11,16,32,0)')
+                            : (on ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0)'),
+                          outline: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: FONT,
+                          whiteSpace: 'nowrap',
+                          transition: `border-color ${dur}ms ${EASE_CSS}, background-color ${dur}ms ${EASE_CSS}`,
+                        }}
+                      >
+                        <span style={{ fontSize: '12px', fontWeight: 600, letterSpacing: '-0.01em', color: INK.strong }}>
+                          {p.name}{' '}
+                          <span style={{ fontWeight: 500, color: on ? INK.strong : INK.body }}>${p.price}</span>
+                        </span>
+                        <span style={{ fontSize: '11px', fontWeight: 500, color: INK.quiet }}>
+                          {p.hours} hours · {p.days} days
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p style={{ margin: '6px 0 0', fontSize: '11px', lineHeight: 1.4, color: INK.faint }}>
+                  Paid once: Pro and AI until the hours or the days run out.
+                </p>
+              </motion.div>
+
               {/* marginTop: auto pins the action row to the bottom of the column. */}
               <motion.div variants={item} style={{ marginTop: 'auto', paddingTop: '22px' }}>
                 {error && (
@@ -420,7 +494,7 @@ export const FreeTrialModal: React.FC<TrialModalProps> = ({ usage, onByok, onSta
                 <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'nowrap' }}>
                   <button
                     type="button"
-                    onClick={() => handlePlan('pro', PLAN_PRO_URL)}
+                    onClick={() => handlePlan('pro', yearly ? CHECKOUT_URLS.apiProYearly : CHECKOUT_URLS.apiPro)}
                     onPointerEnter={e => { if (e.pointerType === 'mouse') setCtaActive(true); }}
                     onPointerLeave={() => { setCtaActive(false); setCtaPressed(false); }}
                     onPointerDown={() => setCtaPressed(true)}

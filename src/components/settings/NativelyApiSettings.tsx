@@ -27,6 +27,7 @@ import { Presence, SettingsMotionReady, SwapLabel } from './SettingsRow';
 import { isTrialClaimedLocally, markTrialClaimedLocally } from '../../lib/trialCampaign.mjs';
 import { trialRefusal } from '../../lib/trial/trialStart.mjs';
 import { CHECKOUT_URLS } from '../../config/urls';
+import { BillingCycleSwitch } from '../ui/BillingCycleSwitch';
 import {
   apiPlanLabel, formatMeetingTime, isPackPlan, packStatus, PRO_PACKS, YEARLY_MONTHS_FREE,
   type BillingCycle, type PackStatus,
@@ -216,11 +217,11 @@ export const PLANS = [
     yearlyUrl: CHECKOUT_URLS.apiUltraYearly,
     badgeText: 'Heavy Users',
     includesPro: true,
-    description: 'For continuous recording and the heaviest daily usage.',
+    description: 'For the heaviest daily use: about 12.5 hours of meetings a month.',
     note: 'Includes a full Natively Pro desktop app license for the duration of subscription.',
     features: [
       'Maximum AI usage, all-day',
-      'Continuous recording & transcription',
+      'The most meeting transcription',
       'Maximum web searches',
       'Full Natively Pro app features included',
     ],
@@ -715,62 +716,8 @@ function trialMeter(used: number, limit: number, unit: UsageMeter['unit']): Usag
   };
 }
 
-// ─── Monthly / Yearly switch ─────────────────────────────────
-// Overlay's two-way switch (.surface-switch / .surface-switch-thumb in
-// index.css, already themed for light and dark): a radiogroup with one thumb
-// that slides under the picked label. Arrow keys move the choice.
-const BILLING_CYCLES: ReadonlyArray<{ id: BillingCycle; label: string }> = [
-  { id: 'monthly', label: 'Monthly' },
-  { id: 'yearly', label: 'Yearly' },
-];
-
-function BillingCycleSwitch({ value, onChange }: { value: BillingCycle; onChange: (next: BillingCycle) => void }) {
-  const reduceMotion = useReducedMotion();
-  const index = Math.max(0, BILLING_CYCLES.findIndex((c) => c.id === value));
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-    e.preventDefault();
-    const next = BILLING_CYCLES[e.key === 'ArrowRight' ? 1 : 0].id;
-    onChange(next);
-    (e.currentTarget.querySelector(`[data-cycle="${next}"]`) as HTMLElement | null)?.focus();
-  };
-  return (
-    <div className="flex items-center justify-center gap-2.5">
-      <div
-        role="radiogroup"
-        aria-label="Billing"
-        onKeyDown={onKeyDown}
-        className="surface-switch relative grid grid-cols-2 p-1 rounded-full"
-      >
-        <motion.div
-          aria-hidden="true"
-          className="surface-switch-thumb absolute top-1 bottom-1 left-1 rounded-full"
-          style={{ width: 'calc(50% - 4px)' }}
-          initial={false}
-          animate={{ x: `${index * 100}%` }}
-          transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 30 }}
-        />
-        {BILLING_CYCLES.map(({ id, label }) => (
-          <button
-            key={id}
-            type="button"
-            role="radio"
-            data-cycle={id}
-            aria-checked={value === id}
-            tabIndex={value === id ? 0 : -1}
-            onClick={() => onChange(id)}
-            className={`relative z-10 flex items-center justify-center px-4 py-1 rounded-full text-[12px] font-medium whitespace-nowrap transition-colors duration-200 motion-reduce:transition-none ${value === id ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      <span className="text-[11px] text-text-tertiary whitespace-nowrap">
-        Yearly: {YEARLY_MONTHS_FREE} months free
-      </span>
-    </div>
-  );
-}
+// The Monthly / Yearly switch is shared with the end-of-trial card:
+// ../ui/BillingCycleSwitch.tsx.
 
 // ─── Pro packs ───────────────────────────────────────────────
 // Two one-time buys beside the subscriptions. The rule that makes a pack a

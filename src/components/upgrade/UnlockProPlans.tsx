@@ -5,7 +5,9 @@
 // new window and not a jump to Settings, and offers three ways in: the $5 Pro
 // Pack (a week to try it), API Pro (AI included, recommended) and Pro Yearly
 // (your own AI keys). "See all plans" opens the website's pricing page for the
-// rest (Lifetime, API Max and up).
+// rest (Lifetime, API Max and up). Two quieter text links sit under their
+// cards' buttons (2026-11-07): the bigger pack (5 hours for $10) and API Pro
+// yearly ($150, 2 months free).
 //
 // The same page is the Natively Plans card after getting started
 // (onboarding/PlansToaster.tsx): there it has no back arrow, a quiet
@@ -35,6 +37,7 @@ import { ArrowLeft, ArrowUpRight, Check, ChevronRight, X } from 'lucide-react';
 import { PLANS } from '../settings/NativelyApiSettings';
 import { CHECKOUT_URLS, PRICING_PAGE_URL } from '../../config/urls';
 import { YEARLY_LIST, YEARLY_SALE, YEARLY_PCT_OFF, yearlySaleLabel } from '../../lib/lifetimeSale.mjs';
+import { PRO_PACKS, YEARLY_MONTHS_FREE } from '../../lib/apiPlans.mjs';
 import LenticularGlass from '../glass/LenticularGlass';
 import type { Palette } from '../glass/lenticular';
 
@@ -222,6 +225,11 @@ interface Tier {
   features: readonly string[];
   cta: string;
   url: string;
+  /**
+   * A quieter second way to buy the same tier, as a text link under the
+   * button: the bigger pack, API Pro yearly. Same checkout path and surface.
+   */
+  alt: { id: string; label: string; url: string } | null;
   featured: boolean;
   mesh: Mesh;
   pattern: Pattern;
@@ -230,13 +238,15 @@ interface Tier {
 function buildTiers(now: Date): Tier[] {
   const saleName = yearlySaleLabel(now)?.replace(/\s*[−-]\d+%$/, '') ?? null;
   const apiPro = PLANS.find(x => x.planKey === 'pro')!;
+  const heavy = PRO_PACKS.find(p => p.id === 'pack_heavy')!;
   return [
     {
       id: 'pack_light', name: 'Pro Pack', badge: 'Try it', tab: null,
-      blurb: 'Every Pro feature with AI included, for one week.',
+      blurb: 'Every Pro feature with AI included, for an interview or two.',
       price: '$5', was: null, period: 'one-time', note: 'No renewal', noteAccent: false,
       features: ['Full Natively Pro app', 'AI and transcription included', '2 meeting hours within 7 days'],
       cta: 'Get Pro Pack', url: CHECKOUT_URLS.packLight,
+      alt: { id: heavy.id, label: `or ${heavy.hours} hours for $${heavy.price}`, url: CHECKOUT_URLS.packHeavy },
       featured: false, mesh: 'standard', pattern: 'dots',
     },
     {
@@ -247,6 +257,8 @@ function buildTiers(now: Date): Tier[] {
       price: apiPro.price, was: null, period: '/mo', note: 'Cancel anytime', noteAccent: false,
       features: apiPro.features.slice(0, 3),
       cta: `Get API ${apiPro.name}`, url: apiPro.url,
+      // 10x monthly; the allowance still refills every month.
+      alt: { id: `${apiPro.id}_yearly`, label: `or ${apiPro.yearlyPrice}/yr, ${YEARLY_MONTHS_FREE} months free`, url: apiPro.yearlyUrl },
       featured: true, mesh: 'pro', pattern: 'rings',
     },
     {
@@ -257,6 +269,7 @@ function buildTiers(now: Date): Tier[] {
       note: `$${(YEARLY_SALE / 12).toFixed(2)} a month`, noteAccent: true,
       features: ['Resume & JD context awareness', '9 expert modes', 'Your own AI keys'],
       cta: 'Get Yearly', url: CHECKOUT_URLS.proYearly,
+      alt: null,
       featured: false, mesh: 'ultra', pattern: 'grid',
     },
   ];
@@ -321,15 +334,16 @@ export function UnlockProPlans({
     }
   };
 
-  const choose = async (tier: Tier) => {
+  // `id` is the tier's, or its alt's (pack_heavy, the yearly API Pro).
+  const choose = async (id: string, url: string) => {
     if (opening) return;
-    setOpening(tier.id);
+    setOpening(id);
     setFailed(false);
-    const ok = await openUrl(tier.url);
+    const ok = await openUrl(url);
     setOpening(null);
     if (ok) {
-      setOpened(tier.id);
-      onCheckoutOpened?.(tier.id);
+      setOpened(id);
+      onCheckoutOpened?.(id);
     } else setFailed(true);
   };
 
@@ -515,7 +529,7 @@ export function UnlockProPlans({
 
                       <button
                         type="button"
-                        onClick={() => choose(tier)}
+                        onClick={() => choose(tier.id, tier.url)}
                         disabled={!!opening}
                         onMouseEnter={() => setHoveredBtn(tier.id)}
                         onMouseLeave={() => setHoveredBtn(null)}
@@ -540,6 +554,36 @@ export function UnlockProPlans({
                           </>
                         )}
                       </button>
+
+                      {/* The quieter second offer. Every card keeps the line's
+                          height, so the three trays below still line up. */}
+                      <div style={{ marginTop: 8, height: 16, display: 'flex', justifyContent: 'center' }}>
+                        {tier.alt && (() => {
+                          const alt = tier.alt;
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => choose(alt.id, alt.url)}
+                              disabled={!!opening}
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 2, padding: 0, border: 0, background: 'none',
+                                fontFamily: FONT, fontSize: 11.5, fontWeight: 500, lineHeight: '16px', whiteSpace: 'nowrap',
+                                color: T.inkMuted, cursor: opening ? 'progress' : 'pointer',
+                                opacity: opening && opening !== alt.id ? 0.5 : 1,
+                                transition: `color 200ms ${EASE_CSS}, opacity 200ms ${EASE_CSS}`,
+                              }}
+                              onMouseEnter={e => (e.currentTarget.style.color = T.ink)}
+                              onMouseLeave={e => (e.currentTarget.style.color = T.inkMuted)}
+                              onFocus={e => (e.currentTarget.style.color = T.ink)}
+                              onBlur={e => (e.currentTarget.style.color = T.inkMuted)}
+                            >
+                              {opening === alt.id ? 'Opening checkout' : opened === alt.id ? 'Opened in browser' : (
+                                <>{alt.label} <ArrowUpRight size={12} strokeWidth={2} aria-hidden /></>
+                              )}
+                            </button>
+                          );
+                        })()}
+                      </div>
                     </div>
 
                     {/* The recessed tray. */}
