@@ -387,6 +387,10 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   const isLicensed = (): boolean => {
     try {
+      const { isDevPremiumOverrideEnabled } = require('./services/devPremiumOverride');
+      if (isDevPremiumOverrideEnabled()) return true;
+    } catch { /* devPremiumOverride unavailable in this build */ }
+    try {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
       if (LicenseManager.getInstance().isPremium() === true) return true;
     } catch {
@@ -1248,6 +1252,10 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
   safeHandle('license:check-premium', async () => {
     try {
+      const { isDevPremiumOverrideEnabled } = require('./services/devPremiumOverride');
+      if (isDevPremiumOverrideEnabled()) return true;
+    } catch { /* devPremiumOverride unavailable */ }
+    try {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
       return LicenseManager.getInstance().isPremium();
     } catch {
@@ -1256,6 +1264,12 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('license:get-details', async () => {
+    try {
+      const { isDevPremiumOverrideEnabled, getDevPlanOverride } = require('./services/devPremiumOverride');
+      if (isDevPremiumOverrideEnabled()) {
+        return { isPremium: true, plan: getDevPlanOverride() ?? 'ultra' };
+      }
+    } catch { /* devPremiumOverride unavailable */ }
     try {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
       return LicenseManager.getInstance().getLicenseDetails();
@@ -1267,6 +1281,10 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Returns false only if the server definitively revokes the key.
   // Network errors fail-open (returns cached sync result).
   safeHandle('license:check-premium-async', async () => {
+    try {
+      const { isDevPremiumOverrideEnabled } = require('./services/devPremiumOverride');
+      if (isDevPremiumOverrideEnabled()) return true;
+    } catch { /* devPremiumOverride unavailable */ }
     try {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
       return await LicenseManager.getInstance().isPremiumAsync();
@@ -12437,6 +12455,31 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('get-natively-usage', async (_event, opts?: { force?: boolean }) => {
+    // Dev override: return mock ultra/pro plan data without a real API key.
+    try {
+      const { getDevPlanOverride } = require('./services/devPremiumOverride');
+      const devPlan: string | null = getDevPlanOverride();
+      if (devPlan) {
+        const resetAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        const unmetered = { used: 0, limit: null, remaining: null, percent: 0, visual_percent: 0, unit: 'minutes' as const };
+        const tokens = (limit: number) => ({ used: 0, limit, remaining: limit, percent: 0, visual_percent: 0, unit: 'tokens' as const });
+        return {
+          ok: true,
+          plan: devPlan,
+          quota: {
+            ai: tokens(10_000_000),
+            voice: unmetered,
+            knowledge: { percent: 0, visual_percent: 0, embedding: tokens(50_000_000), reranker: tokens(125_000_000) },
+            research: { used: 0, limit: 10, remaining: 10, percent: 0, visual_percent: 0, unit: 'usd' as const, runs_used: 0, runs_limit: 10, runs_remaining: 10 },
+            transcription: unmetered,
+            search: { used: 0, limit: null, remaining: null, percent: 0, visual_percent: 0, unit: 'requests' as const },
+            embedding: tokens(50_000_000),
+            resets_at: resetAt,
+          },
+        };
+      }
+    } catch { /* devPremiumOverride unavailable in this build */ }
+
     // Hoisted out of try so the catch block's stale-cache lookup can reach it.
     let key: string | undefined;
     try {
@@ -13467,7 +13510,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         ninerouterMaxTokens: creds.ninerouterMaxTokens || null,
         ninerouterThinking: creds.ninerouterThinking || null,
         ninerouterModelMeta: creds.ninerouterModelMeta || {},
-        hasNativelyKey: hasKey(creds.nativelyApiKey),
+        hasNativelyKey: (() => {
+          try {
+            const { isDevPremiumOverrideEnabled } = require('./services/devPremiumOverride');
+            if (isDevPremiumOverrideEnabled()) return true;
+          } catch { /* devPremiumOverride unavailable */ }
+          return hasKey(creds.nativelyApiKey);
+        })(),
         // Any AI route of the user's own, by the same rule the Trial ended card
         // uses (custom and cURL providers count), so the card scheduler and
         // main never disagree about who is "key-less".

@@ -26,12 +26,13 @@ const outDir = path.resolve(rootDir, 'dist-electron');
 const entryPoints = [];
 
 // Function to recursively find all .ts files in a directory
-const findTs = (dir) => {
+const findTs = (dir, includeJs = false) => {
   const results = [];
   for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, f.name);
-    if (f.isDirectory()) results.push(...findTs(full));
-    else if (f.name.endsWith('.ts') && !f.name.endsWith('.d.ts')) results.push(full);
+    if (f.isDirectory()) results.push(...findTs(full, includeJs));
+    else if ((f.name.endsWith('.ts') && !f.name.endsWith('.d.ts'))
+      || (includeJs && f.name.endsWith('.js'))) results.push(full);
   }
   return results;
 };
@@ -44,7 +45,7 @@ if (fs.existsSync(electronDir)) {
 // Also include premium electron files if they exist
 const premiumDir = path.resolve(rootDir, 'premium/electron');
 if (fs.existsSync(premiumDir)) {
-  entryPoints.push(...findTs(premiumDir).map(f => path.relative(rootDir, f)));
+  entryPoints.push(...findTs(premiumDir, true).map(f => path.relative(rootDir, f)));
 }
 
 const start = Date.now();

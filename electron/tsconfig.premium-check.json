@@ -37,7 +37,10 @@
   // DIFFERENT strictness and report 3 pre-existing TS7018s that `strict` does not
   // produce, which is noise this gate must not emit.
   "include": [
-    "../premium/electron/**/*.ts"
+    "../premium/electron/**/*.ts",
+    // Recovered modules preserve JavaScript because original types are absent.
+    // recovery.test.cjs separately checks their unresolved names and exports.
+    "../premium/electron/**/*.js"
   ],
   // MUST be overridden, not inherited: ./tsconfig.json excludes "../premium/**",
   // which would cancel the include above and leave this config with no inputs

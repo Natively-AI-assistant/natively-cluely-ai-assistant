@@ -63,7 +63,13 @@ export function getProEntitlementReconciler(): Reconciler {
     },
     isTrialKey: (key) => key === TRIAL_SENTINEL_KEY,
     // No premium module → report "already fine" so the reconciler never runs.
-    isPremium: () => { const lm = licenseManager(); return lm ? Boolean(lm.isPremium()) : true; },
+    isPremium: () => {
+      try {
+        const { isDevPremiumOverrideEnabled } = require('./devPremiumOverride');
+        if (isDevPremiumOverrideEnabled()) return true;
+      } catch { /* devPremiumOverride unavailable */ }
+      const lm = licenseManager(); return lm ? Boolean(lm.isPremium()) : true;
+    },
     fetchPlan,
     activate: async (key): Promise<ActivateAnswer> => {
       const lm = licenseManager();

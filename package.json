@@ -24,6 +24,7 @@
     "prepare": "husky",
     "electron:dev": "npm run build && npm run build:electron && cross-env NODE_ENV=development electron .",
     "electron:build": "npm run build:electron && cross-env NODE_ENV=production electron .",
+    "electron:dev:ultra": "concurrently --kill-others --kill-signal SIGKILL \"npm run dev -- --host 127.0.0.1 --port 5180 --strictPort\" \"wait-on http://127.0.0.1:5180 && cross-env NATIVELY_CORE_SMOKE=1 npm run build:electron && cross-env NODE_ENV=development NATIVELY_DEV_PREMIUM=1 NATIVELY_DEV_PLAN=ultra electron .\"",
     "app:dev": "concurrently --kill-others --kill-signal SIGKILL \"npm run dev -- --host 127.0.0.1 --port 5180 --strictPort\" \"wait-on http://127.0.0.1:5180 && npm run electron:dev\"",
     "dev:agent": "node scripts/dev-agent.mjs",
     "app:build": "npm run build && npm run typecheck:electron && npm run build:electron && cross-env NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native && node scripts/ensure-sharp-mac-deps.js && node scripts/ensure-napi-canvas-mac-deps.js && node scripts/ensure-node-llama-cpp-mac-deps.js && node scripts/ensure-sqlite-vec.js && npm run verify:packaged-local-assets && node scripts/package-app.js",

@@ -10,6 +10,12 @@
  * research, Cue Cards, "About you").
  */
 export function isProOrTrialActive(): boolean {
+  // Dev override: simulate active pro/ultra subscription in development.
+  try {
+    const { isDevPremiumOverrideEnabled } = require('./devPremiumOverride');
+    if (isDevPremiumOverrideEnabled()) return true;
+  } catch { /* devPremiumOverride unavailable */ }
+
   // 1. Full premium license (Dodo / Gumroad / Natively API subscription)
   try {
     const { LicenseManager } = require('../../premium/electron/services/LicenseManager');
