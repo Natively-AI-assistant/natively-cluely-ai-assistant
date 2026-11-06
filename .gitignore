@@ -707,6 +707,7 @@ agent-browser.json
 # Dev harnesses, benchmark datasets, and prototype docs
 /actionCardHarness.html
 /aboutSettingsHarness.html
+/unlockProHarness.html
 /aiProvidersTablistHarness.html
 /CLUELY_FONTS.md
 /CLUELY_MEETING_DETECTION.md

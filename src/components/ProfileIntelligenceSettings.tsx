@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import {
     X, RefreshCw, Upload, Briefcase, Trash2, Check, Globe,
     Building2, Search, AlertCircle, AlertTriangle, Gift, Info, Star,
-    User, CheckCircle, ArrowUpRight, ChevronRight, Paperclip, FileText,
+    User, CheckCircle, ArrowUpRight, ArrowRight, ChevronRight, Paperclip, FileText,
     GraduationCap, FolderKanban, Layers, Mail, MessageSquare, Target,
 } from 'lucide-react';
 import { ThinkingOrb } from 'thinking-orbs';
@@ -13,18 +13,10 @@ import { LiquidGlassButton, useLensTracking } from '../ui-components/LiquidGlass
 import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
 import { Presence } from './settings/SettingsRow';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
-import { CHECKOUT_URLS } from '../config/urls';
+import { UnlockProPlans } from './upgrade/UnlockProPlans';
 import { useConfirmDialog } from './ui/ConfirmDialog';
 import { OwnAnswersSection } from './OwnAnswersSection';
 import { copyText } from '../lib/copyText';
-
-const openExternal = (url: string) => {
-    if ((window as any).electronAPI?.openExternal) {
-        (window as any).electronAPI.openExternal(url, { surface: 'profile_intelligence' });
-    } else {
-        window.open(url, '_blank', 'noopener,noreferrer');
-    }
-};
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const PI_CSS = `
@@ -1807,6 +1799,28 @@ function ProfileIntelligenceProGate({ onOpenNativelyAPI, onClose }: {
     useEffect(() => {
         (window as any).electronAPI?.funnelTrack?.('paywall_hit', { feature: 'profile_intelligence' })?.catch?.(() => {});
     }, []);
+    /* "Unlock Pro" swaps this paywall for the plans page (UnlockProPlans), in
+       this same panel: the $5 Pro Pack, API Pro and Pro Yearly side by side,
+       and a link to every plan on the website. It used to open the API Max checkout straight away, a $25/month
+       page behind a button that said Pro (6–9% of those checkouts were paid,
+       against 21–25% where plans are compared first; Oct 7–Nov 5, 2026). */
+    const [showPlans, setShowPlans] = useState(false);
+    const unlockPro = () => {
+        (window as any).electronAPI?.funnelTrack?.('upgrade_prompt', { surface: 'profile_intelligence', action: 'clicked' })?.catch?.(() => {});
+        setShowPlans(true);
+    };
+
+    if (showPlans) {
+        return (
+            <UnlockProPlans
+                surface="profile_intelligence"
+                theme={theme === 'light' ? 'light' : 'dark'}
+                onBack={() => setShowPlans(false)}
+                onClose={onClose}
+                onHaveLicense={onOpenNativelyAPI}
+            />
+        );
+    }
 
     return (
         <div className="pi-pro-gate" data-theme={theme} style={{
@@ -1976,10 +1990,10 @@ function ProfileIntelligenceProGate({ onOpenNativelyAPI, onClose }: {
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <button className="pig-cta-group" onClick={() => openExternal(CHECKOUT_URLS.apiMax)}>
+                    <button className="pig-cta-group" onClick={unlockPro}>
                         Unlock Pro
                         <div className="pig-cta-icon-ring">
-                            <ArrowUpRight size={14} strokeWidth={2.5} />
+                            <ArrowRight size={14} strokeWidth={2.5} />
                         </div>
                     </button>
                 </div>

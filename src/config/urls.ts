@@ -13,6 +13,10 @@ export const CHECKOUT_URLS = {
      * Nothing reads this key (2026-11-07); kept so an import cannot break.
      */
     pro: 'https://checkout.dodopayments.com/buy/pdt_0NcM6Aw0IWdspbsgUeCLA',
+    /** Natively Pro licence, yearly (own AI keys); the Unlock Pro plans page */
+    proYearly: 'https://checkout.dodopayments.com/buy/pdt_0NcM4QBwy0CDcPV9CXaNP',
+    /** Natively Pro licence, lifetime (own AI keys) */
+    proLifetime: 'https://checkout.dodopayments.com/buy/pdt_0NbHo6EnXlNPqNcZ14OTi',
     /** Natively API — Standard tier, monthly ($8) */
     apiStandard: 'https://checkout.dodopayments.com/buy/pdt_0NbFixGmD8CSeawb5qvVl',
     /** Natively API — Pro tier, monthly ($15) */
@@ -37,3 +41,6 @@ export const CHECKOUT_URLS = {
     /** Heavy pack — $10, 5 hours of meetings within 14 days */
     packHeavy: 'https://checkout.dodopayments.com/buy/pdt_0NrMX0EGK6xaJYhsWRIla',
 } as const;
+
+/** The website's pricing page, every plan side by side. */
+export const PRICING_PAGE_URL = 'https://heynatively.com/pricing';
