@@ -25,13 +25,33 @@ test('a send during the capture waits for it and takes it', async () => {
   assert.equal(shots.inFlight(), false);
 });
 
-test('the late tray add can tell the send already took it', async () => {
+test('the capture handler sees the claim when it checks, not only after the send', async () => {
+  // As NativelyInterface runs it: the handler awaits the capture and checks
+  // claimed() in its continuation, which runs BEFORE the waiting send resumes.
+  // The old claim (taken after the wait) came too late, and the image was
+  // also added to the tray.
   const shots = createPendingScreenshots();
-  const capture = shots.track(later({ path: '/b.png', preview: 'p' }, 30));
+  let sawClaim = null;
+  const handler = (async () => {
+    const shot = await shots.track(later({ path: '/b.png', preview: 'p' }, 30));
+    sawClaim = shots.claimed(shot.path);
+  })();
   const sending = shots.settle(1000);
-  const shot = await capture;
-  await sending;
-  assert.equal(shots.claimed(shot.path), true);
+  await handler;
+  assert.equal(sawClaim, true, 'the tray add is skipped');
+  assert.deepEqual(await sending, [{ path: '/b.png', preview: 'p' }], 'and the send has it');
+});
+
+test('a capture that finishes after the wait is not claimed: it goes to the tray', async () => {
+  const shots = createPendingScreenshots();
+  let sawClaim = null;
+  const handler = (async () => {
+    const shot = await shots.track(later({ path: '/late.png', preview: 'p' }, 120));
+    sawClaim = shots.claimed(shot.path);
+  })();
+  assert.deepEqual(await shots.settle(30), []);
+  await handler;
+  assert.equal(sawClaim, false);
 });
 
 test('a capture slower than the cap is left for the tray', async () => {

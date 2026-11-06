@@ -1987,6 +1987,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
         myController = new AbortController();
         _chatStreamsBySender.set(senderId, { streamId: myStreamId, controller: myController });
+        // This question's id, before anything else of its stream (2026-11-06):
+        // the overlay drops every desktop chat event until it arrives, as all of
+        // them belong to older questions (isStaleDesktopChatEvent).
+        try { event.sender.send('gemini-stream-started', { streamId: myStreamId }); } catch { /* sender gone */ }
         // The overlay cancels its own stream on session-reset, and modes:set-active
         // aborts every sender's, but the launcher's chat (GlobalChat /
         // MeetingChat fallback) is not cancelled at meeting stop. Its answer is
@@ -3099,6 +3103,13 @@ export function initializeIpcHandlers(appState: AppState): void {
             }
           }
         } catch (v3Err: any) {
+          // Replaced by a newer question (2026-11-06): main aborted this stream
+          // for it, and some providers throw on the abort. Not a V3 defect, and
+          // nobody is waiting for this answer: no legacy run, no fallback count.
+          if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
+            console.log('[ContextIntelligenceV3] manual-chat stream replaced by a newer question; not falling back', { streamId: myStreamId });
+            return null;
+          }
           // A defect in the new path must not take the surface down: fall through
           // to legacy rather than failing the answer — but the reversion is
           // COUNTED and logged, because a silent fallback reverts five source-

@@ -327,7 +327,7 @@ import {
   pinnedViewportBudget,
   type OverlayResizeDirection,
 } from '../lib/overlayCustomSize.mjs';
-import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch, resolveChatStreamSurfaceError, isReplacedChatStream } from '../lib/chatStreamGuard.mjs';
+import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch, resolveChatStreamSurfaceError, isStaleDesktopChatEvent } from '../lib/chatStreamGuard.mjs';
 import { buildDirectWhatToSayPayload } from '../lib/directAssistWhatToSayPayload.mjs';
 import { chatFailureFromError, isProviderFailureSentence } from '../lib/chatFailure.mjs';
 import {
@@ -2114,22 +2114,21 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // A question typed while the previous answer still streams (2026-11-06). The
   // flag above used to stay set until that answer FINISHED, so Enter did
   // nothing and the question sat in the box. It is now released once the
-  // question is sent; main stops the older stream. The newest desktop chat
-  // stream id seen so far, and the floor below which streams are replaced
-  // (isReplacedChatStream), keep the older stream's last tokens, done and error
-  // out of the new card. The sequence number keeps a replaced send's own error
-  // path off the new card.
-  const lastDesktopChatStreamIdRef = useRef<number | null>(null);
+  // question is sent; main stops the older stream. The older stream's last
+  // tokens, done and error are kept out of the new card: from a send until
+  // main's gemini-stream-started for it, every desktop chat event is an older
+  // stream's, and after it the floor is that stream's id minus one
+  // (isStaleDesktopChatEvent). The sequence number keeps a replaced send's own
+  // error path off the new card.
+  const awaitingChatStreamStartRef = useRef(false);
   const replacedChatStreamFloorRef = useRef<number | null>(null);
   const manualSubmitSeqRef = useRef(0);
   // Refs only, so the stream listeners (mounted once) can call any render's copy.
-  const noteDesktopChatStreamId = (streamId: unknown, source: unknown) => {
-    if (typeof streamId !== 'number') return;
-    if (typeof source === 'string' && source && source !== 'desktop') return;
-    if (lastDesktopChatStreamIdRef.current === null || streamId > lastDesktopChatStreamIdRef.current) {
-      lastDesktopChatStreamIdRef.current = streamId;
-    }
-  };
+  const staleDesktopChatEvent = (streamId: unknown, source: unknown) => isStaleDesktopChatEvent(
+    { awaitingStart: awaitingChatStreamStartRef.current, floor: replacedChatStreamFloorRef.current },
+    typeof streamId === 'number' ? streamId : undefined,
+    typeof source === 'string' ? source : undefined,
+  );
   const lastManualSubmitRef = useRef<{ text: string; atMs: number } | null>(null);
   /** Blocks duplicate quick-action LLM calls (Clarify, Follow-up, Brainstorm, Answer). */
   const overlayActionInFlightRef = useRef(new Set<string>());
@@ -8819,13 +8818,20 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // streamId guard (audit finding #3): drop tokens from a superseded chat stream so
     // a phone-mirror or stale desktop stream can't bleed into the active bubble. Tokens
     // without a streamId (back-compat) are always accepted.
+    // The id main gave the question just sent: older desktop streams are below it.
+    cleanups.push(
+      window.electronAPI.onGeminiStreamStarted((data) => {
+        if (typeof data?.streamId !== 'number') return;
+        replacedChatStreamFloorRef.current = data.streamId - 1;
+        awaitingChatStreamStartRef.current = false;
+      }),
+    );
     cleanups.push(
       window.electronAPI.onGeminiStreamToken((token, meta) => {
         // Direct Assist owns this overlay row while active. A legacy token that
         // was already queued before cancellation must never be adopted into it.
         if (activeDirectAssistRef.current) return;
-        if (isReplacedChatStream(replacedChatStreamFloorRef.current, meta?.streamId, (meta as any)?.source)) return;
-        noteDesktopChatStreamId(meta?.streamId, (meta as any)?.source);
+        if (staleDesktopChatEvent(meta?.streamId, (meta as any)?.source)) return;
         const decision = resolveChatStreamToken(
           chatStreamIdRef.current, meta?.streamId,
           chatStreamSourceRef.current, (meta as any)?.source,
@@ -8843,8 +8849,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         if (activeDirectAssistRef.current) return;
         // Replaced by a newer typed question: the new question owns the card
         // and the spinner, so nothing here is released either.
-        if (isReplacedChatStream(replacedChatStreamFloorRef.current, data?.streamId, (data as any)?.source)) return;
-        noteDesktopChatStreamId(data?.streamId, (data as any)?.source);
+        if (staleDesktopChatEvent(data?.streamId, (data as any)?.source)) return;
         // Ignore a done from a superseded stream (audit finding #3) so it can't
         // tear down a newer stream's row. A done without a streamId is honored
         // (back-compat). On an honored done we clear the adopted id.
@@ -9020,7 +9025,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           }
           return;
         }
-        if (isReplacedChatStream(replacedChatStreamFloorRef.current, meta?.streamId, meta?.source)) return;
+        if (staleDesktopChatEvent(meta?.streamId, meta?.source)) return;
         if (typeof meta?.streamId === 'number'
           && chatStreamIdRef.current !== null
           && meta.streamId !== chatStreamIdRef.current) return;
@@ -9512,6 +9517,9 @@ Provide only the answer, nothing else.`;
           // surface. The desktop done/error handlers both clear it again.
           chatStreamIdRef.current = null;
           chatStreamSourceRef.current = 'desktop';
+          // As for a typed question: older desktop streams' events are dropped
+          // until main names this one's (isStaleDesktopChatEvent).
+          awaitingChatStreamStartRef.current = true;
           requestStartTimeRef.current = Date.now();
           await window.electronAPI.streamGeminiChat(
             question,
@@ -9527,6 +9535,7 @@ Provide only the answer, nothing else.`;
           // gemini-stream-error follows and nothing else releases the claim we
           // took above. Left set, it would pin the guard to 'desktop' and block
           // every phone turn — the bug this fix removes, inverted.
+          awaitingChatStreamStartRef.current = false;
           chatStreamIdRef.current = null;
           chatStreamSourceRef.current = null;
           setIsProcessing(false);
@@ -9614,6 +9623,10 @@ Provide only the answer, nothing else.`;
     lastManualSubmitRef.current = { text: userText, atMs: nowMs };
     analytics.trackChatQuestionSent();
 
+    // Cleared now, before the wait below (2026-11-06): what is typed during
+    // it is the next question, and clearing after the wait erased it.
+    setInputValue('');
+
     // ⌘H then Enter in one motion: wait for a screenshot still capturing.
     let currentAttachments = attachedContext;
     for (const shot of await pendingShotsRef.current.settle()) {
@@ -9626,8 +9639,7 @@ Provide only the answer, nothing else.`;
       return;
     }
 
-    // Clear inputs immediately
-    setInputValue('');
+    // Clear the tray (the input was cleared before the wait above)
     setAttachedContext([]);
 
     // Seal any in-flight streaming rows from a previous turn before we
@@ -9749,11 +9761,9 @@ Provide only the answer, nothing else.`;
       // Pass imagePath if attached, AND conversation context
       // R-17: claim the desktop surface before the round-trip (see the note at
       // the other streamGeminiChat call site).
-      // Every desktop stream seen so far is now older than this question's;
-      // what they still send is dropped (isReplacedChatStream).
-      if (lastDesktopChatStreamIdRef.current !== null) {
-        replacedChatStreamFloorRef.current = lastDesktopChatStreamIdRef.current;
-      }
+      // Until main names this question's stream, every desktop chat event is
+      // an older question's and is dropped (isStaleDesktopChatEvent).
+      awaitingChatStreamStartRef.current = true;
       chatStreamIdRef.current = null;
       chatStreamSourceRef.current = 'desktop';
       requestStartTimeRef.current = Date.now();
@@ -9769,6 +9779,8 @@ Provide only the answer, nothing else.`;
       // A newer question replaced this one (main stopped this stream): its card,
       // claim and spinner belong to that question now.
       if (mySubmit !== manualSubmitSeqRef.current) return;
+      // No stream will start for a send that failed.
+      awaitingChatStreamStartRef.current = false;
       // R-17: release the claim taken above — see the note at the other call site.
       chatStreamIdRef.current = null;
       chatStreamSourceRef.current = null;

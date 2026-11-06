@@ -25,7 +25,7 @@
 
 import { app } from 'electron';
 import { validateImagePath } from '../../utils/curlUtils';
-import { ImageHashService } from './ImageHashService';
+import { hashImageFileAsync } from './ScreenshotDescriptionStore';
 import {
   runVisionFallback,
   VisionFallbackResult,
@@ -202,7 +202,6 @@ const LATE_RECORD_BUDGETS_MS: Readonly<Record<string, number>> = {
 };
 
 export class ScreenUnderstandingService {
-  private imageHashService: ImageHashService;
   private optimizer: ImageOptimizer;
   private lastResult: ScreenUnderstandingResult | null = null;
   /**
@@ -233,7 +232,6 @@ export class ScreenUnderstandingService {
   private readonly rungLedFor = new Map<string, string>();
 
   constructor(optimizer?: ImageOptimizer) {
-    this.imageHashService = new ImageHashService();
     this.optimizer = optimizer || getImageOptimizer();
   }
 
@@ -295,25 +293,20 @@ export class ScreenUnderstandingService {
       return this.buildUnavailable({ request, warnings, started });
     }
 
-    // Hash for cache.
-    let imageHash: string | undefined;
-    try {
-      imageHash = await this.imageHashService.computeHash(validPaths[validPaths.length - 1]);
-    } catch {
-      try {
-        imageHash = await this.imageHashService.quickHash(validPaths[validPaths.length - 1]);
-      } catch {
-        imageHash = undefined;
-      }
-    }
+    // Hash for cache: the exact bytes of the LATEST image, the one image a
+    // read sends (latestPath below) (2026-11-06). It was that image's
+    // PERCEPTUAL hash (a 16×16 average), so a screen that only LOOKED like the
+    // last one — an editor with one line changed, a page scrolled a little —
+    // matched it: this cache returned the old screen's read, and the image
+    // optimizer (which takes the same key) handed the provider the old screen's
+    // image. Not a key over the whole set: only the latest is read, and a set
+    // key ignores order ([A, B] then [B, A] would reuse B's read for A).
+    const imageHash: string | undefined =
+      (await hashImageFileAsync(validPaths[validPaths.length - 1])) ?? undefined;
 
     // Cache lookup — same image AND same question-kind within 5 min → reuse.
-    // Not for the record (2026-11-06). This hash is PERCEPTUAL (a 16×16
-    // average), so a screen that looks like the last one — an editor with one
-    // line changed, a page scrolled a little — matched it, and the new
-    // screenshot was recorded with the OLD screen's text. The record has an
-    // exact cache already: screenTranscription.ts looks the screenshot's bytes
-    // up in the description store before it asks for a record at all.
+    // Not for the record: screenTranscription.ts looks the screenshots up in
+    // the description store before it asks for a record at all.
     const resultKind = request.userAction === 'transcribe' ? 'transcribe' : 'answer';
     if (imageHash && resultKind !== 'transcribe') {
       const cached = this.cacheLookup(imageHash, resultKind);

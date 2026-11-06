@@ -30,8 +30,12 @@ export type JpegEncoder = (filePath: string, spec: JpegSpec) => Promise<Buffer>;
 const MAX_ENTRIES = 24;
 const entries = new Map<string, Promise<Buffer>>();
 
-const encodeWithSharp: JpegEncoder = (filePath, { edge, quality }) =>
-  sharp(filePath)
+// From the file's BYTES, not its path (2026-11-06): libvips can keep a file it
+// opened by path in its operation cache, and on Windows an open file cannot be
+// deleted, so the screenshot queue's unlinks would fail (quietly) and old
+// screenshots stay on disk. The prewarm opens every capture, twice.
+const encodeWithSharp: JpegEncoder = async (filePath, { edge, quality }) =>
+  sharp(await fs.promises.readFile(filePath))
     .resize({ width: edge, height: edge, fit: 'inside', withoutEnlargement: true })
     .jpeg({ quality })
     .toBuffer();

@@ -110,6 +110,27 @@ export function isReplacedChatStream(floor, incomingId, incomingSource) {
     && incomingId <= floor;
 }
 
+/**
+ * Whether a desktop chat event belongs to a stream OLDER than the question the
+ * user sent last (2026-11-06). From the send until main's
+ * `gemini-stream-started` for it, every desktop event is older: main sends
+ * that event before any token of the new stream, and one window's IPC arrives
+ * in order. After it, `floor` is that stream's id minus one. Keying on ids
+ * the renderer had already SEEN was not enough: an older question still
+ * "Thinking" (no token yet) had no id to floor on, and its first token
+ * claimed the new question's card. Phone streams are never affected.
+ *
+ * @param {{ awaitingStart?: boolean, floor?: number|null }} state
+ * @param {number|null|undefined} incomingId
+ * @param {string|null|undefined} incomingSource
+ * @returns {boolean}
+ */
+export function isStaleDesktopChatEvent(state, incomingId, incomingSource) {
+  if (normalizeSource(incomingSource) !== 'desktop') return false;
+  if (state?.awaitingStart) return true;
+  return isReplacedChatStream(state?.floor, incomingId, incomingSource);
+}
+
 /** Absent/unknown source means the legacy desktop path. */
 function normalizeSource(source) {
   return typeof source === 'string' && source ? source : 'desktop';

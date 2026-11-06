@@ -31,6 +31,13 @@ export function isReplacedChatStream(
   incomingSource?: string | null,
 ): boolean;
 
+/** An event of a desktop chat stream older than the last typed question (2026-11-06): drop it. */
+export function isStaleDesktopChatEvent(
+  state: { awaitingStart?: boolean; floor?: number | null } | null | undefined,
+  incomingId: number | null | undefined,
+  incomingSource?: string | null,
+): boolean;
+
 export function resolveLiveAnswerBatch(
   activeId: number | null | undefined,
   incomingId: number | null | undefined,

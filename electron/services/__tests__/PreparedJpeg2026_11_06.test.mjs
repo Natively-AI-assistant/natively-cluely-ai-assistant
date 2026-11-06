@@ -108,3 +108,10 @@ test('the cache stays bounded', async () => {
   await preparedJpeg(first, NATIVELY_API_JPEG, encode);
   assert.equal(calls.length, 32, 'the oldest entry was dropped');
 });
+
+test('the real encoder reads the file\'s bytes, never opens it by path (Windows: a file libvips holds open cannot be deleted)', () => {
+  const src = fs.readFileSync(path.join(root, 'electron/services/screen/preparedJpeg.ts'), 'utf8');
+  const encoder = src.slice(src.indexOf('const encodeWithSharp'), src.indexOf('function keyFor'));
+  assert.match(encoder, /sharp\(await fs\.promises\.readFile\(filePath\)\)/);
+  assert.doesNotMatch(encoder, /sharp\(filePath\)/);
+});

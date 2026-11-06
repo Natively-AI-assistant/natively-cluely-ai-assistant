@@ -31,7 +31,11 @@ const TOKEN_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/token';
 // ─── Configuration ──────────────────────────────────────────────────────────
 
 test('client ID: from the build or env, validated; tenant defaults to common', () => {
-    assert.deepEqual(graph.microsoftClientConfig({}), { clientId: '', tenant: 'common' }, 'this test build has no baked ID');
+    // With no env, the ID the BUILD baked in (scripts/build-electron.js reads
+    // .env): none on CI, Natively's own on a machine whose .env has one.
+    const baked = graph.microsoftClientConfig({});
+    assert.equal(baked.tenant, 'common');
+    assert.ok(baked.clientId === '' || /^[A-Za-z0-9-]{8,64}$/.test(baked.clientId), `baked ID: ${baked.clientId}`);
     assert.deepEqual(graph.microsoftClientConfig({ MICROSOFT_CALENDAR_CLIENT_ID: ` ${CLIENT_ID} ` }), CONFIG);
     assert.equal(graph.microsoftClientConfig({ MICROSOFT_CALENDAR_CLIENT_ID: CLIENT_ID, MICROSOFT_CALENDAR_TENANT: 'contoso.onmicrosoft.com' }).tenant, 'contoso.onmicrosoft.com');
     assert.equal(graph.microsoftClientConfig({ MICROSOFT_CALENDAR_CLIENT_ID: CLIENT_ID, MICROSOFT_CALENDAR_TENANT: 'bad/tenant?x' }).tenant, 'common');

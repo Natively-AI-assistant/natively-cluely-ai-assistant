@@ -224,6 +224,6 @@ describe('the overlay takes an empty bubble away when nothing came back', () => 
   // its token batch, so they opened a new row under the failure line.
   test('main sends the words that came before a failure first', () => {
     const main = read('electron/main.ts');
-    assert.match(main, /this\.intelligenceManager\.on\('error', \(error: Error, mode: string\) => \{[\s\S]{0,420}flushBatchesBeforeFinal\(\)\s*const win = mainWindow\(\)\s*this\.sendToWindow\(win, 'intelligence-error'/);
+    assert.match(main, /this\.intelligenceManager\.on\('error', \(error: Error, mode: string\) => \{[\s\S]{0,420}flushBatchesBeforeFinal\(\)\s*const win = answerWindow\(\)\s*this\.sendToWindow\(win, 'intelligence-error'/);
   });
 });

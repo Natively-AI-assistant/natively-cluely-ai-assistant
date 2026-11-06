@@ -859,16 +859,6 @@ export class IntelligenceEngine extends EventEmitter {
     }
 
     /**
-     * The conversation so far, for a quick action V3 does not compose
-     * (renderHistoryForQuickAction): the overlay's typed chat, every hotkey
-     * answer, and the text of every screenshot shared. Those actions read a
-     * speech window and nothing else, so a screenshot asked about one press ago
-     * was invisible to Clarify, Recap, Brainstorm and Code hint. Plain text,
-     * for the action's own turn builder to escape. '' when there is nothing,
-     * when the multi-turn history is rolled back, or when the transcript may
-     * not be sent (the rule the bridge applies to the same text).
-     */
-    /**
      * conversationHistoryText as a data-only block for a prompt, '' when there
      * is no history. Shared by the quick actions and the phone's chat
      * (2026-11-06), which read only the last 100 s of the session before and
@@ -886,6 +876,16 @@ export class IntelligenceEngine extends EventEmitter {
             : '';
     }
 
+    /**
+     * The conversation so far, for a quick action V3 does not compose
+     * (renderHistoryForQuickAction): the overlay's typed chat, every hotkey
+     * answer, and the text of every screenshot shared. Those actions read a
+     * speech window and nothing else, so a screenshot asked about one press ago
+     * was invisible to Clarify, Recap, Brainstorm and Code hint. Plain text,
+     * for the action's own turn builder to escape. '' when there is nothing,
+     * when the multi-turn history is rolled back, or when the transcript may
+     * not be sent (the rule the bridge applies to the same text).
+     */
     private conversationHistoryText(alreadyIn?: string): string {
         try {
             if (!isIntelligenceFlagEnabled('chatHistoryMultiTurn')) return '';
@@ -1900,6 +1900,20 @@ export class IntelligenceEngine extends EventEmitter {
      * NEVER returns null - always provides a usable response
      */
     /**
+     * A question asked on the phone, recorded like a typed one (2026-11-06):
+     * question, answer, and the screenshots or photos it carried. Phone
+     * questions were kept only as a plain assistant message, so the next
+     * question (on the phone, or typed, What to answer or a button on the
+     * desktop) had no record of the phone's question or of its screen.
+     */
+    public recordPhoneTurn(answer: string, question: string, imagePaths: readonly string[] = [], startedUnder?: string): void {
+        this.recordLiveTurn(answer, undefined, question, imagePaths.length, imagePaths, 'user', {
+            ...(startedUnder ? { startedUnder } : {}),
+            ...(imagePaths.length ? { backupDescribe: 'manual_use_screen' as const } : {}),
+        });
+    }
+
+    /**
      * Records a completed live exchange into the V3 conversation ring.
      *
      * WHY THIS IS A WRAPPER, NOT A LINE AT THE END OF EACH METHOD
@@ -1916,20 +1930,6 @@ export class IntelligenceEngine extends EventEmitter {
      * saw is not part of the conversation, and recording it would make the ring
      * describe an exchange that did not happen.
      */
-    /**
-     * A question asked on the phone, recorded like a typed one (2026-11-06):
-     * question, answer, and the screenshots or photos it carried. Phone
-     * questions were kept only as a plain assistant message, so the next
-     * question (on the phone, or typed, What to answer or a button on the
-     * desktop) had no record of the phone's question or of its screen.
-     */
-    public recordPhoneTurn(answer: string, question: string, imagePaths: readonly string[] = [], startedUnder?: string): void {
-        this.recordLiveTurn(answer, undefined, question, imagePaths.length, imagePaths, 'user', {
-            ...(startedUnder ? { startedUnder } : {}),
-            ...(imagePaths.length ? { backupDescribe: 'manual_use_screen' as const } : {}),
-        });
-    }
-
     private recordLiveTurn(
         answer: string | null, screenContext?: unknown, question?: string,
         /** How many screenshots the turn carried, INDEPENDENT of whether any of

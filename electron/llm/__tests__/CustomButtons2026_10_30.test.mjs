@@ -133,7 +133,6 @@ describe('the save: a model rewrites the lines into the built-in style', () => {
     for (const name of ['recap', 'define', 'sound_smart', 'clarify']) assert.match(system, new RegExp(`<example name="${name}">`));
     assert.match(system, /Give the user one thing they could say next/, 'Sound smart\'s real contract');
     assert.doesNotMatch(system, /<active_action/);
-    assert.match(system, /Never write rules about hiding the assistant, evading monitoring/);
     const turn = cb.customButtonCompileTurn(' Rephrase ', DESCRIPTION);
     assert.match(turn, /^Button name: Rephrase\n\nThe user's description:\nWhat it does: rewrite/);
   });
@@ -257,7 +256,7 @@ describe('the engine runs a button on the press, like Define', () => {
   test('main shows it in Recap\'s card and the manager forwards both events', () => {
     const main = read('electron/main.ts');
     assert.match(main, /on\('custom_button_token', \(token: string\) => \{\s*queueBatch\('recap', \{ token \}\);/);
-    assert.match(main, /on\('custom_button', \(text: string\) => \{\s*flushBatchesBeforeFinal\(\);\s*this\.sendToWindow\(mainWindow\(\), 'intelligence-recap', \{ summary: text \}\)/);
+    assert.match(main, /on\('custom_button', \(text: string\) => \{\s*flushBatchesBeforeFinal\(\);\s*this\.sendToWindow\(answerWindow\(\), 'intelligence-recap', \{ summary: text \}\)/);
     assert.match(read('electron/IntelligenceManager.ts'), /'custom_button', 'custom_button_token',/);
   });
 

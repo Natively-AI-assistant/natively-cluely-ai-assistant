@@ -16,6 +16,7 @@
  */
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -77,9 +78,12 @@ const h = helper('http://127.0.0.1:1', 'unused');
 Object.assign(h, { useOllama: false, currentModelId: 'gemini-3.8-flash' });
 h.isCodexAvailable = () => false;
 let transcribeDelayMs = 0;
-h.runVisionRequest = async (_id, _userPrompt, systemPrompt) => {
+/** The bytes of each image the vision call was SENT (the optimizer's output), by sha. */
+let sent = [];
+h.runVisionRequest = async (_id, _userPrompt, systemPrompt, imagePath) => {
   const kind = systemPrompt === STRUCTURED_EXTRACTION_SYSTEM_PROMPT ? 'transcribe' : 'describe';
   asked.push(kind);
+  try { sent.push(crypto.createHash('sha256').update(fs.readFileSync(imagePath)).digest('hex')); } catch { sent.push(null); }
   if (kind === 'transcribe' && transcribeDelayMs) await new Promise((r) => setTimeout(r, transcribeDelayMs));
   const reply = replies[kind];
   if (reply === undefined) throw FAIL();
@@ -98,6 +102,24 @@ beforeEach(() => {
 });
 afterEach(() => { console.log = realLog; delete globalThis.__nativelyGetLLMHelper; });
 const backupTried = () => logged.some((a) => /backup read/.test(String(a[0])));
+
+/**
+ * Two screenshots that differ in one glyph of a very wide image: the
+ * PERCEPTUAL hash (ImageHashService.computeHash, a 16×16 average) gives them
+ * the same value for about 3 in 4 such pairs, so bases are tried until a pair
+ * does. New bytes every run, or the store (which outlives a run) answers first.
+ */
+async function lookAlikePair() {
+  const { ImageHashService } = require(dist('services/screen/ImageHashService.js'));
+  const hashes = new ImageHashService();
+  const make = (digits) => { const p = path.join(userData, `lookalike-${process.pid}-${++n}.png`); fs.writeFileSync(p, renderDigitsPng(digits)); return p; };
+  for (let i = 0; i < 10; i++) {
+    const base = `${runId}${n}${i}`.repeat(30).slice(0, 170);
+    const x = make(`${base}1`); const y = make(`${base}7`);
+    if (await hashes.computeHash(x) === await hashes.computeHash(y)) return [x, y];
+  }
+  assert.fail('no look-alike pair found');
+}
 
 describe('the backup read after a failed transcription', () => {
   test('transcription works: no backup call, and the transcription is stored', async () => {
@@ -160,24 +182,54 @@ describe('the backup read after a failed transcription', () => {
   });
 
   test('a screen that LOOKS like the last one is still read: the record never takes a perceptual match', async () => {
-    const { ImageHashService } = require(dist('services/screen/ImageHashService.js'));
-    const hashes = new ImageHashService();
-    const make = (digits) => { const p = path.join(userData, `lookalike-${process.pid}-${++n}.png`); fs.writeFileSync(p, renderDigitsPng(digits)); return p; };
-    // Two screenshots one glyph apart in a very wide image look the same to
-    // that hash (about 3 in 4 such pairs); try bases until a pair does. New
-    // bytes every run, or the store (which outlives a run) would answer first.
-    let a = null; let b = null;
-    for (let i = 0; i < 10 && !a; i++) {
-      const base = `${runId}${i}`.repeat(30).slice(0, 170);
-      const x = make(`${base}1`); const y = make(`${base}7`);
-      if (await hashes.computeHash(x) === await hashes.computeHash(y)) { a = x; b = y; }
-    }
-    assert.ok(a && b, 'no look-alike pair found');
+    const [a, b] = await lookAlikePair();
+    sent = [];
     vision({ transcribe: 'Line 12: return total * 1.05;' });
     await transcribeScreenForMemory([a], 'q');
     vision({ transcribe: 'Line 12: return total * 1.07;' });
     const text = await transcribeScreenForMemory([b], 'q');
     assert.match(text, /1\.07/, 'the new screen\'s own text, not the look-alike\'s');
+    assert.equal(sent.length, 2);
+    assert.notEqual(sent[1], sent[0], 'the new screen\'s own image was sent, not the look-alike\'s optimized file');
+  });
+
+  test('the read BEFORE an answer, too: a look-alike screen is read again, from its own image', async () => {
+    const { getScreenUnderstandingService } = require(dist('services/screen/ScreenUnderstandingService.js'));
+    const { composeScreenDescription } = require(dist('services/screen/screenDescription.js'));
+    const [a, b] = await lookAlikePair();
+    const understand = (imagePath) => getScreenUnderstandingService().understand({
+      modeId: 'look-alike', transcript: 'q', userAction: 'manual_use_screen', qualityMode: 'balanced',
+      imagePaths: [imagePath], screenUnderstandingMode: 'vision_first',
+      providerPolicy: { localOnly: false, allowScreenshots: true, visionAvailable: true, localVisionAvailable: false },
+    });
+    sent = [];
+    vision({ describe: 'An invoice for $4,180.' });
+    assert.match(composeScreenDescription(await understand(a)), /\$4,180/);
+    vision({ describe: 'An invoice for $4,780.' });
+    assert.match(composeScreenDescription(await understand(b)), /\$4,780/, 'not the cached read of the screen it looks like');
+    assert.equal(sent.length, 2, 'the new screen was read');
+    assert.notEqual(sent[1], sent[0], 'from its own image');
+    // The same screenshot again is still a cache hit: no second read.
+    assert.match(composeScreenDescription(await understand(b)), /\$4,780/);
+    assert.equal(sent.length, 2);
+  });
+
+  test('two screenshots in the other order are a different read: the latest one is the one read', async () => {
+    const { getScreenUnderstandingService } = require(dist('services/screen/ScreenUnderstandingService.js'));
+    const { composeScreenDescription } = require(dist('services/screen/screenDescription.js'));
+    const a = shot(); const b = shot();
+    const understand = (imagePaths) => getScreenUnderstandingService().understand({
+      modeId: 'order', transcript: 'q', userAction: 'manual_use_screen', qualityMode: 'balanced',
+      imagePaths, screenUnderstandingMode: 'vision_first',
+      providerPolicy: { localOnly: false, allowScreenshots: true, visionAvailable: true, localVisionAvailable: false },
+    });
+    sent = [];
+    vision({ describe: 'Screen B.' });
+    assert.match(composeScreenDescription(await understand([a, b])), /Screen B\./);
+    vision({ describe: 'Screen A.' });
+    assert.match(composeScreenDescription(await understand([b, a])), /Screen A\./, 'not B\'s cached read');
+    assert.equal(sent.length, 2);
+    assert.notEqual(sent[1], sent[0], 'A\'s own image was sent, not B\'s encoded file');
   });
 
   test('a transcribed screen keeps no backup read', async () => {

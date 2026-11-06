@@ -8419,7 +8419,18 @@ export class AppState {
   }
 
   private setupIntelligenceEvents(): void {
-    const mainWindow = this.getMainWindow.bind(this)
+    // Where answers go: the OVERLAY, in every window mode (2026-11-06). Only the
+    // overlay's interface (NativelyInterface) listens on any channel below.
+    // They followed getMainWindow(), which is the launcher whenever the window
+    // mode is 'launcher' — so a What to answer pressed then (from the phone,
+    // or the overlay's own key handler) showed "Thinking" in the overlay and
+    // the answer went to the launcher, which drops it: the card never filled.
+    // A meeting's start resets the overlay (session-reset), so an answer left
+    // in it while it was hidden never carries into the next meeting.
+    const answerWindow = (): BrowserWindow | null => {
+      const overlay = this.windowHelper.getOverlayWindow();
+      return overlay && !overlay.isDestroyed() ? overlay : this.getMainWindow();
+    }
 
     // Sprint 9: time-batched IPC token sends.
     //
@@ -8460,7 +8471,7 @@ export class AppState {
       // done the work the queued one was going to do, so the next queueBatch
       // must be able to arm a fresh immediate rather than be dropped.
       batchFlushScheduled = false;
-      const win = mainWindow();
+      const win = answerWindow();
       if (!win) { tokenBatches.clear(); return; }
       for (const [kind, items] of tokenBatches.entries()) {
         if (items.length > 0) {
@@ -8540,7 +8551,7 @@ export class AppState {
       // (fallback paths, code-hint, brainstorm) that don't compute it.
       flushBatchesBeforeFinal();
       this.autoAnswerUsage.answerShown();
-      const win = mainWindow()
+      const win = answerWindow()
       // emittedAt (2026-07-31): WTA supersession is generation-relative only —
       // a slow generation stays "current" through any number of manual turns
       // and mode switches, so a minutes-old answer appeared with no marker of
@@ -8566,7 +8577,7 @@ export class AppState {
     this.intelligenceManager.on('suggested_answer_discard', (reason: string) => {
       this.autoAnswerUsage.stopAwaitingAnswer();
       flushBatchesBeforeFinal();
-      const win = mainWindow()
+      const win = answerWindow()
       this.sendToWindow(win, 'intelligence-suggested-answer-discard', { reason })
     })
 
@@ -8574,12 +8585,12 @@ export class AppState {
     // its executed test cases, and a NEW corrected message when it failed and a
     // re-verified fix was produced. Both arrive AFTER the answer was shown.
     this.intelligenceManager.on('code_verified', (info: { question: string; passed: number; total: number; language: string }) => {
-      const win = mainWindow()
+      const win = answerWindow()
       this.sendToWindow(win, 'intelligence-code-verified', info)
     })
     this.intelligenceManager.on('code_correction', (info: { question: string; answer: string; note: string; reVerified: boolean }) => {
       flushBatchesBeforeFinal();
-      const win = mainWindow()
+      const win = answerWindow()
       this.sendToWindow(win, 'intelligence-code-correction', info)
     })
 
@@ -8591,7 +8602,7 @@ export class AppState {
       // Sprint 9: flush any pending batched tokens first so the renderer
       // sees them before the coaching card swap.
       flushBatchesBeforeFinal();
-      const win = mainWindow()
+      const win = answerWindow()
       this.sendToWindow(win, 'intelligence-negotiation-coaching', { payload })
     })
 
@@ -8602,14 +8613,14 @@ export class AppState {
 
     this.intelligenceManager.on('refined_answer', (answer: string, intent: string) => {
       flushBatchesBeforeFinal();
-      const win = mainWindow()
+      const win = answerWindow()
       this.sendToWindow(win, 'intelligence-refined-answer', { answer, intent })
 
     })
 
     this.intelligenceManager.on('recap', (summary: string) => {
       flushBatchesBeforeFinal();
-      const win = mainWindow()
+      const win = answerWindow()
       this.sendToWindow(win, 'intelligence-recap', { summary })
     })
 
@@ -8620,7 +8631,7 @@ export class AppState {
 
     this.intelligenceManager.on('clarify', (clarification: string) => {
       flushBatchesBeforeFinal();
-      const win = mainWindow()
+      const win = answerWindow()
       this.sendToWindow(win, 'intelligence-clarify', { clarification })
     })
 
@@ -8631,7 +8642,7 @@ export class AppState {
 
     this.intelligenceManager.on('follow_up_questions_update', (questions: string) => {
       flushBatchesBeforeFinal();
-      const win = mainWindow()
+      const win = answerWindow()
       this.sendToWindow(win, 'intelligence-follow-up-questions-update', { questions })
     })
 
@@ -8649,7 +8660,7 @@ export class AppState {
 
     this.intelligenceManager.on('live_helper', (text: string, action: LiveHelperAction) => {
       flushBatchesBeforeFinal();
-      const win = mainWindow()
+      const win = answerWindow()
       if (liveHelperDisplayKind(action) === 'clarify') this.sendToWindow(win, 'intelligence-clarify', { clarification: text })
       else this.sendToWindow(win, 'intelligence-recap', { summary: text })
     })
@@ -8662,25 +8673,25 @@ export class AppState {
 
     this.intelligenceManager.on('custom_button', (text: string) => {
       flushBatchesBeforeFinal();
-      this.sendToWindow(mainWindow(), 'intelligence-recap', { summary: text })
+      this.sendToWindow(answerWindow(), 'intelligence-recap', { summary: text })
     })
 
     this.intelligenceManager.on('manual_answer_started', () => {
       // The hotkey/click commits whatever Auto Answer was offering — and,
       // inside the feedback window, says the automatic answer missed.
       this.simpleAutoAnswer.onManualAnswerStarted();
-      const win = mainWindow()
+      const win = answerWindow()
       this.sendToWindow(win, 'intelligence-manual-started')
     })
 
     this.intelligenceManager.on('manual_answer_result', (answer: string, question: string) => {
-      const win = mainWindow()
+      const win = answerWindow()
       this.sendToWindow(win, 'intelligence-manual-result', { answer, question })
 
     })
 
     this.intelligenceManager.on('mode_changed', (mode: string) => {
-      const win = mainWindow()
+      const win = answerWindow()
       this.sendToWindow(win, 'intelligence-mode-changed', { mode })
       // A candidate parked because the engine was busy may now dispatch.
       if (mode === 'idle') this.simpleAutoAnswer.onEngineIdle()
@@ -8692,7 +8703,7 @@ export class AppState {
       // Sent after it, they opened a new row under the failure line that
       // nothing ever closed.
       flushBatchesBeforeFinal()
-      const win = mainWindow()
+      const win = answerWindow()
       this.sendToWindow(win, 'intelligence-error', { error: error.message, mode })
     })
   }

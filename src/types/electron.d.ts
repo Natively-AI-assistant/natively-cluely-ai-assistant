@@ -895,6 +895,7 @@ export interface ElectronAPI {
   streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean, liveQuestion?: boolean }) => Promise<void>
   onGeminiStreamToken: (callback: (token: string, meta?: { streamId?: number }) => void) => () => void
   onGeminiStreamDone: (callback: (data?: { finalText?: string; streamId?: number; incomplete?: boolean; incompleteReason?: string }) => void) => () => void
+  onGeminiStreamStarted: (callback: (data: { streamId: number }) => void) => () => void
   onGeminiStreamError: (callback: (error: string, meta?: { streamId?: number | null; source?: string }) => void) => () => void;
 
   // NOTE: onSkillsChanged broadcast subscription was removed. Skills are

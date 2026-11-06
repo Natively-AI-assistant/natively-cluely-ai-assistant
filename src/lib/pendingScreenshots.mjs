@@ -24,12 +24,29 @@ export function createPendingScreenshots() {
   const flying = new Set();
   /** @type {Set<string>} */
   const taken = new Set();
+  /**
+   * The sends waiting right now, oldest first: each collects the captures
+   * that finish while it waits. A capture is claimed the moment it finishes,
+   * inside its own promise, so the capture handler's `claimed()` check, which
+   * runs after that, already sees it (2026-11-06: claiming after the wait
+   * came too late, and the image was also added to the tray).
+   * @type {Set<T[]>}
+   */
+  const waiting = new Set();
 
   return {
     /** Register a capture; resolves to its result (null on failure / none). */
     track(capture) {
       const p = Promise.resolve(capture).then(
-        (shot) => (shot && shot.path ? shot : null),
+        (shot) => {
+          const done = shot && shot.path ? shot : null;
+          const send = waiting.values().next().value;
+          if (done && send && !taken.has(done.path)) {
+            taken.add(done.path);
+            send.push(done);
+          }
+          return done;
+        },
         () => null,
       );
       flying.add(p);
@@ -42,28 +59,26 @@ export function createPendingScreenshots() {
     },
 
     /**
-     * Wait for every capture in flight (at most `timeoutMs`) and claim the
-     * ones that finished. Never rejects. Resolves at once when none is flying.
+     * Wait for every capture in flight (at most `timeoutMs`) and take the
+     * ones that finished meanwhile. Never rejects. Resolves at once when none
+     * is flying. A capture finishing after the wait is not taken: it goes to
+     * the tray, for the next question.
      */
     async settle(timeoutMs = PENDING_SHOT_WAIT_MS) {
       if (flying.size === 0) return [];
       const pending = [...flying];
-      /** @type {(T | null)[]} */
-      const done = [];
-      pending.forEach((p, i) => p.then((shot) => { done[i] = shot; }));
-      let timer;
-      await Promise.race([
-        Promise.all(pending),
-        new Promise((r) => { timer = setTimeout(r, timeoutMs); }),
-      ]);
-      clearTimeout(timer);
       /** @type {T[]} */
       const shots = [];
-      for (const shot of done) {
-        if (shot && !taken.has(shot.path)) {
-          taken.add(shot.path);
-          shots.push(shot);
-        }
+      waiting.add(shots);
+      let timer;
+      try {
+        await Promise.race([
+          Promise.all(pending),
+          new Promise((r) => { timer = setTimeout(r, timeoutMs); }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+        waiting.delete(shots);
       }
       return shots;
     },
