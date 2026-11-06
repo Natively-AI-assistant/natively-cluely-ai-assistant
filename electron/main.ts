@@ -1432,6 +1432,7 @@ import {
   OVERLAY_PASTE_IMAGE_PREFIX,
 } from "./utils/overlayImageAttach"
 import { renderPhoneAnswer } from "./services/phoneMirrorMarkdown"
+import { wireLiveAnswersToPhone } from "./services/phoneMirrorLiveAnswers"
 import { describeFormulaImage, describePageCaptureFallback, describeDoubleCaptureFailure, describeUnreadableFormulas, PAGE_CAPTURE_FALLBACK_CHANNEL, PAGE_CAPTURE_STARTED_CHANNEL } from "./services/pageCaptureFallback"
 import { AUTO_FORMULA_IMAGE_MAX_AGE_MS, FormulaScreenshotHandoff, markMissingFormulas, type FormulaShot } from "./services/formulaScreenshotHandoff"
 import { setVerboseLoggingFlag } from "./verboseLog"
@@ -8488,6 +8489,11 @@ export class AppState {
     // answer, trailing tokens) — the latter would clobber the just-finalized
     // row with appended text from a pending setImmediate batch.
     const flushBatchesBeforeFinal = flushBatchesNow;
+
+    // The paired phone gets every answer the overlay gets, streamed as it is
+    // written: Auto Answer, the buttons, coaching cards, corrected code.
+    // Before, only the button IPC handlers published, once finished.
+    wireLiveAnswersToPhone(this.intelligenceManager, () => PhoneMirrorService.getInstance())
 
     // Forward intelligence events to renderer
     this.intelligenceManager.on('assist_update', (insight: string) => {

@@ -237,7 +237,7 @@ const geo = (page) => page.evaluate(() => {
 async function scenario(dev, scheme) {
   // One service serves every run: start each from an empty desktop.
   svc.history = [];
-  svc.livePartial = null;
+  svc.liveStreams.clear();
   svc.publishMeetingState(true);
   svc.publishMeetingState(false);
   const browser = await launch(dev.engine);
@@ -282,7 +282,7 @@ async function scenario(dev, scheme) {
     await page.click('.chip[data-action="whatToAnswer"]');
     await page.waitForSelector('.answer.is-pending', { timeout: 1000 });
     const pending = await page.$eval('.answer.is-pending', (n) => ({ ask: n.querySelector('.ask-label')?.textContent, thinking: n.querySelector('.thinking')?.textContent, skel: !!document.querySelector('.skel') }));
-    check(tag, 'placeholder asks as the overlay does, then says Thinking... (no skeleton)', pending.ask === 'What should I say?' && pending.thinking === 'Thinking...' && !pending.skel, JSON.stringify(pending));
+    check(tag, 'placeholder asks as the overlay does, then says Thinking... (no skeleton)', pending.ask === 'What should I say?' && pending.thinking === 'Thinking' && !pending.skel, JSON.stringify(pending));
     await shot('03-pending');
     await page.waitForSelector('.answer.is-pending', { state: 'detached', timeout: 4000 });
     await sleep(500);
@@ -327,7 +327,7 @@ async function scenario(dev, scheme) {
       const next = rows[i + 1];
       return { found: i >= 0, thinking: next ? next.querySelector('.thinking')?.textContent : null };
     });
-    check(tag, 'a desktop question shows before any answer, with Thinking under it', asked.found && asked.thinking === 'Thinking...', JSON.stringify(asked));
+    check(tag, 'a desktop question shows before any answer, with Thinking under it', asked.found && asked.thinking === 'Thinking', JSON.stringify(asked));
     await shot('04b-desktop-question');
     for (const w of 'Canary first, then ten percent. '.split(/(?<= )/)) { svc.publishToken(deskId, w); await sleep(30); }
     svc.publishDone(deskId, 'Canary first, then ten percent.');
@@ -542,7 +542,7 @@ async function tokenScenarios() {
 async function recordingScenario(dev) {
   const tag = `${dev.name}/recording`;
   svc.history = [];
-  svc.livePartial = null;
+  svc.liveStreams.clear();
   svc.setRecording(false);
   desktop.voice = { question: 'How would you shard the ledger?', answer: 'By account id, so **one account never spans two shards**.' };
   const browser = await launch(dev.engine);
@@ -592,10 +592,77 @@ async function recordingScenario(dev) {
   }
 }
 
+// Answers the desktop streams on its own (Auto Answer) or for a button, under
+// that button's label, several at once (2026-11-05 customer report: answers
+// showed on the laptop only).
+async function liveAnswersScenario(dev) {
+  const tag = `${dev.name}/live`;
+  svc.history = [];
+  svc.liveStreams.clear();
+  svc.publishMeetingState(true);   // the chips are meeting actions
+  const browser = await launch(dev.engine);
+  const { ctx, page, errors } = await openPage(browser, dev, 'dark');
+  const cards = () => page.$$eval('.answer', (ns) => ns.map((n) => ({
+    pending: n.classList.contains('is-pending'),
+    streaming: n.classList.contains('is-streaming'),
+    label: n.dataset.label || '',
+    ask: (n.querySelector('.ask-label') || {}).textContent || '',
+    body: ((n.querySelector('.answer-body') || {}).textContent || '').trim(),
+  })));
+  const until = (fn, arg) => page.waitForFunction(fn, arg, { timeout: 3000 });
+  try {
+    desktop.ignoreActions = true;
+    await page.click('.chip[data-action="whatToAnswer"]');
+    await page.waitForSelector('.answer.is-pending', { timeout: 1000 });
+    svc.publishToken('wta-1', 'Lead with ', { label: 'What to Answer' });
+    await until(() => !document.querySelector('.answer.is-pending') && document.querySelector('.answer.is-streaming'));
+    let c = await cards();
+    check(tag, 'a streamed What to Answer takes the chip placeholder in place', c.length === 1 && c[0].streaming && c[0].label === 'What to Answer' && c[0].ask === 'What should I say?', JSON.stringify(c));
+
+    svc.publishToken('recap-1', 'They want ', { label: 'Recap' });
+    svc.publishToken('wta-1', 'the trade-off.');
+    svc.publishToken('recap-1', 'payments.');
+    await until(() => document.querySelectorAll('.answer.is-streaming').length === 2
+      && /trade-off/.test(document.body.textContent) && /payments/.test(document.body.textContent));
+    c = await cards();
+    check(tag, 'two answers stream side by side, each with its own words', c.length === 2 && c.every((x) => x.streaming)
+      && /^Lead with the trade-off\./.test(c[0].body) && /^They want payments\./.test(c[1].body) && c[1].ask === 'Recap', JSON.stringify(c));
+
+    svc.publishDone('recap-1', 'They want payments.', { label: 'Recap' });
+    svc.publishDone('wta-1', 'Lead with the trade-off.');
+    await until(() => !document.querySelector('.answer.is-streaming'));
+    c = await cards();
+    check(tag, 'both finish in place', c.length === 2 && /trade-off/.test(c[0].body) && /payments/.test(c[1].body), JSON.stringify(c));
+
+    svc.publishToken('wta-2', 'A stale draft', { label: 'What to Answer' });
+    await until(() => document.querySelectorAll('.answer.is-streaming').length === 1);
+    svc.publishDiscard('wta-2');
+    await until(() => !document.querySelector('.answer.is-streaming') && !/stale draft/.test(document.getElementById('feedInner').textContent));
+    check(tag, 'a discarded answer leaves the phone quietly', (await cards()).length === 2 && !(await page.$('.answer-note')));
+
+    desktop.dropChatOnce.add('Is the cache write-through?');
+    await page.fill('#input', 'Is the cache write-through?');
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('.answer.is-pending', { timeout: 1000 });
+    svc.publishToken('wta-3', 'An Auto Answer', { label: 'What to Answer' });
+    await until(() => document.querySelector('.answer.is-streaming'));
+    c = await cards();
+    check(tag, 'an Auto Answer never takes a typed question\'s placeholder', c.filter((x) => x.pending).length === 1 && c.filter((x) => x.streaming).length === 1, JSON.stringify(c));
+    svc.publishDone('wta-3', 'An Auto Answer.');
+    check(tag, 'no page errors', errors.length === 0, errors.join(' | '));
+  } finally {
+    desktop.ignoreActions = false;
+    desktop.dropChatOnce.clear();
+    svc.publishMeetingState(false);
+    await ctx.close();
+    await browser.close();
+  }
+}
+
 async function timeoutScenarios() {
   const dev = DEVICES[1];
   svc.history = [];
-  svc.livePartial = null;
+  svc.liveStreams.clear();
   svc.publishMeetingState(true);   // the unanswered action is a meeting action
   const browser = await launch(dev.engine);
   const { ctx, page, errors } = await openPage(browser, dev, 'dark');
@@ -657,7 +724,7 @@ async function imageScenarios(dev) {
 
   const tag = `${dev.name}/images`;
   svc.history = [];
-  svc.livePartial = null;
+  svc.liveStreams.clear();
   images.length = 0;
   const browser = await launch(dev.engine);
   const { ctx, page, errors } = await openPage(browser, dev, 'dark');
@@ -725,7 +792,7 @@ async function trayScenario(dev, scheme) {
     await require('sharp')({ create: { width: 800, height: 600, channels: 3, background: '#557' } }).jpeg().toFile(UPLOAD_FIXTURE);
   }
   svc.history = [];
-  svc.livePartial = null;
+  svc.liveStreams.clear();
   setDesktopTray([]);
   svc.publishMeetingState(true);
   const browser = await launch(dev.engine);
@@ -856,7 +923,7 @@ async function trayScenario(dev, scheme) {
 // empty page, the transcript line. Ending a meeting leaves a clean canvas.
 async function meetingStateScenario(dev, scheme) {
   svc.history = [];
-  svc.livePartial = null;
+  svc.liveStreams.clear();
   setDesktopTray([]);
   svc.publishMeetingState(false);
   svc.meetingEnded = false;   // a desktop that has not had a meeting yet
@@ -936,7 +1003,7 @@ async function meetingStateScenario(dev, scheme) {
 async function retryScenario(dev) {
   const tag = `${dev.name}/retry`;
   svc.history = [];
-  svc.livePartial = null;
+  svc.liveStreams.clear();
   svc.publishMeetingState(true);
   const browser = await launch(dev.engine);
   const { ctx, page, errors } = await openPage(browser, dev, 'dark');
@@ -1023,7 +1090,7 @@ const RICH = [
 async function markdownAndSessionScenarios(dev) {
   const tag = `${dev.name}/markdown`;
   svc.history = [];
-  svc.livePartial = null;
+  svc.liveStreams.clear();
   svc.publishMeetingState(false);
   svc.setAnswerRenderer(renderPhoneAnswer);
   const browser = await launch(dev.engine);
@@ -1163,6 +1230,11 @@ if (!only || only === 'images') {
 if (!only || only === 'recording') {
   for (const dev of [DEVICES[1], DEVICES[3]]) {
     try { await recordingScenario(dev); } catch (e) { check(`${dev.name}/recording`, 'threw', false, e.message.split('\n')[0]); }
+  }
+}
+if (!only || only === 'live') {
+  for (const dev of [DEVICES[1], DEVICES[3]]) {
+    try { await liveAnswersScenario(dev); } catch (e) { check(`${dev.name}/live`, 'threw', false, e.message.split('\n')[0]); }
   }
 }
 if (!only || only === 'timeouts') {

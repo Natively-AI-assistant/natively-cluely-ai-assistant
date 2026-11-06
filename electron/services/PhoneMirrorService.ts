@@ -57,9 +57,10 @@ export class LANBindConfirmationRequired extends Error {
 export type StreamEvent =
   | { type: 'history'; messages: PersistedMessage[] }
   | { type: 'user'; id: string; content: string; createdAt: string; awaiting?: boolean }
-  | { type: 'token'; streamId: string; token: string }
-  | { type: 'done'; streamId: string; content: string; createdAt: string; html?: string; gist?: string | null }
+  | { type: 'token'; streamId: string; token: string; label?: string }
+  | { type: 'done'; streamId: string; content: string; createdAt: string; html?: string; gist?: string | null; label?: string }
   | { type: 'error'; streamId: string; message: string }
+  | { type: 'discard'; streamId: string }
   | { type: 'assistant'; id: string; content: string; label: string; createdAt: string; html?: string; gist?: string | null }
   | { type: 'render'; streamId: string; html: string; gist: string | null }
   // A diagram the desktop finished drawing after its answer was already sent
@@ -241,6 +242,8 @@ function isPhoneThumb(thumb: string): boolean {
 
 export class PhoneMirrorService {
   private static _instance: PhoneMirrorService | null = null;
+  /** Streams kept at once; a stream that never ends must not pin memory. */
+  static readonly MAX_LIVE_STREAMS = 8;
 
   private server: http.Server | null = null;
   private wss: WebSocketServer | null = null;
@@ -261,8 +264,10 @@ export class PhoneMirrorService {
   private extToken = '';
   private exposeOnLan = false;
   private history: PersistedMessage[] = [];
-  // Single string instead of token array: O(1) append, O(1) replay (one WS frame).
-  private livePartial: { streamId: string; content: string } | null = null;
+  // Answers streaming now, by stream id. Several can overlap: an Auto Answer
+  // while a Recap or a phone question streams. One string each: O(1) append,
+  // O(1) replay (one WS frame per stream). `dirty`: tokens since the last render frame.
+  private liveStreams = new Map<string, { content: string; label?: string; dirty: boolean }>();
   private transcriptFinals: PhoneTranscriptSegment[] = [];
   private transcriptPartial: PhoneTranscriptSegment | null = null;
   private meetingActive = false;
@@ -507,24 +512,43 @@ export class PhoneMirrorService {
     this.broadcast({ type: 'user', id: msg.id, content: msg.content, createdAt: msg.createdAt, ...(awaiting ? { awaiting: true } : {}) });
   }
 
-  publishToken(streamId: string, token: string): void {
+  /**
+   * One piece of a streaming answer. `label` names the button or action it
+   * answers (What to Answer, Recap…): the phone shows it above the answer as
+   * the overlay does, and a tap on that chip on the phone resolves to it.
+   */
+  publishToken(streamId: string, token: string, opts?: { label?: string }): void {
     if (!this.isRunning() || !token || this.droppedStreams.has(streamId)) return;
     this.awaitingAnswers.delete(streamId);
-    if (!this.livePartial || this.livePartial.streamId !== streamId) {
-      this.livePartial = { streamId, content: '' };
+    let stream = this.liveStreams.get(streamId);
+    if (!stream) {
+      stream = { content: '', ...(opts?.label ? { label: opts.label } : {}), dirty: false };
+      this.liveStreams.set(streamId, stream);
+      if (this.liveStreams.size > PhoneMirrorService.MAX_LIVE_STREAMS) {
+        // The oldest is given up: the phone drops its card, and anything
+        // still arriving for it is not sent (it would restart mid-answer).
+        const evicted = this.liveStreams.keys().next().value as string;
+        this.liveStreams.delete(evicted);
+        this.markDropped(evicted);
+        this.broadcast({ type: 'discard', streamId: evicted });
+      }
     }
-    this.livePartial.content += token;
-    this.broadcast({ type: 'token', streamId, token });
+    stream.content += token;
+    stream.dirty = true;
+    this.broadcast({ type: 'token', streamId, token, ...(stream.label ? { label: stream.label } : {}) });
     this.scheduleLiveRender();
   }
 
-  publishDone(streamId: string, fullContent: string): void {
+  /** The end of a streamed answer. */
+  publishDone(streamId: string, fullContent: string, opts?: { label?: string }): void {
     if (!this.isRunning()) return;
     if (this.droppedStreams.delete(streamId)) return;
     this.awaitingAnswers.delete(streamId);
+    const stream = this.liveStreams.get(streamId);
+    this.endLiveStream(streamId);
+    const label = opts?.label || stream?.label;
     const createdAt = new Date().toISOString();
-    let content =
-      fullContent || (this.livePartial?.streamId === streamId ? this.livePartial.content : '');
+    let content = fullContent || stream?.content || '';
     // Prompt System v2 no-action sentinel: never display or record on the
     // phone surface (a second live sink parallel to the renderer).
     try {
@@ -532,27 +556,54 @@ export class PhoneMirrorService {
       if (shouldSuppressModelOutput(content)) content = '';
       else content = stripLeadingNoActionSentinel(content) || content;
     } catch { /* non-fatal */ }
-    if (this.livePartial?.streamId === streamId) this.cancelLiveRender();
     if (content.trim()) {
       const payload = this.answerPayload(content);
-      const msg: PersistedMessage = { id: 'a:' + streamId, role: 'assistant', createdAt, ...payload };
+      const msg: PersistedMessage = { id: 'a:' + streamId, role: 'assistant', createdAt, ...(label ? { label } : {}), ...payload };
       this.recordHistory(msg);
-      this.broadcast({ type: 'done', streamId, createdAt, ...payload });
+      this.broadcast({ type: 'done', streamId, createdAt, ...(label ? { label } : {}), ...payload });
     } else {
       // Nothing to show (suppressed, or no words came): still end it, so the
       // phone clears the Thinking it shows for this answer.
       this.broadcast({ type: 'done', streamId, content: '', createdAt });
     }
-    if (this.livePartial?.streamId === streamId) this.livePartial = null;
   }
 
   publishError(streamId: string, message: string): void {
     if (!this.isRunning()) return;
     if (this.droppedStreams.delete(streamId)) return;
     this.awaitingAnswers.delete(streamId);
-    if (this.livePartial?.streamId === streamId) this.cancelLiveRender();
+    this.endLiveStream(streamId);
     this.broadcast({ type: 'error', streamId, message: String(message || 'Stream error') });
-    if (this.livePartial?.streamId === streamId) this.livePartial = null;
+  }
+
+  /**
+   * A streamed answer the desktop threw away (superseded by a newer one,
+   * cancelled, nothing usable came back): the overlay removes its row, so
+   * the phone removes the card it was streaming into, without an error.
+   */
+  publishDiscard(streamId: string): void {
+    if (!this.isRunning()) return;
+    this.droppedStreams.delete(streamId);
+    this.awaitingAnswers.delete(streamId);
+    this.endLiveStream(streamId);
+    this.broadcast({ type: 'discard', streamId });
+  }
+
+  /** Ids of the answers streaming now, oldest first. */
+  liveStreamIds(): string[] {
+    return [...this.liveStreams.keys()];
+  }
+
+  /** Its late tokens / done / error are not sent or kept. */
+  private markDropped(streamId: string): void {
+    this.droppedStreams.add(streamId);
+    // Bounded: a stream that never finishes must not pin memory.
+    if (this.droppedStreams.size > 32) this.droppedStreams.delete(this.droppedStreams.values().next().value as string);
+  }
+
+  private endLiveStream(streamId: string): void {
+    this.liveStreams.delete(streamId);
+    if (this.liveStreams.size === 0) this.cancelLiveRender();
   }
 
   /**
@@ -638,12 +689,8 @@ export class PhoneMirrorService {
       // The overlay drops a recording on either edge; the phone's chip must
       // not keep reading Stop. Its own 'meeting' frame resets the chip too.
       this.recording = false;
-      if (this.livePartial) {
-        this.droppedStreams.add(this.livePartial.streamId);
-        // Bounded: a stream that never finishes must not pin memory.
-        if (this.droppedStreams.size > 32) this.droppedStreams.delete(this.droppedStreams.values().next().value as string);
-      }
-      this.livePartial = null;
+      for (const streamId of this.liveStreams.keys()) this.markDropped(streamId);
+      this.liveStreams.clear();
       this.cancelLiveRender();
     }
     if (!this.isRunning()) return;
@@ -838,7 +885,10 @@ export class PhoneMirrorService {
     this.broadcast(dataUrl ? { type: 'diagram', key, src: dataUrl } : { type: 'diagram', key });
     // An answer still streaming re-renders on its own timer; nudge it so the
     // picture does not wait for the next token.
-    if (this.livePartial) this.scheduleLiveRender();
+    if (this.liveStreams.size) {
+      for (const stream of this.liveStreams.values()) stream.dirty = true;
+      this.scheduleLiveRender();
+    }
   }
 
   /** While a phone question streams, send its rendered HTML at most every LIVE_RENDER_INTERVAL_MS. */
@@ -846,10 +896,13 @@ export class PhoneMirrorService {
     if (this.liveRenderTimer || !this.answerRenderer) return;
     this.liveRenderTimer = setTimeout(() => {
       this.liveRenderTimer = null;
-      const live = this.livePartial;
-      if (!live || !this.hasClients()) return;
-      const rendered = this.renderAnswer(live.content, true);
-      if (rendered) this.broadcast({ type: 'render', streamId: live.streamId, html: rendered.html, gist: rendered.gist });
+      if (!this.liveStreams.size || !this.hasClients()) return;
+      for (const [streamId, stream] of this.liveStreams) {
+        if (!stream.dirty) continue;
+        stream.dirty = false;
+        const rendered = this.renderAnswer(stream.content, true);
+        if (rendered) this.broadcast({ type: 'render', streamId, html: rendered.html, gist: rendered.gist });
+      }
     }, LIVE_RENDER_INTERVAL_MS);
   }
 
@@ -1480,7 +1533,7 @@ export class PhoneMirrorService {
     this.port = 0;
     this.token = '';
     this.extToken = '';
-    this.livePartial = null;
+    this.liveStreams.clear();
     this.recording = false;
     this.cancelLiveRender();
     this.rateBuckets.clear();
@@ -2019,17 +2072,12 @@ export class PhoneMirrorService {
       // Replay in-flight partial as a SINGLE token frame containing the full
       // accumulated content so far.  Previously this sent one frame per token
       // (up to 500+ frames for a long response) — now it's always 1 frame.
-      if (this.livePartial && this.livePartial.content) {
-        ws.send(
-          JSON.stringify({
-            type: 'token',
-            streamId: this.livePartial.streamId,
-            token: this.livePartial.content,
-          }),
-        );
-        const rendered = this.renderAnswer(this.livePartial.content, true);
+      for (const [streamId, stream] of this.liveStreams) {
+        if (!stream.content) continue;
+        ws.send(JSON.stringify({ type: 'token', streamId, token: stream.content, ...(stream.label ? { label: stream.label } : {}) }));
+        const rendered = this.renderAnswer(stream.content, true);
         if (rendered) {
-          ws.send(JSON.stringify({ type: 'render', streamId: this.livePartial.streamId, html: rendered.html, gist: rendered.gist }));
+          ws.send(JSON.stringify({ type: 'render', streamId, html: rendered.html, gist: rendered.gist }));
         }
       }
       // Extension sockets also land here before their `hello`; broadcast() never

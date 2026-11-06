@@ -160,7 +160,7 @@ export interface IntelligenceModeEvents {
     // generation, declined as a non-answer sentinel, or errored). The renderer
     // must drop the open scaffold row so the user never sees a permanent
     // "Working on…" card (REPORT C1 follow-up — orphaned-scaffold fix).
-    'suggested_answer_discard': (reason: string) => void;
+    'suggested_answer_discard': (reason: string, generationId?: number) => void;
     // Emitted when the planner deliberately declines to answer a trigger (e.g.
     // the same utterance arriving twice inside the cooldown window). Without it a
     // skip is indistinguishable from a failure — nothing runs and nothing is said.
@@ -1608,7 +1608,7 @@ export class IntelligenceEngine extends EventEmitter {
         if (!text.trim()) {
             console.warn('[IntelligenceEngine] Prefetched answer was empty — nothing to reveal');
             // An adopted stream already opened a row; it gets no final, so close it.
-            if (streamed?.emitted) this.emit('suggested_answer_discard', 'empty_after_strip');
+            if (streamed?.emitted) this.emit('suggested_answer_discard', 'empty_after_strip', finished.generationId);
             return;
         }
         // "Repetition guard" covers THIS path too. An adopted prefetch (the most
@@ -5243,7 +5243,7 @@ export class IntelligenceEngine extends EventEmitter {
                 // Aborted mid-stream — don't update session or emit final event.
                 // If we opened a streaming row, discard it so the superseding
                 // generation's row is the only one (no orphaned partial answer).
-                if (openedStreamRow) this.emit('suggested_answer_discard', 'superseded');
+                if (openedStreamRow) this.emit('suggested_answer_discard', 'superseded', generationId);
                 if (isSpeculative && this.ownsSpeculativeSlot(generationId)) {
                     this.speculativeText = null;
                     this.speculativeTextExpiry = Infinity;
@@ -6680,7 +6680,7 @@ export class IntelligenceEngine extends EventEmitter {
                 // isn't left as an orphaned partial on the auto path (the manual
                 // path also resolves null via the renderer, but the discard is
                 // idempotent and covers the auto-trigger path too).
-                if (openedStreamRow) this.emit('suggested_answer_discard', 'no_answer');
+                if (openedStreamRow) this.emit('suggested_answer_discard', 'no_answer', generationId);
                 this.speculativeText = null;
                 this.speculativeTextExpiry = Infinity;
                 this.lastTriggerTime = Date.now();
@@ -7343,7 +7343,7 @@ export class IntelligenceEngine extends EventEmitter {
             if (isWtaSuperseded()) {
                 recordWtaCancellation();
                 if (isSpeculative && this.ownsSpeculativeSlot(generationId)) { this.speculativeText = null; this.speculativeTextExpiry = Infinity; }
-                if (openedStreamRow) this.emit('suggested_answer_discard', 'superseded');
+                if (openedStreamRow) this.emit('suggested_answer_discard', 'superseded', generationId);
                 return null;
             }
             try {
@@ -7357,7 +7357,7 @@ export class IntelligenceEngine extends EventEmitter {
             // non-null fallback, so the manual path's null-cleanup never runs and
             // no 'suggested_answer' would otherwise fire) so the error row below is
             // the only artifact, not an orphaned half-streamed answer.
-            if (openedStreamRow) this.emit('suggested_answer_discard', 'error');
+            if (openedStreamRow) this.emit('suggested_answer_discard', 'error', generationId);
             this.emit('error', error as Error, 'what_to_say');
             this.setMode('idle');
             // A provider failure must not be dressed as "Could you repeat that?"

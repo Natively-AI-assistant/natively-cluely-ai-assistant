@@ -86,7 +86,8 @@ describe('persistence stores the answer without the marker', () => {
     const svc = SRC('electron/services/PhoneMirrorService.ts');
     const fn = svc.slice(svc.indexOf('private answerPayload(raw: string)'));
     assert.match(fn, /const rendered = this\.renderAnswer\(raw\);\s*const content = stripGistTrailer\(raw\);/);
-    assert.match(svc, /const payload = this\.answerPayload\(content\);[\s\S]{0,200}this\.broadcast\(\{ type: 'done', streamId, createdAt, \.\.\.payload \}\)/);
+    // A streamed answer's done frame also carries its button label (live answers, 2026-11-06).
+    assert.match(svc, /const payload = this\.answerPayload\(content\);[\s\S]{0,300}this\.broadcast\(\{ type: 'done', streamId, createdAt, (?:\.\.\.\(label \? \{ label \} : \{\}\), )?\.\.\.payload \}\)/);
     assert.match(svc, /this\.broadcast\(\{ type: 'assistant', id: msg\.id, label, createdAt, \.\.\.payload \}\)/);
   });
   test('the doc-grounded exact-repeat check compares stripped text with stripped history', () => {

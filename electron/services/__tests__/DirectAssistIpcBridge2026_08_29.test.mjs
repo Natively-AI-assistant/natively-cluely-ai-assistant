@@ -124,7 +124,7 @@ test('provider_switch is forwarded in order without being swallowed into the ter
   assert.ok(fallThroughAt > switchAt, 'provider_switch branch must precede the terminal fall-through');
 
   const switchBlock = streamBlock.slice(switchAt, fallThroughAt);
-  assert.match(switchBlock, /sendDirectAssistEvent\(event\.sender, streamEvent\)/);
+  assert.match(switchBlock, /sendDirectAssistEvent(?:AndMirror)?\(event\.sender, streamEvent\)/);
   assert.match(switchBlock, /continue;/);
   // It must never touch lastSequence: a switch's sequence is a snapshot of
   // the delta counter (always 0), not a slot of its own.
@@ -138,7 +138,7 @@ test('provider_switch is forwarded in order without being swallowed into the ter
   // rewrite is exactly what this assertion catches.
   assert.doesNotMatch(
     switchBlock,
-    /sendDirectAssistEvent\([^)]*\{/,
+    /sendDirectAssistEvent(?:AndMirror)?\([^)]*\{/,
     'provider_switch must forward the streamEvent object itself, not a hand-rebuilt payload',
   );
 });

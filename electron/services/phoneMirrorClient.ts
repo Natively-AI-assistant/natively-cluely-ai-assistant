@@ -1985,7 +1985,11 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         var entries = [];          // { key, t, kind, role, content, label, el, local }
         var clearedAt = 0;
         var localSeq = 0;
-        var live = null;           // { streamId, content, entry }
+        // Answers streaming now, by stream id: an Auto Answer can stream while
+        // a Recap or a question typed here does. { entry, dirty } each.
+        var lives = {};
+        function liveOf(streamId) { return Object.prototype.hasOwnProperty.call(lives, streamId) ? lives[streamId] : null; }
+        function isLiveEntry(e) { return Object.keys(lives).some(function (id) { return lives[id].entry === e; }); }
 
         function timeOf(iso) {
           var t = iso ? Date.parse(iso) : NaN;
@@ -2473,7 +2477,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           // token frame holding everything so far. Drop the old live card, or
           // that frame would append the whole answer a second time.
           if (liveRaf) { cancelAnimationFrame(liveRaf); liveRaf = 0; }
-          live = null;
+          lives = {};
           rebuildFeed();
         }
         function onUser(ev) {
@@ -2514,42 +2518,67 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         // The placeholder this answer resolves: its own (a desktop question's,
         // by stream id) first, else a question typed here, else a recording
         // just stopped.
-        function takeAnswerPending(streamId) {
-          return takePending(function (e) { return e.streamId === streamId; }) ||
-            takePending(function (e) { return e.action === 'chat' && !e.streamId; }) ||
+        function takeAnswerPending(streamId, label) {
+          var own = takePending(function (e) { return e.streamId === streamId; });
+          if (own) return own;
+          // A button's answer (What to Answer, Recap…) resolves the chip
+          // tapped here for that button, never a question typed here.
+          if (label) {
+            return takePending(function (e) { return !e.streamId && e.expect && e.expect.indexOf(label) >= 0; });
+          }
+          return takePending(function (e) { return e.action === 'chat' && !e.streamId; }) ||
             takePending(function (e) { return e.action === 'answer' && !e.streamId; });
         }
         var liveRaf = 0;
         // Answers still streaming when a new session started: their late
         // tokens belong to the old session and are dropped.
         var droppedStreams = {};
-        function onToken(streamId, token) {
+        function onToken(streamId, token, label) {
           if (droppedStreams[streamId]) return;
-          if (!live || live.streamId !== streamId) {
-            var entry = { key: 'live:' + streamId, t: Date.now(), kind: 'assistant', content: '', label: '' };
-            live = { streamId: streamId, entry: entry };
+          var lv = liveOf(streamId);
+          if (!lv) {
+            var entry = { key: 'live:' + streamId, t: Date.now(), kind: 'assistant', content: '', label: label || '' };
+            lv = lives[streamId] = { entry: entry, dirty: false };
             // The question's placeholder turns into this answer in place.
-            var wait = takeAnswerPending(streamId);
+            var wait = takeAnswerPending(streamId, label);
             if (wait) morph(wait, entry, { streaming: true });
             else appendEntry(entry, { streaming: true });
           }
-          live.entry.content += token;
+          lv.entry.content += token;
           // Once the desktop's render frames are arriving they drive the
           // updates; until then the page renders the tokens itself.
-          if (typeof live.entry.html !== 'string' && !liveRaf) liveRaf = requestAnimationFrame(flushLive);
+          if (typeof lv.entry.html !== 'string') { lv.dirty = true; scheduleLive(); }
         }
         function onRender(ev) {
           var streamId = String(ev.streamId);
-          if (droppedStreams[streamId] || !live || live.streamId !== streamId || typeof ev.html !== 'string') return;
-          live.entry.html = ev.html;
-          live.entry.gist = ev.gist || null;
+          var lv = liveOf(streamId);
+          if (droppedStreams[streamId] || !lv || typeof ev.html !== 'string') return;
+          lv.entry.html = ev.html;
+          lv.entry.gist = ev.gist || null;
+          lv.dirty = true;
+          scheduleLive();
+        }
+        function scheduleLive() {
           if (!liveRaf) liveRaf = requestAnimationFrame(flushLive);
         }
         function flushLive() {
           liveRaf = 0;
-          if (!live || !live.entry.el) return;
-          renderAnswerBody(live.entry, true);
-          noteNewContent();
+          var any = false;
+          Object.keys(lives).forEach(function (id) {
+            var lv = lives[id];
+            if (!lv.dirty || !lv.entry.el) return;
+            lv.dirty = false;
+            renderAnswerBody(lv.entry, true);
+            any = true;
+          });
+          if (any) noteNewContent();
+        }
+        function endLive(streamId) {
+          var lv = liveOf(streamId);
+          if (!lv) return null;
+          delete lives[streamId];
+          if (!Object.keys(lives).length && liveRaf) { cancelAnimationFrame(liveRaf); liveRaf = 0; }
+          return lv.entry;
         }
         function finishLive(entry, content) {
           if (content) entry.content = content;
@@ -2562,10 +2591,9 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         function onDone(ev) {
           var streamId = String(ev.streamId);
           if (droppedStreams[streamId]) return;
-          if (liveRaf) { cancelAnimationFrame(liveRaf); liveRaf = 0; }
-          if (live && live.streamId === streamId) {
-            var entry = live.entry;
-            live = null;
+          var label = ev.label ? String(ev.label) : '';
+          var entry = endLive(streamId);
+          if (entry) {
             // The final rendering replaces the last streaming frame.
             entry.html = typeof ev.html === 'string' ? ev.html : undefined;
             entry.gist = ev.gist || null;
@@ -2580,29 +2608,37 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
             if (gone) removeEntry(gone, true);
             return;
           }
-          var fresh = { key: 'a:' + streamId, t: timeOf(ev.createdAt), kind: 'assistant', content: ev.content, label: '', html: ev.html, gist: ev.gist };
-          var wait = takeAnswerPending(streamId);
+          var fresh = { key: 'a:' + streamId, t: timeOf(ev.createdAt), kind: 'assistant', content: ev.content, label: label, html: ev.html, gist: ev.gist };
+          var wait = takeAnswerPending(streamId, label);
           if (wait) morph(wait, fresh);
           else appendEntry(fresh);
           announce('Answer ready. ' + plainText(fresh.content).slice(0, 160));
         }
         function onStreamError(ev) {
-          if (droppedStreams[String(ev.streamId)]) return;
-          if (liveRaf) { cancelAnimationFrame(liveRaf); liveRaf = 0; }
+          var streamId = String(ev.streamId);
+          if (droppedStreams[streamId]) return;
           var message = String(ev.message || 'stream failed');
-          if (live && live.streamId === String(ev.streamId)) {
-            var entry = live.entry;
-            live = null;
+          var entry = endLive(streamId);
+          if (entry) {
             finishLive(entry);
             entry.el.querySelector('.answer-body').append(el('p', 'answer-note', 'The answer stopped: ' + message));
             return;
           }
-          var wait = takeAnswerPending(String(ev.streamId));
+          var wait = takeAnswerPending(streamId);
           var failed = { key: 'err:' + (++localSeq), t: Date.now(), kind: 'assistant', label: '', content: '', local: true };
           if (wait) morph(wait, failed);
           else appendEntry(failed);
           failed.el.querySelector('.answer-body').append(el('p', 'answer-note', 'Could not get an answer: ' + message));
           failed.el.querySelector('.answer-foot').remove();
+        }
+        // The desktop threw this answer away (a newer one replaced it): its
+        // overlay row goes, so the card streaming here goes too, quietly.
+        function onDiscard(ev) {
+          var streamId = String(ev.streamId);
+          var entry = endLive(streamId);
+          if (entry) { removeEntry(entry, true); return; }
+          var wait = takePending(function (e) { return e.streamId === streamId; });
+          if (wait) removeEntry(wait, true);
         }
         function onAssistant(ev) {
           var label = String(ev.label || '');
@@ -2799,11 +2835,12 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           switch (ev.type) {
             case 'history': onHistory(ev.messages); break;
             case 'user': onUser(ev); break;
-            case 'token': onToken(String(ev.streamId), String(ev.token || '')); break;
+            case 'token': onToken(String(ev.streamId), String(ev.token || ''), ev.label ? String(ev.label) : ''); break;
             case 'render': onRender(ev); break;
             case 'diagram': onDiagram(ev); break;
             case 'done': onDone(ev); break;
             case 'error': onStreamError(ev); break;
+            case 'discard': onDiscard(ev); break;
             case 'assistant': onAssistant(ev); break;
             case 'ack': onAck(ev); break;
             case 'transcript': onTranscript(ev); break;
@@ -2887,7 +2924,8 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         // reconnect won't bring them back.
         function startNewSession(toast) {
           if (liveRaf) { cancelAnimationFrame(liveRaf); liveRaf = 0; }
-          if (live) { droppedStreams[live.streamId] = true; live = null; }
+          Object.keys(lives).forEach(function (id) { droppedStreams[id] = true; });
+          lives = {};
           entries.forEach(function (e) { clearTimeout(e.timer); });
           entries = [];
           clearedAt = 0;
@@ -3543,7 +3581,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         function clearScreen() {
           clearedAt = Date.now();
           entries.slice().forEach(function (e) {
-            if (live && live.entry === e) return;
+            if (isLiveEntry(e)) return;
             clearTimeout(e.timer);
             removeEntry(e, false);
           });

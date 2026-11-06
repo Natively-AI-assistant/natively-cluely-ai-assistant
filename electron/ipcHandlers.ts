@@ -203,6 +203,7 @@ import {
   type DirectAssistStreamEvent,
 } from './direct-assist';
 import { nativelyApiBase } from './services/nativelyApiBase';
+import { startPhonePress, PHONE_LABELS, liveHelperLabel } from './services/phoneMirrorLiveAnswers';
 
 type DirectAssistSource = 'typed' | 'stt' | 'screenshot';
 
@@ -8399,6 +8400,22 @@ export function initializeIpcHandlers(appState: AppState): void {
       maxContextChars: request.maxContextChars,
     });
 
+    // The paired phone gets this answer too, as it streams (before, Direct
+    // Assist never reached it). The overlay retires the legacy answers still
+    // in flight when a Direct request starts; the phone drops them as well.
+    const { mirrorDirectAssistToPhone, supersedeLegacyPhoneAnswers } =
+      require('./services/phoneMirrorLiveAnswers') as typeof import('./services/phoneMirrorLiveAnswers');
+    supersedeLegacyPhoneAnswers();
+    const mirrorToPhone = mirrorDirectAssistToPhone(() => PhoneMirrorService.getInstance(), {
+      requestId: request.requestId,
+      source: request.source,
+      currentRequest: resolvedSkill.currentRequest,
+    });
+    const sendDirectAssistEventAndMirror = (sender: any, payload: any): void => {
+      sendDirectAssistEvent(sender, payload);
+      mirrorToPhone(payload);
+    };
+
     void (async () => {
       let terminalSent = false;
       let startSent = false;
@@ -8415,7 +8432,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       ): void => {
         if (terminalSent) return;
         terminalSent = true;
-        sendDirectAssistEvent(event.sender, payload);
+        sendDirectAssistEventAndMirror(event.sender, payload);
       };
 
       try {
@@ -8427,7 +8444,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           if (streamEvent.type === 'start') {
             if (startSent) throw new Error('duplicate_start');
             startSent = true;
-            sendDirectAssistEvent(event.sender, streamEvent);
+            sendDirectAssistEventAndMirror(event.sender, streamEvent);
             continue;
           }
           if (streamEvent.type === 'delta') {
@@ -8436,7 +8453,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             }
             lastSequence = streamEvent.sequence;
             fullText += streamEvent.text;
-            sendDirectAssistEvent(event.sender, streamEvent);
+            sendDirectAssistEventAndMirror(event.sender, streamEvent);
             continue;
           }
           if (streamEvent.type === 'provider_switch') {
@@ -8447,7 +8464,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             // sequence accounting below: doing so would let this event fall
             // through to the terminal branch and kill the stream the moment
             // a fallback fired.
-            sendDirectAssistEvent(event.sender, streamEvent);
+            sendDirectAssistEventAndMirror(event.sender, streamEvent);
             continue;
           }
           // LATENT TRAP: everything past this line treats an unrecognized
@@ -16331,7 +16348,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         });
 
         // Question and imagePaths are now optional - IntelligenceManager infers from transcript
-        let answer = await intelligenceManager.runWhatShouldISay(
+        const phonePress = startPhonePress();
+        let answer = await phonePress.run(() => intelligenceManager.runWhatShouldISay(
           question,
           0.8,
           validatedImagePaths,
@@ -16355,7 +16373,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 : undefined,
             domContext: effectiveDomContext,
           },
-        );
+        ));
         // The refusal-triggered retry of #647's Problem A. The refusal ("I
         // can't provide a solution for a live HackerRank test") is the MODEL's
         // judgement of a FULL-SCREEN capture: a background "Test Login" tab
@@ -16387,7 +16405,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               );
               if (crop) {
                 const retryPaths = validatedImagePaths.slice(0, -1).concat(croppedImagePath);
-                const retryAnswer = await intelligenceManager.runWhatShouldISay(
+                const retryAnswer = await phonePress.run(() => intelligenceManager.runWhatShouldISay(
                   question,
                   0.8,
                   retryPaths,
@@ -16403,7 +16421,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                     // the original capture, tab strip and all, and its text
                     // would re-tell the model what we cropped away.
                   },
-                );
+                ));
                 if (retryAnswer) {
                   // Both runs recorded a turn, each with the screenshot: the
                   // refusal is dropped from the conversation, so it neither
@@ -16438,10 +16456,10 @@ export function initializeIpcHandlers(appState: AppState): void {
           // screenshot attached to it. `screenContext` computed above is passed
           // into runWhatShouldISay, so the engine records the screen text too.
           try {
-            PhoneMirrorService.getInstance().publishAssistantMessage(
+            if (!phonePress.answeredOnPhone) PhoneMirrorService.getInstance().publishAssistantMessage(
               crypto.randomUUID(),
               answer,
-              'What to Answer',
+              PHONE_LABELS.whatToAnswer,
             );
           } catch (_) {}
         }
@@ -16483,7 +16501,8 @@ export function initializeIpcHandlers(appState: AppState): void {
     return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
-      const clarification = await intelligenceManager.runClarify();
+      const phonePress = startPhonePress();
+      const clarification = await phonePress.run(() => intelligenceManager.runClarify());
       // A null is not worded here. The engine reports its own failures (an
       // error event with the reason), and the other way to get a null is a
       // Clarify the user cancelled or an answer overtook. This handler used to
@@ -16493,10 +16512,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       // The overlay takes its own empty placeholder away (handleClarify).
       if (clarification !== null) {
         try {
-          PhoneMirrorService.getInstance().publishAssistantMessage(
+          if (!phonePress.answeredOnPhone) PhoneMirrorService.getInstance().publishAssistantMessage(
             crypto.randomUUID(),
             clarification,
-            'Clarify',
+            PHONE_LABELS.clarify,
           );
         } catch (_) {}
       }
@@ -16581,16 +16600,17 @@ export function initializeIpcHandlers(appState: AppState): void {
       );
 
       const intelligenceManager = appState.getIntelligenceManager();
-      const hint = await intelligenceManager.runCodeHint(
+      const phonePress = startPhonePress();
+      const hint = await phonePress.run(() => intelligenceManager.runCodeHint(
         optimizedPaths.length > 0 ? optimizedPaths : undefined,
         problemStatement,
-      );
+      ));
       if (hint) {
         try {
-          PhoneMirrorService.getInstance().publishAssistantMessage(
+          if (!phonePress.answeredOnPhone) PhoneMirrorService.getInstance().publishAssistantMessage(
             crypto.randomUUID(),
             hint,
-            'Code Hint',
+            PHONE_LABELS.codeHint,
           );
         } catch (_) {}
       }
@@ -16639,16 +16659,17 @@ export function initializeIpcHandlers(appState: AppState): void {
       );
 
       const intelligenceManager = appState.getIntelligenceManager();
-      const script = await intelligenceManager.runBrainstorm(
+      const phonePress = startPhonePress();
+      const script = await phonePress.run(() => intelligenceManager.runBrainstorm(
         optimizedPaths.length > 0 ? optimizedPaths : undefined,
         problemStatement,
-      );
+      ));
       if (script) {
         try {
-          PhoneMirrorService.getInstance().publishAssistantMessage(
+          if (!phonePress.answeredOnPhone) PhoneMirrorService.getInstance().publishAssistantMessage(
             crypto.randomUUID(),
             script,
-            'Brainstorm',
+            PHONE_LABELS.brainstorm,
           );
         } catch (_) {}
       }
@@ -16669,13 +16690,14 @@ export function initializeIpcHandlers(appState: AppState): void {
     return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
-      const refined = await intelligenceManager.runFollowUp(intent, userRequest);
+      const phonePress = startPhonePress();
+      const refined = await phonePress.run(() => intelligenceManager.runFollowUp(intent, userRequest));
       if (refined) {
         try {
-          PhoneMirrorService.getInstance().publishAssistantMessage(
+          if (!phonePress.answeredOnPhone) PhoneMirrorService.getInstance().publishAssistantMessage(
             crypto.randomUUID(),
             refined,
-            'Follow Up',
+            PHONE_LABELS.followUp,
           );
         } catch (_) {}
       }
@@ -16691,13 +16713,14 @@ export function initializeIpcHandlers(appState: AppState): void {
     return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
-      const summary = await intelligenceManager.runRecap();
+      const phonePress = startPhonePress();
+      const summary = await phonePress.run(() => intelligenceManager.runRecap());
       if (summary) {
         try {
-          PhoneMirrorService.getInstance().publishAssistantMessage(
+          if (!phonePress.answeredOnPhone) PhoneMirrorService.getInstance().publishAssistantMessage(
             crypto.randomUUID(),
             summary,
-            'Recap',
+            PHONE_LABELS.recap,
           );
         } catch (_) {}
       }
@@ -16713,13 +16736,14 @@ export function initializeIpcHandlers(appState: AppState): void {
     return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
-      const questions = await intelligenceManager.runFollowUpQuestions();
+      const phonePress = startPhonePress();
+      const questions = await phonePress.run(() => intelligenceManager.runFollowUpQuestions());
       if (questions) {
         try {
-          PhoneMirrorService.getInstance().publishAssistantMessage(
+          if (!phonePress.answeredOnPhone) PhoneMirrorService.getInstance().publishAssistantMessage(
             crypto.randomUUID(),
             questions,
-            'Follow-Up Questions',
+            PHONE_LABELS.followUpQuestions,
           );
         } catch (_) {}
       }
@@ -16738,11 +16762,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (!isLiveHelperAction(action)) return { text: null };
     const sinceMs = typeof opts?.sinceMs === 'number' && Number.isFinite(opts.sinceMs) ? opts.sinceMs : undefined;
     return _tracked(async () => {
-      const text = await appState.getIntelligenceManager().runLiveHelper(action, { sinceMs });
+      const phonePress = startPhonePress();
+      const text = await phonePress.run(() => appState.getIntelligenceManager().runLiveHelper(action, { sinceMs }));
       if (text) {
         try {
-          const label = action === 'catch_me_up' ? 'What did I miss?' : action === 'define' ? 'Define' : action === 'follow_up_questions' ? 'Follow-up questions' : 'Sound smart';
-          PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), text, label);
+          if (!phonePress.answeredOnPhone) PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), text, liveHelperLabel(action));
         } catch (_) {}
       }
       return { text };
@@ -16867,10 +16891,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     const { customButtonReadSeconds } = require('./llm/customButtons') as typeof import('./llm/customButtons');
     const readSeconds = customButtonReadSeconds(readMinutes);
     return _tracked(async () => {
-      const text = await appState.getIntelligenceManager().runCustomButton(button, paths, readSeconds);
+      const phonePress = startPhonePress();
+      const text = await phonePress.run(() => appState.getIntelligenceManager().runCustomButton(button, paths, readSeconds));
       if (text) {
         try {
-          PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), text, button.name);
+          if (!phonePress.answeredOnPhone) PhoneMirrorService.getInstance().publishAssistantMessage(crypto.randomUUID(), text, button.name);
         } catch (_) {}
       }
       return { text };
