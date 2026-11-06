@@ -7,7 +7,6 @@ import fs from "fs"
 import os from "os"
 import path from "path"
 import { createHash, randomUUID } from "crypto"
-import sharp from "sharp"
 import { ModelVersionManager, ModelFamily, TextModelFamily } from './services/ModelVersionManager'
 import {
   HARD_SYSTEM_PROMPT, GROQ_SYSTEM_PROMPT, OPENAI_SYSTEM_PROMPT, CLAUDE_SYSTEM_PROMPT,
@@ -72,6 +71,7 @@ import type { TranscriptTurn } from "./llm/transcriptCleaner"
 import { applyCurlVariables, getByPath, injectImageIntoMessages, flattenStructuredJsonAnswer, blockedInfrastructureHost } from './utils/curlUtils';
 import { getImageOptimizer } from './services/screen/ImageOptimizer';
 import { isPhoneImagePath, visionImageEdge } from './utils/phoneImage';
+import { NATIVELY_API_JPEG, preparedJpeg } from './services/screen/preparedJpeg';
 import curl2Json from "@bany/curl-to-json";
 import { CustomProvider, CurlProvider } from './services/CredentialsManager';
 import { TRIAL_SENTINEL_KEY } from './config/constants';
@@ -4248,8 +4248,6 @@ ${IMAGE_TRUST_TRAILER}`;
    */
   private async processImage(path: string): Promise<{ mimeType: string, data: string }> {
     try {
-      const imageBuffer = await fs.promises.readFile(path);
-
       // Resize and compress. 1536px @ q80 unless "Shrink screenshots when the
       // provider is slow" is on AND the measured provider would blow this turn's
       // budget AND this is not a coding session — then ImageOptimizer's `fast`
@@ -4260,15 +4258,9 @@ ${IMAGE_TRUST_TRAILER}`;
       // phone photo needs it (see visionImageEdge).
       const shrink = this.imageProfileFor('balanced', 0) === 'fast';
       const edge = visionImageEdge({ shrink, phoneImage: isPhoneImagePath(path) });
-      const processedBuffer = await sharp(imageBuffer)
-        .resize({
-          width: edge,
-          height: edge,
-          fit: 'inside', // Maintain aspect ratio
-          withoutEnlargement: true
-        })
-        .jpeg({ quality: shrink ? 78 : 80 }) // JPEG is much smaller than PNG
-        .toBuffer();
+      // JPEG is much smaller than PNG. A screenshot's JPEG is usually made
+      // already, right after ⌘/Ctrl+H (services/screen/preparedJpeg).
+      const processedBuffer = await preparedJpeg(path, { edge, quality: shrink ? 78 : 80 });
 
       return {
         mimeType: "image/jpeg",
@@ -6918,10 +6910,8 @@ let isMultimodal = !!(imagePaths?.length);
       for (const p of imagePaths) {
         if (fs.existsSync(p)) {
           try {
-            const compressed = await sharp(p)
-              .resize(1920, 1920, { fit: 'inside', withoutEnlargement: true })
-              .jpeg({ quality: 85 })
-              .toBuffer();
+            // Usually made already, right after ⌘/Ctrl+H (services/screen/preparedJpeg).
+            const compressed = await preparedJpeg(p, NATIVELY_API_JPEG);
             images.push({ mime_type: 'image/jpeg', data: compressed.toString('base64') });
           } catch (compressErr: any) {
             // Fallback: send raw if sharp fails (e.g. unsupported format)
@@ -12210,10 +12200,8 @@ let isMultimodal = !!(imagePaths?.length);
       for (const p of imagePaths) {
         if (fs.existsSync(p)) {
           try {
-            const compressed = await sharp(p)
-              .resize(1920, 1920, { fit: 'inside', withoutEnlargement: true })
-              .jpeg({ quality: 85 })
-              .toBuffer();
+            // Usually made already, right after ⌘/Ctrl+H (services/screen/preparedJpeg).
+            const compressed = await preparedJpeg(p, NATIVELY_API_JPEG);
             images.push({ mime_type: 'image/jpeg', data: compressed.toString('base64') });
           } catch (compressErr: any) {
             // Fallback: send raw if sharp fails (e.g. unsupported format)

@@ -418,7 +418,9 @@ test('a screenshot that could not be transcribed is still recorded as having exi
   // (2026-10-29: of the screenshots themselves. Code hint and Brainstorm pass
   // optimized copies, which understand() refuses as outside the app folder.)
   assert.match(engine, /const shots: string\[\] \| undefined = imagePaths\?\.map\(screenshotSourceOf\);/);
-  assert.match(engine, /transcribeScreenForMemory\(shots, question\?\.trim\(\) \|\| undefined\)/);
+  // (2026-11-06: with the backup read as a third argument, for the presses
+  // that skipped the describe call; ScreenMemoryEverySurface2026_11_06.)
+  assert.match(engine, /transcribeScreenForMemory\(shots, question\?\.trim\(\) \|\| undefined,/);
 });
 
 // ── Three defects found only by running a real session ──────────────────────

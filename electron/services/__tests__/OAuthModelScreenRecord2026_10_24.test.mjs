@@ -22,7 +22,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { helper, png, fakeCredentials, isolateSingletons, userData, dist, require, CRED_SLOT } from './fakeOllamaHarness.mjs';
 
-const { getScreenUnderstandingService, OAUTH_RECORD_BUDGET_MS } = require(dist('services/screen/ScreenUnderstandingService.js'));
+const { getScreenUnderstandingService, OAUTH_RECORD_BUDGET_MS, CLOUD_RECORD_PER_PROVIDER_MS } = require(dist('services/screen/ScreenUnderstandingService.js'));
 const { composeScreenDescription } = require(dist('services/screen/screenDescription.js'));
 const { renderDigitsPng } = require(dist('llm/visionTestImage.js'));
 isolateSingletons();
@@ -206,9 +206,11 @@ describe('the screen record through the service', () => {
     try { result = await understand('transcribe'); } finally { globalThis.setTimeout = realSetTimeout; }
     assert.equal(result.providerUsed, 'oauth_model');
     assert.ok(OAUTH_RECORD_BUDGET_MS > 6000, String(OAUTH_RECORD_BUDGET_MS));
-    assert.ok(armed.some((ms) => ms > 6000 && ms <= OAUTH_RECORD_BUDGET_MS), `no attempt was armed with the record budget: ${armed}`);
-    const cloudAttempts = armed.filter((ms) => ms <= 6000);
-    assert.ok(cloudAttempts.length > 0, `the cloud rungs ran inside the 6 s stage: ${armed}`);
+    assert.ok(armed.some((ms) => ms > CLOUD_RECORD_PER_PROVIDER_MS && ms <= OAUTH_RECORD_BUDGET_MS), `no attempt was armed with the record budget: ${armed}`);
+    // The cloud rungs run first, in their own record stage (2026-11-06: no
+    // longer the pre-pass's 6 s — CLOUD_RECORD_PER_PROVIDER_MS a rung).
+    const cloudAttempts = armed.filter((ms) => ms <= CLOUD_RECORD_PER_PROVIDER_MS);
+    assert.ok(cloudAttempts.length > 0, `the cloud rungs ran inside the cloud record stage: ${armed}`);
   });
   test('the PRE-PASS never asks the selected model: it runs before the answer, inside 6 seconds', async () => {
     use(selectedHelper());

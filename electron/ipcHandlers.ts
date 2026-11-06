@@ -1,6 +1,7 @@
 // ipcHandlers.ts
 
 import * as crypto from 'crypto';
+import { prewarmPreparedJpeg } from './services/screen/preparedJpeg';
 import { repairCapReached, endsInsideFence } from './llm/repairCap';
 import { AntigravityService, initializeAntigravityLifecycle } from './services/AntigravityService';
 import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
@@ -131,7 +132,7 @@ import { decideSessionWritePolicy, type FinalGenerationMode, type SessionWriteDe
 import { stripEmbeddedAnswerContract } from './llm/stripEmbeddedAnswerContract';
 import { isCodeVerificationEnabled } from './llm/codeVerification/verificationEnabled';
 import { CodingStreamGate } from './llm/codingStreamGate';
-import { PiLatencyTrace } from './services/telemetry/PiLatencyTracer';
+import { PiLatencyTrace, tracerNow } from './services/telemetry/PiLatencyTracer';
 import { beginTrace, commitTrace } from './intelligence/IntelligenceTrace';
 import { ProfileTreeService } from './intelligence/ProfileTreeService';
 import { isIntelligenceFlagEnabled, getSourceOwnerEnforcementStage } from './intelligence/intelligenceFlags';
@@ -1637,6 +1638,8 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const screenshotPath = await appState.takeScreenshot();
       const preview = await appState.getImagePreview(screenshotPath);
+      // Make the upload JPEG now, while the user types, not when they send.
+      prewarmPreparedJpeg(screenshotPath);
       return { path: screenshotPath, preview };
     } catch (error) {
       // console.error("Error taking screenshot:", error)
@@ -1673,6 +1676,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const screenshotPath = await appState.takeSelectiveScreenshot();
       const preview = await appState.getImagePreview(screenshotPath);
+      prewarmPreparedJpeg(screenshotPath);
       return { path: screenshotPath, preview };
     } catch (error) {
       // EC-04 fix: cast unknown error to Error before accessing .message
@@ -1956,6 +1960,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       // an error + commit. Assigned to the real trace right after planAnswer; until
       // then it's the shared zero-cost NO-OP, so this is free when the flag is off.
       let iTrace = beginTrace('');
+      // Per-question latency trace (MEASURE_LATENCY=true prints a stage
+      // breakdown). Started on entry (2026-11-06) and shared by both paths:
+      // it used to start only on the legacy path, past the V3 branch, so a
+      // V3-answered question — every typed question — reported no latency at all.
+      const chatTrace = new PiLatencyTrace({ source: 'manual' });
+      chatTrace.mark('question_submitted', { hasImages: Boolean(imagePaths?.length) });
       const { ForegroundGate } = require('./services/ForegroundGate') as typeof import('./services/ForegroundGate');
       try {
         const llmHelper = appState.processingHelper.getLLMHelper();
@@ -2308,6 +2318,10 @@ export function initializeIpcHandlers(appState: AppState): void {
             // The text came from the description cache, which only a dedicated
             // transcription fills: the record needs no second read.
             let v3ScreenIsTranscription = false;
+            // The screen port's text when the describe call was skipped. Kept
+            // apart from v3ScreenDescription, which is what the conversation
+            // record stores and what decides the post-answer transcription.
+            let v3ScreenEvidence = '';
             if (imagePaths?.length) {
               try {
                 const screenStore = require('./services/screen/ScreenshotDescriptionStore') as
@@ -2344,7 +2358,22 @@ export function initializeIpcHandlers(appState: AppState): void {
                 const credentials = CredentialsManager.getInstance();
                 const providerScopes = settings.get('providerDataScopes') || {};
                 const localVisionAvailable = credentials.anyLocalVisionProviderConfigured?.() ?? false;
-                const sur = v3ScreenDescription ? null : await getScreenUnderstandingService().understand({
+                // No describe call in front of the answer when the answer reads
+                // the image itself (screenPrepass.ts): it cost 3.5–6 s per turn.
+                // The record for later turns is still written after the answer
+                // (transcribeScreenForMemory below, since this is not a cache hit).
+                const { answerReadsScreenshotItself, SCREEN_IN_ATTACHED_IMAGE } =
+                  require('./services/screen/screenPrepass') as typeof import('./services/screen/screenPrepass');
+                const v3SkipPrepass = !v3ScreenDescription && answerReadsScreenshotItself({
+                  mode: settings.getScreenUnderstandingMode(),
+                  allowScreenshots: providerScopes.screenshots !== false,
+                  visionAvailable: credentials.anyVisionProviderConfigured?.() ?? true,
+                });
+                if (v3SkipPrepass) {
+                  v3ScreenEvidence = SCREEN_IN_ATTACHED_IMAGE;
+                  console.log('[V3] screen pre-pass skipped: the answer reads the screenshot itself', { images: imagePaths.length });
+                }
+                const sur = v3ScreenDescription || v3SkipPrepass ? null : await getScreenUnderstandingService().understand({
                   modeId: modeId,
                   transcript: v3Question,
                   userAction: 'manual_use_screen',
@@ -2383,10 +2412,10 @@ export function initializeIpcHandlers(appState: AppState): void {
                   screenErr?.message ?? screenErr);
               }
             }
-            const v3ScreenPort = v3ScreenDescription
+            const v3ScreenPort = (v3ScreenDescription || v3ScreenEvidence)
               ? require('./context-intelligence/retrieval/screen-retrieval-port')
                   .createScreenRetrievalPort({
-                    description: v3ScreenDescription,
+                    description: v3ScreenDescription || v3ScreenEvidence,
                     userId: V3_USER_ID,
                     // The SAME key the request scope carries below (2026-09-11).
                     // This was String(senderId) while the request scope moved to
@@ -2779,6 +2808,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             const emitV3Visible = (visible: string) => {
               if (!visible) return;
               finalText += visible;
+              chatTrace.markFirstUseful({ path: 'v3' });
               event.sender.send('gemini-stream-token', visible, { streamId: myStreamId });
               // Streamed to the phone as it is written, like the legacy path.
               try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), visible); } catch { /* mirror only */ }
@@ -2906,6 +2936,8 @@ export function initializeIpcHandlers(appState: AppState): void {
               incomplete: v3Truncated,
               incompleteReason: v3Truncated ? v3Stream.outcome.reason : undefined,
             });
+            chatTrace.mark('response_completed', { path: 'v3', chars: finalText.length, incomplete: v3Truncated });
+            chatTrace.finish({ chars: finalText.length, path: 'v3' });
             // The phone watched it stream: end it as the overlay does (a cut-off
             // answer keeps its words and says it stopped).
             try {
@@ -2997,7 +3029,10 @@ export function initializeIpcHandlers(appState: AppState): void {
                       typeof import('./services/screen/screenTranscription');
                     const { attachScreenToAnsweredTurn } = require('./context-intelligence/question/conversation-state-store') as
                       typeof import('./context-intelligence/question/conversation-state-store');
-                    void transcribeScreenForMemory(imagePaths, v3Question.trim() || undefined)
+                    // A turn that skipped the describe call before its answer
+                    // gets that call AFTER it, if the transcription fails.
+                    void transcribeScreenForMemory(imagePaths, v3Question.trim() || undefined,
+                      v3ScreenEvidence ? { backupDescribe: 'manual_use_screen' } : {})
                       .catch((): string => '')
                       .then((screenText) => {
                         if (screenText) attachScreenToAnsweredTurn(ringKey, finalText, screenText, { turn, placeholder: screenPlaceholder });
@@ -3254,11 +3289,8 @@ export function initializeIpcHandlers(appState: AppState): void {
 
         let fullResponse = '';
 
-        // Per-request latency trace (MEASURE_LATENCY=true prints a stage
-        // breakdown to the console so we can see exactly where the wall time
-        // goes: pre-work in streamChat → provider first token → stream).
-        const chatTrace = new PiLatencyTrace({ source: 'manual' });
-        chatTrace.mark('question_submitted');
+        // The latency trace (chatTrace) started when this question arrived, at
+        // the top of the handler, so it counts the V3 routing before this point.
 
         // Intelligence OS — observe-only per-answer trace (Phase 1 wiring). Returns a
         // zero-cost NO-OP when intelligence_trace_enabled is off (default), so this
@@ -8032,10 +8064,16 @@ export function initializeIpcHandlers(appState: AppState): void {
       })();
       const screenStorePre = require('./services/screen/ScreenshotDescriptionStore') as
         typeof import('./services/screen/ScreenshotDescriptionStore');
+      const { getTranscriptionByNames } = require('./services/screen/screenTranscription') as
+        typeof import('./services/screen/screenTranscription');
       for (let i = rawTurns.length - 1; i >= 0; i -= 1) {
         if (!rawTurns[i].imagePaths.length) continue;
         try {
-          const described = screenStorePre.getDescriptionForImageSet(rawTurns[i].imagePaths);
+          // By the files' bytes; once the queue has deleted them, by their
+          // names (2026-11-06), or the screen of an older turn was lost.
+          const described = screenStorePre.getDescriptionForImageSet(rawTurns[i].imagePaths)
+            || getTranscriptionByNames(rawTurns[i].imagePaths)
+            || null;
           // A description made while that screenshot was being kept on this
           // device goes only to a provider on this device; anyone else gets a
           // note that a screenshot was there (never a silent gap). The note
@@ -8077,10 +8115,20 @@ export function initializeIpcHandlers(appState: AppState): void {
       // shared transcription cache the main live path populates: a screenshot it
       // has already transcribed reaches a Direct follow-up as text, cheaper than
       // the bytes and outliving them.
+      const { getBackupScreenRead } = require('./services/screen/screenTranscription') as
+        typeof import('./services/screen/screenTranscription');
       history = rawTurns.map((turn, index) => {
         const canonicalPaths = turn.imagePaths
           .map((rendererPath) => validated.get(rendererPath) ?? null)
           .filter((canonicalPath): canonicalPath is string => Boolean(canonicalPath));
+        // A screen that was never transcribed (the read failed) and whose bytes
+        // are not carried (deleted, or past the payload's slots) is described by
+        // its backup read, when one was kept (2026-11-06). Only then: a turn
+        // with a description is sent as text, and its bytes say more than a
+        // short read does.
+        const backupRead = !describedByTurn.has(index) && turn.imagePaths.length && !canonicalPaths.length
+          ? getBackupScreenRead(turn.imagePaths)
+          : '';
         return Object.freeze({
           role: turn.role,
           content: turn.content,
@@ -8089,7 +8137,8 @@ export function initializeIpcHandlers(appState: AppState): void {
           // ONE lookup per turn, keyed on the turn's whole attachment set —
           // which is what a description actually describes.
           // Reuses the pre-pass result rather than hashing the same files again.
-          imageDescription: describedByTurn.get(index) ?? '',
+          imageDescription: describedByTurn.get(index)
+            ?? (backupRead && keptOnDeviceText(backupRead) && !directSelectionOnDevice ? ON_DEVICE_SCREEN_WITHHELD : backupRead),
         });
       });
       Object.freeze(history);
@@ -8492,9 +8541,11 @@ export function initializeIpcHandlers(appState: AppState): void {
             //
             // Fire-and-forget and fully guarded: nothing below may affect the
             // answer that has already been delivered.
+            // If the transcription fails, a short read is kept instead
+            // (2026-11-06); the history below reads it (getBackupScreenRead).
             if (request.imagePaths?.length) {
               void require('./services/screen/screenTranscription')
-                .transcribeScreenForMemory(request.imagePaths, request.currentRequest);
+                .transcribeScreenForMemory(request.imagePaths, request.currentRequest, { backupDescribe: 'manual_use_screen' });
             }
           } else {
             sendTerminal(streamEvent);
@@ -9268,6 +9319,20 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (win.isDestroyed()) return;
       try {
         win.webContents.send('genie-animation:changed', enabled);
+      } catch {
+        // Renderer may be tearing down between isDestroyed() and send.
+      }
+    });
+  });
+
+  // Settings → Advanced → "Keep overlay size" (overlaySizeSetting.ts): set in
+  // the launcher, read by the overlay. Same hop; only a boolean is passed on.
+  safeOn('keep-overlay-size:set', (_event, enabled: unknown) => {
+    if (typeof enabled !== 'boolean') return;
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (win.isDestroyed()) return;
+      try {
+        win.webContents.send('keep-overlay-size:changed', enabled);
       } catch {
         // Renderer may be tearing down between isDestroyed() and send.
       }
@@ -16176,6 +16241,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       imagePaths?: string[],
       options?: { promptInstruction?: string; domContext?: string; domContextEnvelope?: unknown },
     ) => {
+      // The press, for the answer's latency trace (PiTraceInit.startedAt).
+      const pressedAt = tracerNow();
       return _tracked(async () => {
       // Auto Answer V3: a manual What-to-Answer (hotkey, button, or an accepted
       // offer card) commits whatever Auto Answer was offering — retract the card.
@@ -16187,6 +16254,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         let visionModelUsed: string | undefined;
         let visionAttempts: number | undefined;
         let visionFailureReason: string | undefined;
+        // The describe call was skipped because the answer reads the image (screenPrepass.ts).
+        let screenFromImage = false;
 
         // A ⌘/Ctrl+Y capture's screenshot for formulas its page text could not
         // carry, when it was still being taken as this answer started (#645).
@@ -16259,7 +16328,20 @@ export function initializeIpcHandlers(appState: AppState): void {
               );
             }
 
-            const sur = await sus.understand({
+            // No describe call in front of the answer when the answer reads
+            // the image itself (screenPrepass.ts): it cost 3.5–6 s per press.
+            // The turn's record is still transcribed after the answer
+            // (IntelligenceEngine.recordLiveTurn → transcribeScreenForMemory).
+            screenFromImage = (require('./services/screen/screenPrepass') as
+              typeof import('./services/screen/screenPrepass')).answerReadsScreenshotItself({
+              mode: settings.getScreenUnderstandingMode(),
+              allowScreenshots: providerScopes.screenshots !== false,
+              visionAvailable: credentials.anyVisionProviderConfigured?.() ?? true,
+            });
+            if (screenFromImage) {
+              console.log('[IPC] generate-what-to-say: screen pre-pass skipped: the answer reads the screenshot itself', { images: validatedImagePaths?.length ?? 0 });
+            }
+            const sur = screenFromImage ? null : await sus.understand({
               modeId: 'what-to-say',
               transcript: question,
               userAction: 'what_to_say',
@@ -16275,6 +16357,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               },
             });
 
+            if (sur) {
             screenContext = sur.status === 'available' ? sur : undefined;
             // NO write-through here, deliberately. `screenContext` is the
             // ANSWERING call's result — "analyze and answer concisely" — and
@@ -16296,6 +16379,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             visionModelUsed = sur.modelUsed;
             visionAttempts = Array.isArray(sur.attempts) ? sur.attempts.length : undefined;
             visionFailureReason = sur.failureReason;
+            }
           } catch (sErr: any) {
             screenContextStatus = 'failed';
             console.warn('[IPC] generate-what-to-say: ScreenUnderstandingService failed', {
@@ -16367,6 +16451,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             // current manual press). See runWhatShouldISay.forceFresh branch.
             forceFresh: true,
             screenContext,
+            pressedAt,
+            ...(screenFromImage ? { screenFromImage: true } : {}),
             promptInstruction:
               typeof options?.promptInstruction === 'string'
                 ? options.promptInstruction
@@ -16417,6 +16503,8 @@ export function initializeIpcHandlers(appState: AppState): void {
                         ? options.promptInstruction
                         : undefined,
                     domContext: effectiveDomContext,
+                    // The cropped image is still read by the answer itself.
+                    ...(screenFromImage ? { screenFromImage: true } : {}),
                     // No screenContext on the retry: the pre-pass described
                     // the original capture, tab strip and all, and its text
                     // would re-tell the model what we cropped away.
@@ -20936,6 +21024,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       // or mode switch mid-answer would save this answer into the context that
       // replaced the one it was asked in. The phone still gets the full answer.
       const myPhoneContextEpoch = intelligenceManager.getContextEpoch();
+      // The conversation this question was asked in, for recording it below.
+      const myPhoneConversationKey = (() => {
+        try { return intelligenceManager.conversationSessionId(); } catch { return undefined; }
+      })();
 
       // Document-grounded custom mode (audit 2026-06-27): the phone chat path is
       // a SECOND ungated entry — it captures the rolling snapshot and saves the
@@ -20981,6 +21073,23 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
       } catch (ctxErr) {
         console.warn('[PhoneMirror] Failed to capture pre-turn context:', ctxErr);
+      }
+      // Whether anything was said: the source routing below asks this of the
+      // transcript, never of the history added next.
+      const phoneHasLiveTranscript = Boolean(context && String(context).trim());
+      // The conversation so far, screenshots included (2026-11-06), read the way
+      // a button press reads it. The last 100 s above was all the phone had,
+      // so "what did that screenshot say?" asked here could not see any screen
+      // from earlier in the conversation, the phone's own or the desktop's.
+      // Not in a document-grounded mode: that mode keeps earlier answers out
+      // of the context (stripPriorAssistantTurns above).
+      if (!phoneDocGrounded) {
+        try {
+          const history = intelligenceManager.conversationHistoryBlock(context ?? '');
+          if (history) context = context?.trim() ? `${history}\n\n${context}` : history;
+        } catch (historyErr: any) {
+          console.warn('[PhoneMirror] conversation history not added:', historyErr?.message ?? historyErr);
+        }
       }
 
       intelligenceManager.addTranscript(
@@ -21065,7 +21174,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 hasReferenceFiles: Boolean((_pMode as any)?.hasReferenceFiles),
                 hasProfileFacts: _pHasProfile,
                 hasJobDescription: _pHasJd,
-                hasLiveTranscript: Boolean(context && String(context).trim()),
+                hasLiveTranscript: phoneHasLiveTranscript,
                 hasMeetingRag: false,
               },
             })
@@ -21086,7 +21195,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             isDocGroundedCustomModeActive: _pMode?.documentGroundedCustomModeActive === true,
             hasReferenceFiles: Boolean((_pMode as any)?.hasReferenceFiles),
             hasCustomPrompt: Boolean((_pMode as any)?.hasCustomPrompt),
-            hasLiveTranscript: Boolean(context && String(context).trim()),
+            hasLiveTranscript: phoneHasLiveTranscript,
             hasProfileFacts: _pHasProfile,
             hasMeetingRag: false,
             hasLongTermMemory: false,
@@ -21278,6 +21387,15 @@ export function initializeIpcHandlers(appState: AppState): void {
           if (phoneTrim.length > 0 && !phoneInvalid && !phoneContextChanged) {
             intelligenceManager.addAssistantMessage(full, undefined, 'phone_mirror');
             intelligenceManager.logUsage('chat', message, full);
+            // Into the conversation with its screenshots and photos (2026-11-06),
+            // like a question typed on the desktop: the next question, on the
+            // phone (conversationHistoryBlock, above) or the desktop (typed,
+            // What to answer, a button), can then refer to it and its screen.
+            try {
+              intelligenceManager.recordPhoneTurn(full, String(message || ''), phoneImagePaths, myPhoneConversationKey);
+            } catch (recordErr: any) {
+              console.warn('[PhoneMirror] phone turn not recorded in the conversation:', recordErr?.message ?? recordErr);
+            }
           }
         }
       } catch (err: any) {
@@ -21791,8 +21909,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         // retrieve from. Without this the harness sent the raw image only, the
         // screen port had nothing, and two "screenshot gaps" measured on
         // 2026-09-11 were the harness bypassing the product path.
-        const e2eScreenContext = (async () => {
-          if (!params.hotkey || !params.imagePaths?.length) return undefined;
+        // …and skips it exactly when that handler does (screenPrepass.ts,
+        // 2026-11-06): the answer then reads the image itself, and the press
+        // carries `screenFromImage` so the record gets the same backup read.
+        const e2eScreen = (async (): Promise<{ screenContext?: any; screenFromImage?: true }> => {
+          if (!params.hotkey || !params.imagePaths?.length) return {};
           try {
             const { getScreenUnderstandingService } = require('./services/screen/ScreenUnderstandingService');
             const { SettingsManager: SM2 } = require('./services/SettingsManager');
@@ -21800,6 +21921,16 @@ export function initializeIpcHandlers(appState: AppState): void {
             const settings2 = SM2.getInstance(); const credentials2 = CM2.getInstance();
             const providerScopes = settings2.get('providerDataScopes') || {};
             const localVisionAvailable = credentials2.anyLocalVisionProviderConfigured?.() ?? false;
+            const e2eScreenFromImage = (require('./services/screen/screenPrepass') as
+              typeof import('./services/screen/screenPrepass')).answerReadsScreenshotItself({
+              mode: settings2.getScreenUnderstandingMode(),
+              allowScreenshots: providerScopes.screenshots !== false,
+              visionAvailable: credentials2.anyVisionProviderConfigured?.() ?? true,
+            });
+            if (e2eScreenFromImage) {
+              console.log('[E2E] screen pre-pass skipped: the answer reads the screenshot itself', { images: params.imagePaths.length });
+              return { screenFromImage: true };
+            }
             const sur = await getScreenUnderstandingService().understand({
               modeId: 'what-to-say', transcript: params.question, userAction: 'what_to_say', qualityMode: 'balanced',
               imagePaths: params.imagePaths,
@@ -21813,12 +21944,16 @@ export function initializeIpcHandlers(appState: AppState): void {
               },
             });
             console.log('[E2E] screen understanding', { status: sur?.status, chars: String(sur?.extractedText ?? sur?.visibleSummary ?? '').length, provider: sur?.providerUsed, failureReason: sur?.failureReason, warnings: sur?.warnings });
-            return sur?.status === 'available' ? sur : undefined;
-          } catch (e: any) { console.warn('[E2E] screen understanding threw', e?.message); return undefined; }
+            return sur?.status === 'available' ? { screenContext: sur } : {};
+          } catch (e: any) { console.warn('[E2E] screen understanding threw', e?.message); return {}; }
         })();
         Promise.resolve(
           params.hotkey
-            ? e2eScreenContext.then((screenContext) => im.runWhatShouldISay(params.question, 0.9, params.imagePaths, { skipCooldown: true, forceFresh: true, ...(screenContext ? { screenContext } : {}) }))
+            ? e2eScreen.then(({ screenContext, screenFromImage }) => im.runWhatShouldISay(params.question, 0.9, params.imagePaths, {
+              skipCooldown: true, forceFresh: true,
+              ...(screenContext ? { screenContext } : {}),
+              ...(screenFromImage ? { screenFromImage } : {}),
+            }))
             : im.handleSuggestionTrigger({
               context: builtContext,
               lastQuestion: params.question,

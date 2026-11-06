@@ -64,6 +64,14 @@ export type PiMilestone =
   // distinguishable from "guard fired but the repair was a no-op" in a live trace.
   | 'wta_diversity_guard_checked';
 
+/**
+ * The tracer's clock, for a caller that knows when a request really began
+ * before its trace can be made (PiTraceInit.startedAt).
+ */
+export function tracerNow(): number {
+  return monotonicNow();
+}
+
 function monotonicNow(): number {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -80,6 +88,13 @@ export interface PiTraceInit {
   modeId?: string;
   /** Opaque request id so renderer + main milestones can be joined. */
   requestId?: string;
+  /**
+   * When the request began, on tracerNow()'s clock (2026-11-06). What to answer
+   * makes its trace in the engine, after the IPC handler has validated the
+   * screenshots and possibly read the screen first; every milestone then hid
+   * that wait (2.7–4.6 s reported where 8.7–10.5 s was seen). Defaults to now.
+   */
+  startedAt?: number;
 }
 
 export class PiLatencyTrace {
@@ -93,7 +108,9 @@ export class PiLatencyTrace {
   private static counter = 0;
 
   constructor(init: PiTraceInit) {
-    this.t0 = monotonicNow();
+    this.t0 = typeof init.startedAt === 'number' && Number.isFinite(init.startedAt) && init.startedAt <= monotonicNow()
+      ? init.startedAt
+      : monotonicNow();
     this.source = init.source;
     this.sessionId = init.sessionId;
     this.modeId = init.modeId;

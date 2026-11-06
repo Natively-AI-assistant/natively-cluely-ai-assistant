@@ -9,7 +9,7 @@ import {
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
     ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Download, Settings, Activity, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff,
-    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Boxes, Languages, Volume2, KeyRound, Loader2, CornerDownRight, PanelBottomClose, TriangleAlert, MicOff,
+    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Boxes, Languages, Volume2, KeyRound, Loader2, CornerDownRight, PanelBottomClose, Maximize2, TriangleAlert, MicOff,
     Plug, AppWindow
 } from 'lucide-react';
 import { AutoAnswerIcon } from './AutoAnswerIcon';
@@ -44,6 +44,7 @@ import {
 } from '../lib/overlayAppearance';
 import { getMeetingInterfaceTheme, resolveMeetingInterfaceTheme, setMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import { setGenieAnimationEnabled, useGenieAnimationEnabled } from '../lib/genieAnimationSetting';
+import { setKeepOverlaySizeEnabled, useKeepOverlaySizeEnabled } from '../lib/overlaySizeSetting';
 import { KeyRecorder } from './ui/KeyRecorder';
 import { useConfirmDialog } from './ui/ConfirmDialog';
 import { ModelSelectorLabel } from './ui/ModelSelectorLabel';
@@ -738,6 +739,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [codeVerification, setCodeVerification] = useState(false);
     const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
     const genieAnimationEnabled = useGenieAnimationEnabled();
+    const keepOverlaySize = useKeepOverlaySizeEnabled();
 
     useEffect(() => {
         if (!showVerboseToast) return;
@@ -2956,6 +2958,27 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             label={t('Genie animation')}
                                                             onChange={() => setGenieAnimationEnabled(!genieAnimationEnabled)}
                                                             className={genieAnimationEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                        />
+                                                    </div>
+
+                                                    {/* Keep overlay size — off: the overlay narrows again and each answer starts from the automatic size */}
+                                                    <div className="flex items-center justify-between px-4 py-3">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <Maximize2 size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Keep overlay size')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">
+                                                                    {t('The overlay stays as wide and tall as it got or you set it. Turn off to shrink it back after each answer.')}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <SettingsToggle
+                                                            checked={keepOverlaySize}
+                                                            label={t('Keep overlay size')}
+                                                            onChange={() => setKeepOverlaySizeEnabled(!keepOverlaySize)}
+                                                            className={keepOverlaySize ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
                                                         />
                                                     </div>
 

@@ -89,6 +89,27 @@ function claimOf(activeId, activeSource) {
   return normalizeSource(activeSource);
 }
 
+/**
+ * A desktop chat stream the user has already replaced with a newer question
+ * (2026-11-06). Sending while an answer streams used to be blocked until that
+ * answer finished, so the question was silently dropped; now the newer
+ * question goes out and main stops the old stream. Tokens of the old one that
+ * were already on their way must not be adopted by the new question's card,
+ * and its done or error must not close it. `floor` is the newest desktop
+ * stream id the renderer had seen when the user sent; ids only grow.
+ *
+ * @param {number|null|undefined} floor
+ * @param {number|null|undefined} incomingId
+ * @param {string|null|undefined} incomingSource
+ * @returns {boolean}
+ */
+export function isReplacedChatStream(floor, incomingId, incomingSource) {
+  return typeof floor === 'number'
+    && typeof incomingId === 'number'
+    && normalizeSource(incomingSource) === 'desktop'
+    && incomingId <= floor;
+}
+
 /** Absent/unknown source means the legacy desktop path. */
 function normalizeSource(source) {
   return typeof source === 'string' && source ? source : 'desktop';

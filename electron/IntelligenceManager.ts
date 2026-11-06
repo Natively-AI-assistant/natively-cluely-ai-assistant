@@ -346,7 +346,7 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.runAssistMode();
     }
 
-    async runWhatShouldISay(question?: string, confidence?: number, imagePaths?: string[], options?: { skipCooldown?: boolean; forceFresh?: boolean; screenContext?: ScreenContext; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string }): Promise<string | null> {
+    async runWhatShouldISay(question?: string, confidence?: number, imagePaths?: string[], options?: { skipCooldown?: boolean; forceFresh?: boolean; screenContext?: ScreenContext; screenFromImage?: boolean; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string; pressedAt?: number }): Promise<string | null> {
         return this.engine.runWhatShouldISay(question, confidence, imagePaths, options);
     }
 
@@ -373,6 +373,16 @@ export class IntelligenceManager extends EventEmitter {
 
     async runCustomButton(button: import('./llm/promptSystemV2').CustomButtonActionV2, imagePaths?: string[], readSeconds?: number): Promise<string | null> {
         return this.engine.runCustomButton(button, imagePaths, readSeconds);
+    }
+
+    /** The conversation so far, screenshots included, as a prompt block. See IntelligenceEngine.conversationHistoryBlock. */
+    conversationHistoryBlock(alreadyIn?: string): string {
+        return this.engine.conversationHistoryBlock(alreadyIn);
+    }
+
+    /** A question asked on the phone, into the conversation. See IntelligenceEngine.recordPhoneTurn. */
+    recordPhoneTurn(answer: string, question: string, imagePaths?: readonly string[], startedUnder?: string): void {
+        this.engine.recordPhoneTurn(answer, question, imagePaths, startedUnder);
     }
 
     async runManualAnswer(question: string): Promise<string | null> {

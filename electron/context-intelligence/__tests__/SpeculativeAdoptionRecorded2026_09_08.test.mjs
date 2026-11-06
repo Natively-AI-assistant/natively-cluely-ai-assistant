@@ -50,7 +50,15 @@ test('the adoption branches still cannot reach recordLiveTurn on their own', () 
   // they never asked for. Assist still READS the ring.
   // + runCodeHint and runBrainstorm (2026-10-28): a press on a screenshot is
   // an exchange, and its screen is the problem later presses are about.
-  assert.equal(sites, 5, 'reveal + the two question-bearing wrappers + code hint + brainstorm');
+  // + runCustomButton and recordPhoneTurn (2026-11-06): a button press and a
+  // question asked on the phone are exchanges too, screenshot and all
+  // (ScreenMemoryEverySurface2026_11_06.test.mjs).
+  assert.equal(sites, 7, 'reveal + the two question-bearing wrappers + code hint + brainstorm + custom button + phone');
+  for (const [from, to] of [['async runCustomButton(', '\n    }\n\n'], ['public recordPhoneTurn(', '\n    }\n\n']]) {
+    const start = src.indexOf(from);
+    assert.ok(start >= 0, `${from} must exist`);
+    assert.match(src.slice(start, src.indexOf(to, start + from.length)), /this\.recordLiveTurn\(/, `${from} must record its turn`);
+  }
   for (const m of ['async runWhatShouldISay(', 'async runManualAnswer(']) {
     assert.ok(src.includes(m), `${m} must still exist as the wrapper that records`);
   }

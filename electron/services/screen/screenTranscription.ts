@@ -1,4 +1,6 @@
+import path from 'path';
 import { composeScreenDescription } from './screenDescription';
+import type { ScreenUnderstandingResult, UserAction } from './ScreenUnderstandingService';
 import { hasOnDeviceScreenText } from '../../context-intelligence/question/on-device-screen';
 import {
   getScreenshotDescription,
@@ -31,12 +33,113 @@ import {
  * has been delivered. Cached on the attachment set, so a re-captured screen is
  * free, and skipped entirely when the set is already described.
  */
+export interface ScreenMemoryOptions {
+  /** `false` for automatic captures (see VisionProviderBuildInputs). */
+  allowOAuthRecord?: boolean;
+  /**
+   * The short read to fall back on when the transcription comes back empty
+   * (2026-11-06): the answering-style describe call the turn used to make
+   * BEFORE its answer, which screenPrepass.ts now skips when the answer reads
+   * the image itself. Without it, a failed transcription left later turns only
+   * "could not be read", where they used to have that call's summary. Given by
+   * the turns that skip the call (typed chat, What to answer) and the turns
+   * recorded since (custom buttons, phone questions).
+   *
+   * The backup's text goes to the conversation record only, NEVER the
+   * description store: that store holds transcriptions alone (one writer), so
+   * the next capture of this screen still gets a real transcription.
+   */
+  backupDescribe?: BackupRead;
+}
+
+/**
+ * The reads that make a SHORT description (DIRECT_VISION_SYSTEM_PROMPT,
+ * visionPrompts.ts). Any other action — `dynamic_action`, for one — takes the
+ * same long JSON extraction as the transcription, so as a backup it would
+ * repeat the read that just failed.
+ */
+export type BackupRead = Extract<UserAction, 'manual_use_screen' | 'what_to_say'>;
+
+/** Failures the backup cannot get past: it runs under the same policy, with fewer readers. */
+const BACKUP_CANNOT_HELP = new Set(['no_vision_provider', 'privacy_blocked', 'scope_blocked']);
+
+/**
+ * The last backup reads, by the screenshots' file names (2026-11-06). The store
+ * keeps transcriptions only (a paraphrase there would be served as one, and
+ * would stop the screen from ever being transcribed), so a backup reaches the
+ * conversation through its caller's ring. Direct Assist keeps its own history,
+ * not the ring, and reads its backups here (getBackupScreenRead).
+ *
+ * By name, not bytes: every image Natively saves is named with a UUID, and the
+ * name outlives the file, which the screenshot queue deletes past five. In
+ * memory only, like the ring.
+ */
+const BACKUP_READS_KEPT = 32;
+const backupReads = new Map<string, string>();
+
+function backupReadKey(imagePaths: readonly string[]): string | null {
+  const names = imagePaths.map((imagePath) => path.basename(String(imagePath || ''))).filter(Boolean);
+  return names.length && names.length === imagePaths.length ? names.sort().join('\n') : null;
+}
+
+function rememberBackupRead(imagePaths: readonly string[], text: string): void {
+  const key = backupReadKey(imagePaths);
+  if (!key || !text) return;
+  backupReads.delete(key);
+  backupReads.set(key, text);
+  while (backupReads.size > BACKUP_READS_KEPT) {
+    const oldest = backupReads.keys().next().value;
+    if (oldest === undefined) break;
+    backupReads.delete(oldest);
+  }
+}
+
+/** The backup read kept for this set of screenshots, '' when there is none. */
+export function getBackupScreenRead(imagePaths: readonly string[]): string {
+  const key = backupReadKey(imagePaths);
+  return (key && backupReads.get(key)) || '';
+}
+
+/**
+ * Which stored transcription a set of screenshot NAMES has (2026-11-06). The
+ * store keys on the files' bytes, so once the screenshot queue deletes a file
+ * its transcription can no longer be found from the path: Direct Assist, which
+ * looks it up that way for its own history, lost the screen of every turn
+ * more than five screenshots back. Remembered whenever a set is transcribed or
+ * found already transcribed; in memory, like the backup reads.
+ */
+const TRANSCRIBED_NAMES_KEPT = 64;
+const transcribedByName = new Map<string, string>();
+
+function rememberTranscribedNames(imagePaths: readonly string[], sha: string): void {
+  const key = backupReadKey(imagePaths);
+  if (!key || !sha) return;
+  transcribedByName.delete(key);
+  transcribedByName.set(key, sha);
+  while (transcribedByName.size > TRANSCRIBED_NAMES_KEPT) {
+    const oldest = transcribedByName.keys().next().value;
+    if (oldest === undefined) break;
+    transcribedByName.delete(oldest);
+  }
+}
+
+/** The stored transcription of this set of screenshots, found by their names; '' when there is none. */
+export function getTranscriptionByNames(imagePaths: readonly string[]): string {
+  const key = backupReadKey(imagePaths);
+  const sha = key ? transcribedByName.get(key) : undefined;
+  if (!sha) return '';
+  try {
+    return getScreenshotDescription(sha)?.description ?? '';
+  } catch {
+    return '';
+  }
+}
+
 export async function transcribeScreenForMemory(
   imagePaths: readonly string[],
   /** The turn's question, passed only as disambiguation context. */
   transcriptHint?: string,
-  /** `allowOAuthRecord: false` for automatic captures (see VisionProviderBuildInputs). */
-  options: { allowOAuthRecord?: boolean } = {},
+  options: ScreenMemoryOptions = {},
 ): Promise<string> {
   if (!imagePaths.length) return '';
   try {
@@ -53,23 +156,23 @@ export async function transcribeScreenForMemory(
     // under today's setting (and the row replaced) rather than recorded as
     // text no cloud model may ever be shown.
     const stale = hasOnDeviceScreenText(cached?.description) && settings.getScreenUnderstandingMode() !== 'private_vision';
-    if (cached?.description && !stale) return cached.description;
+    if (cached?.description && !stale) {
+      rememberTranscribedNames(imagePaths, sha);
+      return cached.description;
+    }
 
     const credentials = CredentialsManager.getInstance();
     const providerScopes = settings.get('providerDataScopes') || {};
-
-    const result = await getScreenUnderstandingService().understand({
+    // ONE policy, read the same way as the other call sites — a transcription
+    // is still a screenshot leaving the device, and `private_vision` and a
+    // denied `screenshots` scope bind it exactly as they bind the answer.
+    const read = (userAction: UserAction): Promise<ScreenUnderstandingResult> => getScreenUnderstandingService().understand({
       modeId: 'screen-memory',
       transcript: transcriptHint,
-      // The whole point: this reaches STRUCTURED_EXTRACTION_SYSTEM_PROMPT,
-      // which every existing call site missed.
-      userAction: 'transcribe',
+      userAction,
       allowOAuthRecord: options.allowOAuthRecord,
       qualityMode: 'balanced',
       imagePaths: [...imagePaths],
-      // ONE policy, read the same way as the other call sites — a transcription
-      // is still a screenshot leaving the device, and `private_vision` and a
-      // denied `screenshots` scope bind it exactly as they bind the answer.
       screenUnderstandingMode: settings.getScreenUnderstandingMode(),
       technicalInterviewVisionFirst: settings.getTechnicalInterviewVisionFirst(),
       providerPolicy: {
@@ -80,9 +183,23 @@ export async function transcribeScreenForMemory(
       },
     });
 
+    // 'transcribe' is the whole point: it reaches STRUCTURED_EXTRACTION_SYSTEM_PROMPT,
+    // which every existing call site missed.
+    const result = await read('transcribe');
+
     const text = composeScreenDescription(result);
     if (text) {
       putScreenshotDescription(sha, text, result?.providerUsed ?? '', result?.modelUsed ?? '');
+      rememberTranscribedNames(imagePaths, sha);
+      return text;
+    }
+    if (options.backupDescribe && !BACKUP_CANNOT_HELP.has(String(result?.failureReason ?? ''))) {
+      const backup = composeScreenDescription(await read(options.backupDescribe));
+      rememberBackupRead(imagePaths, backup);
+      console.log('[screen-memory] transcription came back empty; backup read', {
+        recorded: Boolean(backup), chars: backup.length, failureReason: result?.failureReason,
+      });
+      return backup;
     }
     return text;
   } catch (error: any) {

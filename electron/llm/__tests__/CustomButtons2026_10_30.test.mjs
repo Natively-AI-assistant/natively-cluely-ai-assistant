@@ -188,6 +188,9 @@ describe('the engine runs a button on the press, like Define', () => {
   const run = async (fill, imagePaths, readSeconds) => {
     const { IntelligenceEngine } = require(dist('IntelligenceEngine.js'));
     const { SessionTracker } = require(dist('SessionTracker.js'));
+    // A press is recorded in the conversation (2026-11-06), which is process-wide:
+    // each press here starts from an empty one, as a fresh session would.
+    require(dist('context-intelligence/question/conversation-state-store.js')).clearConversationState();
     const session = new SessionTracker();
     fill?.(session);
     const engine = new IntelligenceEngine({ setNegotiationCoachingHandler() {} }, session);

@@ -24,6 +24,13 @@ export function resolveChatStreamDone(
   release: boolean;
 };
 
+/** A desktop chat stream replaced by a newer typed question (2026-11-06): drop what it still sends. */
+export function isReplacedChatStream(
+  floor: number | null | undefined,
+  incomingId: number | null | undefined,
+  incomingSource?: string | null,
+): boolean;
+
 export function resolveLiveAnswerBatch(
   activeId: number | null | undefined,
   incomingId: number | null | undefined,
