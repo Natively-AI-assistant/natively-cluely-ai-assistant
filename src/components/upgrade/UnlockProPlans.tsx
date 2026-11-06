@@ -7,6 +7,10 @@
 // (your own AI keys). "See all plans" opens the website's pricing page for the
 // rest (Lifetime, API Max and up).
 //
+// The same page is the Natively Plans card after getting started
+// (onboarding/PlansToaster.tsx): there it has no back arrow, a quiet
+// "Continue for free" in place of the close button, and its own subtitle.
+//
 // Why it exists: "Unlock Pro" used to open the API Max checkout straight away,
 // a $25/month "Natively API Max" page behind a button that said Pro. 6–9% of
 // those checkouts were paid, against 21–25% from Settings › Plans & Billing,
@@ -199,7 +203,7 @@ const ITEM_REDUCED = {
   show: { opacity: 1, transition: { duration: 0.2 } },
 };
 
-type Surface = 'modes_settings' | 'profile_intelligence';
+type Surface = 'modes_settings' | 'profile_intelligence' | 'plans_card';
 
 interface Tier {
   id: string;
@@ -266,18 +270,27 @@ const Arrow = () => (
 );
 
 interface Props {
-  /** The paywall this page stands in for: also the checkout's funnel surface. */
+  /** Where the page is shown: also the checkout's funnel surface. */
   surface: Surface;
-  /** Back to the paywall. */
-  onBack: () => void;
+  /** Back to the paywall; no back arrow without it. */
+  onBack?: () => void;
   /** Closes the manager panel. */
   onClose?: () => void;
+  /** A quiet text way out in place of the close button ("Continue for free" on the startup card). */
+  dismiss?: { label: string; onClick: () => void };
+  /** A checkout opened in the browser (not "See all plans"). */
+  onCheckoutOpened?: (tierId: string) => void;
   /** Settings › Plans & Billing, for someone who already holds a licence or key. */
   onHaveLicense?: () => void;
+  /** The line under the title. */
+  subtitle?: string;
   theme: 'light' | 'dark';
 }
 
-export function UnlockProPlans({ surface, onBack, onClose, onHaveLicense, theme }: Props) {
+export function UnlockProPlans({
+  surface, onBack, onClose, dismiss, onCheckoutOpened, onHaveLicense,
+  subtitle = 'Modes and Profile Intelligence come with every plan.', theme,
+}: Props) {
   const T = theme === 'light' ? LIGHT : DARK;
   const reduced = useReducedMotion() ?? false;
   const item = reduced ? ITEM_REDUCED : ITEM;
@@ -314,8 +327,10 @@ export function UnlockProPlans({ surface, onBack, onClose, onHaveLicense, theme 
     setFailed(false);
     const ok = await openUrl(tier.url);
     setOpening(null);
-    if (ok) setOpened(tier.id);
-    else setFailed(true);
+    if (ok) {
+      setOpened(tier.id);
+      onCheckoutOpened?.(tier.id);
+    } else setFailed(true);
   };
 
   const iconBtn = (label: string, onClick: () => void, icon: React.ReactNode) => (
@@ -362,10 +377,25 @@ export function UnlockProPlans({ surface, onBack, onClose, onHaveLicense, theme 
         }} />
       </div>
 
-      {/* Header: back to the paywall, close the panel. */}
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px 0', flexShrink: 0 }}>
-        {iconBtn('Back', onBack, <ArrowLeft size={16} strokeWidth={1.5} />)}
-        {onClose ? iconBtn('Close', onClose, <X size={16} strokeWidth={1.5} />) : <span />}
+      {/* Header: back to the paywall, and close the panel (or a quiet way out). */}
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 32, padding: '12px 16px 0', flexShrink: 0 }}>
+        {onBack ? iconBtn('Back', onBack, <ArrowLeft size={16} strokeWidth={1.5} />) : <span />}
+        {dismiss ? (
+          <button
+            type="button"
+            onClick={dismiss.onClick}
+            style={{
+              height: 32, padding: '0 10px', border: 0, borderRadius: 8, background: 'none', cursor: 'pointer',
+              fontFamily: FONT, fontSize: 12.5, fontWeight: 500, color: T.inkFaint, transition: `color 200ms ${EASE_CSS}`,
+            }}
+            onMouseEnter={e => (e.currentTarget.style.color = T.ink)}
+            onMouseLeave={e => (e.currentTarget.style.color = T.inkFaint)}
+            onFocus={e => (e.currentTarget.style.color = T.ink)}
+            onBlur={e => (e.currentTarget.style.color = T.inkFaint)}
+          >
+            {dismiss.label}
+          </button>
+        ) : onClose ? iconBtn('Close', onClose, <X size={16} strokeWidth={1.5} />) : <span />}
       </div>
 
       <motion.div
@@ -377,8 +407,8 @@ export function UnlockProPlans({ surface, onBack, onClose, onHaveLicense, theme 
         }}>
           Unlock Pro.
         </motion.h2>
-        <motion.p variants={item} style={{ margin: '10px 0 0', fontSize: 13, lineHeight: 1.55, color: T.inkMuted, textAlign: 'center' }}>
-          Modes and Profile Intelligence come with every plan.
+        <motion.p variants={item} id="unlock-pro-desc" style={{ margin: '10px 0 0', fontSize: 13, lineHeight: 1.55, color: T.inkMuted, textAlign: 'center' }}>
+          {subtitle}
         </motion.p>
 
         <div style={{ position: 'relative', width: '100%', maxWidth: 760, marginTop: 4 }}>

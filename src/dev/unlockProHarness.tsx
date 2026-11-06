@@ -12,7 +12,10 @@ document.documentElement.style.background = document.body.style.background = the
 createRoot(document.getElementById('harness-root')!).render(
   <div style={{ padding: 40 }}>
     <div style={{ width: 820, height: 600, borderRadius: 24, overflow: 'hidden', boxShadow: '0 30px 80px -20px rgba(0,0,0,0.6)' }}>
-      <UnlockProPlans surface="modes_settings" theme={theme} onBack={() => {}} onClose={() => {}} onHaveLicense={() => {}} />
+      {new URLSearchParams(location.search).has('card')
+        // The Natively Plans card after getting started (onboarding/PlansToaster.tsx).
+        ? <UnlockProPlans surface="plans_card" theme={theme} subtitle="Every plan includes the full Natively Pro app." dismiss={{ label: 'Continue for free', onClick: () => {} }} onHaveLicense={() => {}} />
+        : <UnlockProPlans surface="modes_settings" theme={theme} onBack={() => {}} onClose={() => {}} onHaveLicense={() => {}} />}
     </div>
   </div>,
 );

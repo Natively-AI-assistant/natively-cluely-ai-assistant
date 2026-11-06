@@ -173,7 +173,7 @@ export const OrchestratedToasterHost: React.FC<HostProps> = ({ onOpenSettings, o
       );
 
     case 'plans':
-      return <PlansToaster isOpen={true} onDismiss={closeWith('plans')} />;
+      return <PlansToaster isOpen={true} onDismiss={closeWith('plans')} onOpenPlans={() => openSettings('plans')} />;
 
     case 'demo_video':
       return <DemoVideoToaster isOpen={true} onDismiss={closeWith('demo_video')} />;
