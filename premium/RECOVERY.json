@@ -1,285 +1,353 @@
 {
-  "format": 1,
+  "format": 2,
   "files": [
     {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/AOTPipeline.js",
-      "sha256": "6f61e0794ff092424b000bd509e685b272f306c005a557ead101bc5c0e47b4e3",
-      "output": "premium/electron/knowledge/AOTPipeline.js"
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/AOTPipeline.ts",
+      "sha256": "08be32d8a3c41aa5409753a39fcf7822dfca4d8300cb4d3032c5cc2ff03d013e",
+      "output": "premium/electron/knowledge/AOTPipeline.ts",
+      "outputSha256": "08be32d8a3c41aa5409753a39fcf7822dfca4d8300cb4d3032c5cc2ff03d013e"
     },
     {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/CompanyResearchEngine.js",
-      "sha256": "dc8d1e0b21994d2f9728236486f9d7276c76190c07c9df4add70171f9a9b41b8",
-      "output": "premium/electron/knowledge/CompanyResearchEngine.js"
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/CompanyResearchEngine.ts",
+      "sha256": "cf15a45d58e83b364c4a39ee0fdfd69c97301b7552c00ee70fe7c12f6873b449",
+      "output": "premium/electron/knowledge/CompanyResearchEngine.ts",
+      "outputSha256": "cf15a45d58e83b364c4a39ee0fdfd69c97301b7552c00ee70fe7c12f6873b449"
     },
     {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/ContextAssembler.js",
-      "sha256": "196dd476f4fcbb432647c67539207c476de06b286d7233b03a45d64e391ad113",
-      "output": "premium/electron/knowledge/ContextAssembler.js"
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/ContextAssembler.ts",
+      "sha256": "4f1934d5856737120fb482f4befcbe8975244a3cffafb529c123410195d77946",
+      "output": "premium/electron/knowledge/ContextAssembler.ts",
+      "outputSha256": "4f1934d5856737120fb482f4befcbe8975244a3cffafb529c123410195d77946"
     },
     {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/CoverLetterEngine.js",
-      "sha256": "9be58fc8cc257c2f798c7fb5f4d0c718a26934d3801cb56337592bd60b0e4ab4",
-      "output": "premium/electron/knowledge/CoverLetterEngine.js"
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/CoverLetterEngine.ts",
+      "sha256": "628210cfcfd806eb779c8c3d843a152dc520e03934462ca8bb039fde5d0e8a58",
+      "output": "premium/electron/knowledge/CoverLetterEngine.ts",
+      "outputSha256": "628210cfcfd806eb779c8c3d843a152dc520e03934462ca8bb039fde5d0e8a58"
     },
     {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/CultureValuesMapper.js",
-      "sha256": "fa1706243d56e08b975177d2da4e6649d7218a00c15bc08e601ba6b9e9648c8b",
-      "output": "premium/electron/knowledge/CultureValuesMapper.js"
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/CultureValuesMapper.ts",
+      "sha256": "3cc7011d6dd0f5883f4cbad6e6a572557cae9dd44ee4f89b624b17da5e847e6f",
+      "output": "premium/electron/knowledge/CultureValuesMapper.ts",
+      "outputSha256": "3cc7011d6dd0f5883f4cbad6e6a572557cae9dd44ee4f89b624b17da5e847e6f"
     },
     {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/DocumentChunker.js",
-      "sha256": "6e1fbec21341e6b444fe144fa67f187a73a4b7fe5b4408a90723ca5b9e8e07b4",
-      "output": "premium/electron/knowledge/DocumentChunker.js"
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/DocumentChunker.ts",
+      "sha256": "b4f28b2e4c6b94a868ddc3c57614eeb838e3092ff1a4ac40ab05aec7e20603cf",
+      "output": "premium/electron/knowledge/DocumentChunker.ts",
+      "outputSha256": "b4f28b2e4c6b94a868ddc3c57614eeb838e3092ff1a4ac40ab05aec7e20603cf"
     },
     {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/DocumentReader.js",
-      "sha256": "1e20a31190ff88517bac15d16a0acf8043622c18cf57bc52d336e9a75e82c9f2",
-      "output": "premium/electron/knowledge/DocumentReader.js"
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/DocumentReader.ts",
+      "sha256": "044f8089198d2f877c5231e990f10a82ca6272dcb11a251bfdf127c412d87820",
+      "output": "premium/electron/knowledge/DocumentReader.ts",
+      "outputSha256": "044f8089198d2f877c5231e990f10a82ca6272dcb11a251bfdf127c412d87820"
     },
     {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/GapAnalysisEngine.js",
-      "sha256": "19d1c82d6bbdbf032cbd9f2cd50414dd19c86993707f3b6a64bbbfb2f5a9b95d",
-      "output": "premium/electron/knowledge/GapAnalysisEngine.js"
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/GapAnalysisEngine.ts",
+      "sha256": "f966aa92ebceca5a765f7e82bb5b3f489ba6127ad5953c19404e5624a04a3087",
+      "output": "premium/electron/knowledge/GapAnalysisEngine.ts",
+      "outputSha256": "f966aa92ebceca5a765f7e82bb5b3f489ba6127ad5953c19404e5624a04a3087"
     },
     {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/HeuristicExtractor.js",
-      "sha256": "aef4f065f6fe54ae488e684c4752f2db0842458a2628dd12e21964b413f792d7",
-      "output": "premium/electron/knowledge/HeuristicExtractor.js"
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/HeuristicExtractor.ts",
+      "sha256": "8668b4217658ac199a65d7fdf2f02420dfbfdd3a566e86b0bf651be6f499a884",
+      "output": "premium/electron/knowledge/HeuristicExtractor.ts",
+      "outputSha256": "746997245b7d238f503d57af952f947a0a1531c28aa616a18e05b37afe0a54a7"
     },
     {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/HybridSearchEngine.js",
-      "sha256": "0718447cf2c0e12e04b14298d4d5d3664cc0fabc4f3300b3869c56609618d042",
-      "output": "premium/electron/knowledge/HybridSearchEngine.js"
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/HybridSearchEngine.ts",
+      "sha256": "5b61af64ff91d79a1e116f038b61a61abfeccdb448aeab7a91a2b41646f70a98",
+      "output": "premium/electron/knowledge/HybridSearchEngine.ts",
+      "outputSha256": "5b61af64ff91d79a1e116f038b61a61abfeccdb448aeab7a91a2b41646f70a98"
     },
     {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/IntentClassifier.js",
-      "sha256": "781cae8ee506cf95db8b232517db6c3acdf0124410e3a839b59022be149d318b",
-      "output": "premium/electron/knowledge/IntentClassifier.js"
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/IntentClassifier.ts",
+      "sha256": "c4d68ac8d26f3128a6d8d35e48e6a1d2aea86034076db44b500f0eb8c1b2af23",
+      "output": "premium/electron/knowledge/IntentClassifier.ts",
+      "outputSha256": "c4d68ac8d26f3128a6d8d35e48e6a1d2aea86034076db44b500f0eb8c1b2af23"
     },
     {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/KnowledgeDatabaseManager.js",
-      "sha256": "350b97f8916ff39abf3cf91e322f1802e5a4c9e3aff48b06afd85fec81a2bc2d",
-      "output": "premium/electron/knowledge/KnowledgeDatabaseManager.js"
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/KnowledgeDatabaseManager.ts",
+      "sha256": "0538f8bfedcf275d0a5dfcd9d6243c6119239cd6baccdf16b6667c9e18ecc666",
+      "output": "premium/electron/knowledge/KnowledgeDatabaseManager.ts",
+      "outputSha256": "0538f8bfedcf275d0a5dfcd9d6243c6119239cd6baccdf16b6667c9e18ecc666"
     },
     {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/KnowledgeOrchestrator.js",
-      "sha256": "073dc6bc1ee9d54927aaf4a378731c97670932d636605b06628f0741d067d4ac",
-      "output": "premium/electron/knowledge/KnowledgeOrchestrator.js"
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/KnowledgeOrchestrator.ts",
+      "sha256": "8ecfa8025425d530231c15919c75342b8c92d1c743e8d22939651b6647705ae4",
+      "output": "premium/electron/knowledge/KnowledgeOrchestrator.ts",
+      "outputSha256": "8ecfa8025425d530231c15919c75342b8c92d1c743e8d22939651b6647705ae4"
     },
     {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/LiveNegotiationAdvisor.js",
-      "sha256": "77af652cabed92be21e3af3202330ba5ad41dff4f5ddaa7df5afaa43e829e6e7",
-      "output": "premium/electron/knowledge/LiveNegotiationAdvisor.js"
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/LiveNegotiationAdvisor.ts",
+      "sha256": "382c126ff85c8a5016ea2d0292fd936eb5b0609fc2cdf7329f47878f886fbd3b",
+      "output": "premium/electron/knowledge/LiveNegotiationAdvisor.ts",
+      "outputSha256": "382c126ff85c8a5016ea2d0292fd936eb5b0609fc2cdf7329f47878f886fbd3b"
     },
     {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/MockInterviewGenerator.js",
-      "sha256": "2002b89b88679352ede3115006ebce96b213f7d9a4108df2ce1a136ee0dfa289",
-      "output": "premium/electron/knowledge/MockInterviewGenerator.js"
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/MockInterviewGenerator.ts",
+      "sha256": "eba97cdd076fcc439343a6106154a8957607be28ae2292805ce63d9c63fa5f84",
+      "output": "premium/electron/knowledge/MockInterviewGenerator.ts",
+      "outputSha256": "eba97cdd076fcc439343a6106154a8957607be28ae2292805ce63d9c63fa5f84"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/NegotiationConversationTracker.ts",
+      "sha256": "81de62f88552739c750d046ab09e1cc2edc3ecc33cc5616e37529b9ee0330936",
+      "output": "premium/electron/knowledge/NegotiationConversationTracker.ts",
+      "outputSha256": "81de62f88552739c750d046ab09e1cc2edc3ecc33cc5616e37529b9ee0330936"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/NegotiationEngine.ts",
+      "sha256": "6c7096dae21e71a087a5dcc8716c8b4025c55b3887127bbe3f010164f2ddd4a1",
+      "output": "premium/electron/knowledge/NegotiationEngine.ts",
+      "outputSha256": "6c7096dae21e71a087a5dcc8716c8b4025c55b3887127bbe3f010164f2ddd4a1"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/PostProcessor.ts",
+      "sha256": "c8cc7055a56898920d9f8e141ea55a724b00219ae327ca9cda1189661117e393",
+      "output": "premium/electron/knowledge/PostProcessor.ts",
+      "outputSha256": "c8cc7055a56898920d9f8e141ea55a724b00219ae327ca9cda1189661117e393"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/ProfileContextBuilder.ts",
+      "sha256": "3d52b3490d357f9950a4c5eec9f58d645e6057899a3cb7765e6445d3732ad766",
+      "output": "premium/electron/knowledge/ProfileContextBuilder.ts",
+      "outputSha256": "3d52b3490d357f9950a4c5eec9f58d645e6057899a3cb7765e6445d3732ad766"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/SalaryIntelligenceEngine.ts",
+      "sha256": "14cfcc6e292f67264eebab20e195cbe1d30f2d232b6a8283aba87a90ff727e0a",
+      "output": "premium/electron/knowledge/SalaryIntelligenceEngine.ts",
+      "outputSha256": "14cfcc6e292f67264eebab20e195cbe1d30f2d232b6a8283aba87a90ff727e0a"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/StarStoryGenerator.ts",
+      "sha256": "362d32a3310ab5cd88c1d948f62115f57f6472279289480ab384dd709b19220a",
+      "output": "premium/electron/knowledge/StarStoryGenerator.ts",
+      "outputSha256": "362d32a3310ab5cd88c1d948f62115f57f6472279289480ab384dd709b19220a"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/StructuredExtractor.ts",
+      "sha256": "c8fc72dc706981a0999e3ea1b03114c57e34197e868e42b1d9e2c6012893d0e0",
+      "output": "premium/electron/knowledge/StructuredExtractor.ts",
+      "outputSha256": "c8fc72dc706981a0999e3ea1b03114c57e34197e868e42b1d9e2c6012893d0e0"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/StructuredJDNormalizer.ts",
+      "sha256": "7bdb8c1dfbe192590bc044fb571250ba64a97ba4a9035e4ac441f82664c2a207",
+      "output": "premium/electron/knowledge/StructuredJDNormalizer.ts",
+      "outputSha256": "7bdb8c1dfbe192590bc044fb571250ba64a97ba4a9035e4ac441f82664c2a207"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/StructuredResumeNormalizer.ts",
+      "sha256": "9eb7baec2560336f6c243849097065842bb75c1676c8111fbeb082dc09195951",
+      "output": "premium/electron/knowledge/StructuredResumeNormalizer.ts",
+      "outputSha256": "9eb7baec2560336f6c243849097065842bb75c1676c8111fbeb082dc09195951"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/TechnicalDepthScorer.ts",
+      "sha256": "d0c505a4635f293f7bb49880cf8b86543adc7d1aba0016d9e2feac8fa03d8d66",
+      "output": "premium/electron/knowledge/TechnicalDepthScorer.ts",
+      "outputSha256": "d0c505a4635f293f7bb49880cf8b86543adc7d1aba0016d9e2feac8fa03d8d66"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/jsonExtract.ts",
+      "sha256": "56c4bce33ad595650325694fa79a9c7e2c41bf19b1c1bef9c249a1399cfbc213",
+      "output": "premium/electron/knowledge/jsonExtract.ts",
+      "outputSha256": "56c4bce33ad595650325694fa79a9c7e2c41bf19b1c1bef9c249a1399cfbc213"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/llmUtils.ts",
+      "sha256": "0c0e74129c983058cb67f41ecfa455ab18773816e4c14dc229937a66eb4c40b2",
+      "output": "premium/electron/knowledge/llmUtils.ts",
+      "outputSha256": "0c0e74129c983058cb67f41ecfa455ab18773816e4c14dc229937a66eb4c40b2"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/roleInsight/AssessmentValidator.ts",
+      "sha256": "4e1356b81bcd667f966e5d88266438eb44f8f21cb138fb7c232cce58b907d6ae",
+      "output": "premium/electron/knowledge/roleInsight/AssessmentValidator.ts",
+      "outputSha256": "4e1356b81bcd667f966e5d88266438eb44f8f21cb138fb7c232cce58b907d6ae"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/roleInsight/CoverageCalculator.ts",
+      "sha256": "c0a20812b35d1f72efec304199867b143ef69fd1948aa7d597f780265bd96190",
+      "output": "premium/electron/knowledge/roleInsight/CoverageCalculator.ts",
+      "outputSha256": "c0a20812b35d1f72efec304199867b143ef69fd1948aa7d597f780265bd96190"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/roleInsight/EvidenceRetriever.ts",
+      "sha256": "724de281e53173b83bac95a12c2fe4dff7dbbae3ab3d2d226cc223505062719d",
+      "output": "premium/electron/knowledge/roleInsight/EvidenceRetriever.ts",
+      "outputSha256": "724de281e53173b83bac95a12c2fe4dff7dbbae3ab3d2d226cc223505062719d"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/roleInsight/HardGateEvaluator.ts",
+      "sha256": "ff16d0daa18f1082997d26fb791ff454cee78658ff0860c439c7949798ce8fb0",
+      "output": "premium/electron/knowledge/roleInsight/HardGateEvaluator.ts",
+      "outputSha256": "ff16d0daa18f1082997d26fb791ff454cee78658ff0860c439c7949798ce8fb0"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/roleInsight/JdSourceResolver.ts",
+      "sha256": "a8293fc11c2b3b916493f3f4068903fcdedca7ee22c8568b512751950254adc8",
+      "output": "premium/electron/knowledge/roleInsight/JdSourceResolver.ts",
+      "outputSha256": "a8293fc11c2b3b916493f3f4068903fcdedca7ee22c8568b512751950254adc8"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/roleInsight/RequirementAssessor.ts",
+      "sha256": "f1c18413abfd1de08521328f38d337698ac016087027647970289f432149ece0",
+      "output": "premium/electron/knowledge/roleInsight/RequirementAssessor.ts",
+      "outputSha256": "f1c18413abfd1de08521328f38d337698ac016087027647970289f432149ece0"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/roleInsight/RequirementExtractor.ts",
+      "sha256": "ddb4424956f948fcbfaa2e8fdffc555fedde236f19a4d9f1d38dd730613b0df4",
+      "output": "premium/electron/knowledge/roleInsight/RequirementExtractor.ts",
+      "outputSha256": "ddb4424956f948fcbfaa2e8fdffc555fedde236f19a4d9f1d38dd730613b0df4"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/roleInsight/RequirementNormalizer.ts",
+      "sha256": "a81a66a94efe9acdbfa93ed6bf4c94f62d3b21ac66891da97152d70361f349a4",
+      "output": "premium/electron/knowledge/roleInsight/RequirementNormalizer.ts",
+      "outputSha256": "a81a66a94efe9acdbfa93ed6bf4c94f62d3b21ac66891da97152d70361f349a4"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/roleInsight/RoleInsightDatabase.ts",
+      "sha256": "4342c3620df0c897e9b0274ff672e6a49fa6995c0a0f6400b2f4e41e71be864f",
+      "output": "premium/electron/knowledge/roleInsight/RoleInsightDatabase.ts",
+      "outputSha256": "4342c3620df0c897e9b0274ff672e6a49fa6995c0a0f6400b2f4e41e71be864f"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/roleInsight/RoleInsightEngine.ts",
+      "sha256": "7141e78328993bc535eeef7a4af66fe8261dd6218705b6b218b6dfa9b126ac3d",
+      "output": "premium/electron/knowledge/roleInsight/RoleInsightEngine.ts",
+      "outputSha256": "7141e78328993bc535eeef7a4af66fe8261dd6218705b6b218b6dfa9b126ac3d"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/roleInsight/RoleInsightService.ts",
+      "sha256": "b34e37c9c5ef0f6d2c9c035247074dc5e2cef7f287ac72f26121c622ebfb484a",
+      "output": "premium/electron/knowledge/roleInsight/RoleInsightService.ts",
+      "outputSha256": "b34e37c9c5ef0f6d2c9c035247074dc5e2cef7f287ac72f26121c622ebfb484a"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/roleInsight/index.ts",
+      "sha256": "a34526999eef327207da5786234d214f6c6f98cabe6ab269b934631b4ae6196e",
+      "output": "premium/electron/knowledge/roleInsight/index.ts",
+      "outputSha256": "a34526999eef327207da5786234d214f6c6f98cabe6ab269b934631b4ae6196e"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/roleInsight/skillOntology.ts",
+      "sha256": "4df19896980d9dbbf8cb2371e5f85ceef42117afbd1d26d8f089a7846ba284f8",
+      "output": "premium/electron/knowledge/roleInsight/skillOntology.ts",
+      "outputSha256": "4df19896980d9dbbf8cb2371e5f85ceef42117afbd1d26d8f089a7846ba284f8"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/roleInsight/types.ts",
+      "sha256": "bf1b3699c84597007342777ba32262bf11c9c1062e059befa095874d2f755fd5",
+      "output": "premium/electron/knowledge/roleInsight/types.ts",
+      "outputSha256": "bf1b3699c84597007342777ba32262bf11c9c1062e059befa095874d2f755fd5"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/skillsUtil.ts",
+      "sha256": "d72cc74db295bdb4b8b75194e219931559377c9ebc2f077fc0ad3a6f06301c48",
+      "output": "premium/electron/knowledge/skillsUtil.ts",
+      "outputSha256": "d72cc74db295bdb4b8b75194e219931559377c9ebc2f077fc0ad3a6f06301c48"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/knowledge/types.ts",
+      "sha256": "795ff0cece049db815a27c0dc5ab99ac1185d64b19c46345d2d137cb6bf97f8b",
+      "output": "premium/electron/knowledge/types.ts",
+      "outputSha256": "795ff0cece049db815a27c0dc5ab99ac1185d64b19c46345d2d137cb6bf97f8b"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/services/LicenseManager.ts",
+      "sha256": "35528aa7cb7b0aeef1b6b9f0a98b8ebb4fd16b564bbfde43799d9e76c82cf79d",
+      "output": "premium/electron/services/LicenseManager.ts",
+      "outputSha256": "35528aa7cb7b0aeef1b6b9f0a98b8ebb4fd16b564bbfde43799d9e76c82cf79d"
+    },
+    {
+      "source": "recovered/source/natively-3.1.0/premium/electron/services/licenseVerifyPolicy.ts",
+      "sha256": "eb46bc74c6891f01fa57e17215ba333f16af1db87b95c6853ed5e84a28693820",
+      "output": "premium/electron/services/licenseVerifyPolicy.ts",
+      "outputSha256": "eb46bc74c6891f01fa57e17215ba333f16af1db87b95c6853ed5e84a28693820"
     },
     {
       "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/NativelySearchProvider.js",
       "sha256": "f4cedf3ee2c69d529965d721d85f4d0d14f317c35e1602c61197670c35744920",
-      "output": "premium/electron/knowledge/NativelySearchProvider.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/NegotiationConversationTracker.js",
-      "sha256": "34b9151d3806bcbd077df063992b899c0f9277622d0797eeb58bd8efaa419430",
-      "output": "premium/electron/knowledge/NegotiationConversationTracker.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/NegotiationEngine.js",
-      "sha256": "9ad83a28085f9b298fc86b0b9c6b06492c4a983fc5661bec1397ad06e5f97cd8",
-      "output": "premium/electron/knowledge/NegotiationEngine.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/PostProcessor.js",
-      "sha256": "36070d56dedd8c9c4a27d1ef8c437428fbf586684191c5b6622f1e243cea3166",
-      "output": "premium/electron/knowledge/PostProcessor.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/ProfileContextBuilder.js",
-      "sha256": "8942fd30cb753a509ffe729f679cb56f0942ad12baefc258c17fe43767ebf355",
-      "output": "premium/electron/knowledge/ProfileContextBuilder.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/SalaryIntelligenceEngine.js",
-      "sha256": "8d7d7c15af66f9b81fc878c2a63807254499198c492278e368acde2c039d5dd1",
-      "output": "premium/electron/knowledge/SalaryIntelligenceEngine.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/StarStoryGenerator.js",
-      "sha256": "971adf8c0e4d4ada2c2057be338c5ddfd75636613ca8b21298497025e7946b7d",
-      "output": "premium/electron/knowledge/StarStoryGenerator.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/StructuredExtractor.js",
-      "sha256": "c78fda1ad1ccba6ed9f54105f5250a585d3306f58ccd4e08e5d44942861bdf0c",
-      "output": "premium/electron/knowledge/StructuredExtractor.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/StructuredJDNormalizer.js",
-      "sha256": "71cd12752f37c8d863350a83dc6a8a3764d67cbcf7b1abba07f21bad1e6d8087",
-      "output": "premium/electron/knowledge/StructuredJDNormalizer.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/StructuredResumeNormalizer.js",
-      "sha256": "59eabea6cfa06008d3a0968434b92a319e589882ca991c7c2b07e4a011ef4f1d",
-      "output": "premium/electron/knowledge/StructuredResumeNormalizer.js"
+      "output": "premium/electron/knowledge/NativelySearchProvider.js",
+      "outputSha256": "1ff74b19a7c15b23d23440e7c68f2080adcd15370333424e0883e223567d794a"
     },
     {
       "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/TavilySearchProvider.js",
       "sha256": "27c2e8812b666fdae616d00e78ea2ce7b8bbf4cee60ae8bafc1ee470886112be",
-      "output": "premium/electron/knowledge/TavilySearchProvider.js"
+      "output": "premium/electron/knowledge/TavilySearchProvider.js",
+      "outputSha256": "8db0e5680dfe7a18db501cb5e598b2d9dd0208f947bbaf965861a1622843b068"
     },
     {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/TechnicalDepthScorer.js",
-      "sha256": "000a8c4b075df22a0391d1415b8957e1d02c4e6e45a15cfa196752b1a74e1b31",
-      "output": "premium/electron/knowledge/TechnicalDepthScorer.js"
+      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/NativelySearchProvider.js",
+      "sha256": "f4cedf3ee2c69d529965d721d85f4d0d14f317c35e1602c61197670c35744920",
+      "output": "premium/electron/knowledge/NativelySearchProvider.d.ts",
+      "outputSha256": "fb7731e0b0c895c25a40645a18ba6dccd16277274a71ccc33f4457f0e33a1465"
     },
     {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/jsonExtract.js",
-      "sha256": "cf227e5acba42bea75d88a5fbaeeee7fcd030093384f5c6733beaa9232e17c9f",
-      "output": "premium/electron/knowledge/jsonExtract.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/llmUtils.js",
-      "sha256": "9a8b7f063d4484c2bcb891f37f30915b8104660d317c3eff0ced0e928225a254",
-      "output": "premium/electron/knowledge/llmUtils.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/roleInsight/AssessmentValidator.js",
-      "sha256": "20f146db80586f7f8024e0deda37bf83aecedb4ffb4e9d947977d86ea7c29447",
-      "output": "premium/electron/knowledge/roleInsight/AssessmentValidator.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/roleInsight/CoverageCalculator.js",
-      "sha256": "22e0ac85ce4519996a8591e2387c32bbe4a0761baa3c3c3cd6748b32464dfe68",
-      "output": "premium/electron/knowledge/roleInsight/CoverageCalculator.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/roleInsight/EvidenceRetriever.js",
-      "sha256": "0fbdf1611ddfb47e494e5b9ebf93bfd7411aa10fd726c53af9e319312977d818",
-      "output": "premium/electron/knowledge/roleInsight/EvidenceRetriever.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/roleInsight/HardGateEvaluator.js",
-      "sha256": "c755e5bd93ab6134765def98203b7c5de78255ea6b576fb8aa94e4d1a675df0a",
-      "output": "premium/electron/knowledge/roleInsight/HardGateEvaluator.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/roleInsight/JdSourceResolver.js",
-      "sha256": "2026bd4143da2ed04051e2591711793488c6f34965afbb3f94d2de23101eba32",
-      "output": "premium/electron/knowledge/roleInsight/JdSourceResolver.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/roleInsight/RequirementAssessor.js",
-      "sha256": "32e09310c14dba679ad3438069bb42b0768baf8bfa85651c7cbb2bd773820393",
-      "output": "premium/electron/knowledge/roleInsight/RequirementAssessor.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/roleInsight/RequirementExtractor.js",
-      "sha256": "e5f4ce0ee72474738b15d2fdceadc244cd744672107f71387882c7e5a50f773d",
-      "output": "premium/electron/knowledge/roleInsight/RequirementExtractor.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/roleInsight/RequirementNormalizer.js",
-      "sha256": "bb489539c23644cd5f90c4c5b6a3d3145ac5b8e3e64a9e21c89a1078a7f6e8dd",
-      "output": "premium/electron/knowledge/roleInsight/RequirementNormalizer.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/roleInsight/RoleInsightDatabase.js",
-      "sha256": "30d5a3920a6e194416c9efb705de8db494406428516ab281c163d3e6cace34e1",
-      "output": "premium/electron/knowledge/roleInsight/RoleInsightDatabase.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/roleInsight/RoleInsightEngine.js",
-      "sha256": "7198d3b45878e78376ab3a3c65f9f0c5d1a5ad25239f37b4a3a9ef9aee27a836",
-      "output": "premium/electron/knowledge/roleInsight/RoleInsightEngine.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/roleInsight/RoleInsightService.js",
-      "sha256": "8a83cf970ba493398d69bd6b26ad40b574f687b5cf9fa80a138c688ad58a8c4c",
-      "output": "premium/electron/knowledge/roleInsight/RoleInsightService.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/roleInsight/index.js",
-      "sha256": "b58c0530d4aff9d08aefa33616687ada2cf0cc59fff147b6ee43b1fa7088a324",
-      "output": "premium/electron/knowledge/roleInsight/index.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/roleInsight/skillOntology.js",
-      "sha256": "29d94ec0ffef58b0b1ab2691adb69d154fe9ca361110968df460b33d0fcd769a",
-      "output": "premium/electron/knowledge/roleInsight/skillOntology.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/roleInsight/types.js",
-      "sha256": "671d3694613ecb10e48de2700b7f1311287c66d96a75fdb129ba13b8e39ed925",
-      "output": "premium/electron/knowledge/roleInsight/types.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/skillsUtil.js",
-      "sha256": "c3d496d9ffd2f824f7809f60330c7a5d354bd2ca058ba974dffa289fcc394f13",
-      "output": "premium/electron/knowledge/skillsUtil.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/types.js",
-      "sha256": "271dd8deb5aa384a73f1f949cd07b8d7410906002060acbada36d375f40c35cb",
-      "output": "premium/electron/knowledge/types.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/services/LicenseManager.js",
-      "sha256": "13934393f763d7b85898a28126975f549920657994693dcbad4452a8ce648b4d",
-      "output": "premium/electron/services/LicenseManager.js"
-    },
-    {
-      "source": "recovered/compiled/app/dist-electron/premium/electron/services/licenseVerifyPolicy.js",
-      "sha256": "a3805a354d78981b866a74849f08b1449e1e6241f9295d4589c3c8bdda238dd5",
-      "output": "premium/electron/services/licenseVerifyPolicy.js"
+      "source": "recovered/compiled/app/dist-electron/premium/electron/knowledge/TavilySearchProvider.js",
+      "sha256": "27c2e8812b666fdae616d00e78ea2ce7b8bbf4cee60ae8bafc1ee470886112be",
+      "output": "premium/electron/knowledge/TavilySearchProvider.d.ts",
+      "outputSha256": "f92f17dab8b711b439478a6a765a90a6c445d32e62accc2f464c9b3d7ef5811d"
     },
     {
       "source": "recovered/compiled/app/dist/assets/profile-CPP-OHUZ.jpg",
       "sha256": "12d6da3db02ba66806e9c4b81218606a5452b0eea9408b5bc2e4e7fbfb707bf6",
-      "output": "premium/src/recovered/profile-CPP-OHUZ.jpg"
+      "output": "premium/src/recovered/profile-CPP-OHUZ.jpg",
+      "outputSha256": "12d6da3db02ba66806e9c4b81218606a5452b0eea9408b5bc2e4e7fbfb707bf6"
     },
     {
       "source": "recovered/compiled/app/dist/assets/jd-DOFbpjQE.jpg",
       "sha256": "b8365f5ea392fe0527018a7f7eb84d8c0f48cd04dda1e0fb083ac41d6e1d09d2",
-      "output": "premium/src/recovered/jd-DOFbpjQE.jpg"
+      "output": "premium/src/recovered/jd-DOFbpjQE.jpg",
+      "outputSha256": "b8365f5ea392fe0527018a7f7eb84d8c0f48cd04dda1e0fb083ac41d6e1d09d2"
     },
     {
       "source": "recovered/compiled/app/dist/assets/BE-black-DNx2EVZh.png",
       "sha256": "dcb3f6b05febce5beb5afecda042b6e9dc8b50b5dec984380c2b48995701ca48",
-      "output": "premium/src/recovered/BE-black-DNx2EVZh.png"
+      "output": "premium/src/recovered/BE-black-DNx2EVZh.png",
+      "outputSha256": "dcb3f6b05febce5beb5afecda042b6e9dc8b50b5dec984380c2b48995701ca48"
     },
     {
       "source": "recovered/compiled/app/dist/assets/pro-CcTqtgCy.jpg",
       "sha256": "7b142880e5bf0c572eed406b911d5121b20d39350ee4ae603f2f1f41fc7439a0",
-      "output": "premium/src/recovered/pro-CcTqtgCy.jpg"
+      "output": "premium/src/recovered/pro-CcTqtgCy.jpg",
+      "outputSha256": "7b142880e5bf0c572eed406b911d5121b20d39350ee4ae603f2f1f41fc7439a0"
     },
     {
       "source": "recovered/reconstructed/readable/dist/assets/App-h7VwvpAg.js",
       "sha256": "d646199aa6e785b9e120421bd7d1b7799401328be9ae626f671e6b76c221d2c7",
-      "output": "premium/src/recovered/App-h7VwvpAg.js"
+      "output": "premium/src/recovered/App-h7VwvpAg.js",
+      "outputSha256": "7582ca3ee9ea0f923c2da3bd8b99c5faef2e65fbfe204e97fb05b3aacdfc55a9"
     },
     {
       "source": "recovered/reconstructed/readable/dist/assets/icon-vendor-B3WjWc6h.js",
       "sha256": "f62549e5505945063ee20f93c2c59e16ed13fafc211259cab0765df679f3c729",
-      "output": "premium/src/recovered/icon-vendor-B3WjWc6h.js"
+      "output": "premium/src/recovered/icon-vendor-B3WjWc6h.js",
+      "outputSha256": "debe819186753df4254199eb24bf91d6fb43bc63df2cae07774d47b0992c1ce8"
     },
     {
       "source": "recovered/reconstructed/readable/dist/assets/animation-vendor-BV2z4HNJ.js",
       "sha256": "acadcda7476d506c26bf6247a972a8162ffc3ce0d01588bbb93a0656938fbb08",
-      "output": "premium/src/recovered/animation-vendor-BV2z4HNJ.js"
+      "output": "premium/src/recovered/animation-vendor-BV2z4HNJ.js",
+      "outputSha256": "36d9c5d166fc924f2d8c2882a1c7f437e9c831b266186e22d39460aef3240b4a"
     },
     {
       "source": "recovered/reconstructed/readable/dist/assets/useResolvedTheme-1s5qaJ9g.js",
       "sha256": "24f6ad33bbf6c570fb60a2edca7940d6cde9999772004aaa16fba2661cc922d2",
-      "output": "premium/src/recovered/useResolvedTheme-1s5qaJ9g.js"
+      "output": "premium/src/recovered/useResolvedTheme-1s5qaJ9g.js",
+      "outputSha256": "74c1647a60fb1e2253ddb623e4d7c63397989477c581117e5113ce332b21db1c"
     },
     {
       "source": "recovered/reconstructed/readable/dist/assets/index-byU9h2Oi.js",
       "sha256": "225c2e21c4d26fcf84972d91bf4761674a96efac143651a8e4ed84d8764ae299",
-      "output": "premium/src/recovered/index-byU9h2Oi.js"
+      "output": "premium/src/recovered/index-byU9h2Oi.js",
+      "outputSha256": "e3663fb9dbd7fa522a718474383b972787cf0750247b4448c20fdf318915d151"
     }
   ]
 }

@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
@@ -7,11 +8,18 @@ const esbuild = require('esbuild');
 const ts = require('typescript');
 const root = path.resolve(__dirname, '../..');
 const recovered = process.env.NATIVELY_RECOVERED_SOURCE;
+const comparisonSkip = recovered ? false : 'Set NATIVELY_RECOVERED_SOURCE to run recovered-source comparisons';
 const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-recovery-test-'));
 test.after(() => fs.rmSync(userData, { recursive: true, force: true }));
 function load(relative, original = false) {
-  const file = original ? path.join(recovered, 'recovered/compiled/app/dist-electron/premium/electron', relative) : path.join(root, 'premium/electron', relative);
-  const code = original ? fs.readFileSync(file, 'utf8') : esbuild.buildSync({ entryPoints: [file], bundle: true, packages: 'external', platform: 'node', format: 'cjs', write: false, logLevel: 'silent' }).outputFiles[0].text;
+  const compiledRelative = relative.endsWith('.js') ? relative : `${relative}.js`;
+  let file = original
+    ? path.join(recovered, 'recovered/compiled/app/dist-electron/premium/electron', compiledRelative)
+    : path.join(root, 'premium/electron', compiledRelative);
+  if (!original && !fs.existsSync(file)) file = file.replace(/\.js$/, '.ts');
+  const code = original || file.endsWith('.js')
+    ? fs.readFileSync(file, 'utf8')
+    : esbuild.buildSync({ entryPoints: [file], bundle: true, packages: 'external', platform: 'node', format: 'cjs', write: false, logLevel: 'silent' }).outputFiles[0].text;
   const mod = { exports: {} };
   const localRequire = name => name === 'electron' ? { app: { isReady: () => true, isPackaged: false, getPath: () => userData } } : require(name);
   new Function('require', 'module', 'exports', '__dirname', '__filename', code)(localRequire, mod, mod.exports, path.dirname(file), file);
@@ -26,16 +34,58 @@ const fixtures = [
   ['knowledge/roleInsight/skillOntology.js', 'extractCanonicalTerms', [['React and TypeScript on AWS with PostgreSQL'], ['C++ C# .NET Node.js CI/CD Kubernetes']]],
   ['knowledge/roleInsight/skillOntology.js', 'normalizeTerm', [['  REACT.JS '], ['Amazon Web Services'], ['TypeScript']]],
 ];
-for (const [file, fn, cases] of fixtures) test('Recovered parity: ' + file + (fn ? '#' + fn : ''), { skip: !recovered }, () => {
+for (const [file, fn, cases] of fixtures) test('Recovered parity: ' + file + (fn ? '#' + fn : ''), { skip: comparisonSkip }, () => {
   const expected = load(file, true), actual = load(file);
   assert.deepEqual(Object.keys(actual).sort(), Object.keys(expected).sort());
   if (fn) for (const args of cases) assert.deepEqual(actual[fn](...structuredClone(args)), expected[fn](...structuredClone(args)));
   else assert.deepEqual(actual.DocType, expected.DocType);
 });
+test('Premium TypeScript files match recovered source provenance and deterministic output hashes', { skip: comparisonSkip }, () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'premium/RECOVERY.json'), 'utf8'));
+  const files = manifest.files.filter(item => item.output.startsWith('premium/electron/') && item.output.endsWith('.ts') && !item.output.endsWith('.d.ts'));
+  assert.equal(files.length, 45);
+  for (const item of files) {
+    const source = fs.readFileSync(path.join(recovered, item.source));
+    const output = fs.readFileSync(path.join(root, item.output));
+    assert.equal(crypto.createHash('sha256').update(source).digest('hex'), item.sha256, item.source);
+    assert.equal(crypto.createHash('sha256').update(output).digest('hex'), item.outputSha256, item.output);
+  }
+  const heuristic = fs.readFileSync(path.join(root, 'premium/electron/knowledge/HeuristicExtractor.ts'), 'utf8');
+  assert.match(heuristic, /const state: \{ current: ExperienceEntry \| null \} = \{ current: null \};/);
+  assert.match(heuristic, /const state: \{ current: EducationEntry \| null \} = \{ current: null \};/);
+});
 test('JD wire value and complete premium export graph', () => {
   assert.equal(load('knowledge/types.js').DocType.JD, 'job_description');
   const exports = load('knowledge/roleInsight/index.js');
   for (const name of ['RoleInsightService', 'RoleInsightEngine', 'resolveFromUrl', 'validateAssessments']) assert.equal(typeof exports[name], 'function', name);
+});
+test('JS-only search providers have runtime-matched, reproducible declarations', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'premium/RECOVERY.json'), 'utf8'));
+  const declarations = [
+    ['knowledge/TavilySearchProvider.d.ts', [
+      'import type { SearchResult } from "./CompanyResearchEngine";',
+      'constructor(apiKey: string);',
+      'get sessionCreditsUsed(): number;',
+      'search(query: string, numResults?: number): Promise<SearchResult[]>;',
+      'extractUrl(url: string): Promise<{ title: string; content: string } | null>;',
+    ]],
+    ['knowledge/NativelySearchProvider.d.ts', [
+      'import type { SearchResult } from "./CompanyResearchEngine";',
+      'constructor(apiKey: string, trialToken?: string);',
+      'quotaExhausted: boolean;',
+      'search(query: string, numResults?: number): Promise<SearchResult[]>;',
+    ]],
+  ];
+  for (const [relative, signatures] of declarations) {
+    const file = path.join(root, 'premium/electron', relative);
+    const text = fs.readFileSync(file, 'utf8');
+    for (const signature of signatures) assert.ok(text.includes(signature), `${relative}: ${signature}`);
+    assert.ok(manifest.files.some(item => item.output === `premium/electron/${relative}`), `${relative} missing from recovery manifest`);
+  }
+  const tavily = fs.readFileSync(path.join(root, 'premium/electron/knowledge/TavilySearchProvider.js'), 'utf8');
+  const natively = fs.readFileSync(path.join(root, 'premium/electron/knowledge/NativelySearchProvider.js'), 'utf8');
+  assert.match(tavily, /return \{ title: hit\.title \|\| "", content: hit\.rawContent \}/);
+  assert.match(natively, /quotaExhausted = false/);
 });
 test('Every recovered backend export resolves without embedded shared-service copies', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'premium/RECOVERY.json'), 'utf8'));

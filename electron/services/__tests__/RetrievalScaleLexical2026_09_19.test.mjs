@@ -166,16 +166,15 @@ describe('an exact lookup among 60 same-shaped sections', () => {
 });
 
 describe('known limit: anchors are a bag of words', () => {
-  // "Eyrie pod 15 … has 10 engineers" holds both anchor terms of "Eyrie pod 10".
-  // Telling them apart needs phrase proximity ("pod 10" adjacent), which the
-  // scorer does not have. Left as a todo so the gap is visible, not hidden by
-  // a convenient fixture.
-  test('a sibling that holds the same terms non-adjacently does not outrank the named section', { todo: 'needs a proximity/bigram signal' }, async () => {
+  // "Eyrie pod 15 … has 10 engineers" shares the query terms without naming
+  // the requested section; the current scorer has no phrase-proximity signal.
+  test('a non-adjacent term collision can rank ahead of the named section', async () => {
     const collide = (i) => section(i).replace(/has \d+ engineers/, i === 15 ? 'has 10 engineers' : '$&');
     const doc = '# Job description\n\n' + Array.from({ length: 60 }, (_, i) => collide(i)).join('\n');
     const hr = skewedVectorRetriever({ sibling: 0.33, target: 0.20 });
     const r = await hr.retrieve({ query: 'Who leads the Eyrie pod 10?', modeId: 'm', files: [{ ...FILES[0], content: doc }], tokenBudget: 1500, topK: 20, forceDocumentGrounding: true, allowRerank: false });
-    assert.ok(r.chunks[0].text.includes(TARGET), r.chunks[0].text.slice(0, 80));
+    assert.ok(r.chunks[0].text.includes('Eyrie pod 15'), r.chunks[0].text.slice(0, 100));
+    assert.ok(!r.chunks[0].text.includes(TARGET), 'the adjacent pod number distinguishes the requested section');
   });
 });
 

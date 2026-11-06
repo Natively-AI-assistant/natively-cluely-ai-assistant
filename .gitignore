@@ -515,6 +515,7 @@ docs/*
 # Outlook calendar's Azure app registration steps (2026-10-15): scripts/lib/microsoft-calendar-client.cjs,
 # build-electron.js and the release workflow point here for the client ID.
 !docs/microsoft-calendar-setup.md
+!docs/UNSUPPORTED_APIs.md
 # Per-release notes are published artifacts (linked from the README), not scratch notes.
 !docs/releases/
 !docs/releases/**

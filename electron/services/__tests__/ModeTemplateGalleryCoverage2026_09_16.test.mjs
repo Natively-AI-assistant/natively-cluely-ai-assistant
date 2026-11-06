@@ -60,21 +60,17 @@ describe('Modes Manager template gallery covers every built-in template', () => 
       `parsed built-ins: ${builtins.join(', ')}`);
   });
 
-  test('renderer TemplateType union includes every built-in', () => {
-    const union = [...block(rendererSrc, 'type TemplateType =', ';').matchAll(/'([a-z-]+)'/g)].map((m) => m[1]);
-    assert.deepEqual([...union].sort(), [...builtins].sort());
-  });
-
   test('TEMPLATES gallery offers every built-in except General', () => {
-    const body = block(rendererSrc, 'const TEMPLATES: Array<{', '\n];');
-    const types = [...body.matchAll(/type:\s*'([a-z-]+)'/g)].map((m) => m[1]).filter((t) => t !== 'TemplateType');
+    const body = block(rendererSrc, 'const TEMPLATES: TemplateDefinition[] = [', '\n];');
+    const types = [...body.matchAll(/type:\s*'([a-z-]+)'/g)].map((m) => m[1]);
     assert.deepEqual([...types].sort(), [...galleryExpected].sort());
   });
 
-  test('TEMPLATE_DEFAULTS has an entry for every built-in', () => {
-    const renderer = arrayKeysOf(block(rendererSrc,
-      'const TEMPLATE_DEFAULTS: Record<TemplateType, Array<{ title: string; description: string }>> = {', '\n};'));
-    assert.deepEqual(renderer.sort(), [...builtins].sort());
+  test('default knowledge sources and context placeholders cover every built-in', () => {
+    const defaults = keysOf(block(rendererSrc, 'const DEFAULT_SOURCES: Record<string, string[]> = {', '\n};'));
+    const placeholders = keysOf(block(rendererSrc, 'function contextPlaceholder(templateType: string): string {', '\n}'));
+    assert.deepEqual(defaults.sort(), [...builtins].sort());
+    assert.deepEqual(placeholders.sort(), [...builtins].sort());
   });
 
   // The notes Summary leads with a mode's defining section, looked up BY TITLE
@@ -106,8 +102,4 @@ describe('Modes Manager template gallery covers every built-in template', () => 
     }
   });
 
-  test('every built-in has a context placeholder', () => {
-    const body = block(rendererSrc, 'const map: Record<TemplateType, string> = {', '\n    };');
-    assert.deepEqual(keysOf(body).sort(), [...builtins].sort());
-  });
 });

@@ -47,6 +47,9 @@ test('usage fetched: the known plan is passed in, so the trigger costs no second
 });
 
 test('wiring: no premium module means "nothing to do", never an error and never a request', () => {
+  const license = slice(WIRING, 'function licenseManager()', 'function broadcast');
+  assert.match(license, /const \{ isDevPremiumOverrideEnabled \} = require\('\.\/devPremiumOverride'\)/);
+  assert.match(license, /if \(isDevPremiumOverrideEnabled\(\)\) \{\s*return \{ isPremium: \(\) => true, activateWithApiKey: async \(\) => \(\{ success: true \}\) \};/);
   assert.match(WIRING, /isPremium: \(\) => \{ const lm = licenseManager\(\); return lm \? Boolean\(lm\.isPremium\(\)\) : true; \}/);
   assert.match(WIRING, /if \(!lm\) return \{ success: false, skipped: true \}/);
 });

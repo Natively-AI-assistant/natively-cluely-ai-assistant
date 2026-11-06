@@ -1205,6 +1205,8 @@ export interface ElectronAPI {
     jd_structured_extraction_complete?: boolean
     jdFactsReady?: boolean
     aot_pipeline_running?: boolean
+    resume_indexing_in_flight?: boolean
+    jd_indexing_in_flight?: boolean
     extractionMode?: 'llm' | 'heuristic' | 'none'
   }>
   profileSetMode: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
@@ -1253,7 +1255,7 @@ export interface ElectronAPI {
   /** Async startup check — calls Dodo validate endpoint to detect server-side revocations. */
   licenseCheckPremiumAsync: () => Promise<boolean>
   onLicenseStatusChanged: (callback: (data: { isPremium: boolean, plan?: string }) => void) => () => void
-  licenseDeactivate: () => Promise<void>
+  licenseDeactivate: () => Promise<{ success: boolean }>
   licenseGetHardwareId: () => Promise<string>
 
   // Overlay Opacity (Stealth Mode)

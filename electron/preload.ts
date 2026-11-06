@@ -1120,8 +1120,8 @@ interface ElectronAPI {
   // Global shortcut events (stealth: fired even when window is not focused)
   onGlobalShortcut: (callback: (data: { action: string }) => void) => () => void;
 
-  // CGEventTap-backed stealth keyboard tap (macOS only). Returns false on
-  // non-macOS or when the native module / Accessibility permission is missing.
+  // Native stealth keyboard tap. Returns false when the platform-specific
+  // implementation, required permission, or native module is unavailable.
   // M5 cleanup: three dead query-style IPCs were removed — they never had
   // main-side handlers; tap state arrives via onStealthTapState instead.
   stealthTapAvailable: () => Promise<boolean>;
@@ -1166,6 +1166,15 @@ interface ElectronAPI {
     name?: string;
     role?: string;
     totalExperienceYears?: number;
+    resume_structured_extraction_complete?: boolean;
+    resume_profile_facts_ready?: boolean;
+    profileFactsReady?: boolean;
+    jd_structured_extraction_complete?: boolean;
+    jdFactsReady?: boolean;
+    aot_pipeline_running?: boolean;
+    resume_indexing_in_flight?: boolean;
+    jd_indexing_in_flight?: boolean;
+    extractionMode?: 'llm' | 'heuristic' | 'none';
   }>;
   profileSetMode: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   profileDelete: () => Promise<{ success: boolean; error?: string }>;
@@ -2247,6 +2256,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('system-audio-permission-denied', subscription);
     };
   },
+  // System audio permission warning channel (see docs/UNSUPPORTED_APIs.md).
+  // Registered via registerStealthHandler in electron/main.ts.
   getSystemAudioPermissionWarning: () => ipcRenderer.invoke('get-system-audio-permission-warning'),
   onDeviceSelectionApplied: (
     callback: (payload: {
@@ -2428,6 +2439,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     createAutoSendRule: (input) => ipcRenderer.invoke('connectors:autosend-create', input),
     updateAutoSendRule: (id, patch) => ipcRenderer.invoke('connectors:autosend-update', id, patch),
     deleteAutoSendRule: (id) => ipcRenderer.invoke('connectors:autosend-delete', id),
+    // Connectors API keys & Gmail integration channels (see docs/UNSUPPORTED_APIs.md).
+    // Registered modularly in electron/services/outputs/outputsIpc.ts (registerLocalApiIpc & registerGmailIpc).
     listApiKeys: () => ipcRenderer.invoke('connectors:apikeys-list'),
     createApiKey: (input) => ipcRenderer.invoke('connectors:apikey-create', input),
     revokeApiKey: (id) => ipcRenderer.invoke('connectors:apikey-revoke', id),
@@ -3369,7 +3382,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
-  // Stealth keyboard tap bridge. Three dead query-style IPCs were dropped in
+  // Stealth keyboard tap and clipboard bridge (see docs/UNSUPPORTED_APIs.md).
+  // Registered via registerStealthHandler in electron/main.ts.
+  // M5 cleanup: three dead query-style IPCs were dropped in
   // the M5 cleanup — they had no main-side handler and were not called from
   // src/; tap state arrives via onStealthTapState instead.
   stealthTapAvailable: () => ipcRenderer.invoke('stealth-tap:available'),
@@ -3490,7 +3505,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   licenseCheckPremium: () => ipcRenderer.invoke('license:check-premium'),
   licenseGetDetails: () => ipcRenderer.invoke('license:get-details'),
   licenseCheckPremiumAsync: () => ipcRenderer.invoke('license:check-premium-async'),
-  licenseDeactivate: () => ipcRenderer.invoke('license:deactivate'),
+  licenseDeactivate: (): Promise<{ success: boolean }> => ipcRenderer.invoke('license:deactivate'),
   licenseGetHardwareId: () => ipcRenderer.invoke('license:get-hardware-id'),
   onLicenseStatusChanged: (callback: (data: { isPremium: boolean; plan?: string }) => void) => {
     const subscription = (_: any, data: { isPremium: boolean; plan?: string }) => callback(data);

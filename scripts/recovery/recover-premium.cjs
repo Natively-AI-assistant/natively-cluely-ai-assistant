@@ -5,9 +5,12 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const ts = require('typescript');
 
-const root = path.resolve(__dirname, '../..');
+const repoRoot = path.resolve(__dirname, '../..');
 const source = process.argv[2];
-if (!source) throw new Error('Usage: node scripts/recovery/recover-premium.cjs <recovered-source-directory>');
+const outputRootIndex = process.argv.indexOf('--output-root');
+const root = outputRootIndex === -1 ? repoRoot : path.resolve(process.argv[outputRootIndex + 1]);
+if (!source || (outputRootIndex !== -1 && !process.argv[outputRootIndex + 1])) throw new Error('Usage: node scripts/recovery/recover-premium.cjs <recovered-source-directory> [--output-root <directory>]');
+const typescriptSource = path.resolve(source, 'recovered/source/natively-3.1.0/premium/electron');
 const compiled = path.resolve(source, 'recovered/compiled/app/dist-electron');
 const premium = path.join(compiled, 'premium/electron');
 const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
@@ -20,12 +23,35 @@ function relative(from, to) {
   return rel.startsWith('.') ? rel : './' + rel;
 }
 function record(file, out) {
-  provenance.push({ source: path.relative(path.resolve(source), file).split(path.sep).join('/'), sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'), output: out });
+  provenance.push({
+    source: path.relative(path.resolve(source), file).split(path.sep).join('/'),
+    sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'),
+    output: out,
+    outputSha256: crypto.createHash('sha256').update(fs.readFileSync(path.join(root, out))).digest('hex'),
+  });
 }
 function write(out, text) {
   const destination = path.join(root, out);
   fs.mkdirSync(path.dirname(destination), { recursive: true });
   fs.writeFileSync(destination, text);
+}
+function applyTypeFlowFix(relativePath, text) {
+  if (relativePath.split(path.sep).join('/') !== 'knowledge/HeuristicExtractor.ts') return text;
+
+  for (const [startMarker, endMarker, declaration] of [
+    ['const parseExperience =', 'const HONORS_RE =', 'let cur: ExperienceEntry | null = null;'],
+    ['const parseEducation =', '// ── public API', 'let cur: EducationEntry | null = null;'],
+  ]) {
+    const start = text.indexOf(startMarker);
+    const end = text.indexOf(endMarker, start);
+    if (start < 0 || end < 0) throw new Error(`Could not locate HeuristicExtractor type-flow section: ${startMarker}`);
+    let section = text.slice(start, end);
+    if (!section.includes(declaration)) throw new Error(`Could not locate expected parser state declaration: ${declaration}`);
+    section = section.replace(declaration, declaration.replace(/^let cur: (.+) = null;$/, 'const state: { current: $1 } = { current: null };'));
+    section = section.replace(/\bcur\b/g, 'state.current');
+    text = text.slice(0, start) + section + text.slice(end);
+  }
+  return text;
 }
 function reference(n) {
   const p = n.parent;
@@ -55,6 +81,17 @@ function inspect(file) {
   return { sf, checker, owners, exports };
 }
 const inputs = files(premium).filter(f => f.endsWith('.js'));
+const typescriptInputs = files(typescriptSource).filter(f => f.endsWith('.ts'));
+if (typescriptInputs.length !== 45) throw new Error(`Expected 45 Natively 3.1.0 premium TypeScript files, found ${typescriptInputs.length}`);
+for (const file of typescriptInputs) {
+  const relativePath = path.relative(typescriptSource, file);
+  const output = path.join('premium/electron', relativePath);
+  const destination = path.join(root, output);
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  fs.writeFileSync(destination, applyTypeFlowFix(relativePath, fs.readFileSync(file, 'utf8')));
+  fs.rmSync(destination.replace(/\.ts$/, '.js'), { force: true });
+  record(file, output);
+}
 const publicNames = new Map();
 for (const file of inputs) {
   const { exports } = inspect(file), name = path.relative(compiled, file).split(path.sep).join('/').replace(/\.js$/, '.ts');
@@ -63,6 +100,7 @@ for (const file of inputs) {
 for (const file of inputs) {
   const { sf, checker, owners, exports } = inspect(file);
   const name = path.relative(compiled, file).split(path.sep).join('/').replace(/\.js$/, '.ts');
+  if (fs.existsSync(path.join(typescriptSource, name.replace(/^premium\/electron\//, '')))) continue;
   const output = name.replace(/\.ts$/, '.js'), imports = new Map(), initSymbols = new Set();
   const ownExports = exports.get(name);
   if (!ownExports?.size) throw new Error('No exports found: ' + name);
@@ -128,6 +166,18 @@ for (const file of inputs) {
   write(output, `// Recovered from Natively 3.1.0 compiled output; see ../RECOVERY.json for provenance.\n${importsText}\n${helpers}\n${body}\n${exportsText}\n`);
   record(file, output);
 }
+const providerOutputs = provenance.filter(item => item.output.startsWith('premium/electron/') && item.output.endsWith('.js')).map(item => item.output).sort();
+if (providerOutputs.join(',') !== 'premium/electron/knowledge/NativelySearchProvider.js,premium/electron/knowledge/TavilySearchProvider.js') {
+  throw new Error(`Expected only the two JS-only search providers, found: ${providerOutputs.join(', ') || '(none)'}`);
+}
+for (const provider of providerOutputs) {
+  const output = provider.replace(/\.js$/, '.d.ts');
+  const declaration = provider.endsWith('/TavilySearchProvider.js')
+    ? `import type { SearchResult } from "./CompanyResearchEngine";\n\nexport declare class TavilySearchProvider {\n  creditsUsed: number;\n  constructor(apiKey: string);\n  get sessionCreditsUsed(): number;\n  search(query: string, numResults?: number): Promise<SearchResult[]>;\n  extractUrl(url: string): Promise<{ title: string; content: string } | null>;\n}\n`
+    : `import type { SearchResult } from "./CompanyResearchEngine";\n\nexport declare class NativelySearchProvider {\n  apiKey: string;\n  trialToken: string | undefined;\n  endpoint: string;\n  sessionId: string;\n  quotaExhausted: boolean;\n  constructor(apiKey: string, trialToken?: string);\n  search(query: string, numResults?: number): Promise<SearchResult[]>;\n}\n`;
+  write(output, declaration);
+  record(path.resolve(compiled, provider), output);
+}
 require('./recover-premium-renderer.cjs')({ source, root, write, record });
-write('premium/RECOVERY.json', JSON.stringify({ format: 1, files: provenance }, null, 2) + '\n');
-console.log('Recovered', inputs.length, 'backend modules.');
+write('premium/RECOVERY.json', JSON.stringify({ format: 2, files: provenance }, null, 2) + '\n');
+console.log('Recovered', typescriptInputs.length, 'premium TypeScript modules and', providerOutputs.length, 'JS-only providers.');

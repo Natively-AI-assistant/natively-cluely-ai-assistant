@@ -24,6 +24,12 @@ let instance: Reconciler | null = null;
 /** The premium module is absent from open-source builds; absence means "nothing to do". */
 function licenseManager(): any | null {
   try {
+    const { isDevPremiumOverrideEnabled } = require('./devPremiumOverride');
+    if (isDevPremiumOverrideEnabled()) {
+      return { isPremium: () => true, activateWithApiKey: async () => ({ success: true }) };
+    }
+  } catch { /* devPremiumOverride unavailable */ }
+  try {
     const { LicenseManager } = require('../../premium/electron/services/LicenseManager');
     return LicenseManager.getInstance();
   } catch {
@@ -63,13 +69,7 @@ export function getProEntitlementReconciler(): Reconciler {
     },
     isTrialKey: (key) => key === TRIAL_SENTINEL_KEY,
     // No premium module → report "already fine" so the reconciler never runs.
-    isPremium: () => {
-      try {
-        const { isDevPremiumOverrideEnabled } = require('./devPremiumOverride');
-        if (isDevPremiumOverrideEnabled()) return true;
-      } catch { /* devPremiumOverride unavailable */ }
-      const lm = licenseManager(); return lm ? Boolean(lm.isPremium()) : true;
-    },
+    isPremium: () => { const lm = licenseManager(); return lm ? Boolean(lm.isPremium()) : true; },
     fetchPlan,
     activate: async (key): Promise<ActivateAnswer> => {
       const lm = licenseManager();

@@ -229,11 +229,11 @@ describe('a template as a mode\'s notes template', () => {
     });
     test('Modes Manager: Use a template beside Remove template, applied only to the mode still open', () => {
         const mm = src('premium/src/ModesSettings.tsx');
-        assert.match(mm, /<NoteTemplateMenu currentTitles=\{noteSections\.map\(s => s\.title\)\} modeDefault=\{modeDefault\} onPick=/);
-        const apply = mm.slice(mm.indexOf('const applyNoteTemplate = async'), mm.indexOf('const updateSectionTitle = async'));
-        assert.ok(apply.indexOf('modesApplyNoteTemplate') < apply.indexOf('if (selectedIdRef.current !== modeId) return;'));
-        assert.ok(apply.indexOf('if (selectedIdRef.current !== modeId) return;') < apply.indexOf('setNoteSections(res.sections)'));
-        assert.doesNotMatch(mm.slice(mm.indexOf('const NoteTemplateMenu'), mm.indexOf('// See .mm-banner-slot')), /<select/);
+        assert.match(mm, /<NotesTemplatePicker[\s\S]*?currentTitles=\{noteSections\.map\(s => s\.title\)\}[\s\S]*?modeDefault=\{modeDefault\}[\s\S]*?onPick=\{applyNoteTemplate\}/);
+        const apply = mm.slice(mm.indexOf('const applyNoteTemplate = async'), mm.indexOf('// ─── Render', mm.indexOf('const applyNoteTemplate = async')));
+        assert.ok(apply.indexOf('const id = selectedId;') < apply.indexOf('modesApplyNoteTemplate'));
+        assert.ok(apply.indexOf('if (selectedIdRef.current !== id) return;') < apply.indexOf('setNoteSections(result.sections)'));
+        assert.doesNotMatch(mm.slice(mm.indexOf('function NotesTemplatePicker'), mm.indexOf('// ─── TemplatePicker')), /<select/);
     });
 });
 
@@ -262,25 +262,13 @@ describe('a mode\'s own default back from Use a template', () => {
         assert.match(h, /toDefault \? mgr\.defaultNoteSectionsFor\(modeId\) : template!\.sections/);
         assert.match(src('electron/preload.ts'), /modesGetDefaultNoteSections: \(modeId: string\) => ipcRenderer\.invoke\('modes:get-default-note-sections', modeId\)/);
     });
-    test('Modes Manager: a This mode row first, named after the mode\'s type, read again when the type changes', () => {
+    test('Modes Manager: loads the mode-type default and offers it in the template picker', () => {
         const mm = src('premium/src/ModesSettings.tsx');
-        assert.match(mm, /<div style=\{\{ \.\.\.styles\.noteTemplateGroup, paddingTop: 4 \}\}>This mode<\/div>/);
-        assert.match(mm, /row\(MODE_DEFAULT_NOTE_TEMPLATE_ID, modeDefault\.label, modeDefault\.titles\)/);
-        // Motion: rises from the trigger, one gliding highlight, a pick draws its check and closes a beat later.
-        assert.match(mm, /\.mm-nt-menu \{\n\s+animation: mm-nt-in 250ms/);
-        assert.match(mm, /\.mm-nt-menu\[data-closing='true'\] \{\n\s+animation: mm-nt-out 150ms/);
-        assert.match(mm, /className="mm-nt-highlight"/);
-        assert.match(mm, /pickTimer\.current = setTimeout\(\(\) => close\(true\), NOTE_TEMPLATE_PICK_BEAT_MS\)/);
-        // onPick runs at the click, not after the beat.
-        assert.match(mm, /setPicked\(key\);\n\s+setHl\(h => \(\{ \.\.\.h, shown: false \}\)\);\n\s+onPick\(key\);/);
-        // Every new motion has a reduced-motion stand-in.
-        const reduced = mm.slice(mm.lastIndexOf('@media (prefers-reduced-motion: reduce)', mm.indexOf('.mm-nt-menu { animation-name: mm-fade-only')));
-        for (const sel of ['.mm-nt-menu { animation-name: mm-fade-only', '.mm-nt-check[data-draw=\'true\'] path { animation: none; }', '.mm-nt-chevron { transition: none; }', '.mm-notes-applying { filter: none; }']) assert.ok(reduced.includes(sel), sel);
-        // A plain list, no icons (Evin: the icon version was "so ugly").
-        const menu = mm.slice(mm.indexOf('const NoteTemplateMenu'), mm.indexOf('// See .mm-banner-slot'));
-        assert.doesNotMatch(menu, /Icon|iconBg|<Briefcase|<FileText/);
-        assert.match(mm, /\}, \[selectedId, selectedTemplateType\]\);/);
+        assert.match(mm, /api\(\)\?\.modesGetDefaultNoteSections\?\.\(selectedId\)/);
+        assert.match(mm, /setDefaultNoteSections\(Array\.isArray\(defaults\) \? defaults : \[\]\)/);
+        assert.match(mm, /label: mode\.templateType === 'general' \? 'General' : \(TEMPLATE_MAP\[mode\.templateType\]\?\.label \?\? 'Default'\)/);
         assert.match(mm, /modeDefault=\{modeDefault\}/);
+        assert.match(mm, /onPick=\{applyNoteTemplate\}/);
     });
 });
 

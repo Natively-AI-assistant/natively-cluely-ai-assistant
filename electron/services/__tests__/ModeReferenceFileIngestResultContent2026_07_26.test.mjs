@@ -59,6 +59,6 @@ describe('ModeReferenceFileIngestResult includes content (the actual bug)', () =
 describe('ModesSettings.tsx render site is defensive even if a future backend regression omits content again', () => {
   test('file.content.length is accessed with optional chaining + a numeric fallback, not a bare unguarded access', () => {
     assert.doesNotMatch(modesSettingsSrc, /\(file\.content\.length \/ 1000\)/, 'the old unguarded access must be gone');
-    assert.match(modesSettingsSrc, /\(\(file\.content\?\.length \?\? 0\) \/ 1000\)/, 'must guard with optional chaining + a numeric fallback so a missing content field can never crash the render');
+    assert.match(modesSettingsSrc, /\(\(f\.content\?\.length \?\? 0\) \/ 1000\)/, 'must guard with optional chaining + a numeric fallback so a missing content field can never crash the render');
   });
 });

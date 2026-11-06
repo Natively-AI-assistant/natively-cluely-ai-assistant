@@ -53,10 +53,7 @@ const guardsMarker = (text) =>
 const guardsBroadcast = (text) => {
   const save = text.indexOf("DatabaseManager.getInstance().saveMeeting(meetingData");
   const region = text.slice(save, text.indexOf('} catch (error)', save));
-  const send = region.indexOf("send('meetings-updated')");
-  if (send < 0) return false;
-  // The broadcast must sit inside a try opened after the save.
-  return /try\s*\{[\s\S]{0,300}$/.test(region.slice(0, send));
+  return /try\s*\{\s*const wins = require\('electron'\)\.BrowserWindow\.getAllWindows\(\);\s*wins\.forEach\(\(w: any\) => w\.webContents\.send\('meetings-updated'\)\);\s*\}\s*catch/.test(region);
 };
 
 describe('the destructive failure path is gated on the save not having happened', () => {
@@ -88,10 +85,13 @@ describe('the destructive failure path is gated on the save not having happened'
     assert.ok(!guardsMarker(withoutGuard),
       'the !meetingSaved pin still passes with the guard removed — it is vacuous');
 
-    const withoutTry = source.replace(
-      /try\s*\{\s*\n(\s*)const wins = require\('electron'\)\.BrowserWindow\.getAllWindows\(\);/,
-      '$1const wins = require(\'electron\').BrowserWindow.getAllWindows();',
+    const save = source.indexOf('DatabaseManager.getInstance().saveMeeting(meetingData');
+    const beforeSave = source.slice(0, save);
+    const afterSave = source.slice(save).replace(
+      /try\s*\{\s*const wins = require\('electron'\)\.BrowserWindow\.getAllWindows\(\);\s*wins\.forEach\(\(w: any\) => w\.webContents\.send\('meetings-updated'\)\);\s*\}\s*catch/,
+      "const wins = require('electron').BrowserWindow.getAllWindows(); wins.forEach((w: any) => w.webContents.send('meetings-updated'));",
     );
+    const withoutTry = beforeSave + afterSave;
     assert.notEqual(withoutTry, source, 'probe failed to mutate the broadcast guard');
     assert.ok(!guardsBroadcast(withoutTry),
       'the broadcast pin still passes with the try removed — it is vacuous');
