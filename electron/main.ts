@@ -1293,7 +1293,7 @@ console.error = (...args: any[]) => {
   } catch { }
 };
 
-import { initializeIpcHandlers } from "./ipcHandlers"
+import { initializeIpcHandlers, triggerLicenceRecheck } from "./ipcHandlers"
 import { WindowHelper } from "./WindowHelper"
 import { SettingsWindowHelper } from "./SettingsWindowHelper"
 import { ModelSelectorWindowHelper } from "./ModelSelectorWindowHelper"
@@ -3248,7 +3248,21 @@ export class AppState {
         // NOTE: groqFastTextMode is now restored unconditionally in the AppState constructor
         // so it is not repeated here.
         const sm = SettingsManager.getInstance();
-        if (sm.get('knowledgeMode')) {
+        // Profile Intelligence is Pro or trial (services/proAccess.ts). A licence
+        // or trial that ended while the app was closed leaves knowledgeMode true
+        // on disk; restoring it would keep the résumé and JD in answers. The
+        // setting is kept, so a renewed licence turns it back on next launch.
+        let profileAllowed = false;
+        try {
+          const { isProOrTrialActive } = require('./services/proAccess') as typeof import('./services/proAccess');
+          profileAllowed = isProOrTrialActive();
+        } catch {
+          profileAllowed = false;
+        }
+        if (sm.get('knowledgeMode') && !profileAllowed) {
+          console.log('[AppState] Knowledge mode not restored: no Pro licence or active trial');
+        }
+        if (sm.get('knowledgeMode') && profileAllowed) {
           this.knowledgeOrchestrator.setKnowledgeMode(true);
           console.log('[AppState] Knowledge mode restored from settings');
           // Pre-warm the provider prompt cache off the hot path so the first
@@ -11239,6 +11253,13 @@ if (process.env.THINKING_MATRIX === '1') {
       console.log('[Main] powerMonitor: system resumed from sleep.');
       // The Pro pack meeting clock accrues again from now; the sleep is not billed.
       appState.packClockResume();
+      // A laptop closed for days may come back with a licence that lapsed,
+      // was refunded or was cancelled meanwhile: ask the server.
+      try {
+        triggerLicenceRecheck('resume');
+      } catch (err) {
+        console.warn('[Main] licence re-check on resume failed (non-fatal):', err);
+      }
       // Tell the Provider Performance Profile that the next few turns are not
       // representative: a machine coming back from sleep re-associates Wi-Fi,
       // re-opens TLS sessions and re-warms DNS, and a first-token measurement

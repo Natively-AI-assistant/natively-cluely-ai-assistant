@@ -26,6 +26,8 @@ export type ConnectionErrorKind =
     | 'server'
     | 'too_large'
     | 'storage_unavailable'
+    /** Connectors are Natively Pro (or a trial): electron/services/outputs/connectorAccess.ts. */
+    | 'pro_required'
     | 'unknown';
 
 export interface OutputResult {
@@ -70,6 +72,12 @@ export interface ConnectedVia { via?: 'oauth'; account?: string }
 export interface ConnectionsStatus {
     /** False when the OS keychain / DPAPI is unavailable: tokens are then kept for this session only. */
     secureStorage: boolean;
+    /**
+     * Pro or an active trial: connecting and sending are allowed. False shows
+     * the Pro card; status, disconnect and remove still work. Optional only so
+     * an older main process (dev reload) reads as allowed rather than locked.
+     */
+    pro?: boolean;
     slack: { webhooks: SlackWebhookInfo[] };
     notion: { connected: boolean; parent?: NotionParentInfo } & ConnectedVia;
     hubspot: { connected: boolean } & ConnectedVia;

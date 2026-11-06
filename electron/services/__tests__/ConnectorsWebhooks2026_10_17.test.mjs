@@ -428,6 +428,8 @@ test('the IPC registers every channel, checks inputs, and connectorsDelivery rea
         foldersOfMeeting: () => [],
         listFolders: () => [{ id: 'f1', name: 'Sales', position: 0, rules: [] }, { bogus: true }],
         autoSendSender: async (destination, meetingId) => { sent.push([destination.kind, meetingId]); return { ok: true }; },
+        // Connectors are Pro (2026-11-06); this is the Pro path. ConnectorsProGate covers the locked one.
+        connectorsAllowed: () => true,
         fetchImpl: f.fetchImpl,
         wait: async () => {},
         timers: fakeTimers(),

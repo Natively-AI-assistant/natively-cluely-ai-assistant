@@ -104,6 +104,11 @@ export interface GmailStatus {
     account?: string;
     /** Read recent threads with attendees into meeting briefs. */
     briefsEnabled: boolean;
+    /**
+     * True without Pro or a trial (connectors are Pro): nothing is sent or read
+     * through Gmail, and the follow-up falls back to Gmail's compose window.
+     */
+    locked?: boolean;
 }
 
 // ── The bridge ──────────────────────────────────────────────────────────

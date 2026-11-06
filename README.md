@@ -476,7 +476,7 @@ While Natively is **free for personal, educational, research, and non-commercial
 | **Phone Mirror 2.0**                                |      ✅       |      ✅      |
 | **Notepad with Recipes & Live Transcript**          |      ✅       |      ✅      |
 | **Your Own Overlay Buttons**                        |      ✅       |      ✅      |
-| **Connectors (Gmail, Slack, Notion, CRMs, MCP)**    |      ✅       |      ✅      |
+| **Connectors (Gmail, Slack, Notion, CRMs, MCP)**    |      ❌       |      ✅      |
 | **Share Notes as a Link**                           |      ✅       |      ✅      |
 | **Follow-Up Emails in Your Style**                  |      ✅       |      ✅      |
 | **Room Speakers (People Sharing One Mic)**          |      ✅       |      ✅      |
@@ -916,7 +916,7 @@ Create local `SKILL.md` files to give the AI specialized instructions for any ta
 
 - **Phone Mirror 2.0:** Follow the meeting from your phone, with the live transcript, answers as they stream in, and photos sent back to the desktop. Set it up in **Settings → Companion**.
 - **Calendar Sync:** Connect Google Calendar and each meeting is linked to its event, notes name the people who spoke, and a follow-up email is drafted when you ask.
-- **Connectors:** Send notes to Gmail, Slack, Notion, Zapier, webhooks, HubSpot, Salesforce, Attio, Affinity and Pipedrive, with browser sign-in and auto-send rules. A local MCP server and API let your own tools read your meetings. Notes go from your computer to the service, never through our servers. In **Settings → Connectors**.
+- **Connectors (Pro):** Send notes to Gmail, Slack, Notion, Zapier, webhooks, HubSpot, Salesforce, Attio, Affinity and Pipedrive, with browser sign-in and auto-send rules. A local MCP server and API let your own tools read your meetings. Notes go from your computer to the service, never through our servers. In **Settings → Connectors**. Connectors are part of Natively Pro (the free trial includes them). Their code lives in this repo, not the premium module, so you can read it, report issues and send pull requests for any connector.
 - **Share Notes as a Link:** Send anyone a link to a meeting's notes and transcript, from the meeting's Share menu.
 - **Knows Your Meeting App:** Reads Zoom and Teams for the meeting ID, the people on the call and whether you are muted, and follows the microphone the meeting app uses.
 - **Live Model Catalogue:** Each provider's model list is fetched live, so new models show up without an app update.

@@ -46,6 +46,7 @@ const GUARDED_FILES = [
   'src/components/settings/connectors/AutoSendSection.tsx',
   'src/components/settings/connectors/GmailPanel.tsx',
   'src/components/settings/connectors/McpCard.tsx',
+  'src/components/settings/connectors/ProCard.tsx',
   'src/components/settings/connectors/WebhooksPanel.tsx',
   'src/components/settings/connectors/common.tsx',
   'src/components/settings/connectors/parts.tsx',

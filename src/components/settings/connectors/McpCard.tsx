@@ -201,7 +201,12 @@ const AppSetup: React.FC<{ snippets: Snippets }> = ({ snippets }) => {
     );
 };
 
-export const McpCard: React.FC<{ mcp: McpServerStatus; onStatus: (s: McpServerStatus) => void }> = ({ mcp, onStatus }) => {
+/**
+ * `locked`: no Pro or trial (connectorAccess.ts). Turning on is disabled, and a
+ * server left on answers apps with "Pro required", so the status says paused.
+ * Turning off and a new token still work.
+ */
+export const McpCard: React.FC<{ mcp: McpServerStatus; onStatus: (s: McpServerStatus) => void; locked?: boolean }> = ({ mcp, onStatus, locked = false }) => {
     const t = useT();
     const tones = useSettingsTones();
     const [busy, setBusy] = useState(false);
@@ -250,7 +255,9 @@ export const McpCard: React.FC<{ mcp: McpServerStatus; onStatus: (s: McpServerSt
         if (now && now !== lastError.current) setShakeKey(now);
         lastError.current = now;
     }, [failed, mcp.error]);
-    const status = !mcp.enabled
+    const status = locked
+        ? (mcp.enabled ? t('Paused. Connectors are part of Natively Pro.') : t('Part of Natively Pro.'))
+        : !mcp.enabled
         ? t('Off. Nothing can read your meetings.')
         : mcp.running ? t('On. Only apps on this computer can connect.') : (mcp.error || t('Starting…'));
 
@@ -306,7 +313,7 @@ export const McpCard: React.FC<{ mcp: McpServerStatus; onStatus: (s: McpServerSt
                         variant="lavender"
                         className={`${LAVENDER_PILL} min-w-[84px]`}
                         onClick={() => void toggle()}
-                        disabled={busy}
+                        disabled={busy || locked}
                         aria-pressed={false}
                         icon={busy && slow ? <Loader2 size={14} className="animate-spin" /> : undefined}
                     >
@@ -321,7 +328,7 @@ export const McpCard: React.FC<{ mcp: McpServerStatus; onStatus: (s: McpServerSt
                     {/* The dot travels with its sentence, so the text never slides over when it goes. */}
                     <Swap k={status} block>
                         <span className="flex items-center gap-2">
-                            {mcp.enabled && mcp.running && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />}
+                            {mcp.enabled && mcp.running && !locked && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />}
                             <span className="min-w-0">{status}</span>
                         </span>
                     </Swap>

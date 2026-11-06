@@ -13,7 +13,7 @@ async function loadPolicy() {
   return import(pathToFileURL(policyPath).href);
 }
 
-// Regression for F4 (Phase 2): a transient server state (429 ip_blocked, 403 account_suspended,
+// Regression for F4 (Phase 2): a transient server state (429 ip_blocked,
 // 5xx, network error, unparseable body) must NEVER revoke a paying user's natively_api Pro
 // license. Only a CONFIRMED loss of entitlement (plan downgraded / subscription_inactive /
 // key_not_found) revokes.
@@ -40,9 +40,11 @@ test('key_not_found / invalid_key_format → revoke (refund/deleted key)', async
   assert.equal(classifyProVerify(400, { ok: false, error: 'invalid_key_format' }), 'revoke');
 });
 
-test('REGRESSION F4: account_suspended (403 payment hold) → keep (NOT revoke)', async () => {
+test('account_suspended (403 payment hold) → hold: Pro locked, licence kept (NOT revoke, NOT keep)', async () => {
+  // 2026-11-07: 'keep' left every Pro feature on for a key not being paid for.
+  // 'hold' locks it and LicenseManager restores it when the payment clears.
   const { classifyProVerify } = await loadPolicy();
-  assert.equal(classifyProVerify(403, { ok: false, error: 'account_suspended' }), 'keep');
+  assert.equal(classifyProVerify(403, { ok: false, error: 'account_suspended' }), 'hold');
 });
 
 test('REGRESSION F4: ip_blocked (429 rate limit) → keep (NOT revoke)', async () => {

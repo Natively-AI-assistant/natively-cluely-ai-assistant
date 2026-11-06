@@ -179,22 +179,28 @@ export const ShareMenu: React.FC<{
         { key: 'pdf', label: t('File'), icon: <FileDown size={14} />, run: () => void exportPdf() },
         { key: 'link', label: t('Link'), icon: <Link2 size={14} />, run: () => void shareLink() },
     ];
+    // Connectors are Pro or trial (main enforces it: connectorAccess.ts). Without
+    // it the destinations stay listed and say so, instead of opening a dialog
+    // whose send would be refused. Absent `pro` (an older main) reads as allowed.
+    const proOnly = (run: () => void) => (conn?.pro === false
+        ? () => showMessage(t('Sending notes to Slack, Notion and your CRM is part of Natively Pro. Upgrade in Settings, Plans & Billing.'))
+        : run);
     const send: Item[] = [
-        { key: 'slack', label: 'Slack', icon: <ConnectorMark id="slack" size={14} />, brand: true, run: () => setDialog('slack') },
-        { key: 'notion', label: 'Notion', icon: <ConnectorMark id="notion" size={14} />, brand: true, run: () => setDialog('notion') },
+        { key: 'slack', label: 'Slack', icon: <ConnectorMark id="slack" size={14} />, brand: true, run: proOnly(() => setDialog('slack')) },
+        { key: 'notion', label: 'Notion', icon: <ConnectorMark id="notion" size={14} />, brand: true, run: proOnly(() => setDialog('notion')) },
         crm
-            ? { key: 'crm', label: CRM_NAMES[crm], icon: <ConnectorMark id={crm} size={14} />, brand: true, run: () => setDialog('crm') }
-            : { key: 'crm', label: 'CRM', icon: <Contact size={14} />, run: () => setDialog('crm') },
+            ? { key: 'crm', label: CRM_NAMES[crm], icon: <ConnectorMark id={crm} size={14} />, brand: true, run: proOnly(() => setDialog('crm')) }
+            : { key: 'crm', label: 'CRM', icon: <Contact size={14} />, run: proOnly(() => setDialog('crm')) },
         // Only once a directory key is saved: looks the attendees up and files
         // title / company suggestions. Nothing is applied here.
         ...(conn?.clearbit?.connected ? [{
             key: 'enrich',
             label: t('Look up attendees'),
             icon: <Contact size={14} />,
-            run: () => {
+            run: proOnly(() => {
                 const failed = t('The lookup did not finish. Try again.');
                 void api()?.enrichAttendees(meetingId).then((r) => showMessage(r?.message || failed)).catch(() => showMessage(failed));
-            },
+            }),
         }] : []),
     ];
     // Styled from its neighbours (owner, 2026-10-17: "visually disconnected"). It

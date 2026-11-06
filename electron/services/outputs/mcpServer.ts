@@ -17,6 +17,7 @@
 import * as http from 'http';
 import * as crypto from 'crypto';
 import { buildNotesDocument, formatOffset, notesToMarkdown, plainTitle, type MeetingLike } from './notesDocument';
+import { CONNECTORS_PRO_HTTP, checkAllowed } from './connectorAccess';
 
 export const MCP_HOST = '127.0.0.1';
 export const MCP_PATH = '/mcp';
@@ -335,6 +336,12 @@ export interface RunningMcpServer {
 export interface McpServerOptions {
     port: number;
     token: () => string;
+    /**
+     * Connectors are Pro or trial (connectorAccess.ts), asked per request after
+     * the token check. False answers 403 pro_required. Absent: always allowed
+     * (this transport alone; outputsIpc passes the real gate).
+     */
+    allowed?: () => boolean;
     source: MeetingSource;
     version: string;
     selfName?: () => string | undefined;
@@ -360,6 +367,9 @@ export function createMcpRequestListener(opts: McpServerOptions & { boundPort: (
         }
         if (!bearerMatches(req.headers.authorization, opts.token())) {
             return send(res, 401, { error: 'Unauthorized' }, { 'WWW-Authenticate': 'Bearer' });
+        }
+        if (opts.allowed && !checkAllowed(opts.allowed)) {
+            return send(res, CONNECTORS_PRO_HTTP.status, { error: CONNECTORS_PRO_HTTP.message, code: CONNECTORS_PRO_HTTP.code });
         }
         if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed' }, { Allow: 'POST' });
         if (!String(req.headers['content-type'] || '').toLowerCase().includes('application/json')) {

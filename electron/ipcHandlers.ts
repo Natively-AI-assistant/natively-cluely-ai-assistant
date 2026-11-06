@@ -330,6 +330,14 @@ const GATE_GENERIC_TOKENS = new Set<string>([
 
 let appleSpeechLocalesCache: { available: boolean; supported: string[]; installed: string[]; reserved: string[]; maxReserved: number } | null = null;
 
+/** The running licence re-check schedule (services/licenceRecheck.ts), once IPC is up. */
+let licenceRecheck: import('./services/licenceRecheck').LicenceRecheck | null = null;
+
+/** Ask the licence server now (wake from sleep, a usage read without Pro); spaced and single-flight. */
+export function triggerLicenceRecheck(reason: import('./services/licenceRecheck').RecheckReason): void {
+  void licenceRecheck?.trigger(reason);
+}
+
 export function initializeIpcHandlers(appState: AppState): void {
   const safeHandle = (
     channel: string,
@@ -425,7 +433,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         licensed: hasPro,
         hasRealApiKey: hasApiKey,
         hasTrialToken: !!cm.getTrialToken(),
-        trialExpired: !!trialExpiresAt && new Date(trialExpiresAt).getTime() <= Date.now(),
+        trialExpired: !!trialExpiresAt && trialTimeIsUp(),
         hasOwnAi,
       }),
       hasOwnAi,
@@ -560,7 +568,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!token) return none;
       const expiresAt = cm.getTrialExpiresAt();
       const expired = opts.serverExpired === true
-        || (!!expiresAt && new Date(expiresAt).getTime() <= Date.now());
+        || (!!expiresAt && trialTimeIsUp());
       if (!expired) return none;
 
       const trialId = cm.getTrialStartedAt() || expiresAt || 'unknown-trial';
@@ -1049,6 +1057,13 @@ export function initializeIpcHandlers(appState: AppState): void {
     const { isProOrTrialActive: check } = require('./services/proAccess') as typeof import('./services/proAccess');
     return check();
   };
+  // Is the free trial over? Server verdict or the trial clock, never the
+  // computer's clock alone (services/trialClock.ts). A declaration so the
+  // handlers above it can call it.
+  function trialTimeIsUp(): boolean {
+    const { trialTimeIsUp: check } = require('./services/proAccess') as typeof import('./services/proAccess');
+    return check();
+  }
 
   // Clears premium-only context when the pro license is lost.
   const clearActiveModeOnLicenseLoss = (): void => {
@@ -1268,14 +1283,68 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Async variant: performs Dodo server-side revocation check on startup.
   // Returns false only if the server definitively revokes the key.
   // Network errors fail-open (returns cached sync result).
-  safeHandle('license:check-premium-async', async () => {
+  // The server licence check (services/licenceRecheck.ts runs it at launch,
+  // every 6 hours, on wake and after a usage read without Pro). The server
+  // revoking a licence the local file still held (a lapsed subscription, a
+  // refund) stands the Pro features down now, as license:deactivate does,
+  // instead of leaving Profile Intelligence on for the rest of the session. A
+  // trial still running keeps them. Returns false only on a definite answer;
+  // network errors fail open.
+  const runLicenceRecheck = async (): Promise<boolean> => {
+    let lm: any;
     try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      return await LicenseManager.getInstance().isPremiumAsync();
+      lm = require('../premium/electron/services/LicenseManager').LicenseManager.getInstance();
     } catch {
       return false;
     }
-  });
+    const { recheckLicence } = require('./services/proAccess') as typeof import('./services/proAccess');
+    const tell = (isPremium: boolean) => BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) win.webContents.send('license-status-changed', { isPremium });
+    });
+    return recheckLicence(lm, {
+      stillAllowed: isProOrTrialActive,
+      onLost: () => {
+        try {
+          const orchestrator = appState.getKnowledgeOrchestrator();
+          if (orchestrator) {
+            orchestrator.setKnowledgeMode(false);
+            console.log('[IPC] Knowledge mode auto-disabled: licence revoked by the server');
+          }
+        } catch { /* ignore */ }
+        clearActiveModeOnLicenseLoss();
+        tell(false);
+      },
+      onRestored: () => tell(true),
+    });
+  };
+  safeHandle('license:check-premium-async', async () => runLicenceRecheck());
+  try {
+    const { startLicenceRecheck } = require('./services/licenceRecheck') as typeof import('./services/licenceRecheck');
+    licenceRecheck?.stop();
+    licenceRecheck = startLicenceRecheck({
+      run: async () => {
+        await runLicenceRecheck();
+        // A trial that still looks live: ask the server too (it may have ended
+        // it, or the computer's clock may be wound back).
+        try {
+          const { CredentialsManager } = require('./services/CredentialsManager');
+          if (CredentialsManager.getInstance().getTrialToken() && !trialTimeIsUp()) await pollTrialStatus();
+        } catch { /* the trial clock still applies */ }
+      },
+      setTimer: (fn, ms) => {
+        const t = setTimeout(fn, ms);
+        // A pending check must never hold the app open on quit.
+        if (typeof (t as any).unref === 'function') (t as any).unref();
+        return t;
+      },
+      clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>),
+      // Wake from sleep comes through main.ts's one powerMonitor 'resume'
+      // listener (triggerLicenceRecheck below), not a second subscription.
+      log: console,
+    });
+  } catch (e: any) {
+    console.warn('[IPC] licence re-check schedule unavailable:', e?.message || e);
+  }
   safeHandle('license:deactivate', async () => {
     try {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
@@ -12268,7 +12337,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         cm.getNativelyApiKey() === TRIAL_SENTINEL_KEY &&
         !!cm.getTrialToken() &&
         !!trialExpiresAt &&
-        new Date(trialExpiresAt).getTime() > Date.now();
+        !trialTimeIsUp();
       cm.setNativelyApiKey(apiKey);
 
       // Update LLMHelper immediately (same pattern as other provider keys)
@@ -12550,11 +12619,22 @@ export function initializeIpcHandlers(appState: AppState): void {
         headers: { 'x-natively-key': key },
         signal: AbortSignal.timeout(8000),
       });
+      // The plan read says this key's Pro is gone (cancelled, refunded, dropped
+      // to Standard): ask the licence server now rather than at the next 6-hour
+      // check. A reason to ask only; the licence check decides.
+      const askLicenceIf = (answer: { ok: boolean; plan?: unknown; error?: unknown }) => {
+        try {
+          const { usageSuggestsProLost } = require('./services/licenceRecheck') as typeof import('./services/licenceRecheck');
+          if (usageSuggestsProLost(answer)) triggerLicenceRecheck('usage');
+        } catch { /* schedule unavailable in this build */ }
+      };
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as any;
+        askLicenceIf({ ok: false, error: body?.error });
         return { ok: false, error: body.error || 'request_failed', status: res.status };
       }
       const data = (await res.json()) as any;
+      askLicenceIf({ ok: true, plan: data?.plan });
       const result = { ok: true, ...data };
 
       // Cache the successful response
@@ -12738,7 +12818,10 @@ export function initializeIpcHandlers(appState: AppState): void {
   }
 
   // Poll the server for live trial status (remaining time + usage counters).
-  safeHandle('trial:status', async () => {
+  // Also run by the licence re-check (launch, wake, every 6 hours) while a trial
+  // still looks live, so the server's verdict lands without a window polling.
+  // A declaration so that schedule, set up earlier, can call it.
+  async function pollTrialStatus(): Promise<any> {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -12749,7 +12832,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // runtime down once the local clock has passed the expiry. Both branches
       // below return early, and the trial is just as over either way.
       const localExpiry = cm.getTrialExpiresAt();
-      if (localExpiry && new Date(localExpiry).getTime() <= Date.now()) {
+      if (localExpiry && trialTimeIsUp()) {
         await endExpiredTrialRuntime('Trial expired (local clock)');
         const settled = settleExpiredTrial('status poll (local clock)');
         // A licence or key superseded it and the token is gone: answer now,
@@ -12772,10 +12855,20 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
 
       const data = (await res.json()) as any;
+      // The server's time moves the trial clock forward, so a computer clock
+      // wound back cannot stretch the rest of the trial either.
+      try {
+        const { serverNowFromStatus } = require('./services/trialClock') as typeof import('./services/trialClock');
+        const serverNow = serverNowFromStatus(data);
+        if (serverNow !== undefined) require('./services/proAccess').getTrialClock().observe(serverNow);
+      } catch { /* the computer's clock still applies */ }
       // The server's verdict wins: it can end a trial before this machine's
       // clock says so, and /v1/trial/status answers 200 with `expired: true`
       // rather than a 4xx, so this is the one reliable signal.
       if (data?.expired) {
+        // Over by the server's word: stays over even if this computer's clock
+        // is wound back below the expiry (services/trialClock.ts).
+        try { cm.markTrialEnded?.(); } catch { /* the local clock check still applies */ }
         await endExpiredTrialRuntime('Trial expired (server)');
         const settled = settleExpiredTrial('status poll (server)', { serverExpired: true });
         // A superseded token is gone by now; the renderer then drops the card.
@@ -12795,7 +12888,8 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       return { ok: false, error: error.message || 'network_error' };
     }
-  });
+  }
+  safeHandle('trial:status', async () => pollTrialStatus());
 
   // The one-time "everyone may try again" reset (src/lib/trialCampaign.mjs). The
   // server archived every device's trial row; this forgets the local record of it
@@ -12875,9 +12969,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const cm = CredentialsManager.getInstance();
       const token = cm.getTrialToken();
       if (!token) return { hasToken: false, trialClaimed: cm.getTrialClaimed() };
-      const expired = cm.getTrialExpiresAt()
-        ? new Date(cm.getTrialExpiresAt()!).getTime() < Date.now()
-        : false;
+      const expired = cm.getTrialExpiresAt() ? trialTimeIsUp() : false;
       // Launching after the trial lapsed reaches here and nothing else — the
       // poll never starts, because the renderer returns early on an expired
       // token. NOT awaited: this handler is documented as the no-network startup
@@ -12987,7 +13079,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const action = trialCardActionForChoice(choice);
       if (action && action !== 'byok') {
         const expiresAt = cm.getTrialExpiresAt();
-        const live = !!token && !!expiresAt && new Date(expiresAt).getTime() > Date.now();
+        const live = !!token && !!expiresAt && !trialTimeIsUp();
         funnelTelemetry.track('trial_card', { mode: live ? 'active' : 'expired', action });
       }
       if (!token) return { ok: true }; // no token to report
@@ -13173,7 +13265,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // "End trial anyway" (force): the trial ends and the card says honestly
       // that some data was left behind, so nobody is walled in for good.
       const byokExpiresAt = cm.getTrialExpiresAt();
-      const byokMode = !!cm.getTrialToken() && !!byokExpiresAt && new Date(byokExpiresAt).getTime() > Date.now() ? 'active' : 'expired';
+      const byokMode = !!cm.getTrialToken() && !!byokExpiresAt && !trialTimeIsUp() ? 'active' : 'expired';
       const wiped = wipeTrialProfileData();
       if (!wiped.success) {
         console.warn('[IPC] trial:end-byok: wipe incomplete:', wiped.failed.join(', '), opts?.force ? '(ending anyway)' : '');

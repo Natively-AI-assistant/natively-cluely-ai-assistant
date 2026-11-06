@@ -350,6 +350,13 @@ export declare function inputInUse(): boolean | null
  */
 export declare function isAccessibilityGranted(): boolean
 
+/**
+ * True when the active keyboard layout is a CJK IME (Chinese / Japanese /
+ * Korean), i.e. one where text is composed rather than typed key-for-key.
+ * Windows only; JS reports stealth typing unavailable while it is true.
+ */
+export declare function isImeKeyboardActive(): boolean
+
 export interface MicUser {
   /** macOS: the capturing process. Windows: unknown (the consent store is per app). */
   pid?: number

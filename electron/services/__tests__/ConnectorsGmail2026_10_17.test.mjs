@@ -437,6 +437,8 @@ describe('IPC and the brief context', () => {
             grantShared: () => false,
             fetchImpl: over.fetchImpl ?? fakeGoogle({}).fetchImpl,
             loadFollowUpContext: over.loadFollowUpContext,
+            // Connectors are Pro (2026-11-06); these tests are the Pro path. ConnectorsProGate covers the locked one.
+            connectorsAllowed: () => true,
         });
         return { handlers, ...u };
     }

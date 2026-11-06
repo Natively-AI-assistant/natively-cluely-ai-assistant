@@ -19,6 +19,7 @@ import type { AutoSendDestination, AutoSendRuleInfo, DeliveryInfo } from '../../
 import type { CrmService, OutputResult } from '../../../src/types/meetingOutputs';
 import { readTextFileSync, writeFileAtomicSync, type AtomicFileDeps } from './atomicFile';
 import { CRM_LABELS } from './crm';
+import { checkAllowed } from './connectorAccess';
 
 export const AUTOSEND_FILE = 'connector-rules.json';
 export const MAX_AUTOSEND_RULES = 50;
@@ -61,6 +62,8 @@ export interface AutoSendDeps {
     now?: () => number;
     /** Lock-retry stand-ins for atomicFile (tests). */
     fileDeps?: AtomicFileDeps;
+    /** Connectors are Pro or trial (connectorAccess.ts), asked when a queued run starts. Absent: allowed. */
+    allowed?: () => boolean;
 }
 
 const CRMS: readonly CrmService[] = ['hubspot', 'attio', 'affinity', 'salesforce', 'pipedrive'];
@@ -250,6 +253,7 @@ export class AutoSendRules {
 
     private async runRules(meetingId: string): Promise<void> {
         if (typeof meetingId !== 'string' || !meetingId) return;
+        if (this.deps.allowed !== undefined && !checkAllowed(this.deps.allowed)) return;
         const rules = (this.load() || []).filter((r) => r.enabled && !r.sentMeetingIds.includes(meetingId));
         if (!rules.length) return;
         let folders: string[] = [];

@@ -92,6 +92,8 @@ export const GmailPanel: React.FC<{ status: GmailStatus | null; onStatus: (s: Gm
                         <SettingsSwitch
                             checked={status.briefsEnabled}
                             label={t('Use email in meeting briefs')}
+                            // Connectors are Pro: off can always be pressed, on needs Pro or a trial.
+                            disabled={!!status.locked && !status.briefsEnabled}
                             onChange={() => void capi()?.setGmailBriefsEnabled(!status.briefsEnabled).then((s) => s && onStatus(s))}
                         />
                     ) : undefined}

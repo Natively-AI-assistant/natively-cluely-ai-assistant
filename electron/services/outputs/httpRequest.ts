@@ -141,6 +141,7 @@ export function describeConnectionError(kind: ConnectionErrorKind | undefined, s
         case 'server': return `${service} is having trouble right now. Try again in a few minutes.`;
         case 'too_large': return `This is too large to send to ${service}.`;
         case 'storage_unavailable': return 'This computer has no secure storage available, so the token is kept until Natively quits.';
+        case 'pro_required': return `${service} is a connector, and connectors are part of Natively Pro. Upgrade in Settings, Plans & Billing.`;
         default: return `Something went wrong talking to ${service}. Try again.`;
     }
 }

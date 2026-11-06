@@ -15,6 +15,7 @@ import type { OutputResult } from '../../../src/types/meetingOutputs';
 import { ApiKeyStore } from './apiKeys';
 import type { SafeStorageLike } from './connectionsStore';
 import { LocalApiController, type LocalApiSource } from './localApi';
+import { connectorsAllowed, requirePro } from './connectorAccess';
 
 type SafeHandle = (channel: string, listener: (event: any, ...args: any[]) => Promise<any> | any) => void;
 /** registerOutputsIpc's guard: answers the launcher window only, `fallback` for any other sender. */
@@ -30,6 +31,8 @@ export interface LocalApiIpcDeps {
     source: LocalApiSource;
     /** The user's own name, for their transcript lines. */
     selfName?: () => string | undefined;
+    /** Pro or trial (connectorAccess.ts): making a key and reading through the API need it; listing and revoking never do. */
+    connectorsAllowed?: () => boolean;
     /** Tests only. */
     now?: () => number;
     randomPort?: () => number;
@@ -55,7 +58,8 @@ function listing(): { keys: ApiKeyInfo[]; server: LocalApiStatus } {
 export function registerLocalApiIpc(deps: LocalApiIpcDeps): void {
     keys = new ApiKeyStore({ userDataDir: deps.userDataDir, safeStorage: deps.safeStorage, now: deps.now });
     const store = keys;
-    controller = new LocalApiController({ keys: store, source: deps.source, selfName: deps.selfName, now: deps.now, randomPort: deps.randomPort });
+    const allowed = deps.connectorsAllowed ?? connectorsAllowed;
+    controller = new LocalApiController({ keys: store, source: deps.source, selfName: deps.selfName, allowed, now: deps.now, randomPort: deps.randomPort });
     const ctl = controller;
 
     deps.safeHandle(LOCAL_API_CHANNELS.list, deps.guard(LIST_FALLBACK, async () => {
@@ -64,7 +68,7 @@ export function registerLocalApiIpc(deps: LocalApiIpcDeps): void {
         return listing();
     }));
 
-    deps.safeHandle(LOCAL_API_CHANNELS.create, deps.guard(FORBIDDEN, async (_e, input: unknown): Promise<OutputResult & { key?: string; info?: ApiKeyInfo }> => {
+    deps.safeHandle(LOCAL_API_CHANNELS.create, deps.guard(FORBIDDEN, requirePro(allowed, async (_e: unknown, input: unknown): Promise<OutputResult & { key?: string; info?: ApiKeyInfo }> => {
         if (!input || typeof input !== 'object' || Array.isArray(input)) {
             return { ok: false, kind: 'invalid_input', message: 'Describe the key and pick when it should expire.' };
         }
@@ -73,7 +77,7 @@ export function registerLocalApiIpc(deps: LocalApiIpcDeps): void {
         if (!made.ok) return made;
         await ctl.sync();
         return { ok: true, key: made.key, info: made.info };
-    }));
+    })));
 
     deps.safeHandle(LOCAL_API_CHANNELS.revoke, deps.guard(FORBIDDEN, async (_e, id: unknown): Promise<OutputResult> => {
         const r = store.revoke(id);

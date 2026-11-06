@@ -18,18 +18,61 @@ export function isProOrTrialActive(): boolean {
     /* premium module not available */
   }
 
-  // 2. Active free trial (token present and not expired)
+  // 2. Active free trial (token present, not ended, not past its expiry by
+  //    the trial clock, which winding the computer's clock back does not move)
   try {
-    const { CredentialsManager } = require('./CredentialsManager');
-    const cm = CredentialsManager.getInstance();
-    const token = cm.getTrialToken();
-    if (!token) return false;
-    const expiresAt = cm.getTrialExpiresAt();
-    if (!expiresAt) return false;
-    return new Date(expiresAt).getTime() > Date.now();
+    return !trialTimeIsUp();
   } catch {
     return false;
   }
+}
+
+let trialClock: import('./trialClock').TrialClock | null = null;
+
+function credentials(): any {
+  const { CredentialsManager } = require('./CredentialsManager');
+  return CredentialsManager.getInstance();
+}
+
+/** The trial clock (services/trialClock.ts), kept in the credential store. */
+export function getTrialClock(): import('./trialClock').TrialClock {
+  if (trialClock) return trialClock;
+  const { createTrialClock } = require('./trialClock') as typeof import('./trialClock');
+  trialClock = createTrialClock({
+    startedAt: () => credentials().getTrialStartedAt?.(),
+    load: () => credentials().getTrialClockMs?.(),
+    save: (ms) => credentials().setTrialClockMs?.(ms),
+  });
+  return trialClock;
+}
+
+/**
+ * Is the free trial over (or absent)? The one answer for every place that asks
+ * whether the trial still runs: ended by the server, or past its expiry by the
+ * trial clock. Marks it ended the first time it is found over, so the answer
+ * cannot flip back when the computer's clock is wound back later. Any failure
+ * reads as over.
+ */
+export function trialTimeIsUp(): boolean {
+  try {
+    const cm = credentials();
+    const token = cm.getTrialToken();
+    const expiresAt = cm.getTrialExpiresAt();
+    const endedAt = typeof cm.getTrialEndedAt === 'function' ? cm.getTrialEndedAt() : undefined;
+    if (!token || !expiresAt) return true;
+    if (endedAt) return true;
+    const { trialIsOver } = require('./trialClock') as typeof import('./trialClock');
+    const over = trialIsOver({ token, expiresAt, endedAt }, getTrialClock().now());
+    if (over && typeof cm.markTrialEnded === 'function') cm.markTrialEnded();
+    return over;
+  } catch {
+    return true;
+  }
+}
+
+/** For tests: forget the trial clock (a new CredentialsManager stand-in). */
+export function resetTrialClockForTests(): void {
+  trialClock = null;
 }
 
 /**
@@ -55,4 +98,35 @@ export function userBioForAnswers(): string {
   } catch {
     return '';
   }
+}
+
+/**
+ * The startup licence re-check (license:check-premium-async). Asks the server
+ * through `isPremiumAsync`; when that revokes a licence the local file still
+ * held (a lapsed subscription, a refund) and no trial is running, `onLost`
+ * stands the Pro features down for this session. Resolves to what
+ * `isPremiumAsync` said; any failure reads as no licence, and `onLost` is never
+ * called for a user who had no licence to begin with. `onRestored` runs when a
+ * licence held as revoked is valid again (Dodo re-enables a key once a held
+ * payment clears).
+ */
+export async function recheckLicence(
+  license: { isPremium(): boolean; isPremiumAsync(): Promise<boolean> },
+  deps: { stillAllowed(): boolean; onLost(): void; onRestored?(): void },
+): Promise<boolean> {
+  let wasPremium = false;
+  try { wasPremium = license.isPremium() === true; } catch { wasPremium = false; }
+  let active = false;
+  try { active = (await license.isPremiumAsync()) === true; } catch { return false; }
+  if (wasPremium && !active) {
+    let allowed = false;
+    try { allowed = deps.stillAllowed() === true; } catch { allowed = false; }
+    if (!allowed) {
+      try { deps.onLost(); } catch { /* standing down is best effort */ }
+    }
+  }
+  if (!wasPremium && active) {
+    try { deps.onRestored?.(); } catch { /* telling the windows is best effort */ }
+  }
+  return active;
 }

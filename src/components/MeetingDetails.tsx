@@ -2589,7 +2589,8 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const [gmailSend, setGmailSend] = useState<{ connected: boolean; state: 'idle' | 'confirm' | 'sending' | 'sent'; message?: string }>({ connected: false, state: 'idle' });
     useEffect(() => {
         let live = true;
-        void window.electronAPI?.connectors?.getGmailStatus?.().then((g) => { if (live && g) setGmailSend((cur) => ({ ...cur, connected: !!g.connected })); }).catch(() => {});
+        // Locked (no Pro or trial: connectors are Pro) sends through Gmail's compose window instead, as when not connected.
+        void window.electronAPI?.connectors?.getGmailStatus?.().then((g) => { if (live && g) setGmailSend((cur) => ({ ...cur, connected: !!g.connected && !g.locked })); }).catch(() => {});
         return () => { live = false; };
     }, [meeting.id]);
 

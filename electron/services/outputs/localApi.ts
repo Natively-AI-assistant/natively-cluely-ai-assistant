@@ -20,6 +20,7 @@ import * as http from 'http';
 import type { LocalApiStatus } from '../../../src/types/connectors';
 import { buildNotesDocument, notesToMarkdown, plainTitle, type NotesDocument } from './notesDocument';
 import { MCP_SCAN_MEETINGS, isLoopbackHost, randomMcpPort, type MeetingSource } from './mcpServer';
+import { CONNECTORS_PRO_HTTP, checkAllowed } from './connectorAccess';
 
 export const LOCAL_API_HOST = '127.0.0.1';
 export const LOCAL_API_PREFIX = '/v1';
@@ -48,6 +49,11 @@ export interface LocalApiOptions {
     selfName?: () => string | undefined;
     /** Called after a refused key, so the owner can stop the server when no active key remains. */
     onRefused?: () => void;
+    /**
+     * Connectors are Pro or trial (connectorAccess.ts), asked per request after
+     * the key check. False answers 403 pro_required. Absent: always allowed.
+     */
+    allowed?: () => boolean;
 }
 
 export interface RunningLocalApi {
@@ -258,6 +264,9 @@ export function createLocalApiListener(opts: LocalApiOptions & { boundPort: () =
             try { opts.onRefused?.(); } catch { /* never affects the answer */ }
             return sendError(res, new ApiError(401, 'unauthorized', 'Send an active personal API key as "Authorization: Bearer nat_…". Make one in Natively, Settings, Connectors, API keys.'), { 'WWW-Authenticate': 'Bearer', ...closeAfter });
         }
+        if (opts.allowed && !checkAllowed(opts.allowed)) {
+            return sendError(res, new ApiError(CONNECTORS_PRO_HTTP.status, CONNECTORS_PRO_HTTP.code, CONNECTORS_PRO_HTTP.message), closeAfter);
+        }
         if (req.method !== 'GET') {
             return sendError(res, new ApiError(405, 'method_not_allowed', 'This API only reads. Use GET.'), { Allow: 'GET', ...closeAfter });
         }
@@ -326,6 +335,8 @@ export interface LocalApiControllerDeps {
     keys: LocalApiKeys;
     source: LocalApiSource;
     selfName?: () => string | undefined;
+    /** Pro or trial, passed to the server (LocalApiOptions.allowed). */
+    allowed?: () => boolean;
     /** A port in 49152–65535; tests pass their own. */
     randomPort?: () => number;
     now?: () => number;
@@ -390,6 +401,7 @@ export class LocalApiController {
                     verify: (k) => this.deps.keys.verify(k),
                     source: this.deps.source,
                     selfName: this.deps.selfName,
+                    ...(this.deps.allowed ? { allowed: this.deps.allowed } : {}),
                     onRefused: () => { if (!this.deps.keys.hasActiveKeys()) void this.sync(); },
                 });
                 this.error = undefined;

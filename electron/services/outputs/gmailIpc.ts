@@ -13,6 +13,7 @@ import type { OutputResult } from '../../../src/types/meetingOutputs';
 import type { GmailStatus } from '../../../src/types/connectors';
 import { GmailError, GmailService, MAX_BODY_BYTES, MAX_RECIPIENTS, type GmailDeps } from './gmail';
 import type { FetchLike } from './httpRequest';
+import { checkAllowed, connectorsAllowed, requirePro } from './connectorAccess';
 
 type SafeHandle = (channel: string, listener: (event: any, ...args: any[]) => Promise<any> | any) => void;
 type Guard = <A extends any[]>(fallback: unknown, fn: (event: any, ...args: A) => unknown) => (event: any, ...args: A) => Promise<unknown>;
@@ -32,6 +33,8 @@ export interface GmailIpcDeps {
     grantShared?(account: string | undefined): boolean;
     fetchImpl?: FetchLike;
     now?(): number;
+    /** Pro or trial (connectorAccess.ts): connect, briefs on and send need it; status, cancel and disconnect never do. */
+    connectorsAllowed?: () => boolean;
 }
 
 export const GMAIL_CHANNELS = {
@@ -50,6 +53,7 @@ const FORBIDDEN: OutputResult = { ok: false, kind: 'forbidden', message: 'Not av
 const NO_STATUS: GmailStatus = { available: false, connected: false, briefsEnabled: false };
 
 let service: GmailService | null = null;
+let allowed: () => boolean = () => false;
 
 /** The app's Gmail service, once registerGmailIpc ran. */
 export function getGmailService(): GmailService | null {
@@ -95,11 +99,15 @@ export function registerGmailIpc(deps: GmailIpcDeps): GmailService {
     });
     service = gmail;
     const { safeHandle, guard } = deps;
+    const gate = deps.connectorsAllowed ?? connectorsAllowed;
+    allowed = gate;
+    const proGuard: Guard = (fallback, fn) => guard(fallback, requirePro(gate, fn));
     let signIn: AbortController | null = null;
 
-    safeHandle(GMAIL_CHANNELS.status, guard(NO_STATUS, async (): Promise<GmailStatus> => gmail.status()));
+    const withAccess = (s: GmailStatus): GmailStatus => (checkAllowed(gate) ? s : { ...s, locked: true });
+    safeHandle(GMAIL_CHANNELS.status, guard(NO_STATUS, async (): Promise<GmailStatus> => withAccess(gmail.status())));
 
-    safeHandle(GMAIL_CHANNELS.connect, guard(FORBIDDEN, async (): Promise<OutputResult> => {
+    safeHandle(GMAIL_CHANNELS.connect, proGuard(FORBIDDEN, async (): Promise<OutputResult> => {
         // One sign-in at a time: a second Connect replaces the first, whose port closes.
         signIn?.abort();
         const ctl = new AbortController();
@@ -133,10 +141,12 @@ export function registerGmailIpc(deps: GmailIpcDeps): GmailService {
 
     safeHandle(GMAIL_CHANNELS.setBriefs, guard(NO_STATUS, async (_e, enabled: unknown): Promise<GmailStatus> => {
         if (typeof enabled !== 'boolean') return gmail.status();
-        return gmail.setBriefsEnabled(enabled);
+        // Turning briefs off is always allowed; on needs Pro or a trial.
+        if (enabled && !checkAllowed(gate)) return withAccess(gmail.status());
+        return withAccess(gmail.setBriefsEnabled(enabled));
     }));
 
-    safeHandle(GMAIL_CHANNELS.sendFollowUp, guard(FORBIDDEN, async (_e, input: unknown): Promise<OutputResult & { messageUrl?: string }> => {
+    safeHandle(GMAIL_CHANNELS.sendFollowUp, proGuard(FORBIDDEN, async (_e, input: unknown): Promise<OutputResult & { messageUrl?: string }> => {
         const checked = checkFollowUpInput(input);
         if ('message' in checked) return { ok: false, kind: 'invalid_input', message: checked.message };
         if (deps.loadFollowUpContext) {
@@ -179,6 +189,8 @@ export async function gmailBriefContext(attendeeEmails: string[]): Promise<Array
     const ctl = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
+        // Connectors are Pro: no Gmail read for a brief without it.
+        if (!checkAllowed(allowed)) return [];
         if (!gmail.status().briefsEnabled) return [];
         const read = gmail.threadsWithPeople(Array.isArray(attendeeEmails) ? attendeeEmails : [], { signal: ctl.signal, perRequestTimeoutMs: 5_000 });
         const budget = new Promise<null>((resolve) => { timer = setTimeout(() => { ctl.abort(); resolve(null); }, BRIEF_EMAIL_BUDGET_MS); });
@@ -196,4 +208,5 @@ export async function gmailBriefContext(attendeeEmails: string[]): Promise<Array
 /** For tests: forget the registered service. */
 export function resetGmailServiceForTests(): void {
     service = null;
+    allowed = () => false;
 }

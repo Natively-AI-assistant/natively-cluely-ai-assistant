@@ -112,6 +112,8 @@ function registerFake({ dir, c, randomPort } = {}) {
         safeStorage: fakeSafeStorage(),
         source,
         selfName: () => 'Evin',
+        // Connectors are Pro (2026-11-06); these tests are the Pro path. ConnectorsProGate covers the locked one.
+        connectorsAllowed: () => true,
         now: c?.now,
         randomPort,
     });

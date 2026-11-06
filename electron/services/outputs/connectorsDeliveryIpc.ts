@@ -13,6 +13,7 @@ import type { FetchLike } from './httpRequest';
 import type { NotesDocument } from './notesDocument';
 import { Webhooks, type WebhooksDeps } from './webhooks';
 import { AutoSendRules, type AutoSendSender } from './autoSend';
+import { checkAllowed, connectorsAllowed, requirePro } from './connectorAccess';
 
 type SafeHandle = (channel: string, listener: (event: any, ...args: any[]) => Promise<any> | any) => void;
 type Guard = <A extends any[]>(fallback: unknown, fn: (event: any, ...args: A) => unknown) => (event: any, ...args: A) => Promise<unknown>;
@@ -25,6 +26,12 @@ export interface ConnectorsDeliveryDeps {
     foldersOfMeeting: (meetingId: string) => string[];
     listFolders: () => Array<{ id: string; name: string }>;
     autoSendSender: AutoSendSender;
+    /**
+     * Pro or trial (connectorAccess.ts). Without it nothing is sent (webhooks,
+     * automatic rules) and nothing can be made or tested; listing and deleting
+     * still work.
+     */
+    connectorsAllowed?: () => boolean;
     /** Defaults to Electron's safeStorage (Keychain on macOS, DPAPI on Windows). */
     safeStorage?: WebhooksDeps['safeStorage'];
     /** Test stand-ins. */
@@ -52,12 +59,17 @@ const FORBIDDEN: OutputResult = { ok: false, kind: 'forbidden', message: 'Not av
 
 let webhooks: Webhooks | null = null;
 let rules: AutoSendRules | null = null;
+let allowed: () => boolean = () => false;
+
+const mayDeliver = (): boolean => checkAllowed(allowed);
 
 /** The hooks the main process calls. Before registration they do nothing. */
 export const connectorsDelivery = {
     /** A meeting's notes were generated (or regenerated): webhooks, then the automatic sending rules. Never rejects. */
     async notesReady(meetingId: string): Promise<void> {
         if (typeof meetingId !== 'string' || !meetingId) return;
+        // Connectors are Pro: a free user's leftover webhooks and rules stay, silent.
+        if (!mayDeliver()) return;
         await Promise.all([
             webhooks ? webhooks.dispatchEvent('note.generated', meetingId) : undefined,
             rules ? rules.onNotesReady(meetingId) : undefined,
@@ -65,6 +77,7 @@ export const connectorsDelivery = {
     },
     /** Someone edited the notes in Natively: one note.edited a minute after the last change. */
     notesEdited(meetingId: string): void {
+        if (!mayDeliver()) return;
         try { webhooks?.noteEdited(meetingId); } catch { console.warn('[ConnectorsDelivery] notesEdited failed'); }
     },
     /** App quit: drop pending edit timers. */
@@ -82,6 +95,9 @@ function folderOptions(raw: unknown): FolderOption[] {
 
 export function registerConnectorsDeliveryIpc(deps: ConnectorsDeliveryDeps): { webhooks: Webhooks; rules: AutoSendRules } {
     const { safeHandle, guard } = deps;
+    const gate = deps.connectorsAllowed ?? connectorsAllowed;
+    allowed = gate;
+    const proGuard: Guard = (fallback, fn) => guard(fallback, requirePro(gate, fn));
     const safeStorage = deps.safeStorage ?? (require('electron') as typeof import('electron')).safeStorage;
     webhooks = new Webhooks({
         userDataDir: deps.userDataDir,
@@ -92,6 +108,7 @@ export function registerConnectorsDeliveryIpc(deps: ConnectorsDeliveryDeps): { w
         now: deps.now,
         wait: deps.wait,
         timers: deps.timers,
+        allowed: gate,
     });
     rules = new AutoSendRules({
         userDataDir: deps.userDataDir,
@@ -99,6 +116,7 @@ export function registerConnectorsDeliveryIpc(deps: ConnectorsDeliveryDeps): { w
         foldersOfMeeting: deps.foldersOfMeeting,
         meetingTitle: async (meetingId) => (await deps.loadDoc(meetingId))?.title,
         now: deps.now,
+        allowed: gate,
     });
     const wh = webhooks;
     const rs = rules;
@@ -109,16 +127,16 @@ export function registerConnectorsDeliveryIpc(deps: ConnectorsDeliveryDeps): { w
 
     // Webhooks and Zapier
     safeHandle('connectors:webhooks-list', guard([], async () => wh.list()));
-    safeHandle('connectors:webhook-create', guard(FORBIDDEN, async (_e, input: unknown) => wh.create(input)));
-    safeHandle('connectors:webhook-update', guard(FORBIDDEN, async (_e, id: unknown, patch: unknown) => wh.update(id, patch)));
+    safeHandle('connectors:webhook-create', proGuard(FORBIDDEN, async (_e, input: unknown) => wh.create(input)));
+    safeHandle('connectors:webhook-update', proGuard(FORBIDDEN, async (_e, id: unknown, patch: unknown) => wh.update(id, patch)));
     safeHandle('connectors:webhook-delete', guard(FORBIDDEN, async (_e, id: unknown) => wh.remove(id)));
-    safeHandle('connectors:webhook-test', guard(FORBIDDEN, async (_e, id: unknown) => wh.test(id)));
-    safeHandle('connectors:webhook-rotate', guard(FORBIDDEN, async (_e, id: unknown) => wh.rotateSecret(id)));
+    safeHandle('connectors:webhook-test', proGuard(FORBIDDEN, async (_e, id: unknown) => wh.test(id)));
+    safeHandle('connectors:webhook-rotate', proGuard(FORBIDDEN, async (_e, id: unknown) => wh.rotateSecret(id)));
 
     // Automatic sending
     safeHandle('connectors:autosend-list', guard([], async () => rs.list()));
-    safeHandle('connectors:autosend-create', guard(FORBIDDEN, async (_e, input: unknown) => rs.create(input)));
-    safeHandle('connectors:autosend-update', guard(FORBIDDEN, async (_e, id: unknown, patch: unknown) => rs.update(id, patch)));
+    safeHandle('connectors:autosend-create', proGuard(FORBIDDEN, async (_e, input: unknown) => rs.create(input)));
+    safeHandle('connectors:autosend-update', proGuard(FORBIDDEN, async (_e, id: unknown, patch: unknown) => rs.update(id, patch)));
     safeHandle('connectors:autosend-delete', guard(FORBIDDEN, async (_e, id: unknown) => rs.remove(id)));
 
     return { webhooks: wh, rules: rs };

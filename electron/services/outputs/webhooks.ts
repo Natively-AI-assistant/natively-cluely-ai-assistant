@@ -24,6 +24,7 @@ import type { ConnectionErrorKind, OutputResult } from '../../../src/types/meeti
 import { ConnectionError, errorKindOf, httpRequest, type FetchLike } from './httpRequest';
 import { notesToMarkdown, type NotesDocument } from './notesDocument';
 import { loadSecretJson, saveSecretJson } from '../calendar/providers/secureFile';
+import { checkAllowed } from './connectorAccess';
 
 export const WEBHOOKS_FILE = 'webhooks.enc';
 export const MAX_WEBHOOKS = 20;
@@ -97,6 +98,12 @@ export interface WebhooksDeps {
     wait?: (ms: number) => Promise<void>;
     /** For the edit debounce; tests drive it by hand. */
     timers?: { setTimeout: (fn: () => void, ms: number) => unknown; clearTimeout: (handle: unknown) => void };
+    /**
+     * Connectors are Pro or trial (connectorAccess.ts). Asked when an event is
+     * dispatched and again before every try, so an edit timer or a retry wait
+     * that ends after Pro or the trial does sends nothing. Absent: allowed.
+     */
+    allowed?: () => boolean;
 }
 
 // ── Pure pieces ──────────────────────────────────────────────────────────
@@ -492,12 +499,17 @@ export class Webhooks {
         });
     }
 
-    /** Up to three tries; stops early when the endpoint is removed or turned off meanwhile. */
+    private mayDeliver(): boolean {
+        return this.deps.allowed === undefined || checkAllowed(this.deps.allowed);
+    }
+
+    /** Up to three tries; stops early when the endpoint is removed or turned off, or Pro ends, meanwhile. */
     private async deliver(endpointId: string, payload: WebhookPayload): Promise<void> {
         const msgId = newMessageId();
         const body = JSON.stringify(payload);
         const meetingTitle = payload.data.title;
         for (let attempt = 0; ; attempt++) {
+            if (!this.mayDeliver()) return;
             const endpoint = this.current(endpointId);
             if (!endpoint || !endpoint.enabled) return;
             try {
@@ -532,6 +544,7 @@ export class Webhooks {
         try {
             if (!WEBHOOK_EVENTS.includes(event) || typeof meetingId !== 'string' || !meetingId) return;
             if (event === 'note.generated') this.cancelEdit(meetingId);
+            if (!this.mayDeliver()) return;
             const all = this.load() || [];
             if (!all.some((r) => r.enabled && r.events.includes(event))) return;
             let folders: string[] = [];

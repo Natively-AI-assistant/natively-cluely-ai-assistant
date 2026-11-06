@@ -299,12 +299,23 @@ impl Task for ValidateDodoTask {
                             return Ok("OK".to_string());
                         }
 
-                        // Any 4xx with valid=false means the key is definitively revoked/expired
-                        if status >= 400 || !valid {
+                        // A rate limit or a Dodo outage says nothing about the key.
+                        // These used to fall through to REVOKED (their JSON has no
+                        // `valid`, which read as false), so a 429 or a 5xx deleted a
+                        // paying user's licence. Tagged network: the caller fails open.
+                        if status == 429 || status >= 500 {
+                            return Ok(format!("ERR:dodo:network:HTTP {}", status));
+                        }
+
+                        // An explicit answer about this key: 200 with valid=false
+                        // (disabled, expired, on hold), or a 4xx refusing it.
+                        if (status == 200 && json["valid"].as_bool() == Some(false))
+                            || (400..500).contains(&status)
+                        {
                             return Ok("REVOKED".to_string());
                         }
 
-                        Ok("ERR:dodo:validate unexpected state".to_string())
+                        Ok(format!("ERR:dodo:validate unexpected state (HTTP {})", status))
                     }
                     Err(_) => {
                         println!(

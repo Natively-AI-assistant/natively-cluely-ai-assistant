@@ -38,6 +38,7 @@ import { WritingStyleService, migrateLegacyStyleFile, removeModeStyleFile, type 
 import { applyFollowUpEdit, currentDraft, followUpSample } from './followUpEdit';
 import { safeDiagramFileStem, saveDialogPlacement, uniqueDiagramFileName } from '../diagram/diagramExport';
 import { nativePromptsBlocked } from '../stealthPromptGate';
+import { PRO_REQUIRED, checkAllowed, connectorsAllowed, requirePro } from './connectorAccess';
 
 type SafeHandle = (channel: string, listener: (event: any, ...args: any[]) => Promise<any> | any) => void;
 
@@ -286,6 +287,8 @@ async function saveExport(appState: AppState, event: any, doc: NotesDocument, fo
 // ── MCP lifecycle ────────────────────────────────────────────────────────
 
 let mcpServer: RunningMcpServer | null = null;
+/** The gate registerOutputsIpc was given (connectorAccess.ts by default), read per MCP request. */
+let mcpGate: () => boolean = connectorsAllowed;
 let mcpError: string | undefined;
 let mcpStarting: Promise<void> | null = null;
 
@@ -325,6 +328,8 @@ async function startMcp(): Promise<void> {
             mcpServer = await startMcpServer({
                 port: candidate,
                 token: () => getConnectionsStore().mcpSettings().token || '',
+                // Pro or trial, asked per request: a trial that runs out locks the server at once.
+                allowed: () => checkAllowed(mcpGate),
                 source: databaseMeetingSource(),
                 version: app.getVersion(),
                 selfName: () => selfIdentity().name,
@@ -371,7 +376,12 @@ export function stopMcpServerOnQuit(): void {
 
 // ── Handlers ─────────────────────────────────────────────────────────────
 
-export function registerOutputsIpc(appState: AppState, safeHandle: SafeHandle): void {
+export function registerOutputsIpc(
+    appState: AppState,
+    safeHandle: SafeHandle,
+    /** Connectors are Pro or trial (connectorAccess.ts); tests pass their own. */
+    access: { connectorsAllowed?: () => boolean } = {},
+): void {
     const fromLauncher = (event: any): boolean => {
         try {
             const w = appState.getWindowHelper().getLauncherWindow();
@@ -384,6 +394,11 @@ export function registerOutputsIpc(appState: AppState, safeHandle: SafeHandle): 
         async (event: any, ...args: A): Promise<unknown> => (fromLauncher(event) ? fn(event, ...args) : fallback);
     const FORBIDDEN: OutputResult = { ok: false, kind: 'forbidden', message: 'Not available here.' };
     const MCP_OFF: McpServerStatus = { enabled: false, running: false };
+    // Connect and send need Pro or a trial; status, disconnect and remove never do.
+    const gateFn = access.connectorsAllowed ?? connectorsAllowed;
+    mcpGate = gateFn;
+    const allowed = (): boolean => checkAllowed(gateFn);
+    const proGuard = <A extends any[]>(fallback: unknown, fn: (event: any, ...args: A) => unknown) => guard(fallback, requirePro(allowed, fn));
     const llm = () => { try { return appState.processingHelper.getLLMHelper(); } catch { return null; } };
 
     // Browser sign-in (connectorOAuth.ts) and the tokens it keeps fresh.
@@ -477,6 +492,7 @@ export function registerOutputsIpc(appState: AppState, safeHandle: SafeHandle): 
         };
         return {
             secureStorage: st.isPersistent(),
+            pro: allowed(),
             slack: { webhooks: s.slack.webhooks.map(({ id, label }) => ({ id, label })) },
             notion: { connected: !!s.notion?.token, ...(s.notion?.parent ? { parent: s.notion.parent } : {}), ...via('notion') },
             hubspot: { connected: !!s.hubspot?.token, ...via('hubspot') },
@@ -490,7 +506,7 @@ export function registerOutputsIpc(appState: AppState, safeHandle: SafeHandle): 
     }));
 
     safeHandle('outputs:oauth-services', guard({ slack: false, notion: false, hubspot: false, salesforce: false, pipedrive: false, attio: false }, async () => oauthServices({ apiBase: nativelyApiBase() })));
-    safeHandle('outputs:oauth-connect', guard(FORBIDDEN, async (_e, service: unknown): Promise<OutputResult> => {
+    safeHandle('outputs:oauth-connect', proGuard(FORBIDDEN, async (_e, service: unknown): Promise<OutputResult> => {
         if (!isOAuthConnector(service)) return { ok: false, kind: 'invalid_input', message: 'Unknown service.' };
         // One sign-in at a time: a second Connect replaces the first, whose port closes.
         browserSignIn?.abort();
@@ -512,7 +528,7 @@ export function registerOutputsIpc(appState: AppState, safeHandle: SafeHandle): 
         browserSignIn = null;
     }));
 
-    safeHandle('outputs:slack-add', guard(FORBIDDEN, async (_e, label: unknown, url: unknown) => {
+    safeHandle('outputs:slack-add', proGuard(FORBIDDEN, async (_e, label: unknown, url: unknown) => {
         const u = typeof url === 'string' ? url.trim() : '';
         if (!isSlackWebhookUrl(u)) {
             return { ok: false, kind: 'invalid_input', message: 'That is not a Slack webhook address. It starts with https://hooks.slack.com/services/.' };
@@ -533,7 +549,7 @@ export function registerOutputsIpc(appState: AppState, safeHandle: SafeHandle): 
         if (typeof id === 'string') getConnectionsStore().removeSlackWebhook(id);
         return { ok: true };
     }));
-    safeHandle('outputs:slack-test', guard(FORBIDDEN, async (_e, id: unknown) => {
+    safeHandle('outputs:slack-test', proGuard(FORBIDDEN, async (_e, id: unknown) => {
         const url = typeof id === 'string' ? getConnectionsStore().slackWebhookUrl(id) : null;
         if (!url) return fail('not_connected', 'Slack');
         try { await testSlackWebhook(url); return { ok: true, message: 'Slack accepts this webhook.' }; } catch (err) {
@@ -549,7 +565,7 @@ export function registerOutputsIpc(appState: AppState, safeHandle: SafeHandle): 
         if (service === 'clearbit') return testEnrichment({ token });
         return testCrm(service, { token, ...(instanceUrl ? { instanceUrl } : {}) });
     };
-    safeHandle('outputs:save-token', guard(FORBIDDEN, async (_e, service: unknown, token: unknown, instanceUrl: unknown) => {
+    safeHandle('outputs:save-token', proGuard(FORBIDDEN, async (_e, service: unknown, token: unknown, instanceUrl: unknown) => {
         if (!isTokenService(service)) return { ok: false, kind: 'invalid_input', message: 'Unknown service.' };
         const t = typeof token === 'string' ? token.trim() : '';
         const label = SERVICE_LABEL[service];
@@ -568,7 +584,7 @@ export function registerOutputsIpc(appState: AppState, safeHandle: SafeHandle): 
         const persisted = getConnectionsStore().setToken(service, t);
         return { ok: true, ...(persisted ? {} : { message: describeConnectionError('storage_unavailable', label) }) };
     }));
-    safeHandle('outputs:test', guard(FORBIDDEN, async (_e, service: unknown) => {
+    safeHandle('outputs:test', proGuard(FORBIDDEN, async (_e, service: unknown) => {
         if (!isTokenService(service)) return { ok: false, kind: 'invalid_input', message: 'Unknown service.' };
         const label = SERVICE_LABEL[service];
         if (!getConnectionsStore().token(service)) return fail('not_connected', label);
@@ -581,13 +597,13 @@ export function registerOutputsIpc(appState: AppState, safeHandle: SafeHandle): 
         getConnectionsStore().clear(service);
         return { ok: true };
     }));
-    safeHandle('outputs:notion-search', guard(FORBIDDEN, async (_e, query: unknown) => {
+    safeHandle('outputs:notion-search', proGuard(FORBIDDEN, async (_e, query: unknown) => {
         if (!getConnectionsStore().token('notion')) return fail('not_connected', 'Notion');
         try {
             return { ok: true, results: await withToken('notion', (token) => searchNotion(typeof query === 'string' ? query : '', { token })) };
         } catch (err) { return failOn(err, 'notion'); }
     }));
-    safeHandle('outputs:notion-set-parent', guard(FORBIDDEN, async (_e, parent: unknown) => {
+    safeHandle('outputs:notion-set-parent', proGuard(FORBIDDEN, async (_e, parent: unknown) => {
         const p = parent as Partial<NotionParentInfo> | null;
         const id = normaliseNotionId(p?.id);
         if (!p || (p.type !== 'page' && p.type !== 'database') || !id) return { ok: false, kind: 'invalid_input', message: 'Pick a page or database from the list.' };
@@ -597,13 +613,13 @@ export function registerOutputsIpc(appState: AppState, safeHandle: SafeHandle): 
     }));
 
     // Slack send
-    safeHandle('outputs:slack-compose', guard(FORBIDDEN, async (_e, meetingId: unknown, opts: any) => {
+    safeHandle('outputs:slack-compose', proGuard(FORBIDDEN, async (_e, meetingId: unknown, opts: any) => {
         const doc = loadDoc(meetingId);
         if (!doc) return NO_MEETING;
         if (!hasNotes(doc)) return NO_NOTES;
         return { ok: true, title: doc.title, text: composeSlackDraft(doc, { includeActionItems: opts?.includeActionItems !== false }) };
     }));
-    safeHandle('outputs:slack-send', guard(FORBIDDEN, async (_e, payload: any) => {
+    safeHandle('outputs:slack-send', proGuard(FORBIDDEN, async (_e, payload: any) => {
         const url = typeof payload?.webhookId === 'string' ? getConnectionsStore().slackWebhookUrl(payload.webhookId) : null;
         if (!url) return fail('not_connected', 'Slack');
         const doc = loadDoc(payload?.meetingId);
@@ -627,7 +643,7 @@ export function registerOutputsIpc(appState: AppState, safeHandle: SafeHandle): 
 
     // Notion send
     const PARTIAL_PAGE = 'The page was made in Notion, but only part of the notes reached it. Add the rest to that page, or start over with a new page.';
-    safeHandle('outputs:notion-send', guard(FORBIDDEN, async (_e, meetingId: unknown, opts: any) => {
+    safeHandle('outputs:notion-send', proGuard(FORBIDDEN, async (_e, meetingId: unknown, opts: any) => {
         const n = getConnectionsStore().read().notion;
         if (!n?.token) return fail('not_connected', 'Notion');
         if (!n.parent) return { ok: false, kind: 'invalid_input', message: 'Pick where Notion pages go in Settings, Connectors.' };
@@ -657,7 +673,7 @@ export function registerOutputsIpc(appState: AppState, safeHandle: SafeHandle): 
         }
     }));
     // The rest of a half-made page, appended to that same page.
-    safeHandle('outputs:notion-resume', guard(FORBIDDEN, async (_e, meetingId: unknown) => {
+    safeHandle('outputs:notion-resume', proGuard(FORBIDDEN, async (_e, meetingId: unknown) => {
         const n = getConnectionsStore().read().notion;
         if (!n?.token) return fail('not_connected', 'Notion');
         const mid = typeof meetingId === 'string' ? meetingId : '';
@@ -673,7 +689,7 @@ export function registerOutputsIpc(appState: AppState, safeHandle: SafeHandle): 
     }));
 
     // Attendee enrichment: opt-in, on this call only, results become People-page suggestions.
-    safeHandle('outputs:enrich-attendees', guard(FORBIDDEN, async (_e, meetingId: unknown) => {
+    safeHandle('outputs:enrich-attendees', proGuard(FORBIDDEN, async (_e, meetingId: unknown) => {
         const token = getConnectionsStore().token('clearbit');
         if (!token) return fail('not_connected', ENRICHMENT_LABEL);
         const doc = loadDoc(meetingId);
@@ -740,6 +756,8 @@ export function registerOutputsIpc(appState: AppState, safeHandle: SafeHandle): 
         return instanceUrl ? { token, instanceUrl } : null;
     };
     safeHandle('outputs:crm-preview', guard({ ok: false, kind: 'forbidden', service: 'hubspot', attendees: [] } as CrmMatchPreview, async (_e, meetingId: unknown, service: unknown): Promise<CrmMatchPreview> => {
+        // Pro first, before anything is read: the same order as every proGuard handler.
+        if (!allowed()) return { ...PRO_REQUIRED, service: isCrm(service) ? service : 'hubspot', attendees: [] };
         if (!isCrm(service)) return { ok: false, kind: 'invalid_input', message: 'Unknown CRM.', service: 'hubspot', attendees: [] };
         const token = getConnectionsStore().token(service);
         if (!token || !crmOpts(service, token)) return { ...fail('not_connected', CRM_LABELS[service]), service, attendees: [] };
@@ -756,7 +774,7 @@ export function registerOutputsIpc(appState: AppState, safeHandle: SafeHandle): 
             return { ...failOn(err, service), service, attendees: [] };
         }
     }));
-    safeHandle('outputs:crm-send', guard(FORBIDDEN, async (_e, meetingId: unknown, service: unknown, emails: unknown) => {
+    safeHandle('outputs:crm-send', proGuard(FORBIDDEN, async (_e, meetingId: unknown, service: unknown, emails: unknown) => {
         if (!isCrm(service)) return { ok: false, kind: 'invalid_input', message: 'Unknown CRM.' };
         const token = getConnectionsStore().token(service);
         if (!token || !crmOpts(service, token)) return fail('not_connected', CRM_LABELS[service]);
@@ -793,6 +811,8 @@ export function registerOutputsIpc(appState: AppState, safeHandle: SafeHandle): 
     // senders are the Share menu's own sends, minus the review step: the user
     // made the rule on the connector's page, which is their say-so for it.
     const autoSendSender = async (destination: AutoSendDestination, meetingId: string): Promise<{ ok: boolean; message?: string; skipped?: boolean }> => {
+        // connectorsDelivery already skips without Pro; checked again here so no path sends.
+        if (!allowed()) return { ok: true, skipped: true };
         const doc = loadDoc(meetingId);
         if (!doc) return { ok: false, message: 'The meeting could not be found.' };
         if (!hasNotes(doc)) return { ok: true, skipped: true };
@@ -848,6 +868,7 @@ export function registerOutputsIpc(appState: AppState, safeHandle: SafeHandle): 
     registerConnectorsDeliveryIpc({
         safeHandle,
         guard,
+        connectorsAllowed: allowed,
         userDataDir: app.getPath('userData'),
         loadDoc,
         foldersOfMeeting: (meetingId: string) => {
@@ -864,6 +885,7 @@ export function registerOutputsIpc(appState: AppState, safeHandle: SafeHandle): 
     registerGmailIpc({
         safeHandle,
         guard,
+        connectorsAllowed: allowed,
         userDataDir: app.getPath('userData'),
         safeStorage,
         openExternal: (url: string) => shell.openExternal(url),
@@ -874,6 +896,7 @@ export function registerOutputsIpc(appState: AppState, safeHandle: SafeHandle): 
     registerLocalApiIpc({
         safeHandle,
         guard,
+        connectorsAllowed: allowed,
         userDataDir: app.getPath('userData'),
         safeStorage,
         source: databaseMeetingSource(),
@@ -883,6 +906,8 @@ export function registerOutputsIpc(appState: AppState, safeHandle: SafeHandle): 
     // MCP
     safeHandle('outputs:mcp-set-enabled', guard(MCP_OFF, async (_e, enabled: unknown) => {
         const on = enabled === true;
+        // Turning off is always allowed; turning on needs Pro or a trial.
+        if (on && !allowed()) return { ...mcpStatus(), error: PRO_REQUIRED.message };
         getConnectionsStore().setMcp({ enabled: on, ...(getConnectionsStore().mcpSettings().token ? {} : { token: newMcpToken() }) });
         if (mcpStarting) await mcpStarting;
         if (on) await startMcp(); else await stopMcp();
