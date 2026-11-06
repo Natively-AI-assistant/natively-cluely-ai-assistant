@@ -30,6 +30,9 @@ export const ENTITLEMENTS = Object.freeze([
 /** Everything the app can send a buyer to. */
 export const CHECKOUT_PRODUCTS = Object.freeze([
   'api_standard', 'api_pro', 'api_max', 'api_ultra', 'pro_lifetime', 'pro_yearly',
+  // 2026-11-06: yearly API plans and the two one-time Pro packs.
+  'api_standard_yearly', 'api_pro_yearly', 'api_max_yearly', 'api_ultra_yearly',
+  'pack_light', 'pack_heavy',
 ])
 
 /** Every place in the app that can open a checkout page or offer a trial. */

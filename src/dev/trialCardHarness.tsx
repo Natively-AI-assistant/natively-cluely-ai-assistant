@@ -11,7 +11,8 @@
 // The only ways to see it live are to remove a real credential or to sign out,
 // both of which mutate something the developer wants to keep.
 //
-// `?claimed=1` renders the post-claim branch, `?error=1` the failure line.
+// `?claimed=1` renders the post-claim branch, `?error=1` the failure line,
+// `?key=monthly|yearly|pack` a saved key on that billing.
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import '../index.css';
@@ -31,6 +32,34 @@ const ACTIVE = params.get('active') === '1';
  *  three, which is how the over-limit row ships unlooked-at. */
 const NEAR = params.get('near') === '1';
 const OVER = params.get('over') === '1';
+/** `?key=monthly|yearly|pack` renders a SAVED key on that billing: the key
+ *  badge, the usage card (a pack shows its meeting time and use-by date) and
+ *  the "Change plan" chooser. */
+const KEY = params.get('key') as 'monthly' | 'yearly' | 'pack' | null;
+const meter = (used: number, limit: number, unit: string) => ({
+  used, limit, remaining: limit - used, percent: (used / limit) * 100,
+  visual_percent: Math.min(100, (used / limit) * 100), unit,
+});
+const KEY_USAGE = KEY ? {
+  ok: true,
+  plan: KEY === 'pack' ? 'pack_light' : 'pro',
+  billing_period: KEY,
+  pack: KEY === 'pack' ? {
+    plan: 'pack_light', seconds_total: 7200, seconds_used: 2400, seconds_left: 4800,
+    ends_at: new Date(Date.now() + 5 * 86_400_000).toISOString(), ended: false, ended_reason: null,
+  } : null,
+  member_since: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+  quota: {
+    ai: meter(1_300_000, 4_000_000, 'tokens'),
+    voice: meter(80, 240, 'minutes'),
+    research: { ...meter(1, 3, 'usd'), runs_used: 0, runs_limit: 1, runs_remaining: 1 },
+    knowledge: {
+      percent: 12, visual_percent: 12, max_half_percent: 14,
+      embedding: meter(280_000, 2_000_000, 'tokens'), reranker: meter(500_000, 5_000_000, 'tokens'),
+    },
+    resets_at: KEY === 'pack' ? '2100-01-01T00:00:00.000Z' : new Date(Date.now() + 24 * 86_400_000).toISOString(),
+  },
+} : null;
 const startedAt = new Date(Date.now() - 11 * 60_000).toISOString();
 const expiresAt = new Date(Date.now() + 19 * 60_000).toISOString();
 
@@ -41,7 +70,7 @@ const noop = async () => ([] as any);
 
 const OVERRIDES: Record<string, () => Promise<any>> = {
   // No key saved: `isSaved` false is half of what puts the card on screen.
-  getStoredCredentials: async () => ({ hasNativelyKey: false }),
+  getStoredCredentials: async () => ({ hasNativelyKey: !!KEY }),
   getNativelyApiKey: async () => null,
   // The other half: no trial token, and never claimed.
   getLocalTrial: async () => (ACTIVE
@@ -69,7 +98,7 @@ const OVERRIDES: Record<string, () => Promise<any>> = {
       },
     }
     : { ok: false }),
-  getNativelyUsage: async () => null,
+  getNativelyUsage: async () => KEY_USAGE,
   getNativelyPlans: async () => null,
   getLicenseDetails: async () => ({ isPremium: false }),
 };

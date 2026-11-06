@@ -1482,6 +1482,7 @@ import { resolveTrayIcon } from './utils/trayIcon'
 import { appUserModelIdForDisguise } from './utils/windowsTaskbarPolicy'
 import { shouldOpenExternally } from './utils/windowOpenPolicy'
 import { ensureNativeModuleAbi } from './utils/nativeModuleGuard'
+import { getPackMeetingClock } from './services/packs/packClockWiring'
 
 // Opt-in only: this trace writes allowlisted process metadata and IPC byte estimates
 // for a copied-profile native OOM investigation. It is inert unless explicitly enabled.
@@ -2836,6 +2837,32 @@ export class AppState {
       }
     }, 90_000);
     (timer as any).unref?.();
+  }
+
+  /**
+   * The Pro pack meeting clock. When a pack ends and the server confirms Pro
+   * went with it, the same premium-only context a deactivated licence loses is
+   * cleared here (the license-status-changed broadcast is the wiring's).
+   */
+  private packMeetingClock() {
+    return getPackMeetingClock(() => {
+      try { this.getKnowledgeOrchestrator()?.setKnowledgeMode(false); } catch { /* not running */ }
+      try {
+        const { ModesManager } = require('./services/ModesManager');
+        ModesManager.getInstance().setActiveMode(null);
+        this.broadcast('modes-active-cleared');
+      } catch { /* no modes */ }
+    });
+  }
+
+  /** powerMonitor 'suspend' (macOS and Windows): sleep is not meeting time. */
+  public packClockSuspend(): void {
+    try { this.packMeetingClock().suspend(); } catch { /* billing only */ }
+  }
+
+  /** powerMonitor 'resume' (macOS and Windows). */
+  public packClockResume(): void {
+    try { this.packMeetingClock().resume(); } catch { /* billing only */ }
   }
 
   private broadcastMeetingState(): void {
@@ -7652,6 +7679,10 @@ export class AppState {
     const meetingGeneration = ++this._meetingGeneration;
     this.isMeetingActive = true;
     this.autoAnswerUsage.meetingStarted();
+    // A Pro pack is sold as meeting hours: report this meeting's time, whatever
+    // transcribes it (services/packs/PackMeetingClock.ts). No-op without a
+    // Natively API key, and one request per meeting for a key that is not a pack.
+    try { this.packMeetingClock().meetingStarted(); } catch (e) { console.warn('[Main] pack clock not started:', (e as Error)?.message); }
     // The user's name as a transcription hint, before any STT connects (sttContextTerms.ts).
     try { setSttContextTerms(nameTerms(this.currentUserName())); } catch { /* a hint, never a blocker */ }
     // The user's dictionary (Settings > Audio) beside it, for every provider with a vocabulary input.
@@ -8183,6 +8214,7 @@ export class AppState {
     this._meetingGeneration++;
     this._isDraining = true;
     this.sttGap.endMeeting();
+    try { void this.packMeetingClock().meetingEnded(); } catch (e) { console.warn('[Main] pack clock not stopped:', (e as Error)?.message); }
     this.broadcastMeetingState();
 
     // ─── ABORT + AWAIT IN-FLIGHT AUDIO INIT (before any capture teardown) ───
@@ -11205,6 +11237,8 @@ if (process.env.THINKING_MATRIX === '1') {
     const { powerMonitor } = require('electron') as typeof import('electron');
     powerMonitor.on('resume', () => {
       console.log('[Main] powerMonitor: system resumed from sleep.');
+      // The Pro pack meeting clock accrues again from now; the sleep is not billed.
+      appState.packClockResume();
       // Tell the Provider Performance Profile that the next few turns are not
       // representative: a machine coming back from sleep re-associates Wi-Fi,
       // re-opens TLS sessions and re-warms DNS, and a first-token measurement
@@ -11239,6 +11273,7 @@ if (process.env.THINKING_MATRIX === '1') {
     });
     powerMonitor.on('suspend', () => {
       console.log('[Main] powerMonitor: system suspending. Captures will be recreated on resume if a meeting is active.');
+      appState.packClockSuspend();
     });
     // Unlocking the session is another moment the OS may have dropped global
     // shortcut registrations (a lock can outlast a short sleep that never fired

@@ -120,6 +120,26 @@ export interface NativelyUsageResponse {
   limits?: NativelyPlanLimits;
   research_credit_usd?: number;
   member_since?: string;
+  /**
+   * How the key is billed. A yearly key still refills its allowance monthly; a
+   * pack never refills, it ends. Absent from servers before 2026-11-06 (= monthly).
+   */
+  billing_period?: 'monthly' | 'yearly' | 'pack';
+  /**
+   * A Pro pack's clock (natively-api lib/proPacks.js packView). null for every
+   * other plan. The seconds are null while the server cannot read the hours
+   * (migration 031 not applied); the pack is then judged on its date alone.
+   */
+  pack?: {
+    plan: string;
+    seconds_total: number | null;
+    seconds_used: number | null;
+    seconds_left: number | null;
+    /** The use-by date, ISO. */
+    ends_at: string | null;
+    ended: boolean;
+    ended_reason: 'hours_used' | 'window_closed' | null;
+  } | null;
   /** Set when a network failure was covered by serving the last good response. */
   stale?: boolean;
   error?: string;

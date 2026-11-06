@@ -163,7 +163,14 @@ test('a caller that already knows the plan passes it in — no second /v1/usage'
 });
 
 test('the plan set matches the server (natively-api lib/plans.js PRO_PLANS)', () => {
-  assert.deepEqual([...PRO_CAPABLE_PLANS].sort(), ['max', 'pro', 'ultra']);
+  assert.deepEqual([...PRO_CAPABLE_PLANS].sort(), ['max', 'pack_heavy', 'pack_light', 'pro', 'ultra']);
+});
+
+test('a Pro pack key turns Pro on like a Pro plan does', async () => {
+  for (const plan of ['pack_light', 'pack_heavy']) {
+    const w = world();
+    assert.equal(await w.r.run('usage-ok', { plan }), 'activated', plan);
+  }
 });
 
 test('status is reported so the settings page can say what is happening', async () => {
