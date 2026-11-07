@@ -24,7 +24,7 @@ import { NOTES_EXPORT_FILTERS, defaultExportPath, notesFileStem, withExportExten
 import { ConnectionError, describeConnectionError, errorKindOf } from './httpRequest';
 import { connectWithBrowser, currentToken, isOAuthConnector, oauthServices, reconnectMessage, withCurrentToken } from './connectorOAuth';
 import { connectorsDelivery, registerConnectorsDeliveryIpc } from './connectorsDeliveryIpc';
-import { registerLocalApiIpc, startLocalApiIfKeys, stopLocalApi } from './localApiIpc';
+import { registerLocalApiIpc, startLocalApiIfKeys, stopLocalApi, syncLocalApiWithPro } from './localApiIpc';
 import { registerGmailIpc } from './gmailIpc';
 import type { AutoSendDestination } from '../../../src/types/connectors';
 import type { OAuthTokenService } from './connectionsStore';
@@ -302,12 +302,16 @@ function mcpStatus(): McpServerStatus {
     const s = st.mcpSettings();
     const running = !!mcpServer;
     const port = mcpServer?.port ?? s.port;
+    // Locked (no Pro or trial): the server is not running, and the token and
+    // client setups stay in main, as while it is off. They come back with Pro.
+    let unlocked = true;
+    try { unlocked = checkAllowed(mcpGate); } catch { unlocked = false; }
     return {
         enabled: s.enabled,
         running,
         ...(port ? { port, url: mcpUrl(port) } : {}),
-        ...(s.token && s.enabled ? { token: s.token } : {}),
-        ...(port && s.enabled && s.token ? (() => {
+        ...(s.token && s.enabled && unlocked ? { token: s.token } : {}),
+        ...(port && s.enabled && s.token && unlocked ? (() => {
             const { url: _url, ...snippets } = mcpClientSnippets(port, s.token);
             return { snippets };
         })() : {}),
@@ -363,8 +367,35 @@ export function startMcpServerIfEnabled(): void {
     void startLocalApiIfKeys();
     try {
         if (!getConnectionsStore().mcpSettings().enabled) return;
+        // Connectors are Pro or trial: a locked server is not started at all.
+        // syncConnectorServersWithPro starts it when Pro comes back.
+        if (!checkAllowed(mcpGate)) {
+            console.log('[MCP] Left off at launch: connectors need Pro or a trial');
+            return;
+        }
         mcpStarting = startMcp().finally(() => { mcpStarting = null; });
     } catch { /* never blocks launch */ }
+}
+
+/**
+ * Pro or a trial gained or lost (a licence check, an activation, a trial that
+ * started or ended): the MCP server and the local API follow. Locked, neither
+ * listens; back, each starts again if the user left it on. Never throws.
+ */
+export async function syncConnectorServersWithPro(): Promise<void> {
+    try {
+        let allowed = false;
+        try { allowed = checkAllowed(mcpGate); } catch { allowed = false; }
+        if (mcpStarting) await mcpStarting;
+        if (!allowed && mcpServer) {
+            await stopMcp();
+            console.log('[MCP] Stopped: connectors need Pro or a trial');
+        } else if (allowed && !mcpServer && getConnectionsStore().mcpSettings().enabled) {
+            mcpStarting = startMcp().finally(() => { mcpStarting = null; });
+            await mcpStarting;
+        }
+    } catch { /* the Settings card shows the server's state */ }
+    await syncLocalApiWithPro();
 }
 
 /** On quit (both systems): drop open connections and stop listening. Never blocks the quit. */

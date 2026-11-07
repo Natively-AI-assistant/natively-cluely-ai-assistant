@@ -45,9 +45,11 @@ describe('Profile Intelligence IPC: Pro/trial gate', () => {
         slice.includes('isProOrTrialActive()'),
         `Handler ${handler} must invoke isProOrTrialActive() to enforce the gate`
       );
+      // One refusal shape since 2026-11-07 (electron/services/proGate.ts):
+      // error 'pro_required', the words in `message`.
       assert.ok(
-        slice.includes('Pro license required'),
-        `Handler ${handler} must return the "Pro license required" error when gated out`
+        slice.includes('proRefusal('),
+        `Handler ${handler} must refuse with proRefusal() when gated out`
       );
 
       const gateIdx = slice.indexOf('isProOrTrialActive()');

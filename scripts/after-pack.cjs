@@ -15,6 +15,9 @@ const adHocSignModule = require('./ad-hoc-sign.js');
 // onnxruntime-node needs, copied next to its binaries. Runs before signing so
 // nothing is added to the app after it.
 const { bundleVcRuntimeForAfterPack } = require('./bundle-vc-runtime.cjs');
+// Both systems: Electron fuses (no --inspect, no run-as-Node, app.asar checked).
+// After every file is in place, before any signing.
+const { flipFusesForAfterPack } = require('./electron-fuses.cjs');
 
 const adHocSign = adHocSignModule.default || adHocSignModule;
 
@@ -25,11 +28,13 @@ async function runAfterPack(
     buildParakeetAne = buildParakeetAneForAfterPack,
     signApp = adHocSign,
     bundleVcRuntime = bundleVcRuntimeForAfterPack,
+    flipFuses = flipFusesForAfterPack,
   } = {}
 ) {
   await buildHelper(context);
   await buildParakeetAne(context);
   await bundleVcRuntime(context);
+  await flipFuses(context);
   await signApp(context);
 }
 

@@ -205,6 +205,7 @@ import {
 } from './direct-assist';
 import { nativelyApiBase } from './services/nativelyApiBase';
 import { startPhonePress, PHONE_LABELS, liveHelperLabel } from './services/phoneMirrorLiveAnswers';
+import { proRefusal } from './services/proGate';
 
 type DirectAssistSource = 'typed' | 'stt' | 'screenshot';
 
@@ -332,6 +333,7 @@ let appleSpeechLocalesCache: { available: boolean; supported: string[]; installe
 
 /** The running licence re-check schedule (services/licenceRecheck.ts), once IPC is up. */
 let licenceRecheck: import('./services/licenceRecheck').LicenceRecheck | null = null;
+let proWatchTimer: ReturnType<typeof setInterval> | null = null;
 
 /** Ask the licence server now (wake from sleep, a usage read without Pro); spaced and single-flight. */
 export function triggerLicenceRecheck(reason: import('./services/licenceRecheck').RecheckReason): void {
@@ -398,7 +400,17 @@ export function initializeIpcHandlers(appState: AppState): void {
   const isLicensed = (): boolean => {
     try {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      if (LicenseManager.getInstance().isPremium() === true) return true;
+      const lm = LicenseManager.getInstance();
+      if (lm.isPremium() === true) return true;
+      // A licence the seller no longer stands behind (held as refunded or on a
+      // payment hold, or unconfirmed past the offline limit) stays on disk but
+      // is not one the user holds: it must not spare the trial wipe or hide the
+      // Trial ended card. Only a file this session cannot read still counts.
+      if (typeof lm.storedLicenceState === 'function') {
+        const state = lm.storedLicenceState();
+        if (state === 'held' || state === 'none') return false;
+        if (state === 'unreadable') return true;
+      }
     } catch {
       /* premium module unavailable: fall through to the file check */
     }
@@ -584,6 +596,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         wipedForThisTrial: sm.get('trialExpiryWipedFor') === trialId,
       });
 
+      // A trial user who saved a free (Standard) key, or whose licence was
+      // revoked during the trial, skips endExpiredTrialRuntime's clean-up.
+      try { standDownIfNoPro('trial ended'); } catch { /* best effort; the read-time checks still hold */ }
       if (decision.wipe && !expiryWipeAttempted.has(trialId)) {
         expiryWipeAttempted.add(trialId);
         const wiped = wipeTrialProfileData();
@@ -1057,6 +1072,21 @@ export function initializeIpcHandlers(appState: AppState): void {
     const { isProOrTrialActive: check } = require('./services/proAccess') as typeof import('./services/proAccess');
     return check();
   };
+  // Pro modes and Profile Intelligence ask this every time an answer reads
+  // them, not only when they are switched on (ModesManager.modeLockedWithoutPro,
+  // KnowledgeOrchestrator.isKnowledgeMode).
+  try {
+    const { setModesProAccessCheck } = require('./services/ModesManager') as typeof import('./services/ModesManager');
+    setModesProAccessCheck(isProOrTrialActive);
+  } catch (e: any) {
+    console.warn('[IPC] Pro check for modes not wired:', e?.message || e);
+  }
+  try {
+    const { KnowledgeOrchestrator } = require('../premium/electron/knowledge/KnowledgeOrchestrator');
+    KnowledgeOrchestrator.setProAccessCheck(isProOrTrialActive);
+  } catch {
+    /* premium module absent: there is no knowledge mode to gate */
+  }
   // Is the free trial over? Server verdict or the trial clock, never the
   // computer's clock alone (services/trialClock.ts). A declaration so the
   // handlers above it can call it.
@@ -1080,6 +1110,39 @@ export function initializeIpcHandlers(appState: AppState): void {
       console.log('[IPC] Premium-only context cleared due to license loss');
     } catch (e) {
       /* non-fatal */
+    }
+  };
+
+  /**
+   * Without Pro or a trial, switch off what is still switched on: Profile
+   * Intelligence and a Pro mode. Answers already ignore both (they ask Pro on
+   * every read); this makes the switches say so too. Runs after every licence
+   * check and when a trial ends, so a licence revoked while a trial was running
+   * (recheckLicence skips the stand-down then) is stood down once the trial
+   * goes, whichever way it goes. Returns whether anything changed. Never throws.
+   */
+  const standDownIfNoPro = (reason: string): boolean => {
+    try {
+      if (isProOrTrialActive()) return false;
+      let changed = false;
+      try {
+        const orchestrator = appState.getKnowledgeOrchestrator();
+        if (orchestrator?.isKnowledgeModeSwitchedOn?.()) {
+          orchestrator.setKnowledgeMode(false);
+          changed = true;
+          console.log(`[IPC] Knowledge mode switched off (${reason}): no Pro licence or trial`);
+        }
+      } catch { /* ignore */ }
+      try {
+        const { ModesManager, modeNeedsPro } = require('./services/ModesManager') as typeof import('./services/ModesManager');
+        if (modeNeedsPro(ModesManager.getInstance().getStoredActiveMode())) {
+          clearActiveModeOnLicenseLoss();
+          changed = true;
+        }
+      } catch { /* ignore */ }
+      return changed;
+    } catch {
+      return false;
     }
   };
 
@@ -1246,6 +1309,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const result = await LicenseManager.getInstance().activateLicense(key);
       funnelTelemetry.keyEntered('pro_licence', result?.success ? 'ok' : 'invalid');
       if (result?.success) {
+        proWatch.check();
         BrowserWindow.getAllWindows().forEach((win) => {
           if (!win.isDestroyed())
             win.webContents.send('license-status-changed', { isPremium: true });
@@ -1318,6 +1382,24 @@ export function initializeIpcHandlers(appState: AppState): void {
     });
   };
   safeHandle('license:check-premium-async', async () => runLicenceRecheck());
+  // Whatever changes Pro (a check, an activation, a trial starting or running
+  // out), what follows it outside the per-use checks follows within 30 s:
+  // Profile Intelligence and a Pro mode switched off, the MCP server and local
+  // API stopped, or started again when Pro is back.
+  const { createProWatch, PRO_WATCH_EVERY_MS } = require('./services/licenceRecheck') as typeof import('./services/licenceRecheck');
+  const proWatch = createProWatch(isProOrTrialActive, (allowed) => {
+    console.log(`[IPC] Pro ${allowed ? 'available' : 'gone'}: connector servers and Pro switches follow`);
+    if (!allowed) standDownIfNoPro('Pro gone');
+    try {
+      void require('./services/outputs/outputsIpc').syncConnectorServersWithPro();
+    } catch { /* connectors module absent */ }
+  });
+  proWatch.check();
+  {
+    proWatchTimer && clearInterval(proWatchTimer);
+    proWatchTimer = setInterval(() => proWatch.check(), PRO_WATCH_EVERY_MS);
+    if (typeof (proWatchTimer as any).unref === 'function') (proWatchTimer as any).unref();
+  }
   try {
     const { startLicenceRecheck } = require('./services/licenceRecheck') as typeof import('./services/licenceRecheck');
     licenceRecheck?.stop();
@@ -1330,6 +1412,12 @@ export function initializeIpcHandlers(appState: AppState): void {
           const { CredentialsManager } = require('./services/CredentialsManager');
           if (CredentialsManager.getInstance().getTrialToken() && !trialTimeIsUp()) await pollTrialStatus();
         } catch { /* the trial clock still applies */ }
+        proWatch.check();
+        if (standDownIfNoPro('licence check')) {
+          BrowserWindow.getAllWindows().forEach((win) => {
+            if (!win.isDestroyed()) win.webContents.send('license-status-changed', { isPremium: false });
+          });
+        }
       },
       setTimer: (fn, ms) => {
         const t = setTimeout(fn, ms);
@@ -1363,6 +1451,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
       // Notify all windows so the license UI (ProGate, settings) refreshes immediately
       clearActiveModeOnLicenseLoss();
+      proWatch.check();
       BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed())
           win.webContents.send('license-status-changed', { isPremium: false });
@@ -14722,7 +14811,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     const clean = bio.replace(/\r\n?/g, '\n').trim().slice(0, 600);
     // Pro (Profile Intelligence › Cue Cards), like the Cue Card answers beside it.
     // Clearing is always allowed: a lapsed user can still delete their own text.
-    if (clean && !isProOrTrialActive()) return { success: false, error: 'pro_required' };
+    if (clean && !isProOrTrialActive()) return proRefusal();
     return SettingsManager.getInstance().set('userBio', clean) ? { success: true, bio: clean } : { success: false, error: 'settings_store_degraded' };
   });
   // The notes window's "Attach image": a picture kept with the running meeting
@@ -17567,7 +17656,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     const { noteTemplateById } = require('./services/meeting/noteTemplates') as typeof import('./services/meeting/noteTemplates');
     if (!noteTemplateById(id)) return { success: false, error: 'unknown_template' };
     const { noteTemplateGate } = require('./services/meeting/notesTemplateGate') as typeof import('./services/meeting/notesTemplateGate');
-    if (noteTemplateGate(id as string, isProOrTrialActive)) return { success: false, error: 'pro_required' };
+    if (noteTemplateGate(id as string, isProOrTrialActive)) return proRefusal();
     return { success: mgr.setLiveNoteTemplate(id as string) };
   });
   safeHandle('live-notes:get-template', async () => appState.getIntelligenceManager()?.getLiveNoteTemplate() ?? null);
@@ -18517,7 +18606,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('profile:save-own-answer', async (_, key: string, text: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      if (!isProOrTrialActive()) return proRefusal();
       const { saveOwnAnswer } = require('./services/knowledge/OwnAnswersStore') as typeof import('./services/knowledge/OwnAnswersStore');
       const saved = saveOwnAnswer(String(key ?? ''), text);
       return saved.ok ? { success: true, text: saved.text } : { success: false, error: 'That answer could not be saved.' };
@@ -18529,7 +18618,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('profile:use-own-answer-drafts', async (_, keys?: string[]) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      if (!isProOrTrialActive()) return proRefusal();
       const { useOwnAnswerDrafts } = require('./services/knowledge/OwnAnswersStore') as typeof import('./services/knowledge/OwnAnswersStore');
       const changed = useOwnAnswerDrafts(Array.isArray(keys) ? keys.map(String) : undefined);
       return { success: true, changed };
@@ -18541,7 +18630,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('profile:draft-own-answers', async () => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      if (!isProOrTrialActive()) return proRefusal();
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator?.getStatus?.().hasResume) return { success: false, error: 'Add a résumé first: the drafts are written from it.' };
       const written = await kickOwnAnswerDrafts(orchestrator);
@@ -18556,11 +18645,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       // Premium gate: require active license or free trial for profile features
       if (!isProOrTrialActive()) {
-        return {
-          success: false,
-          error:
-            'Pro license required. Please activate a license key to use Profile Intelligence features.',
-        };
+        return proRefusal('Profile Intelligence is part of Natively Pro. Activate a licence or start the free trial to use it.');
       }
       const resolvedPath = consumeSelectedProfilePath(filePath);
       if (!resolvedPath) {
@@ -18669,11 +18754,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       // Premium gate: only allow enabling profile mode with active license or free trial
       if (enabled && !isProOrTrialActive()) {
-        return {
-          success: false,
-          error:
-            'Pro license required. Please activate a license key to use Profile Intelligence features.',
-        };
+        return proRefusal('Profile Intelligence is part of Natively Pro. Activate a licence or start the free trial to use it.');
       }
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
@@ -18792,11 +18873,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       // Premium gate
       if (!isProOrTrialActive()) {
-        return {
-          success: false,
-          error:
-            'Pro license required. Please activate a license key to use Profile Intelligence features.',
-        };
+        return proRefusal('Profile Intelligence is part of Natively Pro. Activate a licence or start the free trial to use it.');
       }
       const resolvedPath = consumeSelectedProfilePath(filePath);
       if (!resolvedPath) {
@@ -18866,7 +18943,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // any file is written — a non-conformant bundle is refused, never shipped.
   safeHandle('knowledge:export-profile-pack', async () => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProOrTrialActive()) return proRefusal();
       const { isOkfProfileMarkdownExportEnabled } = require('./intelligence/intelligenceFlags') as typeof import('./intelligence/intelligenceFlags');
       if (!isOkfProfileMarkdownExportEnabled()) return { success: false, error: 'export_flag_off' };
 
@@ -18914,7 +18991,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // own handler above.
   safeHandle('knowledge:list-profile-packs', async () => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required', packs: [] };
+      if (!isProOrTrialActive()) return proRefusal(undefined, { packs: [] });
       const { isOkfProfileKnowledgeUiEnabled } = require('./intelligence/intelligenceFlags') as typeof import('./intelligence/intelligenceFlags');
       if (!isOkfProfileKnowledgeUiEnabled()) return { success: false, error: 'ui_flag_off', packs: [] };
       const { ProfilePackBuilder } = require('./services/knowledge/ProfilePackBuilder') as typeof import('./services/knowledge/ProfilePackBuilder');
@@ -18931,7 +19008,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('knowledge:get-profile-pack', async (_, kind: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProOrTrialActive()) return proRefusal();
       const { isOkfProfileKnowledgeUiEnabled } = require('./intelligence/intelligenceFlags') as typeof import('./intelligence/intelligenceFlags');
       if (!isOkfProfileKnowledgeUiEnabled()) return { success: false, error: 'ui_flag_off' };
       const { ProfilePackBuilder } = require('./services/knowledge/ProfilePackBuilder') as typeof import('./services/knowledge/ProfilePackBuilder');
@@ -18967,11 +19044,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       console.log(`[CompanyIntel-research] invoked for companyName="${companyName}" forceRefresh=${forceRefresh}`);
       // Premium gate
       if (!isProOrTrialActive()) {
-        return {
-          success: false,
-          error:
-            'Pro license required. Please activate a license key to use Profile Intelligence features.',
-        };
+        return proRefusal('Profile Intelligence is part of Natively Pro. Activate a licence or start the free trial to use it.');
       }
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
@@ -19017,11 +19090,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       // Premium gate
       if (!isProOrTrialActive()) {
-        return {
-          success: false,
-          error:
-            'Pro license required. Please activate a license key to use Profile Intelligence features.',
-        };
+        return proRefusal('Profile Intelligence is part of Natively Pro. Activate a licence or start the free trial to use it.');
       }
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
@@ -19055,11 +19124,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       // Premium gate
       if (!isProOrTrialActive()) {
-        return {
-          success: false,
-          error:
-            'Pro license required. Please activate a license key to use Profile Intelligence features.',
-        };
+        return proRefusal('Profile Intelligence is part of Natively Pro. Activate a licence or start the free trial to use it.');
       }
       const orchestrator = appState.getKnowledgeOrchestrator();
       if (!orchestrator) {
@@ -19214,10 +19279,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('roleInsight:analyse', async (event, options: { jobUrl?: string; skipExternalVerification?: boolean } = {}) => {
     try {
       if (!isProOrTrialActive()) {
-        return {
-          success: false,
-          error: 'Pro license required. Please activate a license key to use Role Insight.',
-        };
+        return proRefusal('Role Insight is part of Natively Pro. Activate a licence or start the free trial to use it.');
       }
       const service = getRoleInsightService();
       if (!service) return { success: false, error: 'Role Insight is not available in this build.' };
@@ -19284,7 +19346,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('roleInsight:apply-correction', async (_, args: any) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      if (!isProOrTrialActive()) return proRefusal();
       const service = getRoleInsightService();
       if (!service) return { success: false, error: 'Role Insight is not available.' };
       if (!args?.analysisId || !args?.kind) return { success: false, error: 'Invalid correction request.' };
@@ -19308,7 +19370,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('roleInsight:answer-clarification', async (_, args: any) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      if (!isProOrTrialActive()) return proRefusal();
       const service = getRoleInsightService();
       if (!service) return { success: false, error: 'Role Insight is not available.' };
       if (!args?.analysisId || !args?.requirementId || !args?.answer) {
@@ -19333,7 +19395,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Intelligence evidence, so the UI can gate it behind an explicit second step.
   safeHandle('roleInsight:save-to-profile', async (_, args: any) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      if (!isProOrTrialActive()) return proRefusal();
       const service = getRoleInsightService();
       if (!service) return { success: false, error: 'Role Insight is not available.' };
       if (!args?.analysisId || !args?.requirementId || !args?.claim) {
@@ -19358,7 +19420,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('roleInsight:paste-jd', async (_, text: string) => {
     let tempPath: string | null = null;
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      if (!isProOrTrialActive()) return proRefusal();
       if (typeof text !== 'string' || text.trim().length < 200) {
         return { success: false, error: 'Paste the full job description — this looks too short to analyse.' };
       }
@@ -19405,7 +19467,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('roleInsight:import-jd-url', async (_, url: string) => {
     let tempPath: string | null = null;
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      if (!isProOrTrialActive()) return proRefusal();
       if (typeof url !== 'string' || !/^https?:\/\//i.test(url.trim())) {
         return { success: false, error: 'Enter a valid job posting URL starting with http:// or https://' };
       }
@@ -19621,7 +19683,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('modes:create', async (_, params: { name: string; templateType: string }) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProOrTrialActive()) return proRefusal();
       const { ModesManager } = require('./services/ModesManager');
       const mode = ModesManager.getInstance().createMode({
         name: params.name,
@@ -19653,7 +19715,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       },
     ) => {
       try {
-        if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+        if (!isProOrTrialActive()) return proRefusal();
         if (!params?.brief || typeof params.brief !== 'string' || params.brief.trim().length < 8) {
           return { success: false, error: 'brief_too_short' };
         }
@@ -19716,11 +19778,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Also gate if the existing mode is already non-general (editing a pro mode requires pro).
         if (!isProOrTrialActive()) {
           if (updates.templateType && updates.templateType !== 'general') {
-            return { success: false, error: 'pro_required' };
+            return proRefusal();
           }
           const existing = mgr.getModes().find((m: any) => m.id === id);
           if (existing && existing.templateType !== 'general') {
-            return { success: false, error: 'pro_required' };
+            return proRefusal();
           }
         }
         mgr.updateMode(id, updates);
@@ -19899,7 +19961,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('modes:delete', async (_, id: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProOrTrialActive()) return proRefusal();
       const { ModesManager } = require('./services/ModesManager');
       ModesManager.getInstance().deleteMode(id);
       return { success: true };
@@ -19918,7 +19980,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           .getModes()
           .find((m: any) => m.id === id);
         if (targetMode && targetMode.templateType !== 'general' && !isProOrTrialActive()) {
-          return { success: false, error: 'pro_required' };
+          return proRefusal();
         }
       }
       const { ModesManager } = require('./services/ModesManager');
@@ -20081,7 +20143,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     // profile:upload-resume already uses correctly.
     let selectedPath: string | undefined;
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProOrTrialActive()) return proRefusal();
       const result: any = await dialog.showOpenDialog({
         properties: ['openFile'],
         filters: [
@@ -20116,7 +20178,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('modes:delete-reference-file', async (_, id: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProOrTrialActive()) return proRefusal();
       const { ModesManager } = require('./services/ModesManager');
       ModesManager.getInstance().deleteReferenceFile(id);
       return { success: true };
@@ -20187,7 +20249,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('knowledge:regenerate-pack', async (_, params: { fileId: string; modeId: string; fileName: string }) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProOrTrialActive()) return proRefusal();
       const { isOkfKnowledgeUiEnabled } = require('./intelligence/intelligenceFlags');
       if (!isOkfKnowledgeUiEnabled()) return { success: false, error: 'okf_knowledge_ui_disabled' };
       const { ModesManager } = require('./services/ModesManager');
@@ -20213,7 +20275,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('knowledge:export-pack', async (_, fileId: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProOrTrialActive()) return proRefusal();
       const { isOkfMarkdownExportEnabled } = require('./intelligence/intelligenceFlags');
       if (!isOkfMarkdownExportEnabled()) return { success: false, error: 'okf_markdown_export_disabled' };
       const { KnowledgeManager } = require('./services/knowledge/KnowledgeManager');
@@ -20251,7 +20313,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('knowledge:edit-card', async (_, params: { cardId: string; title?: string; body?: string; entities?: string[]; tags?: string[] }) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProOrTrialActive()) return proRefusal();
       const { isOkfUserEditableCardsEnabled } = require('./intelligence/intelligenceFlags');
       if (!isOkfUserEditableCardsEnabled()) return { success: false, error: 'okf_user_editable_cards_disabled' };
       const { editCard } = require('./services/knowledge/OkfCardEditor');
@@ -20265,7 +20327,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('knowledge:approve-card', async (_, cardId: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProOrTrialActive()) return proRefusal();
       const { isOkfUserEditableCardsEnabled } = require('./intelligence/intelligenceFlags');
       if (!isOkfUserEditableCardsEnabled()) return { success: false, error: 'okf_user_editable_cards_disabled' };
       const { approveCard } = require('./services/knowledge/OkfCardEditor');
@@ -20279,7 +20341,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('knowledge:reject-card', async (_, cardId: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProOrTrialActive()) return proRefusal();
       const { isOkfUserEditableCardsEnabled } = require('./intelligence/intelligenceFlags');
       if (!isOkfUserEditableCardsEnabled()) return { success: false, error: 'okf_user_editable_cards_disabled' };
       const { rejectCard } = require('./services/knowledge/OkfCardEditor');
@@ -20293,7 +20355,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('knowledge:restore-card-version', async (_, params: { cardId: string; versionId: string }) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProOrTrialActive()) return proRefusal();
       const { isOkfUserEditableCardsEnabled } = require('./intelligence/intelligenceFlags');
       if (!isOkfUserEditableCardsEnabled()) return { success: false, error: 'okf_user_editable_cards_disabled' };
       const { restoreCardVersion } = require('./services/knowledge/OkfCardEditor');
@@ -20482,7 +20544,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     'modes:add-note-section',
     async (_, modeId: string, title: string, description: string) => {
       try {
-        if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+        if (!isProOrTrialActive()) return proRefusal();
         const { ModesManager } = require('./services/ModesManager');
         const section = ModesManager.getInstance().addNoteSection({ modeId, title, description });
         return { success: true, section };
@@ -20497,7 +20559,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     'modes:update-note-section',
     async (_, id: string, updates: { title?: string; description?: string }) => {
       try {
-        if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+        if (!isProOrTrialActive()) return proRefusal();
         const { ModesManager } = require('./services/ModesManager');
         ModesManager.getInstance().updateNoteSection(id, updates);
         return { success: true };
@@ -20510,7 +20572,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('modes:delete-note-section', async (_, id: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProOrTrialActive()) return proRefusal();
       const { ModesManager } = require('./services/ModesManager');
       ModesManager.getInstance().deleteNoteSection(id);
       return { success: true };
@@ -20524,7 +20586,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Notes template › Use a template). Same Pro gate as editing a section.
   safeHandle('modes:apply-note-template', async (_, modeId: string, templateId: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProOrTrialActive()) return proRefusal();
       const { noteTemplateById, MODE_DEFAULT_NOTE_TEMPLATE_ID } = require('./services/meeting/noteTemplates') as typeof import('./services/meeting/noteTemplates');
       const toDefault = templateId === MODE_DEFAULT_NOTE_TEMPLATE_ID;
       const template = toDefault ? null : noteTemplateById(templateId);
@@ -20554,7 +20616,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('modes:remove-all-note-sections', async (_, modeId: string) => {
     try {
-      if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
+      if (!isProOrTrialActive()) return proRefusal();
       const { ModesManager } = require('./services/ModesManager');
       ModesManager.getInstance().removeAllNoteSections(modeId);
       return { success: true };

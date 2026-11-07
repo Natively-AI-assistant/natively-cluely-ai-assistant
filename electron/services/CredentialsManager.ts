@@ -2121,9 +2121,8 @@ export class CredentialsManager {
     public markTrialEnded(): void {
         if (!this.credentials.trialToken || this.credentials.trialEndedAt) return;
         this.credentials.trialEndedAt = new Date().toISOString();
-        if (this.refuseWriteWhileDegraded('persist trial ended')) return;
-        this.saveCredentials();
         console.log('[CredentialsManager] Trial marked ended');
+        this.saveSoon('persist trial ended');
     }
 
     public getTrialClockMs(): number | undefined {
@@ -2135,8 +2134,30 @@ export class CredentialsManager {
     public setTrialClockMs(ms: number): void {
         if (!this.credentials.trialToken || !Number.isFinite(ms)) return;
         this.credentials.trialClockMs = ms;
-        if (this.refuseWriteWhileDegraded('persist trial clock')) return;
-        this.saveCredentials();
+        this.saveSoon('persist trial clock');
+    }
+
+    private saveSoonPending = false;
+    /**
+     * Save on the next turn of the event loop, not inside the caller. The trial
+     * clock and the trial-ended mark are written from proAccess.isProOrTrialActive,
+     * which sits on the live-answer and MCP request paths; a full encrypt and
+     * write there (slow under antivirus on Windows) held those up. Several
+     * calls before it runs make one write of the latest state. Memory is
+     * already updated, so every read sees the new value at once.
+     */
+    private saveSoon(op: string): void {
+        if (this.saveSoonPending) return;
+        this.saveSoonPending = true;
+        setTimeout(() => {
+            this.saveSoonPending = false;
+            try {
+                if (this.refuseWriteWhileDegraded(op)) return;
+                this.saveCredentials();
+            } catch (e: any) {
+                console.warn(`[CredentialsManager] ${op} failed:`, e?.message || e);
+            }
+        }, 0);
     }
 
     /**

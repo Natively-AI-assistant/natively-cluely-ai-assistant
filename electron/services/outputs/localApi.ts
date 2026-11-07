@@ -382,7 +382,9 @@ export class LocalApiController {
 
     private async syncNow(): Promise<void> {
         if (this.stopped) return;
-        const want = this.deps.keys.hasActiveKeys();
+        // Connectors are Pro or trial: without either the API does not listen at
+        // all (it would answer 403 to everything). sync() again once Pro is back.
+        const want = this.deps.keys.hasActiveKeys() && (!this.deps.allowed || checkAllowed(this.deps.allowed));
         if (!want) { this.error = undefined; await this.close(); return; }
         if (!this.server) await this.open();
         this.scheduleExpiryCheck();

@@ -68,6 +68,36 @@ export const PROFILE_OKF_RESERVED_MODE_ID = '__profile_okf__';
  */
 export const ACTIVE_MODE_CACHE_KEY = '__nativelyActiveModeInfoCacheV1__';
 
+/**
+ * Pro modes are checked when an answer READS the active mode, not only when it
+ * is switched on (modes:set-active). Before 2026-11-07 a Pro mode set while
+ * licensed, or written straight into natively.db, kept shaping every answer
+ * after the licence or trial ended. Only the 'general' template (General and
+ * the user's own modes built from it) is free, the same line modes:set-active
+ * draws. The check is injected (ipcHandlers wires proAccess.isProOrTrialActive)
+ * so this module stays free of licence code; until it is wired nothing is
+ * withheld. On globalThis because esbuild inlines this module into several
+ * bundles (see _cache below). The stored choice is kept: Pro back, mode back.
+ */
+const PRO_ACCESS_KEY = '__nativelyModesProAccessV1__';
+export function setModesProAccessCheck(check: (() => boolean) | null): void {
+    (globalThis as unknown as Record<string, unknown>)[PRO_ACCESS_KEY] = check;
+}
+export function modeNeedsPro(mode: Pick<Mode, 'templateType'> | null | undefined): boolean {
+    return !!mode && mode.templateType !== 'general';
+}
+/** True when this mode needs Pro and the user has neither Pro nor a trial. */
+export function modeLockedWithoutPro(mode: Pick<Mode, 'templateType'> | null | undefined): boolean {
+    if (!modeNeedsPro(mode)) return false;
+    const check = (globalThis as unknown as Record<string, unknown>)[PRO_ACCESS_KEY] as (() => boolean) | null | undefined;
+    if (typeof check !== 'function') return false;
+    try {
+        return check() !== true;
+    } catch {
+        return true;
+    }
+}
+
 export type ModeTemplateType =
     | 'general'
     | 'looking-for-work'
@@ -493,6 +523,15 @@ export class ModesManager {
 
     public getActiveMode(): Mode | null {
         const row = DatabaseManager.getInstance().getActiveMode();
+        if (!row) return null;
+        const mode = rowToMode(row);
+        // Without Pro or a trial a Pro mode answers as General (no mode).
+        return modeLockedWithoutPro(mode) ? null : mode;
+    }
+
+    /** The stored active mode with no Pro check. Only for standing it down. */
+    public getStoredActiveMode(): Mode | null {
+        const row = DatabaseManager.getInstance().getActiveMode();
         return row ? rowToMode(row) : null;
     }
 
@@ -508,7 +547,7 @@ export class ModesManager {
             const pinned = this.getModes().find(m => m.id === pinnedModeId);
             // Fall back to the active mode only if the pinned mode was deleted
             // mid-request (rare); otherwise the pinned mode wins.
-            if (pinned) return pinned;
+            if (pinned) return modeLockedWithoutPro(pinned) ? null : pinned;
         }
         return this.getActiveMode();
     }
@@ -542,9 +581,9 @@ export class ModesManager {
     // rejection, plus a raw db.setActiveMode bypass in the license-loss path;
     // both fixed the same day. This slot keeps the harness runtimes truthful
     // and makes the class impossible if multi-bundle loading ever arrives.)
-    private static get _cache(): { info: ActiveModeInfo | null; valid: boolean } {
+    private static get _cache(): { info: ActiveModeInfo | null; valid: boolean; filledLocked?: boolean } {
         const g = globalThis as unknown as Record<string, unknown>;
-        let store = g[ACTIVE_MODE_CACHE_KEY] as { info: ActiveModeInfo | null; valid: boolean } | undefined;
+        let store = g[ACTIVE_MODE_CACHE_KEY] as { info: ActiveModeInfo | null; valid: boolean; filledLocked?: boolean } | undefined;
         if (!store) {
             store = { info: null, valid: false };
             g[ACTIVE_MODE_CACHE_KEY] = store;
@@ -566,8 +605,12 @@ export class ModesManager {
      */
     public getActiveModeInfo(): ActiveModeInfo | null {
         const store = ModesManager._cache;
-        if (store.valid) return store.info;
-        const mode = this.getActiveMode();
+        // The cache holds the stored mode; Pro is asked on every read. Filled while
+        // locked, its grounding was read without the mode: refilled once Pro is back.
+        if (store.valid && store.filledLocked && !modeLockedWithoutPro(store.info)) store.valid = false;
+        if (store.valid) return modeLockedWithoutPro(store.info) ? null : store.info;
+        const mode = this.getStoredActiveMode();
+        store.filledLocked = modeLockedWithoutPro(mode);
         if (mode) {
             const grounding = this.getActiveModeDocumentGroundingInfo(mode.id);
             store.info = {
@@ -586,7 +629,7 @@ export class ModesManager {
             store.info = null;
         }
         store.valid = true;
-        return store.info;
+        return modeLockedWithoutPro(store.info) ? null : store.info;
     }
 
     // Modes where the premium knowledge intercept (negotiation coaching, intro

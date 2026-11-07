@@ -221,12 +221,17 @@ test('composite afterPack builds the helpers before the existing signing hook', 
       assert.equal(received, context);
       events.push('parakeet-ane');
     },
+    bundleVcRuntime: async () => { events.push('vc-runtime'); },
+    flipFuses: async (received) => {
+      assert.equal(received, context);
+      events.push('fuses');
+    },
     signApp: async (received) => {
       assert.equal(received, context);
       events.push('sign');
     },
   });
-  assert.deepEqual(events, ['build', 'parakeet-ane', 'sign']);
+  assert.deepEqual(events, ['build', 'parakeet-ane', 'vc-runtime', 'fuses', 'sign']);
 });
 
 test('a helper build failure stops signing and therefore stops packaging', async () => {

@@ -91,6 +91,11 @@ export async function startLocalApiIfKeys(): Promise<void> {
     try { await controller?.start(); } catch { /* the Settings row shows the server as off */ }
 }
 
+/** Pro gained or lost: the server follows (it listens only with Pro or a trial and an active key). Never throws. */
+export async function syncLocalApiWithPro(): Promise<void> {
+    try { await controller?.sync(); } catch { /* the Settings row shows the server as off */ }
+}
+
 /** At quit, on both systems: stops listening and drops open connections. */
 export async function stopLocalApi(): Promise<void> {
     try { await controller?.stop(); } catch { /* quitting anyway */ }

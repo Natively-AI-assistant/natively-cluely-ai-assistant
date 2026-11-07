@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { failureText } from '../lib/proRefusal.mjs';
 import {
     X, RefreshCw, Upload, Briefcase, Trash2, Check, Globe,
     Building2, Search, AlertCircle, AlertTriangle, Gift, Info, Star,
@@ -2398,7 +2399,7 @@ export function ProfileIntelligenceSettings({
                 if (data) setProfileData(data);
                 setProfileUploadStatus('ready');
             } else {
-                setProfileError(result?.error || 'Upload failed');
+                setProfileError(failureText(result, 'Upload failed'));
                 setProfileUploadStatus('failed');
             }
         } catch (e: any) {
@@ -2434,7 +2435,7 @@ export function ProfileIntelligenceSettings({
                 applyCompanyDossier(data);
                 setJdUploadStatus('ready');
             } else {
-                setJdError(result?.error || 'JD upload failed');
+                setJdError(failureText(result, 'JD upload failed'));
                 setJdUploadStatus('failed');
             }
         } catch (e: any) {
@@ -3603,7 +3604,7 @@ export function ProfileIntelligenceSettings({
             try {
                 const result = await window.electronAPI?.profileGenerateCoverLetter?.(regen);
                 if (result?.success && result.letter) setCoverLetter(result.letter);
-                else setCoverLetterError(result?.error || 'Generation failed');
+                else setCoverLetterError(failureText(result, 'Generation failed'));
             } catch { setCoverLetterError('Generation failed'); }
             finally { setCoverLetterGenerating(false); }
         };

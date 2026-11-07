@@ -190,9 +190,11 @@ test('the composite afterPack hook runs it between the helper build and signing'
     buildHelper: async () => { events.push('build'); },
     buildParakeetAne: async () => { events.push('parakeet-ane'); },
     bundleVcRuntime: async (received) => { assert.equal(received, context); events.push('vc-runtime'); },
+    flipFuses: async (received) => { assert.equal(received, context); events.push('fuses'); },
     signApp: async () => { events.push('sign'); },
   });
-  assert.deepEqual(events, ['build', 'parakeet-ane', 'vc-runtime', 'sign'], 'nothing may be added to the app after it is signed');
+  // Fuses last before signing: flipping them changes the Electron binary.
+  assert.deepEqual(events, ['build', 'parakeet-ane', 'vc-runtime', 'fuses', 'sign'], 'nothing may be added to the app after it is signed');
 });
 
 test('the packaged-asset verifier requires the four DLLs on Windows', () => {

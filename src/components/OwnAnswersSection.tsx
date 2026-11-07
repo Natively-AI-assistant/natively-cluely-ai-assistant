@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AlertCircle, Check, RefreshCw } from 'lucide-react';
+import { failureText } from '../lib/proRefusal.mjs';
 
 // "Cue Cards" in Profile Intelligence: the questions only the user can
 // answer (biggest weakness, why they left, a salary range). Natively drafts the
@@ -184,7 +185,7 @@ export function OwnAnswersSection({ hasResume, hasAccess }: { hasResume: boolean
         if (value === (was?.text ?? '') && was?.status !== 'draft') return;
         setError('');
         const res = await api()?.profileSaveOwnAnswer?.(key, value);
-        if (!res?.success) { setError(res?.error || 'That answer could not be saved.'); return; }
+        if (!res?.success) { setError(failureText(res, 'That answer could not be saved.')); return; }
         const saved = String(res.text ?? '');
         setStored((prev) => {
             const next = { ...prev };
@@ -198,7 +199,7 @@ export function OwnAnswersSection({ hasResume, hasAccess }: { hasResume: boolean
     const useDrafts = async (keys?: string[]) => {
         setError('');
         const res = await api()?.profileUseOwnAnswerDrafts?.(keys);
-        if (!res?.success) { setError(res?.error || 'The drafts could not be saved.'); return; }
+        if (!res?.success) { setError(failureText(res, 'The drafts could not be saved.')); return; }
         await load();
     };
 
@@ -206,7 +207,7 @@ export function OwnAnswersSection({ hasResume, hasAccess }: { hasResume: boolean
         setError('');
         setDrafting(true);
         const res = await api()?.profileDraftOwnAnswers?.();
-        if (!res?.success) setError(res?.error || 'The drafts could not be written.');
+        if (!res?.success) setError(failureText(res, 'The drafts could not be written.'));
         await load();
     };
 

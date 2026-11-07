@@ -141,9 +141,10 @@ describe('auth and origin checks', () => {
         const fs = require('node:fs');
         const ipc = fs.readFileSync(path.join(REPO, 'electron/services/outputs/outputsIpc.ts'), 'utf8');
         const body = ipc.slice(ipc.indexOf('function mcpStatus()'), ipc.indexOf('async function startMcp()'));
-        // url hangs on the port alone; the token and setups still need the server enabled.
+        // url hangs on the port alone; the token and setups still need the server
+        // enabled, and Pro or a trial (connectors are Pro, 2026-11-07).
         assert.match(body, /\.\.\.\(port \? \{ port, url: mcpUrl\(port\) \} : \{\}\)/);
-        assert.match(body, /\.\.\.\(s\.token && s\.enabled \? \{ token: s\.token \} : \{\}\)/);
+        assert.match(body, /\.\.\.\(s\.token && s\.enabled && unlocked \? \{ token: s\.token \} : \{\}\)/);
         // A port is picked and kept the first time, so a never-enabled install has an address too.
         assert.match(body, /if \(!st\.mcpSettings\(\)\.port\) st\.setMcp\(\{ port: randomMcpPort\(\)/);
     });

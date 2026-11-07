@@ -112,3 +112,30 @@ export function usageSuggestsProLost(answer: { ok: boolean; plan?: unknown; erro
   if (answer.ok) return typeof answer.plan === 'string' && answer.plan.toLowerCase() === NO_PRO_PLAN;
   return typeof answer.error === 'string' && LOST_ERRORS.has(answer.error);
 }
+
+/** How often the Pro watch asks (cheap: the licence read is cached). */
+export const PRO_WATCH_EVERY_MS = 30_000;
+
+/**
+ * Watches the one Pro answer (proAccess.isProOrTrialActive) and calls
+ * `onChange` when it flips, whatever flipped it: a licence check, an
+ * activation, a deactivation, a trial that started or ran out. What has to
+ * follow Pro outside the per-use checks (switching Profile Intelligence and a
+ * Pro mode off, the MCP server and local API stopping or starting) hangs off
+ * this, instead of being wired into every place that can change it. The
+ * first `check()` only records the answer. Never throws.
+ */
+export function createProWatch(read: () => boolean, onChange: (allowed: boolean) => void): { check(): boolean } {
+  let last: boolean | null = null;
+  return {
+    check: () => {
+      let now = false;
+      try { now = read() === true; } catch { now = false; }
+      if (last !== null && now !== last) {
+        try { onChange(now); } catch { /* following Pro is best effort */ }
+      }
+      last = now;
+      return now;
+    },
+  };
+}
