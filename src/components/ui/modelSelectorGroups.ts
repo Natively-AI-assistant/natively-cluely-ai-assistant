@@ -39,7 +39,7 @@ const GROUP_LABELS: Record<string, string> = {
     deepseek: 'DeepSeek',
     nvidia_nim: 'NVIDIA NIM',
     openrouter: 'OpenRouter',
-    fluxion: 'Fluxion',
+    fluxion: 'Sidrune',
     agentrouter: 'AgentRouter',
     antigravity: 'Antigravity',
     'codex-cli': 'OpenAI Codex',

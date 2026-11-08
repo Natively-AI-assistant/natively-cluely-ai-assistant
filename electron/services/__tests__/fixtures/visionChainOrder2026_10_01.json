@@ -51,7 +51,7 @@
    "THROWS: No vision-capable provider configured. The selected OpenRouter gateway model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings"
   ],
   "[] fluxion/claude-opus-5": [
-   "THROWS: No vision-capable provider configured. The selected Fluxion AI gateway model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings"
+   "THROWS: No vision-capable provider configured. The selected Sidrune AI gateway model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings"
   ],
   "[] agentrouter/gpt-6-astra": [
    "THROWS: No vision-capable provider configured. The selected AgentRouter model (gpt-6-astra) can't read screenshots — pick an AgentRouter model that can, or add another vision provider in Settings"
@@ -407,7 +407,7 @@
    "THROWS: No vision-capable provider configured. The selected OpenRouter gateway model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings"
   ],
   "[deepseek] fluxion/claude-opus-5": [
-   "THROWS: No vision-capable provider configured. The selected Fluxion AI gateway model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings"
+   "THROWS: No vision-capable provider configured. The selected Sidrune AI gateway model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings"
   ],
   "[deepseek] agentrouter/gpt-6-astra": [
    "THROWS: No vision-capable provider configured. The selected AgentRouter model (gpt-6-astra) can't read screenshots — pick an AgentRouter model that can, or add another vision provider in Settings"

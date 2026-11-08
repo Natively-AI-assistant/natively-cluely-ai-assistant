@@ -43,6 +43,7 @@
 import { app } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { DatabaseManager } from '../db/DatabaseManager';
+import { nativelyApiBase } from './nativelyApiBase';
 
 /**
  * Install id, resolved lazily.
@@ -72,7 +73,7 @@ function installId(): string | undefined {
     }
 }
 
-const NATIVELY_API_URL = (process.env.NATIVELY_API_URL || 'https://api.natively.software').replace(/\/+$/, '');
+const NATIVELY_API_URL = nativelyApiBase();
 
 const DISPATCH_INTERVAL_MS = 30_000;
 const BATCH_SIZE = 100;

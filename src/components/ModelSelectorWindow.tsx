@@ -2,9 +2,9 @@ import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 're
 import { Check, ImageOff, Loader2 } from 'lucide-react';
 import { groupModelOptions, type ModelSelectorOption } from './ui/modelSelectorGroups';
 import { MODEL_SELECTOR_WIDTH } from './ui/modelSelectorLabelText';
-import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, gatewayModelLabel, isModelAllowed, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
+import { CODEX_CLI_MODEL, cloudModelRows, codexCliSelectorId, codexModelOptions, gatewayModelLabel, isModelAllowed, LIVE_CATALOGUE_PROVIDERS, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
-import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
+import { getMeetingInterfaceTheme, type MeetingInterfaceTheme, interfaceThemeSurface, isCssOwnedInterfaceTheme, resolveMeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import {
     clampOverlayOpacity,
     getDefaultOverlayOpacity,
@@ -36,7 +36,9 @@ const ModelSelectorWindow = () => {
     // --overlay-opacity happens to cascade in by default, not the user's
     // actual live-configured value — the same gap SettingsPopup.tsx's
     // already-committed fix (7c4f3bd2) closed for that window.
-    const [interfaceTheme, setInterfaceTheme] = useState<MeetingInterfaceTheme>(() => getMeetingInterfaceTheme());
+    const [chosenInterfaceTheme, setInterfaceTheme] = useState<MeetingInterfaceTheme>(() => getMeetingInterfaceTheme());
+    // What the overlay paints for that pick (Default is Lavender).
+    const interfaceTheme = resolveMeetingInterfaceTheme(chosenInterfaceTheme, isLight ? 'light' : 'dark');
     const [overlayOpacity, setOverlayOpacity] = useState<number>(() => {
         const stored = localStorage.getItem('natively_overlay_opacity');
         const parsed = stored ? parseFloat(stored) : NaN;
@@ -48,7 +50,7 @@ const ModelSelectorWindow = () => {
         const handleStorage = () => setInterfaceTheme(getMeetingInterfaceTheme());
         window.addEventListener('storage', handleStorage);
         const unsubscribe = window.electronAPI?.onMeetingInterfaceThemeChanged?.((theme: string) => {
-            const valid: MeetingInterfaceTheme[] = ['default', 'liquid-glass', 'modern'];
+            const valid: MeetingInterfaceTheme[] = ['default', 'liquid-glass', 'modern', 'lavender'];
             if (valid.includes(theme as MeetingInterfaceTheme)) {
                 setInterfaceTheme(theme as MeetingInterfaceTheme);
             }
@@ -66,7 +68,7 @@ const ModelSelectorWindow = () => {
         return () => unsubscribe?.();
     }, []);
 
-    const isGlassTheme = interfaceTheme === 'liquid-glass';
+    const isGlassTheme = isCssOwnedInterfaceTheme(interfaceTheme);
     const appearance = useMemo(
         () =>
             isGlassTheme
@@ -111,6 +113,11 @@ const ModelSelectorWindow = () => {
 
                 // 1. Get Stored Credentials (to know which Cloud providers are active)
                 const creds = await window.electronAPI?.getStoredCredentials?.();
+
+                // Fetched catalogues, read for LIVE_CATALOGUE_PROVIDERS only
+                // (cloudModelRows): every other provider keeps its presets, for
+                // the flooding reason ModelPickerIgnoresFetchedCatalogue gives.
+                const liveCatalogues = (await window.electronAPI?.getCloudFetchedModels?.().catch(() => null))?.models ?? null;
 
                 // 2. Custom Providers
                 const customProviders = await window.electronAPI?.getCustomProviders?.() || [];
@@ -173,11 +180,12 @@ const ModelSelectorWindow = () => {
                 // Cloud Models — standard models + unique preferred models
                 for (const [prov, cfg] of Object.entries(STANDARD_CLOUD_MODELS)) {
                     if (!cfg.hasKeyCheck(creds)) continue;
-                    cfg.ids.forEach((id, i) => {
-                        models.push({ id, name: cfg.names[i], type: 'cloud', provider: prov });
+                    const rows = cloudModelRows(prov, liveCatalogues);
+                    rows.forEach(({ id, name }) => {
+                        models.push({ id, name, type: 'cloud', provider: prov });
                     });
                     const pm = creds?.[cfg.pmKey];
-                    if (pm && !cfg.ids.includes(pm)) {
+                    if (pm && !rows.some(r => r.id === pm)) {
                         models.push({ id: pm, name: prettifyModelId(pm), type: 'cloud', provider: prov });
                     }
                 }
@@ -303,10 +311,16 @@ const ModelSelectorWindow = () => {
         const unsubCredentials = window.electronAPI?.onCredentialsChanged?.(() => {
             loadModels();
         });
+        // A background re-fetch of a live catalogue changes the rows without
+        // touching credentials, so it needs its own reload.
+        const unsubCatalogue = window.electronAPI?.onLiveCatalogUpdated?.((data) => {
+            if (data?.provider && LIVE_CATALOGUE_PROVIDERS.has(data.provider)) loadModels();
+        });
         return () => {
             cancelled = true;
             unsubscribe?.();
             unsubCredentials?.();
+            unsubCatalogue?.();
         };
     }, []);
 
@@ -362,7 +376,7 @@ const ModelSelectorWindow = () => {
     // otherwise a user on a light OS theme with liquid-glass or modern
     // selected would get light-colored row text on a dark glass/modern
     // panel, unreadable low-contrast.
-    const isDarkBg = interfaceTheme === 'liquid-glass' || interfaceTheme === 'modern' || !isLight;
+    const isDarkBg = interfaceThemeSurface(interfaceTheme, isLight ? 'light' : 'dark') === 'dark';
     const panelClass = isDarkBg
         ? 'bg-[#1E1E1E]/80 border-white/10'
         : 'bg-[#F3F4F6]/92 border-black/10';
@@ -463,7 +477,16 @@ const ModelSelectorWindow = () => {
         : undefined;
 
     return (
-        <div className="w-fit h-fit bg-transparent flex flex-col">
+        <div
+            className="w-fit h-fit bg-transparent flex flex-col"
+            // Lavender works its body out from the opacity slider where
+            // data-interface-theme sits. This window's attribute sits above
+            // any slider value, so the panel took the 0.65 default and read
+            // thinner than the overlay. Re-declared here under the live
+            // value, as NativelyInterface's own root does.
+            data-interface-theme={interfaceTheme === 'lavender' ? 'lavender' : undefined}
+            style={interfaceTheme === 'lavender' ? ({ ['--overlay-opacity' as '--overlay-opacity']: String(overlayOpacity) } as React.CSSProperties) : undefined}
+        >
             <div
                 ref={panelRef}
                 className={`backdrop-blur-md border rounded-[14px] overflow-hidden p-1 flex flex-col origin-top-left overlay-shell-surface overlay-popover-surface ${panelClass}`}

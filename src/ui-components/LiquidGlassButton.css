@@ -211,6 +211,46 @@
 }
 
 /*
+  .lg-green-light: a lighter green body (the badge's #2f7350) for the
+  permissions card's Continue, on macOS and Windows. #1b352a read as black on
+  the light card (12.7:1 against it) and all but vanished on the dark one
+  (1.4:1); this sits at 5.5:1 and 3.3:1, label 5.5:1 against the body.
+  Lit like .lg-sky, since a lighter body inverts the lighting: a bright top
+  face and specular, a darker underside and a contact shadow instead of a
+  bottom rim. At (0,3,0) it ties the hover rules below and loses to them on
+  source order, so hover still swaps the body colour and keeps the sheen.
+*/
+.lg-button.lg-green.lg-green-light {
+    background:
+        linear-gradient(180deg,
+            rgba(255, 255, 255, .24) 0%, rgba(255, 255, 255, .06) 42%,
+            rgba(255, 255, 255, 0) 60%, rgba(0, 0, 0, .06) 100%),
+        #2f7350;
+    --lg-tint-hover: #37835c;
+    --lg-lens-tint: rgba(236, 255, 244, .14);
+    --lg-lens-rim: rgba(236, 255, 244, .44);
+    --lg-lens-rim-soft: rgba(236, 255, 244, .18);
+    --lg-rim-1: rgba(236, 255, 244, .52);
+    --lg-rim-2: rgba(236, 255, 244, .22);
+    --lg-rim-3: rgba(236, 255, 244, .10);
+    box-shadow:
+        inset 0 -1px 0 rgba(4, 40, 24, .30),
+        0 1px 2px rgba(4, 40, 24, .18),
+        0 6px 16px rgba(24, 96, 60, .24);
+}
+/* specular on the top face only, as .lg-sky */
+.lg-button.lg-green.lg-green-light::before {
+    -webkit-mask-image:
+        linear-gradient(180deg, #000 0%, #000 4%, transparent 30%, transparent 100%),
+        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
+    mask-image:
+        linear-gradient(180deg, #000 0%, #000 4%, transparent 30%, transparent 100%),
+        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
+}
+.lg-button.lg-green.lg-green-light::after { opacity: .3; }
+.lg-green.lg-green-light .lg-content { color: #f2fff0; }
+
+/*
   .lg-action — the material in the HOST application's action colour, read from
   its own tokens, so the button still reads as that app's primary action rather
   than importing the reference's green.
@@ -1056,6 +1096,87 @@
 
 /*
   ---------------------------------------------------------------------------
+  .lg-bubble.lg-bubble-lavender — the Usage tab's question, as the website draws
+  it in "The whole call, distilled" (natively-website PremiumMeetingNotesCard:
+  .lg-button.lg-lavender.lg-sm). Owner request: "like the website's usage
+  section". The "ask about this meeting" chat (MeetingChatOverlay.tsx) and the
+  top bar's search-all-meetings chat (GlobalChatOverlay.tsx) use the same card
+  since 2026-10-30, owner request.
+
+  LIGHT is the website's values as they render there: the .24 lavender tint
+  under a white sheen on the top face, ONE 1px white rim (.lg-sm collapses the
+  rings at this size), a deep lavender label (#3F2593, ~7.3:1 on the tint over
+  the #EBEBF0 pane), the cap shadow down to .10, and the lavender glow under it.
+  The sheen's 18% stop is a length here (6px), since a wrapped question is
+  taller than the site's one-line pill.
+
+  DARK has no website original. Same material, retuned for a #151515 pane: the
+  tint a little denser (.30), the sheen and rim quiet enough not to read as a
+  white edge, and a light lavender label (#E6DDFD, ~9:1).
+  ---------------------------------------------------------------------------
+*/
+.lg-bubble.lg-bubble-lavender {
+    --lg-rim-1: rgba(255, 255, 255, .22);
+    /* the rim reaches full strength by the host's 19px corner radius */
+    --lg-cap-2: 19px;
+    color: #E6DDFD;
+    background:
+        linear-gradient(180deg,
+            rgba(255, 255, 255, .12) 0, rgba(255, 255, 255, .03) 6px,
+            rgba(255, 255, 255, 0) 32px),
+        rgba(156, 111, 243, .30);
+    -webkit-backdrop-filter: blur(20px) saturate(190%);
+            backdrop-filter: blur(20px) saturate(190%);
+    box-shadow:
+        inset 0 -1px 0 rgba(0, 0, 0, .24),
+        0 14px 30px -12px rgba(156, 111, 243, .30);
+}
+/* .lg-lavender's rim: one ring, lit on the top face only, dying across the corners */
+.lg-bubble.lg-bubble-lavender::before {
+    box-shadow: inset 0 0 0 1px var(--lg-rim-1);
+    -webkit-mask-image:
+        linear-gradient(180deg, #000 0, #000 2px, transparent 12px),
+        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
+    mask-image:
+        linear-gradient(180deg, #000 0, #000 2px, transparent 12px),
+        linear-gradient(90deg, transparent var(--lg-cap-0), rgba(0, 0, 0, .82) var(--lg-cap-1), #000 var(--lg-cap-2), #000 calc(100% - var(--lg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--lg-cap-1)), transparent calc(100% - var(--lg-cap-0)));
+}
+/* the cap shadow is a black gradient; on glass this clear it reads as dirt */
+.lg-bubble.lg-bubble-lavender::after { padding: 1px; opacity: .10; }
+
+[data-theme='light'] .lg-bubble.lg-bubble-lavender {
+    --lg-rim-1: rgba(255, 255, 255, .78);
+    color: #3F2593;
+    background:
+        linear-gradient(180deg,
+            rgba(255, 255, 255, .42) 0, rgba(255, 255, 255, .10) 6px,
+            rgba(255, 255, 255, 0) 100%),
+        rgba(156, 111, 243, .24);
+    box-shadow:
+        inset 0 -1px 0 rgba(90, 43, 176, .14),
+        0 1px 2px rgba(78, 46, 150, .10),
+        0 14px 30px -12px rgba(156, 111, 243, .55);
+}
+
+/* High contrast: the website's move — the glass gives way to a solid body and
+   a defined border, the label keeps its ink. */
+@media (prefers-contrast: more) {
+    .lg-bubble.lg-bubble-lavender {
+        background: #3B2C63;
+        box-shadow: inset 0 0 0 2px #E6DDFD;
+        -webkit-backdrop-filter: none;
+                backdrop-filter: none;
+    }
+    [data-theme='light'] .lg-bubble.lg-bubble-lavender {
+        background: #E3D5FB;
+        box-shadow: inset 0 0 0 2px #3F2593;
+    }
+    .lg-bubble.lg-bubble-lavender::before,
+    .lg-bubble.lg-bubble-lavender::after { content: none; }
+}
+
+/*
+  ---------------------------------------------------------------------------
   .lg-notice — the material as a CLEAR pane: the launcher's corner notice
   (ProviderChangeNotice: degraded search, re-index progress, provider change).
 
@@ -1374,6 +1495,8 @@
     }
     .lg-button.lg-neutral { background-color: #4a4a4a; }
     .lg-button.lg-green   { background-color: #103425; }
+    /* outranks the light body above, so high contrast keeps the darker green */
+    .lg-button.lg-green.lg-green-light { background-color: #103425; }
     /*
       clear is the only variant with no body of its own, so high contrast is
       where it has to grow one: a 2px white border on a transparent body over

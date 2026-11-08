@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import { resolveOllamaExecutable } from '../services/ollamaExecutable';
 import { DatabaseManager } from '../db/DatabaseManager';
 
 export class OllamaBootstrap {
@@ -49,7 +50,9 @@ export class OllamaBootstrap {
 
     // Try to start it
     try {
-      const child = spawn('ollama', ['serve'], { detached: true, stdio: 'ignore' });
+      // The resolved binary, not the bare name: a Finder/Dock launch has no
+      // Homebrew PATH (services/ollamaExecutable.ts).
+      const child = spawn(resolveOllamaExecutable(), ['serve'], { detached: true, stdio: 'ignore', windowsHide: true });
       child.on('error', (err: NodeJS.ErrnoException) => {
         // Throttle: log the FIRST occurrence, then only every MISSING_BACKOFF_MS.
         if (

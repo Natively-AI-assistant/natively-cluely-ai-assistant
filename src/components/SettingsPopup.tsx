@@ -3,7 +3,7 @@ import { MessageSquare, Camera, Zap, Eye } from 'lucide-react';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { getModifierSymbol } from '../utils/platformUtils';
-import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
+import { getMeetingInterfaceTheme, type MeetingInterfaceTheme, interfaceThemeSurface, isCssOwnedInterfaceTheme, resolveMeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import {
     clampOverlayOpacity,
     getDefaultOverlayOpacity,
@@ -83,9 +83,11 @@ const SettingsPopup = () => {
     // sign-in. Key-based, like Settings — the on/off switches decide whether it
     // APPLIES, not whether the toggle can be used, so the two never disagree.
     const [fastResponseAvailable, setFastResponseAvailable] = useState(false);
-    const [interfaceTheme, setInterfaceTheme] = useState<MeetingInterfaceTheme>(() => {
+    const [chosenInterfaceTheme, setInterfaceTheme] = useState<MeetingInterfaceTheme>(() => {
         return getMeetingInterfaceTheme();
     });
+    // What the overlay paints for that pick (Default is Lavender).
+    const interfaceTheme = resolveMeetingInterfaceTheme(chosenInterfaceTheme, isLightTheme ? 'light' : 'dark');
 
     // Overlay opacity — same localStorage key + init logic SettingsOverlay.tsx
     // and App.tsx use ('natively_overlay_opacity', theme-aware default when
@@ -161,7 +163,7 @@ const SettingsPopup = () => {
         window.addEventListener('storage', handleStorage);
         // @ts-ignore
         const unsubscribe = window.electronAPI?.onMeetingInterfaceThemeChanged?.((theme: string) => {
-            const valid: MeetingInterfaceTheme[] = ['default', 'liquid-glass', 'modern'];
+            const valid: MeetingInterfaceTheme[] = ['default', 'liquid-glass', 'modern', 'lavender'];
             if (valid.includes(theme as MeetingInterfaceTheme)) {
                 setInterfaceTheme(theme as MeetingInterfaceTheme);
             }
@@ -245,8 +247,6 @@ const SettingsPopup = () => {
         }
     }, [useGroqFastText]);
 
-    const [actionButtonMode, setActionButtonModeState] = useState<'recap' | 'brainstorm'>('recap');
-
     const [showTranscript, setShowTranscript] = useState(() => {
         const stored = localStorage.getItem('natively_interviewer_transcript');
         return stored !== 'false'; // Default to true if not set
@@ -260,21 +260,6 @@ const SettingsPopup = () => {
 
         window.addEventListener('storage', handleStorage);
         return () => window.removeEventListener('storage', handleStorage);
-    }, []);
-
-    // Load action button mode and subscribe to changes from other windows
-    useEffect(() => {
-        // @ts-ignore
-        window.electronAPI?.getActionButtonMode?.()?.then((mode: 'recap' | 'brainstorm') => {
-            setActionButtonModeState(mode ?? 'recap');
-        }).catch(() => {});
-        // @ts-ignore
-        if (!window.electronAPI?.onActionButtonModeChanged) return;
-        // @ts-ignore
-        const unsubscribe = window.electronAPI.onActionButtonModeChanged((mode: 'recap' | 'brainstorm') => {
-            setActionButtonModeState(mode);
-        });
-        return () => unsubscribe();
     }, []);
 
     const contentRef = useRef<HTMLDivElement>(null);
@@ -323,7 +308,7 @@ const SettingsPopup = () => {
     }, []);
 
     // Determine if the background is dark (glass themes are always dark glass)
-    const isDarkBg = interfaceTheme === 'liquid-glass' || interfaceTheme === 'modern' || !isLightTheme;
+    const isDarkBg = interfaceThemeSurface(interfaceTheme, isLightTheme ? 'light' : 'dark') === 'dark';
 
     const popupPanelClass = isDarkBg
         ? 'bg-[#1E1E1E]/80 border-white/10'
@@ -351,7 +336,7 @@ const SettingsPopup = () => {
     // [data-interface-theme="liquid-glass"] .overlay-shell-surface !important
     // rule governs; for modern its own !important rule wins over the inline
     // style the same way.
-    const isGlassTheme = interfaceTheme === 'liquid-glass';
+    const isGlassTheme = isCssOwnedInterfaceTheme(interfaceTheme);
     const appearance = useMemo(
         () =>
             isGlassTheme
@@ -420,7 +405,16 @@ const SettingsPopup = () => {
     const iconClass = 'w-3.5 h-3.5';
 
     return (
-        <div className="w-fit h-fit bg-transparent flex flex-col">
+        <div
+            className="w-fit h-fit bg-transparent flex flex-col"
+            // Lavender works its body out from the opacity slider where
+            // data-interface-theme sits. This window's attribute sits above
+            // any slider value, so the panel took the 0.65 default and read
+            // thinner than the overlay. Re-declared here under the live
+            // value, as NativelyInterface's own root does.
+            data-interface-theme={interfaceTheme === 'lavender' ? 'lavender' : undefined}
+            style={interfaceTheme === 'lavender' ? ({ ['--overlay-opacity' as '--overlay-opacity']: String(overlayOpacity) } as React.CSSProperties) : undefined}
+        >
             <div
                 ref={contentRef}
                 className={`w-[180px] backdrop-blur-md border rounded-[14px] overflow-hidden p-1 flex flex-col origin-top-left overlay-shell-surface overlay-popover-surface ${popupPanelClass}`}
@@ -429,7 +423,12 @@ const SettingsPopup = () => {
                 <div className="relative z-[1] flex flex-col">
                     {renderToggleRow({
                         key: 'undetectable',
-                        icon: <CustomGhost className={iconClass} />,
+                        // The ghost the launcher and Settings show: an outline
+                        // while Detectable, filled with cut-out eyes while
+                        // Undetectable, so the icon says the state too.
+                        icon: isUndetectable
+                            ? <CustomGhost className={iconClass} fill="currentColor" eyeColor={isDarkBg ? '#1E1E1E' : '#FFFFFF'} />
+                            : <CustomGhost className={iconClass} />,
                         label: isUndetectable ? 'Undetectable' : 'Detectable',
                         checked: isUndetectable,
                         onToggle: () => {
@@ -472,43 +471,14 @@ const SettingsPopup = () => {
                         onClassName: accentTrackClass,
                     })}
 
-                    {/* Interview Mode = the Brainstorm action button. */}
-                    {renderToggleRow({
-                        key: 'interview-mode',
-                        icon: (
-                            <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                className={iconClass}
-                            >
-                                <line x1="6" y1="3" x2="6" y2="15" />
-                                <circle cx="18" cy="6" r="3" />
-                                <circle cx="6" cy="18" r="3" />
-                                <path d="M18 9a9 9 0 0 1-9 9" />
-                            </svg>
-                        ),
-                        label: 'Interview Mode',
-                        checked: actionButtonMode === 'brainstorm',
-                        onToggle: async () => {
-                            const newMode: 'recap' | 'brainstorm' = actionButtonMode === 'brainstorm' ? 'recap' : 'brainstorm';
-                            setActionButtonModeState(newMode);
-                            try {
-                                // @ts-ignore
-                                await window.electronAPI?.setActionButtonMode?.(newMode);
-                            } catch (e) { console.error(e); }
-                        },
-                        onClassName: accentTrackClass,
-                    })}
+                    {/* Interview Mode (Recap read Brainstorm) was dropped on
+                        2026-10-20: Brainstorm is its own button, put in the
+                        overlay's row from Settings › Overlay. */}
 
                     {/* Profile Mode lives in Settings › Profile Intelligence only;
                         it was dropped from this popup by owner request. */}
 
-                    <div className="px-2 pt-2 pb-0.5 text-[11px] leading-4 font-semibold select-none" style={{ color: headerColor }}>
+                    <div className="px-2 pt-2 pb-0.5 text-[11px] leading-4 font-semibold text-center select-none" style={{ color: headerColor }}>
                         Shortcuts
                     </div>
                     {renderShortcutRow({

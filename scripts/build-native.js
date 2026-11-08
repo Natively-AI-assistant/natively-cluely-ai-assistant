@@ -112,7 +112,29 @@ function fixMacOSDylibPaths(nodeFilePath) {
 // resolves to its OS path, /usr/lib/swift/libswiftCoreMedia.dylib.
 const MACOS_DEPLOYMENT_TARGET = '12.0';
 
+const { assertMacWeakLinks, assertNoDynamicVcRuntime } = require(path.join(__dirname, 'lib', 'native-link-checks.cjs'));
+
+// A module that fails a link check loads on this machine and not on users'
+// (scripts/lib/native-link-checks.cjs). Move it out of the name the app and
+// the packager load, keep it beside as `.rejected-<ts>` for inspection, and
+// rethrow so the build fails.
+function checkOrReject(artifactPath, check) {
+  try {
+    check(artifactPath);
+  } catch (err) {
+    const rejected = `${artifactPath}.rejected-${Date.now()}`;
+    try {
+      fs.renameSync(artifactPath, rejected);
+      console.error(`Moved the rejected module aside: ${rejected}`);
+    } catch (renameErr) {
+      console.error(`Could not move the rejected module aside (${renameErr.code || renameErr.message}).`);
+    }
+    throw err;
+  }
+}
+
 if (os.platform() === 'darwin') {
+  const { alignMachOStringTableFile } = require(path.join(__dirname, 'lib', 'macho-align-strtab.cjs'));
   const macTargets = buildAllMacTargets
     ? ['x86_64-apple-darwin', 'aarch64-apple-darwin']
     : [os.arch() === 'arm64' ? 'aarch64-apple-darwin' : 'x86_64-apple-darwin'];
@@ -148,14 +170,19 @@ if (os.platform() === 'darwin') {
     runCommand(`npx napi build --platform --target ${target} --release`, extraEnv);
   }
 
-  // Fix hardcoded absolute paths in .node binaries
+  // Fix hardcoded absolute paths in .node binaries, then pad the string table
+  // macOS 27's dyld insists on (scripts/lib/macho-align-strtab.cjs). Signed
+  // builds replace the ad-hoc signature this leaves when electron-builder signs.
+  verifyArtifacts(macTargets.map((target) => artifactMap[target]));
+
   for (const target of macTargets) {
     const artifact = artifactMap[target];
     const artifactPath = path.join(nativeModulePath, artifact);
     fixMacOSDylibPaths(artifactPath);
+    const pad = alignMachOStringTableFile(artifactPath);
+    if (pad) console.log(`Aligned the string table in ${artifact} (+${pad} bytes) and re-signed it.`);
+    checkOrReject(artifactPath, assertMacWeakLinks);
   }
-
-  verifyArtifacts(macTargets.map((target) => artifactMap[target]));
 
 } else {
   console.log(`Building for current platform: ${os.platform()}`);
@@ -246,6 +273,13 @@ if (os.platform() === 'darwin') {
     // failure, with the restore path already behind us.
     if (expectedArtifacts) {
       verifyArtifacts(expectedArtifacts);
+      if (os.platform() === 'win32') {
+        for (const artifact of expectedArtifacts) {
+          // A rejected module is moved aside, so the catch below puts the
+          // last-good one back in its place.
+          checkOrReject(path.join(nativeModulePath, artifact), assertNoDynamicVcRuntime);
+        }
+      }
     }
   } catch (err) {
     // Put the last-good artifacts back so a failed build leaves the tree no

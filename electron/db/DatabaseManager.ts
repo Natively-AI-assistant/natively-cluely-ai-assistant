@@ -10,6 +10,8 @@ import { decodeUsageMetadata, encodeUsageMetadata } from './usageMetadata';
 import { encodeSavedOrigin, decodeSavedOrigin } from '../intelligence/savedTranscriptOrigin';
 import { parseVecTableName, readPendingVecRebuilds, writePendingVecRebuilds, type PendingVecRebuild } from './vecRebuildPending';
 import { prepareVecRowWriter } from './vecRowWrite';
+import { ensureOrganiseSchema, ORGANISE_TABLES } from './organiseSchema';
+import { runObservedMeetingDelete } from './meetingDeleteObservers';
 import type { ActionItem, DecisionItem, FollowUpDraft, MeetingSummaryGenerationMeta, MeetingSummaryModeMeta, MeetingSummarySectionV3, NoteBlock, PersonMention, QuestionItem, RiskItem, SourceQualityMeta, SpeakerLabelMap, SummaryStatus, TimelineItem } from '../services/meeting/types';
 
 // Interfaces for our data objects
@@ -96,6 +98,13 @@ export interface Meeting {
      * words with it. saveMeeting writes it only when given.
      */
     userNotes?: string | null;
+    /**
+     * What the meeting was taken on (2026-11-02): the overlay or the notepad
+     * (utils/meetingSurface.ts). Decides where its Resume button lives
+     * (services/meeting/meetingResume.ts). Own column (meeting_surface);
+     * saveMeeting writes it only when given; older meetings have none.
+     */
+    surface?: 'overlay' | 'notepad';
 }
 
 /**
@@ -440,9 +449,10 @@ export class DatabaseManager {
             // Must run OUTSIDE any transaction (SQLite no-ops `foreign_keys` if set
             // mid-transaction) and BEFORE migrations — both hold here.
             this.db.pragma('foreign_keys = ON');
-            // Leave synchronous = FULL (the WAL default). NORMAL trades crash
-            // durability for throughput — a power loss between commit and
-            // fsync loses the transaction. The emergency-close path added in
+            // synchronous is left at better-sqlite3's build default, which in
+            // WAL mode is NORMAL (SQLITE_DEFAULT_WAL_SYNCHRONOUS=1), not FULL:
+            // commits are synced at checkpoints, so a power loss can drop the
+            // latest ones (checked 2026-10-15). The emergency-close path added in
             // electron/main.ts (uncaughtException / SIGTERM / process-gone)
             // checkpoint+closes the DB so the next launch never sees a stale
             // WAL holding a kernel lock from a dead writer.
@@ -496,6 +506,9 @@ export class DatabaseManager {
             // After the migrations (it alters `meetings`); not version-gated.
             this.ensureLiveMeetingSchema();
             this.ensureMeetingNotesSchema();
+            // Folders, tags, people, companies (organiseSchema.ts). Same rule:
+            // idempotent and not behind user_version.
+            ensureOrganiseSchema(this.db);
         } catch (error) {
             console.error('[DatabaseManager] Failed to initialize database:', error);
             throw error;
@@ -1861,6 +1874,52 @@ export class DatabaseManager {
             }
         }
 
+        if (version < 32) {
+            console.log('[DatabaseManager] Applying migration v31 → v32: the user\'s own answers');
+            try {
+                // "Cue Cards" in Profile Intelligence (services/knowledge/ownAnswers.ts):
+                // what the user says about themselves that no résumé states. One row
+                // per question. `status` is 'draft' while the text is Natively's own
+                // proposal and 'saved' once the user wrote or approved it; only
+                // 'saved' rows are ever read by an answer.
+                this.db.exec(`
+                    CREATE TABLE IF NOT EXISTS profile_own_answers (
+                        key        TEXT PRIMARY KEY,
+                        answer     TEXT NOT NULL DEFAULT '',
+                        status     TEXT NOT NULL DEFAULT 'saved' CHECK (status IN ('draft', 'saved')),
+                        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                    );
+                `);
+                this.db.pragma('user_version = 32');
+            } catch (e) {
+                console.error('[DatabaseManager] v32 own answers failed (leaving version at 31 to retry next launch):', e);
+                // Same rule as v28 to v31 above: stop rather than fall through.
+                return;
+            }
+        }
+
+        if (version < 33) {
+            console.log('[DatabaseManager] Applying migration v32 → v33: where each own answer came from');
+            try {
+                // `origin` is 'user' when the user typed or changed the words, and
+                // 'drafted' when they accepted Natively's draft as it stood. An
+                // accepted draft is still Natively's guess about them: the
+                // 2026-10-15 benchmark had accepted drafts override the user's own
+                // notes on why they are leaving and on their weakness. Rows from
+                // before this column are treated as the user's own words.
+                const cols = this.db.prepare("PRAGMA table_info('profile_own_answers')").all() as Array<{ name: string }>;
+                if (!cols.some((c) => c.name === 'origin')) {
+                    this.db.exec(`ALTER TABLE profile_own_answers ADD COLUMN origin TEXT NOT NULL DEFAULT 'user' CHECK (origin IN ('user', 'drafted'));`);
+                    // A row still waiting as a draft was written by Natively, whatever the default says.
+                    this.db.exec(`UPDATE profile_own_answers SET origin = 'drafted' WHERE status = 'draft';`);
+                }
+                this.db.pragma('user_version = 33');
+            } catch (e) {
+                console.error('[DatabaseManager] v33 own-answer origin failed (leaving version at 32 to retry next launch):', e);
+                return;
+            }
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
@@ -2703,6 +2762,30 @@ export class DatabaseManager {
             this.db.prepare('DELETE FROM mode_note_sections WHERE id = ?').run(id);
         } catch (e) {
             console.error('[DatabaseManager] deleteNoteSection failed:', e);
+        }
+    }
+
+    /**
+     * A mode's notes sections replaced by another set (a note template applied
+     * in the Modes Manager), in one transaction: a failed insert leaves the old
+     * sections, never a half-written list.
+     */
+    public replaceNoteSections(modeId: string, sections: Array<{ id: string; title: string; description: string }>): boolean {
+        if (!this.db) return false;
+        try {
+            const del = this.db.prepare('DELETE FROM mode_note_sections WHERE mode_id = ?');
+            const ins = this.db.prepare(`
+                INSERT INTO mode_note_sections (id, mode_id, title, description, sort_order)
+                VALUES (?, ?, ?, ?, ?)
+            `);
+            this.db.transaction(() => {
+                del.run(modeId);
+                sections.forEach((s, i) => ins.run(s.id, modeId, s.title, s.description, i));
+            })();
+            return true;
+        } catch (e) {
+            console.error('[DatabaseManager] replaceNoteSections failed:', e);
+            return false;
         }
     }
 
@@ -3557,6 +3640,13 @@ export class DatabaseManager {
         return this.resolvedExtPath;
     }
 
+    /** type, timestamp, question and answer of an AI interaction, as SQLite can bind them (unusable values become NULL). */
+    private static usageColumns(usage: any): [string | null, number | null, string | null, string | null] {
+        const text = (v: unknown): string | null => (typeof v === 'string' ? v || null : typeof v === 'number' ? String(v) : null);
+        const timestamp = typeof usage?.timestamp === 'number' && Number.isFinite(usage.timestamp) ? usage.timestamp : null;
+        return [text(usage?.type), timestamp, text(usage?.question), Array.isArray(usage?.answer) ? null : text(usage?.answer)];
+    }
+
     public saveMeeting(meeting: Meeting, startTimeMs: number, durationMs: number) {
         if (!this.db) {
             console.error('[DatabaseManager] DB not initialized');
@@ -3680,18 +3770,10 @@ export class DatabaseManager {
                     // previews — see usageMetadata.ts for the stored shapes.
                     const metadata = encodeUsageMetadata(usage);
 
-                    // Normalization
-                    const answerText = Array.isArray(usage.answer) ? null : usage.answer || null;
-                    const queryText = usage.question || null;
-
-                    insertInteraction.run(
-                        meeting.id,
-                        usage.type,
-                        usage.timestamp,
-                        queryText,
-                        answerText,
-                        metadata
-                    );
+                    // Only values SQLite can bind (2026-10-15): one answer holding
+                    // an object, a non-finite timestamp or a boolean threw inside
+                    // this transaction and lost the WHOLE meeting's save.
+                    insertInteraction.run(meeting.id, ...DatabaseManager.usageColumns(usage), metadata);
                 }
             }
         });
@@ -3713,6 +3795,30 @@ export class DatabaseManager {
         // Same reasoning: written only when the save carries it, so the final
         // save after the notes (which does not) keeps what Stop wrote.
         if (typeof meeting.userNotes === 'string') this.setMeetingUserNotes(meeting.id, meeting.userNotes);
+        if (meeting.surface === 'overlay' || meeting.surface === 'notepad') this.setMeetingSurface(meeting.id, meeting.surface);
+    }
+
+    /** Store what a meeting was taken on (the overlay or the notepad). */
+    public setMeetingSurface(id: string, surface: 'overlay' | 'notepad'): boolean {
+        if (!this.db) return false;
+        try {
+            return this.db.prepare('UPDATE meetings SET meeting_surface = ? WHERE id = ?').run(surface === 'notepad' ? 'notepad' : 'overlay', id).changes > 0;
+        } catch (e: any) {
+            console.warn(`[DatabaseManager] the meeting's surface was not stored for ${id}:`, e?.message);
+            return false;
+        }
+    }
+
+    /** A saved meeting's true start and how long it ran (ms), for a resume to continue from. */
+    public getMeetingTiming(id: string): { startTime: number; durationMs: number } | null {
+        if (!this.db) return null;
+        try {
+            const row = this.db.prepare('SELECT start_time, duration_ms FROM meetings WHERE id = ?').get(id) as { start_time: number | null; duration_ms: number | null } | undefined;
+            if (!row) return null;
+            return { startTime: Number(row.start_time) || 0, durationMs: Number(row.duration_ms) || 0 };
+        } catch {
+            return null;
+        }
     }
 
     // ============================================
@@ -3728,6 +3834,7 @@ export class DatabaseManager {
     private ensureMeetingNotesSchema(): void {
         if (!this.db) return;
         try { this.db.exec('ALTER TABLE meetings ADD COLUMN user_notes TEXT'); } catch (e) { /* Column already exists */ }
+        try { this.db.exec('ALTER TABLE meetings ADD COLUMN meeting_surface TEXT'); } catch (e) { /* Column already exists */ }
         try {
             this.db.exec(`
                 CREATE TABLE IF NOT EXISTS meeting_notes_versions (
@@ -3758,6 +3865,66 @@ export class DatabaseManager {
             `);
         } catch (e) {
             console.error('[DatabaseManager] notes versions / ratings tables could not be created:', e);
+        }
+        // Blind A/B picks between two versions of the notes (services/meeting/notesCompare.ts).
+        try {
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS meeting_notes_comparisons (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    meeting_id  TEXT NOT NULL,
+                    a_hash      TEXT NOT NULL,
+                    b_hash      TEXT NOT NULL,
+                    a_label     TEXT,
+                    b_label     TEXT,
+                    a_provider  TEXT,
+                    a_model     TEXT,
+                    b_provider  TEXT,
+                    b_model     TEXT,
+                    choice      TEXT NOT NULL CHECK (choice IN ('a', 'b', 'same')),
+                    reason      TEXT,
+                    created_at  INTEGER NOT NULL,
+                    FOREIGN KEY(meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_meeting_notes_comparisons_meeting ON meeting_notes_comparisons(meeting_id);
+            `);
+        } catch (e) {
+            console.error('[DatabaseManager] notes comparisons table could not be created:', e);
+        }
+    }
+
+    /** Store one blind A/B pick between two versions of a meeting's notes. */
+    public saveNotesComparison(r: {
+        meetingId: string; aHash: string; bHash: string; aLabel: string; bLabel: string;
+        aProvider: string | null; aModel: string | null; bProvider: string | null; bModel: string | null;
+        choice: 'a' | 'b' | 'same'; reason: string | null; createdAt: number;
+    }): boolean {
+        if (!this.db) return false;
+        if (r.choice !== 'a' && r.choice !== 'b' && r.choice !== 'same') return false;
+        try {
+            return this.db.prepare(`
+                INSERT INTO meeting_notes_comparisons (meeting_id, a_hash, b_hash, a_label, b_label, a_provider, a_model, b_provider, b_model, choice, reason, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                r.meetingId, r.aHash, r.bHash, r.aLabel, r.bLabel, r.aProvider, r.aModel, r.bProvider, r.bModel,
+                r.choice, r.reason?.trim() ? r.reason.trim().slice(0, 2000) : null, r.createdAt,
+            ).changes > 0;
+        } catch (e: any) {
+            console.warn(`[DatabaseManager] the notes comparison was not stored for ${r.meetingId}:`, e?.message);
+            return false;
+        }
+    }
+
+    /** Every blind A/B pick, oldest first. */
+    public listNotesComparisons(): Array<{ meetingId: string; aHash: string; bHash: string; aLabel: string | null; bLabel: string | null; aProvider: string | null; aModel: string | null; bProvider: string | null; bModel: string | null; choice: 'a' | 'b' | 'same'; reason: string | null; createdAt: number }> {
+        if (!this.db) return [];
+        try {
+            return (this.db.prepare('SELECT * FROM meeting_notes_comparisons ORDER BY created_at ASC, id ASC').all() as any[]).map((r) => ({
+                meetingId: r.meeting_id, aHash: r.a_hash, bHash: r.b_hash, aLabel: r.a_label ?? null, bLabel: r.b_label ?? null,
+                aProvider: r.a_provider ?? null, aModel: r.a_model ?? null, bProvider: r.b_provider ?? null, bModel: r.b_model ?? null,
+                choice: r.choice, reason: r.reason ?? null, createdAt: r.created_at,
+            }));
+        } catch {
+            return [];
         }
     }
 
@@ -3813,6 +3980,17 @@ export class DatabaseManager {
         } catch (e: any) {
             console.warn(`[DatabaseManager] an earlier version of the notes was not kept for ${meetingId}:`, e?.message);
             return null;
+        }
+    }
+
+    /** Delete one earlier version of a meeting's notes (a Compare pick it lost). */
+    public deleteNotesVersion(meetingId: string, versionId: number): boolean {
+        if (!this.db || !Number.isInteger(versionId)) return false;
+        try {
+            return this.db.prepare('DELETE FROM meeting_notes_versions WHERE id = ? AND meeting_id = ?').run(versionId, meetingId).changes > 0;
+        } catch (e: any) {
+            console.warn(`[DatabaseManager] a notes version was not deleted for ${meetingId}:`, e?.message);
+            return false;
         }
     }
 
@@ -3917,6 +4095,55 @@ export class DatabaseManager {
             console.error('[DatabaseManager] live_meeting_journal could not be created (meetings in progress will not survive a quit):', e);
         }
         try { this.db.exec('ALTER TABLE meetings ADD COLUMN recovery_meta_json TEXT'); } catch (e) { /* Column already exists */ }
+        // AI interactions of a running meeting past what memory keeps (see
+        // appendLiveUsageOverflow). rowid is the order they happened in.
+        try {
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS live_meeting_usage_overflow (
+                    meeting_id TEXT NOT NULL,
+                    usage_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_live_usage_overflow_meeting ON live_meeting_usage_overflow(meeting_id);
+            `);
+        } catch (e) {
+            console.error('[DatabaseManager] live_meeting_usage_overflow could not be created (a meeting past 1,500 AI answers keeps only the newest):', e);
+        }
+    }
+
+    /**
+     * AI interactions of a running meeting that left memory (SessionTracker
+     * keeps the newest 1,500; the journal row holds those), oldest first, one
+     * row each, written once. Read back at Stop and with the meeting's live row.
+     */
+    public appendLiveUsageOverflow(id: string, entries: unknown[]): void {
+        if (!this.db || entries.length === 0) return;
+        const insert = this.db.prepare('INSERT INTO live_meeting_usage_overflow (meeting_id, usage_json) VALUES (?, ?)');
+        this.db.transaction(() => { for (const e of entries) insert.run(id, JSON.stringify(e ?? null)); })();
+    }
+
+    public getLiveUsageOverflow(id: string): any[] {
+        if (!this.db) return [];
+        try {
+            const rows = this.db.prepare('SELECT usage_json FROM live_meeting_usage_overflow WHERE meeting_id = ? ORDER BY rowid ASC').all(id) as Array<{ usage_json: string }>;
+            const out: any[] = [];
+            for (const r of rows) { try { const v = JSON.parse(r.usage_json); if (v && typeof v === 'object') out.push(v); } catch { /* skip one bad row */ } }
+            return out;
+        } catch {
+            return [];
+        }
+    }
+
+    public removeLiveUsageOverflow(id: string): void {
+        if (!this.db) return;
+        try { this.db.prepare('DELETE FROM live_meeting_usage_overflow WHERE meeting_id = ?').run(id); } catch { /* table may not exist */ }
+    }
+
+    /** Overflow rows whose meeting has no live row any more (and is not `runningId`). */
+    public sweepOrphanUsageOverflow(runningId: string | null): void {
+        if (!this.db) return;
+        try {
+            this.db.prepare('DELETE FROM live_meeting_usage_overflow WHERE meeting_id NOT IN (SELECT id FROM live_meeting_journal) AND meeting_id IS NOT ?').run(runningId);
+        } catch { /* table may not exist */ }
     }
 
     /** Upsert the running meeting's row. Synchronous; throws on failure (the journal retries). */
@@ -3936,6 +4163,7 @@ export class DatabaseManager {
     public removeLiveMeeting(id: string): void {
         if (!this.db) return;
         this.db.prepare('DELETE FROM live_meeting_journal WHERE id = ?').run(id);
+        try { this.db.prepare('DELETE FROM live_meeting_usage_overflow WHERE meeting_id = ?').run(id); } catch { /* table may not exist */ }
     }
 
     /** Every left-over live meeting, oldest first. A malformed row is dropped from the list, not thrown. */
@@ -3954,7 +4182,9 @@ export class DatabaseManager {
                 const usage = JSON.parse(row.usage_json || '[]');
                 const meta = JSON.parse(row.meta_json || '{}');
                 if (!Array.isArray(transcript)) continue;
-                out.push({ id: row.id, startedAt: row.started_at, updatedAt: row.updated_at, transcript, usage: Array.isArray(usage) ? usage : [], meta: meta && typeof meta === 'object' ? meta : {} });
+                const kept = Array.isArray(usage) ? usage : [];
+                const overflow = this.getLiveUsageOverflow(row.id);
+                out.push({ id: row.id, startedAt: row.started_at, updatedAt: row.updated_at, transcript, usage: overflow.length ? [...overflow, ...kept] : kept, meta: meta && typeof meta === 'object' ? meta : {} });
             } catch {
                 console.warn(`[DatabaseManager] live meeting ${row?.id} is unreadable; left in place`);
             }
@@ -3967,18 +4197,22 @@ export class DatabaseManager {
      * transaction: saved as `meeting` (a placeholder) with its recovery
      * metadata, and its live row deleted. A meeting already saved under the id
      * (Stop got that far before the app went) is kept as it is; only the live
-     * row goes. Returns whether a meeting was created.
+     * row goes — unless `replaceExisting`: a RESUMED meeting's live copy holds
+     * the whole meeting (the saved lines and the new ones), so it replaces the
+     * saved row (2026-11-02, services/meeting/meetingResume.ts). Returns
+     * whether a meeting was written.
      */
-    public promoteLiveMeeting(meeting: Meeting, startTimeMs: number, durationMs: number): boolean {
+    public promoteLiveMeeting(meeting: Meeting, startTimeMs: number, durationMs: number, opts?: { replaceExisting?: boolean }): boolean {
         if (!this.db) return false;
         const exists = this.db.prepare('SELECT 1 FROM meetings WHERE id = ?');
         let created = false;
         this.db.transaction(() => {
-            if (!exists.get(meeting.id)) {
+            if (opts?.replaceExisting || !exists.get(meeting.id)) {
                 this.saveMeeting(meeting, startTimeMs, durationMs);
                 created = true;
             }
             this.db!.prepare('DELETE FROM live_meeting_journal WHERE id = ?').run(meeting.id);
+            try { this.db!.prepare('DELETE FROM live_meeting_usage_overflow WHERE meeting_id = ?').run(meeting.id); } catch { /* table may not exist */ }
         })();
         return created;
     }
@@ -4167,6 +4401,30 @@ export class DatabaseManager {
         }
     }
 
+    /** Every saved meeting's id and raw summary_json, for deterministic data
+     *  migrations that cannot narrow by text (placeholderNotesMigration). */
+    public listMeetingSummaries(): Array<{ id: string; summaryJson: string }> {
+        if (!this.db) return [];
+        try {
+            const rows = this.db.prepare('SELECT id, summary_json FROM meetings').all() as Array<{ id: string; summary_json: string }>;
+            return rows.map((r) => ({ id: r.id, summaryJson: r.summary_json || '{}' }));
+        } catch (error) {
+            console.error('[DatabaseManager] listMeetingSummaries failed:', error);
+            return [];
+        }
+    }
+
+    /** A notes rating follows its notes when a migration rewrites them. A rating
+     *  already stored under the new hash wins. */
+    public rekeyNotesRating(meetingId: string, fromHash: string, toHash: string): void {
+        if (!this.db || fromHash === toHash) return;
+        try {
+            this.db.prepare('UPDATE OR IGNORE meeting_notes_ratings SET notes_hash = ? WHERE meeting_id = ? AND notes_hash = ?').run(toHash, meetingId, fromHash);
+        } catch (error) {
+            console.warn(`[DatabaseManager] rekeyNotesRating failed for ${meetingId}:`, error);
+        }
+    }
+
     public replaceDetailedSummary(id: string, detailedSummary: Meeting['detailedSummary'], opts?: { title?: string; summaryStatus?: SummaryStatus }): boolean {
         if (!this.db) return false;
         try {
@@ -4291,6 +4549,46 @@ export class DatabaseManager {
         }
     }
 
+    /**
+     * Saved meetings that started at or after `sinceMs`, newest first, with
+     * their notes, length and calendar snapshot (linked or not): what the
+     * assist features read (services/assist: "You owe", the pre-meeting
+     * brief, the catch-up after back-to-back meetings). Read-only; no schema
+     * change.
+     */
+    public getMeetingsWithNotesSince(sinceMs: number, limit: number = 300): Array<{
+        id: string; title: string; startMs: number; durationMs: number; calendarEventId: string | null;
+        calendarEvent: Meeting['calendarEvent']; detailedSummary: any; summaryStatus: string | null; isProcessed: boolean;
+    }> {
+        if (!this.db) return [];
+        try {
+            const rows = this.db.prepare(
+                `SELECT id, title, start_time, duration_ms, calendar_event_id, calendar_event_json, summary_json, summary_status, is_processed
+                 FROM meetings
+                 WHERE start_time >= ?
+                 ORDER BY start_time DESC LIMIT ?`,
+            ).all(Number.isFinite(sinceMs) ? sinceMs : 0, Math.max(1, Math.min(limit, 1000))) as any[];
+            return rows.map((row) => {
+                let detailedSummary: any = null;
+                try { detailedSummary = JSON.parse(row.summary_json || '{}')?.detailedSummary ?? null; } catch { /* unreadable notes: nothing to read */ }
+                return {
+                    id: row.id,
+                    title: row.title,
+                    startMs: Number(row.start_time) || 0,
+                    durationMs: Number(row.duration_ms) || 0,
+                    calendarEventId: row.calendar_event_id ?? null,
+                    calendarEvent: parseCalendarEvent(row.calendar_event_json),
+                    detailedSummary,
+                    summaryStatus: row.summary_status ?? null,
+                    isProcessed: row.is_processed === 1 || row.is_processed === true,
+                };
+            });
+        } catch (error) {
+            console.error('[DatabaseManager] getMeetingsWithNotesSince failed:', error);
+            return [];
+        }
+    }
+
     public updateSpeakerLabels(
         id: string,
         speakerLabels: Record<string, string>,
@@ -4382,6 +4680,20 @@ export class DatabaseManager {
         });
     }
 
+    /** One meeting's saved notes alone, without its transcript or usage rows; null
+     *  when there is no such meeting. For lookups that need only the notes (which
+     *  mode a meeting ran under). */
+    public getMeetingDetailedSummary(id: string): { detailedSummary: unknown } | null {
+        if (!this.db) return null;
+        const row = this.db.prepare('SELECT summary_json FROM meetings WHERE id = ?').get(id) as { summary_json?: string } | undefined;
+        if (!row) return null;
+        try {
+            return { detailedSummary: JSON.parse(row.summary_json || '{}')?.detailedSummary };
+        } catch {
+            return { detailedSummary: undefined };
+        }
+    }
+
     public getMeetingDetails(id: string): Meeting | null {
         if (!this.db) return null;
 
@@ -4440,6 +4752,7 @@ export class DatabaseManager {
             transcript: transcript,
             usage: usage,
             ...(typeof meetingRow.user_notes === 'string' && meetingRow.user_notes ? { userNotes: meetingRow.user_notes } : {}),
+            ...(meetingRow.meeting_surface === 'notepad' || meetingRow.meeting_surface === 'overlay' ? { surface: meetingRow.meeting_surface } : {}),
         };
     }
 
@@ -4463,10 +4776,13 @@ export class DatabaseManager {
             // no transaction a failure of the parent DELETE left the vectors gone and
             // the meeting present. This was inert only while R-01 meant nothing was
             // ever deleted; fixing R-01 makes it reachable.
-            const info = this.db.transaction((meetingId: string) => {
+            // meetingDeleteObservers: features that follow a meeting out (its share
+            // link goes off) hear of it before, and settle once the delete held.
+            const removeMeeting = this.db.transaction((meetingId: string) => {
                 this.deleteVectorsForMeeting(meetingId);
                 return this.db!.prepare('DELETE FROM meetings WHERE id = ?').run(meetingId);
-            })(id);
+            });
+            const info = runObservedMeetingDelete({ ids: [id] }, () => removeMeeting(id), (result) => result.changes > 0);
             console.log(`[DatabaseManager] Deleted meeting ${id}. Changes: ${info.changes}`);
             return info.changes > 0;
         } catch (error) {
@@ -4578,7 +4894,9 @@ export class DatabaseManager {
             // Clear all tables atomically (order matters due to foreign keys,
             // but SQLite handles cascades). Using a transaction ensures we never
             // end up in a half-cleared state if one statement fails.
-            this.db.transaction(() => {
+            // meetingDeleteObservers hear 'all' before, and settle once it held
+            // (every share link goes off), or are told it did not.
+            const wipe = this.db.transaction(() => {
                 // F-705: vec0 virtual tables take no part in FK cascades, so a
                 // full wipe has to clear them explicitly too — otherwise
                 // "clear all data" left every embedding vector on disk.
@@ -4594,7 +4912,14 @@ export class DatabaseManager {
                 this.db!.exec('DELETE FROM meetings');
                 // A meeting in progress is data too (LiveMeetingJournal).
                 try { this.db!.exec('DELETE FROM live_meeting_journal'); } catch (_) { /* table may not exist */ }
-            })();
+                try { this.db!.exec('DELETE FROM live_meeting_usage_overflow'); } catch (_) { /* table may not exist */ }
+                // Folders, tags, people and companies hold what the meetings said
+                // about people (and the user's notes on them): all data.
+                for (const table of ORGANISE_TABLES) {
+                    try { this.db!.exec(`DELETE FROM ${table}`); } catch (_) { /* table may not exist */ }
+                }
+            });
+            runObservedMeetingDelete('all', () => wipe(), () => true);
 
             console.log('[DatabaseManager] All data cleared from database.');
             return true;
@@ -4757,7 +5082,7 @@ The credit can be used for Speech-to-Text and is sufficient for extended testing
 # Support
 
 If you need help with setup or usage, contact us anytime at:
-natively.contact@gmail.com`;
+support@heynatively.com`;
 
         const demoMeeting: Meeting = {
             id: demoId,
@@ -4855,7 +5180,7 @@ natively.contact@gmail.com`;
                 { speaker: 'interviewer', text: "Check out the 'How to Use' section in the notes for API setup instructions.", timestamp: 20000 },
                 { speaker: 'interviewer', text: "'Clarify' asks a targeted question to get missing constraints. 'Recap' summarizes the entire conversation so far.", timestamp: 22000 },
                 { speaker: 'user', text: "What about the other buttons?", timestamp: 30000 },
-                { speaker: 'interviewer', text: "'Follow Up Questions' suggests questions you can ask. 'Answer' lets you speak a question and get an instant response.", timestamp: 35000 },
+                { speaker: 'interviewer', text: "'Follow Up Questions' suggests questions you can ask. 'Speak' lets you ask a question out loud and get an instant answer.", timestamp: 35000 },
                 { speaker: 'user', text: "Can I take screenshots during calls?", timestamp: 45000 },
                 { speaker: 'interviewer', text: "Yes! Press Cmd+H for full screen or Cmd+Shift+H to select an area. The AI will analyze it and help you.", timestamp: 50000 },
                 { speaker: 'user', text: "How do I hide Natively during screen share?", timestamp: 60000 },

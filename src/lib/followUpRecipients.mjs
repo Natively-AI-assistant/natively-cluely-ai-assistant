@@ -72,3 +72,18 @@ export function gmailComposeUrl({ to = [], subject = '', body = '', account } = 
   if (body) params.push(`body=${encodeURIComponent(body)}`);
   return `https://mail.google.com/mail/?${params.join('&')}`;
 }
+
+/**
+ * Outlook on the web's compose window, filled in (the follow-up sheet's send
+ * menu). outlook.office.com is the work and school address; it asks a personal
+ * account to sign in there too.
+ * @param {{ to?: string[], subject?: string, body?: string }} draft
+ * @returns {string}
+ */
+export function outlookComposeUrl({ to = [], subject = '', body = '' } = {}) {
+  const params = [];
+  if (to.length > 0) params.push(`to=${to.map((e) => encodeURIComponent(e)).join(',')}`);
+  if (subject) params.push(`subject=${encodeURIComponent(subject)}`);
+  if (body) params.push(`body=${encodeURIComponent(body)}`);
+  return `https://outlook.office.com/mail/deeplink/compose${params.length ? `?${params.join('&')}` : ''}`;
+}

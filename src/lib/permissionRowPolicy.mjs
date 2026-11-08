@@ -228,3 +228,30 @@ export function allPermissionsResolved(platform, statuses) {
   }
   return rows.every((r) => r.tone === 'granted' || r.tone === 'blocked');
 }
+
+/**
+ * How often an open card re-reads the statuses on its own, in ms, or null when
+ * the window-focus refresh is enough.
+ *
+ * - Windows: the privacy page is a separate Settings app, and with the two
+ *   windows side by side a switch flipped there fires no focus event here, so
+ *   the card would sit on a stale row until clicked. permissions:check on
+ *   win32 reads only the microphone (getMediaAccessStatus, synchronous; the
+ *   screen is not probed there), so a re-read every 2 s costs next to nothing.
+ * - macOS: no. Its check can run a desktopCapturer probe of up to 5 s for
+ *   Screen Recording, and System Settings hands focus back when it is left,
+ *   so the focus refresh already catches the grant.
+ * - Anything else: no, nothing there changes while the card is open.
+ *
+ * @param {string|undefined|null} platform  process.platform, injected.
+ * @returns {number|null}
+ */
+export function statusPollIntervalMs(platform) {
+  switch (platform) {
+    case 'win32':
+      return 2000;
+    case 'darwin':
+    default:
+      return null;
+  }
+}

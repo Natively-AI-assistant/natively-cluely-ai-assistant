@@ -37,6 +37,65 @@ export const ELEVENLABS_SILENCE_TAIL_MS = 600;
 // keepalive cadence took ~1.25 s to fill.
 export const ELEVENLABS_SEND_THRESHOLD_SAMPLES = 1600;
 
+/**
+ * A server message that carries an error (auth_error, quota_exceeded,
+ * insufficient_funds, ...) as an Error, with the message type as `code`.
+ * The raw message used to be emitted as-is: a string or a plain object with
+ * no `.message`, so main's STT error handler threw on `err.message
+ * .toLowerCase()`, the throw was swallowed as "Failed to parse message", and
+ * an out-of-credit key just went quiet with no "quota" status (user log
+ * 2026-11-01, Windows 2.9.2).
+ */
+export function elevenLabsServerError(msg: any): Error {
+    const raw = msg?.error ?? msg?.message ?? msg?.detail;
+    const text = typeof raw === 'string' && raw.trim()
+        ? raw.trim()
+        : (raw && typeof raw === 'object' && typeof raw.message === 'string' ? raw.message : '');
+    const code = typeof (msg?.message_type ?? msg?.type) === 'string' ? (msg.message_type ?? msg.type) : 'error';
+    const message = text ? `ElevenLabs ${code}: ${text}` : `ElevenLabs ${code}`;
+    return Object.assign(new Error(message), { code, terminal: ELEVENLABS_TERMINAL_ERRORS.has(code) });
+}
+
+/**
+ * Server errors no reconnect can fix: the user has to act (key, credit,
+ * terms) or the request itself is wrong. Every other documented type
+ * (rate_limited, resource_exhausted, session_time_limit_exceeded,
+ * transcriber_error, commit_throttled, ...) is followed by a close and a new
+ * session works. Per the docs the error message always arrives BEFORE the
+ * close (elevenlabs.io realtime STT event reference, "Error handling").
+ */
+export const ELEVENLABS_TERMINAL_ERRORS: ReadonlySet<string> = new Set([
+    'auth_error', 'quota_exceeded', 'unaccepted_terms', 'invalid_request',
+]);
+
+/**
+ * A session that lasted this long was healthy, so the server closing it
+ * (idle, time limit, throttling) resets the reconnect backoff. Shorter ones
+ * count as failed attempts, so a server that accepts and closes at once
+ * backs off and gives up instead of reconnecting on every audio chunk.
+ */
+export const ELEVENLABS_HEALTHY_SESSION_MS = 5000;
+
+/**
+ * What a socket close means. 'stop': stopped on purpose, by a terminal error,
+ * or out of reconnects. 'reconnect': a dropped or short-lived socket, retried
+ * with backoff. 'lazy': the server ended a healthy session with a normal close
+ * (idle, session time limit, throttling): stay active and reconnect on the
+ * next audio. 'lazy' used to be 'stop', which dropped every later chunk and
+ * left the channel silent for the rest of the meeting.
+ */
+export function elevenLabsCloseAction(shouldReconnect: boolean, code: number, livedMs: number): 'stop' | 'reconnect' | 'lazy' {
+    if (!shouldReconnect) return 'stop';
+    if (code !== 1000 || livedMs < ELEVENLABS_HEALTHY_SESSION_MS) return 'reconnect';
+    return 'lazy';
+}
+
+/** What a server error message means: see ELEVENLABS_TERMINAL_ERRORS. */
+export function elevenLabsServerErrorAction(msgType: string): 'idle' | 'terminal' | 'retry' {
+    if (msgType === 'insufficient_audio_activity') return 'idle';
+    return ELEVENLABS_TERMINAL_ERRORS.has(msgType) ? 'terminal' : 'retry';
+}
+
 export class ElevenLabsStreamingSTT extends EventEmitter {
     private apiKey: string;
     private ws: WebSocket | null = null;
@@ -44,6 +103,8 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
     private shouldReconnect = false;
     private reconnectAttempts = 0;
     private reconnectTimer: NodeJS.Timeout | null = null;
+    /** When the current socket opened (0: none open). See ELEVENLABS_HEALTHY_SESSION_MS. */
+    private sessionOpenedAt = 0;
     private inputSampleRate = 48000; // what the mic/system audio captures at
     private targetSampleRate = 16000; // what ElevenLabs Scribe v2 requires
     
@@ -340,7 +401,10 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
                 return;
             }
             this.isConnecting = false;
-            this.reconnectAttempts = 0;
+            // reconnectAttempts resets in the close handler once a session has
+            // proven healthy, not on open: a server that accepts and closes at
+            // once must still back off.
+            this.sessionOpenedAt = Date.now();
             console.log('[ElevenLabsStreaming] Connected');
 
             // Note: ElevenLabs requires waiting for 'session_started' before sending audio.
@@ -389,28 +453,9 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
                         if (msg.text) this.emitCommitted(msg.text);
                         break;
 
-                    case 'auth_error':
-                        console.error('[ElevenLabsStreaming] Auth error — check key scope/permissions in ElevenLabs dashboard:', msg);
-                        this.emit('error', msg);
-                        // Stop reconnection loops for auth failures to save API credits.
-                        // Also clear any queued reconnect timer (write()'s lazy-connect or
-                        // a prior close-handler enqueue) so we don't get a stray connect()
-                        // attempt after the latch flips.
-                        this.shouldReconnect = false;
-                        if (this.reconnectTimer) {
-                            clearTimeout(this.reconnectTimer);
-                            this.reconnectTimer = null;
-                        }
-                        if (this.ws) {
-                            this.ws.close();
-                        }
-                        break;
-
                     default:
-                        // Log other messages for debugging (e.g. metadata or unknowns)
                         if (msg.error) {
-                            console.error('[ElevenLabsStreaming] Server error:', msg.error);
-                            this.emit('error', msg.error);
+                            this.handleServerError(msg, msgType);
                         } else {
                             console.log('[ElevenLabsStreaming] Received message:', msgType, Object.keys(msg));
                         }
@@ -426,18 +471,44 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
             this.isConnecting = false;
             this.isSessionReady = false;
             console.log(`[ElevenLabsStreaming] Closed: code=${code} reason=${reason}`);
-            if (this.shouldReconnect && code !== 1000) {
-                this.scheduleReconnect();
-            } else {
-                // If not reconnecting, mark session as truly inactive
-                this.isActive = false;
-            }
+            const livedMs = this.sessionOpenedAt ? Date.now() - this.sessionOpenedAt : 0;
+            this.sessionOpenedAt = 0;
+            if (livedMs >= ELEVENLABS_HEALTHY_SESSION_MS) this.reconnectAttempts = 0;
+            const action = elevenLabsCloseAction(this.shouldReconnect, code, livedMs);
+            if (action === 'stop') this.isActive = false;
+            else if (action === 'reconnect') this.scheduleReconnect();
+            // 'lazy': stay active; write() reconnects on the next audio.
         });
 
         this.ws.on('error', (err) => {
             console.error('[ElevenLabsStreaming] WS error:', err);
             this.emit('error', err);
         });
+    }
+
+    /** A server message carrying `error`. Terminal types stop reconnecting. */
+    private handleServerError(msg: any, msgType: string): void {
+        const action = elevenLabsServerErrorAction(msgType);
+        if (action === 'idle') {
+            // Nothing to hear yet (quiet call, no system audio). Not a fault the
+            // user should see as "reconnecting": the close that follows keeps
+            // the provider active and the next audio opens a new session.
+            console.log('[ElevenLabsStreaming] Server closed an idle session; reconnecting on the next audio.');
+            return;
+        }
+        console.error('[ElevenLabsStreaming] Server error:', msgType, msg.error);
+        if (action === 'terminal') {
+            // Retrying cannot help and would spend credits / spam the server.
+            // Clear any queued reconnect (write()'s lazy-connect or a prior
+            // close-handler enqueue) so nothing reconnects after the latch.
+            this.shouldReconnect = false;
+            if (this.reconnectTimer) {
+                clearTimeout(this.reconnectTimer);
+                this.reconnectTimer = null;
+            }
+            this.ws?.close();
+        }
+        this.emit('error', elevenLabsServerError(msg));
     }
 
     private scheduleReconnect(): void {

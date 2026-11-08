@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:">
+<title>Natively audio</title>
+</head>
+<body>
+<script>
+// Hidden audio capture page for the renderer fallback (captureHost.ts).
+// Each session is one AudioContext at 16 kHz: Chromium resamples the track to
+// the context rate, and the worklet below hands main 100 ms blocks of mono
+// 16-bit PCM. 'mic' is getUserMedia; 'system' is getDisplayMedia, which the
+// host answers with audio: 'loopback' (WASAPI loopback on Windows, the Core
+// Audio tap on macOS 14.2+). No processing (echo cancellation, noise
+// suppression, gain) runs, matching the native capture.
+'use strict';
+const bridge = window.nativelyCapture;
+const sessions = new Map();
+
+const WORKLET = `
+class NativelyPcm extends AudioWorkletProcessor {
+  constructor() { super(); this.block = new Int16Array(1600); this.n = 0; }
+  process(inputs) {
+    const channel = inputs[0] && inputs[0][0];
+    if (channel) {
+      for (let i = 0; i < channel.length; i++) {
+        const s = Math.max(-1, Math.min(1, channel[i]));
+        this.block[this.n++] = s < 0 ? s * 32768 : s * 32767;
+        if (this.n === this.block.length) {
+          this.port.postMessage(this.block.buffer, [this.block.buffer]);
+          this.block = new Int16Array(1600);
+          this.n = 0;
+        }
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('natively-pcm', NativelyPcm);
+`;
+const workletUrl = URL.createObjectURL(new Blob([WORKLET], { type: 'application/javascript' }));
+
+function errorText(e) {
+  return (e && (e.name ? `${e.name}: ${e.message}` : e.message)) || String(e);
+}
+
+async function micStream(deviceLabel) {
+  const processing = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 };
+  let deviceId;
+  if (deviceLabel) {
+    const want = String(deviceLabel).toLowerCase();
+    const inputs = (await navigator.mediaDevices.enumerateDevices())
+      .filter((d) => d.kind === 'audioinput' && d.deviceId !== 'default' && d.deviceId !== 'communications');
+    const hit = inputs.find((d) => d.label.toLowerCase() === want) || inputs.find((d) => d.label.toLowerCase().includes(want));
+    deviceId = hit ? hit.deviceId : undefined;
+  }
+  return navigator.mediaDevices.getUserMedia({ audio: deviceId ? { ...processing, deviceId: { exact: deviceId } } : processing });
+}
+
+async function systemStream() {
+  const stream = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true });
+  for (const v of stream.getVideoTracks()) { v.stop(); stream.removeTrack(v); }
+  const audio = stream.getAudioTracks()[0];
+  if (!audio) throw new Error('no system audio track was granted');
+  // macOS: without the System Audio Recording grant Chromium hands over a track
+  // that is already ended and never delivers samples.
+  if (audio.readyState === 'ended') throw new Error('the system audio track ended before it started (permission?)');
+  return stream;
+}
+
+async function start({ id, kind, deviceLabel }) {
+  let stream = null;
+  let context = null;
+  try {
+    stream = kind === 'system' ? await systemStream() : await micStream(deviceLabel);
+    const track = stream.getAudioTracks()[0];
+    context = new AudioContext({ sampleRate: 16000, latencyHint: 'playback' });
+    await context.audioWorklet.addModule(workletUrl);
+    if (context.state !== 'running') await context.resume();
+    const source = context.createMediaStreamSource(stream);
+    const node = new AudioWorkletNode(context, 'natively-pcm', { channelCount: 1, channelCountMode: 'explicit', channelInterpretation: 'speakers' });
+    const mute = context.createGain();
+    mute.gain.value = 0;
+    source.connect(node).connect(mute).connect(context.destination);
+    node.port.onmessage = (m) => { if (sessions.has(id)) bridge.emit({ type: 'data', id, pcm: m.data }); };
+    track.addEventListener('ended', () => { if (sessions.has(id)) { stop({ id }); bridge.emit({ type: 'ended', id }); } });
+    sessions.set(id, { stream, context });
+    const settings = track.getSettings ? track.getSettings() : {};
+    bridge.emit({ type: 'started', id, label: track.label || '', nativeRate: settings.sampleRate || 0 });
+  } catch (e) {
+    try { stream && stream.getTracks().forEach((t) => t.stop()); } catch {}
+    try { context && context.close(); } catch {}
+    bridge.emit({ type: 'error', id, message: errorText(e) });
+  }
+}
+
+function stop({ id }) {
+  const s = sessions.get(id);
+  if (!s) return;
+  sessions.delete(id);
+  try { s.stream.getTracks().forEach((t) => t.stop()); } catch {}
+  try { s.context.close(); } catch {}
+}
+
+bridge.onCommand((command) => {
+  if (!command || typeof command !== 'object') return;
+  if (command.type === 'start') start(command);
+  else if (command.type === 'stop') stop(command);
+});
+bridge.emit({ type: 'ready' });
+</script>
+</body>
+</html>

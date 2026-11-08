@@ -1,10 +1,12 @@
 import { BrowserWindow, screen, app } from "electron"
 import path from "node:path"
 import { DEV_SERVER_URL } from './devServerUrl';
+import { attachNoActivate } from "./utils/windowsFocusPolicy"
 import {
     applyNotesWindowPlatformBehaviour,
     buildNotesWindowOptions,
     resolveNotesWindowBounds,
+    NOTES_WINDOW_LAYOUT,
     showNotesWindow,
     type NotesWindowBounds,
 } from "./utils/notesWindowPolicy"
@@ -34,6 +36,7 @@ export class NotesWindowHelper {
     private quitting = false
     private saveTimer: NodeJS.Timeout | null = null
     private visibilityListener: ((visible: boolean) => void) | null = null
+    private closedByUserListener: (() => void) | null = null
 
     constructor() {
         app.once('before-quit', () => {
@@ -55,14 +58,23 @@ export class NotesWindowHelper {
         this.visibilityListener = listener
     }
 
-    /** The overlay's Notes button: open it (focused, to type) or hide it. */
-    /** Returns whether the window is now open (a new one shows once painted, so ask here, not isVisible()). */
+    /** The user closed the window (not a screenshot's brief hide): main shows a launcher Stop held back. */
+    public onClosedByUser(listener: (() => void) | null): void {
+        this.closedByUserListener = listener
+    }
+
+    /**
+     * The overlay's Notes button: open it or hide it. Opened without focus, as
+     * the overlay is: the meeting app keeps focus, and a click in the page
+     * starts typing through the keyboard hook (NotesWindow.tsx).
+     * Returns whether the window is now open (a new one shows once painted, so ask here, not isVisible()).
+     */
     public toggle(): boolean {
         if (this.isVisible()) {
             this.hide(true)
             return false
         }
-        this.open({ activate: true })
+        this.open({ activate: false })
         return true
     }
 
@@ -85,15 +97,28 @@ export class NotesWindowHelper {
     public hide(byUser: boolean): void {
         const win = this.getWindow()
         if (!win || !win.isVisible()) return
+        // A session typing into it ends with it (the hook swallows keys).
+        this.stealthTyping()?.stopIfTarget('notes')
         win.hide()
-        if (byUser) this.saveState({ open: false })
+        if (byUser) {
+            this.saveState({ open: false })
+            this.closedByUserListener?.()
+        }
     }
 
-    /** A meeting started: reopen the window, without focus, if the user left it open. */
-    public reopenForMeeting(): void {
-        if (this.isVisible()) return
-        const saved = this.readState()
-        if (saved?.open) this.open({ activate: false })
+    /** Whether the user left the window open (a meeting start opens it again). */
+    public wasLeftOpen(): boolean {
+        return this.readState()?.open === true
+    }
+
+    /**
+     * A meeting started: open the window, without focus, when the plan says so
+     * (utils/meetingSurface.planMeetingStart: the notepad is the meeting's
+     * surface, or the user left it open).
+     */
+    public reopenForMeeting(open: boolean): void {
+        if (this.isVisible() || !open) return
+        this.open({ activate: false })
     }
 
     public setContentProtection(enable: boolean): void {
@@ -115,7 +140,18 @@ export class NotesWindowHelper {
         if (win.isVisible()) win.setOpacity(1)
     }
 
-    private readState(): { x: number; y: number; width: number; height: number; open: boolean } | null {
+    private stealthTyping(): { stopIfTarget(t: 'notes' | 'overlay'): void; getTarget(): 'notes' | 'overlay'; isActive(): boolean; setNotesWindow(w: BrowserWindow | null): void } | null {
+        if (process.platform !== 'darwin' && process.platform !== 'win32') return null
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { StealthKeyboardManager } = require('./services/StealthKeyboardManager')
+            return StealthKeyboardManager.getInstance()
+        } catch {
+            return null
+        }
+    }
+
+    private readState(): { x: number; y: number; width: number; height: number; open: boolean; layout?: number } | null {
         try {
             // eslint-disable-next-line @typescript-eslint/no-var-requires
             const { SettingsManager } = require('./services/SettingsManager')
@@ -130,8 +166,8 @@ export class NotesWindowHelper {
         const prev = this.readState()
         const b = win ? win.getBounds() : prev
         if (!b) return
-        const next = { x: b.x, y: b.y, width: b.width, height: b.height, open: patch.open ?? prev?.open ?? false }
-        if (prev && prev.x === next.x && prev.y === next.y && prev.width === next.width && prev.height === next.height && prev.open === next.open) return
+        const next = { x: b.x, y: b.y, width: b.width, height: b.height, open: patch.open ?? prev?.open ?? false, layout: NOTES_WINDOW_LAYOUT }
+        if (prev && prev.x === next.x && prev.y === next.y && prev.width === next.width && prev.height === next.height && prev.open === next.open && prev.layout === next.layout) return
         try {
             // eslint-disable-next-line @typescript-eslint/no-var-requires
             const { SettingsManager } = require('./services/SettingsManager')
@@ -162,6 +198,13 @@ export class NotesWindowHelper {
         }) as Electron.BrowserWindowConstructorOptions)
         this.window = win
         const applied = applyNotesWindowPlatformBehaviour(win, process.platform, this.contentProtection)
+        // Windows: never activated by a click, as the overlay (WS_EX_NOACTIVATE
+        // via windowsFocusPolicy). Typing goes through the keyboard hook. Skipped
+        // (the window stays focusable, typing by focus) when there is no hook to
+        // type through. macOS: the NSPanel attributes below do the same.
+        if (attachNoActivate(win)) applied.push('noActivate')
+        // The second typing sink of the keyboard hook (StealthKeyboardManager).
+        this.stealthTyping()?.setNotesWindow(win)
         console.log(`[NotesWindowHelper] Created the notes window (${applied.join(', ')})`)
 
         win.loadURL(`${startUrl}?window=notes`).catch((e) => {
@@ -185,14 +228,12 @@ export class NotesWindowHelper {
             }
         })
 
-        // Typing here must reach this window: stealth typing (the overlay's
-        // keyboard hook, both platforms) would route every key to the overlay.
+        // Focused anyway (no hook to type through, so typing is by focus):
+        // keys must reach this window, so an overlay session ends. A session
+        // of the notes' own is left alone (macOS can make the panel key on the
+        // click that started it).
         win.on('focus', () => {
-            try {
-                // eslint-disable-next-line @typescript-eslint/no-var-requires
-                const { StealthKeyboardManager } = require('./services/StealthKeyboardManager')
-                StealthKeyboardManager.getInstance().stop()
-            } catch { /* no hook: nothing to stop */ }
+            this.stealthTyping()?.stopIfTarget('overlay')
         })
 
         // Closing hides; the notes stay in main.

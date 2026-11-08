@@ -27,11 +27,18 @@ function bareHelper() {
   h.delay = async () => {}; h.getOpenAiPromptCacheKey = () => undefined;
   return h;
 }
-/** AgentRouter's two clients. The Anthropic one records every request and streams `reply` (or throws it). */
+/**
+ * AgentRouter's two clients. Both record every request and stream `reply` (or
+ * throw it): the default (gpt-5.6-sol) travels the Responses API, a Claude or
+ * DeepSeek id the Anthropic route. Chat Completions is refused for GPT now.
+ */
 function agentrouter(h, reply = '{"ok":"agentrouter"}') {
   const calls = [];
   const anthropic = { messages: { stream: (body) => { calls.push(body); return { abort() {}, async *[Symbol.asyncIterator]() { if (reply instanceof Error) throw reply; yield { type: 'content_block_delta', delta: { type: 'text_delta', text: reply } }; } }; } } };
-  const openai = { chat: { completions: { create: async () => { throw new Error('the Chat Completions route is not the one DeepSeek uses on AgentRouter'); } } } };
+  const openai = {
+    chat: { completions: { create: async () => { throw new Error('AgentRouter GPT refuses /v1/chat/completions'); } } },
+    responses: { create: async (body) => { calls.push(body); if (reply instanceof Error) throw reply; return (async function* () { yield { type: 'response.output_text.delta', delta: reply }; })(); } },
+  };
   h._agentrouterAnthropicClient = anthropic; h._agentrouterOpenAIClient = openai;
   return { calls };
 }
@@ -48,22 +55,25 @@ describe('structured ladder: a user whose only key is AgentRouter gets a model',
     assert.equal(a.calls.length, 1);
   });
 
-  test('the request: the gateway\'s DeepSeek default, thinking off, the extraction temperature, the prompt as the only message, no system text', async () => {
+  test('the request: the gateway\'s default on the Responses API, reasoning off, the prompt as the only input, no instructions', async () => {
     const h = bareHelper(); const a = agentrouter(h);
     await h.generateContentStructured('extract this résumé');
     const body = a.calls[0];
-    assert.equal(body.model, 'deepseek-v4-flash');
-    assert.deepEqual(body.thinking, { type: 'disabled' });
-    assert.equal(body.temperature, 0.4);
-    assert.equal('system' in body, false);
-    assert.deepEqual(body.messages, [{ role: 'user', content: [{ type: 'text', text: 'extract this résumé' }] }]);
+    assert.equal(body.model, 'gpt-5.6-sol');
+    assert.equal(body.stream, true);
+    assert.deepEqual(body.reasoning, { effort: 'none' });
+    assert.equal('temperature' in body, false, 'GPT reasoning models refuse sampling params');
+    assert.equal('instructions' in body, false);
+    assert.deepEqual(body.input, [{ role: 'user', content: 'extract this résumé' }]);
   });
 
-  test('it does not follow the selected chat model: a rationed Claude pick is not spent on extraction', async () => {
-    const h = bareHelper(); const a = agentrouter(h); h.currentModelId = 'agentrouter/claude-opus-5';
+  test('it does not follow the selected chat model: a slow pick is not used for extraction', async () => {
+    const h = bareHelper(); const a = agentrouter(h); h.currentModelId = 'agentrouter/gpt-6-astra';
     await h.generateContentStructured('extract');
-    assert.equal(a.calls[0].model, 'deepseek-v4-flash');
+    assert.equal(a.calls[0].model, 'gpt-5.6-sol');
   });
+  // Following the fetched catalogue is pinned in AgentRouterWire2026_09_30 (it
+  // needs CredentialsManager, which needs the Electron stub that file sets up).
 });
 
 describe('structured ladder: AgentRouter is last, so nobody with a working rung is moved', () => {
@@ -93,7 +103,7 @@ describe('structured ladder: AgentRouter is last, so nobody with a working rung 
   });
   test('in the source the rung is pushed after the DeepSeek rung and before the no-provider error', () => {
     const deepseek = SOURCE.indexOf('name: `DeepSeek (${DEEPSEEK_MODEL})`,');
-    const rung = SOURCE.indexOf('name: `AgentRouter (${agentRouterWireModel(AGENTROUTER_DEFAULT_MODEL)})`,');
+    const rung = SOURCE.indexOf('name: `AgentRouter (${agentRouterWireModel(arModel)})`,');
     const none = SOURCE.indexOf("throw new Error('No reasoning model available.");
     assert.ok(deepseek > 0 && rung > deepseek && none > rung, `order deepseek ${deepseek} < agentrouter ${rung} < error ${none}`);
   });

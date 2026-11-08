@@ -1,16 +1,16 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../../i18n';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import {
+    AlertCircle,
     Check,
-    CheckCircle,
     FileCode,
     FileUp,
     FolderOpen,
     Loader2,
-    RefreshCw,
+    ScrollText,
     Trash2,
-    X,
+    Upload,
 } from 'lucide-react';
 import type {
     SkillSummary,
@@ -23,10 +23,17 @@ import {
     Collapse,
     CollapseItem,
     Presence,
-    SwapLabel,
-    SettingsDisclosureButton,
+    SETTINGS_BTN,
+    SETTINGS_BTN_BASE,
+    SETTINGS_CARD,
+    SettingsFootnote,
     SettingsMotionReady,
+    SettingsNotice,
+    SettingsRow,
+    SettingsSectionHeading,
+    SwapLabel,
     useMotionReadyAfter,
+    useSettingsTones,
     useSettledFlag,
 } from './SettingsRow';
 
@@ -79,21 +86,13 @@ const buildFilePayload = async (file: File): Promise<SkillUploadPayload> => ({
 export const SkillsSettings: React.FC = () => {
     const t = useT();
     const [skills, setSkills] = useState<SkillSummary[]>([]);
-    const [skillsPath, setSkillsPath] = useState<string>('');
-    const [loading, setLoading] = useState(false);
+    const [, setLoading] = useState(false);
     // First list landed. Until then nothing moves (rows that arrive over IPC
     // must not grow in as the pane opens), and the count / empty state stay
     // up through every later Refresh instead of blinking out with `loading`.
     const [loadedOnce, setLoadedOnce] = useState(false);
     const motionReady = useMotionReadyAfter(loadedOnce);
-    // Only a load that runs long enough to notice gets the spinner.
-    const refreshing = useSettledFlag(loading);
-    // skills:list is a synchronous read of the local folder, a few ms, so the
-    // spinner above almost never shows and a click looked like it did nothing.
-    // Each click turns the glyph once instead: a running total of turns, so a
-    // second click mid-turn adds one more rather than restarting from 0deg.
-    const [refreshTurns, setRefreshTurns] = useState(0);
-    const reduceMotion = useReducedMotion();
+    const tones = useSettingsTones();
     const [status, setStatus] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
     const [preview, setPreview] = useState<{
@@ -112,17 +111,22 @@ export const SkillsSettings: React.FC = () => {
     // moves the focus, doesn't stack). null = no row awaiting confirmation.
     const [confirmingId, setConfirmingId] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState(false);
+    // Only an upload that runs long enough to notice swaps the icon for a spinner.
+    const uploadingShown = useSettledFlag(uploading);
     // Counter for dragenter/dragleave. A simple boolean flag would flicker
     // every time the cursor crossed a child boundary inside the card (icon,
     // heading, button) — those boundaries DO fire dragleave. Tracking the
     // depth via a counter means we only clear the highlight when the cursor
     // has fully exited the entire card.
     const dragDepthRef = useRef(0);
-    // The glass button is a real <button>, so it cannot rely on a wrapping
-    // <label> to open the picker — an interactive descendant suppresses the
-    // label's activation behaviour. It drives the input directly instead.
+    // Upload is a real <button>, so it cannot rely on a wrapping <label> to
+    // open the picker — an interactive descendant suppresses the label's
+    // activation behaviour. It drives the input directly instead.
     const uploadInputRef = useRef<HTMLInputElement | null>(null);
-    const [showAdvanced, setShowAdvanced] = useState(false);
+    // Set once Open folder has shown the folder. There is no Refresh button:
+    // the list re-reads the folder when the window gets focus back, which is
+    // when a skill dropped in from Finder or Explorer can have arrived.
+    const folderOpenedRef = useRef(false);
 
     const loadSkills = useCallback(async () => {
         setLoading(true);
@@ -161,6 +165,14 @@ export const SkillsSettings: React.FC = () => {
         loadSkills();
     }, [loadSkills]);
 
+    useEffect(() => {
+        const onFocus = () => {
+            if (folderOpenedRef.current) void loadSkills();
+        };
+        window.addEventListener('focus', onFocus);
+        return () => window.removeEventListener('focus', onFocus);
+    }, [loadSkills]);
+
     // Auto-cancel the inline confirm state after 6s of inactivity so a stale
     // "Delete / Cancel" affordance never lingers if the user gets distracted
     // mid-click. The cleanup function cancels the timer if the user clicks
@@ -194,7 +206,7 @@ export const SkillsSettings: React.FC = () => {
                 return;
             }
             const result = await window.electronAPI.skillsOpenFolder();
-            if (result?.path) setSkillsPath(result.path);
+            if (result?.success) folderOpenedRef.current = true;
             if (!result?.success && result?.error) setStatus(result.error);
         } catch (error: any) {
             setStatus(error?.message || 'Could not open skills folder.');
@@ -309,7 +321,7 @@ export const SkillsSettings: React.FC = () => {
     // Drag-and-drop handler. v1: only FILE drops are accepted via drag-drop.
     // Folder drops (which would need a recursive FileSystemDirectoryEntry walk)
     // are NOT supported here — users wanting to install a folder of files
-    // should use the Advanced "open skills folder" escape hatch and drop files
+    // should use Open folder and drop the folder in with the OS file manager
     // manually into the OS file explorer. This avoids the complexity of
     // async-recursive DataTransferItem traversal in the renderer.
     const handleDrop = async (e: React.DragEvent) => {
@@ -337,7 +349,7 @@ export const SkillsSettings: React.FC = () => {
         }
         if (sawDirectory) {
             setStatus(
-                'Folder drag-and-drop is not supported — use the Advanced "open skills folder" option to drop a folder manually.',
+                'A folder can’t be dropped here. Use Open folder and put the skill folder in it.',
             );
         }
         if (fileItems.length === 0) return;
@@ -457,367 +469,254 @@ export const SkillsSettings: React.FC = () => {
     const truncate = (s: string, n: number) =>
         s.length <= n ? s : `${s.slice(0, n).trimEnd()}…`;
 
+    // The drop handlers, on the whole section: all of Skills is the target.
+    const dropTarget = {
+        onDragEnter: (e: React.DragEvent) => {
+            e.preventDefault();
+            if (dragDepthRef.current === 0) setIsDragging(true);
+            dragDepthRef.current += 1;
+        },
+        onDragOver: (e: React.DragEvent) => e.preventDefault(),
+        onDragLeave: () => {
+            dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+            if (dragDepthRef.current === 0) setIsDragging(false);
+        },
+        onDrop: (e: React.DragEvent) => {
+            dragDepthRef.current = 0;
+            setIsDragging(false);
+            handleDrop(e);
+        },
+    };
+
     return (
         <SettingsMotionReady.Provider value={motionReady}>
-        <div className="space-y-5 animated fadeIn select-text pb-4" data-settings-stagger>
-            <div className="flex items-start justify-between gap-4">
-                <div>
-                    <h3 className="text-lg font-bold text-text-primary mb-1">{t('Skills')}</h3>
-                    <p className="text-xs text-text-secondary">
-                        {t('Local SKILL.md instructions. Invoke a skill in the overlay chat by typing /skill-name or $skill-name at the start of your message.')}
-                    </p>
-                </div>
-                <button
-                    onClick={() => {
-                        setRefreshTurns((n) => n + 1);
-                        void loadSkills();
-                    }}
-                    disabled={loading}
-                    className="flex items-center gap-2 px-4 py-1.5 rounded-full border border-border-subtle hover:bg-bg-item-surface transition-[color,background-color,transform,opacity] duration-150 ease-out text-xs font-medium text-text-secondary hover:text-text-primary active:scale-[0.97] motion-reduce:active:scale-100 mt-1 disabled:opacity-60"
-                >
-                    {/* Cross-fades to a spinner and back, instead of a spinning
-                        glyph that snapped to 0deg mid-turn when loading ended. */}
-                    <Presence kind="icon" id={refreshing ? 'busy' : 'idle'}>
-                        {refreshing ? <Loader2 size={13} strokeWidth={2.5} className="animate-spin" /> : (
-                            // One turn per click: 500ms (--duration-very-slow) on
-                            // --ease-smooth-out, so it answers at once and lands
-                            // softly. initial={false}: when the spinner hands back
-                            // after a slow load, the glyph returns at rest.
-                            <motion.span
-                                className="inline-flex"
-                                initial={false}
-                                animate={{ rotate: reduceMotion ? 0 : refreshTurns * 360 }}
-                                transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                            >
-                                <RefreshCw size={13} strokeWidth={2.5} />
-                            </motion.span>
-                        )}
-                    </Presence>
-                    {t('Refresh')}
-                </button>
+        {/* A section of Settings › Intelligence, laid out as the other tabs lay out
+            a section: the heading, with Open folder and Upload beside it (they act
+            on the whole list, as Overlay's Reset sits beside its heading), then
+            the rows. The whole section is the drop target, and a frosted veil
+            says so while a file is over it. The preview and the notices open
+            between the heading and the list. The page owns the entrance fade
+            and the stagger, so this root carries neither. */}
+        <div className="relative select-text" {...dropTarget}>
+            <div aria-hidden={!isDragging} data-open={isDragging} className="settings-drop-veil text-sm font-semibold">
+                <FileUp size={18} />
+                {t('Drop to add this skill')}
             </div>
 
-            {/* Upload card — drop target. Mirrors the Advanced "Skills Folder"
-                card layout for visual consistency: icon + heading on the
-                left, action button on the right, description below. */}
-            <div
-                onDragEnter={(e) => {
-                    e.preventDefault();
-                    if (dragDepthRef.current === 0) setIsDragging(true);
-                    dragDepthRef.current += 1;
-                }}
-                onDragOver={(e) => e.preventDefault()}
-                onDragLeave={() => {
-                    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-                    if (dragDepthRef.current === 0) setIsDragging(false);
-                }}
-                onDrop={(e) => {
-                    dragDepthRef.current = 0;
-                    setIsDragging(false);
-                    handleDrop(e);
-                }}
-                className={[
-                    'rounded-xl border transition-colors p-4',
-                    // The dashed outline is drag feedback, so it appears only
-                    // while a file is actually over the card. It used to also
-                    // show on plain hover, which read as the card being a
-                    // control in its own right.
-                    isDragging
-                        ? 'border-dashed border-accent-primary bg-accent-subtle'
-                        : 'border-transparent bg-bg-card',
-                ].join(' ')}
-            >
-                <div className="flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                            <FileUp size={15} className="text-text-secondary" />
-                            <h4 className="text-sm font-semibold text-text-primary">{t('Upload skill')}</h4>
-                        </div>
-                        <p className="text-xs text-text-secondary">
-                            {t('Drop a SKILL.md file here, or click Upload to pick one. For folders, use the Advanced option below.')}
-                        </p>
-                        {uploading && (
-                            <p className="text-[11px] text-text-tertiary animate-pulse motion-reduce:animate-none mt-2">{t('Uploading…')}</p>
-                        )}
-                    </div>
-                    <input
-                        ref={uploadInputRef}
-                        type="file"
-                        accept=".md,text/markdown"
-                        className="hidden"
-                        onChange={async (e) => {
-                            const f = e.target.files?.[0];
-                            if (f) await handleFilePicked(f);
-                            e.currentTarget.value = ''; // allow re-pick of same file
-                        }}
-                        disabled={uploading}
+            <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                    <SettingsSectionHeading
+                        title={t('Skills')}
+                        subtitle={t('Instructions the chat follows. Start a message with /name or $name to use one.')}
                     />
-                    <LiquidGlassButton
-                        variant="sky"
-                        className="lg-sm shrink-0"
+                </div>
+                {/* Icon only (Evin, 2026-11-01: two labelled buttons beside the
+                    heading read as cluttered). The name moves to the tooltip
+                    and the accessible label. */}
+                <div className="flex shrink-0 items-center gap-1.5">
+                    <button
+                        type="button"
+                        className={`${SETTINGS_BTN} !p-0 w-[30px] h-[30px]`}
+                        onClick={() => { void openFolder(); }}
+                        aria-label={t('Open folder')}
+                        title={t('Open folder')}
+                    >
+                        <FolderOpen size={14} />
+                    </button>
+                    <button
+                        type="button"
+                        className={`${SETTINGS_BTN} !p-0 w-[30px] h-[30px]`}
+                        aria-label={t('Upload')}
+                        title={t('Upload')}
                         disabled={uploading}
                         onClick={() => { void pickAndUpload(); }}
                     >
-                        {t('Upload')}
-                    </LiquidGlassButton>
+                        <Presence kind="icon" id={uploadingShown ? 'busy' : 'idle'}>
+                            {uploadingShown ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                        </Presence>
+                    </button>
                 </div>
             </div>
 
-            {/* Preview card — shown when validate-only succeeded. */}
-            {/* Preview, success and status fold open and closed (Collapse) instead
-                of shoving the installed list in one frame. The stack's 20px gap
-                rides inside each fold (pt-5) so it opens with it. */}
-            <Collapse open={!!preview} className="!mt-0" skipStagger>
-            <div className="pt-5">
-            {preview && (
-                <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3">
-                    <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                                <CheckCircle size={14} className="text-green-500 shrink-0" />
-                                <h4 className="text-sm font-semibold text-text-primary truncate">
-                                    {preview.preview.name}
-                                </h4>
-                                <span className="px-1.5 py-0.5 rounded-md border border-border-subtle bg-bg-input text-[10px] text-text-tertiary shrink-0">
-                                    {preview.preview.id}
-                                </span>
-                            </div>
-                            <p className="text-xs text-text-secondary leading-relaxed">
-                                {preview.preview.description}
-                            </p>
-                        </div>
-                    </div>
+            <input
+                ref={uploadInputRef}
+                type="file"
+                accept=".md,text/markdown"
+                className="hidden"
+                onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    if (f) await handleFilePicked(f);
+                    e.currentTarget.value = ''; // allow re-pick of same file
+                }}
+                disabled={uploading}
+            />
 
-                    {preview.preview.instructionsPreview && (
-                        <pre className="rounded-lg bg-bg-input border border-border-subtle px-3 py-2 text-[11px] font-mono text-text-secondary whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
-                            {truncate(preview.preview.instructionsPreview, RENDER_PREVIEW_MAX)}
-                        </pre>
-                    )}
-
-                    <div className="flex items-center gap-3 flex-wrap text-[11px] text-text-tertiary">
-                        <span>
-                            <span className="text-text-secondary font-medium">{preview.preview.referenceCount}</span> {t('reference')}
-                        </span>
-                        <span>
-                            <span className="text-text-secondary font-medium">{preview.preview.assetCount}</span> {t('asset')}
-                        </span>
-                        <span>
-                            <span className="text-text-secondary font-medium">{preview.preview.scriptCount}</span> {t('script')}
-                        </span>
-                        {preview.preview.otherCount > 0 && (
-                            <span>
-                                <span className="text-text-secondary font-medium">{preview.preview.otherCount}</span> {t('other')}
-                            </span>
-                        )}
-                        <span className="ml-auto font-mono">
-                            {formatBytes(preview.preview.totalBytes)}
-                        </span>
-                    </div>
-
-                    {preview.preview.fileTree.length > 0 && (
-                        <details className="text-[11px] text-text-tertiary">
-                            <summary className="cursor-pointer hover:text-text-secondary transition-colors">
-                                {preview.preview.fileTree.length} {t('files')}
-                            </summary>
-                            <ul className="mt-2 font-mono space-y-0.5 max-h-32 overflow-y-auto">
-                                {preview.preview.fileTree.map((p) => (
-                                    <li key={p} className="truncate">
-                                        {p}
-                                    </li>
-                                ))}
-                            </ul>
-                        </details>
-                    )}
-
-                    <div className="flex items-center gap-2 pt-1">
-                        <button
-                            onClick={handleInstall}
-                            disabled={installing}
-                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-legacy-action-bg hover:bg-legacy-action-hover text-legacy-action-fg text-xs font-semibold transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100 disabled:opacity-60"
-                        >
-                            <Check size={13} strokeWidth={2.5} />
-                            <SwapLabel id={installing ? 'installing' : 'install'} sizers={[t('Install'), t('Installing…')]}>
-                                {installing ? t('Installing…') : t('Install')}
-                            </SwapLabel>
-                        </button>
-                        <button
-                            onClick={handleCancel}
-                            disabled={installing}
-                            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border-subtle bg-bg-input hover:bg-bg-elevated text-xs font-medium text-text-secondary transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100 disabled:opacity-60"
-                        >
-                            <X size={13} strokeWidth={2.5} />
-                            {t('Cancel')}
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            </div>
-            </Collapse>
-
-            <Collapse open={!!success} className="!mt-0" skipStagger>
-                <div className="pt-5">
-                    <div className="rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-2 text-xs text-green-400">
-                        {success}
-                    </div>
-                </div>
-            </Collapse>
-
-            <Collapse open={!!status} className="!mt-0" skipStagger>
-                <div className="pt-5">
-                    <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">
-                        {status}
-                    </div>
-                </div>
-            </Collapse>
-
-            <div>
-                <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-text-tertiary">
-                        {t('Installed skills')}
-                    </h4>
-                    {loadedOnce && skills.length > 0 && (
-                        <span className="text-[11px] text-text-tertiary">
-                            {skills.length} {skills.length === 1 ? t('skill') : t('skills')}
-                        </span>
-                    )}
-                </div>
-                <div className="-mb-1.5">
-                    <AnimatePresence initial={false}>
-                    {skills.map((skill) => (
-                        <CollapseItem key={skill.id}>
-                        <div className="pb-1.5">
-                        <div
-                            className={`group bg-bg-card rounded-lg border border-border-subtle px-3 py-2.5 hover:border-border-muted transition-[border-color,opacity] duration-150 ease-out ${deletingIds.has(skill.id) ? 'opacity-60' : ''}`}
-                            aria-busy={deletingIds.has(skill.id) || undefined}
-                        >
-                            <div className="flex items-center justify-between gap-3">
-                                {/* Left side: [Name] [/id] — name + slug only.
-                                    Built-in vs Local is no longer distinguished
-                                    visually per-row (user requested removal of
-                                    the badge). Source classification still
-                                    drives whether the delete affordance
-                                    renders — built-ins have no delete button
-                                    because SkillsManager would refuse the call. */}
-                                <div className="flex items-center gap-2 min-w-0">
-                                    <span className="text-sm font-medium text-text-primary truncate">
-                                        {skill.name}
-                                    </span>
-                                    <span className="text-[10px] font-mono text-text-tertiary shrink-0">
-                                        /{skill.id}
-                                    </span>
-                                </div>
-                                {/* Right side: delete affordance only (no badge).
-                                    Built-ins render nothing here; user-installed
-                                    skills render the trash icon (hover-reveal
-                                    via the MeetingDetails.tsx:696 idiom) or the
-                                    inline 2-step confirm after first click. The
-                                    delete affordance itself does NOT need a
-                                    fixed-width wrapper anymore — the natural
-                                    button width is stable and there's no badge
-                                    to anchor to. */}
-                                <div className="flex items-center gap-1 shrink-0">
-                                    {skill.source !== 'builtin' && (
-                                        confirmingId === skill.id ? (
-                                            <div
-                                                role="group"
-                                                aria-live="polite"
-                                                aria-label={`Confirm delete ${skill.name}`}
-                                                className="flex items-center gap-2 select-none animate-[settings-stagger-fade_150ms_ease-out] motion-reduce:animate-none"
-                                            >
-                                                <span className="text-[11px] text-text-secondary hidden sm:inline">
-                                                    {t('Delete')} <span className="font-medium text-text-primary">{skill.name}</span>?
-                                                </span>
-                                                <button
-                                                    onClick={() => setConfirmingId(null)}
-                                                    className="px-2.5 py-1 rounded-md border border-border-subtle bg-bg-input text-text-secondary text-[11px] font-medium hover:bg-bg-elevated hover:text-text-primary focus:outline-none transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100"
-                                                    title={t("Cancel (Escape)")}
-                                                >
-                                                    {t('Cancel')}
-                                                </button>
-                                                <button
-                                                    onClick={() => commitDeleteSkill(skill.id, skill.name)}
-                                                    disabled={deletingIds.has(skill.id)}
-                                                    className="px-2.5 py-1 rounded-md bg-red-500 text-white text-[11px] font-semibold hover:bg-red-600 focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100"
-                                                    title={t("Delete this skill")}
-                                                >
-                                                    {deletingIds.has(skill.id) ? t('Deleting…') : t('Delete')}
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <div className="flex items-center gap-1 opacity-0 translate-y-1 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:translate-y-0 [@media(hover:none)]:opacity-100 transition-[opacity,transform] duration-150 ease-out motion-reduce:translate-y-0 select-none">
-                                                <button
-                                                    onClick={() => requestDeleteSkill(skill.id)}
-                                                    disabled={deletingIds.has(skill.id)}
-                                                    className="p-1.5 rounded-lg text-text-secondary hover:text-red-400 hover:bg-red-500/10 focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100"
-                                                    title={t("Delete skill")}
-                                                    aria-label={`Delete ${skill.name}`}
-                                                >
-                                                    <Trash2 size={14} />
-                                                </button>
-                                            </div>
-                                        )
-                                    )}
-                                </div>
-                            </div>
-                            {skill.description && (
-                                <p className="text-[11px] text-text-secondary mt-1 ml-5 leading-snug line-clamp-2">
-                                    {skill.description}
-                                </p>
-                            )}
-                        </div>
-                        </div>
-                        </CollapseItem>
-                    ))}
-                    </AnimatePresence>
-
-                    {loadedOnce && skills.length === 0 && (
-                        <div className="mb-1.5 bg-bg-card rounded-lg border border-dashed border-border-subtle p-5 text-center">
-                            <FileCode size={18} className="mx-auto mb-1.5 text-text-tertiary" />
-                            <p className="text-xs font-medium text-text-primary">{t('No skills installed')}</p>
-                            <p className="text-[11px] text-text-secondary mt-0.5">
-                                {t('Upload a SKILL.md above, or use the Advanced option.')}
-                            </p>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Advanced escape hatch — preserved from the pre-upload UI so
-                power users can still drop files directly into the folder. */}
-            <div className="pt-1">
-                <SettingsDisclosureButton
-                    open={showAdvanced}
-                    onToggle={() => setShowAdvanced((s) => !s)}
-                    label={t('Advanced: open skills folder')}
-                />
-                <Collapse open={showAdvanced}>
-                    <div className="pt-2">
-                    <div className="bg-bg-card rounded-xl border border-border-subtle p-4">
-                        <div className="flex items-center justify-between gap-4">
+            {/* What the file holds, before anything is written to disk. */}
+            <Collapse open={!!preview}>
+                <div className="pt-1.5 pb-2">
+                    {preview && (
+                        <div className={`${SETTINGS_CARD} p-4 space-y-3`}>
                             <div className="min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <FolderOpen size={15} className="text-text-secondary" />
-                                    <h4 className="text-sm font-semibold text-text-primary">{t('Skills Folder')}</h4>
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <h4 className="text-sm font-bold text-text-primary truncate">{preview.preview.name}</h4>
+                                    <span className="text-[11px] font-mono text-text-tertiary shrink-0">/{preview.preview.id}</span>
                                 </div>
-                                <p className="text-xs text-text-secondary">
-                                    {t('Manually drop a folder containing SKILL.md here. Used as a fallback for non-upload workflows.')}
-                                </p>
-                                {skillsPath && (
-                                    <p className="mt-2 text-[11px] text-text-tertiary font-mono truncate">{skillsPath}</p>
+                                {preview.preview.description && (
+                                    <p className="text-xs text-text-secondary mt-0.5">{preview.preview.description}</p>
                                 )}
                             </div>
-                            <button
-                                onClick={openFolder}
-                                className="px-4 py-2 rounded-lg bg-legacy-action-bg hover:bg-legacy-action-hover text-legacy-action-fg text-xs font-semibold transition-[color,background-color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.97] disabled:active:scale-100 motion-reduce:active:scale-100 shrink-0"
-                            >
-                                {t('Open Folder')}
-                            </button>
+
+                            {preview.preview.instructionsPreview && (
+                                <pre className="rounded-lg bg-bg-input border border-border-subtle px-3 py-2 text-[11px] font-mono text-text-secondary whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
+                                    {truncate(preview.preview.instructionsPreview, RENDER_PREVIEW_MAX)}
+                                </pre>
+                            )}
+
+                            {/* One quiet line of what else came with it; a kind it has none of is left out. */}
+                            <p className="text-[11px] text-text-tertiary">
+                                {[
+                                    ...([
+                                        [preview.preview.referenceCount, t('reference'), t('references')],
+                                        [preview.preview.assetCount, t('asset'), t('assets')],
+                                        [preview.preview.scriptCount, t('script'), t('scripts')],
+                                        [preview.preview.otherCount, t('other file'), t('other files')],
+                                    ] as const)
+                                        .filter(([n]) => n > 0)
+                                        .map(([n, one, many]) => `${n} ${n === 1 ? one : many}`),
+                                    formatBytes(preview.preview.totalBytes),
+                                ].join(' · ')}
+                            </p>
+
+                            {preview.preview.fileTree.length > 0 && (
+                                <details className="text-[11px] text-text-tertiary">
+                                    <summary className="cursor-pointer hover:text-text-secondary transition-colors">
+                                        {preview.preview.fileTree.length} {t('files')}
+                                    </summary>
+                                    <ul className="mt-2 font-mono space-y-0.5 max-h-32 overflow-y-auto">
+                                        {preview.preview.fileTree.map((p) => (
+                                            <li key={p} className="truncate">{p}</li>
+                                        ))}
+                                    </ul>
+                                </details>
+                            )}
+
+                            <div className="flex items-center justify-end gap-2">
+                                <button type="button" className={SETTINGS_BTN} onClick={handleCancel} disabled={installing}>
+                                    {t('Cancel')}
+                                </button>
+                                <LiquidGlassButton
+                                    variant="action"
+                                    className="lg-sm"
+                                    onClick={() => { void handleInstall(); }}
+                                    disabled={installing}
+                                >
+                                    <SwapLabel id={installing ? 'installing' : 'install'} sizers={[t('Install'), t('Installing…')]}>
+                                        {installing ? t('Installing…') : t('Install')}
+                                    </SwapLabel>
+                                </LiquidGlassButton>
+                            </div>
                         </div>
-                    </div>
-                    </div>
-                </Collapse>
-            </div>
+                    )}
+                </div>
+            </Collapse>
+
+            <Collapse open={!!success}>
+                <div className="pt-1.5 pb-2">
+                    <SettingsNotice tone={tones.ok} icon={<Check size={14} />} className="">
+                        {success}
+                    </SettingsNotice>
+                </div>
+            </Collapse>
+
+            <Collapse open={!!status}>
+                <div className="pt-1.5 pb-2">
+                    <SettingsNotice tone={tones.danger} icon={<AlertCircle size={14} />} alert shakeKey={status ?? ''} className="">
+                        {status}
+                    </SettingsNotice>
+                </div>
+            </Collapse>
+
+            <AnimatePresence initial={false}>
+                {skills.map((skill) => {
+                    const deleting = deletingIds.has(skill.id);
+                    const confirming = confirmingId === skill.id;
+                    return (
+                        <CollapseItem key={skill.id}>
+                            <div
+                                className={`transition-opacity duration-150 ease-out ${deleting ? 'opacity-60' : ''}`}
+                                aria-busy={deleting || undefined}
+                            >
+                                <SettingsRow
+                                    icon={<ScrollText size={20} />}
+                                    title={skill.name}
+                                    truncateTitle
+                                    badge={<span className="text-[11px] font-mono text-text-tertiary">/{skill.id}</span>}
+                                    description={skill.description ? <span className="line-clamp-2">{skill.description}</span> : undefined}
+                                    // Built-ins have no delete: SkillsManager would refuse it.
+                                    control={skill.source !== 'builtin' ? (
+                                        // The delete button and its confirm are one slot that changes identity.
+                                        <Presence kind="control" id={confirming ? 'confirm' : 'idle'}>
+                                            {confirming ? (
+                                                <div
+                                                    role="group"
+                                                    aria-live="polite"
+                                                    aria-label={`Confirm delete ${skill.name}`}
+                                                    className="flex items-center gap-2"
+                                                >
+                                                    <button
+                                                        autoFocus
+                                                        type="button"
+                                                        className={SETTINGS_BTN}
+                                                        onClick={() => setConfirmingId(null)}
+                                                        title={t('Cancel (Escape)')}
+                                                    >
+                                                        {t('Cancel')}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className={`${SETTINGS_BTN_BASE} hover:bg-red-500/15 ${tones.danger}`}
+                                                        onClick={() => { void commitDeleteSkill(skill.id, skill.name); }}
+                                                        disabled={deleting}
+                                                        title={t('Delete this skill')}
+                                                    >
+                                                        <Trash2 size={14} />
+                                                        {t('Delete')}
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    className={`${SETTINGS_BTN} !px-2`}
+                                                    onClick={() => requestDeleteSkill(skill.id)}
+                                                    disabled={deleting}
+                                                    title={t('Delete skill')}
+                                                    aria-label={`Delete ${skill.name}`}
+                                                >
+                                                    <Presence kind="icon" id={deleting ? 'busy' : 'idle'}>
+                                                        {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                                                    </Presence>
+                                                </button>
+                                            )}
+                                        </Presence>
+                                    ) : undefined}
+                                />
+                            </div>
+                        </CollapseItem>
+                    );
+                })}
+            </AnimatePresence>
+
+            {loadedOnce && skills.length === 0 && (
+                <SettingsRow
+                    icon={<FileCode size={20} />}
+                    title={t('No skills yet')}
+                    description={t('Upload a SKILL.md, or drop one here.')}
+                />
+            )}
+
+            <SettingsFootnote icon={<FileUp size={14} />}>
+                {t('Drop a SKILL.md on this section to add it. Built-in skills can’t be deleted.')}
+            </SettingsFootnote>
         </div>
         </SettingsMotionReady.Provider>
     );

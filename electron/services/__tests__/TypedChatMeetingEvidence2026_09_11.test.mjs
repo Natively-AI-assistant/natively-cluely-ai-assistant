@@ -193,8 +193,21 @@ describe('renderer typed chat', () => {
     assert.doesNotMatch(submit, /ragQueryLive/);
     assert.match(submit, /streamGeminiChat\(\s*userText \|\| 'Analyze this screenshot',[\s\S]*conversationContextForSubmit/);
   });
-  test('the voice path still queries live RAG (it is legacy-owned via skipSystemPrompt)', () => {
+  test('the voice path still queries live RAG for self-contained asks (legacy skipSystemPrompt path)', () => {
     const voice = between(ui, 'const handleAnswerNow = async () => {', 'const selectSkill = useCallback');
     assert.match(voice, /ragQueryLive\?\.\(question\)/);
+    // Issue #552: referential follow-ups skip that pre-flight so prior chat
+    // reaches the speaking prompt instead of being answered from chunks alone.
+    assert.match(voice, /shouldSkipLiveRagForChatFollowUp/);
+    assert.match(voice, /Prior conversation context/);
+  });
+  test('a voice follow-up that skips live RAG goes the typed-chat way: history as context, no skipSystemPrompt', () => {
+    // On the caller-owned speaking prompt (skipSystemPrompt → legacy transport,
+    // 100 s of transcript) a follow-up kept the history but lost the evidence
+    // its previous answer came from, and the model disowned that answer.
+    const voice = between(ui, 'const handleAnswerNow = async () => {', 'const selectSkill = useCallback');
+    assert.match(voice, /followUpViaChat = shouldSkipLiveRagForChatFollowUp\(question, \{ hasPriorChat \}\);\s*if \(!followUpViaChat\) \{\s*const ragResult = await window\.electronAPI\.ragQueryLive/);
+    assert.match(voice, /followUpViaChat \? conversationContextForSubmit : prompt,/);
+    assert.match(voice, /followUpViaChat \? \{ liveQuestion: true \} : \{ skipSystemPrompt: true, liveQuestion: true \},/);
   });
 });

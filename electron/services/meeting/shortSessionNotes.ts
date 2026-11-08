@@ -9,13 +9,14 @@
 // path counted transcript LINES (`> 2`), and none looked at how much was said.
 //
 // Below the minimum this module writes the notes with ONE small call and no
-// polish; the title is derived from the result without a model call.
+// polish; that call names the meeting too, so there is no title call.
 //
 // Pure apart from the one injected call. No Electron, no database.
 
 import type { NormalizedTranscript } from './types';
 import { TYPED_SPEAKER, ASSISTANT_REPLY_SPEAKER } from './TranscriptNormalizer';
 import { renderNotesPromptContext, type NotesPromptContext } from './meetingNotesContext';
+import { MEETING_TITLE_RULE } from './MeetingSummaryV3';
 
 /** Fewer human lines than this is a short session… */
 export const SHORT_SESSION_MIN_LINES = 3;
@@ -64,9 +65,11 @@ RULES:
 - Lines from "${TYPED_SPEAKER}" were typed by the user to their AI assistant, not said aloud. "${ASSISTANT_REPLY_SPEAKER}" lines are the assistant's replies. Describe that exchange as what the user asked the assistant and what it answered; never as something said in the meeting, and never as unanswered when a reply follows.
 - If nothing of substance happened, say so in one plain sentence.
 - No action items unless someone clearly committed to something aloud.
+- ${MEETING_TITLE_RULE}.
 
 Return ONLY valid JSON, no markdown fences:
 {
+  "title": "the meeting's name",
   "overview": "one or two plain sentences",
   "keyPoints": ["zero to three short bullets, only for real content"],
   "actionItems": []
@@ -89,6 +92,8 @@ ${SHORT_SESSION_PROMPT.slice(at)}`;
 }
 
 export interface ShortSessionNotes {
+  /** The name the call gave the meeting, unvetted; absent when it gave none. */
+  title?: string;
   overview: string;
   keyPoints: string[];
   actionItems: string[];
@@ -119,5 +124,6 @@ export function parseShortSessionNotes(raw: string | null | undefined): ShortSes
   const keyPoints = strings(parsed.keyPoints, 3);
   const actionItems = strings(parsed.actionItems, 3);
   if (!overview && keyPoints.length === 0) return null;
-  return { overview, keyPoints, actionItems };
+  const title = typeof parsed.title === 'string' ? parsed.title.replace(/\s+/g, ' ').trim() : '';
+  return { ...(title ? { title } : {}), overview, keyPoints, actionItems };
 }

@@ -24,7 +24,7 @@ import {
 
 /** How fast each kind of provider is fed (times real time). */
 const SPEED: Record<string, number> = {
-    deepgram: 2, soniox: 2, openai: 2, google: 1.5, elevenlabs: 1.5, nvidia_nim: 1,
+    deepgram: 2, soniox: 2, qwen: 2, openai: 2, google: 1.5, elevenlabs: 1.5, nvidia_nim: 1,
     groq: 8, azure: 8, ibmwatson: 8, 'local-whisper': 4,
 };
 
@@ -41,6 +41,7 @@ const CLOUD_KEYS: Array<[string, (cm: any) => string | undefined]> = [
     ['openai', (cm) => cm.getOpenAiSttApiKey?.()],
     ['deepgram', (cm) => cm.getDeepgramApiKey?.()],
     ['soniox', (cm) => cm.getSonioxApiKey?.()],
+    ['qwen', (cm) => cm.getQwenAsrApiKey?.()],
     ['elevenlabs', (cm) => cm.getElevenLabsApiKey?.()],
 ];
 
@@ -61,6 +62,11 @@ function createInstance(id: string, source: SttSource, cm: any, sm: any): Replay
         case 'soniox': {
             const key = cm.getSonioxApiKey?.();
             if (key) { const { SonioxStreamingSTT } = require('./SonioxStreamingSTT'); stt = new SonioxStreamingSTT(key); }
+            break;
+        }
+        case 'qwen': {
+            const key = cm.getQwenAsrApiKey?.();
+            if (key) { const { QwenRealtimeSTT } = require('./QwenRealtimeSTT'); stt = new QwenRealtimeSTT(key); }
             break;
         }
         case 'elevenlabs': {
@@ -150,6 +156,53 @@ export function currentRecoveryPlan(source: SttSource, ctx: RecoveryContext): Re
     });
 }
 
+/**
+ * Keep only the stand-ins that can transcribe the user's configured language,
+ * so a non-English meeting is never handed to an English-only transcriber
+ * (which would return wrong words rather than a gap). Defensive: any failure to
+ * read settings or the catalogue returns the list unchanged, so this can only
+ * ever narrow on solid information, never make failover worse than before.
+ */
+function languageCapableCandidates(source: SttSource, ids: string[]): string[] {
+    try {
+        const { CredentialsManager } = require('../services/CredentialsManager');
+        const { SettingsManager } = require('../services/SettingsManager');
+        const { candidatesForLanguage } = require('./sttLanguageSupport');
+        const { isSttModelProvider, isEnglishOnlySttModel } = require('./sttModelCatalog');
+        const cm = CredentialsManager.getInstance();
+        const sm = SettingsManager.getInstance();
+        return candidatesForLanguage(ids, cm.getSttLanguage?.(), {
+            modelFor: (id: string) => (isSttModelProvider(id) ? cm.getSttModel?.(id) : undefined),
+            isEnglishOnlyModel: (id: string, model: string | undefined) =>
+                isSttModelProvider(id) && typeof model === 'string' ? isEnglishOnlySttModel(id, model) : false,
+            localModelLanguageKeys: (id: string) => {
+                if (id !== 'local-whisper') return null;
+                const modelId = localModelId(source, sm);
+                if (!modelId) return null;
+                try {
+                    const { getLocalModelLanguageSupport } = require('./whisper/modelLanguageSupport');
+                    return new Set<string>(getLocalModelLanguageSupport(modelId).allowedLanguageKeys);
+                } catch { return null; }
+            },
+        });
+    } catch {
+        return ids;
+    }
+}
+
+/**
+ * Live stand-ins for a channel whose provider is down (sttFailover.ts): the
+ * recovery plan without the failing provider itself (so the same privacy rule
+ * holds — local-only transcription never reaches a cloud provider), and
+ * without any that cannot do the meeting's language.
+ */
+export function failoverCandidates(source: SttSource, ctx: RecoveryContext): string[] {
+    const ids = currentRecoveryPlan(source, ctx)
+        .filter((entry) => entry.kind !== 'same-provider' && entry.id !== ctx.effectiveProvider)
+        .map((entry) => entry.id);
+    return languageCapableCandidates(source, ids);
+}
+
 /** Transcribers for one recovery of `source`, in the order the plan allows. */
 export function buildRecoveryTranscribers(source: SttSource, ctx: RecoveryContext): RecoveryTranscriber[] {
     const { CredentialsManager } = require('../services/CredentialsManager');
@@ -171,4 +224,17 @@ export function buildRecoveryTranscribers(source: SttSource, ctx: RecoveryContex
             },
         ),
     );
+}
+
+/**
+ * A private instance of provider `id` for `source`, built from the saved
+ * settings like the recovery ones, or null when it is not set up. Dictation
+ * (services/dictation) streams into one, never wired to a meeting; a live
+ * failover stand-in (sttFailover.ts) is one too, fed the meeting's channel
+ * only while that channel's own provider is down.
+ */
+export function createPrivateSttInstance(id: string, source: SttSource): ReplayableStt | null {
+    const { CredentialsManager } = require('../services/CredentialsManager');
+    const { SettingsManager } = require('../services/SettingsManager');
+    return createInstance(id, source, CredentialsManager.getInstance(), SettingsManager.getInstance());
 }

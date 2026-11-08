@@ -1,5 +1,5 @@
 // Regression test for B6 fix (2026-05-28): setupSystemAudioPipeline used to
-// gate the `resolveMacScreenCaptureCapability` call inside the
+// gate the `resolveMacSystemAudioCapability` call inside the
 // `if (!this.systemAudioCapture)` branch. That meant a 2nd meeting started
 // after a between-meeting TCC revoke (Screen Recording permission removed
 // from System Settings while a stale SystemAudioCapture wrapper survived
@@ -11,7 +11,7 @@
 // "permissions granted then revoked → no transcription, no UI signal"
 // failure mode the audit flagged.
 //
-// Fix: hoist resolveMacScreenCaptureCapability OUT of the
+// Fix: hoist resolveMacSystemAudioCapability OUT of the
 // !this.systemAudioCapture guard so it runs UNCONDITIONALLY at every
 // pipeline setup. The permission-denied branch now also tears down any
 // stale capture (await destroy() inside try/catch, null the wrapper,
@@ -21,7 +21,7 @@
 // original gating was correct and was preserved.
 //
 // Regression we guard against: a future contributor "tidies up" by
-// re-wrapping resolveMacScreenCaptureCapability back inside the
+// re-wrapping resolveMacSystemAudioCapability back inside the
 // `if (!this.systemAudioCapture)` block (tempting cleanup: "why
 // re-check permission when we already have a capture?"). That
 // silently restores the original bug.
@@ -204,16 +204,16 @@ describe('B6: setupSystemAudioPipeline permission check is always run', () => {
     );
   });
 
-  it('2. resolveMacScreenCaptureCapability is NOT inside an `if (!this.systemAudioCapture)` block', () => {
+  it('2. resolveMacSystemAudioCapability is NOT inside an `if (!this.systemAudioCapture)` block', () => {
     // CORE B6 ASSERTION. We locate the line containing the
-    // resolveMacScreenCaptureCapability call and check that the nearest
+    // resolveMacSystemAudioCapability call and check that the nearest
     // preceding `if (!this.systemAudioCapture` line is NOT close enough
     // to plausibly contain the call.
-    const callRe = /resolveMacScreenCaptureCapability\s*\(/;
+    const callRe = /resolveMacSystemAudioCapability\s*\(/;
     const callMatch = callRe.exec(fnBody);
     assert.ok(
       callMatch !== null,
-      'BUG: resolveMacScreenCaptureCapability call not found inside setupSystemAudioPipeline. ' +
+      'BUG: resolveMacSystemAudioCapability call not found inside setupSystemAudioPipeline. ' +
         'The B6 fix REQUIRES this call to run unconditionally at pipeline setup so a between-meeting ' +
         'TCC revoke is detected on the 2nd meeting. If you removed the call, you reintroduced the ' +
         'silent zero-fill bug — restore it.',
@@ -241,13 +241,13 @@ describe('B6: setupSystemAudioPipeline permission check is always run', () => {
     const distance = callLine - lastGuardLine;
     assert.ok(
       distance > 5,
-      'BUG (B6 REGRESSION): resolveMacScreenCaptureCapability appears to be gated by ' +
+      'BUG (B6 REGRESSION): resolveMacSystemAudioCapability appears to be gated by ' +
         `an \`if (!this.systemAudioCapture)\` block at line ${lastGuardLine} (call is at line ${callLine}, ` +
         `distance ${distance} lines). Gating the permission re-check on the absence of a wrapper ` +
         'silently restores the original bug: a stale wrapper that survived from the prior meeting ' +
         '(e.g. teardown was deferred, or reconfigureAudio mid-stream failure) prevents the permission ' +
         'check from running, and a between-meeting TCC revoke causes the 2nd meeting to zero-fill ' +
-        'forever with no banner. resolveMacScreenCaptureCapability MUST run unconditionally at every ' +
+        'forever with no banner. resolveMacSystemAudioCapability MUST run unconditionally at every ' +
         'pipeline setup — move it OUT of the `if (!this.systemAudioCapture)` block.',
     );
   });
@@ -345,7 +345,7 @@ describe('B6: setupSystemAudioPipeline permission check is always run', () => {
     assert.ok(
       lastGuardMatch !== null,
       'BUG (B6 REGRESSION): `new SystemAudioCapture()` is not gated on `!this.systemAudioCapture`. ' +
-        'The B6 fix MOVED resolveMacScreenCaptureCapability out of the guard, but the ctor itself ' +
+        'The B6 fix MOVED resolveMacSystemAudioCapability out of the guard, but the ctor itself ' +
         'must remain gated — otherwise every pipeline setup clobbers a healthy existing wrapper.',
     );
 

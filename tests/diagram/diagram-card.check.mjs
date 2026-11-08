@@ -156,6 +156,16 @@ window.__card = {
 
     win = new BrowserWindow({ width: 1000, height: 900, show: false, webPreferences: { contextIsolation: true, nodeIntegration: false } });
     await win.loadFile(page);
+    // Motion is pinned to "no preference" for every section until the reduced
+    // motion one, not inherited from the machine: on windows-latest Chromium
+    // reports prefers-reduced-motion: reduce (most likely Windows "Show
+    // animations" is off there; emulating reduce reproduces its exact failure),
+    // and the card correctly skips the stepped zoom's easing, which section 3
+    // is there to see. The emulation only lasts
+    // while the debugger is attached, so it stays attached until section 10.
+    win.webContents.debugger.attach('1.3');
+    const emulateMotion = (value) => win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value }] });
+    await emulateMotion('no-preference');
     const run = (fn, ...args) => win.webContents.executeJavaScript(`(${fn.toString()})(...${JSON.stringify(args)})`);
     const render = (slot, props) => run((s, p) => window.__card.render(s, p), slot, props);
     /** Poll the card until `predicate(state)` holds; returns the last state. */
@@ -655,12 +665,11 @@ window.__card = {
 
     // ── 10. reduced motion ──────────────────────────────────────────────────
     console.log('reduced motion');
-    // "Normal" is set, not assumed: a CI runner (macOS and Windows both)
-    // reports reduced motion as the machine's own preference.
-    win.webContents.debugger.attach('1.3');
-    await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
+    // "Normal" is set, not assumed (see the emulation set after loadFile): a
+    // CI runner can report reduced motion as the machine's own preference.
+    await emulateMotion('no-preference');
     const normal = await run(() => getComputedStyle(document.querySelector('#a figure.diagram-card')).transitionDuration);
-    await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+    await emulateMotion('reduce');
     const reduced = await run(() => ({
       card: getComputedStyle(document.querySelector('#a figure.diagram-card')).transitionDuration,
       tab: getComputedStyle(document.querySelector('#a .diagram-card__tab')).transitionDuration,
@@ -670,8 +679,15 @@ window.__card = {
       drawing: getComputedStyle(document.querySelector('#a img.diagram-card__img')).animationName,
       visible: document.querySelector('#a img.diagram-card__img').getBoundingClientRect().width > 0,
     }));
+    // The other half of section 3's easing check: with reduced motion a
+    // stepped zoom jumps to its new size at once.
+    await click('a', 'Zoom in');
+    const reducedStep = await run(() => new Promise((r) => setTimeout(() => r({ easing: document.querySelector('#a .diagram-card__viewport').classList.contains('is-easing'), readout: document.querySelector('#a .diagram-card__fit').textContent.trim() }), 40)));
+    await click('a', 'Fit to card');
     win.webContents.debugger.detach();
     check('with reduced motion the card has no transitions and stays visible', normal !== '0s' && reduced.card === '0s' && reduced.tab === '0s' && reduced.pill === '0s' && reduced.row === '0s' && reduced.drawing === 'none' && reduced.visible, JSON.stringify({ normal, reduced }));
+
+    check('with reduced motion a stepped zoom does not ease, and still says how far in it is', reducedStep.easing === false && /^\d{3}%$/.test(reducedStep.readout) && reducedStep.readout !== '100%', JSON.stringify(reducedStep));
 
     // ── 11. cleanup ─────────────────────────────────────────────────────────
     console.log('cleanup');

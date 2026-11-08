@@ -159,7 +159,6 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         --scrim: rgba(0, 0, 0, 0.46);
         --shadow-float: 0 14px 34px rgba(0, 0, 0, 0.46), 0 2px 8px rgba(0, 0, 0, 0.3);
         --code-bg: #0d0e11;
-        --logo-filter: none;
       }
       @media (prefers-color-scheme: light) {
         :root {
@@ -193,7 +192,6 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           --menu-bg: rgba(252, 252, 253, 0.88);
           --scrim: rgba(0, 0, 0, 0.16);
           --shadow-float: 0 12px 30px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.08);
-          --logo-filter: invert(1);
         }
       }
 
@@ -247,8 +245,8 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         min-height: calc(var(--safe-top) + 52px);
       }
       .brand { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 1; }
-      .brand img { width: 22px; height: 22px; filter: var(--logo-filter); opacity: 0.92; }
-      .brand-name { font-size: var(--type-body); font-weight: 600; letter-spacing: -0.022em; }
+      /* The lowercase "natively" wordmark (src/components/NativelyWordmark.tsx), in the label colour so it follows both themes. */
+      .brand-mark { display: block; height: 19px; width: calc(19px * 80.0977 / 22); color: var(--label); flex: 0 0 auto; }
       .conn {
         display: inline-flex;
         align-items: center;
@@ -857,6 +855,13 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
       .chip:active, .chip.is-pressed { transform: scale(0.96); background: var(--fill-press); transition-duration: var(--duration-micro); }
       .chip.is-primary:active, .chip.is-primary.is-pressed { background: var(--accent-tint-2); }
       .chip.is-sent { background: var(--accent-tint-2); color: var(--accent); }
+      /* The desktop's Speak button is recording its mic: this chip reads Stop,
+         with a pulsing dot, until a tap (here or there) stops it. */
+      .chip.is-recording { display: inline-flex; align-items: center; gap: 6px; color: var(--danger); }
+      .chip.is-recording::before {
+        content: ""; width: 7px; height: 7px; border-radius: 50%;
+        background: var(--danger); animation: tk-pulse 1.2s ease-in-out infinite;
+      }
       .chip:disabled { opacity: 0.4; }
       /* Needs a meeting and none is running: still tappable, it says why. */
       .chip.needs-meeting { opacity: 0.45; }
@@ -1285,6 +1290,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         .tray-thumb.is-new { animation: fade-in var(--duration-fast) var(--ease-out) both; }
         .t-stagger-line { transition: none !important; }
         .chip.is-shaking { animation: none !important; }
+        .chip.is-recording::before { animation: none; }
         .tk-line { scroll-behavior: auto; }
         .app[data-meeting="live"][data-speaking="true"] .tk-dot { animation: none; }
         .t-icon-swap .t-icon { transition: none !important; }
@@ -1317,8 +1323,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
 
       <header class="bar" id="bar">
         <div class="brand">
-          <img alt="" src="data:image/png;base64,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" />
-          <span class="brand-name">Natively</span>
+          <svg class="brand-mark" viewBox="21.3709 0 80.0977 22" fill="currentColor" role="img" aria-label="Natively" xmlns="http://www.w3.org/2000/svg"><path d="M21.3709 16.6829V4.5781H23.6032L23.9023 6.0509H24.0174Q24.5927 5.1994 25.4672 4.7737Q26.3417 4.3479 27.3313 4.3479Q28.643 4.3479 29.6556 4.9348Q30.6681 5.5216 31.2435 6.6377Q31.8188 7.7539 31.8188 9.2497V16.6829H29.1723V9.5259Q29.1723 8.2141 28.4934 7.4777Q27.8145 6.7413 26.6639 6.7413Q25.5132 6.7413 24.7653 7.5352Q24.0174 8.3292 24.0174 9.5259V16.6829Z" /><path transform="translate(-3.2218 0)" d="M47.1234 8.81246V16.6829H44.8912L44.592 15.2101H44.4769C44.2008 15.655 43.7597 16.05 43.1537 16.3952C42.5477 16.7404 41.8304 16.913 41.002 16.913C40.1582 16.913 39.4179 16.7519 38.7812 16.4298C38.1445 16.1076 37.6536 15.6627 37.3084 15.095C36.9632 14.5274 36.7906 13.883 36.7906 13.1619C36.7906 12.0573 37.1972 11.156 38.0103 10.4579C38.8234 9.75983 39.9587 9.4108 41.4162 9.4108H44.4769V8.74342C44.4769 8.08372 44.2621 7.5736 43.8326 7.21306C43.403 6.85252 42.82 6.67226 42.0836 6.67226C41.5313 6.67226 41.0633 6.79116 40.6798 7.02896C40.2962 7.26676 40.0354 7.57743 39.8973 7.96098H37.2048C37.4656 6.88704 38.0218 6.01639 38.8733 5.34901C39.7247 4.68163 40.8179 4.34795 42.1526 4.34795C43.7175 4.34795 44.9372 4.73917 45.8117 5.52161C46.6862 6.30405 47.1234 7.401 47.1234 8.81246ZM44.4769 11.9652V11.4359H41.4852C40.8102 11.4359 40.3001 11.5817 39.9549 11.8732C39.6097 12.1647 39.4371 12.5482 39.4371 13.0238C39.4371 13.5148 39.6135 13.9098 39.9664 14.209C40.3192 14.5082 40.8255 14.6578 41.4852 14.6578C42.3904 14.6578 43.1153 14.4085 43.66 13.9098C44.2046 13.4112 44.4769 12.763 44.4769 11.9652Z" /><path transform="translate(-3.2218 0)" d="M54.1815 16.6829C53.0769 16.6829 52.2177 16.3876 51.604 15.7969C50.9904 15.2062 50.6835 14.3893 50.6835 13.346V7.04047H48.7734V4.57808H50.6835L51.0517 1.35626H53.33V4.57808H56.2987V7.04047H53.33V12.9778C53.33 13.346 53.4451 13.6452 53.6752 13.8753C53.9053 14.1054 54.2045 14.2205 54.5727 14.2205H56.2987V16.6829H54.1815Z" /><path transform="translate(-3.2218 0)" d="M60.9714 16.6829H58.3249V5.26326H60.9714V16.6829ZM58.0487 2.09355C58.0487 1.67381 58.2021 1.31559 58.509 1.01888C58.8158 0.722176 59.1994 0.573822 59.6596 0.573822C60.1045 0.573822 60.4804 0.722176 60.7873 1.01888C61.0941 1.31559 61.2475 1.67381 61.2475 2.09355C61.2475 2.51328 61.0941 2.86788 60.7873 3.15735C60.4804 3.44683 60.1045 3.59156 59.6596 3.59156C59.2147 3.59156 58.835 3.44683 58.5205 3.15735C58.206 2.86788 58.0487 2.51328 58.0487 2.09355Z" /><path transform="translate(-3.2218 0)" d="M70.2608 16.6829H67.039L62.5975 4.57808H65.4281L68.6269 13.8523H68.7419L71.8947 4.57808H74.7023L70.2608 16.6829Z" /><path transform="translate(-3.2218 0)" d="M81.6165 4.5274C82.2016 4.52213 82.515 4.54846 82.9225 4.63269C83.215 4.6906 83.6329 4.81168 83.8471 4.90117C84.0665 4.9854 84.4165 5.16439 84.6307 5.30127C84.8606 5.43814 85.2262 5.74874 85.4926 6.0225C85.7956 6.3278 86.0516 6.6542 86.2083 6.9227C86.3441 7.1491 86.5113 7.486 86.5844 7.6703C86.6628 7.8492 86.7829 8.2072 86.8561 8.4599C86.9292 8.7126 87.0232 9.1864 87.065 9.5128C87.1068 9.8392 87.1382 10.4025 87.1382 10.7605C87.1382 11.2343 87.1225 11.4291 87.0755 11.4606C87.0389 11.4817 85.1165 11.4922 78.5971 11.4659L78.6389 11.7818C78.6598 11.9608 78.7434 12.2977 78.8217 12.5398C78.9001 12.7767 79.0516 13.1084 79.1613 13.2769C79.271 13.4401 79.4591 13.677 79.5844 13.8033C79.715 13.9244 79.9292 14.0876 80.0702 14.1665C80.2113 14.2455 80.5091 14.3613 80.7389 14.4192C81.0106 14.4877 81.324 14.5245 81.627 14.5245C81.9352 14.5245 82.2486 14.4877 82.515 14.4192C82.7449 14.3613 83.0426 14.2508 83.168 14.1823C83.2986 14.1086 83.5128 13.9612 83.6382 13.8507C83.7688 13.7401 83.9934 13.4716 84.1344 13.2611C84.2755 13.0452 84.3904 12.861 84.3956 12.8557C84.3956 12.8504 84.8188 12.9768 85.3359 13.1347C85.8531 13.2927 86.4382 13.4716 86.9814 13.6296L86.7829 14.0402C86.668 14.2613 86.4695 14.593 86.3389 14.7772C86.2031 14.9562 85.9732 15.23 85.8217 15.3826C85.6703 15.5353 85.3934 15.7669 85.2053 15.9038C85.0225 16.0354 84.7143 16.2302 84.5262 16.3302C84.3434 16.4355 83.9777 16.5934 83.7165 16.6829C83.4605 16.7724 83.0479 16.883 82.8023 16.9251C82.562 16.9672 82.0762 16.9988 81.7314 16.9988C81.3867 16.9988 80.8852 16.962 80.6083 16.9198C80.3367 16.8725 79.9083 16.7672 79.6576 16.6829C79.4068 16.5987 79.0777 16.4618 78.9262 16.3881C78.7747 16.3092 78.4874 16.1354 78.2837 15.9986C78.0852 15.8617 77.7822 15.6195 77.615 15.4669C77.4426 15.3089 77.1658 14.9931 76.9934 14.7614C76.821 14.5298 76.565 14.1034 76.424 13.8138C76.2829 13.5243 76.121 13.1347 76.0688 12.9452C76.0113 12.7609 75.9277 12.3924 75.8859 12.1292C75.8337 11.8397 75.8023 11.3448 75.8023 10.8394C75.8076 10.3814 75.8389 9.8181 75.8807 9.5497C75.9225 9.2917 76.0165 8.8653 76.0949 8.6021C76.168 8.3441 76.3195 7.9387 76.4344 7.7071C76.5441 7.4755 76.7374 7.1333 76.8576 6.9438C76.9829 6.7595 77.2494 6.4279 77.4583 6.2067C77.662 5.99091 78.0016 5.69084 78.2158 5.54343C78.4247 5.39603 78.7486 5.20124 78.9262 5.11175C79.1038 5.01699 79.4225 4.88538 79.6314 4.81694C79.8404 4.74324 80.1956 4.65375 80.4255 4.61163C80.6605 4.56951 81.1882 4.53266 81.6165 4.5274ZM80.53 6.9964C80.3576 7.0596 80.1225 7.1649 80.0076 7.228C79.8926 7.2965 79.6837 7.4702 79.5374 7.6123C79.3964 7.7598 79.1926 8.0388 79.0882 8.2388C78.9837 8.4389 78.8479 8.7705 78.7852 8.9706C78.7277 9.1759 78.6755 9.3707 78.6755 9.4075C78.6755 9.4602 79.2867 9.4707 81.5486 9.4707C84.2546 9.4707 84.4217 9.4654 84.4217 9.3812C84.4217 9.3285 84.3747 9.0916 84.3173 8.8547C84.2598 8.6126 84.1449 8.2757 84.0561 8.1019C83.9725 7.9282 83.8001 7.6755 83.68 7.5439C83.5598 7.4123 83.3613 7.2438 83.2464 7.1807C83.1314 7.1122 82.9329 7.0175 82.8023 6.9701C82.677 6.9227 82.3792 6.8701 82.1494 6.849C81.9195 6.8279 81.5329 6.8279 81.2874 6.849C81.0471 6.8701 80.7023 6.9332 80.53 6.9964Z" /><path transform="translate(-3.2218 0)" d="M89.0188 0.573822H91.6307V16.6829H89.0188V0.573822Z" /><path transform="translate(-3.2218 0)" d="M95.6008 4.83801L95.8673 5.53818C96.0135 5.92248 96.7344 7.79661 97.4762 9.70231C98.2128 11.6133 98.8397 13.1821 98.8658 13.1926C98.8971 13.1979 99.6232 11.3238 102.052 4.84327L104.69 4.83801L104.57 5.16967C104.502 5.34866 103.029 9.19171 101.295 13.7085C99.5658 18.2254 98.124 21.9421 98.0926 21.9631C98.0613 21.9842 97.5232 22 96.8964 22C96.0344 22 95.7523 21.9842 95.7314 21.9368C95.721 21.9 96.1389 20.6839 97.6173 16.604L97.2934 15.8143C97.121 15.3826 96.0553 12.7452 94.9322 9.96031C93.8091 7.17011 92.8844 4.88013 92.8844 4.86433C92.8844 4.8538 93.4956 4.83801 95.6008 4.83801Z" /></svg>
         </div>
         <div class="conn" id="conn" role="status" aria-live="polite">
           <span class="conn-dot" aria-hidden="true"></span>
@@ -1382,7 +1387,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           </div>
           <div class="chips" id="chips" role="toolbar" aria-label="Ask your desktop">
             <button class="chip is-primary" type="button" data-action="whatToAnswer" data-needs-meeting>What to Say</button>
-            <button class="chip" type="button" data-action="answer">Answer</button>
+            <button class="chip" type="button" data-action="answer">Speak</button>
             <button class="chip" type="button" data-action="followUp" data-needs-meeting>Follow Up</button>
             <button class="chip" type="button" data-action="clarify" data-needs-meeting>Clarify</button>
             <button class="chip" type="button" data-action="codeHint">Code Hint</button>
@@ -1980,7 +1985,11 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         var entries = [];          // { key, t, kind, role, content, label, el, local }
         var clearedAt = 0;
         var localSeq = 0;
-        var live = null;           // { streamId, content, entry }
+        // Answers streaming now, by stream id: an Auto Answer can stream while
+        // a Recap or a question typed here does. { entry, dirty } each.
+        var lives = {};
+        function liveOf(streamId) { return Object.prototype.hasOwnProperty.call(lives, streamId) ? lives[streamId] : null; }
+        function isLiveEntry(e) { return Object.keys(lives).some(function (id) { return lives[id].entry === e; }); }
 
         function timeOf(iso) {
           var t = iso ? Date.parse(iso) : NaN;
@@ -2205,7 +2214,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         function buildPending(entry) {
           var node = answerShell(entry, 'answer is-pending');
           var body = el('div', 'answer-body');
-          body.append(el('span', 'thinking', 'Thinking...'));
+          body.append(el('span', 'thinking', 'Thinking'));
           node.append(body);
           entry.el = node;
           return node;
@@ -2414,8 +2423,9 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           codeHint: { label: 'Code Hint', expect: ['Code Hint'] },
           brainstorm: { label: 'Brainstorm', expect: ['Brainstorm'] },
           recap: { label: 'Recap', expect: ['Recap'] },
-          // Answer toggles voice recording on the desktop; the reply comes
-          // later (or never, on the first tap), so no placeholder.
+          // Speak toggles voice recording on the desktop: the first tap
+          // starts it, so no placeholder. The desktop reports the recording
+          // (onRecording below), and the placeholder appears when it stops.
           answer: null,
         };
         var PENDING_TIMEOUT_MS = 45000;
@@ -2467,7 +2477,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           // token frame holding everything so far. Drop the old live card, or
           // that frame would append the whole answer a second time.
           if (liveRaf) { cancelAnimationFrame(liveRaf); liveRaf = 0; }
-          live = null;
+          lives = {};
           rebuildFeed();
         }
         function onUser(ev) {
@@ -2480,6 +2490,15 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
             mine.state = '';
             mine.el.dataset.key = ev.id;
             paintUserState(mine);
+            return;
+          }
+          // What a stopped recording heard: the question goes above its
+          // placeholder, which then waits for the answer under the same id.
+          var voice = takePending(function (e) { return e.action === 'answer' && !e.streamId; });
+          if (voice) {
+            insertBeforePending({ key: ev.id, t: timeOf(ev.createdAt), kind: 'user', content: content });
+            if (ev.awaiting) voice.streamId = String(ev.id).replace(/^u:/, '');
+            voice.timer = setTimeout(function () { expirePending(voice); }, PENDING_TIMEOUT_MS);
             return;
           }
           appendEntry({ key: ev.id, t: timeOf(ev.createdAt), kind: 'user', content: content });
@@ -2497,42 +2516,69 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           return entry;
         }
         // The placeholder this answer resolves: its own (a desktop question's,
-        // by stream id) first, else a question typed here.
-        function takeAnswerPending(streamId) {
-          return takePending(function (e) { return e.streamId === streamId; }) ||
-            takePending(function (e) { return e.action === 'chat' && !e.streamId; });
+        // by stream id) first, else a question typed here, else a recording
+        // just stopped.
+        function takeAnswerPending(streamId, label) {
+          var own = takePending(function (e) { return e.streamId === streamId; });
+          if (own) return own;
+          // A button's answer (What to Answer, Recap…) resolves the chip
+          // tapped here for that button, never a question typed here.
+          if (label) {
+            return takePending(function (e) { return !e.streamId && e.expect && e.expect.indexOf(label) >= 0; });
+          }
+          return takePending(function (e) { return e.action === 'chat' && !e.streamId; }) ||
+            takePending(function (e) { return e.action === 'answer' && !e.streamId; });
         }
         var liveRaf = 0;
         // Answers still streaming when a new session started: their late
         // tokens belong to the old session and are dropped.
         var droppedStreams = {};
-        function onToken(streamId, token) {
+        function onToken(streamId, token, label) {
           if (droppedStreams[streamId]) return;
-          if (!live || live.streamId !== streamId) {
-            var entry = { key: 'live:' + streamId, t: Date.now(), kind: 'assistant', content: '', label: '' };
-            live = { streamId: streamId, entry: entry };
+          var lv = liveOf(streamId);
+          if (!lv) {
+            var entry = { key: 'live:' + streamId, t: Date.now(), kind: 'assistant', content: '', label: label || '' };
+            lv = lives[streamId] = { entry: entry, dirty: false };
             // The question's placeholder turns into this answer in place.
-            var wait = takeAnswerPending(streamId);
+            var wait = takeAnswerPending(streamId, label);
             if (wait) morph(wait, entry, { streaming: true });
             else appendEntry(entry, { streaming: true });
           }
-          live.entry.content += token;
+          lv.entry.content += token;
           // Once the desktop's render frames are arriving they drive the
           // updates; until then the page renders the tokens itself.
-          if (typeof live.entry.html !== 'string' && !liveRaf) liveRaf = requestAnimationFrame(flushLive);
+          if (typeof lv.entry.html !== 'string') { lv.dirty = true; scheduleLive(); }
         }
         function onRender(ev) {
           var streamId = String(ev.streamId);
-          if (droppedStreams[streamId] || !live || live.streamId !== streamId || typeof ev.html !== 'string') return;
-          live.entry.html = ev.html;
-          live.entry.gist = ev.gist || null;
+          var lv = liveOf(streamId);
+          if (droppedStreams[streamId] || !lv || typeof ev.html !== 'string') return;
+          lv.entry.html = ev.html;
+          lv.entry.gist = ev.gist || null;
+          lv.dirty = true;
+          scheduleLive();
+        }
+        function scheduleLive() {
           if (!liveRaf) liveRaf = requestAnimationFrame(flushLive);
         }
         function flushLive() {
           liveRaf = 0;
-          if (!live || !live.entry.el) return;
-          renderAnswerBody(live.entry, true);
-          noteNewContent();
+          var any = false;
+          Object.keys(lives).forEach(function (id) {
+            var lv = lives[id];
+            if (!lv.dirty || !lv.entry.el) return;
+            lv.dirty = false;
+            renderAnswerBody(lv.entry, true);
+            any = true;
+          });
+          if (any) noteNewContent();
+        }
+        function endLive(streamId) {
+          var lv = liveOf(streamId);
+          if (!lv) return null;
+          delete lives[streamId];
+          if (!Object.keys(lives).length && liveRaf) { cancelAnimationFrame(liveRaf); liveRaf = 0; }
+          return lv.entry;
         }
         function finishLive(entry, content) {
           if (content) entry.content = content;
@@ -2545,10 +2591,9 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         function onDone(ev) {
           var streamId = String(ev.streamId);
           if (droppedStreams[streamId]) return;
-          if (liveRaf) { cancelAnimationFrame(liveRaf); liveRaf = 0; }
-          if (live && live.streamId === streamId) {
-            var entry = live.entry;
-            live = null;
+          var label = ev.label ? String(ev.label) : '';
+          var entry = endLive(streamId);
+          if (entry) {
             // The final rendering replaces the last streaming frame.
             entry.html = typeof ev.html === 'string' ? ev.html : undefined;
             entry.gist = ev.gist || null;
@@ -2563,29 +2608,37 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
             if (gone) removeEntry(gone, true);
             return;
           }
-          var fresh = { key: 'a:' + streamId, t: timeOf(ev.createdAt), kind: 'assistant', content: ev.content, label: '', html: ev.html, gist: ev.gist };
-          var wait = takeAnswerPending(streamId);
+          var fresh = { key: 'a:' + streamId, t: timeOf(ev.createdAt), kind: 'assistant', content: ev.content, label: label, html: ev.html, gist: ev.gist };
+          var wait = takeAnswerPending(streamId, label);
           if (wait) morph(wait, fresh);
           else appendEntry(fresh);
           announce('Answer ready. ' + plainText(fresh.content).slice(0, 160));
         }
         function onStreamError(ev) {
-          if (droppedStreams[String(ev.streamId)]) return;
-          if (liveRaf) { cancelAnimationFrame(liveRaf); liveRaf = 0; }
+          var streamId = String(ev.streamId);
+          if (droppedStreams[streamId]) return;
           var message = String(ev.message || 'stream failed');
-          if (live && live.streamId === String(ev.streamId)) {
-            var entry = live.entry;
-            live = null;
+          var entry = endLive(streamId);
+          if (entry) {
             finishLive(entry);
             entry.el.querySelector('.answer-body').append(el('p', 'answer-note', 'The answer stopped: ' + message));
             return;
           }
-          var wait = takeAnswerPending(String(ev.streamId));
+          var wait = takeAnswerPending(streamId);
           var failed = { key: 'err:' + (++localSeq), t: Date.now(), kind: 'assistant', label: '', content: '', local: true };
           if (wait) morph(wait, failed);
           else appendEntry(failed);
           failed.el.querySelector('.answer-body').append(el('p', 'answer-note', 'Could not get an answer: ' + message));
           failed.el.querySelector('.answer-foot').remove();
+        }
+        // The desktop threw this answer away (a newer one replaced it): its
+        // overlay row goes, so the card streaming here goes too, quietly.
+        function onDiscard(ev) {
+          var streamId = String(ev.streamId);
+          var entry = endLive(streamId);
+          if (entry) { removeEntry(entry, true); return; }
+          var wait = takePending(function (e) { return e.streamId === streamId; });
+          if (wait) removeEntry(wait, true);
         }
         function onAssistant(ev) {
           var label = String(ev.label || '');
@@ -2616,6 +2669,33 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
             return;
           }
           if (ev.message) showToast(String(ev.message));
+        }
+        // ───── Desktop recording (the Speak chip) ──────────────────────────
+        // Speak starts the desktop recording its mic and a second tap stops it
+        // and answers what was said. The overlay's button reads Stop meanwhile;
+        // so does this chip. Both read Speak, not Answer, since 2026-10-30. The
+        // action is still 'answer', and the replies still come back labelled
+        // Answer. A stop seen live gets the usual placeholder until the answer
+        // arrives; the state replayed on connect only repaints.
+        var answerChip = document.querySelector('.chip[data-action="answer"]');
+        var recording = false;
+        var recordingSynced = false;
+        function paintRecording() {
+          if (!answerChip) return;
+          answerChip.classList.toggle('is-recording', recording);
+          answerChip.textContent = recording ? 'Stop' : 'Speak';
+          answerChip.setAttribute('aria-label', recording ? 'Stop recording on your desktop and answer' : 'Speak: ask out loud on your desktop');
+        }
+        function setRecording(active, live) {
+          var stopped = recording && !active;
+          recording = active;
+          paintRecording();
+          if (stopped && live) addPending('answer', 'Answer', ['What to Answer', 'Answer']);
+        }
+        function onRecording(ev) {
+          var live = recordingSynced;
+          recordingSynced = true;
+          setRecording(!!ev.active, live);
         }
         // ───── Desktop screenshots ────────────────────────────────────────
         // The overlay's tray (what its next answer goes out with) arrives whole
@@ -2755,17 +2835,19 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           switch (ev.type) {
             case 'history': onHistory(ev.messages); break;
             case 'user': onUser(ev); break;
-            case 'token': onToken(String(ev.streamId), String(ev.token || '')); break;
+            case 'token': onToken(String(ev.streamId), String(ev.token || ''), ev.label ? String(ev.label) : ''); break;
             case 'render': onRender(ev); break;
             case 'diagram': onDiagram(ev); break;
             case 'done': onDone(ev); break;
             case 'error': onStreamError(ev); break;
+            case 'discard': onDiscard(ev); break;
             case 'assistant': onAssistant(ev); break;
             case 'ack': onAck(ev); break;
             case 'transcript': onTranscript(ev); break;
             case 'transcript-history': onTranscriptHistory(ev); break;
             case 'meeting': onMeeting(ev); break;
             case 'attachments': onAttachments(ev); break;
+            case 'recording': onRecording(ev); break;
             case 'images': onImages(ev); break;
             default: break;
           }
@@ -2823,6 +2905,8 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         function onMeeting(ev) {
           meetingActive = !!ev.active;
           if (ev.reset) {
+            // The overlay drops a recording on either edge, with no answer.
+            setRecording(false, false);
             // Started: a new session, as on the overlay. Ended: a clean canvas
             // that says so; the meeting's summary is on the desktop.
             meetingEnded = !meetingActive;
@@ -2840,7 +2924,8 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         // reconnect won't bring them back.
         function startNewSession(toast) {
           if (liveRaf) { cancelAnimationFrame(liveRaf); liveRaf = 0; }
-          if (live) { droppedStreams[live.streamId] = true; live = null; }
+          Object.keys(lives).forEach(function (id) { droppedStreams[id] = true; });
+          lives = {};
           entries.forEach(function (e) { clearTimeout(e.timer); });
           entries = [];
           clearedAt = 0;
@@ -3205,6 +3290,8 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
           ws.addEventListener('open', function () {
             if (ws !== socket) return;
             opened = true;
+            // The replay that follows says whether the desktop is recording.
+            recordingSynced = false;
             reconnectDelay = 800;
             setConn('live');
           });
@@ -3494,7 +3581,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         function clearScreen() {
           clearedAt = Date.now();
           entries.slice().forEach(function (e) {
-            if (live && live.entry === e) return;
+            if (isLiveEntry(e)) return;
             clearTimeout(e.timer);
             removeEntry(e, false);
           });

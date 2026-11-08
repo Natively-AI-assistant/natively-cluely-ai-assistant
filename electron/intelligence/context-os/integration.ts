@@ -53,7 +53,6 @@ export function mapAnswerTypeToAnswerShape(answerType: string | null | undefined
     case 'project_followup_answer':
       return 'follow_up';
     case 'document_absent_fact_refusal':
-    case 'ethical_usage_answer':
       return 'refusal';
     default:
       return 'general';

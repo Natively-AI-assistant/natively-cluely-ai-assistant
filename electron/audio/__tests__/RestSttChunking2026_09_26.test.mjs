@@ -9,9 +9,14 @@
 // "[ME]: Thank you." lines while the user was silent — Whisper's stock output
 // for audio without speech — each passed to the AI as something they said.
 //
+// 2026-10-28, issue #698: Groq bills every request as at least 10 s, so the
+// 3-6 s chunks cost 2-4x the audio. Groq now builds chunks to 10 s and each
+// channel uploads at most once per 10 s; the 3-6 s chunks below run on OpenAI,
+// which has no billed minimum.
+//
 // Runs the compiled RestSTT (dist-electron) against a local HTTP server that
-// stands in for api.groq.com (https.request hands it to the local port: the
-// build bundles axios). Chunk decisions ride on the audio itself, not the
+// stands in for api.groq.com and api.openai.com (https.request hands them to
+// the local port: the build bundles axios). Chunk decisions ride on the audio itself, not the
 // clock, so audio is written as fast as the test likes.
 //
 // Platform: no platform branch here — one run covers darwin and win32.
@@ -35,7 +40,8 @@ const distDir = path.resolve(repoRoot, 'dist-electron/electron/audio');
 let serverPort = 0;
 const realHttpsRequest = https.request;
 https.request = function (opts, ...rest) {
-  if (opts && typeof opts === 'object' && (opts.host === 'api.groq.com' || opts.hostname === 'api.groq.com')) {
+  const host = opts && typeof opts === 'object' ? (opts.hostname || opts.host) : undefined;
+  if (host === 'api.groq.com' || host === 'api.openai.com') {
     const local = { ...opts, host: '127.0.0.1', hostname: '127.0.0.1', port: serverPort, protocol: 'http:', agent: undefined, lookup: undefined };
     local.createConnection = () => net.connect(serverPort, '127.0.0.1');
     return http.request(local, ...rest);
@@ -78,12 +84,14 @@ async function startServer() {
   return { uploads, close: () => new Promise((r) => server.close(r)) };
 }
 
-function groq() {
-  const stt = new RestSTT('groq', 'gsk-test', undefined, undefined, 'interviewer');
+function rest(provider) {
+  const stt = new RestSTT(provider, 'test-key', undefined, undefined, 'interviewer');
   stt.setSampleRate(16000);
   stt.start();
   return stt;
 }
+const groq = () => rest('groq');
+const openai = () => rest('openai');
 
 describe('chunks end sooner', () => {
   let restoreConsole;
@@ -96,7 +104,7 @@ describe('chunks end sooner', () => {
 
   test('after 3 s, a 200 ms pause ends the chunk — no waiting for the 600 ms speech end or 10 s', async () => {
     const server = await startServer();
-    const stt = groq();
+    const stt = openai();
     feed(stt, tone(3500));
     feed(stt, zeros(240));
     await sleep(200);
@@ -104,12 +112,11 @@ describe('chunks end sooner', () => {
     await server.close();
     assert.equal(server.uploads.length, 1, 'the pause did not end the chunk');
     assert.ok(Math.abs(server.uploads[0].pcmMs - 3740) <= 60, `uploaded ${server.uploads[0].pcmMs} ms`);
-    assert.equal(server.uploads[0].responseFormat, 'verbose_json');
   });
 
   test('before 3 s, a short pause does not end it (the native speech end still does)', async () => {
     const server = await startServer();
-    const stt = groq();
+    const stt = openai();
     feed(stt, tone(2000));
     feed(stt, zeros(400));
     feed(stt, tone(300));
@@ -125,7 +132,7 @@ describe('chunks end sooner', () => {
 
   test('continuous speech is cut at 6 s, at the quietest point of the last 1.5 s', async () => {
     const server = await startServer();
-    const stt = groq();
+    const stt = openai();
     const phase = { t: 0 };
     feed(stt, tone(5000, 3000, phase));
     feed(stt, tone(60, 400, phase)); // a soft stretch between words, 5.00-5.06 s
@@ -142,7 +149,7 @@ describe('chunks end sooner', () => {
 
   test('one loud click does not make ordinary speech count as a pause', async () => {
     const server = await startServer();
-    const stt = groq();
+    const stt = openai();
     const phase = { t: 0 };
     feed(stt, tone(1000, 3000, phase));
     feed(stt, tone(20, 30000, phase));

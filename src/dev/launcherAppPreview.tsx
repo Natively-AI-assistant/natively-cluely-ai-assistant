@@ -274,6 +274,11 @@ const stub = {
     seedDemo: noop,
     searchGlobalMeetings: async () => ({ enabled: false, results: [] }),
     searchMemories: previewSearchMemories,
+    // AssistToday: nothing to show (the catch-all's object made a catch-up with no lists, and crashed it).
+    assistGetDailyBrief: async () => null,
+    assistGetCatchUp: async () => null,
+    // The notes page's Share menu reads the connections when it opens; none set up.
+    meetingOutputs: { getConnections: async () => null },
 };
 
 // Effects DO call methods that are not optional-chained (ConnectCalendarButton

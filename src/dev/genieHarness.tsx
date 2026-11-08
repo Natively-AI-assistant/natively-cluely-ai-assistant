@@ -80,8 +80,12 @@ let pushHindsight: ((s: { state: string; reason?: string; logPath?: string }) =>
 if (NOTICES) {
   (window as any).electronAPI = {
     ...(window as any).electronAPI,
+    // `&pack=1`: the key is a Light pack (the banner offers more hours, not Settings).
     getNativelyUsage: async () => ({
       ok: true,
+      ...(new URLSearchParams(location.search).get('pack') === '1'
+        ? { plan: 'pack_light', billing_period: 'pack' }
+        : { plan: 'pro', billing_period: 'monthly' }),
       quota: {
         ai: { used: 5_920_000, limit: 6_500_000 },
         voice: { used: 571, limit: 600 },
@@ -91,6 +95,7 @@ if (NOTICES) {
     onHindsightStatus: (handler: typeof pushHindsight) => { pushHindsight = handler; return () => { pushHindsight = null; }; },
     openHindsightLog: async () => ({ ok: true }),
     openExternal: () => {},
+    openSettingsTab: async (tab: string) => { (window as any).__openedSettingsTab = tab; },
   };
 }
 

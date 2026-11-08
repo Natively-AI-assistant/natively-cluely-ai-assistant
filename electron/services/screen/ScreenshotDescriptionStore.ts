@@ -87,6 +87,18 @@ export function hashImageSet(imagePaths: readonly string[]): string | null {
   return crypto.createHash('sha256').update(members.sort().join(':')).digest('hex');
 }
 
+/**
+ * hashImageFile without blocking the main process on the read (2026-11-06),
+ * for the screen service's cache key on every read. Same hash.
+ */
+export async function hashImageFileAsync(imagePath: string): Promise<string | null> {
+  try {
+    return crypto.createHash('sha256').update(await fs.promises.readFile(imagePath)).digest('hex');
+  } catch {
+    return null;
+  }
+}
+
 export function getScreenshotDescription(imageSha256: string): DescriptionRow | null {
   if (!imageSha256) return null;
   try {

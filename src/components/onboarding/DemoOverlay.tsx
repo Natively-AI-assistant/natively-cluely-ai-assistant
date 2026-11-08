@@ -20,7 +20,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { ArrowRight, ChevronDown, HelpCircle, MessageSquare, Mic, Pencil, PointerOff, RefreshCw, SlidersHorizontal, X } from 'lucide-react';
+import { ArrowRight, ChevronDown, HelpCircle, MessageSquare, Mic, MousePointer2, Pencil, RefreshCw, SlidersHorizontal, X } from 'lucide-react';
 import TopPill from '../ui/TopPill';
 import { getOverlayAppearance } from '../../lib/overlayAppearance';
 import { ModelSelectorLabel } from '../ui/ModelSelectorLabel';
@@ -215,7 +215,7 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
           ) : (
             <div key={msg.id} className="w-full ai-response-card my-2.5 min-h-[24px] text-[14px] leading-relaxed overlay-text-primary">
               {msg.shown === 0 ? (
-                <span className="natively-thinking-label text-[13px]">{tr('Thinking...')}</span>
+                <span className="natively-thinking-label text-[13px]">{tr('Thinking')}</span>
               ) : (
                 answerWords[msg.k].words.slice(0, msg.shown).map((w, i) => (
                   <React.Fragment key={i}>{i > 0 && answerWords[msg.k].sep}<span className="reveal-word-in">{w}</span></React.Fragment>
@@ -231,7 +231,7 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
           <span className={chip} style={appearance.chipStyle}><MessageSquare className="w-3 h-3 opacity-70" /> {tr('Clarify')}</span>
           <span className={chip} style={appearance.chipStyle}><RefreshCw className="w-3 h-3 opacity-70" /> {tr('Recap')}</span>
           <span className={chip} style={appearance.chipStyle}><HelpCircle className="w-3 h-3 opacity-70" /> {tr('Follow Up Question')}</span>
-          <span className={`${chip} justify-center min-w-[74px]`} style={appearance.chipStyle}><Mic className="w-3 h-3 opacity-70" /> {tr('Answer')}</span>
+          <span className={`${chip} justify-center min-w-[74px]`} style={appearance.chipStyle}><Mic className="w-3 h-3 opacity-70" /> {tr('Speak')}</span>
         </div>
 
         {/* Input area */}
@@ -254,7 +254,7 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
                     className={`h-12 w-auto rounded-[10px] border object-cover shadow-sm ${isLight ? 'border-black/15' : 'border-white/20'}`} />
                 ))}
               </div>
-              <span className="text-[10px] overlay-text-muted">{tr('Ask a question or click Answer')}</span>
+              <span className="text-[10px] overlay-text-muted">{tr('Type a question or click Speak')}</span>
             </div>
           </ChromeFold>
 
@@ -284,7 +284,7 @@ export const DemoOverlay: React.FC<Props> = ({ isLight, hidden, answerKey, shotK
                 <ModelSelectorLabel>{DEMO_MODEL_LABEL}</ModelSelectorLabel><ChevronDown size={12} className="shrink-0" />
               </span>
               <span className="w-7 h-7 rounded-[9px] flex items-center justify-center overlay-bare-icon"><SlidersHorizontal className="w-3.5 h-3.5" /></span>
-              <span className="w-7 h-7 rounded-[9px] flex items-center justify-center overlay-bare-icon"><PointerOff className="w-3.5 h-3.5" /></span>
+              <span className="w-7 h-7 rounded-[9px] flex items-center justify-center overlay-bare-icon"><MousePointer2 className="w-3.5 h-3.5" strokeDasharray="3 2.2" /></span>
             </div>
             <span className="w-7 h-7 rounded-full flex items-center justify-center overlay-icon-surface overlay-text-muted" style={appearance.iconStyle}><ArrowRight className="w-3.5 h-3.5" /></span>
           </div>

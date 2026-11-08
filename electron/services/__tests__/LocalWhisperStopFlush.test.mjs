@@ -19,7 +19,17 @@ const listenerSource = source.slice(listenerStart, listenerEnd);
 
 test('LocalWhisperSTT.stop does not clear queued VAD finals before worker readiness', () => {
   assert.ok(stopStart >= 0, 'stop should exist');
-  assert.doesNotMatch(stopSource, /this\.pendingAudio = \[\];/);
+  // With a worker (ready or still loading) the queued finals are kept and
+  // drained. The ONE place stop() may drop them is when no worker exists at
+  // all yet — still waiting on a download, a slot or the shared Nemotron load
+  // (2026-10-14): nothing would ever transcribe them, and left queued they
+  // were replayed into the next meeting.
+  const withWorker = stopSource.slice(stopSource.indexOf('if (w) {'), stopSource.lastIndexOf('} else {'));
+  assert.ok(withWorker.length > 0, 'fixture: stop()\'s worker branch moved');
+  assert.doesNotMatch(withWorker, /this\.pendingAudio = \[\];/);
+  const noWorker = stopSource.slice(stopSource.lastIndexOf('} else {'));
+  assert.match(noWorker, /this\.pendingAudio = \[\];/);
+  assert.equal(stopSource.split('this.pendingAudio = [];').length - 1, 1, 'and nowhere else in stop()');
   assert.match(stopSource, /this\.isDrainingFinals = true;[\s\S]*segs\.forEach\(s => this\.dispatchFinal\(s\.samples\)\);/);
   assert.match(stopSource, /shouldKeepWorkerForFinals[\s\S]*this\.pendingAudio\.length > 0/);
 });

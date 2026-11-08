@@ -331,17 +331,22 @@ function loadManager({ googleTokens } = {}) {
     return { cm: CalendarManager.getInstance(), net, userData, restore };
 }
 
-test('CalendarManager (win32): Google, Outlook (no client ID in this build) and the link; no Apple row', async () => {
+test('CalendarManager (win32): Google, Outlook and the link; no Apple row', async () => {
+    // Outlook is "unconfigured" only in a build with no client ID baked in (CI);
+    // a build made from a .env that has one (a release machine) offers it.
+    const outlookBaked = Boolean(require(path.join(dist, 'microsoftGraph.js')).microsoftClientConfig({}).clientId);
     const { cm, restore } = loadManager();
     try {
         cm.init('win32');
         assert.deepEqual(cm.getSourceStatuses(), [
             { id: 'google', state: 'disconnected' },
-            { id: 'outlook', state: 'unconfigured' },
+            { id: 'outlook', state: outlookBaked ? 'disconnected' : 'unconfigured' },
             { id: 'ics', state: 'disconnected' },
         ]);
         assert.equal(await cm.connectSource('apple'), 'This calendar isn’t available on this computer.');
-        assert.equal(await cm.connectSource('outlook'), 'Outlook sign-in isn’t available in this version of Natively yet.');
+        if (!outlookBaked) {
+            assert.equal(await cm.connectSource('outlook'), 'Outlook sign-in isn’t available in this version of Natively yet.');
+        }
         assert.deepEqual(cm.getConnectionStatus(), { connected: false });
         assert.deepEqual(await cm.getUpcomingEvents(true), []);
     } finally {

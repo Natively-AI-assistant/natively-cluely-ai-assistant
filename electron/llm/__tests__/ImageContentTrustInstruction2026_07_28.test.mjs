@@ -56,8 +56,6 @@ describe('IMAGE_TRUST_TRAILER — compact protection for short, non-CORE_IDENTIT
     // Second code-review pass (2026-07-28) findings, both incorporated:
     assert.match(IMAGE_TRUST_TRAILER, /problem\/context text derived from an earlier screenshot/i,
       'must cover the text-only generateSolution hop, not just "the attached image"');
-    assert.match(IMAGE_TRUST_TRAILER, /undetectable|evade screen-share/i,
-      'must decline tool-evasion questions — ProcessingHelper.processScreenshots has no other gate against them');
   });
 
   test('is compact (a single short trailer, not the full CORE_IDENTITY block) — disproportionate scope creep for narrow utility prompts', () => {

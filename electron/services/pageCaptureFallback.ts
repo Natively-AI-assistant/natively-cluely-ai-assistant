@@ -32,7 +32,9 @@ export type PageCaptureFallbackKind =
   | 'needs-host-permission'
   | 'timeout'
   | 'no-tab'
-  | 'error';
+  | 'error'
+  // The page text arrived but some formulas had no text (drawn only as SVG).
+  | 'formulas';
 
 export interface PageCaptureFallbackNotice {
   kind: PageCaptureFallbackKind;
@@ -108,6 +110,80 @@ export function describePageCaptureFallback(rawReason: unknown): PageCaptureFall
 }
 
 /**
+ * What the browser extension writes in the page text in place of a formula
+ * that has no text on the page. Same string as UNREADABLE_FORMULA in
+ * natively-browser/src/math-text.ts (a separate package, so not importable).
+ */
+export const UNREADABLE_FORMULA_MARKER = '[formula not captured]';
+
+/**
+ * Marks formula N of the image the extension drew for the formulas with no
+ * text. Same as FORMULA_IN_IMAGE_RE in natively-browser/src/math-text.ts.
+ */
+export const FORMULA_IN_IMAGE_RE = /\[formula (\d+), see image\]/;
+
+/** Whether page text has a formula that only an image can carry. */
+export function hasFormulaMarker(text: string | undefined): boolean {
+  return typeof text === 'string' && (text.includes(UNREADABLE_FORMULA_MARKER) || FORMULA_IN_IMAGE_RE.test(text));
+}
+
+/**
+ * The extension sent its own image of the page's formulas with the text;
+ * `unreadable` more had no text and are not in it.
+ */
+export function describeFormulaImage(unreadable: number): PageCaptureFallbackNotice {
+  const n = Math.max(0, Math.floor(Number(unreadable) || 0));
+  const missing =
+    n === 0
+      ? ''
+      : n === 1
+        ? ' 1 more could not be captured; take a screenshot of it before answering.'
+        : ` ${n} more could not be captured; take a screenshot of them before answering.`;
+  return {
+    kind: 'formulas',
+    label: n ? 'Page attached + some formulas as image' : 'Page attached + formulas as image',
+    detail: `Formulas this page draws as pictures were attached as an image with the page text.${missing}`,
+    reason: `formula-image:${n}`,
+  };
+}
+
+/**
+ * The page capture succeeded but `count` formulas on it had no text (issue
+ * #645: HackerRank draws them as bare SVG paths). Unlike the notices above,
+ * the page text is attached either way; `screenshot` says what happened to
+ * the screenshot for the formulas: attached, failed, or not taken (a capture
+ * from the extension popup, whose screenshot would show the popup).
+ */
+export function describeUnreadableFormulas(
+  count: number,
+  screenshot: 'attached' | 'failed' | 'not-taken' = 'attached',
+  /** The user's platform, for the failed-screenshot hint. Callers pass `process.platform`. */
+  platform?: NodeJS.Platform,
+): PageCaptureFallbackNotice {
+  const n = Math.max(1, Math.floor(Number(count) || 1));
+  const what = n === 1 ? '1 formula on this page is' : `${n} formulas on this page are`;
+  const reason = `unreadable-formulas:${n}`;
+  if (screenshot === 'attached') {
+    return {
+      kind: 'formulas',
+      label: 'Page attached + screenshot for formulas',
+      detail: `${what} drawn as pictures with no text, so a screenshot was attached with the page text.`,
+      reason,
+    };
+  }
+  return {
+    kind: 'formulas',
+    label: 'Page attached — formulas missing',
+    detail:
+      screenshot === 'failed'
+        ? `${what} drawn as pictures with no text, and the screenshot for them failed. ` +
+          `${screenshotPermissionHint(platform)} Take a screenshot of the formulas before answering.`
+        : `${what} drawn as pictures with no text. Take a screenshot of the formulas before answering.`,
+    reason,
+  };
+}
+
+/**
  * Both legs failed: the page capture AND the screenshot fallback. The regular
  * notices all assert "a screenshot was attached instead", which would be a lie
  * here — this one says nothing was captured and names the actionable causes.
@@ -154,7 +230,7 @@ export function describeDoubleCaptureFailure(
  * capture fails there it is normally a protected/DRM window, a graphics-driver
  * or remote-session limitation, or security software blocking the capture.
  */
-function screenshotPermissionHint(platform: NodeJS.Platform): string {
+function screenshotPermissionHint(platform: NodeJS.Platform | undefined): string {
   if (platform === 'darwin') {
     return 'Screenshots need Screen Recording permission.';
   }

@@ -3,11 +3,13 @@
 // Checks on every startup — no throttle.
 
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, X, ArrowUpRight } from 'lucide-react';
+import { AlertTriangle, X, ArrowUpRight, ChevronRight } from 'lucide-react';
 import { formatMeter, normalizeQuota, type UsageMeter } from '../types/nativelyUsage';
 import { GenieModal } from './ui/GenieModal';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import '../ui-components/LiquidGlassButton.css';
+import { CHECKOUT_URLS } from '../config/urls';
+import { isPackPlan } from '../lib/apiPlans.mjs';
 
 interface NearLimitBucket {
     label: string;
@@ -20,11 +22,34 @@ interface NearLimitBucket {
 
 const STARTUP_DELAY_MS = 3000;
 const THRESHOLD_PCT    = 90;
-const UPGRADE_URL      = 'https://checkout.dodopayments.com/buy/pdt_0NbFixGmD8CSeawb5qvVl';
+
+// Who sees this, and what it offers them (2026-11-07).
+//
+// It needs a SAVED Natively key (getNativelyUsage answers ok:false without one)
+// and returns early for a trial, so it is only ever shown to a key holder:
+// a monthly or yearly subscriber, or someone on a one-time Pro pack.
+//
+//  - Subscriber: "Upgrade" opens Settings › Plans & Billing, where the tiers and
+//    the Monthly / Yearly switch are. Never a pack: the server issues a pack
+//    bought next to a subscription as a SEPARATE key, so a paying subscriber
+//    would have to swap keys in the app to use it. (It used to open the
+//    Standard monthly checkout, which is the plan most of them already have.)
+//  - Pack: "Add hours" opens that pack's checkout. A pack bought on the same
+//    email adds hours to the pack key already in the app; a pack does not reset,
+//    so the footer says so instead of promising a billing date.
+type Offer = { kind: 'plans' } | { kind: 'pack'; url: string };
+
+export function quotaBannerOffer(plan: string | undefined, billingPeriod: string | undefined): Offer {
+    if (billingPeriod === 'pack' || isPackPlan(plan)) {
+        return { kind: 'pack', url: plan?.toLowerCase() === 'pack_heavy' ? CHECKOUT_URLS.packHeavy : CHECKOUT_URLS.packLight };
+    }
+    return { kind: 'plans' };
+}
 
 export const NativelyQuotaBanner: React.FC = () => {
     const [nearLimitBuckets, setNearLimitBuckets] = useState<NearLimitBucket[]>([]);
     const [visible, setVisible] = useState(false);
+    const [offer, setOffer] = useState<Offer>({ kind: 'plans' });
     // The card is the Liquid Glass kit's clear pane (.lg-notice), shared with
     // the provider-change notice, so its text follows the theme: amber and red
     // step down a shade on light glass to stay legible.
@@ -92,6 +117,7 @@ export const NativelyQuotaBanner: React.FC = () => {
 
                 if (near.length === 0) return;
 
+                setOffer(quotaBannerOffer(result.plan, result.billing_period));
                 setNearLimitBuckets(near);
                 setVisible(true);
                 window.electronAPI?.funnelTrack?.('upgrade_prompt', { surface: 'quota_banner', action: 'shown' })?.catch?.(() => {});
@@ -151,12 +177,25 @@ export const NativelyQuotaBanner: React.FC = () => {
 
             {/* Footer */}
             <div className="flex items-center justify-between pt-0.5">
-                <span className="text-[11px] text-text-secondary">Resets on your next billing date</span>
+                <span className="text-[11px] text-text-secondary">
+                    {offer.kind === 'pack' ? 'Packs do not reset' : 'Resets on your next billing date'}
+                </span>
                 <button
-                    onClick={() => (window.electronAPI as any)?.openExternal?.(UPGRADE_URL, { surface: 'quota_banner' })}
+                    onClick={() => {
+                        window.electronAPI?.funnelTrack?.('upgrade_prompt', { surface: 'quota_banner', action: 'clicked' })?.catch?.(() => {});
+                        if (offer.kind === 'pack') {
+                            (window.electronAPI as any)?.openExternal?.(offer.url, { surface: 'quota_banner' });
+                        } else {
+                            void window.electronAPI?.openSettingsTab?.('plans');
+                        }
+                        setVisible(false);
+                    }}
                     className={`flex items-center gap-1 text-[11px] font-semibold ${amber} ${isLight ? 'hover:text-amber-700' : 'hover:text-amber-300'} transition-colors cursor-pointer`}
                 >
-                    Upgrade <ArrowUpRight size={11} strokeWidth={2.5} />
+                    {/* An arrow out for a checkout in the browser; a chevron for Settings, which opens in the app. */}
+                    {offer.kind === 'pack'
+                        ? <>Add hours <ArrowUpRight size={11} strokeWidth={2.5} /></>
+                        : <>Upgrade <ChevronRight size={11} strokeWidth={2.5} /></>}
                 </button>
             </div>
         </GenieModal>

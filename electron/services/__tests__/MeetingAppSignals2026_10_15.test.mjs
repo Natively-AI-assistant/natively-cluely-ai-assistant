@@ -613,7 +613,8 @@ test('recovery: the app\'s own name and the shared screens survive a quit', () =
 
 test('main wiring: the mic chunk goes through the mute gate on its way to speech; snapshots stay off under Undetectable', () => {
     const main = fs.readFileSync(path.join(REPO, 'electron/main.ts'), 'utf8');
-    assert.match(main, /const heard = meetingMuteSync\.gate\(chunk\);\s*this\.googleSTT_User\?\.write\(heard\);/);
+    // The notepad's Pause (2026-10-20) wraps the same silence around it.
+    assert.match(main, /const heard = this\.transcriptionPause\.gate\(meetingMuteSync\.gate\(chunk\)\);[\s\S]{0,200}this\.googleSTT_User\?\.write\(heard\);/);
     assert.match(main, /this\.sttGap\.onAudio\('mic', heard, gapRate\)/);
     assert.match(main, /get\('screenShareSnapshots'\) === true && !nativePromptsBlocked\(\(\) => this\.isUndetectable\)/);
     assert.match(main, /this\.stopDesktopCallSpeakers\(\);/, 'the meeting end stops the reader, the snapshots and the mute');

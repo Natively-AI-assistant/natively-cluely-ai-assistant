@@ -17,7 +17,7 @@ const SKM = 'electron/services/StealthKeyboardManager.ts';
 
 test('full stealth start() frees the guard first; stop() restores it', () => {
   const src = read(SKM);
-  const start = src.slice(src.indexOf('public start(): boolean {'), src.indexOf('private hideAuxWindowsForStealth'));
+  const start = src.slice(src.indexOf("public start(target: StealthTypingTarget = 'overlay'): boolean {"), src.indexOf('private hideAuxWindowsForStealth'));
   assert.match(start, /this\.stopGuard\(\)/, 'start() must stop the guard before engaging the full typing tap (one shared hook).');
   const stopStart = src.indexOf('public stop(): void {');
   const stop = src.slice(stopStart, src.indexOf('public setShortcutGuardEnabled(', stopStart));
@@ -36,7 +36,7 @@ test('the guard starts the tap in shortcut-only mode with no overlay bounds', ()
 
 test('app-chord events dispatch in guard mode (active is false then)', () => {
   const src = read(SKM);
-  const h = src.slice(src.indexOf('private handleCapturedKey('), src.indexOf('private sendKeyToOverlay('));
+  const h = src.slice(src.indexOf('private handleCapturedKey('), src.indexOf('private sendKeyToTarget('));
   assert.match(h, /if \(!this\.active && !this\.guardRunning\) return/, 'app-chord branch must dispatch when the guard is running, not only when active.');
   assert.match(h, /if \(this\.active\) this\.armIdleTimer\(\)/, 'idle auto-stop applies to full mode only, not the guard.');
 });

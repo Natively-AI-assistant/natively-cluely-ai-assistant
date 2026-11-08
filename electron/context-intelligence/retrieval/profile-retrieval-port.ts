@@ -51,9 +51,9 @@ import { stripUnsupportedDerivedResumeFields, isGeneratedArtifactCard, isExtract
  * nothing — so the turn answered DOCUMENT_FACT_NOT_FOUND about a figure
  * SalaryIntelligence had already computed and logged.
  *
- * Facts are DERIVED, not documentary. Their sections say so in the text (see
- * renderFactSections) because the model must never restate an estimate as a
- * line item on the résumé.
+ * Since 2026-10-14 the kind carries what the USER wrote or approved about
+ * themselves ("Cue Cards": structured.ownAnswers), and nothing derived; see
+ * renderFactSections.
  */
 export type ProfileDocKind = 'resume' | 'jd' | 'fact';
 
@@ -181,23 +181,38 @@ export const PROFILE_WHOLE_SECTION = 'Document (whole)';
  * Size and count of the profile documents a mode would be handed whole, or null
  * when they are not (a document without raw text, too large, none authorized).
  * The callers pass it to the plan; the port applies the same rule to itself.
+ *
+ * The user's own answers are sized apart and reported even when the résumé and
+ * the job description are not handed over whole, or are absent: they go whole
+ * on their own (`{ tokens: 0, docs: 0, answersTokens }`).
  */
 export function profileWholeInfo(
-  docs: ReadonlyArray<Pick<ProfileDocLike, 'kind' | 'sourceId' | 'versionId' | 'rawText'>>,
+  docs: ReadonlyArray<Pick<ProfileDocLike, 'kind' | 'sourceId' | 'versionId' | 'rawText'> & { structured?: ProfileDocLike['structured'] }>,
   allowedSourceTypes: readonly SourceType[],
   profileSources: readonly SourceType[],
-): { tokens: number; docs: number } | null {
+): { tokens: number; docs: number; answersTokens?: number } | null {
   const authorized = new Set<SourceType>((profileSources ?? []).filter((t) => (allowedSourceTypes ?? []).includes(t)));
-  let tokens = 0; let count = 0;
+  let tokens = 0; let count = 0; let answersTokens = 0; let sizeUnknown = false;
   for (const doc of docs ?? []) {
+    // The user's own answers are one more whole item. Their size is reported
+    // apart: it is room the plan adds, never part of the question "do the résumé
+    // and the job description fit".
+    if (doc.kind === 'fact') {
+      if (!authorized.has('PROFILE_FACT') || !doc.sourceId || !doc.versionId) continue;
+      const own = ownAnswersWholeText(doc.structured);
+      if (own) answersTokens += Math.ceil(own.length / 4);
+      continue;
+    }
     if (doc.kind !== 'resume' && doc.kind !== 'jd') continue;
     if (!authorized.has(TYPE_FOR_KIND[doc.kind]) || !doc.sourceId || !doc.versionId) continue;
     const raw = typeof doc.rawText === 'string' ? doc.rawText.trim() : '';
-    if (!raw) return null;                                       // size unknown: retrieval as before
+    if (!raw) { sizeUnknown = true; continue; }                 // size unknown: retrieval as before
     tokens += Math.ceil(raw.length / 4);
     count += 1;
   }
-  return count > 0 && tokens <= PROFILE_WHOLE_MAX_TOKENS ? { tokens, docs: count } : null;
+  const fits = !sizeUnknown && count > 0 && tokens <= PROFILE_WHOLE_MAX_TOKENS;
+  if (!fits) return answersTokens > 0 ? { tokens: 0, docs: 0, answersTokens } : null;
+  return answersTokens > 0 ? { tokens, docs: count, answersTokens } : { tokens, docs: count };
 }
 
 // ── deterministic section rendering ─────────────────────────────────────────
@@ -444,16 +459,56 @@ function renderJdSections(sd: Record<string, unknown>): ProfileSection[] {
  * verified about themselves that no uploaded document holds.
  *
  * The résumé-based salary ESTIMATE rendered here from 2026-08-02 to 2026-09-30
- * and is now refused by design, even if a caller still hands it in: it is a
+ * and is refused by design, even if a caller still hands it in: it is a
  * model's market estimate for a role and location, not the candidate's
  * expectation, and PROFILE_FACT carries first-person authority (USER_* claims).
  * Served as evidence, the model stated the estimate as the user's own figure.
- * No other fact type exists yet, so this renders nothing; a future verified
- * fact joins here, and must never be a completeInventory (one fact enumerates
- * nothing).
+ *
+ * THE USER'S OWN ANSWERS (2026-10-14) are the one fact type. "What is your
+ * biggest weakness?" with only a résumé loaded had no source: one pass either
+ * invented a weakness or deferred ("let me come back to you"), and no prompt
+ * wording changed that. Profile Intelligence now holds what the user wrote or
+ * approved for such questions (services/knowledge/ownAnswers.ts), handed in as
+ * `structured.ownAnswers`. One section per answer; never a completeInventory
+ * (an answer enumerates nothing). Anything else in a fact document renders
+ * nothing, as before.
  */
-function renderFactSections(_sd: Record<string, unknown>): ProfileSection[] {
-  return [];
+export const OWN_ANSWERS_BOOST_KEY = 'own_answer';
+const OWN_ANSWERS_INTRO = 'What the user wrote about themselves, in their own words. Each entry is the user\'s own statement and may be said as theirs.';
+// An entry the user accepted from Natively's draft without changing a word (ownAnswers.ts `origin`). It was written
+// from the résumé alone, so where the user's own notes or files answer the same question, those are what they said.
+// 2026-10-15 benchmark: served as "the user's own answer", an accepted draft replaced the reasons for leaving and the
+// weakness the user's notes give, on 3 of 30 Looking for work questions.
+const DRAFTED_MARK = 'A suggested answer drafted from the résumé, which the user accepted without changing it';
+
+function ownAnswerEntries(structured: unknown): Array<{ label: string; heading: string; text: string; drafted: boolean }> {
+  if (!structured || typeof structured !== 'object') return [];
+  return arr((structured as Record<string, unknown>).ownAnswers)
+    .map((a) => {
+      const r = (a ?? {}) as Record<string, unknown>;
+      const label = str(r.label);
+      // How the question is put aloud rides with the label: "Salary expectation"
+      // shares no word with "what are you looking for in base?".
+      const askedAs = str(r.askedAs);
+      return { label, heading: askedAs ? `${label} (asked as: ${askedAs})` : label, text: str(r.text), drafted: r.origin === 'drafted' };
+    })
+    .filter((a) => a.label && a.text);
+}
+
+/** The user's own answers as ONE item, for a turn that reads the profile whole. Empty when there are none. */
+export function ownAnswersWholeText(structured: unknown): string {
+  const entries = ownAnswerEntries(structured);
+  if (entries.length === 0) return '';
+  return [OWN_ANSWERS_INTRO, ...entries.map((a) => `${a.heading}${a.drafted ? ` [${DRAFTED_MARK}]` : ''}:\n${a.text}`)].join('\n\n');
+}
+
+function renderFactSections(sd: Record<string, unknown>): ProfileSection[] {
+  return ownAnswerEntries(sd).map((a) => ({
+    section: `Own answer: ${a.label}`,
+    text: a.drafted ? `${a.heading}. ${DRAFTED_MARK}: ${a.text}` : `${a.heading}. The user's own answer, in their words: ${a.text}`,
+    completeInventory: false,
+    boostKey: OWN_ANSWERS_BOOST_KEY,
+  }));
 }
 
 export function renderProfileSections(kind: ProfileDocKind, structured: unknown): ProfileSection[] {
@@ -514,6 +569,13 @@ const INTENT_RULES: IntentRule[] = [
   // the 6-item evidence cap.
   { re: /\b(who am i|my name|name is|e-?mail|phone|mobile|contact (details|info\w*|number)|linkedin|github|portfolio|personal (site|website)|my (background|profile)|about me)\b/i,
     boosts: { identity: 0.45 } },
+  // THE USER'S OWN ANSWERS (2026-10-14), for a profile read in passages. The
+  // questions they answer rarely share a word with the answer ("what would you
+  // say you need to work on?" against a paragraph about asking for help
+  // sooner), so the kinds of question the answers exist for admit them. On a
+  // profile handed over whole this does nothing: the answers are one item there.
+  { re: /\b(weakness\w*|strength\w*|improv\w*|work on\b|why (?:did|do|would|are|have) you|why'?d you|reason for (?:leaving|applying)|leav(?:e|ing)\b|left\b|motivat\w*|conflict\w*|disagree\w*|mistake\w*|fail(?:ed|ure|ures)?\b|regret\w*|salary|compensation|pay\b|relocat\w*|remote\b|hybrid\b|in[- ]office|on-?site|notice period|start date|when (?:can|could) you start|tell me about yourself|about yourself)\b/i,
+    boosts: { [OWN_ANSWERS_BOOST_KEY]: 0.3 } },
 ];
 
 /** A raw chunk in a fired intent's vocabulary earns this share of the rule's largest boost… */
@@ -589,6 +651,8 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
   /** Raw text of each registered résumé / JD; `wholeBlocked` when one of them has none. */
   const wholeTexts = new Map<string, { fileName: string; text: string }>();
   let wholeBlocked = false;
+  /** The user's own answers, as one text per fact document: handed over with a whole profile, never on their own. */
+  const ownAnswerTexts = new Map<string, { fileName: string; text: string }>();
 
   for (const doc of input.docs) {
     const mapped = TYPE_FOR_KIND[doc.kind];
@@ -606,8 +670,9 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
         sourceId: doc.sourceId, fileName: doc.fileName, section, text, chunkIndex: idx++,
         boostKey, completeInventory, inventoryCategory,
         // Derived facts are policy-admitted, never lexically discovered — see
-        // PortChunk.policyOnly.
-        policyOnly: doc.kind === 'fact',
+        // PortChunk.policyOnly. The user's own answers are their words, not the
+        // app's: they rank like any other text.
+        policyOnly: doc.kind === 'fact' && boostKey !== OWN_ANSWERS_BOOST_KEY,
       });
     };
 
@@ -663,7 +728,8 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
     // sibling projects (measured: 12 of 12 such lookups missed on a 15k-token
     // résumé). The mode path's chunker prefixes every chunk with its heading
     // path and never splits mid-paragraph; the same one is used here.
-    const raw = str(doc.rawText);
+    // Not for a fact document: its sections ARE its text.
+    const raw = doc.kind === 'fact' ? '' : str(doc.rawText);
     if (raw) {
       const pieces = semanticChunks(raw);
       pieces.forEach((piece, n) => push(`Document text (part ${n + 1})`, piece, 'raw_document', false));
@@ -673,6 +739,10 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
     if (doc.kind === 'resume' || doc.kind === 'jd') {
       if (raw) wholeTexts.set(doc.sourceId, { fileName: doc.fileName, text: raw });
       else wholeBlocked = true;
+    }
+    if (doc.kind === 'fact') {
+      const own = ownAnswersWholeText(doc.structured);
+      if (own) ownAnswerTexts.set(doc.sourceId, { fileName: doc.fileName, text: own });
     }
     sourceTypes.set(doc.sourceId, mapped);
     activeVersions.set(doc.sourceId, doc.versionId);
@@ -708,11 +778,14 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
 
   const port = createLegacyRetrievalPort({
     registry: { sourceTypes, activeVersions, chunkVersions, sourceScopes },
-    retrieve: async (query: string, opts: { topK: number; timeoutMs?: number; sourceTypes?: readonly SourceType[]; intentQuery?: string; wholeProfile?: boolean }): Promise<LegacyChunk[]> => {
+    retrieve: async (query: string, opts: { topK: number; timeoutMs?: number; sourceTypes?: readonly SourceType[]; intentQuery?: string; wholeProfile?: boolean; wholeOwnAnswers?: boolean }): Promise<LegacyChunk[]> => {
       // Whole only when the PLAN says so: it is the plan that made the room for
       // the documents (item cap, token budget). Without it the packer would cut
       // them, so a caller that has not sized the profile gets passages as before.
       const whole = wholeEligible && opts.wholeProfile === true;
+      // The user's own answers go whole on their own plan flag, so a résumé read
+      // in passages, or no résumé at all, still has them in view (orchestrator).
+      const wholeAnswers = ownAnswerTexts.size > 0 && opts.wholeOwnAnswers === true;
       // Only the PLANNED types compete for the top-k (2026-09-11). Measured in
       // technical-interview: "Tell me about your education — degree, school,
       // coursework" planned [RESUME, …] without JOB_DESCRIPTION, but the JD's
@@ -924,14 +997,16 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
       // WHOLE: each document once, entire, in place of its passages. Score 1, like
       // a reference file read whole: nothing here was ranked, and the document
       // must not lose its place to the sections cut from it.
-      const wholeRows = whole
-        ? [...wholeTexts.entries()].map(([sourceId, d]) => ({
-          c: { sourceId, fileName: d.fileName, section: PROFILE_WHOLE_SECTION, text: d.text, chunkIndex: 200_000, boostKey: 'whole_document', completeInventory: false } as PortChunk,
-          score: 1,
-        }))
-        : [];
+      // The user's own answers ride along as one more whole item, in place of
+      // their per-answer sections: the question that needs one rarely shares a
+      // word with it, and together they are a few hundred tokens.
+      const wholeRows = [...(whole ? wholeTexts.entries() : []), ...(wholeAnswers ? ownAnswerTexts.entries() : [])].map(([sourceId, d]) => ({
+        c: { sourceId, fileName: d.fileName, section: PROFILE_WHOLE_SECTION, text: d.text, chunkIndex: 200_000, boostKey: 'whole_document', completeInventory: false } as PortChunk,
+        score: 1,
+      }));
 
-      return (whole ? scoredChunks.filter((s) => s.c.boostKey !== 'raw_document') : scoredChunks)
+      return scoredChunks
+        .filter((s) => !(whole && s.c.boostKey === 'raw_document') && !(wholeAnswers && s.c.boostKey === OWN_ANSWERS_BOOST_KEY))
         .concat(wholeRows)
         .concat([...semanticByText.values()].map((row) => ({ ...row, i: -1 })))
         .filter((s) => s.score > 0.05)

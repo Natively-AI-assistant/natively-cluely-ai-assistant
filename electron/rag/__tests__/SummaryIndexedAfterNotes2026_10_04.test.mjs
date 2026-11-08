@@ -97,7 +97,9 @@ describe('wiring', () => {
   test('the summary is indexed when the notes are saved, and after a regenerate', () => {
     const persistence = read('electron/MeetingPersistence.ts');
     assert.match(persistence, /meetingSaved = true;\s*if \(generationSucceeded\) this\.notifyNotesSaved\(meetingId\);/);
-    assert.match(persistence, /if \(ok\) this\.notifyNotesSaved\(meetingId\);/);
+    // A regenerate that saved also tells the connectors (0b7c79ff), so the call
+    // can sit in a block with that one.
+    assert.match(persistence, /if \(ok\) \{?\s*this\.notifyNotesSaved\(meetingId\);/);
     const main = read('electron/main.ts');
     assert.match(main, /setMeetingNotesSavedListener\?\.\(\(meetingId: string\) => \{[\s\S]{0,200}rag\.indexMeetingSummary\(meetingId\)/);
   });

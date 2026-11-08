@@ -9,13 +9,15 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useT } from '../../i18n';
 import { Disclosure } from '../ui/AccordionSection';
 import { ProviderPerformanceSettings } from './ProviderPerformanceSettings';
+import { SkillsSettings } from './SkillsSettings';
 import { LiquidGlassBadge } from '../../ui-components/LiquidGlassBadge';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
 import {
-  Collapse, Presence, SETTINGS_BTN, SETTINGS_BTN_BASE, SETTINGS_BTN_NEUTRAL, SETTINGS_CARD, SETTINGS_FIELD_LABEL,
-  SETTINGS_INPUT, SettingsDisclosureButton, SettingsMotionReady, SettingsNotice, SettingsRow, SettingsSectionHeading,
+  Collapse, Presence, SETTINGS_BTN, SETTINGS_BTN_BASE, SETTINGS_BTN_NEUTRAL, SETTINGS_CARD, SETTINGS_FIELD_LABEL, SETTINGS_INPUT,
+  SettingsDisclosureButton, SettingsMotionReady, SettingsNotice, SettingsRow, SettingsSectionHeading,
   SettingsSwitch, useMotionReadyAfter, useSettingsTones, useSettledFlag,
 } from './SettingsRow';
+import { copyText } from '../../lib/copyText';
 
 // Label + one-line description + CATEGORY for each USER-FACING Intelligence OS flag.
 // Keyed by flag key.
@@ -184,7 +186,7 @@ const CopyBlock: React.FC<{ text: string; label?: string }> = ({ text, label }) 
   // (caught 2026-09-25 in the Intelligence harness, where clipboard access is denied).
   const handleCopy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(text);
+      await copyText(text);
       setCopied(true);
       clearTimeout(timer.current);
       timer.current = setTimeout(() => setCopied(false), 1500);
@@ -761,17 +763,44 @@ export const IntelligenceSettings: React.FC = () => {
     // and the file's own motion (Presence / Collapse from SettingsRow, silent until
     // SettingsMotionReady) is interaction-only and lives deeper in the tree.
     //
-    // Four categories, each a heading over several rows — never a heading per setting.
-    // Every switch is visible under its category; only diagnostics sit behind a
-    // disclosure, at the foot, as General's ADVANCED does.
+    // Laid out as every other Settings tab is: each category is a section heading
+    // over plain rows, with no card around them. Skills, Notes & answers, Memory,
+    // Provider performance; only diagnostics sit behind a disclosure, at the foot,
+    // as General's ADVANCED does.
     //
     // Built from General's parts, as Companion is: Audio's section heading, General's row
     // (40px tile, 14px bold title, 12px description, control), General's secondary
     // button and ADVANCED disclosure, Audio's card for anything that opens under a
-    // row, and the Liquid Glass badge/button General and Billing use. There is no
-    // pane title, matching Audio and Companion — the first section heading leads.
+    // row, and the Liquid Glass badge/button General and Billing use.
+    //
+    // 2026-10-31: the grouped white cards ("plaques", 2026-10-21) are gone. They
+    // made this the one tab that looked different from all the others.
     <SettingsMotionReady.Provider value={motionReady}>
-    <div className="space-y-8 animated fadeIn" data-settings-stagger>
+    <div className="space-y-6 animated fadeIn" data-settings-stagger>
+      {/* ── The pane title, General's: 18px bold heading and one line under it. ── */}
+      <section>
+        <SettingsSectionHeading
+          title={t('Intelligence')}
+          subtitle={t('Skills, memory, and how Natively writes your notes and answers.')}
+        />
+      </section>
+
+      {/* ── Skills: the instructions the chat follows; leads the page. ── */}
+      <section>
+        <SkillsSettings />
+      </section>
+
+      {/* ── Notes & answers, right under Skills and above Memory (owner's order,
+          2026-10-31). "About you" moved to Profile Intelligence › Cue Cards on
+          2026-11-01 (Pro, owner's call for conversion). ── */}
+      <section>
+        <SettingsSectionHeading
+          title={t('Notes & answers')}
+          subtitle={t('How meeting notes are written and live answers are checked.')}
+        />
+        {flagRows('notes')}
+      </section>
+
       {/* ── Memory: Hindsight long-term memory, then the memory switches ── */}
       <section>
         <SettingsSectionHeading
@@ -1069,17 +1098,6 @@ export const IntelligenceSettings: React.FC = () => {
 
         {flagRows('memory')}
       </section>
-
-      {/* ── Notes & answers ── */}
-      {byGroup.notes.length ? (
-        <section>
-          <SettingsSectionHeading
-            title={t('Notes & answers')}
-            subtitle={t('How meeting notes are written and live answers are checked.')}
-          />
-          {flagRows('notes')}
-        </section>
-      ) : null}
 
       {/* What Natively has learned about each provider's speed, and what it does
           with it. Lives here rather than in AI Providers because it is mostly a

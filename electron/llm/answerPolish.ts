@@ -301,8 +301,16 @@ export function isProviderTransportError(text: string): boolean {
  *  is asking about your interest in the role, so you should respond as the
  *  candidate…". We strip a SINGLE leading meta sentence ONLY when substantive
  *  content clearly follows (a colon hand-off, or ≥60 chars of answer after it),
- *  so a real answer that happens to start with a clause is never truncated. */
-const META_PREAMBLE_RE = /^\s*(?:no (?:identity |actual )?question (?:was|is)[^.:!?]*[.:!?]\s*|(?:the )?interviewer is (?:asking|looking)[^.:!?]*[.:!?]\s*|(?:it )?looks like (?:there'?s|the message)[^.:!?]*[.:!?]\s*|if (?:i'?m|you'?re) asking (?:me )?(?:for|about)[^:]*:\s*|(?:the question|this) (?:is|seems to be)[^.:!?]*[.:!?]\s*)+/i;
+ *  so a real answer that happens to start with a clause is never truncated.
+ *
+ *  This runs on the FINAL text only, after the answer has streamed, so a
+ *  sentence it removes was already on screen. The question branch therefore
+ *  takes only the narration the streaming gate holds back too
+ *  (planningPreamble.ts: "the/this question is asking / asks / wants / is
+ *  looking for"). It used to take any "This is …" / "The question is …"
+ *  sentence: "This is Problem 2, merging overlapping bookings." streamed and
+ *  was then cut from the shown answer (2026-10-15 benchmark). */
+const META_PREAMBLE_RE = /^\s*(?:no (?:identity |actual )?question (?:was|is)[^.:!?]*[.:!?]\s*|(?:the )?interviewer is (?:asking|looking)[^.:!?]*[.:!?]\s*|(?:it )?looks like (?:there'?s|the message)[^.:!?]*[.:!?]\s*|if (?:i'?m|you'?re) asking (?:me )?(?:for|about)[^:]*:\s*|(?:the|this) question (?:is (?:really |basically |essentially |just )?asking|asks|wants|is looking for)[^.:!?]*[.:!?]\s*)+/i;
 export function stripMetaPreamble(text: string): string {
   if (!text) return text;
   const m = text.match(META_PREAMBLE_RE);

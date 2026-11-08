@@ -99,6 +99,11 @@ const INTERNAL_RE = /no handler registered|is not a function|cannot read propert
 const NATIVELY_PLAN_LIMIT_RE = /\b(?:[a-z]+_)?(?:quota_exceeded|plan_limit|limit_exceeded|lifetime_exceeded)\b/;
 const NATIVELY_PLAN_EXPIRED_RE = /\b(?:subscription_expired|license_expired)\b/;
 const TRIAL_RE = /\btrial[_ ](?:has[_ ])?(?:expired|ended)\b/i;
+// Main's last line when no provider could be asked at all
+// (LLMHelper.noProviderAvailableMessage). Nothing failed, nothing is set up:
+// "API key" in it is an instruction, not a rejected key (2026-11-03: a trial
+// whose AI allowance ran out fell through to this and counted as auth).
+const NO_PROVIDER_RE = /\bNo AI provider configured\b/;
 // A plan or balance that ran out. "Quota exceeded for requests per minute" is
 // a rate limit and is sorted as one; a snake_case *_quota_exceeded is a plan's.
 const CREDITS_RE = /insufficient_quota|[a-z]*_?quota_exceeded\b|exceeded your current quota|out of credits|credit balance|billing|payment required/;
@@ -140,6 +145,7 @@ export function chatFailureFromError(raw, context = {}) {
 
   if (INTERNAL_RE.test(source)) return { code: 'INTERNAL_ERROR' };
   if (TRIAL_RE.test(source)) return { code: 'TRIAL_ENDED' };
+  if (NO_PROVIDER_RE.test(source)) return { code: 'NO_PROVIDER_CONFIGURED' };
 
   const natively = /\bNatively API\b/i.test(source);
   // Natively's own plan ran out or lapsed: said as that, never as a provider
@@ -200,4 +206,9 @@ export const PROVIDER_FAILURE_SENTENCE_STARTS = Object.freeze([
   'The AI provider is rate-limiting requests right now.',
   'The AI provider is unreachable or overloaded right now',
   'The AI provider rejected this request: ',
+  // Not a provider's failure: the trial, the plan, or nothing set up.
+  'Your free trial has ended. ',
+  "You've reached your Natively plan's limit. ",
+  'Your Natively plan has expired. ',
+  'No AI provider is set up yet. ',
 ]);

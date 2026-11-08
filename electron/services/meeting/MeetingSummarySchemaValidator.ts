@@ -7,6 +7,7 @@ import type { ChunkMeetingAtoms } from './types';
 import {
   cleanString,
   cleanNoteText,
+  isEmptyPlaceholder,
   sanitizeStringArray,
   sanitizeDecisions,
   sanitizeActions,
@@ -153,7 +154,8 @@ function sanitizeFindings(value: unknown, allowedTitles?: string[]): Record<stri
     const seen = new Set<string>();
     for (const item of list) {
       const text = cleanNoteText(typeof item === 'string' ? item : item?.text);
-      if (!text) continue;
+      // A "None" finding is no bullet; the section is then left out (GitHub #662).
+      if (!text || isEmptyPlaceholder(text)) continue;
       const k = text.toLowerCase();
       if (seen.has(k)) continue;
       seen.add(k);

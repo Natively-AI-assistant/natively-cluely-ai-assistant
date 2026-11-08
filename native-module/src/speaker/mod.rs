@@ -5,6 +5,8 @@
 pub mod stop_signal;
 
 #[cfg(target_os = "macos")]
+pub mod audio_capture_permission;
+#[cfg(target_os = "macos")]
 mod core_audio;
 #[cfg(target_os = "macos")]
 pub mod macos;

@@ -33,7 +33,7 @@ const H = require(path.join(REPO_ROOT, 'benchmarks/profile-intelligence/harness.
 
 const TIMEOUT_MS = 30000;
 const CONTRACT_ENFORCED_TYPES = new Set([
-  'ethical_usage_answer', 'project_link_answer',
+  'project_link_answer',
   'source_code_evidence_answer', 'project_about_answer',
 ]);
 const CANDIDATE_CONTRACT_TYPES = new Set([
@@ -69,11 +69,8 @@ async function runOne(h, im, question, simClockMs, verbose) {
   let isCodingChat = h.isCodingAnswerType(answerPlan.answerType);
   trace.isCodingChat = isCodingChat;
 
-  const isStealthChat = h.isStealthEvasionQuestion ? h.isStealthEvasionQuestion(question) : false;
   const fastPathEligible = !isCodingChat
     && !h.isAssistantIdentityQuestion(question)
-    && !isStealthChat
-    && answerPlan.answerType !== 'ethical_usage_answer'
     && answerPlan.answerType !== 'project_link_answer'
     && answerPlan.answerType !== 'source_code_evidence_answer'
     && answerPlan.answerType !== 'project_about_answer'
@@ -135,11 +132,10 @@ async function runOne(h, im, question, simClockMs, verbose) {
     const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
     const cap = H.captureConsole();
     try {
-      const isSafetyAnswer = answerPlan.answerType === 'ethical_usage_answer';
-      const ignoreKnowledge = isCodingChat || isSafetyAnswer;
+      const ignoreKnowledge = isCodingChat || !manualProfileIntelligenceAllowed ? true : options?.ignoreKnowledgeMode;
       const stream = h.llmHelper.streamChat(
         question, undefined, context, h.CHAT_MODE_PROMPT,
-        ignoreKnowledge, isCodingChat || isSafetyAnswer, [], ac.signal,
+        ignoreKnowledge, isCodingChat, [], ac.signal,
         h.llmHelper.thinkingBudgetForAnswerType(isCodingChat),
         { answerType: answerPlan.answerType, forbiddenContextLayers: answerPlan.forbiddenContextLayers },
       );

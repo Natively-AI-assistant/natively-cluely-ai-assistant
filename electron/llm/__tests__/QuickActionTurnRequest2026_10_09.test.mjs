@@ -189,17 +189,18 @@ describe('1c. found in review, 2026-10-10', () => {
     });
   }
 
-  // RecapLLM.generate has one caller, SessionTracker's transcript compaction,
-  // and that message opens with its own request. Wrapped, the request became a
+  // RecapLLM.generate has one caller, SessionTracker's rolling meeting recap
+  // (transcript compaction until 2026-10-15), and that message opens with its
+  // own request. Wrapped, the request became a
   // line of transcript under "Recap the conversation so far".
-  test('transcript compaction is sent as it was: its own request first, no envelope', async () => {
+  test('the meeting recap is sent as it was: its own request first, no envelope', async () => {
     const { RecapLLM } = require(dist('llm/RecapLLM.js'));
     const calls = [];
-    const compaction = `Summarize this conversation segment into 3-5 concise bullet points preserving key topics, decisions, and questions:\n\n${TRANSCRIPT}`;
+    const compaction = `Summarize this part of a meeting as 3 to 6 short bullet points. Keep every decision, owner, number, date and deadline exactly as said. No preamble.\n\n${TRANSCRIPT}`;
     await new RecapLLM(makeLLMHelper(calls)).generate(compaction);
     assert.equal(calls[0][0], compaction);
     assert.match(calls[0][3], /<active_action name="recap">/);
-    assert.match(read('electron/SessionTracker.ts'), /this\.recapLLM\.generate\(\s*`Summarize this conversation segment/, 'compaction is still the caller, and still states its request');
+    assert.match(read('electron/SessionTracker.ts'), /this\.recapLLM\.generate\(\s*`Summarize this part of a meeting/, 'the recap is still the caller, and still states its request');
   });
 
   test('the engine says which context is its own markup', () => {

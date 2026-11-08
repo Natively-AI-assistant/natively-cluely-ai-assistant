@@ -1,19 +1,14 @@
-// The "Recap / Brainstorm" shortcut ran Recap whatever the slot was set to
-// (2026-10-10).
+// The "Recap / Brainstorm" slot is gone (2026-10-20).
 //
-// Settings can switch the Recap button to Brainstorm. The button followed the
-// setting; its shortcut (chat:dynamicAction4, Cmd/Ctrl+3) did not. Pressed for
-// real in a meeting with the slot on Brainstorm, the button read "Brainstorm"
-// and the press logged `runRecap`.
+// Interview Mode used to switch the overlay's Recap button, and its shortcut
+// (chat:dynamicAction4, Cmd/Ctrl+3), to Brainstorm. On 2026-10-10 the shortcut
+// was caught running Recap with the button reading Brainstorm (a stale closure,
+// fixed with a ref). Since 2026-10-20 Brainstorm is a button of its own, put in
+// the overlay's row from Settings › Overlay, and Interview Mode is removed: the
+// slot shortcut always runs Recap, and Brainstorm keeps its own shortcut.
 //
-// The global-shortcut listener subscribes once (deps []) and read
-// `actionButtonMode` from that first render's closure, where it is always the
-// initial 'recap': the saved setting arrives later, through state the listener
-// never sees again. Its handlers were already read through handlersRef; the
-// slot was not. The focused keydown handler had the same read and went stale
-// whenever the setting changed without the shortcut table changing.
-//
-// These pin both listeners to a ref that is written on every render.
+// These pin that the slot, its toggle and its IPC are all gone, so nothing can
+// read a stale Recap/Brainstorm value again.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -21,10 +16,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-const src = readFileSync(join(root, 'src/components/NativelyInterface.tsx'), 'utf8');
-
-// Drop comments so prose that mentions a read cannot satisfy or trip a check.
-const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+const read = (p) => readFileSync(join(root, p), 'utf8');
+// Drop comments so prose that mentions a name cannot satisfy or trip a check.
+const code = (p) => read(p).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
 
 /** The text from the first occurrence of `start` to the next occurrence of `end`. */
 const between = (text, start, end) => {
@@ -35,22 +29,29 @@ const between = (text, start, end) => {
   return text.slice(i, j);
 };
 
-test('the slot is mirrored into a ref on every render', () => {
-  assert.match(code, /const actionButtonModeRef = useRef\(actionButtonMode\);\s*actionButtonModeRef\.current = actionButtonMode;/);
+const overlay = code('src/components/NativelyInterface.tsx');
+
+test('the overlay has no Recap/Brainstorm slot left', () => {
+  assert.doesNotMatch(overlay, /actionButtonMode|ActionButtonMode|shownActionMode|labelActionMode/);
 });
 
-test('the global shortcut picks Recap or Brainstorm from the ref, not the mount-time closure', () => {
-  const listener = between(code, 'window.electronAPI.onGlobalShortcut(({ action }) => {', 'return unsubscribe;');
-  const branch = between(listener, "action === 'dynamicAction4'", "action === 'answer'");
-  assert.match(branch, /actionButtonModeRef\.current === 'brainstorm'/);
-  assert.match(branch, /handlers\.handleBrainstorm\(\)/);
-  assert.match(branch, /handlers\.handleRecap\(\)/);
-  assert.doesNotMatch(listener, /\bactionButtonMode\b(?!Ref)/, 'a bare read here is the value from the first render');
+test('the global slot shortcut runs Recap, and Brainstorm keeps its own', () => {
+  const listener = between(overlay, 'window.electronAPI.onGlobalShortcut(({ action }) => {', 'return unsubscribe;');
+  assert.match(listener, /action === 'dynamicAction4'\) handlers\.handleRecap\(\);/);
+  assert.match(listener, /action === 'brainstorm'\) handlers\.handleBrainstorm\(\);/);
 });
 
-test('the focused keydown handler reads the same ref', () => {
-  const handler = between(code, 'const handleKeyDown = (e: KeyboardEvent) => {', 'const handleKeyUp = (e: KeyboardEvent) => {');
-  const branch = between(handler, "isShortcutPressed(e, 'dynamicAction4')", "isShortcutPressed(e, 'answer')");
-  assert.match(branch, /actionButtonModeRef\.current === 'brainstorm'/);
-  assert.doesNotMatch(handler, /\bactionButtonMode\b(?!Ref)/);
+test('the focused slot shortcut runs Recap, and Brainstorm keeps its own', () => {
+  const handler = between(overlay, 'const handleKeyDown = (e: KeyboardEvent) => {', 'const handleKeyUp = (e: KeyboardEvent) => {');
+  const slot = between(handler, "isShortcutPressed(e, 'dynamicAction4')", "isShortcutPressed(e, 'answer')");
+  assert.match(slot, /handleRecap\(\);/);
+  assert.doesNotMatch(slot, /handleBrainstorm/);
+  assert.match(between(handler, "isShortcutPressed(e, 'brainstorm')", '} else if'), /handleBrainstorm\(\);/);
+});
+
+test('Interview Mode is gone from the quick-settings popup, the preload and main', () => {
+  assert.doesNotMatch(code('src/components/SettingsPopup.tsx'), /Interview Mode|interview-mode|ActionButtonMode/);
+  assert.doesNotMatch(code('electron/preload.ts'), /action-button-mode|ActionButtonMode/);
+  assert.doesNotMatch(code('electron/ipcHandlers.ts'), /'(get|set)-action-button-mode'|action-button-mode-changed/);
+  assert.doesNotMatch(read('src/types/electron.d.ts'), /ActionButtonMode/);
 });

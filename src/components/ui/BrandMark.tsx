@@ -98,6 +98,8 @@ export const BRAND_MARK_EXEMPT: Record<string, string> = {
     // neither @lobehub/icons-static-svg (MIT) nor simple-icons (CC0). Per the rule
     // in src/assets/provider-logos/README.md, that stays a monogram.
     soniox: 'no licence-compatible mark published',
+    // Keep the integration self-contained until a redistributable Qwen mark is vetted.
+    qwen: 'official mark not vendored; monogram pending licence review',
 };
 
 /** True when the selector should give this row a neutral tile instead of a tint. */

@@ -66,6 +66,13 @@ test('sttErrorMapper maps trial_expired to a user-friendly Trial Expired message
   assert.match(source, /trial has ended|Upgrade your plan/, 'must give upgrade guidance');
 });
 
+// Since 2026-10-21 every site shares one gate, onnxMacSupport.ts: macOS 13.3
+// (Darwin 22.4), the minos of onnxruntime-node 1.22.0's macOS binaries, and one
+// sentence. Its version logic is tested in
+// electron/audio/__tests__/WhisperQueueAndAutoLanguage2026_10_21.test.mjs; here
+// each site must still use it.
+const SHARED_GATE = /onnxRuntimeSupportedOnThisMac\(\)/;
+
 test('LocalWhisperSTT emits a friendly error for ONNX symbol-not-found crash (macOS 12)', () => {
   const source = read('electron/audio/LocalWhisperSTT.ts');
   // The fix must detect the ONNX dlopen symbol-error and surface a friendly message
@@ -74,26 +81,15 @@ test('LocalWhisperSTT emits a friendly error for ONNX symbol-not-found crash (ma
     /Symbol not found|to_chars|libonnxruntime/,
     'LocalWhisperSTT must detect the ONNX libc++ symbol-not-found error',
   );
-  assert.match(
-    source,
-    /macOS 13|macOS 12|Monterey|Ventura/,
-    'LocalWhisperSTT must mention macOS version in the friendly error message',
-  );
+  assert.match(source, /ONNX_MAC_UNSUPPORTED_MESSAGE/, 'LocalWhisperSTT must show the shared macOS version sentence');
+  const gate = read('electron/audio/whisper/onnxMacSupport.ts');
+  assert.match(gate, /macOS 13\.3 or later/);
 });
 
 test('modelManager marks all local Whisper models as error on macOS 12 (Darwin 21)', () => {
   const source = read('electron/audio/whisper/modelManager.ts');
-  // The fix must gate models based on Darwin release version
-  assert.match(
-    source,
-    /darwin.*22|22.*darwin|darwinMajor.*22|22.*darwinMajor/i,
-    'modelManager must gate on Darwin major version 22 (= macOS 13 Ventura)',
-  );
-  assert.match(
-    source,
-    /macOS 13|Ventura|Monterey|macOS 12/,
-    'modelManager must surface macOS version requirement',
-  );
+  assert.match(source, SHARED_GATE, 'modelManager must gate on the shared ONNX macOS check');
+  assert.match(source, /errorMessage: ONNX_MAC_UNSUPPORTED_MESSAGE/, 'modelManager must surface the macOS version requirement');
 });
 
 function extractHandlerBody(source, handlerName) {
@@ -104,41 +100,19 @@ function extractHandlerBody(source, handlerName) {
 }
 
 test('local-whisper-start-download blocks download on macOS 12', () => {
-  // The gate must be ENFORCED for this channel; where it lives is not the
-  // invariant. `local-whisper-preload` still checks inline (asserted below),
-  // while `local-whisper-start-download` was refactored to delegate to
-  // LocalModelDownloadService — which carries the same check, under a comment
-  // saying so verbatim: "Preserve the existing macOS 13 Ventura gate from the
-  // IPC handler." Pinning the check to the handler body reported a lost gate
-  // that had merely moved one layer down.
+  // `local-whisper-start-download` delegates to LocalModelDownloadService,
+  // which carries the gate.
   const source = read('electron/ipcHandlers.ts');
   const handler = extractHandlerBody(source, 'local-whisper-start-download');
-
-  const inlineGate = /darwin/.test(handler) && /22/.test(handler);
-  if (inlineGate) {
-    assert.match(handler, /macOS 13|Ventura|Monterey|macOS 12/, 'handler must surface a user-friendly macOS version error');
-    return;
-  }
-
-  assert.match(
-    handler,
-    /LocalModelDownloadService/,
-    'handler must either gate inline or delegate to LocalModelDownloadService',
-  );
+  assert.match(handler, /LocalModelDownloadService/, 'handler must delegate to LocalModelDownloadService');
   const service = read('electron/services/LocalModelDownloadService.ts');
-  assert.match(service, /process\.platform === 'darwin'/, 'the download service must check for darwin');
-  assert.match(service, /darwinMajor\s*<\s*22/, 'the download service must check Darwin major version 22');
-  assert.match(
-    service,
-    /macOS 13|Ventura|Monterey|macOS 12/,
-    'the download service must surface a user-friendly macOS version error',
-  );
+  assert.match(service, SHARED_GATE, 'the download service must check the shared ONNX macOS gate');
+  assert.match(service, /return ONNX_MAC_UNSUPPORTED_MESSAGE;/, 'the download service must surface the macOS version error');
 });
 
 test('local-whisper-preload IPC blocks preload on macOS 12', () => {
   const source = read('electron/ipcHandlers.ts');
   const handler = extractHandlerBody(source, 'local-whisper-preload');
-  assert.match(handler, /darwin/, 'handler must check process.platform === darwin');
-  assert.match(handler, /22/, 'handler must check Darwin major version 22');
-  assert.match(handler, /macOS 13|Ventura|Monterey|macOS 12/, 'handler must surface a user-friendly macOS version error');
+  assert.match(handler, SHARED_GATE, 'handler must check the shared ONNX macOS gate');
+  assert.match(handler, /error: ONNX_MAC_UNSUPPORTED_MESSAGE/, 'handler must surface the macOS version error');
 });

@@ -1,3 +1,4 @@
+import { nativelyApiBase } from './services/nativelyApiBase'
 import { GoogleGenAI, ThinkingLevel } from "@google/genai"
 import Groq from "groq-sdk"
 import OpenAI from "openai"
@@ -6,7 +7,6 @@ import fs from "fs"
 import os from "os"
 import path from "path"
 import { createHash, randomUUID } from "crypto"
-import sharp from "sharp"
 import { ModelVersionManager, ModelFamily, TextModelFamily } from './services/ModelVersionManager'
 import {
   HARD_SYSTEM_PROMPT, GROQ_SYSTEM_PROMPT, OPENAI_SYSTEM_PROMPT, CLAUDE_SYSTEM_PROMPT,
@@ -29,7 +29,7 @@ import { getVisionCapabilityStore, normalizeVisionBaseURL, storedVisionAnswer, s
 import { VisionProbe, VISION_PROBE_QUESTION, VISION_PROBE_SYSTEM } from "./llm/visionProbe"
 import { parseOpenRouterVision } from "./llm/providerVisionData"
 import { trimUserContentToFit, userContentRoomChars } from "./llm/localContextTrim"
-import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, claudeAcceptsSamplingParams, claudeThinkingParam, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
+import { getModelCapabilities, ollamaRequestContext, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, claudeAcceptsSamplingParams, claudeThinkingParam, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
 import { filterOllamaGenerationModels } from "./llm/ollamaGenerationModels"
 import {
@@ -71,11 +71,11 @@ import type { TranscriptTurn } from "./llm/transcriptCleaner"
 import { applyCurlVariables, getByPath, injectImageIntoMessages, flattenStructuredJsonAnswer, blockedInfrastructureHost } from './utils/curlUtils';
 import { getImageOptimizer } from './services/screen/ImageOptimizer';
 import { isPhoneImagePath, visionImageEdge } from './utils/phoneImage';
+import { NATIVELY_API_JPEG, preparedJpeg } from './services/screen/preparedJpeg';
 import curl2Json from "@bany/curl-to-json";
 import { CustomProvider, CurlProvider } from './services/CredentialsManager';
 import { TRIAL_SENTINEL_KEY } from './config/constants';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { emitNativelyPlanLimit, nativelyLimitErrorMessage } from './llm/nativelyPlanLimitEvents';
 import axios from 'axios';
 import { createProviderRateLimiters, RateLimiter } from './services/RateLimiter';
 import { chatGptCompatibleModel, CodexCliConfig, CodexCliService, codexSignedOutMessage, DEFAULT_CODEX_CLI_CONFIG, getCodexAuthStatus } from './services/CodexCliService';
@@ -90,8 +90,7 @@ import type {
   DirectAssistRung,
   DirectAssistSelection,
 } from './direct-assist/types';
-const execAsync = promisify(exec);
-const NATIVELY_API_URL = (process.env.NATIVELY_API_URL || 'https://api.natively.software').replace(/\/+$/, '');
+const NATIVELY_API_URL = nativelyApiBase();
 
 function nowMs(): number {
   try {
@@ -161,9 +160,11 @@ import {
   AGENTROUTER_JUDGE_MODEL,
   agentRouterError,
   agentRouterProtocolFor,
+  agentRouterReasoningEffort,
   agentRouterWireModel,
   isAgentRouterClaudeWireModel,
   isAgentRouterModelId,
+  pickAgentRouterModel,
 } from './llm/agentRouter'
 import { createAgentRouterClients } from './llm/agentRouterClients'
 import { stripLeadingReasoningBlock } from './llm/reasoningTagFilter'
@@ -232,8 +233,9 @@ const LAST_JUDGE_RUNG_TIMEOUT_MS = 2300
 export const GEMINI_TEXT_TTFT_MS = Object.freeze({ flashLite: 2_500, flash: 5_000, pro: 10_000 })
 // Ceiling for a fast call made with no caller signal (the preferFast callers).
 const FAST_MODEL_DEFAULT_TIMEOUT_MS = 8000
-// Codex's measured first token is 1.7-2.0 s (gpt-5.5; see DEFAULT_CODEX_CLI_CONFIG),
-// before a single token of reply. A fast rung with a smaller budget cannot be
+// Codex's measured first token was 1.7-2.0 s (gpt-5.5, 2026-09-11). gpt-5.6-luna,
+// the default since gpt-5.5 was refused (see DEFAULT_CODEX_CLI_CONFIG), measured
+// 0.9-1.1 s on a one-line prompt; a real answer prompt is far longer. A fast rung with a smaller budget cannot be
 // met on Codex — the judge rung (1.8 s) and the query rewrite (1.5 s) would
 // spend their whole budget and then fall through anyway — so a Codex
 // Background Model skips them and they run their own ladders at once.
@@ -754,6 +756,22 @@ export class LLMHelper {
 
   private isProviderDisabled(family: string): boolean {
     return isProviderFamilyDisabled(family, this.getDisabledProviderFamilies());
+  }
+
+  /**
+   * An automatically chosen AgentRouter model (judge, structured ladder),
+   * checked against the fetched catalogue LIVE, like the disabled list above:
+   * AgentRouter retires models between releases, and a fixed id that is gone
+   * 503s on every call. See pickAgentRouterModel.
+   */
+  private agentRouterAutoModel(wanted: string): string {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const rows = CredentialsManager.getInstance().getCloudFetchedModels?.('agentrouter');
+      return pickAgentRouterModel(wanted, Array.isArray(rows) ? rows.map((m: any) => m?.id) : []);
+    } catch {
+      return wanted;
+    }
   }
 
   /** Error text for "nothing left to try", which reads very differently when
@@ -2252,6 +2270,11 @@ export class LLMHelper {
   }
 
   public setNativelyKey(key: string | null): void {
+    // A new key is a new allowance: a plan bought after the trial ran out must
+    // answer at once, not after the trial's refusal stops being remembered.
+    // Clearing the key (a trial that ended) keeps it, so later answers still
+    // say why there is nothing to answer them.
+    if (key && key !== this.nativelyKey) { this.nativelyQuotaBlockedUntil = 0; this.nativelyLimit = null; }
     this.nativelyKey = key || null;
     this.visionHealth.delete('natively'); // fresh key → its selection leads again at once
     console.log(`[LLMHelper] Natively key ${key ? 'set' : 'cleared'}`);
@@ -2330,7 +2353,7 @@ export class LLMHelper {
   // these named entry points so the surface stays auditable.
 
   public async runVisionRequest(
-    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'ninerouter' | 'agentrouter' | 'deepseek' | 'curl' | 'ollama',
+    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'ninerouter' | 'agentrouter' | 'deepseek' | 'curl' | 'ollama' | 'oauth_model',
     userPrompt: string,
     systemPrompt: string,
     imagePath: string,
@@ -2405,6 +2428,22 @@ export class LLMHelper {
           opts?.signal?.removeEventListener('abort', onOuterAbort);
           if (this.ollamaRecordAbort === record) this.ollamaRecordAbort = null;
         }
+      }
+      // The screen record written by Codex or Antigravity when nothing else can
+      // read the screenshot (see getOAuthRecordReader). Both adapters throw on
+      // failure, so an error is never stored as the screen's contents. Codex
+      // runs at low effort on the default tier: the user's own reasoning
+      // setting (high, xhigh, flex) is for answers, and a transcription at that
+      // effort runs past OAUTH_RECORD_BUDGET_MS every time.
+      case 'oauth_model': {
+        const reader = this.getOAuthRecordReader();
+        if (!reader) throw new Error('No signed-in model can read this screenshot');
+        const stream = reader.family === 'codex-cli'
+          ? this.streamWithCodexCli(userPrompt, systemPrompt, false, [imagePath], opts?.signal, undefined, { modelReasoningEffort: 'low', serviceTier: 'default' })
+          : this.streamWithAntigravity(userPrompt, systemPrompt, [imagePath], opts?.signal, reader.model);
+        let text = '';
+        for await (const piece of stream) text += piece;
+        return text;
       }
       case 'curl': {
         if (!this.activeCurlProvider) throw new Error('No cURL provider selected');
@@ -3338,7 +3377,7 @@ export class LLMHelper {
     });
   }
 
-  private async *streamWithCodexCli(userContent: string, systemPrompt?: string, fastMode = false, imagePaths?: string[], signal?: AbortSignal, modelOverride?: string): AsyncGenerator<string, void, unknown> {
+  private async *streamWithCodexCli(userContent: string, systemPrompt?: string, fastMode = false, imagePaths?: string[], signal?: AbortSignal, modelOverride?: string, tuning?: { modelReasoningEffort?: CodexCliConfig['modelReasoningEffort']; serviceTier?: CodexCliConfig['serviceTier'] }): AsyncGenerator<string, void, unknown> {
     if (!this.isCodexAvailable()) throw new Error('Codex CLI transport is disabled or ChatGPT is signed out.');
     // Codex routes to chatgpt.com/backend-api — it is a CLOUD provider, and it
     // needs the same local-only last boundary every other cloud provider has.
@@ -3362,8 +3401,8 @@ export class LLMHelper {
       timeoutMs: this.codexCliConfig.timeoutMs,
       imagePaths,
       sandboxMode: this.codexCliConfig.sandboxMode,
-      serviceTier: this.codexCliConfig.serviceTier,
-      modelReasoningEffort: this.codexCliConfig.modelReasoningEffort,
+      serviceTier: tuning?.serviceTier ?? this.codexCliConfig.serviceTier,
+      modelReasoningEffort: tuning?.modelReasoningEffort ?? this.codexCliConfig.modelReasoningEffort,
       signal,
     });
   }
@@ -3421,6 +3460,9 @@ export class LLMHelper {
       caps.maxContextTokens,
       this.litellmInputCapFor(modelId) ?? Number.POSITIVE_INFINITY,
       this.ninerouterInputCapFor(modelId) ?? Number.POSITIVE_INFINITY,
+      // Ollama runs at the window the request asks for (num_ctx), not the
+      // model's native one; a 128k llama3.1 gets 16k.
+      this.useOllama ? ollamaRequestContext(modelId) : Number.POSITIVE_INFINITY,
     );
     if (maxContextTokens >= 100_000) return text;
     const reserved = reservedOutputTokens ?? 2000;
@@ -3473,9 +3515,10 @@ export class LLMHelper {
       const ollamaModel = (images && this.localVisionOverride(imagePaths)) || this.ollamaModel;
 
       const sys = systemPrompt ? this.resolveLocalSystemPrompt(systemPrompt) : TINY_SYSTEM_PROMPT;
-      // Per-request hard guard: trim userContent (never sys) until total fits the model's max ctx.
+      // Per-request hard guard: trim userContent (never sys) until total fits the
+      // window requested below as num_ctx (ollamaRequestContext).
       let userContent = prompt;
-      const maxCtx = getModelCapabilities(ollamaModel, true).maxContextTokens;
+      const maxCtx = ollamaRequestContext(ollamaModel);
       let total = estimateTokens(sys) + estimateTokens(userContent) + 2000;
       if (total > maxCtx) {
         console.warn('[Ollama] context overflow', { model: ollamaModel, total, max: maxCtx });
@@ -3501,6 +3544,9 @@ export class LLMHelper {
         options: {
           temperature: 0.7,
           top_p: 0.9,
+          // Without it Ollama uses its 4096-token default and drops the start of
+          // a longer prompt (the system prompt) silently.
+          num_ctx: maxCtx,
         }
       };
       if (this.isThinkingModel(ollamaModel)) ollamaBody.think = false;
@@ -3662,6 +3708,42 @@ export class LLMHelper {
   public getOllamaRecordTarget(): { model: string; url: string } | null {
     if (!this.useOllama || this.isProviderDisabled('ollama') || !this.ollamaVisionModel) return null;
     return { model: this.ollamaVisionModel, url: this.ollamaUrl };
+  }
+
+  /**
+   * The Codex or Antigravity model that writes the after-the-answer screen
+   * record when no other provider can. The vision registry has no rung of its
+   * own for either (both sign in with OAuth, no key it can see), so a user with
+   * only one of them had every screen record fail with `all_vision_failed` —
+   * the answer read the screenshot, since the streaming chain seats both
+   * whenever they are signed in, but no follow-up could ever quote that screen
+   * (issue #647's log).
+   *
+   * The same availability rule as the streaming chain (buildVisionChain), so
+   * the two cannot disagree about who may read a screenshot: signed in and
+   * switched on, not local-only, not "Reads images: Off". That chain seats both
+   * whatever the selection, an Ollama or custom one included, so this does too
+   * (code review, 2026-10-24) — and it matches the record's rule of 2026-10-01:
+   * a cloud provider when one is available, else the selected Ollama.
+   * "Keep screenshots on this device" never reaches here: the registry seats
+   * this rung only where cloud vision is allowed. The selection goes first when
+   * it is one of the two; otherwise Codex before Antigravity, the streaming order.
+   */
+  public getOAuthRecordReader(): { family: 'codex-cli' | 'antigravity'; model: string } | null {
+    if (this.isLocalOnlyMode) return null;
+    const codex = (): { family: 'codex-cli'; model: string } | null => {
+      if (!this.isCodexAvailable()) return null;
+      const model = this.getSelectedCodexCliModel();
+      return this.userVisionOverride('codex-cli', model) === false ? null : { family: 'codex-cli', model };
+    };
+    const antigravity = (): { family: 'antigravity'; model: string } | null => {
+      const model = this.antigravityFallbackModel();
+      if (!model) return null;
+      const routed = `antigravity:${model}`;
+      return this.userVisionOverride('antigravity', routed) === false ? null : { family: 'antigravity', model: routed };
+    };
+    if (this.isAntigravityModel(this.currentModelId)) return antigravity() ?? codex();
+    return codex() ?? antigravity();
   }
 
   /**
@@ -3845,6 +3927,61 @@ export class LLMHelper {
   // instead of burning 400+800+1600ms of backoff on a saturated tier every call.
   // Keyed by an optional `circuitKey` passed to withRetry.
   private rateLimitCircuit = new Map<string, { openUntil: number; consecutive429: number }>();
+  // Natively plan allowance (2026-10-16). A 429 whose body names a *_quota_exceeded /
+  // plan limit is the month's allowance, not a saturated model. withRetry treated it
+  // like any 429 (400/800/1600 ms backoff) and the background loops kept calling:
+  // 4,137 refused requests in 33 h from one key. Remember the server's Retry-After
+  // and fail fast, locally, until then — bounded so a plan upgrade is noticed.
+  private nativelyQuotaBlockedUntil = 0;
+  // What the last plan-limit refusal was, while it holds (2026-11-03): an
+  // answer nothing else could give fails with it, instead of falling through
+  // to "No AI provider configured… add at least one API key", which the
+  // overlay and the funnel read as a rejected key.
+  private nativelyLimit: { code: string; onTrial: boolean } | null = null;
+  private static readonly NATIVELY_QUOTA_BLOCK_MIN_MS = 60_000;
+  private static readonly NATIVELY_QUOTA_BLOCK_MAX_MS = 6 * 60 * 60_000;
+  private static readonly PLAN_LIMIT_RE = /\b(?:[a-z]+_)?(?:quota_exceeded|plan_limit|limit_exceeded|lifetime_exceeded)\b/;
+
+  /** Records a plan-limit 429 from the Natively API. Returns true when it was one. */
+  private noteNativelyPlanLimit(status: number, headers: { get(name: string): string | null } | null | undefined, errData: any, onTrial = false): boolean {
+    if (status !== 429) return false;
+    const code = String(errData?.error ?? errData?.code ?? '');
+    if (!LLMHelper.PLAN_LIMIT_RE.test(code)) return false;
+    const bodySec = Number(errData?.retry_after);
+    const headerSec = Number(headers?.get?.('retry-after'));
+    const sec = Number.isFinite(bodySec) && bodySec > 0 ? bodySec : (Number.isFinite(headerSec) && headerSec > 0 ? headerSec : 0);
+    const ms = Math.min(LLMHelper.NATIVELY_QUOTA_BLOCK_MAX_MS, Math.max(LLMHelper.NATIVELY_QUOTA_BLOCK_MIN_MS, sec * 1000));
+    this.nativelyQuotaBlockedUntil = Date.now() + ms;
+    this.nativelyLimit = { code: (/^[a-z_]{1,64}$/.test(code) ? code : 'ai_quota_exceeded'), onTrial };
+    // A free trial's AI allowance ends the trial (ipcHandlers.ts listens).
+    emitNativelyPlanLimit(this.nativelyLimit);
+    console.warn(`[NativelyAPI] plan allowance exhausted (${code}) — not calling the Natively API again for ${Math.round(ms / 60000)} min${errData?.resets_at ? ` (resets ${errData.resets_at})` : ''}`);
+    return true;
+  }
+
+  /** The error for an answer nothing could give: the Natively limit while it
+   *  holds, else "no provider". */
+  private exhaustedChainError(): Error {
+    if (this.nativelyLimit && this.nativelyQuotaBlockedUntil > Date.now()) {
+      return new Error(nativelyLimitErrorMessage(this.nativelyLimit));
+    }
+    return new Error(this.noProviderAvailableMessage());
+  }
+
+  /** Throws the same quota error the server would, without a network round trip. */
+  private assertNativelyNotBlocked(requestId: string): void {
+    const until = this.nativelyQuotaBlockedUntil;
+    if (until > Date.now()) {
+      throw this.withNativelyLimit(new Error(`Natively API HTTP 429 requestId=${requestId}: ai_quota_exceeded (plan allowance exhausted; next check ${new Date(until).toISOString()})`));
+    }
+  }
+
+  /** Marks a refusal as Natively's own trial or plan limit, so Direct Assist
+   *  (direct-assist/errors.ts) says that instead of "rate limited". */
+  private withNativelyLimit<E extends Error>(error: E): E & { nativelyLimit?: { code: string; onTrial: boolean } } {
+    const limit = this.nativelyLimit ?? { code: 'ai_quota_exceeded', onTrial: false };
+    return Object.assign(error, { nativelyLimit: { ...limit } });
+  }
   private static readonly CIRCUIT_429_THRESHOLD = 2;      // open after N consecutive 429s
   private static readonly CIRCUIT_COOLDOWN_MS = 60_000;   // skip the saturated model for 60s
 
@@ -3869,6 +4006,9 @@ export class LLMHelper {
       } catch (e: any) {
         const msg = e.message || '';
         const status = e.status ?? e.statusCode ?? 0;
+        // A plan allowance that is used up does not come back in 400 ms. Not retryable,
+        // and not a strike against the model's breaker either.
+        if (LLMHelper.PLAN_LIMIT_RE.test(msg)) { if (circuitKey) this.rateLimitCircuit.delete(circuitKey); throw e; }
         const is429 = status === 429 || msg.includes('429') || msg.includes('rate_limit') || msg.includes('rate limit');
         // Retryable: 503 overloaded (Gemini), 529 overloaded (Claude), 429 rate-limit (OpenAI/Claude), 500 transient
         const isRetryable = msg.includes("503") || msg.includes("overloaded")
@@ -4108,8 +4248,6 @@ ${IMAGE_TRUST_TRAILER}`;
    */
   private async processImage(path: string): Promise<{ mimeType: string, data: string }> {
     try {
-      const imageBuffer = await fs.promises.readFile(path);
-
       // Resize and compress. 1536px @ q80 unless "Shrink screenshots when the
       // provider is slow" is on AND the measured provider would blow this turn's
       // budget AND this is not a coding session — then ImageOptimizer's `fast`
@@ -4120,15 +4258,9 @@ ${IMAGE_TRUST_TRAILER}`;
       // phone photo needs it (see visionImageEdge).
       const shrink = this.imageProfileFor('balanced', 0) === 'fast';
       const edge = visionImageEdge({ shrink, phoneImage: isPhoneImagePath(path) });
-      const processedBuffer = await sharp(imageBuffer)
-        .resize({
-          width: edge,
-          height: edge,
-          fit: 'inside', // Maintain aspect ratio
-          withoutEnlargement: true
-        })
-        .jpeg({ quality: shrink ? 78 : 80 }) // JPEG is much smaller than PNG
-        .toBuffer();
+      // JPEG is much smaller than PNG. A screenshot's JPEG is usually made
+      // already, right after ⌘/Ctrl+H (services/screen/preparedJpeg).
+      const processedBuffer = await preparedJpeg(path, { edge, quality: shrink ? 78 : 80 });
 
       return {
         mimeType: "image/jpeg",
@@ -5902,9 +6034,9 @@ let isMultimodal = !!(imagePaths?.length);
     if (family === 'openrouter') return this.openrouterClient ? OPENROUTER_JUDGE_MODEL : null;
     if (family === 'fluxion') return (this.fluxionOpenAIClient || this.fluxionAnthropicClient) ? this.currentModelId : null;
     // NOT the selected model: see AGENTROUTER_JUDGE_MODEL. The judge runs on
-    // every candidate utterance, and on a rationed Claude/GPT pick that would
-    // spend the user's daily AgentRouter allowance on classification.
-    if (family === 'agentrouter') return this.hasAgentRouterCredential() ? AGENTROUTER_JUDGE_MODEL : null;
+    // every candidate utterance, so it stays on the fastest model rather than
+    // whatever slower one the user picked.
+    if (family === 'agentrouter') return this.hasAgentRouterCredential() ? this.agentRouterAutoModel(AGENTROUTER_JUDGE_MODEL) : null;
     if (family === 'ninerouter') return this.ninerouterClient ? this.currentModelId : null;
     if (family === 'nvidia_nim') return this.nvidiaNimClient ? this.currentModelId : null;
     if (family === 'litellm') return this.litellmClient ? this.currentModelId : null;
@@ -6515,17 +6647,17 @@ let isMultimodal = !!(imagePaths?.length);
     // Intelligence read the résumé with its rule-based parser.
     //
     // The model is the gateway's automatic default (AGENTROUTER_DEFAULT_MODEL,
-    // DeepSeek), NOT the selected one, for the reason the Auto Answer judge
-    // gives: a profile upload makes six or more structured calls, and on a
-    // Claude or GPT pick those would be taken from the user's daily ration.
-    // Thinking off and the DeepSeek output cap come from
-    // agentRouterAnthropicParams, as for a chat turn; 0.4 as the rungs above.
+    // resolved against the fetched catalogue), NOT the selected one, for the
+    // reason the Auto Answer judge gives: a profile upload makes six or more
+    // structured calls, and a slow pick would make each of them slow. 0.4 as
+    // the rungs above (ignored for GPT, which takes no temperature).
     //
     // Last on purpose, after DeepSeek: nobody with a working rung is moved.
     if (this.hasAgentRouterCredential()) {
+      const arModel = this.agentRouterAutoModel(AGENTROUTER_DEFAULT_MODEL);
       providers.push({
-        name: `AgentRouter (${agentRouterWireModel(AGENTROUTER_DEFAULT_MODEL)})`,
-        execute: () => this.generateWithAgentRouter(message, undefined, undefined, AGENTROUTER_DEFAULT_MODEL, signal, { temperature: 0.4 }),
+        name: `AgentRouter (${agentRouterWireModel(arModel)})`,
+        execute: () => this.generateWithAgentRouter(message, undefined, undefined, arModel, signal, { temperature: 0.4 }),
       });
     }
 
@@ -6722,6 +6854,7 @@ let isMultimodal = !!(imagePaths?.length);
 
     const endpointUrl = `${NATIVELY_API_URL}/v1/chat`;
     const requestId = makeRequestId('nat_json');
+    this.assertNativelyNotBlocked(requestId);
     const requestStartedAt = nowMs();
     // When the key is the trial sentinel, authenticate with the real trial token
     // instead — the server validates x-trial-token, not __trial__ as an API key.
@@ -6777,10 +6910,8 @@ let isMultimodal = !!(imagePaths?.length);
       for (const p of imagePaths) {
         if (fs.existsSync(p)) {
           try {
-            const compressed = await sharp(p)
-              .resize(1920, 1920, { fit: 'inside', withoutEnlargement: true })
-              .jpeg({ quality: 85 })
-              .toBuffer();
+            // Usually made already, right after ⌘/Ctrl+H (services/screen/preparedJpeg).
+            const compressed = await preparedJpeg(p, NATIVELY_API_JPEG);
             images.push({ mime_type: 'image/jpeg', data: compressed.toString('base64') });
           } catch (compressErr: any) {
             // Fallback: send raw if sharp fails (e.g. unsupported format)
@@ -6869,6 +7000,7 @@ let isMultimodal = !!(imagePaths?.length);
         const errText = await response.text().catch(() => '');
         let errData: any = {};
         try { errData = errText ? JSON.parse(errText) : {}; } catch { errData = {}; }
+        this.noteNativelyPlanLimit(response.status, response.headers, errData, nativelyKey === TRIAL_SENTINEL_KEY);
         console.error('[NativelyAPI] JSON HTTP failure', {
           requestId,
           serverRequestId,
@@ -7257,8 +7389,8 @@ let isMultimodal = !!(imagePaths?.length);
     const status = err?.status ?? err?.response?.status;
     const body = err?.error?.message ?? err?.response?.data?.message ?? err?.message ?? '';
     if (status === 403 && /does not allow \/v1\/messages dispatch/i.test(String(body))) {
-      return 'Fluxion rejected the Anthropic API format for this key\'s group. '
-        + 'Open Settings > AI Providers > Fluxion AI and switch API format to OpenAI.';
+      return 'Sidrune rejected the Anthropic API format for this key\'s group. '
+        + 'Open Settings > AI Providers > Sidrune AI and switch API format to OpenAI.';
     }
     return null;
   }
@@ -7267,10 +7399,10 @@ let isMultimodal = !!(imagePaths?.length);
     const err = chunk?.error;
     if (err) {
       const code = err.code ?? err.type ?? 'error';
-      throw new Error(`Fluxion (${model}) stream error [${code}]: ${err.message || 'gateway failed mid-stream'}`);
+      throw new Error(`Sidrune (${model}) stream error [${code}]: ${err.message || 'gateway failed mid-stream'}`);
     }
     if (chunk?.choices?.[0]?.finish_reason === 'error') {
-      throw new Error(`Fluxion (${model}) ended the stream with finish_reason=error`);
+      throw new Error(`Sidrune (${model}) ended the stream with finish_reason=error`);
     }
   }
 
@@ -7331,7 +7463,7 @@ let isMultimodal = !!(imagePaths?.length);
 
     if (this.fluxionProtocol === 'anthropic') {
       const client = this.fluxionAnthropicClient;
-      if (!client) throw new Error('Fluxion client not initialized');
+      if (!client) throw new Error('Sidrune client not initialized');
       const content = await this.buildFluxionAnthropicContent(userMessage, imagePaths);
       const request = this.buildFluxionAnthropicRequest(model, userMessage, systemPrompt, content);
       let response;
@@ -7339,7 +7471,7 @@ let isMultimodal = !!(imagePaths?.length);
         response = await this.withTimeout(
           this.withRetry(async () => await client.messages.stream(request).finalMessage()),
           120000,
-          `Fluxion (${model})`
+          `Sidrune (${model})`
         );
       } catch (e: any) {
         const hint = this.explainFluxionProtocolMismatch(e);
@@ -7350,7 +7482,7 @@ let isMultimodal = !!(imagePaths?.length);
     }
 
     const client = this.fluxionOpenAIClient;
-    if (!client) throw new Error('Fluxion client not initialized');
+    if (!client) throw new Error('Sidrune client not initialized');
     const messages = await this.buildOpenRouterMessages(userMessage, systemPrompt, imagePaths);
     // STREAMS AND ACCUMULATES rather than calling the non-streaming endpoint —
     // the same trick generateWithClaude uses, for a different reason. Measured
@@ -7377,7 +7509,7 @@ let isMultimodal = !!(imagePaths?.length);
         return acc;
       }),
       60000,
-      `Fluxion (${model})`
+      `Sidrune (${model})`
     );
     return stripLeadingReasoningBlock(text || '');
   }
@@ -7391,7 +7523,7 @@ let isMultimodal = !!(imagePaths?.length);
 
     if (this.fluxionProtocol === 'anthropic') {
       const client = this.fluxionAnthropicClient;
-      if (!client) throw new Error('Fluxion client not initialized');
+      if (!client) throw new Error('Sidrune client not initialized');
       const content = await this.buildFluxionAnthropicContent(userMessage, imagePaths);
       const request = this.buildFluxionAnthropicRequest(model, userMessage, systemPrompt, content);
       const stream = client.messages.stream(request);
@@ -7414,7 +7546,7 @@ let isMultimodal = !!(imagePaths?.length);
     }
 
     const client = this.fluxionOpenAIClient;
-    if (!client) throw new Error('Fluxion client not initialized');
+    if (!client) throw new Error('Sidrune client not initialized');
     const messages = await this.buildOpenRouterMessages(userMessage, systemPrompt, imagePaths);
     const stream = await client.chat.completions.create({ model, messages, stream: true }, { signal: abortSignal }) as any;
     try {
@@ -7607,6 +7739,11 @@ let isMultimodal = !!(imagePaths?.length);
       return;
     }
 
+    if (agentRouterProtocolFor(model) === 'responses') {
+      yield* this.streamAgentRouterResponses(model, userMessage, systemPrompt, imagePaths, abortSignal, opts);
+      return;
+    }
+
     const client = this.agentrouterOpenAIClient;
     if (!client) throw new Error('AgentRouter client not initialized');
     const messages = await this.buildOpenRouterMessages(userMessage, systemPrompt, imagePaths);
@@ -7636,6 +7773,82 @@ let isMultimodal = !!(imagePaths?.length);
       throw agentRouterError(e, model);
     } finally {
       if (abortSignal?.aborted && typeof stream?.abort === 'function') stream.abort();
+      if (abortSignal?.aborted && typeof stream?.controller?.abort === 'function') stream.controller.abort();
+    }
+  }
+
+  /**
+   * Responses API parameters for an AgentRouter GPT model: streamWithOpenai's
+   * output cap (getOpenAiMaxOutput), reasoning as low as the model was measured
+   * to accept (agentRouterReasoningEffort), no temperature or seed (reasoning
+   * models refuse non-default sampling). The fast seam's 256 is raised to 512
+   * for the hidden reasoning tokens, as agentRouterOpenAIParams does.
+   */
+  private agentRouterResponsesParams(model: string, opts?: AgentRouterCallOptions): Record<string, unknown> {
+    return {
+      max_output_tokens: opts?.maxTokens ? Math.max(opts.maxTokens, 512) : getOpenAiMaxOutput(model, MAX_OUTPUT_TOKENS),
+      reasoning: { effort: agentRouterReasoningEffort(model) },
+    };
+  }
+
+  /**
+   * AgentRouter GPT over the OpenAI Responses API (`/v1/responses`), the only
+   * route those models accept since 2026-10 (agentRouter.ts fact 8). The system
+   * prompt travels as `instructions`, images as `input_image` data URLs, and
+   * `store: false` keeps the turn off the gateway's response store, as the
+   * Codex backend request does. Text arrives as `response.output_text.delta`;
+   * an in-band `response.failed` (a rate limit lands there, measured) is
+   * explained like every other AgentRouter error.
+   */
+  private async * streamAgentRouterResponses(
+    model: string,
+    userMessage: string,
+    systemPrompt: string | undefined,
+    imagePaths: string[] | undefined,
+    abortSignal: AbortSignal | undefined,
+    opts: AgentRouterCallOptions | undefined,
+  ): AsyncGenerator<string, void, unknown> {
+    const client = this.agentrouterOpenAIClient;
+    if (!client) throw new Error('AgentRouter client not initialized');
+    const imageParts = imagePaths?.length ? await this.buildOpenAiImageParts(imagePaths) : [];
+    const content = imageParts.length
+      ? [{ type: 'input_text', text: userMessage }, ...imageParts.map((p: any) => ({ type: 'input_image', image_url: p.image_url.url, detail: 'auto' }))]
+      : userMessage;
+    let stream: any;
+    try {
+      stream = await client.responses.create(
+        {
+          model,
+          stream: true,
+          store: false,
+          ...(systemPrompt ? { instructions: systemPrompt } : {}),
+          input: [{ role: 'user', content }],
+          ...this.agentRouterResponsesParams(model, opts),
+        } as any,
+        { signal: abortSignal },
+      );
+    } catch (e: any) {
+      if (abortSignal?.aborted) return;
+      throw agentRouterError(e, model);
+    }
+    try {
+      for await (const event of stream) {
+        if (abortSignal?.aborted) return;
+        // Same `data: null` guard as the Chat Completions branch.
+        if (!event) continue;
+        if (event.type === 'response.output_text.delta') {
+          if (typeof event.delta === 'string' && event.delta) yield event.delta;
+          continue;
+        }
+        if (event.type === 'response.failed' || event.type === 'error') {
+          const error = event.response?.error ?? event.error ?? event;
+          throw agentRouterError(Object.assign(new Error(String(error?.message || 'gateway failed mid-stream')), { error }), model);
+        }
+      }
+    } catch (e: any) {
+      if (abortSignal?.aborted) return;
+      throw e?.agentRouter ? e : agentRouterError(e, model);
+    } finally {
       if (abortSignal?.aborted && typeof stream?.controller?.abort === 'function') stream.controller.abort();
     }
   }
@@ -9179,7 +9392,7 @@ let isMultimodal = !!(imagePaths?.length);
       // look entirely plausible in the logs while billing the wrong account.
       if (this.isFluxionModel(this.currentModelId) && this.hasFluxionCredential()
         && gatewaySeatReadsImages('fluxion', this.currentModelId, this.visionFacts({ provider: 'fluxion', model: this.currentModelId }))) {
-        cloud.push({ id: 'fluxion', name: `Fluxion (${this.fluxionWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+        cloud.push({ id: 'fluxion', name: `Sidrune (${this.fluxionWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithFluxion(userContent, systemPrompt, imagePaths, sig) });
       }
       // Fluxion's rule — only the model the user picked — plus 9Router's
@@ -9404,7 +9617,7 @@ let isMultimodal = !!(imagePaths?.length);
       const gateway = this.isLiteLLMModel(this.currentModelId) ? 'LiteLLM proxy'
         : this.isNvidiaNimModel(this.currentModelId) ? 'NVIDIA NIM endpoint'
         : this.isOpenRouterModel(this.currentModelId) ? 'OpenRouter gateway'
-        : this.isFluxionModel(this.currentModelId) ? 'Fluxion AI gateway'
+        : this.isFluxionModel(this.currentModelId) ? 'Sidrune AI gateway'
         : this.isAgentRouterModel(this.currentModelId) ? 'AgentRouter gateway'
         : null;
       // …unless that id is left over from before a local selection (see
@@ -10513,7 +10726,7 @@ let isMultimodal = !!(imagePaths?.length);
       // to "Answer in 100 words".
       try {
         const alreadyCarried = /<user_instructions\b|<custom_instructions>/.test(`${systemPromptOverride || ''}\n${message || ''}`);
-        const answerTurn = Boolean(routeOptions?.answerType) && routeOptions?.answerType !== 'ethical_usage_answer';
+        const answerTurn = Boolean(routeOptions?.answerType);
         if (!alreadyCarried && answerTurn) {
           const modesMgr = modesMgrForInjection || require('./services/ModesManager').ModesManager.getInstance();
           const pinnedInstructions: string = modesMgr.getActiveModePinnedInstructions?.(modeAnswerType(routeOptions), routeOptions?.pinnedModeId ?? undefined) || '';
@@ -11472,7 +11685,7 @@ let isMultimodal = !!(imagePaths?.length);
       // exhausted channel is a normal outcome rather than an exceptional one.
       yield* this.streamSelectedProviderWithFailover({
         id: 'fluxion',
-        name: `Fluxion (${this.fluxionWireModel(this.currentModelId)})`,
+        name: `Sidrune (${this.fluxionWireModel(this.currentModelId)})`,
         open: (sig) => this.streamWithFluxion(userContent, fxSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, sig),
         userContent, finalSystemPrompt: fxSystem, thinkingBudget, abortSignal,
         hasImages: Boolean(isMultimodal && imagePaths?.length),
@@ -11924,7 +12137,7 @@ let isMultimodal = !!(imagePaths?.length);
       }
     }
 
-    throw new Error(this.noProviderAvailableMessage());
+    throw this.exhaustedChainError();
   }
 
   /**
@@ -11987,10 +12200,8 @@ let isMultimodal = !!(imagePaths?.length);
       for (const p of imagePaths) {
         if (fs.existsSync(p)) {
           try {
-            const compressed = await sharp(p)
-              .resize(1920, 1920, { fit: 'inside', withoutEnlargement: true })
-              .jpeg({ quality: 85 })
-              .toBuffer();
+            // Usually made already, right after ⌘/Ctrl+H (services/screen/preparedJpeg).
+            const compressed = await preparedJpeg(p, NATIVELY_API_JPEG);
             images.push({ mime_type: 'image/jpeg', data: compressed.toString('base64') });
           } catch (compressErr: any) {
             // Fallback: send raw if sharp fails (e.g. unsupported format)
@@ -12042,6 +12253,7 @@ let isMultimodal = !!(imagePaths?.length);
 
     const endpointUrl = `${NATIVELY_API_URL}/v1/chat`;
     const requestId = makeRequestId('nat_stream');
+    this.assertNativelyNotBlocked(requestId);
     const streamStartedAt = nowMs();
     let responseStartedAt = 0;
     let firstTokenAt = 0;
@@ -12221,6 +12433,7 @@ let isMultimodal = !!(imagePaths?.length);
       const errText = await response.text().catch(() => '');
       let errData: any = {};
       try { errData = errText ? JSON.parse(errText) : {}; } catch { errData = {}; }
+      const planLimit = this.noteNativelyPlanLimit(response.status, response.headers, errData, nativelyKey === TRIAL_SENTINEL_KEY);
       console.error('[NativelyAPI] stream HTTP failure', {
         requestId,
         serverRequestId,
@@ -12238,7 +12451,7 @@ let isMultimodal = !!(imagePaths?.length);
       if (directMode) {
         const error = new Error(`Natively API stream HTTP ${response.status}`) as Error & { status?: number };
         error.status = response.status;
-        throw error;
+        throw planLimit ? this.withNativelyLimit(error) : error;
       }
       throw new Error(`Natively API stream HTTP ${response.status} requestId=${requestId} serverRequestId=${serverRequestId || 'n/a'} endpoint=${endpointUrl}: ${errData.error || errText.slice(0, 300) || 'unknown'}`);
     }
@@ -13159,9 +13372,11 @@ let isMultimodal = !!(imagePaths?.length);
     this.cancelOllamaRecordFor(abortSignal);
     const ollamaModel = modelOverride || this.ollamaModel;
     let userContent = context ? `CONTEXT:\n${context}\n\nUSER:\n${message}` : message;
-    // Per-request hard guard: trim userContent (never systemPrompt) until total fits the model's max ctx.
+    // Per-request hard guard: trim userContent (never systemPrompt) until total
+    // fits the window requested below as num_ctx (ollamaRequestContext).
+    const ollamaNumCtx = ollamaRequestContext(ollamaModel);
     {
-      const maxCtx = getModelCapabilities(ollamaModel, true).maxContextTokens;
+      const maxCtx = ollamaNumCtx;
       const total = estimateTokens(systemPrompt) + estimateTokens(userContent) + 2000;
       if (total > maxCtx) {
         console.warn('[Ollama] context overflow', { model: ollamaModel, total, max: maxCtx });
@@ -13230,6 +13445,11 @@ let isMultimodal = !!(imagePaths?.length);
           num_predict: process.env.OLLAMA_MAX_OUTPUT_TOKENS
             ? Number(process.env.OLLAMA_MAX_OUTPUT_TOKENS)
             : undefined,
+          // The window the prompt was trimmed to. Without it Ollama uses its
+          // 4096-token default and drops the start of a longer prompt (the
+          // system prompt) silently. The prewarm goes through here too, so the
+          // model is loaded once at this size, not reloaded on the first turn.
+          num_ctx: ollamaNumCtx,
         }
       };
       if (this.isThinkingModel(ollamaModel)) streamBody.think = false;
@@ -14239,25 +14459,19 @@ let isMultimodal = !!(imagePaths?.length);
 
       console.log('[LLMHelper] Attempting to force restart Ollama...');
 
-      // 1. Check for process on port 11434
+      // 1. Stop a wedged Ollama daemon that still holds the port: only the
+      // listener, only if it is Ollama, never this app (ollamaPortProcess.ts;
+      // the old `lsof -t -i` + `kill -9` also killed connected clients, this
+      // app included, and did nothing on Windows).
       try {
-        const { stdout } = await execAsync(`lsof -t -i:11434`);
-        // SECURITY FIX (P1-1): Validate EACH PID token from lsof before shell interpolation.
-        // lsof -t returns one PID per line when multiple processes are on the port.
-        const pids = stdout.trim().split(/\s+/).filter(p => /^\d+$/.test(p));
-        for (const pid of pids) {
-          console.log(`[LLMHelper] Found blocking PID: ${pid}. Killing...`);
-          await execAsync(`kill -9 ${pid}`);
-        }
-        if (pids.length === 0 && stdout.trim()) {
-          console.warn(`[LLMHelper] Unexpected lsof output (no valid PIDs): "${stdout.trim().substring(0, 50)}". Skipping kill.`);
+        const port = Number(new URL(this.ollamaUrl).port) || 11434;
+        const { ollamaPidsListeningOn, stopOllamaPid } = require('./services/ollamaPortProcess');
+        for (const pid of await ollamaPidsListeningOn(port)) {
+          console.log(`[LLMHelper] Ollama (PID ${pid}) holds port ${port} but does not answer. Stopping it...`);
+          await stopOllamaPid(pid);
         }
       } catch (e: any) {
-        // lsof returns exit code 1 if no process found — that is expected, swallow it.
-        // Only surface genuinely unexpected errors.
-        if (!e.message?.includes('exit code 1') && e.code !== 1) {
-          console.warn('[LLMHelper] lsof error (non-fatal):', e.message);
-        }
+        console.warn('[LLMHelper] Could not stop the Ollama holding the port (non-fatal):', e?.message ?? e);
       }
 
       // 2. Restart Ollama through the Manager (which handles polling and background spawn)
@@ -15589,6 +15803,37 @@ let isMultimodal = !!(imagePaths?.length);
    * 3. Gemini Flash (Retry 2x)
    * 4. Gemini Pro (Retry 5x)
    */
+  /**
+   * The selected model's own provider, for plain text generation without the
+   * live-answer machinery (mode and profile injection, answer plans) that
+   * chatWithGemini and streamChat add. Same provider order as chatWithGemini.
+   * null when the selected model is not one of these: Gemini, Natively, Groq,
+   * Ollama and custom providers have their own rungs where this is used.
+   */
+  private selectedModelTextCall(): { name: string; run: (user: string, system: string) => Promise<string> } | null {
+    const m = this.currentModelId;
+    if (!m || this.useOllama || this.customProvider || this.activeCurlProvider) return null;
+    if (this.isOpenAiModel(m) && this.openaiClient) return { name: 'OpenAI', run: (u, sys) => this.generateWithOpenai(u, sys) };
+    if (this.isClaudeModel(m) && this.claudeClient) return { name: 'Claude', run: (u, sys) => this.generateWithClaude(u, sys) };
+    if (this.isDeepseekModel(m) && this.deepseekClient) return { name: 'DeepSeek', run: (u, sys) => this.generateWithDeepseek(u, sys) };
+    if (this.isLiteLLMModel(m) && this.litellmClient) return { name: 'LiteLLM', run: (u, sys) => this.generateWithLiteLLM(u, sys) };
+    if (this.isNvidiaNimModel(m) && this.nvidiaNimClient) return { name: 'NVIDIA NIM', run: (u, sys) => this.generateWithNvidiaNim(u, sys) };
+    if (this.isNinerouterModel(m) && this.ninerouterClient) return { name: '9Router', run: (u, sys) => this.generateWithNinerouter(u, sys) };
+    if (this.isOpenRouterModel(m) && this.openrouterClient) return { name: 'OpenRouter', run: (u, sys) => this.generateWithOpenRouter(u, sys) };
+    if (this.isFluxionModel(m) && this.hasFluxionCredential()) return { name: 'Sidrune', run: (u, sys) => this.generateWithFluxion(u, sys) };
+    if (this.isAgentRouterModel(m) && this.hasAgentRouterCredential()) return { name: 'AgentRouter', run: (u, sys) => this.generateWithAgentRouter(u, sys) };
+    return null;
+  }
+
+  /** Direct-key providers usable as a last cloud fallback, each on its default model. */
+  private keyTextCalls(): Array<{ name: string; run: (user: string, system: string) => Promise<string> }> {
+    const calls: Array<{ name: string; run: (user: string, system: string) => Promise<string> }> = [];
+    if (this.deepseekClient) calls.push({ name: 'DeepSeek', run: (u, sys) => this.generateWithDeepseek(u, sys) });
+    if (this.openaiClient) calls.push({ name: 'OpenAI', run: (u, sys) => this.generateWithOpenai(u, sys) });
+    if (this.claudeClient) calls.push({ name: 'Claude', run: (u, sys) => this.generateWithClaude(u, sys) });
+    return calls;
+  }
+
   public async generateMeetingSummary(systemPrompt: string, context: string, groqSystemPrompt?: string, opts?: MeetingSummaryCallOpts): Promise<string> {
     console.log(`[LLMHelper] generateMeetingSummary called. Context length: ${context.length}`);
     // Short-circuit on empty/whitespace context. With no transcript content to
@@ -15740,6 +15985,37 @@ let isMultimodal = !!(imagePaths?.length);
       }
     }
 
+    // The user's own key (2026-10-15). The chain had rungs only for Natively,
+    // Codex, Antigravity, Groq, Gemini and Ollama, so a user whose only key was
+    // DeepSeek (deepseek-flash is the app default), OpenAI, Claude, AgentRouter,
+    // OpenRouter... got every meeting saved with its summary marked failed,
+    // after Stop and after crash recovery alike (measured with DeepSeek). The
+    // SELECTED model's provider is tried here, ahead of Groq and Gemini, since
+    // the user chose it as they chose a custom provider above. After the Gemini
+    // rungs, any other key the user has (DeepSeek, OpenAI, Claude) is a fallback.
+    const tryKeySummary = async (call: { name: string; run: (user: string, system: string) => Promise<string> }): Promise<string | null> => {
+      console.log(`[LLMHelper] Attempting ${call.name} for summary...`);
+      try {
+        const text = await this.withTimeout(
+          call.run(`Context:\n${context}`, systemPrompt),
+          opts?.timeoutMs ? opts.timeoutMs + 5000 : 90000,
+          `${call.name} Summary`,
+        );
+        if (text.trim().length > 0) {
+          console.log(`[LLMHelper] ✅ ${call.name} summary generated successfully.`);
+          return this.processResponse(text);
+        }
+      } catch (e: any) {
+        console.warn(`[LLMHelper] ⚠️ ${call.name} summary failed: ${e.message}. Falling back...`);
+      }
+      return null;
+    };
+    const selectedCall = this.selectedModelTextCall();
+    if (selectedCall) {
+      const text = await tryKeySummary(selectedCall);
+      if (text !== null) return text;
+    }
+
     if (this.groqClient && tokenCount < 100000) {
       console.log(`[LLMHelper] Attempting Groq for summary...`);
       try {
@@ -15858,6 +16134,12 @@ let isMultimodal = !!(imagePaths?.length);
       }
     } else {
       console.log(`[LLMHelper] Gemini client not initialized — skipping Gemini Pro.`);
+    }
+
+    for (const call of this.keyTextCalls()) {
+      if (call.name === selectedCall?.name) continue;
+      const text = await tryKeySummary(call);
+      if (text !== null) return text;
     }
 
     // ATTEMPT 6: Ollama (last-resort local fallback — gives users without ANY

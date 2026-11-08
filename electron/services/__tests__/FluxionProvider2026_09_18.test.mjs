@@ -475,7 +475,7 @@ describe('review fixes 2026-09-18 — found by adversarial review, all CONFIRMED
     // — four providers they deliberately did not set up. Same defect the LiteLLM
     // comment directly above it records having already fixed once.
     const msg = llm.slice(llm.indexOf("const gateway = this.isLiteLLMModel"), llm.indexOf('No vision-capable provider configured. Add an API key'));
-    assert.match(msg, /isFluxionModel\(this\.currentModelId\) \? 'Fluxion AI gateway'/);
+    assert.match(msg, /isFluxionModel\(this\.currentModelId\) \? 'Sidrune AI gateway'/);
   });
 
   test('Fluxion gets the user-endpoint deadline, not a first-party budget', () => {
@@ -570,22 +570,25 @@ describe('the provider is reachable from the UI', () => {
   });
 
   test('the card resolves a real brand mark, not the generic fallback', () => {
-    // Raster, so it lives in AI_PROVIDER_MARK_IMAGES rather than the inlined-SVG
-    // map — the same treatment litellm gets, for the same reason.
-    assert.match(marks, /fluxion: fluxionMark/, 'fluxion must resolve to a mark');
-    assert.match(marks, /AI_PROVIDER_MARK_IMAGES[\s\S]*?fluxion: fluxionMark/,
-      'a full-colour raster belongs in the <img> registry, not the currentColor one');
+    // Sidrune AI (Fluxion's name since Oct 2026) ships a one-colour logomark,
+    // so it is an inlined currentColor SVG like OpenRouter's, not a raster.
+    assert.match(marks, /fluxion: sidruneMark/, 'fluxion must resolve to a mark');
+    assert.match(marks, /AI_PROVIDER_MARKS: Record<string, string> = \{[\s\S]*?fluxion: sidruneMark/,
+      'a one-colour mark belongs in the currentColor registry, not the <img> one');
+    const svg = read('src/assets/provider-logos/sidrune.svg');
+    assert.match(svg, /^<svg fill="currentColor"/, 'the mark must take the theme colour');
+    assert.doesNotMatch(svg, /fill="(black|white|#)/, 'no hard-coded fill may survive the recolour');
     assert.ok(
-      fs.existsSync(path.join(root, 'src/assets/provider-logos/fluxion.png')),
-      'the imported mark must exist on disk',
+      !fs.existsSync(path.join(root, 'src/assets/provider-logos/fluxion.png')),
+      'the old Fluxion monogram must not linger',
     );
   });
 
   test('the mark is the BRAND MARK, not one of the two look-alike assets', () => {
-    // Fluxion serves three different images and two of them are wrong: a stale
+    // Fluxion served three different images and two of them were wrong: a stale
     // interlocking-S glyph self-titled "Sub2API", and the wordmark logo (an F
-    // monogram + the words "FluxionAPI"). Both were shipped here by mistake
-    // before the real mark was identified, so the provenance is pinned.
+    // monogram + the words "FluxionAPI"). The README keeps that history so the
+    // Sidrune mark is not swapped back for one of them.
     const readme = read('src/assets/provider-logos/README.md');
     assert.match(readme, /Sub2API/, 'the README must warn about the stale look-alike');
     assert.match(readme, /16px/, 'the README must record why the galaxy mark was rejected');

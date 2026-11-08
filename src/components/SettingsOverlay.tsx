@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { LANG_NATIVE_NAMES, useLanguage, useT } from '../i18n';
 import { CalendarSettings } from './settings/CalendarSettings';
+import { ConnectionsSettings } from './settings/ConnectionsSettings';
 import packageJson from '../../package.json';
 import {
     X, Mic, Speaker, Monitor, Keyboard, User, LifeBuoy, LogOut, Upload,
     ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
     ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Download, Settings, Activity, ExternalLink, Trash2,
-    Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff, Folder,
-    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones, Boxes, Languages, Volume2, KeyRound, Loader2, CornerDownRight, PanelBottomClose, TriangleAlert, MicOff
+    Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff,
+    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Boxes, Languages, Volume2, KeyRound, Loader2, CornerDownRight, PanelBottomClose, Maximize2, TriangleAlert, MicOff,
+    Plug, AppWindow
 } from 'lucide-react';
 import { AutoAnswerIcon } from './AutoAnswerIcon';
 import { HiCreditCard } from 'react-icons/hi2';
@@ -18,11 +20,14 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { HelpSettings } from './settings/HelpSettings';
 import { AIProvidersSettings, AIP_CSS, AipModelList, AipPassedCheck } from './settings/AIProvidersSettings';
 import { SpeechDictionarySettings } from './settings/SpeechDictionarySettings';
+import { RoomSpeakersSettings } from './settings/RoomSpeakersSettings';
+import { FollowMicDeviceSettings } from './settings/FollowMicDeviceSettings';
 import { PlansSettings } from './settings/PlansSettings';
 import { PhoneMirrorSettings } from './settings/PhoneMirrorSettings';
 import { RetrievalSettings } from './settings/RetrievalSettings';
 import { IntelligenceSettings } from './settings/IntelligenceSettings';
-import { SkillsSettings } from './settings/SkillsSettings';
+import { OverlaySettings } from './settings/OverlaySettings';
+import { OverlayMockup } from './settings/OverlayMockup';
 import { LocalWhisperModelPanel, type ChannelConfig as LocalWhisperChannelConfig } from './LocalWhisperModelPanel';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useShortcuts } from '../hooks/useShortcuts';
@@ -37,14 +42,15 @@ import {
     OVERLAY_OPACITY_MIN,
     getDefaultOverlayOpacity,
 } from '../lib/overlayAppearance';
-import { getMeetingInterfaceTheme, setMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
+import { getMeetingInterfaceTheme, resolveMeetingInterfaceTheme, setMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import { setGenieAnimationEnabled, useGenieAnimationEnabled } from '../lib/genieAnimationSetting';
+import { setKeepOverlaySizeEnabled, useKeepOverlaySizeEnabled } from '../lib/overlaySizeSetting';
 import { KeyRecorder } from './ui/KeyRecorder';
 import { useConfirmDialog } from './ui/ConfirmDialog';
 import { ModelSelectorLabel } from './ui/ModelSelectorLabel';
 import { MODEL_SELECTOR_WIDTH } from './ui/modelSelectorLabelText';
 import { Disclosure, DisclosureChevron } from './ui/AccordionSection';
-import { Presence, SettingsMenu, SettingsMotionReady } from './settings/SettingsRow';
+import { Presence, SETTINGS_CARD, SettingsMenu, SettingsMotionReady } from './settings/SettingsRow';
 import { ProfileVisualizer } from '../premium';
 import GlassEffectLayer from './ui/GlassEffectLayer';
 import { GenieModal } from './ui/GenieModal';
@@ -98,7 +104,7 @@ const DISGUISE_TILE_RESTING = {
 // Shared with the main process so the picker cannot offer a model the ipc
 // validator rejects. Pure data module — no node/electron imports.
 import { NVIDIA_NIM_STT_MODELS, DEFAULT_NVIDIA_NIM_STT_MODEL, allowedLanguageKeysForNvidiaModel } from '../../electron/audio/nvidiaNimSttModels';
-import { STT_MODEL_CATALOG, isEnglishOnlySttModel, type SttModelProvider } from '../../electron/audio/sttModelCatalog';
+import { STT_MODEL_CATALOG, isEnglishOnlySttModel, sttModelRejectsLanguage, type SttModelProvider } from '../../electron/audio/sttModelCatalog';
 import { isDefaultOpenAiSttBase } from '../../electron/audio/openaiSttBaseUrl';
 import { isRecognitionLanguageOffered, PARAKEET_ONLY_LANGUAGE_KEYS } from '../../electron/config/languages';
 
@@ -107,132 +113,17 @@ import { isRecognitionLanguageOffered, PARAKEET_ONLY_LANGUAGE_KEYS } from '../..
 
 
 // ---------------------------------------------------------------------------
-// MockupNativelyInterface — fake in-meeting widget for the opacity preview.
-// Mirrors NativelyInterface.tsx's own theme resolution (isGlassTheme /
-// isModernTheme / data-interface-theme / GlassEffectLayer) so the preview
-// actually reflects whichever "Meeting Interface Style" the user has picked,
-// instead of always rendering the default theme's appearance.
+// MockupNativelyInterface — the meeting overlay floated over the app for the
+// opacity preview (OverlayMockup, which Settings › Overlay shows on its page).
 // ---------------------------------------------------------------------------
-const MockupNativelyInterface = ({ opacity, theme }: { opacity: number; theme: MeetingInterfaceTheme }) => {
-    const t = useT();
-    const resolvedTheme = useResolvedTheme();
-    const isGlassTheme = theme === 'liquid-glass';
-    const isModernTheme = theme === 'modern';
-    const shellRef = React.useRef<HTMLDivElement>(null);
-    const appearance = useMemo(
-        () => (isGlassTheme ? getGlassOverlayAppearance() : getOverlayAppearance(opacity, resolvedTheme)),
-        [opacity, resolvedTheme, isGlassTheme]
-    );
-
-    return (
-        <div
-            className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none bg-transparent"
-            // The "modern" theme's CSS (index.css [data-interface-theme="modern"]
-            // .overlay-shell-surface etc.) reads --overlay-opacity directly via
-            // calc(), same as the real overlay window (see App.tsx's
-            // '--overlay-opacity' inline style) — it does NOT go through
-            // appearance.shellStyle. Without setting it here too, the modern
-            // theme's preview would silently ignore the slider entirely.
-            style={{ ['--overlay-opacity' as '--overlay-opacity']: String(opacity) } as React.CSSProperties}
-        >
-                {/* NativelyInterface Widget — opacity controlled by the slider.
-                    Shifted up enough to clear the opacity-slider-card, which
-                    stays visible (and in its normal in-flow position) during
-                    the preview — see #opacity-slider-card's z-index override
-                    in startPreviewingOpacity(). */}
-                <div
-                    id="mockup-natively-interface"
-                    data-interface-theme={isGlassTheme ? 'liquid-glass' : isModernTheme ? 'modern' : 'default'}
-                    className="flex flex-col items-center pointer-events-none -mt-96"
-                >
-                    {/* TopPill Replica */}
-                    <div className="flex justify-center mb-2 select-none z-50">
-                        <div className="flex items-center gap-2 rounded-full overlay-pill-surface backdrop-blur-md pl-1.5 pr-1.5 py-1.5" style={appearance.pillStyle}>
-                            <div className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden overlay-icon-surface" style={appearance.iconStyle}>
-                                <img
-                                    src={icon}
-                                    alt="Natively"
-                                    className="w-[24px] h-[24px] object-contain opacity-95 scale-105 force-black-icon"
-                                    draggable="false"
-                                />
-                            </div>
-                            <div className="flex items-center gap-2 px-4 py-1.5 rounded-full text-[12px] font-medium border overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
-                                <ChevronUp className="w-3.5 h-3.5 opacity-70" />
-                                <span className="opacity-80 tracking-wide">{t('Hide')}</span>
-                            </div>
-                            <div className="w-8 h-8 rounded-full flex items-center justify-center overlay-icon-surface overlay-text-primary" style={appearance.iconStyle}>
-                                <div className="w-3.5 h-3.5 rounded-[3px] bg-red-400 opacity-80" />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Main Interface Window Replica */}
-                    <div ref={shellRef} className="relative w-[600px] max-w-full overlay-shell-surface overlay-text-primary backdrop-blur-2xl border rounded-[24px] overflow-hidden flex flex-col pt-2 pb-3" style={appearance.shellStyle}>
-                        {isGlassTheme && <GlassEffectLayer parentRef={shellRef} cornerRadius={24} />}
-
-                        {/* Rolling Transcript Bar */}
-                        <div className="w-full flex justify-center py-2 px-4 border-b mb-1 overlay-transcript-surface" style={appearance.transcriptStyle}>
-                            <p className="text-[13px] truncate max-w-[90%] font-medium overlay-text-primary">
-                                <span className="overlay-text-muted mr-2 font-semibold">{t('Interviewer')}</span>
-                                <span className="opacity-95">{t('So how would you optimize the current algorithm?')}</span>
-                            </p>
-                        </div>
-
-                        {/* Chat History Mock */}
-                        <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3">
-                            <div className="flex justify-start">
-                                <div className="max-w-[85%] px-4 py-3 text-[14px] leading-relaxed font-normal overlay-text-primary">
-                                    <span className="font-semibold text-emerald-500 block mb-1">{t('Suggestion')}</span>
-                                    {t('A good approach would be to use a hash map to cache the intermediate results, which brings the time complexity down from O(n²) to O(n).')}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Quick Actions */}
-                        <div className="flex flex-nowrap justify-center items-center gap-1.5 px-4 pb-3 pt-3">
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
-                                <Pencil className="w-3 h-3 opacity-70" /> {t('What to answer?')}
-                            </div>
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
-                                <MessageSquare className="w-3 h-3 opacity-70" /> {t('Clarify')}
-                            </div>
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
-                                <RefreshCw className="w-3 h-3 opacity-70" /> {t('Recap')}
-                            </div>
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium border shrink-0 overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
-                                <HelpCircle className="w-3 h-3 opacity-70" /> {t('Follow Up Question')}
-                            </div>
-                            <div className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-medium min-w-[74px] shrink-0 border overlay-chip-surface overlay-text-interactive" style={appearance.chipStyle}>
-                                <Mic className="w-3 h-3 opacity-70" /> {t('Answer')}
-                            </div>
-                        </div>
-
-                        {/* Input Area */}
-                        <div className="px-3">
-                            <div className="relative group">
-                                <div className="w-full border rounded-xl pl-3 pr-10 py-2.5 h-[38px] flex items-center overlay-input-surface" style={appearance.inputStyle}>
-                                    <span className="text-[13px] overlay-text-muted">{t('Ask anything on screen or conversation')}</span>
-                                </div>
-                            </div>
-
-                            {/* Bottom Row */}
-                            <div className="flex items-center justify-between mt-3 px-0.5">
-                                <div className="flex items-center gap-1.5">
-                                    <div className="flex items-center gap-1 pl-3 pr-1.5 h-7 border rounded-[9px] text-xs font-medium text-left shrink-0 overlay-control-surface overlay-text-interactive" style={{ ...appearance.controlStyle, width: MODEL_SELECTOR_WIDTH }}>
-                                        <ModelSelectorLabel>Gemini 3 Flash</ModelSelectorLabel>
-                                        <ChevronDown size={12} className="shrink-0" />
-                                    </div>
-                                    <div className="w-7 h-7 rounded-[9px] flex items-center justify-center overlay-bare-icon">
-                                        <SlidersHorizontal className="w-3.5 h-3.5" />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-        </div>
-    );
-};
+const MockupNativelyInterface = ({ opacity, theme }: { opacity: number; theme: MeetingInterfaceTheme }) => (
+    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none bg-transparent">
+        {/* Shifted up enough to clear the opacity-slider-card, which stays
+            visible (and in its normal in-flow position) during the preview —
+            see #opacity-slider-card's z-index override in startPreviewingOpacity(). */}
+        <OverlayMockup id="mockup-natively-interface" className="pointer-events-none -mt-96" opacity={opacity} theme={theme} />
+    </div>
+);
 
 // A button label or result line that changes on a click: Companion's text swap
 // (150ms, 4px, 2px blur). Always ready, because these only ever change in
@@ -566,10 +457,11 @@ const SETTINGS_NAV_ORDER = [
     'ai-providers',
     'retrieval',
     'audio',
+    'overlay',
     'calendar',
-    'skills',
     'keybinds',
     'phone-mirror',
+    'connections',
     'intelligence',
     'help',
     'about',
@@ -586,6 +478,12 @@ const SETTINGS_SHADOW_DARK = '0 25px 50px -12px rgba(0,0,0,0.25)';
 
 const isRetrievalTab = (tab: string) =>
     tab === 'retrieval' || tab === 'embedding' || tab === 'reranker';
+
+/* Skills is a section of the Intelligence page now, not a page of its own.
+   'skills' stays as an alias so an old deep link opens Intelligence instead
+   of a blank content area. */
+const isIntelligenceTab = (tab: string) =>
+    tab === 'intelligence' || tab === 'skills';
 
 interface SettingsOverlayProps {
     isOpen: boolean;
@@ -628,6 +526,7 @@ const STT_KEY_URLS: Record<string, string> = {
     azure: 'https://portal.azure.com/#create/Microsoft.CognitiveServicesSpeech',
     ibmwatson: 'https://cloud.ibm.com/catalog/services/speech-to-text',
     soniox: 'https://console.soniox.com/api-keys',
+    qwen: 'https://bailian.console.aliyun.com/cn-beijing/',
     nvidia_nim: 'https://build.nvidia.com/explore/speech',
 };
 
@@ -670,7 +569,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         ? 'plans'
         : isRetrievalTab(activeTab)
             ? 'retrieval'
-            : activeTab;
+            : isIntelligenceTab(activeTab)
+                ? 'intelligence'
+                : activeTab;
 
     /* Read the previous key during render, write it in an effect — mutating a
        ref while rendering double-fires under StrictMode. */
@@ -801,6 +702,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             .catch(() => { if (live) setFollowMeetingMute(true); });
         return () => { live = false; };
     }, []);
+    // Dictation (Settings › Audio; main: services/dictation). Off unless turned
+    // on. Same save-first pattern as Follow the meeting app's mute.
+    const [dictationEnabled, setDictationEnabled] = useState<boolean | null>(null);
+    useEffect(() => {
+        let live = true;
+        window.electronAPI?.getDictationEnabled?.()
+            .then((on) => { if (live) setDictationEnabled(on === true); })
+            .catch(() => { if (live) setDictationEnabled(false); });
+        return () => { live = false; };
+    }, []);
     // Windows-only. Defaults to true to match the main-process policy (unset ⟹
     // on), so the toggle doesn't flash off before the IPC read lands.
     const [shortcutGuard, setShortcutGuard] = useState(true);
@@ -811,8 +722,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const themeDropdownRef = React.useRef<HTMLDivElement>(null);
     const aiLangDropdownRef = React.useRef<HTMLDivElement>(null);
     const [meetingInterfaceTheme, setMeetingInterfaceThemeState] = useState<MeetingInterfaceTheme>(getMeetingInterfaceTheme);
-    const [isInterfaceThemeDropdownOpen, setIsInterfaceThemeDropdownOpen] = useState(false);
-    const interfaceThemeDropdownRef = React.useRef<HTMLDivElement>(null);
     const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
     const langDropdownRef = React.useRef<HTMLDivElement>(null);
 
@@ -830,6 +739,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [codeVerification, setCodeVerification] = useState(false);
     const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
     const genieAnimationEnabled = useGenieAnimationEnabled();
+    const keepOverlaySize = useKeepOverlaySizeEnabled();
 
     useEffect(() => {
         if (!showVerboseToast) return;
@@ -911,9 +821,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             if (aiLangDropdownRef.current && !aiLangDropdownRef.current.contains(event.target as Node)) {
                 setIsAiLangDropdownOpen(false);
             }
-            if (interfaceThemeDropdownRef.current && !interfaceThemeDropdownRef.current.contains(event.target as Node)) {
-                setIsInterfaceThemeDropdownOpen(false);
-            }
             if (langDropdownRef.current && !langDropdownRef.current.contains(event.target as Node)) {
                 setIsLangDropdownOpen(false);
             }
@@ -927,7 +834,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             const open = [
                 [isThemeDropdownOpen, themeDropdownRef, setIsThemeDropdownOpen],
                 [isAiLangDropdownOpen, aiLangDropdownRef, setIsAiLangDropdownOpen],
-                [isInterfaceThemeDropdownOpen, interfaceThemeDropdownRef, setIsInterfaceThemeDropdownOpen],
                 [isLangDropdownOpen, langDropdownRef, setIsLangDropdownOpen],
             ] as const;
             for (const [isOpen, ref, setOpen] of open) {
@@ -938,7 +844,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             }
         };
 
-        if (isThemeDropdownOpen || isAiLangDropdownOpen || isInterfaceThemeDropdownOpen || isLangDropdownOpen) {
+        if (isThemeDropdownOpen || isAiLangDropdownOpen || isLangDropdownOpen) {
             document.addEventListener('mousedown', handleClickOutside);
             document.addEventListener('keydown', handleEscape, true);
         }
@@ -947,7 +853,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             document.removeEventListener('mousedown', handleClickOutside);
             document.removeEventListener('keydown', handleEscape, true);
         };
-    }, [isThemeDropdownOpen, isAiLangDropdownOpen, isInterfaceThemeDropdownOpen, isLangDropdownOpen]);
+    }, [isThemeDropdownOpen, isAiLangDropdownOpen, isLangDropdownOpen]);
 
     const [showTranscript, setShowTranscript] = useState(() => {
         const stored = localStorage.getItem('natively_interviewer_transcript');
@@ -963,7 +869,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     // Active STT provider — declared here (not with the rest of the STT
     // settings below) because the local-model language-capability effect and
     // memo that follow depend on it.
-    const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech'>('none');
+    const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech'>('none');
 
     // Declared here for the same reason sttProvider is: the NVIDIA
     // language-capability memo below reads it, and which languages that model
@@ -1479,9 +1385,20 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     // Parakeet-only languages are hidden unless the active local model lists them.
     // Deepgram's English-only models (Nova-3 Medical, Nova-2 Meeting) answer
     // any other language, or `multi`, with a 400 — measured live 2026-09-26.
+    // The multilingual ones refuse a few languages too (Nova-3 has no
+    // Malayalam, Nova-2 none of the Indian languages but Hindi; 2026-10-16).
+    const deepgramEnglishOnly = sttProvider === 'deepgram' && isEnglishOnlySttModel('deepgram', sttModels.deepgram);
     const deepgramLanguageCapability = useMemo(() => {
-        if (sttProvider !== 'deepgram' || !isEnglishOnlySttModel('deepgram', sttModels.deepgram)) return null;
-        const keys = Object.entries(availableLanguages).filter(([, l]: [string, any]) => l?.group === 'English').map(([k]) => k);
+        if (sttProvider !== 'deepgram') return null;
+        const model = sttModels.deepgram;
+        const englishOnly = isEnglishOnlySttModel('deepgram', model);
+        const entries = Object.entries(availableLanguages) as [string, any][];
+        const keys = entries
+            .filter(([key, l]) => englishOnly
+                ? l?.group === 'English'
+                : key === 'auto' || !sttModelRejectsLanguage('deepgram', model, String(l?.iso639 ?? '')))
+            .map(([k]) => k);
+        if (!englishOnly && keys.length === entries.length) return null;
         return keys.length > 0 ? new Set<string>(keys) : null;
     }, [sttProvider, sttModels.deepgram, availableLanguages]);
 
@@ -1530,9 +1447,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     // session always sends English (DeepgramStreamingSTT.connectLanguage), so
     // an Auto or non-English stored choice shows as the English it gets —
     // not as an empty placeholder with nothing in the list to match.
-    const showsEnglishFallback = (languageLocked || !!deepgramLanguageCapability) && (storedLanguageUnsupported || autoDetectUnavailable);
-    const displayedSttGroup = showsEnglishFallback ? 'English' : selectedSttGroup;
-    const displayedRecognitionLanguage = showsEnglishFallback ? 'english-us' : recognitionLanguage;
+    const showsEnglishFallback = (languageLocked || deepgramEnglishOnly) && (storedLanguageUnsupported || autoDetectUnavailable);
+    // A multilingual Deepgram model sends `multi` for a stored language it has
+    // no model for (DeepgramStreamingSTT.connectLanguage), so that is shown as
+    // the Auto Detect it gets rather than a value missing from the list.
+    const showsAutoFallback = !showsEnglishFallback && sttProvider === 'deepgram' && storedLanguageUnsupported;
+    const displayedSttGroup = showsEnglishFallback ? 'English' : showsAutoFallback ? 'Auto' : selectedSttGroup;
+    const displayedRecognitionLanguage = showsEnglishFallback ? 'english-us' : showsAutoFallback ? 'auto' : recognitionLanguage;
 
     // Helper to get variants for current group
     const currentGroupVariants = Object.entries(availableLanguages)
@@ -1585,7 +1506,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         };
         window.addEventListener('storage', handleStorage);
         const unsubscribeIpc = window.electronAPI?.onMeetingInterfaceThemeChanged?.((theme) => {
-            const valid: MeetingInterfaceTheme[] = ['default', 'liquid-glass', 'modern'];
+            const valid: MeetingInterfaceTheme[] = ['default', 'liquid-glass', 'modern', 'lavender'];
             if (valid.includes(theme as MeetingInterfaceTheme)) {
                 setMeetingInterfaceThemeState(theme as MeetingInterfaceTheme);
             }
@@ -1674,6 +1595,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [hasStoredIbmWatsonKey, setHasStoredIbmWatsonKey] = useState(false);
     const [sttSonioxKey, setSttSonioxKey] = useState('');
     const [hasStoredSonioxKey, setHasStoredSonioxKey] = useState(false);
+    const [sttQwenAsrKey, setSttQwenAsrKey] = useState('');
+    const [hasStoredQwenAsrKey, setHasStoredQwenAsrKey] = useState(false);
     const [isSttDropdownOpen, setIsSttDropdownOpen] = useState(false);
     const sttDropdownRef = React.useRef<HTMLDivElement>(null);
 
@@ -1711,6 +1634,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                     if (creds.azureRegion) { setSttAzureRegion(creds.azureRegion); setSavedAzureRegion(creds.azureRegion); }
                     setHasStoredIbmWatsonKey(creds.hasIbmWatsonKey);
                     setHasStoredSonioxKey(creds.hasSonioxKey || false);
+                    setHasStoredQwenAsrKey(creds.hasQwenAsrKey || false);
 
                     setHasNativelyKey(creds.hasNativelyKey || false);
                     // Do NOT pre-populate STT key fields from stored credentials.
@@ -1750,13 +1674,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                     setHasStoredAzureKey(creds.hasAzureKey);
                     setHasStoredIbmWatsonKey(creds.hasIbmWatsonKey);
                     setHasStoredSonioxKey(creds.hasSonioxKey || false);
+                    setHasStoredQwenAsrKey(creds.hasQwenAsrKey || false);
                 }).catch(() => { /* silently ignore */ });
             }
         });
         return () => unsubscribe();
     }, []); // mount-once: isOpen is checked inside the callback
 
-    const handleSttProviderChange = async (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech') => {
+    const handleSttProviderChange = async (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech') => {
         setSttProvider(provider);
         setIsSttDropdownOpen(false);
         setSttTestStatus('idle');
@@ -1821,7 +1746,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         }
     };
 
-    const handleSttKeySubmit = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim', key: string) => {
+    const handleSttKeySubmit = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen' | 'nvidia_nim', key: string) => {
         if (!key.trim()) return;
         // Reject masked values returned by getStoredCredentials ("sk-...XXXX").
         // These are never valid API keys and every provider rejects them.
@@ -1876,6 +1801,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             } else if (provider === 'soniox') {
                 // @ts-ignore
                 saveResult = await window.electronAPI?.setSonioxApiKey?.(key.trim());
+            } else if (provider === 'qwen') {
+                saveResult = await window.electronAPI?.setQwenAsrApiKey?.(key.trim());
             } else {
                 // @ts-ignore
                 saveResult = await window.electronAPI?.setDeepgramApiKey?.(key.trim());
@@ -1899,6 +1826,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             else if (provider === 'azure') setHasStoredAzureKey(true);
             else if (provider === 'ibmwatson') setHasStoredIbmWatsonKey(true);
             else if (provider === 'soniox') setHasStoredSonioxKey(true);
+            else if (provider === 'qwen') setHasStoredQwenAsrKey(true);
             else setHasStoredDeepgramKey(true);
 
             setSttSaved(true);
@@ -1912,7 +1840,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         }
     };
 
-    const handleRemoveSttKey = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox') => {
+    const handleRemoveSttKey = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen') => {
         if (!(await askConfirm({ title: `Are you sure you want to remove the ${provider === 'ibmwatson' ? 'IBM Watson' : provider.charAt(0).toUpperCase() + provider.slice(1)} API key?` }))) return;
 
         try {
@@ -1946,6 +1874,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                 await window.electronAPI?.setSonioxApiKey?.('');
                 setSttSonioxKey('');
                 setHasStoredSonioxKey(false);
+            } else if (provider === 'qwen') {
+                await window.electronAPI?.setQwenAsrApiKey?.('');
+                setSttQwenAsrKey('');
+                setHasStoredQwenAsrKey(false);
             } else {
                 // @ts-ignore
                 await window.electronAPI?.setDeepgramApiKey?.('');
@@ -1975,6 +1907,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             groq: sttGroqKey, openai: sttOpenaiKey, deepgram: sttDeepgramKey,
             elevenlabs: sttElevenLabsKey, azure: sttAzureKey, ibmwatson: sttIbmKey,
             soniox: sttSonioxKey,
+            qwen: sttQwenAsrKey,
         };
         const keyToTest = keyMap[sttProvider]?.trim() || '';
 
@@ -1994,6 +1927,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                 case 'azure':      return hasStoredAzureKey;
                 case 'ibmwatson':  return hasStoredIbmWatsonKey;
                 case 'soniox':     return hasStoredSonioxKey;
+                case 'qwen':       return hasStoredQwenAsrKey;
                 default:           return false;
             }
         })();
@@ -2281,6 +2215,72 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         setSystemAudioError(null);
     }, [isOpen, activeTab, selectedInput]);
 
+    // Interface Opacity (Stealth Mode), shown on Settings › Overlay. Held, it
+    // hides Settings and floats the overlay over the real desktop
+    // (startPreviewingOpacity); it is built here because that preview, and
+    // the commit on release, are Settings' own state.
+    const opacityCard = (
+        <div
+            id="opacity-slider-card"
+            style={isPreviewingOpacity ? { visibility: 'visible', position: 'relative', zIndex: 9999 } : {}}
+            className={`${isLight ? 'bg-bg-card' : 'bg-bg-item-surface'} rounded-xl p-5 border border-border-subtle`}
+        >
+            <div className="flex items-center justify-between mb-3">
+                <label className="flex items-center gap-2 text-xs font-medium text-text-secondary uppercase tracking-wide">
+                    <Eye size={13} className="text-text-secondary" />
+                    {t('Interface Opacity')}
+                </label>
+                {/*
+                 * Render previewOverlayOpacity (live drag value), NOT
+                 * overlayOpacity (committed). The drag handler at
+                 * handleOpacityChange does an imperative
+                 *   document.querySelectorAll('.opacity-percent-label')
+                 *     .forEach(el => el.textContent = percentText)
+                 * for sub-frame latency, then calls setPreviewOverlayOpacity(val).
+                 * That setter queues a React re-render — if this JSX read
+                 * `overlayOpacity` (the un-committed pre-drag value), React
+                 * would clobber the imperative text back to the stale value
+                 * on the next commit, producing a visible flicker every
+                 * drag tick. Reading previewOverlayOpacity keeps React's
+                 * render and the imperative write in agreement — the
+                 * imperative write still wins the sub-frame race, React's
+                 * commit just confirms the same value.
+                 */}
+                <span className="opacity-percent-label text-xs font-semibold text-text-primary tabular-nums">
+                    {Math.round(previewOverlayOpacity * 100)}%
+                </span>
+            </div>
+
+            <input
+                type="range"
+                min={OVERLAY_OPACITY_MIN}
+                max={1.0}
+                step={0.01}
+                defaultValue={overlayOpacity}
+                onChange={(e) => handleOpacityChange(parseFloat(e.target.value))}
+                onPointerDown={startPreviewingOpacity}
+                onPointerUp={stopPreviewingOpacity}
+                onPointerCancel={stopPreviewingOpacity}
+                onPointerLeave={stopPreviewingOpacity}
+                className="lg-slider w-full h-1.5 rounded-full appearance-none bg-bg-input"
+                style={{
+                    WebkitAppearance: 'none',
+                    '--lg-knob-bg': isLight ? SELECTED_PERIWINKLE_LIGHT : SELECTED_PERIWINKLE,
+                } as React.CSSProperties}
+            />
+
+            <div className="flex justify-between mt-1.5">
+                <span className="text-[10px] text-text-tertiary">{t('More Stealth')}</span>
+                <span className="text-[10px] text-text-tertiary">{t('Fully Visible')}</span>
+            </div>
+
+            <p className="text-xs text-text-tertiary mt-2">
+                {t('Controls the visibility of the in-meeting overlay.')}{' '}
+                <span className="text-text-secondary">{t('Hold the slider to preview.')}</span>
+            </p>
+        </div>
+    );
+
     return (
         <>
             {confirmDialog}
@@ -2328,15 +2328,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                         <div className="w-64 bg-bg-sidebar flex flex-col border-r border-border-subtle">
                             <button
                                 onClick={onClose}
-                                className="self-start ml-2 mt-2 mb-1 p-1.5 rounded-md text-text-tertiary hover:text-text-primary transition-colors"
+                                className="self-start ml-2 mt-2 p-1.5 rounded-md text-text-tertiary hover:text-text-primary transition-colors"
                                 title={t('Close')}
                                 aria-label={t('Close')}
                             >
                                 <X size={15} />
                             </button>
-                            <div className="px-5 pt-2 pb-3 overflow-y-auto flex-1 min-h-0">
-                                <h2 className="mb-0 text-[13px] font-bold uppercase tracking-[0.01em] text-text-primary">{t('Settings')}</h2>
-                                <nav className="mt-2 space-y-1">
+                            <div className="px-5 pt-0 pb-3 overflow-y-auto flex-1 min-h-0">
+                                <nav className="space-y-1" aria-label={t('Settings')}>
                                     <button
                                         onClick={() => setActiveTab('general')}
                                         className={navItemClass(activeTab === 'general')}
@@ -2379,18 +2378,18 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         <Mic size={16} /> {t('Audio')}
                                     </button>
                                     <button
+                                        onClick={() => setActiveTab('overlay')}
+                                        className={navItemClass(activeTab === 'overlay')}
+                                    >
+                                        {activeTab === 'overlay' && navActivePill}
+                                        <AppWindow size={16} /> {t('Overlay')}
+                                    </button>
+                                    <button
                                         onClick={() => setActiveTab('calendar')}
                                         className={navItemClass(activeTab === 'calendar')}
                                     >
                                         {activeTab === 'calendar' && navActivePill}
                                         <Calendar size={16} /> {t('Calendar')}
-                                    </button>
-                                    <button
-                                        onClick={() => setActiveTab('skills')}
-                                        className={navItemClass(activeTab === 'skills')}
-                                    >
-                                        {activeTab === 'skills' && navActivePill}
-                                        <Folder size={16} /> {t('Skills')}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab('keybinds')}
@@ -2399,7 +2398,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         {activeTab === 'keybinds' && navActivePill}
                                         <Keyboard size={16} /> {t('Keybinds')}
                                     </button>
-
                                     <button
                                         onClick={() => setActiveTab('phone-mirror')}
                                         className={navItemClass(activeTab === 'phone-mirror')}
@@ -2407,16 +2405,20 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         {activeTab === 'phone-mirror' && navActivePill}
                                         <Smartphone size={16} /> {t('Companion')}
                                     </button>
-
+                                    <button
+                                        onClick={() => setActiveTab('connections')}
+                                        className={navItemClass(activeTab === 'connections')}
+                                    >
+                                        {activeTab === 'connections' && navActivePill}
+                                        <Plug size={16} /> {t('Connectors')}
+                                    </button>
                                     <button
                                         onClick={() => setActiveTab('intelligence')}
-                                        className={navItemClass(activeTab === 'intelligence')}
+                                        className={navItemClass(isIntelligenceTab(activeTab))}
                                     >
-                                        {activeTab === 'intelligence' && navActivePill}
+                                        {isIntelligenceTab(activeTab) && navActivePill}
                                         <Cpu size={16} /> {t('Intelligence')}
                                     </button>
-
-
                                     <button
                                         onClick={() => setActiveTab('help')}
                                         className={navItemClass(activeTab === 'help', 'text-[13px]')}
@@ -2424,7 +2426,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         {activeTab === 'help' && navActivePill}
                                         <HelpCircle size={16} /> {t('Setup & Help')}
                                     </button>
-
                                     <button
                                         onClick={() => setActiveTab('about')}
                                         className={navItemClass(activeTab === 'about')}
@@ -2435,7 +2436,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                 </nav>
                             </div>
 
-                            <div className="mt-auto py-4 px-6 border-t border-border-subtle">
+                            <div className="mt-auto py-4 px-6">
                                 <button
                                     onClick={() => window.electronAPI.quitApp()}
                                     className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-3"
@@ -2622,29 +2623,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     </div>
                                                 )}
 
-                                                {/* Ambient AI Chat */}
-                                                <div className="flex items-center justify-between px-4 py-3">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
-                                                            <Headphones size={20} />
-                                                        </div>
-                                                        <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{t('Ambient AI Chat')}</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Meetings start without capturing mic or system audio')}</p>
-                                                        </div>
-                                                    </div>
-                                                    <SettingsToggle
-                                                        checked={ambientChatEnabled}
-                                                        label={t('Ambient AI Chat')}
-                                                        onChange={() => {
-                                                            const newState = !ambientChatEnabled;
-                                                            setAmbientChatEnabled(newState);
-                                                            window.electronAPI?.setAmbientChatEnabled?.(newState);
-                                                        }}
-                                                        className={ambientChatEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
-                                                    />
-                                                </div>
-
                                                 {/* Auto Answer */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
@@ -2686,26 +2664,26 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     />
                                                 </div>
 
-                                                {/* Meeting Retention */}
-                                                <div className="flex items-start justify-between px-4 py-3 gap-4">
-                                                    <div className="flex items-start gap-4">
+                                                {/* Ambient AI Chat */}
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <div className="flex items-center gap-4">
                                                         <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
-                                                            <Shield size={20} />
+                                                            <MicOff size={20} />
                                                         </div>
-                                                        <div className="flex-1">
-                                                            <h3 className="text-sm font-bold text-text-primary">{t('Do not save meetings')}</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5 leading-normal">{t('Nothing is saved after the meeting ends')}</p>
+                                                        <div>
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('Ambient AI Chat')}</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Meetings start without capturing mic or system audio')}</p>
                                                         </div>
                                                     </div>
                                                     <SettingsToggle
-                                                        checked={meetingRetention === 'never'}
-                                                        label={t('Do not save meetings')}
+                                                        checked={ambientChatEnabled}
+                                                        label={t('Ambient AI Chat')}
                                                         onChange={() => {
-                                                            const nextRetention = meetingRetention === 'never' ? 'forever' : 'never';
-                                                            setMeetingRetention(nextRetention);
-                                                            window.electronAPI?.setMeetingRetention?.(nextRetention);
+                                                            const newState = !ambientChatEnabled;
+                                                            setAmbientChatEnabled(newState);
+                                                            window.electronAPI?.setAmbientChatEnabled?.(newState);
                                                         }}
-                                                        className={`mt-2 ${meetingRetention === 'never' ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        className={ambientChatEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
                                                     />
                                                 </div>
 
@@ -2721,12 +2699,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         </div>
                                                     </div>
 
-                                                    {/* Theme, Language, Meeting Interface Style and the Check
-                                                        and Export buttons share px-2.5 + min-w-[105px], so they
-                                                        match. 105px holds the widest label each can show in
-                                                        English: Theme "System" with its icon (104.9px, icon at
-                                                        gap-1.5) and Check's "Up to date" (104.4px), so no state
-                                                        resizes them. A longer label ("Liquid Glass") still grows. */}
+                                                    {/* Theme, Language and the Check and Export buttons (and
+                                                        Settings › Overlay's style picker) share px-2.5 +
+                                                        min-w-[105px], so they match. 105px holds the widest label
+                                                        each can show in English: Theme "System" with its icon
+                                                        (104.9px, icon at gap-1.5) and Check's "Up to date"
+                                                        (104.4px), so no state resizes them. A longer label
+                                                        ("Liquid Glass") still grows. */}
                                                     <div className="relative" ref={themeDropdownRef}>
                                                         <button
                                                             onClick={() => setIsThemeDropdownOpen(!isThemeDropdownOpen)}
@@ -2913,6 +2892,29 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 </button>
                                                 <Disclosure open={showAdvancedSettings} unclipWhenOpen>
                                                 <div className="mt-1">
+                                                    {/* Meeting Retention */}
+                                                    <div className="flex items-start justify-between px-4 py-3 gap-4">
+                                                        <div className="flex items-start gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <Shield size={20} />
+                                                            </div>
+                                                            <div className="flex-1">
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Do not save meetings')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5 leading-normal">{t('Nothing is saved after the meeting ends')}</p>
+                                                            </div>
+                                                        </div>
+                                                        <SettingsToggle
+                                                            checked={meetingRetention === 'never'}
+                                                            label={t('Do not save meetings')}
+                                                            onChange={() => {
+                                                                const nextRetention = meetingRetention === 'never' ? 'forever' : 'never';
+                                                                setMeetingRetention(nextRetention);
+                                                                window.electronAPI?.setMeetingRetention?.(nextRetention);
+                                                            }}
+                                                            className={`mt-2 ${meetingRetention === 'never' ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}`}
+                                                        />
+                                                    </div>
+
                                                     {/* Mouse Passthrough Toggle — Adapted from public PR #113 */}
                                                     <div className="flex items-center justify-between px-4 py-3">
                                                         <div className="flex items-center gap-4">
@@ -2956,6 +2958,27 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             label={t('Genie animation')}
                                                             onChange={() => setGenieAnimationEnabled(!genieAnimationEnabled)}
                                                             className={genieAnimationEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                        />
+                                                    </div>
+
+                                                    {/* Keep overlay size — off: the overlay narrows again and each answer starts from the automatic size */}
+                                                    <div className="flex items-center justify-between px-4 py-3">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <Maximize2 size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Keep overlay size')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">
+                                                                    {t('The overlay stays as wide and tall as it got or you set it. Turn off to shrink it back after each answer.')}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <SettingsToggle
+                                                            checked={keepOverlaySize}
+                                                            label={t('Keep overlay size')}
+                                                            onChange={() => setKeepOverlaySizeEnabled(!keepOverlaySize)}
+                                                            className={keepOverlaySize ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
                                                         />
                                                     </div>
 
@@ -3105,74 +3128,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         )}
                                                     </AnimatePresence>
 
-                                                    {/* Meeting Interface Style */}
-                                                    <div className="flex items-center justify-between px-4 py-3">
-                                                        <div className="flex items-center gap-4">
-                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
-                                                                <Layout size={20} />
-                                                            </div>
-                                                            <div>
-                                                                <h3 className="text-sm font-bold text-text-primary">{t('Meeting Interface Style')}</h3>
-                                                                <p className="text-xs text-text-secondary mt-0.5">
-                                                                    <Presence kind="text" id={meetingInterfaceTheme}>
-                                                                        {meetingInterfaceTheme === 'liquid-glass'
-                                                                            ? t('Liquid glass — Apple-inspired transparent overlay')
-                                                                            : meetingInterfaceTheme === 'modern'
-                                                                                ? t('Modern — polished dark glass with cobalt accents')
-                                                                                : t('Default overlay appearance')}
-                                                                    </Presence>
-                                                                </p>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="relative" ref={interfaceThemeDropdownRef}>
-                                                            {/* Centred like Language's picker: two spacers share the free
-                                                                space, and the right one holds the chevron and never gets
-                                                                narrower than the chevron plus the old 8px gap, so
-                                                                "Liquid Glass" slides left instead of under it. */}
-                                                            <button
-                                                                onClick={() => setIsInterfaceThemeDropdownOpen(!isInterfaceThemeDropdownOpen)}
-                                                                className="bg-bg-component hover:bg-bg-elevated border border-border-subtle text-text-primary px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center min-w-[105px]"
-                                                            >
-                                                                <span aria-hidden="true" className="flex-1 basis-0 min-w-0" />
-                                                                <span className="min-w-0 text-ellipsis overflow-hidden whitespace-nowrap">
-                                                                    <Presence kind="text" id={meetingInterfaceTheme}>
-                                                                        {meetingInterfaceTheme === 'liquid-glass'
-                                                                            ? 'Liquid Glass'
-                                                                            : meetingInterfaceTheme === 'modern'
-                                                                                ? 'Modern'
-                                                                                : t('Default')}
-                                                                    </Presence>
-                                                                </span>
-                                                                <span aria-hidden="true" className="flex-1 basis-0 min-w-[20px] flex justify-end">
-                                                                    <ChevronDown size={12} className={`shrink-0 transition-transform duration-[250ms] ease-sculpted motion-reduce:transition-none ${isInterfaceThemeDropdownOpen ? 'rotate-180' : ''}`} />
-                                                                </span>
-                                                            </button>
-
-                                                            {/* Opens down past the Export row: the advanced Disclosure is
-                                                                unclipWhenOpen, so the menu is not cut off at its edge. */}
-                                                            <SettingsMenu open={isInterfaceThemeDropdownOpen} origin="top right" className="absolute right-0 top-full mt-1 min-w-full w-max bg-bg-elevated border border-border-subtle rounded-lg shadow-xl overflow-hidden z-20 p-1 select-none">
-                                                                {([
-                                                                    { mode: 'default' as MeetingInterfaceTheme, label: 'Default' },
-                                                                    { mode: 'liquid-glass' as MeetingInterfaceTheme, label: 'Liquid Glass' },
-                                                                    { mode: 'modern' as MeetingInterfaceTheme, label: 'Modern' },
-                                                                ] as const).map((option) => (
-                                                                    <button
-                                                                        key={option.mode}
-                                                                        onClick={() => {
-                                                                            setMeetingInterfaceTheme(option.mode);
-                                                                            setMeetingInterfaceThemeState(option.mode);
-                                                                            setIsInterfaceThemeDropdownOpen(false);
-                                                                        }}
-                                                                        className={`w-full text-center px-2.5 py-1.5 rounded-md text-xs flex items-center justify-center transition-colors ${meetingInterfaceTheme === option.mode ? 'text-text-primary bg-[color:color-mix(in_srgb,var(--bg-item-active)_50%,transparent)]' : 'text-text-secondary hover:bg-bg-input hover:text-text-primary'}`}
-                                                                    >
-                                                                        <span className="font-medium">{t(option.label)}</span>
-                                                                    </button>
-                                                                ))}
-                                                            </SettingsMenu>
-                                                        </div>
-                                                    </div>
-
                                                     {/* Export debug logs — collects the main log, the previous
                                                         session, the structured JSONL records and a system-info
                                                         header into one folder and reveals it. */}
@@ -3220,68 +3175,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 </Disclosure>
                                             </div>
 
-                                                {/* ------------------------------------------------------------------ */}
-                                                {/* Interface Opacity (Stealth Mode)                                   */}
-                                                {/* ------------------------------------------------------------------ */}
-                                                <div
-                                                    id="opacity-slider-card"
-                                                    style={isPreviewingOpacity ? { visibility: 'visible', position: 'relative', zIndex: 9999 } : {}}
-                                                    className={`${isLight ? 'bg-bg-card' : 'bg-bg-item-surface'} rounded-xl p-5 border border-border-subtle mt-4`}
-                                                >
-                                                    <div className="flex items-center justify-between mb-3">
-                                                        <label className="flex items-center gap-2 text-xs font-medium text-text-secondary uppercase tracking-wide">
-                                                            <Eye size={13} className="text-text-secondary" />
-                                                            {t('Interface Opacity')}
-                                                        </label>
-                                                        {/*
-                                                         * Render previewOverlayOpacity (live drag value), NOT
-                                                         * overlayOpacity (committed). The drag handler at
-                                                         * handleOpacityChange does an imperative
-                                                         *   document.querySelectorAll('.opacity-percent-label')
-                                                         *     .forEach(el => el.textContent = percentText)
-                                                         * for sub-frame latency, then calls setPreviewOverlayOpacity(val).
-                                                         * That setter queues a React re-render — if this JSX read
-                                                         * `overlayOpacity` (the un-committed pre-drag value), React
-                                                         * would clobber the imperative text back to the stale value
-                                                         * on the next commit, producing a visible flicker every
-                                                         * drag tick. Reading previewOverlayOpacity keeps React's
-                                                         * render and the imperative write in agreement — the
-                                                         * imperative write still wins the sub-frame race, React's
-                                                         * commit just confirms the same value.
-                                                         */}
-                                                        <span className="opacity-percent-label text-xs font-semibold text-text-primary tabular-nums">
-                                                            {Math.round(previewOverlayOpacity * 100)}%
-                                                        </span>
-                                                    </div>
-
-                                                    <input
-                                                        type="range"
-                                                        min={OVERLAY_OPACITY_MIN}
-                                                        max={1.0}
-                                                        step={0.01}
-                                                        defaultValue={overlayOpacity}
-                                                        onChange={(e) => handleOpacityChange(parseFloat(e.target.value))}
-                                                        onPointerDown={startPreviewingOpacity}
-                                                        onPointerUp={stopPreviewingOpacity}
-                                                        onPointerCancel={stopPreviewingOpacity}
-                                                        onPointerLeave={stopPreviewingOpacity}
-                                                        className="lg-slider w-full h-1.5 rounded-full appearance-none bg-bg-input"
-                                                        style={{
-                                                            WebkitAppearance: 'none',
-                                                            '--lg-knob-bg': isLight ? SELECTED_PERIWINKLE_LIGHT : SELECTED_PERIWINKLE,
-                                                        } as React.CSSProperties}
-                                                    />
-
-                                                    <div className="flex justify-between mt-1.5">
-                                                        <span className="text-[10px] text-text-tertiary">{t('More Stealth')}</span>
-                                                        <span className="text-[10px] text-text-tertiary">{t('Fully Visible')}</span>
-                                                    </div>
-
-                                                    <p className="text-xs text-text-tertiary mt-2">
-                                                        {t('Controls the visibility of the in-meeting overlay.')}{' '}
-                                                        <span className="text-text-secondary">{t('Hold the slider to preview.')}</span>
-                                                    </p>
-                                                </div>
 
                                         </div>
 
@@ -3377,9 +3270,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                     }}
                                     aiLangDropdownRef={aiLangDropdownRef}
                                 />
-                            )}
-                            {activeTab === 'skills' && (
-                                <SkillsSettings />
                             )}
                             {(activeTab === 'plans' || activeTab === 'natively-api' || activeTab === 'natively-pro') && (
                                 <PlansSettings initialIsPremium={initialIsPremium} initialHasNativelyKey={hasNativelyKey} />
@@ -3544,6 +3434,20 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         />
                                                     </div>
                                                 </div>
+                                                {/* Dictation: taken from other apps only while Settings › Audio › Dictation is on. */}
+                                                <div className="flex items-center justify-between py-1.5 group">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="text-text-tertiary group-hover:text-text-primary transition-colors w-5 flex justify-center"><Mic size={14} /></span>
+                                                        <span className="text-sm text-text-secondary font-medium group-hover:text-text-primary transition-colors">{t('Dictate to Clipboard')}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        {renderShortcutConflictBadge('dictation')}
+                                                        <KeyRecorder
+                                                            currentKeys={shortcuts.dictation}
+                                                            onSave={(keys) => updateShortcut('dictation', keys)}
+                                                        />
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
 
@@ -3558,7 +3462,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     { id: 'clarify', label: 'Clarify', icon: <MessageSquare size={14} /> },
                                                     { id: 'followUp', label: 'Follow Up', icon: <MessageSquare size={14} /> },
                                                     { id: 'dynamicAction4', label: 'Recap / Brainstorm', icon: <RefreshCw size={14} /> },
-                                                    { id: 'answer', label: 'Answer / Record', icon: <Mic size={14} /> },
+                                                    { id: 'answer', label: 'Speak', icon: <Mic size={14} /> },
                                                     { id: 'codeHint', label: 'Get Code Hint', icon: <Zap size={14} /> },
                                                     { id: 'brainstorm', label: 'Brainstorm Approaches', icon: <Zap size={14} /> },
                                                     { id: 'acceptSuggestion', label: 'Use Suggestion', icon: <CornerDownRight size={14} /> },
@@ -3653,6 +3557,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                own treatment instead of a generic tint: white letterform on black. Fixed in
                                                                both themes — it is a brand colour pair, not a themed surface. */
                                                             { id: 'soniox', label: 'Soniox', badge: hasStoredSonioxKey ? 'Saved' : null, desc: t('60+ languages, multilingual, domain context'), color: 'cyan', icon: <BrandMonogram name="Soniox" />, tileClassName: 'bg-black text-white' },
+                                                            { id: 'qwen', label: 'Qwen ASR', badge: hasStoredQwenAsrKey ? 'Saved' : null, desc: t('Real-time transcription via Alibaba Cloud (Beijing)'), color: 'blue', icon: <BrandMonogram name="Qwen" />, tileClassName: 'bg-indigo-600 text-white' },
                                                             /* Label only — the `local-whisper` id stays as-is. It is the persisted
                                                                sttProvider value and is matched across the main process, IPC and
                                                                CredentialsManager, so renaming it would strand every existing user
@@ -3720,7 +3625,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 provider: every key-backed provider shares this card, so
                                                 without a key it would never remount — and never swap. */}
                                             {sttProvider !== 'google' && sttProvider !== 'local-whisper' && sttProvider !== 'apple-speech' && sttProvider !== 'natively' && sttProvider !== 'none' && (() => {
-                                                const providerName = sttProvider === 'nvidia_nim' ? 'Nvidia Nim' : sttProvider === 'groq' ? 'Groq' : sttProvider === 'openai' ? 'OpenAI STT' : sttProvider === 'elevenlabs' ? 'ElevenLabs' : sttProvider === 'azure' ? 'Azure' : sttProvider === 'ibmwatson' ? 'IBM Watson' : sttProvider === 'soniox' ? 'Soniox' : 'Deepgram';
+                                                const providerName = sttProvider === 'nvidia_nim' ? 'Nvidia Nim' : sttProvider === 'groq' ? 'Groq' : sttProvider === 'openai' ? 'OpenAI STT' : sttProvider === 'elevenlabs' ? 'ElevenLabs' : sttProvider === 'azure' ? 'Azure' : sttProvider === 'ibmwatson' ? 'IBM Watson' : sttProvider === 'soniox' ? 'Soniox' : sttProvider === 'qwen' ? 'Qwen ASR' : 'Deepgram';
                                                 const keyValue = sttProvider === 'nvidia_nim' ? sttNvidiaNimKey
                                                     : sttProvider === 'groq' ? sttGroqKey
                                                     : sttProvider === 'openai' ? sttOpenaiKey
@@ -3728,6 +3633,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     : sttProvider === 'azure' ? sttAzureKey
                                                     : sttProvider === 'ibmwatson' ? sttIbmKey
                                                     : sttProvider === 'soniox' ? sttSonioxKey
+                                                    : sttProvider === 'qwen' ? sttQwenAsrKey
                                                     : sttDeepgramKey;
                                                 const hasStoredKey = sttProvider === 'nvidia_nim' ? hasStoredNvidiaNimKey
                                                     : sttProvider === 'groq' ? hasStoredSttGroqKey
@@ -3736,6 +3642,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     : sttProvider === 'azure' ? hasStoredAzureKey
                                                     : sttProvider === 'ibmwatson' ? hasStoredIbmWatsonKey
                                                     : sttProvider === 'soniox' ? hasStoredSonioxKey
+                                                    : sttProvider === 'qwen' ? hasStoredQwenAsrKey
                                                     : hasStoredDeepgramKey;
                                                 // handleRemoveSttKey has no NVIDIA branch (the key is shared
                                                 // with AI Providers), so the card never offered one.
@@ -3752,8 +3659,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             {/* The provider's official mark, as AI Providers draws it.
                                                                 Soniox publishes no licence-clean mark: its monogram in
                                                                 the brand's own white-on-black. */}
-                                                            {sttProvider === 'soniox' ? (
-                                                                <span className="aip-tile" style={{ background: '#000', color: '#fff', borderColor: 'transparent' }} aria-hidden="true">SO</span>
+                                                            {sttProvider === 'soniox' || sttProvider === 'qwen' ? (
+                                                                <span className="aip-tile" style={{ background: sttProvider === 'qwen' ? '#4f46e5' : '#000', color: '#fff', borderColor: 'transparent' }} aria-hidden="true">{sttProvider === 'qwen' ? 'QW' : 'SO'}</span>
                                                             ) : (
                                                                 <span className="aip-tile aip-tile--mark" aria-hidden="true">
                                                                     <BrandMark provider={sttProvider} />
@@ -3797,6 +3704,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                             else if (sttProvider === 'azure') setSttAzureKey(e.target.value);
                                                                             else if (sttProvider === 'ibmwatson') setSttIbmKey(e.target.value);
                                                                             else if (sttProvider === 'soniox') setSttSonioxKey(e.target.value);
+                                                                            else if (sttProvider === 'qwen') setSttQwenAsrKey(e.target.value);
                                                                             else setSttDeepgramKey(e.target.value);
                                                                         }}
                                                                         autoComplete="off"
@@ -3818,6 +3726,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                                                 ? (hasStoredIbmWatsonKey ? '••••••••••••' : t('Enter IBM Watson API key'))
                                                                                                 : sttProvider === 'soniox'
                                                                                                     ? (hasStoredSonioxKey ? '••••••••••••' : t('Enter Soniox API key'))
+                                                                                                    : sttProvider === 'qwen'
+                                                                                                        ? (hasStoredQwenAsrKey ? '••••••••••••' : t('Enter Qwen ASR API key'))
                                                                                                     : (hasStoredDeepgramKey ? '••••••••••••' : t('Enter Deepgram API key'))
                                                                         }
                                                                         className="aip-input"
@@ -4057,7 +3967,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             {/* Language and its Accent share one row: the accent
                                                 is a refinement of the language beside it, and two short
                                                 selects stacked full-width left most of each card empty. */}
-                                            <div className={currentGroupVariants.length > 1 ? 'grid grid-cols-2 gap-4' : ''}>
+                                            {/* On macOS, System Audio Capture sits beside Language, paired
+                                                like Input and Output Device; Accent then drops under Language. */}
+                                            <div className={isMac || currentGroupVariants.length > 1 ? 'grid grid-cols-2 gap-4 items-start' : ''}>
                                                 <CustomSelect
                                                     label={t("Language")}
                                                     value={displayedSttGroup}
@@ -4073,6 +3985,33 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     disabled={languageLocked}
                                                     badges={appleLanguageBadges?.group}
                                                 />
+
+                                                {/* System Audio Capture (the SCK backend) — macOS only. The ScreenCaptureKit
+                                                    backend is a CoreAudio alternative implemented in the
+                                                    Rust speaker module under #[cfg(target_os="macos")];
+                                                    Windows audio runs via WASAPI loopback so the toggle
+                                                    has no meaning there and routing "sck" as a device id
+                                                    silently breaks system audio (issue #252 audit / F-003). */}
+                                                {isMac && (
+                                                    /* A CustomSelect card like Language beside it (uppercase label,
+                                                       one control). It was a tile/title/switch card titled "SCK
+                                                       Backend" — the internal name — with a two-line description; a
+                                                       picker names both choices and shows which is on. App reads the
+                                                       flag when a meeting starts, so a change applies from the next one. */
+                                                    <CustomSelect
+                                                        label={t('System Audio Capture')}
+                                                        value={useExperimentalSck ? 'sck' : 'coreaudio'}
+                                                        options={[
+                                                            { deviceId: 'coreaudio', label: t('Core Audio (default)') },
+                                                            { deviceId: 'sck', label: 'ScreenCaptureKit' },
+                                                        ].map((o) => ({ ...o, kind: 'audiooutput' as MediaDeviceKind, groupId: '', toJSON: () => ({}) }))}
+                                                        onChange={(id) => {
+                                                            const useSck = id === 'sck';
+                                                            setUseExperimentalSck(useSck);
+                                                            window.localStorage.setItem('useExperimentalSckBackend', useSck ? 'true' : 'false');
+                                                        }}
+                                                    />
+                                                )}
 
                                                 {/* Variant/Accent Selector (Conditional) — greyed out when the
                                                     active local model's language conditioning is region-neutral
@@ -4263,28 +4202,24 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     <p className="text-xs text-text-secondary">{t('This model transcribes English only.')}</p>
                                                 </div>
                                             )}
-                                            {/* Not while English is fixed: "detected" would be untrue. */}
-                                            {recognitionLanguage === 'auto' && !showsEnglishFallback && (
+                                            {/* Not while English is fixed: "detected" would be untrue. Only
+                                                once a language was actually detected; no placeholder before. */}
+                                            {recognitionLanguage === 'auto' && !showsEnglishFallback && autoDetectedLanguage && (
                                                 <div className="flex gap-2 items-center mt-2 px-1 settings-swap-in">
                                                     <Info size={14} className="text-text-secondary shrink-0" />
                                                     <p className="text-xs text-text-secondary">
-                                                        {autoDetectedLanguage
-                                                            ? (() => {
-                                                                const label = Object.values(availableLanguages).find((l: any) =>
-                                                                    l.bcp47 === autoDetectedLanguage || l.iso639 === autoDetectedLanguage
-                                                                )?.label as string | undefined;
-                                                                return `${t('Auto mode — detected:')} ${label ?? autoDetectedLanguage}`;
-                                                              })()
-                                                            : t('Detected from the first few seconds of audio.')
-                                                        }
+                                                        {(() => {
+                                                            const label = Object.values(availableLanguages).find((l: any) =>
+                                                                l.bcp47 === autoDetectedLanguage || l.iso639 === autoDetectedLanguage
+                                                            )?.label as string | undefined;
+                                                            return `${t('Auto mode — detected:')} ${label ?? autoDetectedLanguage}`;
+                                                        })()}
                                                     </p>
                                                 </div>
                                             )}
                                         </div>
                                     </div>
 
-                                    {/* ── Dictionary Section ── */}
-                                    <SpeechDictionarySettings sttProvider={sttProvider} />
 
                                     {/* ── Audio Configuration Section ── */}
                                     <div>
@@ -4457,42 +4392,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 />
                                             </div>
 
-                                            {/* System Audio Capture (the SCK backend) — macOS only. The ScreenCaptureKit
-                                                backend is a CoreAudio alternative implemented in the
-                                                Rust speaker module under #[cfg(target_os="macos")];
-                                                Windows audio runs via WASAPI loopback so the toggle
-                                                has no meaning there and routing "sck" as a device id
-                                                silently breaks system audio (issue #252 audit / F-003). */}
-                                            {isMac && (
-                                                /* A card like its neighbours: Input Device and Output Device are
-                                                   CustomSelect cards (uppercase label, one control), so the capture
-                                                   method is one too, and the hint under it is the Language card's.
-                                                   It was a tile/title/switch card titled "SCK Backend" — the
-                                                   internal name — with a two-line description; a picker names both
-                                                   choices and shows which is on. App reads the flag when a meeting
-                                                   starts, so a change applies from the next one. */
-                                                <div>
-                                                    <CustomSelect
-                                                        label={t('System Audio Capture')}
-                                                        value={useExperimentalSck ? 'sck' : 'coreaudio'}
-                                                        options={[
-                                                            { deviceId: 'coreaudio', label: t('Core Audio (default)') },
-                                                            { deviceId: 'sck', label: 'ScreenCaptureKit' },
-                                                        ].map((o) => ({ ...o, kind: 'audiooutput' as MediaDeviceKind, groupId: '', toJSON: () => ({}) }))}
-                                                        onChange={(id) => {
-                                                            const useSck = id === 'sck';
-                                                            setUseExperimentalSck(useSck);
-                                                            window.localStorage.setItem('useExperimentalSckBackend', useSck ? 'true' : 'false');
-                                                        }}
-                                                    />
-                                                    <div className="flex gap-2 items-center mt-2 px-1">
-                                                        <Info size={14} className="text-text-secondary shrink-0" />
-                                                        <p className="text-xs text-text-secondary">
-                                                            {t("Try ScreenCaptureKit if the other side isn't transcribed.")}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            )}
+                                            {/* ── Dictionary ── under the devices, above the mute row. */}
+                                            <SpeechDictionarySettings sttProvider={sttProvider} />
 
                                             {/* Follow the meeting app's mute: while Zoom, Teams or Meet shows
                                                 you muted, your mic is transcribed as silence. Natively only
@@ -4524,13 +4425,75 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     />
                                                 </div>
                                             </div>
+
+                                            {/* Dictation: a shortcut that copies what you say. Natively
+                                                never pastes or types into another app; you paste. */}
+                                            <div className="rounded-xl border border-border-subtle bg-bg-card">
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                            <Mic size={20} />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('Dictation')}</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">
+                                                                {t('Press {keys}, speak, then press it again. Natively tidies what you said and copies it, ready to paste with {paste}. Not during a meeting.')
+                                                                    .replace('{keys}', (shortcuts.dictation ?? []).join(isMac ? '' : '+') || t('the dictation shortcut'))
+                                                                    .replace('{paste}', isMac ? '⌘V' : 'Ctrl+V')}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <SettingsToggle
+                                                        checked={!!dictationEnabled}
+                                                        label={t('Dictation')}
+                                                        disabled={dictationEnabled === null}
+                                                        onChange={() => {
+                                                            const was = dictationEnabled;
+                                                            if (was === null) return;
+                                                            setDictationEnabled(!was);
+                                                            window.electronAPI?.setDictationEnabled?.(!was)
+                                                                .then((r) => { if (!r?.success) setDictationEnabled(was); })
+                                                                .catch(() => setDictationEnabled(was));
+                                                        }}
+                                                        className={dictationEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Room speakers and the meeting app's mic close the page, each in
+                                                its own card like the mute and Dictation rows above. */}
+                                            <div className={SETTINGS_CARD}>
+                                                <RoomSpeakersSettings sttProvider={sttProvider} />
+                                            </div>
+                                            {/* macOS only: macOS 14+ names the device a call app is using.
+                                                Windows reports no device name, so the setting could never take
+                                                effect there (followMicDevice.ts; FollowMicDevice2026_10_16 test). */}
+                                            {isMac && (
+                                                <div className={SETTINGS_CARD}>
+                                                    <FollowMicDeviceSettings />
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
                             )}
 
 
+                            {activeTab === 'overlay' && (
+                                <OverlaySettings
+                                    opacity={previewOverlayOpacity}
+                                    opacityControl={opacityCard}
+                                    theme={meetingInterfaceTheme}
+                                    onThemeChange={(theme) => {
+                                        setMeetingInterfaceTheme(theme);
+                                        setMeetingInterfaceThemeState(theme);
+                                    }}
+                                />
+                            )}
+
                             {activeTab === 'calendar' && <CalendarSettings />}
+
+                            {activeTab === 'connections' && <ConnectionsSettings />}
 
                             {activeTab === 'phone-mirror' && (
                                 <PhoneMirrorSettings />
@@ -4553,7 +4516,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                 />
                             )}
 
-                            {activeTab === 'intelligence' && (
+                            {isIntelligenceTab(activeTab) && (
                                 <IntelligenceSettings />
                             )}
 
@@ -4583,7 +4546,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                 className="fixed inset-0 z-[49] pointer-events-none transition-opacity duration-150"
                 style={{ opacity: isPreviewingOpacity ? 1 : 0 }}
             >
-                <MockupNativelyInterface opacity={previewOverlayOpacity} theme={meetingInterfaceTheme} />
+                <MockupNativelyInterface opacity={previewOverlayOpacity} theme={resolveMeetingInterfaceTheme(meetingInterfaceTheme, resolvedTheme)} />
             </div>
         </>
     );

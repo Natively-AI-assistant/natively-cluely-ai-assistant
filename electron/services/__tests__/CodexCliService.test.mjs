@@ -50,8 +50,9 @@ test('DEFAULT_CODEX_CLI_CONFIG has expected shape', () => {
   // `path` is preserved for IPC backward-compat but is ignored at runtime.
   assert.equal(DEFAULT_CODEX_CLI_CONFIG.path, 'codex');
   // Issue #558: gpt-5.4 / gpt-5.3-codex are rejected for a ChatGPT account
-  // (live, 2026-09-11). gpt-5.5 answered fastest of the models that work.
-  assert.equal(DEFAULT_CODEX_CLI_CONFIG.model, 'gpt-5.5');
+  // (live, 2026-09-11), and gpt-5.5 since 2026-10-25. gpt-5.6-luna answered
+  // fastest of the preset models that work.
+  assert.equal(DEFAULT_CODEX_CLI_CONFIG.model, 'gpt-5.6-luna');
   // No Codex fast model of its own (2026-09-26): Fast Response Mode answers
   // with the Background Model, and a Codex "Fast Mode Model" contradicted it.
   assert.equal('fastModel' in DEFAULT_CODEX_CLI_CONFIG, false);
@@ -152,7 +153,7 @@ test('normalizeConfig: downgrades invalid effort for chosen model', () => {
 });
 
 test('normalizeConfig: keeps valid effort for chosen model', () => {
-  const cfg = CodexCliService.normalizeConfig({ model: 'gpt-5.5', modelReasoningEffort: 'xhigh' });
+  const cfg = CodexCliService.normalizeConfig({ model: 'gpt-5.6-luna', modelReasoningEffort: 'xhigh' });
   assert.equal(cfg.modelReasoningEffort, 'xhigh');
 });
 

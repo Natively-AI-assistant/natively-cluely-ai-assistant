@@ -159,8 +159,10 @@ function isWholeModeFile(e: EvidenceItem): boolean {
 // Presence only, as above: `acceptedFor` and evidenceSupportsClaim still keep
 // a job description from supporting a claim about the user. A profile read in
 // passages (too large, or raw text missing) keeps the gate exactly as it was.
+// The user's own answers are one more whole item of the profile (2026-10-14):
+// the same rule keeps them in view on a turn whose claims they cannot evidence.
 function isWholeProfileDocument(e: EvidenceItem): boolean {
-  return (e.provenance === 'PROFILE_RESUME' || e.provenance === 'PROFILE_JOB_DESCRIPTION')
+  return (e.provenance === 'PROFILE_RESUME' || e.provenance === 'PROFILE_JOB_DESCRIPTION' || e.provenance === 'PROFILE_FACT')
     && (e.metadata as Record<string, unknown> | undefined)?.wholeDocument === true;
 }
 
@@ -203,6 +205,7 @@ export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
             ...(decision.retrievalPlan.exhaustive ? { exhaustive: true } : {}),
             ...(typeof decision.retrievalPlan.evidenceTokens === 'number' ? { tokenBudget: decision.retrievalPlan.evidenceTokens } : {}),
             ...(decision.retrievalPlan.wholeProfile === true ? { wholeProfile: true } : {}),
+            ...(decision.retrievalPlan.wholeOwnAnswers === true ? { wholeOwnAnswers: true } : {}),
           });
           if (Array.isArray(got)) raw = got;
           else {

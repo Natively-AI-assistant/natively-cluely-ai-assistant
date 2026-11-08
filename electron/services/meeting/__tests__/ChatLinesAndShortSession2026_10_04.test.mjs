@@ -206,10 +206,11 @@ describe('wiring in meeting save', () => {
     assert.match(src, /if \(!shortSession && summaryData\.schemaVersion !== 3 && data\.transcript\.length > 2 && postCallSummaryAllowed\)/);
   });
 
-  test('its title is derived from the notes, with no model call', () => {
-    assert.match(src, /shortSessionNotesWritten\s*\/\/[^\n]*\n\s*\? deriveDeterministicTitle\(/);
-    // 2026-10-15: the call may carry who the meeting was with (notesInputs.titleHint).
-    assert.match(src, /: shortSession\s*\? null\s*: await generateTitleFromSummary\(this\.llmHelper, summaryData(?:, notesInputs\?\.titleHint)?\)/);
+  // 2026-10-18: the one small call names the meeting too; no title call follows.
+  test('its title comes from the same call, vetted against the notes', () => {
+    assert.match(src, /proposedTitle = notes\.title;/);
+    assert.match(src, /const generatedTitle = vetProposedTitle\(proposedTitle, summaryData\)\.title;/);
+    assert.match(short.SHORT_SESSION_PROMPT, /- "title": the meeting's name[^\n]*At most 50 characters/);
   });
 
   test('"too short" is logged only when it is true', () => {

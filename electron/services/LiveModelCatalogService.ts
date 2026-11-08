@@ -2,7 +2,9 @@
  * LiveModelCatalogService.ts
  *
  * Keeps each configured provider's fetched model catalogue fresh: refreshed
- * when its key is saved (forced) and at launch when older than 24 hours.
+ * when its key is saved (forced), and in the background (at launch, then
+ * hourly while the app runs; see main.ts) once it is older than its TTL —
+ * 24 hours, or 6 for AgentRouter, whose catalogue turns over between releases.
  *
  * A fetched catalogue feeds Settings → AI Providers only. The overlay picker
  * keeps its presets plus the default model; a fetched model reaches it through
@@ -34,6 +36,22 @@ export interface LiveModelCatalogOptions {
 export class LiveModelCatalogService {
     private static instance: LiveModelCatalogService | null = null;
     public static readonly DEFAULT_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+    /** How often main.ts re-checks staleness while the app runs. */
+    public static readonly BACKGROUND_CHECK_MS = 60 * 60 * 1000; // 1 hour
+    /**
+     * Shorter TTLs. AgentRouter retired three of its four models within a month
+     * (agentRouter.ts fact 7), and its fetched list is what the pickers show and
+     * what the default repair follows, so a day-old copy can offer dead models.
+     * Six hours is four GET /v1/models a day per running app, against a key-
+     * scoped endpoint that costs no model quota.
+     */
+    public static readonly PROVIDER_TTL_MS: Readonly<Record<string, number>> = Object.freeze({
+        agentrouter: 6 * 60 * 60 * 1000,
+    });
+
+    public static ttlFor(provider: string): number {
+        return LiveModelCatalogService.PROVIDER_TTL_MS[provider] ?? LiveModelCatalogService.DEFAULT_TTL_MS;
+    }
 
     private credentialsManager: any;
     private fetcher: CatalogFetcher;
@@ -70,7 +88,7 @@ export class LiveModelCatalogService {
     /**
      * Check whether the cached catalog for a given provider has exceeded TTL or never been fetched.
      */
-    public isStale(provider: string, ttlMs: number = LiveModelCatalogService.DEFAULT_TTL_MS): boolean {
+    public isStale(provider: string, ttlMs: number = LiveModelCatalogService.ttlFor(provider)): boolean {
         const cm = this.getCm();
         const fetchedAtMap = cm.getCloudFetchedAt?.() || {};
         const fetchedAt = fetchedAtMap[provider] || 0;

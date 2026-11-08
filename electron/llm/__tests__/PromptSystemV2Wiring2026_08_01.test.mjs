@@ -236,9 +236,13 @@ describe('flag + meeting surfaces', () => {
     assert.ok(flagsSrc.includes('NATIVELY_PROMPT_SYSTEM_V2=0'), 'kill-switch note missing from the promotion comment');
   });
 
-  test('meeting title generation consults the v2 title action; summary JSON keeps its schema prompt', () => {
-    assert.match(meetingSrc, /resolveV2SystemPrompt\(\{ action: 'title'/,
-      'title path must use the provider-neutral v2 contract');
+  test('the meeting title rides in the notes reply; summary JSON keeps its schema prompt', () => {
+    // 2026-10-18: naming a meeting is no longer a call of its own (and so no longer
+    // resolves the v2 'title' action): the notes call writes "title" in its reply and
+    // MeetingPersistence only vets it (MeetingTitleInNotesCall2026_10_18).
+    assert.doesNotMatch(meetingSrc, /resolveV2SystemPrompt\(\{ action: 'title'/,
+      'a separate title call would spend a request the notes call already covers');
+    assert.match(meetingSrc, /vetProposedTitle\(proposedTitle, summaryData\)/);
     // The structured-summary prompt is DELIBERATELY untouched: its JSON shape
     // (overview/keyPoints/actionItems + mode note sections) is coupled to the
     // deterministic parser in MeetingPersistence. Guard that it still exists.

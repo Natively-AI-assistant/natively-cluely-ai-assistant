@@ -154,8 +154,9 @@ describe('wiring (source contracts)', () => {
 
     test('"Your notes" is a tab only when there are notes; it shows them as typed and Copy copies them', () => {
         assert.match(DETAILS, /NOTES_TABS\.filter\(tab => tab !== 'yours' \|\| hasUserNotes\)/);
-        assert.match(DETAILS, /activeTab === 'yours' && \([\s\S]*?whitespace-pre-wrap[\s\S]*?\{meeting\.userNotes\}/);
-        assert.match(DETAILS, /activeTab === 'yours'\) \{\s*textToCopy = meeting\.userNotes \|\| ''/);
+        // The notepad writes markdown (2026-10-20): read as headings, lists and checkboxes; Copy gives the readable text.
+        assert.match(DETAILS, /activeTab === 'yours' && \([\s\S]*?<ReactMarkdown remarkPlugins=\{\[remarkGfm\]\}>\{readableNotesMarkdown\(meeting\.userNotes \|\| ''\)\}<\/ReactMarkdown>/);
+        assert.match(DETAILS, /activeTab === 'yours'\) \{\s*textToCopy = readableNotesMarkdown\(meeting\.userNotes \|\| ''\)/);
     });
 
     test('Source is mounted only for a line with a time; it reads the saved transcript, no model call', () => {
@@ -168,7 +169,9 @@ describe('wiring (source contracts)', () => {
     test('Regenerate over edited notes asks with the in-app confirm, then regenerates; the Pro gate is untouched', () => {
         assert.match(DETAILS, /if \(!confirmed && notesWereEdited\(baseMeeting\.detailedSummary\)\) \{\s*setPendingRegenerate/);
         assert.match(DETAILS, /<ConfirmDialog[\s\S]*?Regenerating replaces the edits you made to these notes\. Your current version stays in its tab\./);
-        assert.match(DETAILS, /res\?\.error === 'pro_required'\) setDetectedNeedsPro\(true\)/);
+        // The suggestion's refusal reads as before; a refusal from the template
+        // picker (2026-10-15, NotesFeedback test) marks that template instead.
+        assert.match(DETAILS, /res\?\.error === 'pro_required'\) \{[\s\S]{0,600}else setDetectedNeedsPro\(true\)/);
         assert.doesNotMatch(DETAILS, /window\.confirm\(/);
     });
 
@@ -183,9 +186,11 @@ describe('wiring (source contracts)', () => {
         assert.match(RATING, /maxLength=\{500\}/);
     });
 
-    test('the overlay has a Notes button; the notes window is a light, tooltip-free route', () => {
-        assert.match(OVERLAY, /aria-label=\{t\('Notes'\)\}[\s\S]{0,400}?<NotebookPen/);
-        assert.match(OVERLAY, /notesWindowToggle\?\.\(\)/);
+    // The overlay's Notes button went on 2026-10-30 (the owner: the notepad is
+    // reached from Settings › Overlay); the window stays for the meeting page.
+    test('the overlay has no Notes button; the notes window is a light, tooltip-free route', () => {
+        assert.doesNotMatch(OVERLAY, /aria-label=\{t\('Notes'\)\}/);
+        assert.doesNotMatch(OVERLAY, /notesWindowToggle/);
         assert.match(AUX, /route === 'notes'[\s\S]*?<NotesWindow \/>/);
         assert.match(MAIN, /LIGHT_ROUTES = \[[^\]]*'notes'[^\]]*\]/);
     });
@@ -193,9 +198,15 @@ describe('wiring (source contracts)', () => {
     test('the notes window sends every change, pings typing, and never focuses itself', () => {
         assert.match(NOTES_WINDOW, /liveNotesSetText\?\.\(next\)/);
         assert.match(NOTES_WINDOW, /meetingAutoStopTyping\?\.\(\)/);
-        assert.match(NOTES_WINDOW, /Your notes are going into the meeting notes\./);
-        assert.match(NOTES_WINDOW, /notesWindowOpenMeeting\?\.\(meetingId\)/);
+        // After Stop the notepad shows the enhanced notes (2026-10-20); the Open meeting
+        // logo button beside Share was removed 2026-11-01.
+        assert.match(NOTES_WINDOW, /<NotesEnhanced ref=\{enhancedRef\} meetingId=\{meetingId!\}/);
+        assert.doesNotMatch(live(read('../../notes/NotesEnhanced.tsx')), /notesWindowOpenMeeting/);
         assert.doesNotMatch(NOTES_WINDOW, /\.focus\(/);
+        // The editor focuses only for a mouse pick, never while the hook types.
+        const EDITOR = live(read('../../notes/NotesEditor.tsx'));
+        assert.match(EDITOR, /runSlash\(editor, entry\.item\.id, \{ from: open\.from, to: open\.to \}, !hookTypingRef\.current\)/);
+        assert.equal((EDITOR.match(/\.focus\(/g) ?? []).length, 1);
     });
 });
 

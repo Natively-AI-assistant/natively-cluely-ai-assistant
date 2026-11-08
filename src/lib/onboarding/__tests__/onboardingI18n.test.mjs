@@ -38,7 +38,7 @@ function englishStrings() {
 
 test('the scan finds the strings it should', () => {
   const found = englishStrings();
-  for (const s of ['Welcome to Natively', 'Step {n} of {total}', 'Get the answer', 'What should I say?', 'Thinking...', '{n} screenshots attached']) {
+  for (const s of ['Welcome to Natively', 'Step {n} of {total}', 'Get the answer', 'What should I say?', 'Thinking', '{n} screenshots attached']) {
     assert.ok(found.includes(s), `scan missed ${s}`);
   }
   assert.ok(found.filter(s => s.startsWith('I’d ') || s.startsWith('From what’s')).length === 3, 'the three canned answers');
@@ -47,7 +47,7 @@ test('the scan finds the strings it should', () => {
 
 test('every string the onboarding shows has a translation in all four languages', () => {
   for (const en of englishStrings()) {
-    if (ALREADY_TRANSLATED.has(en) || en === 'Answer' || en === 'Ask a question or click Answer') continue;
+    if (ALREADY_TRANSLATED.has(en)) continue;
     for (const [lang, dict] of Object.entries(DICTS)) {
       assert.ok(dict[en], `${lang} has no translation for: ${en}`);
       assert.notEqual(dict[en], en, `${lang} left this in English: ${en}`);

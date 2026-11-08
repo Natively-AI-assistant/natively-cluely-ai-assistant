@@ -1,3 +1,4 @@
+import os from 'os';
 import path from 'path';
 
 export interface AudioDeviceInfo {
@@ -19,6 +20,10 @@ export interface NativeModule {
   // existing shipped binaries don't have it — main.ts checks `typeof` before
   // calling. Requires a binary rebuild (cargo build --release).
   getDefaultOutputDeviceId?: () => string;
+  // Same contract for the default microphone (cpal device name).
+  getDefaultInputDeviceId?: () => string;
+  // macOS System Audio Recording grant: "granted" | "denied" | "unknown".
+  getSystemAudioRecordingPermission?: () => string;
   // macOS-only: apply NSPanel-nonactivating + becomesKeyOnlyIfNeeded +
   // hidesOnDeactivate=NO + the right collectionBehavior on the overlay
   // window so clicks/keystrokes don't activate Natively (foreground app
@@ -217,6 +222,17 @@ function getNativeBinaryName(): string {
     return map[platform]?.[arch] ?? `index.${platform}-${arch}.node`;
 }
 
+/**
+ * One line per candidate for the always-on failure log: the first line of the
+ * error (dlopen's reason; Node appends a multi-line "Require stack"), with the
+ * home directory shown as ~ so a shared log does not carry the user's name.
+ */
+export function describeLoadFailure(filePath: string, message: string, home: string = os.homedir()): string {
+    const firstLine = String(message).split('\n')[0].trim();
+    const redact = (text: string) => (home ? text.split(home).join('~') : text);
+    return `${redact(filePath)}: ${redact(firstLine)}`;
+}
+
 // undefined = not yet attempted, null = attempted but failed, object = loaded
 let cached: NativeModule | null | undefined = undefined;
 
@@ -292,6 +308,7 @@ export function loadNativeModule(): NativeModule | null {
         ? [devPath, devFallbackPath, ...(packagedPath ? [packagedPath] : [])]
         : [...(packagedPath ? [packagedPath] : []), devPath, devFallbackPath];
 
+    const failures: string[] = [];
     for (const filePath of candidates) {
         try {
             const mod = require(filePath);
@@ -307,13 +324,22 @@ export function loadNativeModule(): NativeModule | null {
             // "failed to load from all paths" error below still fires loudly
             // if every candidate fails.
             const msg = err instanceof Error ? err.message : String(err);
+            failures.push(describeLoadFailure(filePath, msg));
             if (verboseLogging) {
                 console.warn(`[nativeModuleLoader] Could not load from ${filePath}: ${msg}`);
             }
         }
     }
 
-    console.error(`[nativeModuleLoader] Failed to load ${binary} from all ${candidates.length} candidate paths.`);
+    // Every reason, always: the packaged path's dlopen error ("Symbol not found",
+    // "The specified module could not be found", a wrong architecture) is the
+    // only clue to why a user has no microphone and no system audio at all, and
+    // without verboseLogging it used to be dropped.
+    console.error(
+        `[nativeModuleLoader] Failed to load ${binary} from all ${candidates.length} candidate paths ` +
+        `(${process.platform} ${process.arch}, ${process.getSystemVersion?.() ?? 'unknown OS version'}):\n  ` +
+        failures.join('\n  ')
+    );
     cached = null;
     return null;
 }

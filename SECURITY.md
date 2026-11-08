@@ -25,7 +25,7 @@ You can find the current version in the app's **Settings → About** screen, in 
 
 ### Where to send reports
 
-Email **natively.contact@gmail.com** with a clear subject line such as "Security report — [short description]".
+Email **security@heynatively.com** with a clear subject line such as "Security report — [short description]".
 
 If your report is sensitive enough that you'd like an encrypted channel, mention this in your initial email and we'll arrange one before you send the technical details.
 
@@ -151,7 +151,7 @@ If we ever introduce a paid bounty programme, we'll publish the rules here befor
 
 ## Contact
 
-**Email:** natively.contact@gmail.com
+**Email:** security@heynatively.com
 
 For Privacy Policy questions, see [PRIVACY.md](./PRIVACY.md). For commercial / refund / licensing questions, see the [Refund Policy](https://natively.software/refundpolicy) and [Terms &amp; Conditions](https://natively.software/termsandconditions).
 

@@ -73,7 +73,8 @@ test('no focused window falls back to current display, then primary', () => {
 
 // Execute the real WindowHelper methods with fake Electron windows. Transpile
 // without bundling to isolate its imports from the app/native-module startup.
-function helperFixture(mode = 'launcher') {
+// `platform` is injected so a test runs the same branch on any host.
+function helperFixture(mode = 'launcher', platform = 'darwin') {
   let bounds = { ...original };
   const calls = [];
   let minimum = [0, 0];
@@ -93,7 +94,9 @@ function helperFixture(mode = 'launcher') {
     },
     on: (event, handler) => { listeners[event] = handler; },
     webContents: { id: 1, send() {} },
-    setOpacity() {}, setContentProtection() {}, hide() {},
+    setOpacity() {}, setContentProtection() {}, hide() {}, focus() {},
+    setAlwaysOnTop: (...args) => calls.push(['always-on-top', ...args]),
+    show: () => calls.push(['native-show']),
     showInactive: () => calls.push(['native-show']),
   };
   const fakeElectron = {
@@ -108,7 +111,8 @@ function helperFixture(mode = 'launcher') {
   const source = fs.readFileSync(new URL('../../WindowHelper.ts', import.meta.url), 'utf8');
   const module = { exports: {} };
   vm.runInNewContext(transformSync(source, { loader: 'ts', format: 'cjs' }).code, {
-    module, exports: module.exports, process, __dirname: '/tmp', console: { log() {} },
+    module, exports: module.exports, __dirname: '/tmp', console: { log() {} },
+    process: Object.create(process, { platform: { value: platform } }),
     require: name => {
       if (name === 'electron') return fakeElectron;
       if (name === './services/KeybindManager') return { KeybindManager: { getInstance: () => ({ setMode() {} }) } };
@@ -239,8 +243,9 @@ test('ordinary drags refresh launcher minimum on both small and large displays',
   assert.equal(calls.filter(call => call[0] === 'minimum').length, updates);
 });
 
-test('overlay stays centered through the real show path after width and height limits', () => {
-  const { helper, window, fakeElectron, calls } = helperFixture('overlay');
+for (const platform of ['darwin', 'win32']) {
+test(`overlay stays centered through the real show path after width and height limits (${platform})`, () => {
+  const { helper, window, fakeElectron, calls } = helperFixture('overlay', platform);
   const small = { id: 3, workArea: { x: -1000, y: 25, width: 1000, height: 800 } };
   fakeElectron.screen.getDisplayNearestPoint = () => small;
   fakeElectron.screen.getDisplayMatching = rect => rect.x < 0 ? small : primary;
@@ -250,10 +255,19 @@ test('overlay stays centered through the real show path after width and height l
   const applied = calls.filter(call => call[0] === 'bounds');
   assert.deepEqual(applied[0][1], applied[1][1]);
   assert.equal(calls.at(-1)[0], 'native-show');
+  // Windows re-asserts z-order before the show (issue #136); macOS never calls
+  // it, because it activates the app and steals focus.
+  const onTop = calls.filter(call => call[0] === 'always-on-top');
+  if (platform === 'win32') {
+    assert.deepEqual(onTop, [['always-on-top', true, 'screen-saver']]);
+    assert.ok(calls.indexOf(onTop[0]) < calls.findLastIndex(call => call[0] === 'native-show'));
+  } else {
+    assert.deepEqual(onTop, []);
+  }
 });
 
-test('overlay birth-height floor is included before centering and showing', () => {
-  const { helper, window, calls } = helperFixture('overlay');
+test(`overlay birth-height floor is included before centering and showing (${platform})`, () => {
+  const { helper, window, calls } = helperFixture('overlay', platform);
   window.setBounds({ ...original, height: 1 });
   helper.showMainWindow = Object.getPrototypeOf(helper).showMainWindow;
   helper.toggleMainWindow(true);
@@ -261,6 +275,7 @@ test('overlay birth-height floor is included before centering and showing', () =
   assert.equal(window.getBounds().height, 216);
   assert.deepEqual(applied.at(-2)[1], applied.at(-1)[1]);
 });
+}
 
 // Exercise the actual AppState toggle method without booting its app singleton.
 const mainSource = fs.readFileSync(new URL('../../main.ts', import.meta.url), 'utf8');

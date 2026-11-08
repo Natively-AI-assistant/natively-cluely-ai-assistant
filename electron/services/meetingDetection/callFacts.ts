@@ -32,6 +32,41 @@ export interface CallFacts {
     selfName: string | null;
     /** The other people the window names (callTreeSolvers), for the roster. */
     participants: string[];
+    /**
+     * Whether the app itself is recording the call (Zoom's "Recording…" /
+     * "Computer recording" indicator, Teams' "Recording has started" banner),
+     * read from the window like every other fact. null when the tree shows
+     * nothing either way. Read-only; Natively never starts or stops it.
+     */
+    recording: boolean | null;
+}
+
+// Zoom: the top-bar recording button / indicator ("Recording...", "Computer
+// recording", "Smart recording", "This meeting is being recorded"). Teams: the
+// recording banner ("Recording has started", "Recording and transcription have
+// started", "This meeting is being recorded"). Localised variants as found in
+// the apps' published UI; UNVERIFIED against live trees, like the other facts.
+const RECORDING_ON = /(?:^|\b)(?:(?:computer|cloud|smart|local) recording|recording(?: and transcription)? (?:has|have) started|this (?:meeting|call) is being recorded|recording in progress|recording\.{2,3}|\brecording\b(?!\s+(?:stopped|off|disabled|unavailable)))/i;
+const RECORDING_OFF = /recording (?:stopped|has stopped|paused|is paused|ended)|stop(?:ped)? recording|not recording/i;
+
+/** True when the window shows the call being recorded, false when it shows it stopped, null when neither. */
+export function recordingFromTree(tree: CallTree | null | undefined): boolean | null {
+    if (!tree?.trusted) return null;
+    let on = false;
+    let off = false;
+    for (const w of tree.windows) {
+        for (const node of w.nodes) {
+            if (isChatContainer(node)) continue;
+            for (const t of fields(node)) {
+                if (t.length > 160) continue;
+                if (RECORDING_OFF.test(t)) off = true;
+                else if (RECORDING_ON.test(t)) on = true;
+            }
+        }
+    }
+    if (on) return true;
+    if (off) return false;
+    return null;
 }
 
 const MEETING_ID_LABEL = '(?:meeting id|meeting-id|meeting number|webinar id|besprechungs-id|id de (?:la )?réunion|id de (?:la )?reunión|id da reunião|id riunione|id della riunione|vergader-id|mötes-id|id rapat|ミーティングid|会议\\s*id|會議\\s*id|회의\\s*id)';
@@ -166,5 +201,6 @@ export function readCallFacts(app: DesktopCallApp, tree: CallTree | null | undef
         participantCount: participantCountFromTree(tree),
         selfName: solved.selfNames[0] ?? null,
         participants: solved.people.map((p) => p.name),
+        recording: recordingFromTree(tree),
     };
 }

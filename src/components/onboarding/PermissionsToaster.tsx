@@ -16,7 +16,8 @@
 // file renders; it does not decide.
 //
 // The card NEVER writes a permission state it has not observed. Actions open a
-// panel or raise a prompt; the real status arrives via the focus refresh below.
+// panel or raise a prompt; the real status arrives via the focus refresh below
+// (and, on Windows, a 2 s re-read while the card is open).
 //
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -26,7 +27,7 @@ import nativelyIcon from '../../../assets/icon.png';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
 import { GenieModal } from '../ui/GenieModal';
-import { describePermRow, allPermissionsResolved } from '../../lib/permissionRowPolicy.mjs';
+import { describePermRow, allPermissionsResolved, statusPollIntervalMs } from '../../lib/permissionRowPolicy.mjs';
 import type { RowPresentation } from '../../lib/permissionRowPolicy.mjs';
 import { windowsMicPage } from '../../lib/micPermissionPolicy.mjs';
 
@@ -252,6 +253,21 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [ready, refreshStatus]);
+
+  useEffect(() => {
+    // Windows also re-reads on a timer: a switch flipped in Settings beside the
+    // card fires no focus event here (statusPollIntervalMs says why per OS).
+    // A read still in flight skips the tick rather than stacking another.
+    const every = statusPollIntervalMs(platform);
+    if (!ready || every === null) return;
+    let reading = false;
+    const id = window.setInterval(() => {
+      if (reading) return;
+      reading = true;
+      refreshStatus().finally(() => { reading = false; });
+    }, every);
+    return () => window.clearInterval(id);
+  }, [ready, platform, refreshStatus]);
 
   const openScreenSettings = useCallback(() => {
     if (platform !== 'darwin') return;
@@ -621,7 +637,9 @@ function PrimaryButton({
   return (
     <LiquidGlassButton
       variant={glass ? 'lavender' : 'green'}
-      className="lg-sm lg-wide"
+      // Continue's green is the lighter body on both platforms: the plain
+      // lg-green read as black on the light card and vanished on the dark one.
+      className={glass ? 'lg-sm lg-wide' : 'lg-sm lg-wide lg-green-light'}
       onClick={onClick}
       disabled={disabled}
       icon={Icon ? <Icon size={15} strokeWidth={2} /> : undefined}

@@ -109,7 +109,7 @@ const NO_KEYS = { hasNativelyKey: false, hasOwnAiKey: false, isPremium: false, p
 // starts with no AI (src/lib/trial/autoTrial.mjs). So a new user with no keys
 // meets Permissions and then the extension, and the Natively API offer takes
 // the onboarding slot only once that trial has been used.
-test('1. new user, no keys: Permissions → the extension on day 1; nothing more that day; no promo before 24 h', () => {
+test('1. new user, no keys: Permissions → Natively Plans on day 1; the demo film, then the extension, on later launches; no promo before 24 h', () => {
   const first = launch(policy.emptyLedger(Date.now()), { ...NO_KEYS, permsShown: false });
   first.run(5_000);
   assert.equal(first.active(), 'permissions');
@@ -117,35 +117,55 @@ test('1. new user, no keys: Permissions → the extension on day 1; nothing more
   first.run(55_000);
   assert.equal(first.active(), null, '60 s between cards');
   first.run(15_000);
-  assert.equal(first.active(), 'browser_extension');
+  assert.equal(first.active(), 'plans', 'the first card after getting started');
   first.close('later').run(10 * 60_000).end();
-  assert.deepEqual(first.seen, ['permissions', 'browser_extension'], 'one onboarding card per launch, no promo on day 1, no trial card');
+  assert.deepEqual(first.seen, ['permissions', 'plans'], 'one onboarding card per launch, no promo on day 1, no trial card');
 
-  const second = launch(age(first.ledger, 2 * H), NO_KEYS).run(10 * 60_000);
-  assert.deepEqual(second.seen, [], 'the extension was put off, the trial is still ahead of them, and no promo on day 1');
-  second.end();
+  const second = launch(age(first.ledger, 1 * H), NO_KEYS).run(60_000);
+  assert.deepEqual(second.seen, ['demo_video'], 'the setup film on the next launch');
+  second.close('acted').end();
 
-  const third = launch(age(second.ledger, 23 * H), NO_KEYS).run(2 * 60_000);
-  assert.deepEqual(third.seen, ['profile_ad'], 'the first promo once 24 h have passed');
+  const third = launch(age(second.ledger, 1 * H), NO_KEYS).run(60_000);
+  assert.deepEqual(third.seen, ['browser_extension'], 'the extension on the launch after');
+  third.close('later').run(10 * 60_000);
+  assert.deepEqual(third.seen, ['browser_extension'], 'the slot is free, but no promo on day 1');
   third.end();
+
+  const fourth = launch(age(third.ledger, 23 * H), NO_KEYS).run(2 * 60_000);
+  assert.deepEqual(fourth.seen, ['profile_ad'], 'the first promo once 24 h have passed');
+  fourth.end();
 });
 
-test('1b. no keys, trial already used: the Natively API offer comes before the extension', () => {
+test('1b. no keys, trial already used: Natively Plans, the demo film, then the Natively API offer, then the extension', () => {
   const used = { ...NO_KEYS, trialClaimed: true };
   const first = launch(policy.emptyLedger(Date.now()), used).run(60_000);
-  assert.deepEqual(first.seen, ['natively_api_new']);
+  assert.deepEqual(first.seen, ['plans']);
   first.close('later').run(10 * 60_000).end();
-  assert.deepEqual(first.seen, ['natively_api_new'], 'one onboarding card per launch');
+  assert.deepEqual(first.seen, ['plans'], 'one onboarding card per launch');
 
   const second = launch(age(first.ledger, 2 * H), used).run(60_000);
-  assert.deepEqual(second.seen, ['browser_extension'], 'the extension on a later launch');
-  second.end();
+  assert.deepEqual(second.seen, ['demo_video'], 'the setup film on the next launch');
+  second.close('acted').end();
+
+  const third = launch(age(second.ledger, 2 * H), used).run(60_000);
+  assert.deepEqual(third.seen, ['natively_api_new'], 'then the API offer');
+  third.close('later').end();
+
+  const fourth = launch(age(third.ledger, 2 * H), used).run(60_000);
+  assert.deepEqual(fourth.seen, ['browser_extension'], 'the extension after that');
+  fourth.end();
 });
+
+// Scenarios 2–7 follow other cards. Their installs have already watched the
+// demo film (8 covers the film itself), so it never takes their slot.
+const watchedLedger = () => policy.applyOutcome(policy.emptyLedger(Date.now()), 'demo_video', 'acted', Date.now());
 
 test('2. own keys on day 4: "Three services" shows; the next promo waits 72 h', () => {
   const user = { hasOwnAiKey: true, extensionConnected: true };
-  const first = launch(age(policy.emptyLedger(Date.now()), 4 * D), user).run(2 * 60_000);
-  assert.deepEqual(first.seen, ['natively_api_existing']);
+  const first = launch(age(watchedLedger(), 4 * D), user).run(60_000);
+  assert.deepEqual(first.seen, ['plans'], 'Natively Plans first: it is an onboarding card');
+  first.close('later').run(2 * 60_000);
+  assert.deepEqual(first.seen, ['plans', 'natively_api_existing'], 'then the one promo of the launch');
   first.close('later').end();
 
   const nextDay = launch(age(first.ledger, 1 * D), user).run(5 * 60_000);
@@ -159,7 +179,7 @@ test('2. own keys on day 4: "Three services" shows; the next promo waits 72 h', 
 
 test('3. three "later"s: back after 7 and 21 days, then never', () => {
   const user = { hasNativelyKey: true };
-  let s = launch(policy.emptyLedger(Date.now()), user).run(60_000);
+  let s = launch(watchedLedger(), user).run(60_000);
   assert.deepEqual(s.seen, ['browser_extension']);
   s.close('later').end();
   // Other cards (promos, from day 2) are not this scenario: follow the extension only.
@@ -177,7 +197,7 @@ test('3. three "later"s: back after 7 and 21 days, then never', () => {
 
 test('4. a crash while a card is open costs no strike; the card can return', () => {
   const user = { hasNativelyKey: true };
-  const crashed = launch(policy.emptyLedger(Date.now()), user).run(60_000);
+  const crashed = launch(watchedLedger(), user).run(60_000);
   assert.equal(crashed.active(), 'browser_extension');
   // The process dies here: no outcome, and the persisted state still names the open card.
   assert.equal(policy.entryOf(crashed.ledger, 'browser_extension').strikes, 0);
@@ -188,7 +208,7 @@ test('4. a crash while a card is open costs no strike; the card can return', () 
 
 test('5. a meeting: nothing new opens, and an open card stays', () => {
   const user = { hasNativelyKey: true };
-  const s = launch(policy.emptyLedger(Date.now()), user);
+  const s = launch(watchedLedger(), user);
   s.orch.emit({ type: 'meeting:state', isActive: true });
   s.run(2 * 60_000);
   assert.deepEqual(s.seen, [], 'nothing opens during a meeting');
@@ -203,7 +223,7 @@ test('5. a meeting: nothing new opens, and an open card stays', () => {
 
 test('6. Trial ended: nothing else opens, and an open card leaves the slot', () => {
   const user = { hasNativelyKey: true };
-  const s = launch(policy.emptyLedger(Date.now()), { ...user, trialEndedOpen: true }).run(2 * 60_000);
+  const s = launch(watchedLedger(), { ...user, trialEndedOpen: true }).run(2 * 60_000);
   assert.deepEqual(s.seen, []);
   s.orch.setUserState({ trialEndedOpen: false });
   s.run(60_000);
@@ -216,10 +236,43 @@ test('6. Trial ended: nothing else opens, and an open card leaves the slot', () 
 
 test('7. Pro at 80 %: Max/Ultra shows; "I\'m happy with Pro" retires it for good', () => {
   const user = { isPremium: true, planTier: 'pro', hasNativelyKey: true, nativelyQuotaPct: 85, extensionConnected: true, hasProfile: true, hasJD: true };
-  const s = launch(age(policy.emptyLedger(Date.now()), 4 * D), user).run(2 * 60_000);
+  const s = launch(age(watchedLedger(), 4 * D), user).run(2 * 60_000);
   assert.deepEqual(s.seen, ['max_ultra']);
   s.close('never').end();
   const much = launch(age(s.ledger, 400 * D), { ...user, nativelyQuotaPct: 99 }).run(2 * 60_000);
   assert.ok(!much.seen.includes('max_ultra'), 'never again, whatever the quota');
   much.end();
+});
+
+test('8. the demo film: shown once to a Natively-key user, retired by watching; never shown once watched elsewhere', () => {
+  const user = { hasNativelyKey: true };
+  const first = launch(policy.emptyLedger(Date.now()), user).run(60_000);
+  assert.deepEqual(first.seen, ['demo_video'], 'no Plans card for a key holder: the film comes first');
+  first.close('acted').end();
+  assert.equal(policy.entryOf(first.ledger, 'demo_video').retired, true, 'watching it retires the card');
+
+  const next = launch(age(first.ledger, H), user).run(60_000);
+  assert.deepEqual(next.seen, ['browser_extension'], 'the slot goes to the next card');
+  next.end();
+
+  // Opened from the Welcome screen or Setup & Help before the card ever showed
+  // (src/lib/demoVideo.ts records "acted"): the card never comes.
+  const watchedFirst = policy.applyOutcome(policy.emptyLedger(Date.now()), 'demo_video', 'acted', Date.now());
+  const fresh = launch(watchedFirst, user).run(60_000);
+  assert.deepEqual(fresh.seen, ['browser_extension']);
+  fresh.end();
+});
+
+test('8b. the demo film put off: back after 7 days, at most three times', () => {
+  const user = { hasNativelyKey: true, extensionConnected: true, hasProfile: true, hasJD: true };
+  let s = launch(policy.emptyLedger(Date.now()), user).run(60_000);
+  assert.deepEqual(s.seen, ['demo_video']);
+  s.close('later').end();
+  const film = (sess) => sess.seen.filter((id) => id === 'demo_video');
+  const back = (ledger, days) => launch(age(ledger, days * D), user).run(60_000);
+  const closeFilm = (sess) => { if (sess.active() === 'demo_video') sess.close('later'); return sess; };
+  s = back(s.ledger, 6); assert.deepEqual(film(s), [], 'not before 7 days'); s.end();
+  s = back(s.ledger, 1); assert.deepEqual(film(s), ['demo_video'], 'back after 7 days'); closeFilm(s).end();
+  s = back(s.ledger, 21); assert.deepEqual(film(s), ['demo_video'], 'back after 21 more'); closeFilm(s).end();
+  s = back(s.ledger, 400); assert.deepEqual(film(s), [], 'the third "Not now" retired it'); s.end();
 });

@@ -85,6 +85,11 @@ describe('buildMailtoLink', () => {
         assert.ok(!query.includes('+'));
     });
 
+    test('several recipients keep a plain comma between them', () => {
+        const { to } = parse(buildMailtoLink('ana@example.com, bo+x@example.com', 's', 'b'));
+        assert.equal(to, 'ana%40example.com,bo%2Bx%40example.com');
+    });
+
     test('newlines are percent-encoded', () => {
         const { query } = parse(buildMailtoLink('ana@example.com', 's', 'a\nb\r\nc'));
         assert.equal(query, 'subject=s&body=a%0Ab%0D%0Ac');

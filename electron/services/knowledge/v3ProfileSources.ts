@@ -52,10 +52,35 @@ function canonicalProfileSourceId(kind: 'resume' | 'jd' | 'fact'): string {
  * spoken in the first person as the user's own number — and it could be the
  * previous résumé's guess, because the estimate cache is unkeyed.
  *
- * PROFILE_FACT is reserved for facts the user stated or verified. None has a
- * production store yet (profile_custom_notes is orphaned), so the pool is empty
- * and a salary-expectation question is answered as unstated — which it is.
+ * PROFILE_FACT is reserved for facts the user stated or verified. Since
+ * 2026-10-14 it has a store: "Cue Cards" in Profile Intelligence
+ * (ownAnswers.ts, OwnAnswersStore.ts), where the user writes or approves what
+ * they say about themselves. Only those answers are served here; a draft
+ * Natively wrote and the user has not approved never is. With none saved the
+ * pool is empty and a salary-expectation question is answered as unstated,
+ * which it is.
  */
+
+/** The user's own saved answers as one profile document, or null when there are none. */
+function ownAnswersDoc(): ProfileDocLike | null {
+  try {
+    const { listOwnAnswers } = require('./OwnAnswersStore') as typeof import('./OwnAnswersStore');
+    const { servedOwnAnswers } = require('./ownAnswers') as typeof import('./ownAnswers');
+    const answers = servedOwnAnswers(listOwnAnswers());
+    if (answers.length === 0) return null;
+    return {
+      kind: 'fact',
+      sourceId: canonicalProfileSourceId('fact'),
+      // The content hash: an edited answer is a new version, so the next turn reads the new words.
+      versionId: crypto.createHash('sha1').update(JSON.stringify(answers)).digest('hex').slice(0, 16),
+      fileName: 'Your own answers (Profile Intelligence)',
+      structured: { ownAnswers: answers },
+    };
+  } catch (err) {
+    try { console.warn('[V3] own answers unavailable this turn:', (err as Error)?.message ?? err); } catch { /* noop */ }
+    return null;
+  }
+}
 
 export interface CollectedProfileSources {
   docs: ProfileDocLike[];
@@ -136,16 +161,20 @@ export function collectV3ProfileSources(orchestrator: unknown): CollectedProfile
       });
       resolved.push({ role: 'profile_job_description', id });
     }
-
+    const own = ownAnswersDoc();
+    if (own) {
+      docs.push(own);
+      resolved.push({ role: 'profile_fact', id: own.sourceId });
+    }
 
     return {
       docs,
       counts: {
         profileResume: ctx.activeResume ? 1 : 0,
         profileJd: ctx.activeJD ? 1 : 0,
-        // No derived facts are served (2026-09-30): see the note above
-        // collectV3ProfileSources — a salary ESTIMATE is not a profile fact.
-        profileFact: 0,
+        // Only what the user wrote or approved (see the note above). No derived
+        // fact is served: a salary ESTIMATE is not a profile fact.
+        profileFact: own ? 1 : 0,
       },
       resolved,
     };

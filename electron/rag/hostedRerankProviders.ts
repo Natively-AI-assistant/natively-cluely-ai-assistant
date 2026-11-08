@@ -21,6 +21,8 @@
  * Jina's own API is the only way to actually use it.
  */
 
+import { nativelyApiBase } from '../services/nativelyApiBase';
+
 export type HostedRerankProviderId = 'natively' | 'openrouter' | 'jina' | 'voyage';
 
 /** The two field names that vary between rerank APIs. Absent = Cohere's. */
@@ -68,7 +70,7 @@ export interface HostedRerankProvider {
  * silently bills production.
  */
 const NATIVELY_RERANK_BASE_URL =
-  `${(process.env.NATIVELY_API_URL || 'https://api.natively.software').replace(/\/+$/, '')}/v1`;
+  `${nativelyApiBase()}/v1`;
 
 export const HOSTED_RERANK_PROVIDERS: Record<HostedRerankProviderId, HostedRerankProvider> = {
   /**

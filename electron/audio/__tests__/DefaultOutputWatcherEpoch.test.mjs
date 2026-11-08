@@ -35,8 +35,8 @@ test('default-output route-change rebuild aborts when the meeting generation has
     'BUG: handleDefaultOutputChanged must verify both isMeetingActive and captured generation.',
   );
   assert.ok(
-    /await\s+resolveMacScreenCaptureCapability[\s\S]*if\s*\(\s*!isCurrentMeeting\s*\(\s*\)\s*\)\s*\{[\s\S]*return;/.test(body),
-    'BUG: handleDefaultOutputChanged must re-check the generation after awaiting resolveMacScreenCaptureCapability before mutating systemAudioCapture.',
+    /await\s+resolveMacSystemAudioCapability[\s\S]*if\s*\(\s*!isCurrentMeeting\s*\(\s*\)\s*\)\s*\{[\s\S]*return;/.test(body),
+    'BUG: handleDefaultOutputChanged must re-check the generation after awaiting resolveMacSystemAudioCapability before mutating systemAudioCapture.',
   );
 });
 
@@ -77,8 +77,8 @@ test('system audio recovery handler aborts when the meeting generation has chang
     'BUG: setupAudioRecoveryHandler must check both isMeetingActive and the captured recovery generation.',
   );
   assert.ok(
-    /await\s+resolveMacScreenCaptureCapability\s*\(\s*['"]system audio recovery['"]\s*\)[\s\S]*if\s*\(\s*!isRecoveryCurrentMeeting\s*\(\s*\)\s*\)\s*\{[\s\S]*return;/.test(setupBody),
-    'BUG: setupAudioRecoveryHandler must re-check the generation after awaiting resolveMacScreenCaptureCapability before installing a fresh SystemAudioCapture.',
+    /await\s+resolveMacSystemAudioCapability\s*\(\s*['"]system audio recovery['"]\s*\)[\s\S]*if\s*\(\s*!isRecoveryCurrentMeeting\s*\(\s*\)\s*\)\s*\{[\s\S]*return;/.test(setupBody),
+    'BUG: setupAudioRecoveryHandler must re-check the generation after awaiting resolveMacSystemAudioCapability before installing a fresh SystemAudioCapture.',
   );
   assert.ok(
     /if\s*\(\s*this\._systemAudioRecoveryAttempts\s*>=\s*3\s*&&\s*isRecoveryCurrentMeeting\s*\(\s*\)\s*\)/.test(setupBody),

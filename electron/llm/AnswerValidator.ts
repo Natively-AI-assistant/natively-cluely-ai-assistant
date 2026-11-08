@@ -773,6 +773,36 @@ export const hasStrictCodingScaffoldSignal = (answer: string): boolean => {
  * contamination? Technical types require the strict signal; everything else
  * keeps the historical loose eligibility.
  */
+/**
+ * Detects whether a model answer refused to solve the problem on the grounds
+ * of a live test, assessment, contest, or exam (the shape seen in issue #647:
+ * "I can't provide a solution for a live HackerRank test. I can explain the
+ * dynamic array algorithm or help you practice with a similar problem outside
+ * the assessment."). — point the ipcHandlers' refusal-triggered retry at this.
+ *
+ * The refusal is the MODEL's own wording, so this matches the sentence
+ * patterns a refusal takes ("can't/cannot provide", "can't solve", "not
+ * allowed to solve", "unable to provide", "refuse to answer") combined
+ * within one another's reach with an assessment word (assessment, contest,
+ * exam, live test, HackerRank, LeetCode, CodeSignal, Codility). Either order
+ * counts — refusal first, platform second, or the reverse — because the
+ * observed refusal flips that order across paraphrases.
+ *
+ * A MISSING code block is deliberately not part of this test: a refusal is
+ * prose about not answering, and asking for code would wrongly catch a
+ * spoken answer that mentions HackerRank in passing.
+ */
+export const isAssessmentRefusal = (answer: string): boolean => {
+  if (!answer) return false;
+  const refusal = /\b(?:can(?:not|['’]t)\s+provide|can(?:not|['’]t)\s+solve|not\s+allowed\s+to\s+solve|unable\s+to\s+provide|refuse\s+to\s+(?:answer|solve|provide))\b/i;
+  const platform = /\b(?:hackerrank|leetcode|codesignal|codility|assessment|contest|exam|live\s+test)\b/i;
+  if (!refusal.test(answer) || !platform.test(answer)) return false;
+  // Within 240 chars of each other, so "I can't solve this problem" does not
+  // match a HackerRank mention three paragraphs away.
+  return new RegExp(`${refusal.source}[\\s\\S]{0,240}${platform.source}`, 'i').test(answer)
+    || new RegExp(`${platform.source}[\\s\\S]{0,240}${refusal.source}`, 'i').test(answer);
+};
+
 export const isScaffoldRegenerationEligible = (answerType: AnswerType, answer: string): boolean => {
   if (!hasUnrecoveredScaffoldContamination(answerType, answer)) return false;
   if (STRICT_SCAFFOLD_SIGNAL_TYPES.has(answerType)) return hasStrictCodingScaffoldSignal(answer);

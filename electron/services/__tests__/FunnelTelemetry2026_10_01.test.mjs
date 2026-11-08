@@ -156,7 +156,7 @@ describe('FunnelTelemetry', { skip: HAVE_BUILD ? false : 'run `npm run build:ele
     await h.ft.tick();
     const sent = h.posts.flatMap((p) => p.events);
     assert.deepEqual(sent.map((e) => e.event_type), ['app_first_run', 'app_active_day']);
-    assert.deepEqual(sent[1].props, { days_since_install: 0, has_own_ai: true, has_api_key: false, has_pro: false, meetings_total: 0 });
+    assert.deepEqual(sent[1].props, { days_since_install: 0, has_own_ai: true, has_api_key: false, has_pro: false, meetings_total: 0, surface: 'overlay' });
     for (const e of sent) {
       assert.equal(e.install_id, h.installId());
       assert.equal(e.entitlement, 'byok');
@@ -207,18 +207,36 @@ describe('FunnelTelemetry', { skip: HAVE_BUILD ? false : 'run `npm run build:ele
     h.ft.meetingStarted();
     const events = h.queue().map((e) => [e.event_type, e.props]);
     assert.deepEqual(events, [
-      ['meeting_started', { first: true, ai: 'own' }],
-      ['meeting_ended', { minutes: 0, first: true }],
-      ['meeting_started', { first: false, ai: 'own' }],
+      ['meeting_started', { first: true, ai: 'own', surface: 'overlay' }],
+      ['meeting_ended', { minutes: 0, first: true, surface: 'overlay', notepad_open: false, notes_typed: false, asks: 0, recipes: 0 }],
+      ['meeting_started', { first: false, ai: 'own', surface: 'overlay' }],
     ]);
     assert.equal(h.state().meetings, 2);
+  });
+
+  test('a Resume (2026-11-02) is reported as one, never first, and not counted as another meeting', async () => {
+    const h = load({ packaged: true });
+    h.ft.setSnapshotResolver(() => SNAPSHOT);
+    await h.ft.tick(); // a new install
+    h.ft.meetingStarted(0, 'notepad', true, true); // the very first start is a resume
+    h.ft.meetingEnded();
+    h.ft.meetingStarted(0, 'notepad');               // then a new meeting
+    h.ft.meetingEnded();
+    const events = h.queue().map((e) => [e.event_type, e.props]);
+    assert.deepEqual(events, [
+      ['meeting_started', { first: false, ai: 'own', surface: 'notepad', resumed: true }],
+      ['meeting_ended', { minutes: 0, first: false, resumed: true, surface: 'notepad', notepad_open: true, notes_typed: false, asks: 0, recipes: 0 }],
+      ['meeting_started', { first: true, ai: 'own', surface: 'notepad' }],
+      ['meeting_ended', { minutes: 0, first: true, surface: 'notepad', notepad_open: true, notes_typed: false, asks: 0, recipes: 0 }],
+    ], 'resumed only on the resume, so other meetings send what they always did');
+    assert.equal(h.state().meetings, 1, 'the resume continued a meeting; only the new one counts');
   });
 
   test('an install that upgraded into this code never has a "first" meeting', () => {
     const h = load({ packaged: true, state: { firstRunSent: true, lastActiveDay: '', meetings: 0 } });
     h.ft.setSnapshotResolver(() => SNAPSHOT);
     h.ft.meetingStarted();
-    assert.deepEqual(h.queue()[0].props, { first: false, ai: 'own' });
+    assert.deepEqual(h.queue()[0].props, { first: false, ai: 'own', surface: 'overlay' });
   });
 
   test('a key entry carries how long ago the trial started and the own-keys exit happened', () => {
@@ -379,6 +397,73 @@ describe('FunnelTelemetry', { skip: HAVE_BUILD ? false : 'run `npm run build:ele
       h.ft.meetingEnded();           // no count available: the field is left out, not guessed
       assert.equal('answers' in h.queue().at(-1).props, false);
     });
+  });
+
+  // ── The notepad (2026-11-01) ───────────────────────────────────────────────
+
+  test('a notepad meeting says so, and its end carries what was done in the notepad, as counts', () => {
+    const h = load({ packaged: true, state: { firstRunSent: true } });
+    h.ft.setSnapshotResolver(() => SNAPSHOT);
+    h.ft.meetingStarted(0, 'notepad');
+    h.ft.notepadUsed('notes_typed');
+    h.ft.notepadUsed('notes_typed');           // every keystroke: still one yes
+    h.ft.notepadUsed('ask');
+    h.ft.notepadUsed('ask');
+    h.ft.notepadUsed('recipe', { recipe: 'what-did-i-miss' });
+    h.ft.meetingEnded(0);
+    const started = h.queue().find((e) => e.event_type === 'meeting_started');
+    const ended = h.queue().find((e) => e.event_type === 'meeting_ended');
+    assert.equal(started.props.surface, 'notepad');
+    assert.deepEqual(ended.props, { minutes: 0, first: false, answers: 0, surface: 'notepad', notepad_open: true, notes_typed: true, asks: 2, recipes: 1 });
+    // Once per action, recipe and phase a day; the recipe goes as its id with "_".
+    const used = h.queue().filter((e) => e.event_type === 'notepad_used').map((e) => e.props);
+    assert.deepEqual(used, [
+      { action: 'notes_typed', phase: 'live' },
+      { action: 'ask', phase: 'live' },
+      { action: 'recipe', phase: 'live', recipe: 'what_did_i_miss' },
+    ]);
+  });
+
+  test('an overlay meeting with the notepad opened partway counts it as open', () => {
+    const h = load({ packaged: true, state: { firstRunSent: true } });
+    h.ft.setSnapshotResolver(() => SNAPSHOT);
+    h.ft.meetingStarted(0, 'overlay', false);
+    h.ft.notepadUsed('opened');
+    h.ft.meetingEnded(0);
+    const ended = h.queue().find((e) => e.event_type === 'meeting_ended');
+    assert.equal(ended.props.surface, 'overlay');
+    assert.equal(ended.props.notepad_open, true);
+    assert.equal(ended.props.asks, 0);
+  });
+
+  test('notepad_used: unknown actions and recipes are refused; after Stop it is the ended phase; a switch reports only a change', () => {
+    const h = load({ packaged: true, state: { firstRunSent: true } });
+    assert.equal(h.ft.notepadUsed('typed_a_secret'), 'invalid');
+    assert.equal(h.ft.notepadUsed('recipe', { recipe: 'not-a-recipe' }), 'invalid');
+    assert.equal(h.ft.notepadUsed('notes_copied', { phase: 'ended' }), 'queued');
+    assert.equal(h.ft.notepadUsed('notes_copied', { phase: 'ended' }), 'duplicate');
+    assert.equal(h.ft.notepadUsed('opened'), 'queued', 'no meeting running: the idle phase');
+    assert.equal(h.ft.meetingSurfaceSet('overlay', 'overlay'), 'duplicate');
+    assert.equal(h.ft.meetingSurfaceSet('overlay', 'notepad'), 'queued');
+    const rows = h.queue().map((e) => [e.event_type, e.props]);
+    assert.deepEqual(rows, [
+      ['notepad_used', { action: 'notes_copied', phase: 'ended' }],
+      ['notepad_used', { action: 'opened', phase: 'idle' }],
+      ['meeting_surface_set', { to: 'notepad' }],
+    ]);
+  });
+
+  test('notepad_used is off with Usage statistics off, and in an unpackaged build', () => {
+    assert.equal(load({ packaged: true, settings: { telemetryEnabled: false } }).ft.notepadUsed('opened'), 'disabled');
+    assert.equal(load({ packaged: false }).ft.notepadUsed('opened'), 'disabled');
+  });
+
+  test('the daily snapshot says what a meeting opens on this install', async () => {
+    const h = load({ packaged: true, settings: { meetingSurface: 'notepad' } });
+    h.ft.setSnapshotResolver(() => SNAPSHOT);
+    await h.ft.tick();
+    const day = h.posts.flatMap((p) => p.events).find((e) => e.event_type === 'app_active_day');
+    assert.equal(day.props.surface, 'notepad');
   });
 
   // ── Registering the install ────────────────────────────────────────────────

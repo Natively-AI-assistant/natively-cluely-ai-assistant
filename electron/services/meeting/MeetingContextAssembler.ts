@@ -17,6 +17,9 @@ import { cleanUserNotes, cleanVocabulary, userNoteHeadings, type NotesPromptCont
 export interface AssembleSummaryResult {
   summary: MeetingSummaryV3 | null;
   meta: MeetingSummaryTelemetryMeta;
+  /** The meeting's name as the overview call wrote it, unvetted (MeetingPersistence
+   *  vets it). Absent when that call did not run or wrote none. */
+  proposedTitle?: string;
 }
 
 export interface AssembleSummaryParams {
@@ -31,10 +34,12 @@ export interface AssembleSummaryParams {
   startedAtIso?: string;
   startedAtMs?: number;
   // When true, generate an LLM-based follow-up draft (Phase 8). Gated by the caller on the
-  // followUpDraftV2 flag + post_call_summary scope. Only a notes Regenerate on a meeting
-  // that already has a draft sets it — the draft is otherwise written on demand.
+  // followUpDraftV2 flag + post_call_summary scope. No caller sets it since 2026-10-18:
+  // a follow-up is written only when the user asks (MeetingPersistence.regenerateFollowUpDraft).
   generateFollowUpDraft?: boolean;
   followUpTone?: FollowUpTone;
+  // The user's own voice for the re-draft ('your_style'), when the mode has samples.
+  followUpStyleGuide?: string;
   // The user's own name for the draft's sign-off (Google account behind Calendar sync).
   followUpSenderName?: string;
   // When true, run the constrained LLM Summary polish (#1). Gated by the caller on the
@@ -174,7 +179,9 @@ export class MeetingContextAssembler {
 
       // #1 — Constrained LLM polish (note-content only, "no new tokens" gated). Polishes both
       // the bullet Summary (summary.tldr) and the whole-meeting Overview paragraph. On any
-      // rejection the deterministic versions are kept.
+      // rejection the deterministic versions are kept. The overview call also names the
+      // meeting, so there is no title call afterwards (unless the polish is off).
+      let proposedTitle: string | undefined;
       if (params.polishSummary && (summary.tldr.length > 0 || validAtoms.length > 0)) {
         try {
           const polisher = new SummaryPolisher(this.llmHelper);
@@ -194,9 +201,29 @@ export class MeetingContextAssembler {
             polisher.polishOverview({ ...baseInputs, briefs, topics, totalTokensEstimate: normalized.totalTokensEstimate, notesContext }),
           ]);
           if (polished && polished.length > 0) summary.tldr = polished;
-          if (polishedOverview) summary.overview = polishedOverview;
+          if (polishedOverview.overview) summary.overview = polishedOverview.overview;
+          if (polishedOverview.title) proposedTitle = polishedOverview.title;
         } catch (e) {
           console.warn('[MeetingContextAssembler] summary polish failed (non-fatal):', (e as Error)?.message);
+        }
+      } else if (summary.tldr.length > 0 || validAtoms.length > 0) {
+        // Polish switched off: no overview call to carry the name, so one small call
+        // writes the title alone (the request the old separate title call made).
+        try {
+          const named = await new SummaryPolisher(this.llmHelper).nameMeeting({
+            deterministicSummary: summary.tldr,
+            decisions: summary.decisions,
+            actionItems: summary.actionItems,
+            risks: summary.risks,
+            sections: summary.sections,
+            mode: params.modeTemplateType,
+            briefs: validAtoms.map(a => a.brief).filter(Boolean),
+            topics: summary.topics || [],
+            notesContext,
+          });
+          if (named) proposedTitle = named;
+        } catch (e) {
+          console.warn('[MeetingContextAssembler] meeting naming failed (non-fatal):', (e as Error)?.message);
         }
       }
 
@@ -208,6 +235,7 @@ export class MeetingContextAssembler {
             mode: params.modeTemplateType,
             tone: params.followUpTone,
             senderName: params.followUpSenderName,
+            styleGuide: params.followUpStyleGuide,
           });
           summary.followUpDraft = draft;
         } catch (e) {
@@ -224,6 +252,7 @@ export class MeetingContextAssembler {
 
       return {
         summary,
+        ...(proposedTitle ? { proposedTitle } : {}),
         meta: {
           chunkCount,
           v3Used: true,

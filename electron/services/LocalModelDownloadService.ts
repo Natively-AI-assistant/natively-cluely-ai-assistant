@@ -44,6 +44,7 @@ import { Worker } from 'worker_threads';
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import { retireOnnxWorker, trackOnnxWorker } from '../utils/onnxWorkerShutdown';
 
 export type LocalModelDownloadStatus =
   | 'downloading'  // bytes are arriving from the network
@@ -61,6 +62,9 @@ export interface LocalModelDownloadEntry {
   startedAt: number;
   updatedAt: number;
   error?: string;
+  // The last attempt failed because the files it produced are damaged: the
+  // next start() discards them (provider.discardDamaged) instead of resuming.
+  damaged?: boolean;
 }
 
 // Provider contract — anything that can download a model via a Worker thread
@@ -75,6 +79,11 @@ export interface LocalModelDownloadProvider {
   // "fully downloaded" status. Also called on rehydration to decide whether
   // an `interrupted` entry should flip to `complete`.
   isModelCached(modelId: string): boolean;
+  // Whether the files a download produces are complete, when that differs
+  // from "usable" (Whisper: an older copy can be usable while the current one
+  // is not downloaded). Decides whether start() downloads and what the verify
+  // step accepts. Absent = isModelCached.
+  isDownloadComplete?(modelId: string): boolean;
 
   // Cleans any partial bytes on disk for a given modelId. Used on
   // `cancel` to make sure a re-install doesn't try to "resume from a
@@ -93,6 +102,30 @@ export interface LocalModelDownloadProvider {
   // Builds the message to postMessage the worker on init. Provider-owned
   // so the service doesn't have to know about cacheDir / dtype / etc.
   buildInitMessage(modelId: string): unknown;
+
+  // Optional. Called right before the worker is spawned. The provider removes
+  // anything a previous, unfinished download left behind and marks the model
+  // as "download in progress" on disk, so a quit, crash or cancel from here on
+  // can never be mistaken for an installed model (see
+  // modelManager.markModelDownloadStarted).
+  prepareDownload?(modelId: string): void;
+
+  // Optional. Called when the worker has loaded the finished files, BEFORE
+  // isModelCached() is asked to verify them — it clears the in-progress mark.
+  finishDownload?(modelId: string): void;
+
+  // Optional. Turns a raw worker error into the sentence the user is shown.
+  describeError?(message: string): string;
+  // Whether a worker error means the downloaded files themselves are bad.
+  isDamagedError?(message: string): boolean;
+  // Remove everything the download wrote, so the next attempt starts clean.
+  // Absent = deletePartial.
+  discardDamaged?(modelId: string): void;
+
+  // Optional. Anything asynchronous the provider needs settled before
+  // spawnWorker() (which is synchronous) — e.g. asking the system which proxy
+  // applies. Must never reject. Awaited by startWhenReady().
+  beforeSpawn?(): Promise<void>;
 }
 
 export interface LocalModelDownloadServiceOptions {
@@ -121,10 +154,25 @@ interface SerializedState {
   }>;
 }
 
+// The singleton lives on globalThis, NOT in a static field — the same rule,
+// for the same reason, as the ONNX semaphore (utils/onnxThreadConfig.ts) and
+// the shared Nemotron worker registry: build-electron gives every source file
+// its own bundle, so a static field is one instance PER BUNDLE. This service
+// is "the one owner of every model download" only if LocalWhisperSTT, main and
+// the IPC handlers all reach the same object, whichever bundle each was loaded
+// from.
+function singletonHolder(): { __nativelyLocalModelDownloadServiceV1__?: LocalModelDownloadService } {
+  return globalThis as unknown as { __nativelyLocalModelDownloadServiceV1__?: LocalModelDownloadService };
+}
+
 export class LocalModelDownloadService {
   private readonly entries = new Map<string, LocalModelDownloadEntry>();
   // Live workers, keyed by `${provider}:${modelId}`. One per modelId.
   private readonly workers = new Map<string, Worker>();
+  // Workers that were asked to stop and have not exited yet, per key. A stop
+  // is cooperative (see retireOnnxWorker), so a worker inside a native model
+  // load lives on for a moment and may still have the model's files open.
+  private readonly retiring = new Map<string, Set<Worker>>();
   private readonly emitter = new EventEmitter();
   private readonly opts: Required<Omit<LocalModelDownloadServiceOptions, 'providers' | 'disablePersistence'>> & {
     providers: Map<string, LocalModelDownloadProvider>;
@@ -132,7 +180,6 @@ export class LocalModelDownloadService {
   };
   private persistenceTimer: NodeJS.Timeout | null = null;
   private disposed = false;
-  private static _instance: LocalModelDownloadService | null = null;
 
   /**
    * Singleton accessor. main.ts and ipcHandlers.ts both reach the same
@@ -141,16 +188,20 @@ export class LocalModelDownloadService {
    * persistence path; `__resetForTests()` is available for full isolation.
    */
   static getInstance(): LocalModelDownloadService {
-    if (!this._instance) this._instance = new LocalModelDownloadService();
-    return this._instance;
+    const g = singletonHolder();
+    if (!g.__nativelyLocalModelDownloadServiceV1__) {
+      g.__nativelyLocalModelDownloadServiceV1__ = new LocalModelDownloadService();
+    }
+    return g.__nativelyLocalModelDownloadServiceV1__;
   }
 
   /**
    * Test-only: replace the singleton with a fresh instance.
    */
   static __resetForTests(): void {
-    if (this._instance) this._instance.dispose();
-    this._instance = null;
+    const g = singletonHolder();
+    g.__nativelyLocalModelDownloadServiceV1__?.dispose();
+    g.__nativelyLocalModelDownloadServiceV1__ = undefined;
   }
 
   constructor(opts: LocalModelDownloadServiceOptions = {}) {
@@ -187,7 +238,7 @@ export class LocalModelDownloadService {
     for (const [key, entry] of this.entries) {
       if (entry.provider !== provider.name || entry.status !== 'interrupted') continue;
       try {
-        if (provider.isModelCached(entry.modelId)) {
+        if (downloadCompleteOnDisk(provider, entry.modelId)) {
           this.entries.set(key, { ...entry, status: 'complete', progress: 100 });
           // Broadcast so any open Settings panel sees the updated badge
           // without waiting for the next user interaction.
@@ -225,13 +276,38 @@ export class LocalModelDownloadService {
     if (existing && (existing.status === 'downloading' || existing.status === 'verifying')) {
       return { success: true, alreadyDownloading: true };
     }
+    // The worker of a download that was just cancelled is still on its way
+    // out. Starting over now would delete and rewrite files it may hold open
+    // (on Windows the delete fails outright and the new worker then loads the
+    // stale, half-written ones).
+    if ((this.retiring.get(key)?.size ?? 0) > 0) {
+      return { success: false, error: 'The previous download of this model is still stopping. Try again in a few seconds.' };
+    }
     // If a prior attempt left cancelled/error/interrupted state, purge
-    // partial bytes — transformers can't resume from byte 0 (no HTTP Range).
-    // 'interrupted' is included because a mid-download process kill can leave
-    // a corrupt partial that passes the size>0 check in isModelCached but
-    // triggers "Protobuf parsing failed" when ORT tries to load it.
+    // partial bytes. 'interrupted' is included because a mid-download process
+    // kill can leave a corrupt partial that passes the size>0 check in
+    // isModelCached but triggers "Protobuf parsing failed" when ORT tries to
+    // load it. The Whisper provider keeps its resume points (part files, and
+    // ONNX files it re-checks against the server's size): see
+    // resumableDownload.ts.
     if (existing && (existing.status === 'cancelled' || existing.status === 'error' || existing.status === 'interrupted')) {
-      try { provider.deletePartial(modelId); } catch { /* best-effort */ }
+      try {
+        if (existing.status === 'error' && existing.damaged && provider.discardDamaged) provider.discardDamaged(modelId);
+        else provider.deletePartial(modelId);
+      } catch { /* best-effort */ }
+    }
+    // From here until a worker has loaded the finished files, the model is
+    // "download in progress" on disk — not just in this process's memory.
+    //
+    // Not for a model that is already whole: starting a "download" of an
+    // installed model only re-verifies it, and marking it in progress would
+    // turn a quit during that check into a full re-download of good files.
+    let alreadyOnDisk = false;
+    try { alreadyOnDisk = downloadCompleteOnDisk(provider, modelId); } catch { alreadyOnDisk = false; }
+    if (!alreadyOnDisk) {
+      try { provider.prepareDownload?.(modelId); } catch (e: any) {
+        console.warn(`[LocalModelDownloadService] prepareDownload failed for ${modelId}:`, e?.message);
+      }
     }
     let worker: Worker;
     try {
@@ -293,6 +369,39 @@ export class LocalModelDownloadService {
   }
 
   /**
+   * start(), after giving the provider its chance to prepare (beforeSpawn).
+   * This is the entry point every caller that CAN wait should use; start()
+   * itself stays synchronous and works from whatever the provider last
+   * prepared.
+   */
+  async startWhenReady(providerName: string, modelId: string): Promise<{ success: boolean; error?: string; alreadyDownloading?: boolean }> {
+    const provider = this.opts.providers.get(providerName);
+    if (provider?.beforeSpawn) {
+      try { await provider.beforeSpawn(); } catch { /* never block a download on preparation */ }
+    }
+    // Cancel followed straight away by Download: give the cancelled worker its
+    // moment to exit instead of refusing the click (start() below still
+    // refuses if it has not gone by then).
+    await this.waitForRetiring(this.keyOf(providerName, modelId));
+    return this.start(providerName, modelId);
+  }
+
+  /** Resolves when no stopped worker for `key` is still alive, or after `timeoutMs`. */
+  private waitForRetiring(key: string, timeoutMs: number = 10_000): Promise<void> {
+    const pending = this.retiring.get(key);
+    if (!pending || pending.size === 0) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      let done = false;
+      const finish = () => { if (done) return; done = true; clearTimeout(timer); resolve(); };
+      const timer = setTimeout(finish, timeoutMs);
+      (timer as any).unref?.();
+      for (const w of pending) {
+        w.once('exit', () => { if ((this.retiring.get(key)?.size ?? 0) === 0) finish(); });
+      }
+    });
+  }
+
+  /**
    * Explicit user-initiated cancel. Terminates the worker and marks the entry
    * `cancelled`; on next `start()` the provider will delete any partial bytes.
    * Safe to call when no download is in flight — returns `{ success: false }`.
@@ -310,6 +419,77 @@ export class LocalModelDownloadService {
       updatedAt: Date.now(),
     });
     return { success: true };
+  }
+
+  /** True once a provider with this name has been registered. */
+  hasProvider(providerName: string): boolean {
+    return this.opts.providers.has(providerName);
+  }
+
+  /** Whether the provider reports this model as fully on disk. False on any error. */
+  isModelReady(providerName: string, modelId: string): boolean {
+    const provider = this.opts.providers.get(providerName);
+    if (!provider) return false;
+    try { return provider.isModelCached(modelId); } catch { return false; }
+  }
+
+  /**
+   * Resolve once `modelId` is fully on disk, starting its download when
+   * nothing has started it yet and joining the one in flight when something
+   * has. Rejects when the download fails or is cancelled.
+   *
+   * WHY THIS EXISTS: this service used to be one of two things that could
+   * download a model. The other was a meeting start — LocalWhisperSTT spawned
+   * its own worker, which fetched the same files into the same paths with no
+   * idea a download was already running (the launch-time auto-download, or a
+   * click in Settings). Two writers on one file: for transformers models the
+   * second truncated what the first was about to load; for Nemotron the
+   * loser's rename failed and the resulting "no such file" was then treated
+   * as corruption and deleted the model the winner had just finished. Every
+   * download now goes through here, and a meeting waits for it.
+   *
+   * `shouldAbandon` lets a caller that has moved on (meeting stopped) drop its
+   * wait without cancelling the download for everyone else.
+   */
+  async ensureDownloaded(
+    providerName: string,
+    modelId: string,
+    opts: { onProgress?: (progress: number) => void; shouldAbandon?: () => boolean } = {},
+  ): Promise<void> {
+    if (!this.opts.providers.has(providerName)) {
+      throw new Error(`unknown-provider:${providerName}`);
+    }
+    if (this.isModelReady(providerName, modelId)) return;
+    const started = await this.startWhenReady(providerName, modelId);
+    if (!started.success) {
+      throw new Error(started.error ?? 'The model download could not start.');
+    }
+    const key = this.keyOf(providerName, modelId);
+    await new Promise<void>((resolve, reject) => {
+      const settle = (entry: LocalModelDownloadEntry | undefined): boolean => {
+        if (!entry) return false;
+        if (entry.status === 'complete') { resolve(); return true; }
+        if (entry.status === 'downloading' || entry.status === 'verifying') {
+          try { opts.onProgress?.(entry.progress); } catch { /* a listener must not break the wait */ }
+          return false;
+        }
+        reject(new Error(entry.error ?? `The model download was ${entry.status}.`));
+        return true;
+      };
+      const unsubscribe = this.subscribe(({ key: k, entry }) => {
+        if (k !== key) return;
+        if (opts.shouldAbandon?.()) {
+          unsubscribe();
+          reject(new Error('The wait for the model download was abandoned.'));
+          return;
+        }
+        if (settle(entry)) unsubscribe();
+      });
+      // start() publishes its first state in a microtask, and a download that
+      // was already in flight may have finished between the check above and
+      // the subscription: look at the state as it stands right now too.
+      if (settle(this.entries.get(key))) unsubscribe();
+    });
   }
 
   /**
@@ -404,8 +584,11 @@ export class LocalModelDownloadService {
       // "fully downloaded" bug for dtype changes and torn external-data
       // companions.
       this.setEntry(key, { ...cur, status: 'verifying', progress: 99, updatedAt: Date.now() });
+      // The worker LOADED what it downloaded, so the files are whole: lift the
+      // in-progress mark, then let isModelCached confirm the right set exists.
+      try { provider.finishDownload?.(cur.modelId); } catch { /* verified below */ }
       const ok = (() => {
-        try { return provider.isModelCached(cur.modelId); } catch { return false; }
+        try { return downloadCompleteOnDisk(provider, cur.modelId); } catch { return false; }
       })();
       const after = this.entries.get(key);
       if (!after) return; // cancel fired during the verify
@@ -428,10 +611,17 @@ export class LocalModelDownloadService {
       }
     } else if (msg?.type === 'error') {
       this.terminateWorker(key);
+      const raw = msg?.message ? String(msg.message) : 'Worker reported error';
+      let shown = raw;
+      try { shown = provider.describeError?.(raw) ?? raw; } catch { shown = raw; }
+      if (shown !== raw) console.warn(`[LocalModelDownloadService] ${key} failed: ${raw}`);
+      let damaged = false;
+      try { damaged = provider.isDamagedError?.(raw) === true; } catch { damaged = false; }
       this.setEntry(key, {
         ...cur,
         status: 'error',
-        error: msg?.message ? String(msg.message) : 'Worker reported error',
+        error: shown,
+        ...(damaged ? { damaged: true } : {}),
         updatedAt: Date.now(),
       });
     }
@@ -456,12 +646,30 @@ export class LocalModelDownloadService {
     const w = this.workers.get(key);
     if (!w) return;
     this.workers.delete(key);
-    // terminate() returns a Promise we deliberately don't await — fire and
-    // forget. The exit handler we registered will run for abnormal exits,
-    // but we've already cleaned up the entry above so the late exit will
-    // no-op (cur.status is no longer 'downloading' / 'verifying').
-    try { w.terminate(); } catch { /* worker already gone */ }
+    // NEVER worker.terminate(): this worker downloads AND loads the model, so
+    // a cancel in the final "loading" phase (or a quit) lands inside a native
+    // ONNX session create, and terminating there aborts the whole app — see
+    // onnxWorkerShutdown.ts. It is asked to exit at its next idle point
+    // instead. The exit handler registered in start() sees it is no longer
+    // the live worker for this key and no-ops.
+    this.trackRetiring(key, w);
+    retireOnnxWorker(w);
     if (!suppressPersistence) this.schedulePersistence();
+  }
+
+  private trackRetiring(key: string, w: Worker): void {
+    // A stand-in without an exit event (unit tests) cannot be tracked, and
+    // must not block the next start() forever.
+    if (typeof (w as any)?.once !== 'function') return;
+    let set = this.retiring.get(key);
+    if (!set) { set = new Set(); this.retiring.set(key, set); }
+    set.add(w);
+    w.once('exit', () => {
+      const cur = this.retiring.get(key);
+      if (!cur) return;
+      cur.delete(w);
+      if (cur.size === 0) this.retiring.delete(key);
+    });
   }
 
   private broadcastToRenderers(key: string, entry: LocalModelDownloadEntry): void {
@@ -666,6 +874,70 @@ export function resolveLocalModelProviderName(modelId: string): string {
   return entry?.sessionLayout === 'nemotron-rnnt' ? 'nemotron' : 'whisper';
 }
 
+function downloadCompleteOnDisk(provider: LocalModelDownloadProvider, modelId: string): boolean {
+  return provider.isDownloadComplete ? provider.isDownloadComplete(modelId) : provider.isModelCached(modelId);
+}
+
+/**
+ * Shared by both local-STT providers: remove what an unfinished download left
+ * behind, then mark the model "download in progress" on disk.
+ *
+ * The leftover check does not rely on this service's own state file — that
+ * file can be missing, stale or from another profile, while the marker sits
+ * next to the bytes it describes.
+ */
+function prepareLocalSttDownload(modelId: string, deletePartial: (id: string) => void): void {
+  const mm = require('../audio/whisper/modelManager') as typeof import('../audio/whisper/modelManager');
+  if (mm.isModelDownloadIncomplete(modelId)) {
+    try { deletePartial(modelId); } catch { /* best-effort; the marker is rewritten below either way */ }
+  }
+  mm.markModelDownloadStarted(modelId);
+}
+
+/**
+ * A download worker, started with the system's proxy when there is one (see
+ * utils/systemProxy.ts). With no proxy the Worker is created exactly as
+ * before — no `env` option at all.
+ */
+function spawnLocalSttDownloadWorker(): Worker {
+  const { Worker } = require('worker_threads') as typeof import('worker_threads');
+  const { resolveWhisperWorkerPath } = require('../audio/whisper/workerPathResolver') as typeof import('../audio/whisper/workerPathResolver');
+  const { getCachedSystemProxy, workerEnvForProxy } = require('../utils/systemProxy') as typeof import('../utils/systemProxy');
+  const env = workerEnvForProxy(getCachedSystemProxy());
+  return trackOnnxWorker(env ? new Worker(resolveWhisperWorkerPath(), { env }) : new Worker(resolveWhisperWorkerPath()));
+}
+
+async function prepareLocalSttDownloadEnvironment(): Promise<void> {
+  const { refreshSystemProxy } = require('../utils/systemProxy') as typeof import('../utils/systemProxy');
+  await refreshSystemProxy();
+}
+
+function finishLocalSttDownload(modelId: string): void {
+  const mm = require('../audio/whisper/modelManager') as typeof import('../audio/whisper/modelManager');
+  mm.clearModelDownloadMarker(modelId);
+}
+
+/**
+ * The sentence shown when a local STT model fails to download or load. The
+ * platform decides which remedies may be named: the Visual C++ runtime only
+ * on Windows, the macOS version floor only on macOS.
+ */
+function describeLocalSttDownloadError(message: string): string {
+  const { describeLocalModelLoadFailure } = require('../audio/whisper/loadFailure') as typeof import('../audio/whisper/loadFailure');
+  const { listMissingVcRuntimeDlls, resolveOnnxBindingDir } = require('../audio/whisper/windowsVcRuntime') as typeof import('../audio/whisper/windowsVcRuntime');
+  const bindingDir = resolveOnnxBindingDir();
+  return describeLocalModelLoadFailure(message, {
+    platform: process.platform,
+    missingWindowsRuntimeDlls: listMissingVcRuntimeDlls({ extraDirs: bindingDir ? [bindingDir] : [] }),
+    reinstallReplacesDamaged: true,
+  });
+}
+
+function isDamagedLocalSttDownload(message: string): boolean {
+  const { isCorruptModelFailure } = require('../audio/whisper/loadFailure') as typeof import('../audio/whisper/loadFailure');
+  return isCorruptModelFailure(message, { platform: process.platform });
+}
+
 /**
  * Whisper provider — the first consumer of this service. Wired up from
  * main.ts after `app.whenReady()` so it can lazy-require `electron` and the
@@ -688,29 +960,54 @@ export function createWhisperDownloadProvider(): LocalModelDownloadProvider {
         return isModelCached(modelId as any);
       }
     },
+    isDownloadComplete(modelId: string): boolean {
+      const { isModelDownloadComplete } = require('../audio/whisper/modelManager') as typeof import('../audio/whisper/modelManager');
+      const { resolveInferenceConfig: rIC } = require('../audio/whisper/inferenceConfig') as typeof import('../audio/whisper/inferenceConfig');
+      try {
+        return isModelDownloadComplete(modelId, rIC().dtype);
+      } catch {
+        return isModelDownloadComplete(modelId);
+      }
+    },
     deletePartial(modelId: string): void {
-      const { deleteModel } = require('../audio/whisper/modelManager') as typeof import('../audio/whisper/modelManager');
-      try { deleteModel(modelId as any); } catch { /* best-effort */ }
+      // Keeps what a resumed download can reuse; the worker size-checks every
+      // kept file against the server before trusting it (resumableDownload.ts).
+      const { deleteInterruptedModelDownload } = require('../audio/whisper/modelManager') as typeof import('../audio/whisper/modelManager');
+      try { deleteInterruptedModelDownload(modelId); } catch { /* best-effort */ }
+    },
+    prepareDownload(modelId: string): void {
+      prepareLocalSttDownload(modelId, (id) => this.deletePartial(id));
+    },
+    finishDownload(modelId: string): void {
+      finishLocalSttDownload(modelId);
+    },
+    describeError(message: string): string {
+      return describeLocalSttDownloadError(message);
+    },
+    isDamagedError(message: string): boolean {
+      return isDamagedLocalSttDownload(message);
+    },
+    discardDamaged(modelId: string): void {
+      const { discardModelDownload } = require('../audio/whisper/modelManager') as typeof import('../audio/whisper/modelManager');
+      discardModelDownload(modelId);
     },
     preflightCheck(): string | null {
       // Preserve the existing macOS 13 Ventura gate from the IPC handler.
-      if (process.platform === 'darwin') {
-        const os = require('os') as typeof import('os');
-        const darwinMajor = parseInt(os.release().split('.')[0], 10);
-        if (Number.isNaN(darwinMajor) || darwinMajor < 22) {
-          return 'Local Whisper models require macOS 13 Ventura or later.';
-        }
+      {
+        const { onnxRuntimeSupportedOnThisMac, ONNX_MAC_UNSUPPORTED_MESSAGE } = require('../audio/whisper/onnxMacSupport');
+        if (!onnxRuntimeSupportedOnThisMac()) return ONNX_MAC_UNSUPPORTED_MESSAGE;
       }
       return null;
     },
+    beforeSpawn(): Promise<void> {
+      return prepareLocalSttDownloadEnvironment();
+    },
     spawnWorker(): Worker {
-      const { Worker } = require('worker_threads');
-      const { resolveWhisperWorkerPath } = require('../audio/whisper/workerPathResolver') as typeof import('../audio/whisper/workerPathResolver');
-      return new Worker(resolveWhisperWorkerPath());
+      return spawnLocalSttDownloadWorker();
     },
     buildInitMessage(modelId: string): unknown {
       const { buildWorkerInitMessage } = require('../audio/whisper/inferenceConfig') as typeof import('../audio/whisper/inferenceConfig');
-      return buildWorkerInitMessage(modelId);
+      return buildWorkerInitMessage(modelId, { forDownload: true });
     },
   };
 }
@@ -746,6 +1043,24 @@ export function createNemotronDownloadProvider(): LocalModelDownloadProvider {
       const path = require('path') as typeof import('path');
       deletePartialNemotronFiles(path.join(getModelsDir(), ...modelId.split('/')));
     },
+    prepareDownload(modelId: string): void {
+      prepareLocalSttDownload(modelId, (id) => this.deletePartial(id));
+    },
+    finishDownload(modelId: string): void {
+      finishLocalSttDownload(modelId);
+    },
+    describeError(message: string): string {
+      return describeLocalSttDownloadError(message);
+    },
+    isDamagedError(message: string): boolean {
+      return isDamagedLocalSttDownload(message);
+    },
+    discardDamaged(modelId: string): void {
+      const { getModelsDir } = require('../audio/whisper/modelManager') as typeof import('../audio/whisper/modelManager');
+      const { discardNemotronFiles } = require('../audio/whisper/nemotron/downloadFiles') as typeof import('../audio/whisper/nemotron/downloadFiles');
+      const path = require('path') as typeof import('path');
+      discardNemotronFiles(path.join(getModelsDir(), ...modelId.split('/')));
+    },
     preflightCheck(): string | null {
       // Same macOS-13-floor gate every other local model uses. Interface takes
       // no modelId — getAvailableModels() applies the gate uniformly across
@@ -755,10 +1070,11 @@ export function createNemotronDownloadProvider(): LocalModelDownloadProvider {
       const models = getAvailableModels();
       return models.find((m) => m.errorMessage)?.errorMessage ?? null;
     },
+    beforeSpawn(): Promise<void> {
+      return prepareLocalSttDownloadEnvironment();
+    },
     spawnWorker(): Worker {
-      const { Worker } = require('worker_threads');
-      const { resolveWhisperWorkerPath } = require('../audio/whisper/workerPathResolver') as typeof import('../audio/whisper/workerPathResolver');
-      return new Worker(resolveWhisperWorkerPath());
+      return spawnLocalSttDownloadWorker();
     },
     buildInitMessage(modelId: string): unknown {
       const { buildWorkerInitMessage } = require('../audio/whisper/inferenceConfig') as typeof import('../audio/whisper/inferenceConfig');

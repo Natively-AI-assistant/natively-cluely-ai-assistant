@@ -108,7 +108,14 @@ const REFINEMENT_COMPARATIVE_RE = /\b(shorter|longer|briefer|tighter|punchier|si
 // qualifies (it inherently means "vs the previous answer").
 const PRIOR_PRONOUN_RE = /\b(it|that|this|those|them)\b/i;
 const PRIOR_NOUN_RE = /\bthe\s+(answer|response|reply|intro|introduction|version|wording|phrasing|tone|exaggeration|claim|sentence|paragraph|opening|closing|ending|last\s+(?:line|part|bit|sentence)|first\s+(?:line|part|bit|sentence)|part|bit|pitch|summary|bullet|bullets|list|story|hook|point|points|wording)\b/i;
-const refersPrior = (q: string): boolean => PRIOR_PRONOUN_RE.test(q) || PRIOR_NOUN_RE.test(q);
+// A demonstrative that is the DETERMINER of the meeting or its material ("this
+// meeting", "that call", "this slide") names a new subject, not the prior
+// answer (2026-10-15): typed "Summarize the key decisions from this meeting so
+// far" counted "this" as the prior answer, was anchored as a rephrasing of the
+// last question heard ("did the SRE reqs get approved?"), and the user got that
+// answer again instead of a summary.
+const NEW_SUBJECT_DEMONSTRATIVE_RE = /\b(?:this|that|these|those)\s+(?:meeting|call|conversation|discussion|session|transcript|interview|lecture|class|chat|thread|document|doc|file|deck|slide|page|screen|email|agenda|week|month|quarter|year|morning|afternoon)s?\b/gi;
+const refersPrior = (q: string): boolean => PRIOR_PRONOUN_RE.test(q.replace(NEW_SUBJECT_DEMONSTRATIVE_RE, ' ')) || PRIOR_NOUN_RE.test(q);
 
 /**
  * Is `question` a REFINEMENT/editing follow-up that operates on the prior answer

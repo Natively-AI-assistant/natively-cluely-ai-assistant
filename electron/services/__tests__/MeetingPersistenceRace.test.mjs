@@ -15,8 +15,8 @@ test('stopMeeting saves placeholder before starting background processing', () =
   assert.ok(stopStart >= 0, 'stopMeeting should exist');
   assert.ok(stopEnd > stopStart, 'stopMeeting source should be isolated');
 
-  const placeholderSaveIndex = stopSource.indexOf('DatabaseManager.getInstance().saveMeeting(placeholder, snapshot.startTime, durationMs);');
-  const backgroundStartIndex = stopSource.indexOf('this.processAndSaveMeeting(snapshot, meetingId, metadataSnapshot, modeSnapshot)');
+  const placeholderSaveIndex = stopSource.indexOf('DatabaseManager.getInstance().saveMeeting(placeholder, snapshot.startTime, snapshot.durationMs);');
+  const backgroundStartIndex = stopSource.indexOf('this.processAndSaveMeeting(snapshot, meetingId, metadataSnapshot, modeSnapshot, writer)');
 
   assert.ok(placeholderSaveIndex >= 0, 'placeholder should be saved');
   assert.ok(backgroundStartIndex >= 0, 'background processing should be queued');

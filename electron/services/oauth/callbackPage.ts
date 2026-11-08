@@ -18,7 +18,11 @@ import crypto from 'node:crypto';
 import { NATIVELY_APP_ICON_DATA_URI } from './nativelyAppIcon';
 import { INSTRUMENT_SANS_WOFF2_DATA_URI } from './instrumentSans';
 
-export type OAuthCallbackProvider = 'codex' | 'antigravity' | 'calendar' | 'outlook-calendar';
+export type OAuthCallbackProvider = 'codex' | 'antigravity' | 'calendar' | 'outlook-calendar' | ConnectorCallbackProvider | 'gmail';
+
+/** Settings › Connectors services that sign in with the browser. */
+export type ConnectorCallbackProvider = 'slack' | 'notion' | 'hubspot' | 'salesforce' | 'attio';
+const CONNECTORS: readonly string[] = ['slack', 'notion', 'hubspot', 'salesforce', 'attio'];
 
 /**
  * `returned`  — the code reached Natively; the token exchange runs after this
@@ -41,6 +45,12 @@ const PROVIDERS: Record<OAuthCallbackProvider, { name: string; account: string; 
   antigravity: { name: 'Antigravity', account: 'Google', detail: 'Google account' },
   calendar: { name: 'Google Calendar', account: 'Google', detail: 'Google account' },
   'outlook-calendar': { name: 'Outlook Calendar', account: 'Microsoft', detail: 'Microsoft account' },
+  slack: { name: 'Slack', account: 'Slack', detail: 'Slack workspace' },
+  notion: { name: 'Notion', account: 'Notion', detail: 'Notion workspace' },
+  hubspot: { name: 'HubSpot', account: 'HubSpot', detail: 'HubSpot account' },
+  salesforce: { name: 'Salesforce', account: 'Salesforce', detail: 'Salesforce org' },
+  attio: { name: 'Attio', account: 'Attio', detail: 'Attio workspace' },
+  gmail: { name: 'Gmail', account: 'Google', detail: 'Google account' },
 };
 
 export function escapeHtml(value: string): string {
@@ -70,12 +80,29 @@ const GOOGLE_MARK = '<svg viewBox="0 0 24 24" aria-hidden="true"><g transform="m
 // Microsoft's four squares, for an Outlook (Microsoft 365 or Outlook.com) calendar.
 const MICROSOFT_MARK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#F25022" d="M2 2h9.5v9.5H2z"/><path fill="#7FBA00" d="M12.5 2H22v9.5h-9.5z"/><path fill="#00A4EF" d="M2 12.5h9.5V22H2z"/><path fill="#FFB900" d="M12.5 12.5H22V22h-9.5z"/></svg>';
 
-const PROVIDER_MARKS: Record<OAuthCallbackProvider, { svg: string; tile: 'openai' | 'google' }> = {
+
+// Connector marks, the same files Settings › Connectors shows
+// (src/assets/provider-logos, sources in its README), inlined so the page loads
+// nothing from the network.
+const SLACK_MARK = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><path fill="#e01e5a" d="M53.841 161.32c0 14.832-11.987 26.82-26.819 26.82S.203 176.152.203 161.32c0-14.831 11.987-26.818 26.82-26.818H53.84zm13.41 0c0-14.831 11.987-26.818 26.819-26.818s26.819 11.987 26.819 26.819v67.047c0 14.832-11.987 26.82-26.82 26.82c-14.83 0-26.818-11.988-26.818-26.82z"/><path fill="#36c5f0" d="M94.07 53.638c-14.832 0-26.82-11.987-26.82-26.819S79.239 0 94.07 0s26.819 11.987 26.819 26.819v26.82zm0 13.613c14.832 0 26.819 11.987 26.819 26.819s-11.987 26.819-26.82 26.819H26.82C11.987 120.889 0 108.902 0 94.069c0-14.83 11.987-26.818 26.819-26.818z"/><path fill="#2eb67d" d="M201.55 94.07c0-14.832 11.987-26.82 26.818-26.82s26.82 11.988 26.82 26.82s-11.988 26.819-26.82 26.819H201.55zm-13.41 0c0 14.832-11.988 26.819-26.82 26.819c-14.831 0-26.818-11.987-26.818-26.82V26.82C134.502 11.987 146.489 0 161.32 0s26.819 11.987 26.819 26.819z"/><path fill="#ecb22e" d="M161.32 201.55c14.832 0 26.82 11.987 26.82 26.818s-11.988 26.82-26.82 26.82c-14.831 0-26.818-11.988-26.818-26.82V201.55zm0-13.41c-14.831 0-26.818-11.988-26.818-26.82c0-14.831 11.987-26.818 26.819-26.818h67.25c14.832 0 26.82 11.987 26.82 26.819s-11.988 26.819-26.82 26.819z"/></svg>';
+const NOTION_MARK = '<svg aria-hidden="true" fill="currentColor" fill-rule="evenodd" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path clip-rule="evenodd" d="M15.257.055l-13.31.98C.874 1.128.5 1.83.5 2.667v14.559c0 .654.233 1.213.794 1.96l3.129 4.06c.513.653.98.794 1.962.745l15.457-.932c1.307-.093 1.681-.7 1.681-1.727V4.954c0-.53-.21-.684-.829-1.135l-.106-.078L18.34.755c-1.027-.746-1.45-.84-3.083-.7zm-8.521 4.63c-1.263.086-1.549.105-2.266-.477L2.647 2.76c-.186-.187-.092-.42.375-.466l12.796-.933c1.074-.094 1.634.28 2.054.606l2.195 1.587c.093.047.326.326.047.326l-13.216.794-.162.01zM5.263 21.193V7.287c0-.606.187-.886.748-.933l15.176-.886c.515-.047.748.28.748.886v13.81c0 .609-.093 1.122-.934 1.168l-14.523.84c-.842.047-1.215-.232-1.215-.98zm14.338-13.16c.093.422 0 .842-.422.89l-.699.139v10.264c-.608.327-1.168.513-1.635.513-.747 0-.934-.232-1.495-.932l-4.576-7.185v6.952l1.448.327s0 .84-1.169.84l-3.221.186c-.094-.187 0-.654.327-.747l.84-.232V9.853L7.832 9.76c-.093-.42.14-1.026.794-1.073l3.456-.232 4.763 7.279v-6.44l-1.214-.14c-.094-.513.28-.887.747-.933l3.223-.187z"></path></svg>';
+const HUBSPOT_MARK = '<svg aria-hidden="true" fill="#FF7A59" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M18.164 7.93V5.084a2.198 2.198 0 001.267-1.978v-.067A2.2 2.2 0 0017.238.845h-.067a2.2 2.2 0 00-2.193 2.193v.067a2.196 2.196 0 001.252 1.973l.013.006v2.852a6.22 6.22 0 00-2.969 1.31l.012-.01-7.828-6.095A2.497 2.497 0 104.3 4.656l-.012.006 7.697 5.991a6.176 6.176 0 00-1.038 3.446c0 1.343.425 2.588 1.147 3.607l-.013-.02-2.342 2.343a1.968 1.968 0 00-.58-.095h-.002a2.033 2.033 0 102.033 2.033 1.978 1.978 0 00-.1-.595l.005.014 2.317-2.317a6.247 6.247 0 104.782-11.134l-.036-.005zm-.964 9.378a3.206 3.206 0 113.215-3.207v.002a3.206 3.206 0 01-3.207 3.207z"/></svg>';
+const SALESFORCE_MARK = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 180"><path fill="#00a1e0" d="M106.553 19.651c8.248-8.594 19.731-13.924 32.43-13.924c16.883 0 31.612 9.414 39.455 23.389a54.5 54.5 0 0 1 22.3-4.74c30.449 0 55.134 24.9 55.134 55.615c0 30.719-24.685 55.62-55.134 55.62a54.7 54.7 0 0 1-10.86-1.083c-6.908 12.321-20.07 20.645-35.178 20.645a40.1 40.1 0 0 1-17.632-4.058c-7.002 16.47-23.316 28.019-42.33 28.019c-19.8 0-36.674-12.529-43.152-30.1c-2.83.602-5.763.915-8.772.915c-23.574 0-42.686-19.308-42.686-43.13a43.2 43.2 0 0 1 21.345-37.36a49.4 49.4 0 0 1-4.088-19.727C17.385 22.336 39.626.128 67.06.128c16.106 0 30.42 7.658 39.494 19.523"/></svg>';
+const ATTIO_MARK = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 28"><path fill="currentColor" d="m31.669 19.175l-2.673-4.279l-.016-.026l-.211-.336a2.16 2.16 0 0 0-1.838-1.022l-4.306-.014l-.3.481l-5.146 8.235l-.284.456l2.156 3.444a2.15 2.15 0 0 0 1.843 1.023h6.035a2.19 2.19 0 0 0 1.842-1.02l.213-.34s.008-.01.01-.015l2.677-4.284c.44-.7.44-1.605 0-2.303zm-.816 1.792l-2.677 4.284l-.037.052a.363.363 0 0 1-.579-.054l-2.678-4.284a1.2 1.2 0 0 1-.137-.969c.03-.105.076-.21.135-.306l2.674-4.28l.006-.01a.34.34 0 0 1 .213-.154q.04-.01.071-.014h.03c.062 0 .215.02.31.176l2.674 4.278c.244.39.244.891 0 1.28zM23.758 8.823a2.19 2.19 0 0 0 0-2.303l-2.673-4.278l-.223-.36a2.16 2.16 0 0 0-1.844-1.02h-6.034c-.754 0-1.442.381-1.844 1.022L.333 19.178a2.16 2.16 0 0 0-.002 2.301L3.23 26.12c.4.64 1.088 1.02 1.842 1.02h6.035c.758 0 1.446-.381 1.844-1.022l.22-.35v-.004s.005-.006.005-.008l2.154-3.445l6.384-10.218l2.041-3.268zm-.63-1.151c0 .22-.062.443-.187.64L12.355 25.255a.36.36 0 0 1-.31.17a.36.36 0 0 1-.31-.17l-2.676-4.286a1.22 1.22 0 0 1 0-1.28L19.645 2.752a.36.36 0 0 1 .31-.173c.062 0 .215.018.313.175L22.94 7.03c.125.197.187.42.187.64"/></svg>';
+
+const PROVIDER_MARKS: Record<OAuthCallbackProvider, { svg: string; tile: 'openai' | 'google' | 'light' }> = {
   codex: { svg: OPENAI_MARK, tile: 'openai' },
   antigravity: { svg: GOOGLE_MARK, tile: 'google' },
   calendar: { svg: GOOGLE_MARK, tile: 'google' },
   // The same white tile as Google's.
   'outlook-calendar': { svg: MICROSOFT_MARK, tile: 'google' },
+  slack: { svg: SLACK_MARK, tile: 'google' },
+  hubspot: { svg: HUBSPOT_MARK, tile: 'google' },
+  salesforce: { svg: SALESFORCE_MARK, tile: 'google' },
+  // Monochrome marks (currentColor): a white tile with dark ink.
+  notion: { svg: NOTION_MARK, tile: 'light' },
+  attio: { svg: ATTIO_MARK, tile: 'light' },
+  gmail: { svg: GOOGLE_MARK, tile: 'google' },
 };
 
 const CHECK_GLYPH = '<svg viewBox="0 0 16 16" aria-hidden="true"><path class="tick" d="M3.8 8.4l2.6 2.6 5.8-6.1" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -100,7 +127,11 @@ function copyFor(provider: OAuthCallbackProvider, outcome: OAuthCallbackOutcome)
       headline: `${p.name} connected`,
       sub: provider === 'calendar' || provider === 'outlook-calendar'
         ? 'Your upcoming meetings will show up in Natively.'
-        : `Natively can now use your ${p.account} account.`,
+        : provider === 'gmail'
+          ? 'Follow-ups and meeting briefs can now use Gmail. Nothing is sent until you press Send.'
+        : CONNECTORS.includes(provider)
+          ? `Meeting notes can now go to ${p.name}. Nothing is sent until you press Send.`
+          : `Natively can now use your ${p.account} account.`,
       status: 'Connected',
       reason: null,
     };
@@ -169,6 +200,7 @@ body{margin:0;background:var(--page);color:var(--text-1);font-family:var(--font)
 .badge svg{width:18px;height:18px}
 .badge.openai{background:#000;color:#fff}
 .badge.google{background:#fff}
+.badge.light{background:#fff;color:#111}
 h1{margin:0;font-size:27px;line-height:1.15;font-weight:600;font-stretch:88%;letter-spacing:-.022em;text-wrap:balance}
 .sub{margin:8px auto 0;max-width:34ch;line-height:1.45;color:var(--text-2);text-wrap:balance}
 .row{margin:24px 0 0;display:flex;align-items:center;gap:12px;padding:12px 12px 12px 16px;border-radius:14px;

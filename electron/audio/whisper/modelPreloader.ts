@@ -22,12 +22,15 @@ import path from 'path';
 import { buildWorkerInitMessage } from './inferenceConfig';
 import { resolveWhisperWorkerPath } from './workerPathResolver';
 import { acquireSharedNemotronWorker } from './nemotron/sharedWorkerRegistry';
+import { retireOnnxWorker, trackOnnxWorker } from '../../utils/onnxWorkerShutdown';
 
 // Stable channelId for the preloader's warm hold. Distinct from LocalWhisperSTT's
 // per-channel ids ('mic' / 'system'), so it occupies its own registry slot and
 // its engine instance is never mistaken for an audio channel's.
 const NEMOTRON_WARM_CHANNEL_ID = 'preload-warm';
-import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession, isHighPriorityOnnxBudgetExhausted } from '../../utils/onnxThreadConfig';
+import { acquireOnnxSlot, checkMemoryForModelSize, describeModelMemoryShortfall, isHighPriorityOnnxBudgetExhausted } from '../../utils/onnxThreadConfig';
+import { getModelSizeMb, isCorruptModelError, purgeCorruptModel } from './modelManager';
+import type { WhisperModelId } from './types';
 import {
     consumePoisonedOnnxLoad,
     isSentinelWithinTtl,
@@ -158,8 +161,9 @@ class ModelPreloader {
             this.recordFailure(modelId);
             return;
         }
-        if (!hasEnoughMemoryForOnnxSession()) {
-            console.warn(`[ModelPreloader] Skipping Nemotron warm — under ${getMinFreeGBForOnnxSession()}GB free`);
+        const memory = checkMemoryForModelSize(getModelSizeMb(modelId));
+        if (!memory.ok) {
+            console.warn(`[ModelPreloader] Skipping Nemotron warm — ${describeModelMemoryShortfall(memory)} (measured by ${memory.source})`);
             return;
         }
         const initMsg = buildWorkerInitMessage(modelId);
@@ -246,21 +250,27 @@ class ModelPreloader {
         // cooldown above would block future preloads. The user can retry by
         // toggling Settings → Audio when memory frees up. Acquire the slot
         // at HIGH priority (Whisper is latency-critical).
-        if (!hasEnoughMemoryForOnnxSession()) {
+        const memory = checkMemoryForModelSize(getModelSizeMb(modelId));
+        if (!memory.ok) {
             console.warn(
-                `[ModelPreloader] skipping preload for ${modelId} — free memory below ${getMinFreeGBForOnnxSession()}GB floor (silent skip, not a worker error)`,
+                `[ModelPreloader] skipping preload for ${modelId} — ${describeModelMemoryShortfall(memory)}, measured by ${memory.source} (silent skip, not a worker error)`,
             );
             return;
         }
 
-        // Cancel any in-progress load for a different model
+        // Cancel any in-progress load for a different model. The user picked
+        // model A in Settings and then model B while A was still loading: A's
+        // worker is inside a native session create, and terminate() there
+        // aborted the whole app (and the sentinel it left made the next launch
+        // reset the model to the fallback). It is asked to exit instead.
         if (this.loadingWorker) {
-            this.loadingWorker.terminate();
+            this.retireWorker(this.loadingWorker);
             this.loadingWorker = null;
+            this.unwantedLoadingWorker = null;
         }
         // Tear down warm worker for a different model
         if (this.warmWorker) {
-            this.warmWorker.terminate();
+            this.retireWorker(this.warmWorker);
             this.warmWorker = null;
             this.warmModelId = null;
         }
@@ -292,7 +302,7 @@ class ModelPreloader {
         // acquireOnnxSlot's contract), so the empty .catch() is genuinely
         // unreachable, kept purely as a chain guard.
         writeLoadSentinel(modelId);
-        const w = new Worker(workerPath);
+        const w = trackOnnxWorker(new Worker(workerPath));
         this.loadingWorker = w;
         this.attachSlotToWorker(w, acquireOnnxSlot('high', 1));
         w.on('exit', (code) => {
@@ -335,7 +345,8 @@ class ModelPreloader {
                 console.warn(`[ModelPreloader] Worker init failed: ${msg.message}`);
                 this.recordFailure(modelId);
                 clearLoadSentinel(modelId);
-                w.terminate();
+                this.repairDamagedModelOnExit(w, modelId, String(msg.message ?? ''));
+                this.retireWorker(w);
                 this.loadingWorker = null;
                 this.pendingModelId = null;
                 this.loading = false;
@@ -351,6 +362,61 @@ class ModelPreloader {
         });
 
         w.postMessage(buildWorkerInitMessage(modelId));
+    }
+
+    /**
+     * Stop a worker this preloader no longer wants. Cooperative — see
+     * utils/onnxWorkerShutdown.ts for why terminate() is never used.
+     *
+     * Its 'message' listener goes first: a `ready` already in the queue would
+     * otherwise be accepted as the warm worker for a model nobody asked for
+     * any more. 'exit' and 'error' stay, because they are what release the
+     * worker's ONNX slot when it has actually gone.
+     */
+    private retireWorker(w: Worker): void {
+        w.removeAllListeners('message');
+        retireOnnxWorker(w);
+    }
+
+    /**
+     * The launch preload is the first thing to load a model after an install or
+     * an update, so it is the first to find out that the files are damaged —
+     * typically a download cut short before the in-progress marker existed
+     * (modelManager.markModelDownloadStarted). It used to record a cooldown and
+     * leave them: the model stayed "installed", and the user met the failure at
+     * the start of their next meeting, which then had no transcription.
+     *
+     * Now the damaged files are removed and fetched again in the background,
+     * here, at launch. Only for positive evidence of bad bytes — the same
+     * classifier the meeting path uses, so memory, network or a missing
+     * runtime never deletes a good download.
+     *
+     * Done on the worker's own exit, not at once: on Windows a file the worker
+     * still has open cannot be removed.
+     */
+    private repairDamagedModelOnExit(w: Worker, modelId: string, message: string): void {
+        if (!isCorruptModelError(message)) return;
+        w.once('exit', () => {
+            try {
+                if (!purgeCorruptModel(modelId as WhisperModelId, message)) return;
+                // The failure was the files, and they are gone: do not make
+                // the repaired model sit out the five-minute cooldown.
+                this.clearRecentFailure(modelId);
+                const { LocalModelDownloadService, resolveLocalModelProviderName } =
+                    require('../../services/LocalModelDownloadService') as typeof import('../../services/LocalModelDownloadService');
+                const service = LocalModelDownloadService.getInstance();
+                const providerName = resolveLocalModelProviderName(modelId);
+                if (!service.hasProvider(providerName)) return;
+                console.warn(`[ModelPreloader] ${modelId} was damaged on disk — removed, downloading it again`);
+                void service.startWhenReady(providerName, modelId).then((r) => {
+                    if (!r.success && !r.alreadyDownloading) {
+                        console.warn(`[ModelPreloader] Re-download of ${modelId} could not start:`, r.error);
+                    }
+                });
+            } catch (e) {
+                console.warn(`[ModelPreloader] Could not repair damaged model ${modelId}:`, (e as Error)?.message ?? e);
+            }
+        });
     }
 
     private recordFailure(modelId: string): void {
@@ -506,7 +572,10 @@ class ModelPreloader {
         w.removeAllListeners('error');
         w.removeAllListeners('exit');
         (w as any).__slotRelease?.();
-        void Promise.resolve(w.terminate()).catch(() => { /* already gone */ });
+        // 'error' must keep a listener until the thread has really exited —
+        // an unhandled Worker 'error' is an uncaught exception in main.
+        w.on('error', () => { /* retired */ });
+        retireOnnxWorker(w);
     }
 
     takeWarmWorker(modelId: string): Worker | null {
@@ -528,9 +597,10 @@ class ModelPreloader {
     }
 
     terminate(): void {
-        this.loadingWorker?.terminate();
+        if (this.loadingWorker) this.retireWorker(this.loadingWorker);
         this.loadingWorker = null;
-        this.warmWorker?.terminate();
+        this.unwantedLoadingWorker = null;
+        if (this.warmWorker) this.retireWorker(this.warmWorker);
         this.warmWorker = null;
         this.warmModelId = null;
         this.pendingModelId = null;

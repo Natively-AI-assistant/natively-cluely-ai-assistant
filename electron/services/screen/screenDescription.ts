@@ -38,8 +38,9 @@ import { markOnDeviceScreenText } from '../../context-intelligence/question/on-d
  */
 export const SCREEN_NOT_TRANSCRIBED =
   '[a screenshot was attached on this turn, but it could not be transcribed — '
-  + 'its contents are NOT available here. Say that it cannot be read back rather '
-  + 'than denying a screenshot was sent, and never guess what it showed.]';
+  + 'its contents are NOT available here. If asked about it, say it cannot be '
+  + 'read back rather than denying a screenshot was sent, and never guess what '
+  + 'it showed. Otherwise ignore this note.]';
 
 /**
  * While a turn's screen is STILL BEING READ (2026-10-01). The turn is recorded
@@ -49,10 +50,16 @@ export const SCREEN_NOT_TRANSCRIBED =
  * had failed. It is replaced by the text when it arrives, or by
  * SCREEN_NOT_TRANSCRIBED when the read really fails.
  */
+//
+// Both notes say what to do ONLY when the user asks about that screenshot
+// (2026-11-06). Unconditional, they were obeyed on an unrelated question:
+// asked "Reply with exactly: OK-3A" right after a screenshot turn, the answer
+// was "The screenshot for Round 3 is still being read, so I can't…".
 export const SCREEN_BEING_READ =
   '[a screenshot was attached on this turn and is still being read — its '
-  + 'contents are not available yet. Say that it is still being read rather '
-  + 'than denying a screenshot was sent, and never guess what it showed.]';
+  + 'contents are not available yet. If asked about it, say it is still being '
+  + 'read rather than denying a screenshot was sent, and never guess what it '
+  + 'showed. Otherwise ignore this note.]';
 
 /** Section labels, exported so tests and the truncation notice can name them. */
 export const SCREEN_DESCRIPTION_SECTIONS = Object.freeze({

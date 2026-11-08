@@ -40,8 +40,11 @@ import { tagCheckoutUrl, viaWebsiteCheckout } from '../../src/lib/funnel/checkou
 import { createInstallRegistrar, type InstallRegistrar } from '../../src/lib/funnel/funnelInstall.mjs';
 import { getAppSessionId, usageFlagEnabled } from './UsageOutbox';
 import { SettingsManager } from './SettingsManager';
+import { nativelyApiBase } from './nativelyApiBase';
+import { normalizeMeetingSurface, type MeetingSurface } from '../utils/meetingSurface';
+import { NOTEPAD_ACTIONS, NOTE_RECIPE_IDS } from '../../src/lib/funnel/funnelCatalog.mjs';
 
-const NATIVELY_API_URL = (process.env.NATIVELY_API_URL || 'https://api.natively.software').replace(/\/+$/, '');
+const NATIVELY_API_URL = nativelyApiBase();
 const DISPATCH_INTERVAL_MS = 30_000;
 // Nothing leaves, and the registration puzzle does not start, until the app
 // has been up this long: launch belongs to the user.
@@ -94,6 +97,13 @@ export class FunnelTelemetry {
     private state: StoredState | null = null;
     private meetingStartedAt: number | null = null;
     private meetingWasFirst = false;
+    // The running meeting is a Resume of a saved one (2026-11-02).
+    private meetingWasResumed = false;
+    /** The running meeting's notepad, for meeting_ended: counts and yes/no only, never the notes. */
+    private meetingNotepad: { surface: MeetingSurface; open: boolean; typed: boolean; asks: number; recipes: number } | null = null;
+    /** notepad_used keys already queued today, in memory, so a keystroke never reads the state file. */
+    private notepadSentDay = '';
+    private notepadSent = new Set<string>();
     /** This launch. A meeting note on disk written by any other launch was never ended. */
     private readonly bootId: string = getAppSessionId() || randomUUID();
 
@@ -153,7 +163,7 @@ export class FunnelTelemetry {
                 ...normalizeFunnelState(raw),
                 newInstall: raw?.newInstall === true,
                 featuresDay: typeof raw?.featuresDay === 'string' ? raw.featuresDay : '',
-                featuresUsed: Array.isArray(raw?.featuresUsed) ? raw.featuresUsed.filter((f: unknown) => typeof f === 'string').slice(0, 50) : [],
+                featuresUsed: Array.isArray(raw?.featuresUsed) ? raw.featuresUsed.filter((f: unknown) => typeof f === 'string').slice(0, 200) : [],
                 tokens: raw?.tokens && typeof raw.tokens === 'object' && !Array.isArray(raw.tokens)
                     ? Object.fromEntries(Object.entries(raw.tokens).filter(([, v]) => typeof v === 'string').slice(-MAX_STORED_TOKENS)) as Record<string, string>
                     : {},
@@ -358,6 +368,7 @@ export class FunnelTelemetry {
                 has_api_key: s.hasApiKey,
                 has_pro: s.hasPro,
                 meetings_total: st.meetings,
+                surface: this.currentSurface(),
             });
             if (queued === 'queued') { st.lastActiveDay = day; changed = true; }
         }
@@ -368,13 +379,24 @@ export class FunnelTelemetry {
      * @param answersSoFar how many answers the session log holds as the meeting
      *        starts; the meeting's own count is the difference at the end.
      */
-    public meetingStarted(answersSoFar = 0): void {
+    /** What a meeting opens on this install now (Settings › Overlay). */
+    private currentSurface(): MeetingSurface {
+        try { return normalizeMeetingSurface(SettingsManager.getInstance().get('meetingSurface')); } catch { return 'overlay'; }
+    }
+
+    /**
+     * @param surface what this meeting opened on (main's start plan), the overlay or the notepad.
+     * @param notepadOpen whether the notepad is up as it starts (its 'show' can fire before this).
+     * @param resumed a Resume of a saved meeting: reported as such, never the first, not counted again.
+     */
+    public meetingStarted(answersSoFar = 0, surface?: MeetingSurface, notepadOpen?: boolean, resumed = false): void {
         try {
             if (!this.isEnabled()) return;
             const st = this.loadState();
-            st.meetings += 1;
+            // A resume continues a meeting already counted.
+            if (!resumed) st.meetings += 1;
             this.meetingStartedAt = Date.now();
-            const first = st.newInstall && st.meetings === 1;
+            const first = !resumed && st.newInstall && st.meetings === 1;
             // Written down so a meeting the app never sees end is still counted
             // (reportLifecycle, at the next launch). A note left by an earlier
             // launch is reported before it is replaced.
@@ -384,7 +406,12 @@ export class FunnelTelemetry {
             this.saveState();
             this.answersAtMeetingStart = Number.isInteger(answersSoFar) && answersSoFar > 0 ? answersSoFar : 0;
             this.meetingWasFirst = first;
-            this.track('meeting_started', { first: this.meetingWasFirst, ai: this.snapshot?.().meetingAi ?? 'none' });
+            this.meetingWasResumed = resumed === true;
+            const meetingSurface = surface ?? this.currentSurface();
+            // A notepad meeting opens the notepad at the start: it was open.
+            this.meetingNotepad = { surface: meetingSurface, open: meetingSurface === 'notepad' || notepadOpen === true, typed: false, asks: 0, recipes: 0 };
+            // `resumed` only on a resume, so every other meeting_started is exactly as before.
+            this.track('meeting_started', { first: this.meetingWasFirst, ai: this.snapshot?.().meetingAi ?? 'none', surface: meetingSurface, ...(this.meetingWasResumed ? { resumed: true } : {}) });
         } catch { /* never into a meeting */ }
     }
 
@@ -396,7 +423,17 @@ export class FunnelTelemetry {
             this.meetingStartedAt = null;
             // The meeting ended where the app could see it: nothing to recover.
             try { const st = this.loadState(); if (st.openMeeting) { st.openMeeting = null; this.saveState(); } } catch { /* best effort */ }
-            const props: FunnelProps = { minutes, first: this.meetingWasFirst };
+            const props: FunnelProps = { minutes, first: this.meetingWasFirst, ...(this.meetingWasResumed ? { resumed: true } : {}) };
+            this.meetingWasResumed = false;
+            const np = this.meetingNotepad;
+            this.meetingNotepad = null;
+            if (np) {
+                props.surface = np.surface;
+                props.notepad_open = np.open;
+                props.notes_typed = np.typed;
+                props.asks = np.asks;
+                props.recipes = np.recipes;
+            }
             if (Number.isInteger(answersNow)) {
                 // The log is cleared when a meeting starts on some paths and not
                 // on others; either way the meeting's own count is not negative.
@@ -422,6 +459,57 @@ export class FunnelTelemetry {
             if (st.featuresUsed.includes(feature)) return 'duplicate';
             const result = this.track('feature_used', { feature });
             if (result === 'queued') { st.featuresUsed.push(feature); this.saveState(); }
+            return result;
+        } catch {
+            return 'error';
+        }
+    }
+
+    /**
+     * Someone switched what a meeting opens (Settings › Overlay). Only a real
+     * change is reported: `from` is the setting before the switch.
+     */
+    public meetingSurfaceSet(from: MeetingSurface, to: MeetingSurface): FunnelTrackResult {
+        try {
+            if (from === to) return 'duplicate';
+            return this.track('meeting_surface_set', { to });
+        } catch {
+            return 'error';
+        }
+    }
+
+    /**
+     * Something was done in the notepad. Counted into the running meeting
+     * (meeting_ended: notepad_open, notes_typed, asks, recipes) every time, and
+     * reported as notepad_used at most once per action, recipe and phase per
+     * local day. `phase` defaults to whether a meeting is running.
+     */
+    public notepadUsed(action: string, opts: { recipe?: string; phase?: 'idle' | 'live' | 'ended' } = {}): FunnelTrackResult {
+        try {
+            if (!(NOTEPAD_ACTIONS as readonly string[]).includes(action)) return 'invalid';
+            const recipe = opts.recipe ? opts.recipe.replace(/-/g, '_') : undefined;
+            if (recipe !== undefined && !(NOTE_RECIPE_IDS as readonly string[]).includes(recipe)) return 'invalid';
+            const np = this.meetingNotepad;
+            if (np && this.meetingStartedAt !== null) {
+                if (action === 'opened') np.open = true;
+                if (action === 'notes_typed') np.typed = true;
+                if (action === 'ask') np.asks += 1;
+                if (action === 'recipe') np.recipes += 1;
+            }
+            if (!this.isEnabled()) return 'disabled';
+            const phase = opts.phase ?? (this.meetingStartedAt !== null ? 'live' : 'idle');
+            const day = localDay(Date.now());
+            if (this.notepadSentDay !== day) { this.notepadSentDay = day; this.notepadSent = new Set(); }
+            const key = `np:${action}:${recipe ?? ''}:${phase}`;
+            if (this.notepadSent.has(key)) return 'duplicate';
+            // Shared with feature_used's once-a-day list, so a relaunch the same day does not repeat it.
+            const st = this.loadState();
+            if (st.featuresDay !== day) { st.featuresDay = day; st.featuresUsed = []; }
+            if (st.featuresUsed.includes(key)) { this.notepadSent.add(key); return 'duplicate'; }
+            const props: FunnelProps = { action, phase };
+            if (recipe) props.recipe = recipe;
+            const result = this.track('notepad_used', props);
+            if (result === 'queued') { st.featuresUsed.push(key); this.notepadSent.add(key); this.saveState(); }
             return result;
         } catch {
             return 'error';

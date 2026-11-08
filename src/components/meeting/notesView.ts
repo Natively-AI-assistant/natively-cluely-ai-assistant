@@ -9,6 +9,8 @@
   - The notes window: "- " lines continue on Enter.
 */
 
+import { backspace, deleteWord, editShortcutLetter, isWordDelete, typed } from '../../lib/stealthEdit.mjs';
+
 export interface SourceLine {
     speaker: string;
     text: string;
@@ -151,6 +153,9 @@ export function notesContentKey(detailed: unknown): string {
 /** The tab name for notes: the mode they were written in. */
 export function notesLabel(detailed: unknown): string {
     const mode = (detailed as any)?.mode;
+    // A note template (noteTemplates.ts) wrote them: its name, over the mode's.
+    const noteTemplate = typeof mode?.noteTemplateName === 'string' ? mode.noteTemplateName.trim() : '';
+    if (noteTemplate) return noteTemplate;
     const name = typeof mode?.selectedModeName === 'string' ? mode.selectedModeName.trim() : '';
     if (name) return name;
     const template = typeof mode?.selectedTemplateType === 'string' ? mode.selectedTemplateType.trim() : '';
@@ -201,4 +206,58 @@ export function continueListOnEnter(value: string, selStart: number, selEnd: num
     }
     const next = `${value.slice(0, selStart)}\n${marker}${value.slice(selEnd)}`;
     return { value: next, caret: selStart + 1 + marker.length };
+}
+
+/**
+ * One key typed into the notes window through the keyboard hook (2026-10-20),
+ * which types without the window ever taking focus, as the overlay's input
+ * does. The page has no caret then, so text goes at the end: Return is a new
+ * line (continuing a point, as typed Enter does), Backspace takes the last
+ * character (the last word with Ctrl, or Option on macOS), anything with
+ * characters is added. Keys use the hook's macOS
+ * codes on both platforms (36 Return, 76 numpad Enter, 51 Backspace); Esc and
+ * the arrows never get here as text (main ends the session on Esc; the hook
+ * passes arrows to the meeting app). With `allSelected` (Ctrl/Cmd+A in a
+ * one-line field) the key replaces the whole value, as in the overlay's box.
+ * Returns null when the key changes nothing.
+ */
+export function applyTypedKeyAtEnd(value: string, key: { keyCode: number; chars: string; isKeyDown: boolean; flags?: number }, allSelected = false): string | null {
+    if (!key.isKeyDown) return null;
+    // Ctrl/Cmd+V/A/C/X arrive as their letter with the modifier flag; they are
+    // commands (NotesWindow.tsx runs them), never text.
+    if (editShortcutLetter(key)) return null;
+    if (key.keyCode === 36 || key.keyCode === 76) {
+        return continueListOnEnter(value, value.length, value.length)?.value ?? `${value}\n`;
+    }
+    if (key.keyCode === 51) {
+        if (value.length === 0) return null;
+        // Ctrl+Backspace / Ctrl+Delete (Windows), Option+Backspace (macOS).
+        return isWordDelete(key) ? deleteWord({ value, allSelected }).value : backspace({ value, allSelected }).value;
+    }
+    if (key.keyCode === 53) return null;
+    const chars = key.chars;
+    if (!chars || chars === '\r' || chars === '\n' || chars === '\t') return null;
+    return typed({ value, allSelected }, chars).value;
+}
+
+/**
+ * A chat answer as plain reading text for the notes window's answer panel
+ * (2026-10-20). The notes window is a light route with no markdown renderer,
+ * so the marks a model writes are taken out: `**bold**`, `__bold__`, `*em*`,
+ * `` `code` ``, heading hashes, code fences and "> " quote marks. Points
+ * ("- ", "1. ") stay as they read fine as text.
+ */
+export function plainAnswerText(markdown: string): string {
+    return markdown
+        .replace(/^```[^\n]*\n?/gm, '')
+        .replace(/^#{1,6}\s+/gm, '')
+        .replace(/\*\*(.+?)\*\*/g, '$1')
+        .replace(/__(.+?)__/g, '$1')
+        .replace(/(^|[^*\w])\*(?!\s)([^*\n]+?)\*(?!\w)/g, '$1$2')
+        .replace(/`([^`\n]+)`/g, '$1')
+        .replace(/^\s*[*+]\s+/gm, '- ')
+        // A "> " quote (Make me sound smart's line to say) reads as the line itself.
+        .replace(/^[ \t]*>[ \t]?/gm, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
 }

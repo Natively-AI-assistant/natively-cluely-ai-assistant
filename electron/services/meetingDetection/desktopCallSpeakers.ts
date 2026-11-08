@@ -129,6 +129,8 @@ export interface DesktopCallReport {
     /** true muted, false live, null unknown (counts as live). */
     selfMuted: boolean | null;
     share: ScreenShareReading;
+    /** The app's own recording indicator (callFacts.recordingFromTree); null when the window shows nothing. */
+    recording: boolean | null;
 }
 
 /** Reads in a row a different meeting key must show before it replaces the one held. */
@@ -360,6 +362,7 @@ export class DesktopCallSpeakers {
             rosterKey: call.key,
             at: now,
             meetingKey: this.settleMeetingKey(facts.meetingKey),
+            recording: facts.recording,
             participantCount: facts.participantCount,
             participants: facts.participants,
             selfName: this.selfName,

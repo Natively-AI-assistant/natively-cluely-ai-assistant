@@ -1,6 +1,8 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { SkillUploadPayload } from './services/skills/SkillValidator';
 import type { NativelyUsageResponse, NativelyPlansResponse } from '../src/types/nativelyUsage';
+import type { MeetingOutputsApi } from '../src/types/meetingOutputs';
+import type { ConnectorsApi } from '../src/types/connectors';
 import { PAGE_CAPTURE_FALLBACK_CHANNEL, PAGE_CAPTURE_STARTED_CHANNEL, type PageCaptureFallbackNotice } from './services/pageCaptureFallback';
 import type { CalendarSourceId as CalendarSourceIdInfo, CalendarSourceStatus as CalendarSourceStatusInfo } from './services/calendar/providers/types';
 
@@ -85,6 +87,37 @@ type DirectAssistEvent =
   | { type: 'cancel'; requestId: string; sequence: number };
 
 // Types for the exposed Electron API
+/** A resumed meeting's earlier answer, for the overlay's chat (services/meeting/meetingResume.ts ResumedChatEntry). */
+interface SessionResumedChatEntry {
+  type: string;
+  timestamp: number;
+  question: string;
+  answer: string;
+  source?: string;
+  synthetic?: boolean;
+  hasImages?: boolean;
+}
+
+/** A blind notes comparison after the pick: which version was A, which was B. */
+interface NotesComparePickResult {
+  choice: 'A' | 'B' | 'same';
+  saved: boolean;
+  a: { version: 'current' | number; label: string; provider: string | null; model: string | null };
+  b: { version: 'current' | number; label: string; provider: string | null; model: string | null };
+  /** The version the pick deleted ('current': an earlier winner became the notes), or null. */
+  removed?: 'current' | number | null;
+  promoted?: number | null;
+}
+
+/** services/meetingDetection/meetingOffer.ts MeetingOfferView. */
+interface MeetingOfferPayload {
+  id: string;
+  title: string | null;
+  app: string;
+  body: string;
+  autoStartAt: number | null;
+}
+
 interface ElectronAPI {
   updateContentDimensions: (dimensions: { width: number; height: number }) => Promise<void>;
   updateContentDimensionsCentered: (dimensions: {
@@ -116,7 +149,7 @@ interface ElectronAPI {
   getScreenshots: () => Promise<Array<{ path: string; preview: string }>>;
   deleteScreenshot: (path: string) => Promise<{ success: boolean; error?: string }>;
   onScreenshotTaken: (callback: (data: { path: string; preview: string }) => void) => () => void;
-  onScreenshotAttached: (callback: (data: { path: string; preview: string }) => void) => () => void;
+  onScreenshotAttached: (callback: (data: { path: string; preview: string; formulaCapture?: string; quiet?: boolean }) => void) => () => void;
   onCaptureAndProcess: (callback: (data: { path: string; preview: string }) => void) => () => void;
   onSolutionsReady: (callback: (solutions: string) => void) => () => void;
   onResetView: (callback: () => void) => () => void;
@@ -132,6 +165,10 @@ interface ElectronAPI {
   onDebugError: (callback: (error: string) => void) => () => void;
   takeScreenshot: () => Promise<void>;
   takeSelectiveScreenshot: () => Promise<{ path: string; preview: string; cancelled?: boolean }>;
+  /** Paste a clipboard image into the overlay tray (issue #351). */
+  attachClipboardImage: () => Promise<{ empty?: true; success?: true; path?: string; error?: string }>;
+  /** Drag-drop a local image file into the overlay tray (issue #351). */
+  attachLocalImage: (file: File) => Promise<{ success?: boolean; path?: string; error?: string }>;
   moveWindowLeft: () => Promise<void>;
   moveWindowRight: () => Promise<void>;
   moveWindowUp: () => Promise<void>;
@@ -276,6 +313,7 @@ interface ElectronAPI {
     hasIbmWatsonKey: boolean;
     ibmWatsonRegion: string;
     hasSonioxKey: boolean;
+    hasQwenAsrKey: boolean;
   }>;
   // Free Trial
   startTrial: (surface?: string) => Promise<{
@@ -321,7 +359,9 @@ interface ElectronAPI {
   }>;
   convertTrial: (choice: string) => Promise<{ ok: boolean }>;
   endTrialByok: (opts?: { force?: boolean }) => Promise<{ success: boolean; wipeIncomplete?: boolean; error?: string }>;
-  onTrialEnded: (cb: (data: { choice: string }) => void) => () => void;
+  onTrialEnded: (cb: (data: { choice: string; expiresAt?: string; showEndedCard?: boolean }) => void) => () => void;
+  /** The trial's AI allowance is in its last quarter (main: trial:status poll). */
+  onTrialAllowanceLow: (cb: (data: { expiresAt?: string | null }) => void) => () => void;
   // Card ledger (toaster policy): shows, strikes and retirements per card.
   cardsGet: () => Promise<{ ok: boolean; ledger?: any; error?: string }>;
   cardsRecord: (id: string, outcome: string, meta?: { until?: number }) => Promise<{ ok: boolean; ledger?: any; error?: string }>;
@@ -352,6 +392,7 @@ interface ElectronAPI {
       | 'azure'
       | 'ibmwatson'
       | 'soniox'
+      | 'qwen'
       | 'nvidia_nim'
       | 'natively'
       | 'local-whisper' | 'apple-speech',
@@ -423,11 +464,12 @@ interface ElectronAPI {
   setIbmWatsonApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setGroqSttModel: (model: string) => Promise<{ success: boolean; error?: string }>;
   setSonioxApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
+  setQwenAsrApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setNvidiaNimSttModel: (model: string) => Promise<{ success: boolean; error?: string }>;
   setSttModel: (provider: 'deepgram' | 'openai', model: string) => Promise<{ success: boolean; error?: string }>;
   setIbmWatsonRegion: (region: string) => Promise<{ success: boolean; error?: string }>;
   testSttConnection: (
-    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim',
+    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen' | 'nvidia_nim',
     apiKey: string,
     region?: string,
   ) => Promise<{ success: boolean; error?: string }>;
@@ -454,6 +496,7 @@ interface ElectronAPI {
   onSuggestionError: (callback: (error: { error: string }) => void) => () => void;
   generateSuggestion: (context: string, lastQuestion: string) => Promise<{ suggestion: string }>;
   getInputDevices: () => Promise<Array<{ id: string; name: string }>>;
+  setMeetingInputDevice: (deviceId: string | null) => Promise<{ success: boolean }>;
   getOutputDevices: () => Promise<Array<{ id: string; name: string }>>;
   setRecognitionLanguage: (key: string) => Promise<{ success: boolean; error?: string }>;
   getAiResponseLanguages: () => Promise<Array<{ label: string; code: string }>>;
@@ -494,6 +537,8 @@ interface ElectronAPI {
       error?: string;
       channel: 'user' | 'interviewer';
       reconnectAttempts?: number;
+      /** A stand-in carries the channel while `provider` is down (audio/sttFailover.ts). */
+      fallback?: { provider: string; notice: string };
     }) => void,
   ) => () => void;
 
@@ -511,6 +556,8 @@ interface ElectronAPI {
     ocrTextLength?: number;
     imageCount?: number;
     usedImageInput?: boolean;
+    /** #647 Problem A: the screenshot answer was an assessment refusal that was retried with the capture cropped to the browser's page area. */
+    refusalRetry?: { cropped: boolean; improved: boolean };
   }>;
   startDirectAssist: (
     request: DirectAssistRequest,
@@ -525,6 +572,11 @@ interface ElectronAPI {
     userRequest?: string,
   ) => Promise<{ refined: string | null; intent: string }>;
   generateRecap: () => Promise<{ summary: string | null }>;
+  generateLiveHelper: (action: 'catch_me_up' | 'define' | 'sound_smart' | 'follow_up_questions', opts?: { sinceMs?: number }) => Promise<{ text: string | null }>;
+  /** A notepad recipe (electron/llm/noteRecipes.ts) over the live or finished meeting. */
+  runNoteRecipe: (input: { recipeId: string; extra?: string; meetingId?: string | null; phase: 'live' | 'ended'; notes?: string }) => Promise<{ text: string | null; error?: string }>;
+  compileCustomButton: (input: { name: string; description: string }) => Promise<{ instruction: string; source: 'model' | 'fallback' }>;
+  generateCustomButton: (input: { name: string; instruction: string; imagePaths?: string[]; readMinutes?: number }) => Promise<{ text: string | null; error?: string }>;
   submitManualQuestion: (question: string) => Promise<{ answer: string | null; question: string }>;
   getIntelligenceContext: () => Promise<{
     context: string;
@@ -575,6 +627,9 @@ interface ElectronAPI {
   acceptDiagramRepair: (payload: { originalSource: string; repairedSource: string }) => Promise<boolean>;
   /** Save a diagram the renderer produced (svg text, base64 png, or Mermaid source). */
   exportDiagram: (payload: { format: 'svg' | 'png' | 'mmd' | 'json' | 'csv'; data: string; name?: string }) => Promise<{ saved: boolean; canceled?: boolean; fileName?: string; silent?: boolean; error?: string }>;
+  /** Meeting outputs: export, Slack, Notion, CRM notes, the local MCP server, follow-up style (services/outputs). */
+  meetingOutputs: MeetingOutputsApi;
+  connectors: ConnectorsApi;
   /** The main process asks this window to draw a diagram for the phone. */
   onDiagramRenderRequest: (callback: (request: { requestId: string; key: string; source: string }) => void) => () => void;
   sendDiagramRenderResult: (result: { requestId: string; key: string; ok: boolean; svg?: string }) => void;
@@ -798,6 +853,7 @@ interface ElectronAPI {
     subject: string;
     body: string;
   }) => Promise<{ success: boolean; error?: string }>;
+  getMailAppInfo: () => Promise<{ name: string; icon?: string } | null>;
 
   // Audio Test
   startAudioTest: (deviceId?: string) => Promise<{ success: boolean }>;
@@ -835,6 +891,7 @@ interface ElectronAPI {
   ) => Promise<void>;
   onGeminiStreamToken: (callback: (token: string, meta?: { streamId?: number }) => void) => () => void;
   onGeminiStreamDone: (callback: (data?: { finalText?: string; streamId?: number; incomplete?: boolean; incompleteReason?: string }) => void) => () => void;
+  onGeminiStreamStarted: (callback: (data: { streamId: number }) => void) => () => void;
   onGeminiStreamError: (callback: (error: string, meta?: { streamId?: number | null; source?: string }) => void) => () => void;
 
   onUndetectableChanged: (callback: (state: boolean) => void) => () => void;
@@ -877,10 +934,21 @@ interface ElectronAPI {
   calendarSourceDisconnect: (id: CalendarSourceIdInfo) => Promise<{ success: boolean }>;
   getMeetingDetectionEnabled: () => Promise<boolean>;
   setMeetingDetectionEnabled: (on: boolean) => Promise<{ success: boolean; error?: string }>;
+  getMeetingAutoStartEnabled: () => Promise<boolean>;
+  setMeetingAutoStartEnabled: (on: boolean) => Promise<{ success: boolean; error?: string }>;
+  getCalendarReminderMinutes: () => Promise<number>;
+  setCalendarReminderMinutes: (minutes: number) => Promise<{ success: boolean; error?: string }>;
+  /** The "meeting detected" offer for the launcher's panel (null clears it). */
+  onMeetingOffer: (callback: (offer: MeetingOfferPayload | null) => void) => () => void;
+  getMeetingOffer: () => Promise<MeetingOfferPayload | null>;
+  startMeetingOffer: (id: string) => Promise<{ success: boolean }>;
+  dismissMeetingOffer: (id: string) => Promise<{ success: boolean }>;
   getMeetingAutoStopEnabled: () => Promise<boolean>;
   setMeetingAutoStopEnabled: (on: boolean) => Promise<{ success: boolean; error?: string }>;
   /** Follow the meeting app's mute (Settings › Audio). */
   getFollowMeetingMute: () => Promise<boolean>;
+  getDictationEnabled: () => Promise<boolean>;
+  setDictationEnabled: (on: boolean) => Promise<{ success: boolean; error?: string }>;
   setFollowMeetingMute: (on: boolean) => Promise<{ success: boolean; error?: string }>;
   /** Whether the user is muted in the meeting app right now, and which app says so. */
   getMeetingMuteState: () => Promise<{ muted: boolean; app: string | null }>;
@@ -890,8 +958,27 @@ interface ElectronAPI {
   setScreenShareSnapshots: (on: boolean) => Promise<{ success: boolean; error?: string }>;
   /** The overlay's auto-stop notice: Keep going. */
   meetingAutoStopKeepGoing: () => Promise<{ success: boolean }>;
+  /** Pause / resume transcription during a meeting (the notepad's pill). */
+  getTranscriptionPaused: () => Promise<boolean>;
+  setTranscriptionPaused: (paused: boolean) => Promise<{ success: boolean; paused: boolean }>;
+  onTranscriptionPaused: (callback: (data: { paused: boolean }) => void) => () => void;
+  /** 0..1, the louder of mic and call audio, sent to the notepad while it is open. */
+  onMeetingAudioLevel: (callback: (level: number) => void) => () => void;
   /** The user is typing in the overlay (throttled by the caller). */
   meetingAutoStopTyping: () => void;
+  /** Assist (electron/services/assist): the daily brief, You owe, Brief me, the catch-up, Last time. */
+  assistGetDailyBrief: (events: unknown[]) => Promise<any>;
+  assistGetMeetingBrief: (event: unknown, opts?: { refresh?: boolean }) => Promise<any>;
+  assistGetCatchUp: () => Promise<any>;
+  assistDismissCatchUp: (key: string) => Promise<{ ok: boolean }>;
+  assistGetLiveRecap: () => Promise<any>;
+  assistDismissLiveRecap: () => Promise<{ ok: boolean }>;
+  onAssistLastTimeRecap: (callback: (payload: any) => void) => () => void;
+  getCatchUpEnabled: () => Promise<boolean>;
+  setCatchUpEnabled: (on: boolean) => Promise<{ success: boolean; error?: string }>;
+  assistGetSender: () => Promise<{ name: string | null; email: string | null; google: boolean }>;
+  assistOpenMailDraft: (url: string) => Promise<{ ok: boolean; error?: string }>;
+  onAssistReminderDraft: (callback: (req: { kind: string; event: any }) => void) => () => void;
   /** Show (the time it stops at) or clear (null) the "stops in 1 minute" notice. */
   onMeetingAutoStopNotice: (callback: (data: { stopsAt: number | null }) => void) => () => void;
   /** The notes window (`?window=notes`): the overlay's Notes button, its own X. */
@@ -901,17 +988,40 @@ interface ElectronAPI {
   onNotesWindowVisibility: (callback: (open: boolean) => void) => () => void;
   /** The notes window's text and the meeting it belongs to. */
   liveNotesGetState: () => Promise<{ phase: 'idle' | 'live' | 'ended'; meetingId: string | null; text: string }>;
+  liveNotesMeetingInfo: () => Promise<{ live: boolean; title: string | null; people: number; event?: { id: string; title: string | null; startTime: string | null; endTime: string | null; link: string | null } | null; attendees?: Array<{ email: string; name: string | null }>; selfEmail?: string | null; speakers?: { me: string; them: string } }>;
+  /** The notepad's title, typed by the user (the meeting is saved under it). */
+  /** Copy text from the notepad (main's clipboard: the window is never focused). */
+  notesWindowCopyText: (text: string) => Promise<{ success: boolean }>;
+  /** Write the OS clipboard from main: the Windows overlay is never a focused
+   *  document, which navigator.clipboard needs (src/lib/copyText.ts). */
+  clipboardWriteText: (text: string) => Promise<{ success: boolean }>;
+  liveNotesSetTitle: (title: string) => Promise<{ success: boolean; title?: string | null }>;
+  /** The note template for the running (or next) meeting's notes; null clears. */
+  liveNotesSetTemplate: (id: string | null) => Promise<{ success: boolean; error?: 'pro_required' | 'unknown_template' }>;
+  liveNotesGetTemplate: () => Promise<string | null>;
+  /** The calendar's events around now, for "Link a different event". */
+  liveNotesCalendarCandidates: () => Promise<Array<{ id: string; title: string; startTime: string; endTime: string; people: number }>>;
+  liveNotesLinkEvent: (eventId: string | null) => Promise<{ success: boolean }>;
+  /** Add or remove a person on the linked event, for this meeting only. */
+  liveNotesSetAttendees: (change: { add?: string; remove?: string }) => Promise<{ success: boolean; error?: string }>;
   /** Every change of the notes window's text (main keeps it with the meeting). */
   liveNotesSetText: (text: string) => void;
   onLiveNotesState: (callback: (state: { phase: 'idle' | 'live' | 'ended'; meetingId: string | null; text?: string }) => void) => () => void;
   /** "Open meeting" in the notes window: the launcher opens that meeting. */
   notesWindowOpenMeeting: (meetingId: string) => Promise<{ success: boolean }>;
+  /** The notepad on a saved meeting (the meeting page's notepad button). */
+  notesWindowOpenSavedMeeting: (meetingId: string) => Promise<{ success: boolean; code?: string }>;
+  /** Resume: recording again into a saved meeting (services/meeting/meetingResume.ts). */
+  resumeMeeting: (meetingId: string, request?: { audio?: { inputDeviceId: string | null; outputDeviceId: string | null }; doNotPersist?: boolean }) => Promise<{ success: boolean; error?: string; code?: string }>;
   onLauncherOpenMeeting: (callback: (meetingId: string) => void) => () => void;
   /** Earlier versions of a meeting's notes, oldest first. */
   getMeetingNotesVersions: (meetingId: string) => Promise<Array<{ id: number; label: string; createdAt: number; templateType: string | null; detailedSummary: any }>>;
   /** Thumbs up / down on the notes shown (current: versionId null). */
   rateMeetingNotes: (input: { meetingId: string; rating: 'up' | 'down'; comment?: string; versionId?: number | null }) => Promise<{ success: boolean }>;
   getMeetingNotesRating: (input: { meetingId: string; versionId?: number | null }) => Promise<{ rating: 'up' | 'down'; comment: string | null } | null>;
+  /** Compare two versions of the notes blind: A and B in a random order, named only after the pick. */
+  compareMeetingNotesStart: (input: { meetingId: string; versions: [number | 'current', number | 'current'] }) => Promise<{ id: string; a: any; b: any } | null>;
+  compareMeetingNotesPick: (input: { id: string; choice: 'A' | 'B' | 'same'; reason?: string }) => Promise<NotesComparePickResult | null>;
   /** A notification's Start (a detected call, the calendar reminder), relayed by main to the launcher. */
   onMeetingStartRequest: (callback: (req: { title?: string; calendarEventId?: string; via?: 'detected' | 'reminder' }) => void) => () => void;
   getUpcomingEvents: () => Promise<
@@ -949,7 +1059,10 @@ interface ElectronAPI {
   ) => Promise<{ success?: boolean; fallback?: boolean; error?: string }>;
   ragQueryGlobal: (
     query: string,
+    scope?: { folderId?: string },
   ) => Promise<{ success?: boolean; fallback?: boolean; error?: string }>;
+  /** Folders, tags, People and Companies (electron/services/organise/organiseIpc.ts). */
+  organise: Record<string, (...args: any[]) => any>;
   ragCancelQuery: (options: {
     meetingId?: string;
     global?: boolean;
@@ -1015,6 +1128,10 @@ interface ElectronAPI {
   stealthTapAvailable: () => Promise<boolean>;
   stealthTapOpenSettings: () => Promise<void>;
   stealthTapStop: () => Promise<void>;
+  /** Clipboard text for the stealth-typed box's paste (overlay only). */
+  stealthReadClipboard: () => Promise<string>;
+  /** Copy/cut from the stealth-typed box (overlay only). */
+  stealthWriteClipboard: (text: string) => Promise<void>;
   stealthTapStart: () => Promise<boolean>;
   /** False on macOS when a composition IME (Pinyin/Hangul/Kanji/…) is
    *  enabled — the tap captures below the IME and breaks composition, so
@@ -1028,7 +1145,7 @@ interface ElectronAPI {
   stealthTapRefreshIme: () => Promise<boolean>;
   /** Ollama runtime failure notifications (F-119). */
   onOllamaError: (cb: (data: { message: string }) => void) => () => void;
-  onStealthTapState: (cb: (state: { active: boolean; reason?: string }) => void) => () => void;
+  onStealthTapState: (cb: (state: { active: boolean; reason?: string; target?: 'overlay' | 'notes' }) => void) => () => void;
   onStealthKeyCaptured: (
     cb: (ev: { keyCode: number; chars: string; flags: number; isKeyDown: boolean }) => void,
   ) => () => void;
@@ -1053,6 +1170,18 @@ interface ElectronAPI {
   }>;
   profileSetMode: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   profileDelete: () => Promise<{ success: boolean; error?: string }>;
+  // "Cue Cards": what the user says about themselves that no résumé states.
+  profileGetOwnAnswers: () => Promise<{
+    success: boolean;
+    error?: string;
+    questions: Array<{ key: string; label: string; hint: string; drafted: boolean; needsJob?: boolean; maxChars: number }>;
+    answers: Array<{ key: string; text: string; status: 'draft' | 'saved'; updatedAt?: string }>;
+    drafting: boolean;
+  }>;
+  profileSaveOwnAnswer: (key: string, text: string) => Promise<{ success: boolean; text?: string; error?: string }>;
+  profileUseOwnAnswerDrafts: (keys?: string[]) => Promise<{ success: boolean; changed?: number; error?: string }>;
+  profileDraftOwnAnswers: () => Promise<{ success: boolean; written?: string[]; error?: string }>;
+  onProfileOwnAnswersUpdated: (callback: (data: { written: string[] }) => void) => () => void;
   profileGetProfile: () => Promise<any>;
   profileGetCompanyDossier: () => Promise<any | null>;
   profileSelectFile: () => Promise<{
@@ -1153,6 +1282,9 @@ interface ElectronAPI {
   // Ambient AI Chat — when enabled, meetings run without mic/system audio capture
   getAmbientChatEnabled: () => Promise<boolean>;
   setAmbientChatEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
+  // The running meeting captures no audio (started with Ambient AI Chat on)
+  getMeetingAudioCapture: () => Promise<{ withoutAudio: boolean }>;
+  onMeetingAudioCapture: (callback: (data: { withoutAudio: boolean }) => void) => () => void;
   getAutoAnswerEnabled: () => Promise<boolean>;
   setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   getDirectAssistEnabled: () => Promise<boolean>;
@@ -1193,6 +1325,13 @@ interface ElectronAPI {
       post_call_summary?: boolean;
     }) => void,
   ) => () => void;
+  getScreenshotDisplay: () => Promise<{
+    preference: string;
+    displays: Array<{ id: number; number: number; name: string; width: number; height: number; primary: boolean }>;
+  }>;
+  setScreenshotDisplay: (preference: string) => Promise<{ success: boolean; error?: string }>;
+  cropperPickDisplay: () => void;
+  cropperDrag: (active: boolean) => void;
   getScreenUnderstandingMode: () => Promise<'vision_first' | 'vision_only' | 'private_vision'>;
   setScreenUnderstandingMode: (
     mode: 'vision_first' | 'vision_only' | 'private_vision',
@@ -1363,6 +1502,8 @@ interface ElectronAPI {
   ) => Promise<{ success: boolean; error?: string }>;
   modesDeleteNoteSection: (id: string) => Promise<{ success: boolean; error?: string }>;
   modesRemoveAllNoteSections: (modeId: string) => Promise<{ success: boolean; error?: string }>;
+  modesApplyNoteTemplate: (modeId: string, templateId: string) => Promise<{ success: boolean; sections?: any[]; error?: string }>;
+  modesGetDefaultNoteSections: (modeId: string) => Promise<Array<{ title: string; description: string }>>;
 
   // Meeting interface theme — cross-window propagation. The settings window
   // writes the new theme to localStorage and calls `setMeetingInterfaceTheme`,
@@ -1374,6 +1515,14 @@ interface ElectronAPI {
   // Settings → Advanced → "Genie animation", passed to every window the same way.
   setGenieAnimationEnabled: (enabled: boolean) => void;
   onGenieAnimationChanged: (callback: (enabled: boolean) => void) => () => void;
+  // Settings → Advanced → "Keep overlay size", passed to every window the same way.
+  setKeepOverlaySizeEnabled: (enabled: boolean) => void;
+  onKeepOverlaySizeChanged: (callback: (enabled: boolean) => void) => () => void;
+  // Settings › Overlay: the meeting overlay's button order, passed to every window the same way.
+  setOverlayButtonOrder: (order: string[]) => void;
+  onOverlayButtonOrderChanged: (callback: (order: string[]) => void) => () => void;
+  setOverlayCustomButtons: (buttons: { id: string; name: string; prompt: string; instruction: string; screenshot: boolean }[]) => void;
+  onOverlayCustomButtonsChanged: (callback: (buttons: unknown) => void) => () => void;
 
   // Cancel the in-flight gemini-chat-stream. Renderer wires this to "drop
   // the current answer" user actions (Escape, navigation, chat-overlay unmount).
@@ -1496,6 +1645,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getRecognitionLanguages: () => ipcRenderer.invoke('get-recognition-languages'),
   takeScreenshot: () => ipcRenderer.invoke('take-screenshot'),
   takeSelectiveScreenshot: () => ipcRenderer.invoke('take-selective-screenshot'),
+  attachClipboardImage: () => ipcRenderer.invoke('attach-clipboard-image'),
+  // The path stays out of the renderer: Electron 32 removed File.path, and
+  // only a File the user dropped has one (getPathForFile gives '' otherwise).
+  attachLocalImage: (file: File) => ipcRenderer.invoke('attach-local-image', webUtils.getPathForFile(file)),
   getScreenshots: () => ipcRenderer.invoke('get-screenshots'),
   deleteScreenshot: (path: string) => ipcRenderer.invoke('delete-screenshot', path),
 
@@ -1507,8 +1660,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('screenshot-taken', subscription);
     };
   },
-  onScreenshotAttached: (callback: (data: { path: string; preview: string }) => void) => {
-    const subscription = (_: any, data: { path: string; preview: string }) => callback(data);
+  onScreenshotAttached: (callback: (data: { path: string; preview: string; formulaCapture?: string; quiet?: boolean }) => void) => {
+    const subscription = (_: any, data: { path: string; preview: string; formulaCapture?: string; quiet?: boolean }) => callback(data);
     ipcRenderer.on('screenshot-attached', subscription);
     return () => {
       ipcRenderer.removeListener('screenshot-attached', subscription);
@@ -1718,6 +1871,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.send('phone-mirror:attachments', items),
   phoneMirrorImagesSent: (id: string, paths: string[]) =>
     ipcRenderer.send('phone-mirror:images-sent', id, paths),
+  // The Answer button is recording the mic (reads Stop); the phone's chip follows.
+  phoneMirrorSetRecording: (active: boolean) =>
+    ipcRenderer.send('phone-mirror:recording', active),
   // The phone took a screenshot or photo off the tray; the overlay removes it.
   onPhoneMirrorDetach: (callback: (data: { path: string }) => void) => {
     const subscription = (_: any, data: any) => callback(data);
@@ -1839,10 +1995,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getLocalTrial: () => ipcRenderer.invoke('trial:get-local'),
   convertTrial: (choice: string) => ipcRenderer.invoke('trial:convert', choice),
   endTrialByok: (opts?: { force?: boolean }) => ipcRenderer.invoke('trial:end-byok', opts),
-  onTrialEnded: (cb: (data: { choice: string }) => void) => {
+  onTrialEnded: (cb: (data: { choice: string; expiresAt?: string; showEndedCard?: boolean }) => void) => {
     const sub = (_: any, data: any) => cb(data);
     ipcRenderer.on('trial-ended', sub);
     return () => ipcRenderer.removeListener('trial-ended', sub);
+  },
+  onTrialAllowanceLow: (cb: (data: { expiresAt?: string | null }) => void) => {
+    const sub = (_: any, data: any) => cb(data);
+    ipcRenderer.on('trial-allowance-low', sub);
+    return () => ipcRenderer.removeListener('trial-allowance-low', sub);
   },
   cardsGet: () => ipcRenderer.invoke('cards:get'),
   cardsRecord: (id: string, outcome: string, meta?: { until?: number }) => ipcRenderer.invoke('cards:record', id, outcome, meta),
@@ -1876,6 +2037,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       | 'azure'
       | 'ibmwatson'
       | 'soniox'
+      | 'qwen'
       | 'nvidia_nim'
       | 'natively'
       | 'local-whisper' | 'apple-speech',
@@ -1899,11 +2061,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setIbmWatsonApiKey: (apiKey: string) => ipcRenderer.invoke('set-ibmwatson-api-key', apiKey),
   setGroqSttModel: (model: string) => ipcRenderer.invoke('set-groq-stt-model', model),
   setSonioxApiKey: (apiKey: string) => ipcRenderer.invoke('set-soniox-api-key', apiKey),
+  setQwenAsrApiKey: (apiKey: string) => ipcRenderer.invoke('set-qwen-asr-api-key', apiKey),
   setNvidiaNimSttModel: (model: string) => ipcRenderer.invoke('set-nvidia-nim-stt-model', model),
   setSttModel: (provider: 'deepgram' | 'openai', model: string) => ipcRenderer.invoke('set-stt-model', provider, model),
   setIbmWatsonRegion: (region: string) => ipcRenderer.invoke('set-ibmwatson-region', region),
   testSttConnection: (
-    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim',
+    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen' | 'nvidia_nim',
     apiKey: string,
     region?: string,
   ) => ipcRenderer.invoke('test-stt-connection', provider, apiKey, region),
@@ -1915,6 +2078,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // In-app recovery: resets the active local-Whisper model + per-channel
   // overrides back to the safe fallback. See electron/ipcHandlers.ts handler.
   localWhisperResetToDefault: () => ipcRenderer.invoke('local-whisper-reset-to-default'),
+  userBioGet: () => ipcRenderer.invoke('user-bio-get'),
+  userBioSet: (bio: string) => ipcRenderer.invoke('user-bio-set', bio),
+  liveNotesShortenLine: (line: string) => ipcRenderer.invoke('live-notes:shorten-line', line),
+  liveNotesAttachImage: () => ipcRenderer.invoke('live-notes:attach-image'),
+  followMicDeviceGet: () => ipcRenderer.invoke('follow-mic-device-get'),
+  followMicDeviceSet: (enabled: boolean) => ipcRenderer.invoke('follow-mic-device-set', enabled),
+  roomSpeakersGet: () => ipcRenderer.invoke('room-speakers-get'),
+  roomSpeakersSet: (enabled: boolean) => ipcRenderer.invoke('room-speakers-set', enabled),
   localWhisperGetChannelConfig: () => ipcRenderer.invoke('local-whisper-get-channel-config'),
   localWhisperSetChannelConfig: (cfg: {
     enabled?: boolean;
@@ -2052,6 +2223,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   getNativeAudioStatus: () => ipcRenderer.invoke('native-audio-status'),
   getInputDevices: () => ipcRenderer.invoke('get-input-devices'),
+  setMeetingInputDevice: (deviceId: string | null) => ipcRenderer.invoke('meeting:set-input-device', deviceId),
   getOutputDevices: () => ipcRenderer.invoke('get-output-devices'),
   setRecognitionLanguage: (key: string) => ipcRenderer.invoke('set-recognition-language', key),
   getAiResponseLanguages: () => ipcRenderer.invoke('get-ai-response-languages'),
@@ -2121,6 +2293,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       error?: string;
       channel: 'user' | 'interviewer';
       reconnectAttempts?: number;
+      /** A stand-in carries the channel while `provider` is down (audio/sttFailover.ts). */
+      fallback?: { provider: string; notice: string };
     }) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);
@@ -2157,6 +2331,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('generate-follow-up', intent, userRequest),
   generateFollowUpQuestions: () => ipcRenderer.invoke('generate-follow-up-questions'),
   generateRecap: () => ipcRenderer.invoke('generate-recap'),
+  generateLiveHelper: (action: 'catch_me_up' | 'define' | 'sound_smart' | 'follow_up_questions', opts?: { sinceMs?: number }) =>
+    ipcRenderer.invoke('generate-live-helper', action, opts),
+  runNoteRecipe: (input: { recipeId: string; extra?: string; meetingId?: string | null; phase: 'live' | 'ended'; notes?: string }) =>
+    ipcRenderer.invoke('note-recipe:run', input),
+  compileCustomButton: (input: { name: string; description: string }) =>
+    ipcRenderer.invoke('custom-button:compile', input),
+  generateCustomButton: (input: { name: string; instruction: string; imagePaths?: string[]; readMinutes?: number }) =>
+    ipcRenderer.invoke('generate-custom-button', input),
   submitManualQuestion: (question: string) =>
     ipcRenderer.invoke('submit-manual-question', question),
   getIntelligenceContext: () => ipcRenderer.invoke('get-intelligence-context'),
@@ -2168,18 +2350,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }) => ipcRenderer.invoke('test-inject-transcript', segment),
   testGetModeContext: () => ipcRenderer.invoke('test-get-mode-context'),
   resetIntelligence: () => ipcRenderer.invoke('reset-intelligence'),
-
-  // Action Button Mode (Dynamic Recap / Brainstorm toggle)
-  getActionButtonMode: () => ipcRenderer.invoke('get-action-button-mode'),
-  setActionButtonMode: (mode: 'recap' | 'brainstorm') =>
-    ipcRenderer.invoke('set-action-button-mode', mode),
-  onActionButtonModeChanged: (callback: (mode: 'recap' | 'brainstorm') => void) => {
-    const subscription = (_: any, mode: 'recap' | 'brainstorm') => callback(mode);
-    ipcRenderer.on('action-button-mode-changed', subscription);
-    return () => {
-      ipcRenderer.removeListener('action-button-mode-changed', subscription);
-    };
-  },
 
   onModeChanged: (callback: (data: { id: string | null; name: string | null; fileCount?: number; indexedCount?: number }) => void) => {
     const subscription = (_: any, data: { id: string | null; name: string | null }) =>
@@ -2213,6 +2383,65 @@ contextBridge.exposeInMainWorld('electronAPI', {
   cancelDiagramRepair: (requestId: string) => ipcRenderer.invoke('diagram:repair-cancel', requestId),
   acceptDiagramRepair: (payload: { originalSource: string; repairedSource: string }) => ipcRenderer.invoke('diagram:repair-accepted', payload),
   exportDiagram: (payload: { format: 'svg' | 'png' | 'mmd' | 'json' | 'csv'; data: string; name?: string }) => ipcRenderer.invoke('diagram:export', payload),
+  meetingOutputs: {
+    exportPdf: (meetingId) => ipcRenderer.invoke('outputs:export-pdf', meetingId),
+    getShareLink: (meetingId) => ipcRenderer.invoke('outputs:share-link-get', meetingId),
+    createShareLink: (meetingId, opts) => ipcRenderer.invoke('outputs:share-link-create', meetingId, opts),
+    revokeShareLink: (meetingId) => ipcRenderer.invoke('outputs:share-link-revoke', meetingId),
+    getConnections: () => ipcRenderer.invoke('outputs:get-connections'),
+    addSlackWebhook: (label, url) => ipcRenderer.invoke('outputs:slack-add', label, url),
+    removeSlackWebhook: (id) => ipcRenderer.invoke('outputs:slack-remove', id),
+    testSlackWebhook: (id) => ipcRenderer.invoke('outputs:slack-test', id),
+    saveToken: (service, token, instanceUrl) => ipcRenderer.invoke('outputs:save-token', service, token, instanceUrl),
+    testConnection: (service) => ipcRenderer.invoke('outputs:test', service),
+    disconnect: (service) => ipcRenderer.invoke('outputs:disconnect', service),
+    oauthServices: () => ipcRenderer.invoke('outputs:oauth-services'),
+    connectWithBrowser: (service) => ipcRenderer.invoke('outputs:oauth-connect', service),
+    cancelBrowserConnect: () => ipcRenderer.invoke('outputs:oauth-cancel'),
+    searchNotion: (query) => ipcRenderer.invoke('outputs:notion-search', query),
+    setNotionParent: (parent) => ipcRenderer.invoke('outputs:notion-set-parent', parent),
+    composeSlack: (meetingId, opts) => ipcRenderer.invoke('outputs:slack-compose', meetingId, opts),
+    sendSlack: (payload) => ipcRenderer.invoke('outputs:slack-send', payload),
+    sendNotion: (meetingId, opts) => ipcRenderer.invoke('outputs:notion-send', meetingId, opts),
+    resumeNotion: (meetingId) => ipcRenderer.invoke('outputs:notion-resume', meetingId),
+    previewCrm: (meetingId, service) => ipcRenderer.invoke('outputs:crm-preview', meetingId, service),
+    sendCrm: (meetingId, service, emails) => ipcRenderer.invoke('outputs:crm-send', meetingId, service, emails),
+    enrichAttendees: (meetingId) => ipcRenderer.invoke('outputs:enrich-attendees', meetingId),
+    setMcpEnabled: (enabled) => ipcRenderer.invoke('outputs:mcp-set-enabled', enabled),
+    resetMcpToken: () => ipcRenderer.invoke('outputs:mcp-reset-token'),
+    getWritingStyle: (modeId) => ipcRenderer.invoke('outputs:style-get', modeId),
+    getWritingStyleForMeeting: (meetingId) => ipcRenderer.invoke('outputs:style-get-for-meeting', meetingId),
+    listWritingSamples: (modeId) => ipcRenderer.invoke('outputs:style-list', modeId),
+    addWritingSample: (modeId, text) => ipcRenderer.invoke('outputs:style-add', modeId, text),
+    removeWritingSample: (modeId, id) => ipcRenderer.invoke('outputs:style-remove', modeId, id),
+    recordFollowUpSent: (payload) => ipcRenderer.invoke('outputs:style-record-followup', payload),
+    refreshWritingStyle: (modeId) => ipcRenderer.invoke('outputs:style-refresh', modeId),
+    saveFollowUpEdit: (payload) => ipcRenderer.invoke('outputs:followup-save', payload),
+    openNotionPage: (url) => ipcRenderer.invoke('outputs:open-notion-page', url),
+  } satisfies MeetingOutputsApi,
+  // Settings › Connectors: webhooks and Zapier, automatic sending, personal API keys, Gmail.
+  connectors: {
+    listFolders: () => ipcRenderer.invoke('connectors:list-folders'),
+    listWebhooks: () => ipcRenderer.invoke('connectors:webhooks-list'),
+    createWebhook: (input) => ipcRenderer.invoke('connectors:webhook-create', input),
+    updateWebhook: (id, patch) => ipcRenderer.invoke('connectors:webhook-update', id, patch),
+    deleteWebhook: (id) => ipcRenderer.invoke('connectors:webhook-delete', id),
+    testWebhook: (id) => ipcRenderer.invoke('connectors:webhook-test', id),
+    rotateWebhookSecret: (id) => ipcRenderer.invoke('connectors:webhook-rotate', id),
+    listAutoSendRules: () => ipcRenderer.invoke('connectors:autosend-list'),
+    createAutoSendRule: (input) => ipcRenderer.invoke('connectors:autosend-create', input),
+    updateAutoSendRule: (id, patch) => ipcRenderer.invoke('connectors:autosend-update', id, patch),
+    deleteAutoSendRule: (id) => ipcRenderer.invoke('connectors:autosend-delete', id),
+    listApiKeys: () => ipcRenderer.invoke('connectors:apikeys-list'),
+    createApiKey: (input) => ipcRenderer.invoke('connectors:apikey-create', input),
+    revokeApiKey: (id) => ipcRenderer.invoke('connectors:apikey-revoke', id),
+    getGmailStatus: () => ipcRenderer.invoke('connectors:gmail-status'),
+    connectGmail: () => ipcRenderer.invoke('connectors:gmail-connect'),
+    cancelGmailConnect: () => ipcRenderer.invoke('connectors:gmail-cancel'),
+    disconnectGmail: () => ipcRenderer.invoke('connectors:gmail-disconnect'),
+    setGmailBriefsEnabled: (enabled) => ipcRenderer.invoke('connectors:gmail-set-briefs', enabled),
+    sendGmailFollowUp: (input) => ipcRenderer.invoke('connectors:gmail-send-followup', input),
+  } satisfies ConnectorsApi,
   onDiagramRenderRequest: (callback: (request: { requestId: string; key: string; source: string }) => void) => {
     const subscription = (_e: any, request: any) => callback(request);
     ipcRenderer.on('diagram:render-request', subscription);
@@ -2313,9 +2542,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('update-meeting-title', { id, title }),
   updateMeetingSummary: (id: string, updates: any) =>
     ipcRenderer.invoke('update-meeting-summary', { id, updates }),
-  regenerateMeetingSummary: (id: string, opts?: { templateType?: string; modeId?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }) =>
-    ipcRenderer.invoke('regenerate-meeting-summary', { id, templateType: opts?.templateType, modeId: opts?.modeId, tone: opts?.tone }),
-  regenerateMeetingFollowUp: (id: string, tone?: 'professional' | 'warm' | 'concise' | 'friendly') =>
+  regenerateMeetingSummary: (id: string, opts?: { templateType?: string; modeId?: string; noteTemplateId?: string | null; tone?: 'professional' | 'warm' | 'concise' | 'friendly' | 'your_style' }) =>
+    ipcRenderer.invoke('regenerate-meeting-summary', { id, templateType: opts?.templateType, modeId: opts?.modeId, noteTemplateId: opts?.noteTemplateId, tone: opts?.tone }),
+  regenerateMeetingFollowUp: (id: string, tone?: 'professional' | 'warm' | 'concise' | 'friendly' | 'your_style') =>
     ipcRenderer.invoke('regenerate-meeting-followup', { id, tone }),
   updateMeetingSpeakerLabels: (id: string, labels: Record<string, string>) =>
     ipcRenderer.invoke('update-meeting-speaker-labels', { id, labels }),
@@ -2515,8 +2744,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('intelligence-error', subscription);
     };
   },
-  onSessionReset: (callback: () => void) => {
-    const subscription = () => callback();
+  onSessionReset: (callback: (payload?: { resumedChat?: SessionResumedChatEntry[] }) => void) => {
+    const subscription = (_event: unknown, payload?: { resumedChat?: SessionResumedChatEntry[] }) => callback(payload && typeof payload === 'object' ? payload : undefined);
     ipcRenderer.on('session-reset', subscription);
     return () => {
       ipcRenderer.removeListener('session-reset', subscription);
@@ -2541,6 +2770,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
+  onGeminiStreamStarted: (callback: (data: { streamId: number }) => void) => {
+    const subscription = (_: any, data: { streamId: number }) => callback(data);
+    ipcRenderer.on('gemini-stream-started', subscription);
+    return () => {
+      ipcRenderer.removeListener('gemini-stream-started', subscription);
+    };
+  },
   onGeminiStreamDone: (callback: (data?: { finalText?: string; streamId?: number; incomplete?: boolean; incompleteReason?: string }) => void) => {
     const subscription = (_: any, data?: { finalText?: string; streamId?: number; incomplete?: boolean; incompleteReason?: string }) => callback(data);
     ipcRenderer.on('gemini-stream-done', subscription);
@@ -2675,6 +2911,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setMeetingCalendarEvent: (meetingId: string, eventId: string | null) => ipcRenderer.invoke('meeting-set-calendar-event', { meetingId, eventId }),
   openMailto: (params: { to: string; subject: string; body: string }) =>
     ipcRenderer.invoke('open-mailto', params),
+  getMailAppInfo: () => ipcRenderer.invoke('mail-app-info'),
 
   // Audio Test
   startAudioTest: (deviceId?: string) => ipcRenderer.invoke('start-audio-test', deviceId),
@@ -2806,11 +3043,67 @@ contextBridge.exposeInMainWorld('electronAPI', {
   calendarSourceDisconnect: (id: CalendarSourceIdInfo) => ipcRenderer.invoke('calendar-source-disconnect', id),
   getMeetingDetectionEnabled: () => ipcRenderer.invoke('get-meeting-detection-enabled'),
   setMeetingDetectionEnabled: (on: boolean) => ipcRenderer.invoke('set-meeting-detection-enabled', on),
+  getMeetingAutoStartEnabled: () => ipcRenderer.invoke('get-meeting-auto-start-enabled'),
+  setMeetingAutoStartEnabled: (on: boolean) => ipcRenderer.invoke('set-meeting-auto-start-enabled', on),
+  getCalendarReminderMinutes: () => ipcRenderer.invoke('get-calendar-reminder-minutes'),
+  setCalendarReminderMinutes: (minutes: number) => ipcRenderer.invoke('set-calendar-reminder-minutes', minutes),
+  onMeetingOffer: (callback: (offer: MeetingOfferPayload | null) => void) => {
+    const subscription = (_: any, offer: MeetingOfferPayload | null) => callback(offer);
+    ipcRenderer.on('meeting:offer', subscription);
+    return () => {
+      ipcRenderer.removeListener('meeting:offer', subscription);
+    };
+  },
+  getMeetingOffer: () => ipcRenderer.invoke('meeting-offer:current'),
+  startMeetingOffer: (id: string) => ipcRenderer.invoke('meeting-offer:start', id),
+  dismissMeetingOffer: (id: string) => ipcRenderer.invoke('meeting-offer:dismiss', id),
   getMeetingAutoStopEnabled: () => ipcRenderer.invoke('get-meeting-auto-stop-enabled'),
   setMeetingAutoStopEnabled: (on: boolean) => ipcRenderer.invoke('set-meeting-auto-stop-enabled', on),
   meetingAutoStopKeepGoing: () => ipcRenderer.invoke('meeting-auto-stop-keep-going'),
+  getTranscriptionPaused: () => ipcRenderer.invoke('meeting:get-transcription-paused'),
+  setTranscriptionPaused: (paused: boolean) => ipcRenderer.invoke('meeting:set-transcription-paused', paused),
+  onTranscriptionPaused: (callback: (data: { paused: boolean }) => void) => {
+    const subscription = (_: any, data: any) => callback({ paused: data?.paused === true });
+    ipcRenderer.on('meeting-transcription-paused', subscription);
+    return () => {
+      ipcRenderer.removeListener('meeting-transcription-paused', subscription);
+    };
+  },
+  onMeetingAudioLevel: (callback: (level: number) => void) => {
+    const subscription = (_: any, level: any) => callback(typeof level === 'number' ? level : 0);
+    ipcRenderer.on('meeting-audio-level', subscription);
+    return () => {
+      ipcRenderer.removeListener('meeting-audio-level', subscription);
+    };
+  },
   meetingAutoStopTyping: () => ipcRenderer.send('meeting-auto-stop-typing'),
+  assistGetDailyBrief: (events: unknown[]) => ipcRenderer.invoke('assist:get-daily-brief', events),
+  assistGetMeetingBrief: (event: unknown, opts?: { refresh?: boolean }) => ipcRenderer.invoke('assist:get-meeting-brief', event, opts),
+  assistGetCatchUp: () => ipcRenderer.invoke('assist:get-catch-up'),
+  assistDismissCatchUp: (key: string) => ipcRenderer.invoke('assist:dismiss-catch-up', key),
+  assistGetLiveRecap: () => ipcRenderer.invoke('assist:get-live-recap'),
+  assistDismissLiveRecap: () => ipcRenderer.invoke('assist:dismiss-live-recap'),
+  onAssistLastTimeRecap: (callback: (payload: any) => void) => {
+    const subscription = (_: any, payload: any) => callback(payload && typeof payload === 'object' ? payload : null);
+    ipcRenderer.on('assist:last-time-recap', subscription);
+    return () => {
+      ipcRenderer.removeListener('assist:last-time-recap', subscription);
+    };
+  },
+  getCatchUpEnabled: () => ipcRenderer.invoke('assist:get-catch-up-enabled'),
+  setCatchUpEnabled: (on: boolean) => ipcRenderer.invoke('assist:set-catch-up-enabled', on),
+  assistGetSender: () => ipcRenderer.invoke('assist:get-sender'),
+  assistOpenMailDraft: (url: string) => ipcRenderer.invoke('assist:open-mail-draft', url),
+  onAssistReminderDraft: (callback: (req: { kind: string; event: any }) => void) => {
+    const subscription = (_: any, req: any) => { if (req && typeof req === 'object') callback(req); };
+    ipcRenderer.on('assist:reminder-draft', subscription);
+    return () => {
+      ipcRenderer.removeListener('assist:reminder-draft', subscription);
+    };
+  },
   getFollowMeetingMute: () => ipcRenderer.invoke('get-follow-meeting-mute'),
+  getDictationEnabled: () => ipcRenderer.invoke('get-dictation-enabled'),
+  setDictationEnabled: (on: boolean) => ipcRenderer.invoke('set-dictation-enabled', on),
   setFollowMeetingMute: (on: boolean) => ipcRenderer.invoke('set-follow-meeting-mute', on),
   getMeetingMuteState: () => ipcRenderer.invoke('get-meeting-mute-state'),
   onMeetingMuteChanged: (callback: (state: { muted: boolean; app: string | null }) => void) => {
@@ -2825,6 +3118,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   notesWindowToggle: () => ipcRenderer.invoke('notes-window:toggle'),
   notesWindowClose: () => ipcRenderer.invoke('notes-window:close'),
   notesWindowIsOpen: () => ipcRenderer.invoke('notes-window:is-open'),
+  getMeetingSurface: () => ipcRenderer.invoke('meeting-surface:get'),
+  setMeetingSurface: (surface: 'overlay' | 'notepad') => ipcRenderer.invoke('meeting-surface:set', surface),
   onNotesWindowVisibility: (callback: (open: boolean) => void) => {
     const subscription = (_: any, value: any) => callback(value === true);
     ipcRenderer.on('notes-window-visibility', subscription);
@@ -2833,6 +3128,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   liveNotesGetState: () => ipcRenderer.invoke('live-notes:get-state'),
+  liveNotesMeetingInfo: () => ipcRenderer.invoke('live-notes:meeting-info'),
+  notesWindowCopyText: (text: string) => ipcRenderer.invoke('notes-window:copy-text', text),
+  clipboardWriteText: (text: string) => ipcRenderer.invoke('clipboard:write-text', text),
+  liveNotesSetTitle: (title: string) => ipcRenderer.invoke('live-notes:set-title', title),
+  liveNotesSetTemplate: (id: string | null) => ipcRenderer.invoke('live-notes:set-template', id),
+  liveNotesGetTemplate: () => ipcRenderer.invoke('live-notes:get-template'),
+  liveNotesCalendarCandidates: () => ipcRenderer.invoke('live-notes:calendar-candidates'),
+  liveNotesLinkEvent: (eventId: string | null) => ipcRenderer.invoke('live-notes:link-event', { eventId }),
+  liveNotesSetAttendees: (change: { add?: string; remove?: string }) => ipcRenderer.invoke('live-notes:set-attendees', change),
   liveNotesSetText: (text: string) => ipcRenderer.send('live-notes:set-text', text),
   onLiveNotesState: (callback: (state: { phase: 'idle' | 'live' | 'ended'; meetingId: string | null; text?: string }) => void) => {
     const subscription = (_: any, value: any) => callback(value);
@@ -2842,6 +3146,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   notesWindowOpenMeeting: (meetingId: string) => ipcRenderer.invoke('notes-window:open-meeting', meetingId),
+  notesWindowOpenSavedMeeting: (meetingId: string) => ipcRenderer.invoke('notes-window:open-saved-meeting', meetingId),
+  resumeMeeting: (meetingId: string, request?: { audio?: { inputDeviceId: string | null; outputDeviceId: string | null }; doNotPersist?: boolean }) => ipcRenderer.invoke('meeting:resume', meetingId, request),
   onLauncherOpenMeeting: (callback: (meetingId: string) => void) => {
     const subscription = (_: any, value: any) => callback(String(value));
     ipcRenderer.on('launcher:open-meeting', subscription);
@@ -2852,6 +3158,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getMeetingNotesVersions: (meetingId: string) => ipcRenderer.invoke('meeting-notes:versions', meetingId),
   rateMeetingNotes: (input: { meetingId: string; rating: 'up' | 'down'; comment?: string; versionId?: number | null }) => ipcRenderer.invoke('meeting-notes:rate', input),
   getMeetingNotesRating: (input: { meetingId: string; versionId?: number | null }) => ipcRenderer.invoke('meeting-notes:get-rating', input),
+  compareMeetingNotesStart: (input: { meetingId: string; versions: [number | 'current', number | 'current'] }) => ipcRenderer.invoke('meeting-notes:compare-start', input),
+  compareMeetingNotesPick: (input: { id: string; choice: 'A' | 'B' | 'same'; reason?: string }) => ipcRenderer.invoke('meeting-notes:compare-pick', input),
   onMeetingAutoStopNotice: (callback: (data: { stopsAt: number | null }) => void) => {
     const subscription = (_: any, data: { stopsAt: number | null }) => callback(data);
     ipcRenderer.on('meeting-auto-stop-notice', subscription);
@@ -2922,7 +3230,35 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ragQueryMeeting: (meetingId: string, query: string) =>
     ipcRenderer.invoke('rag:query-meeting', { meetingId, query }),
   ragQueryLive: (query: string) => ipcRenderer.invoke('rag:query-live', { query }),
-  ragQueryGlobal: (query: string) => ipcRenderer.invoke('rag:query-global', { query }),
+  ragQueryGlobal: (query: string, scope?: { folderId?: string }) => ipcRenderer.invoke('rag:query-global', { query, ...(scope?.folderId ? { folderId: scope.folderId } : {}) }),
+  organise: {
+    listFolders: () => ipcRenderer.invoke('organise:folders:list'),
+    createFolder: (name: string) => ipcRenderer.invoke('organise:folders:create', { name }),
+    renameFolder: (id: string, name: string) => ipcRenderer.invoke('organise:folders:rename', { id, name }),
+    deleteFolder: (id: string) => ipcRenderer.invoke('organise:folders:delete', { id }),
+    setFolderRules: (id: string, rules: Array<{ kind: string; value: string }>) => ipcRenderer.invoke('organise:folders:set-rules', { id, rules }),
+    applyFolderRulesToPast: (id: string) => ipcRenderer.invoke('organise:folders:apply-past', { id }),
+    dismissPastOffer: (id: string) => ipcRenderer.invoke('organise:folders:dismiss-past', { id }),
+    getMeeting: (meetingId: string) => ipcRenderer.invoke('organise:meeting:get', { meetingId }),
+    setMeetingFolder: (meetingId: string, folderId: string, inFolder: boolean) => ipcRenderer.invoke('organise:meeting:set-folder', { meetingId, folderId, inFolder }),
+    setMeetingTags: (meetingId: string, tags: string[]) => ipcRenderer.invoke('organise:meeting:set-tags', { meetingId, tags }),
+    listMeetings: (filter: { folderId?: string; tag?: string }) => ipcRenderer.invoke('organise:meetings:list', filter || {}),
+    listTags: () => ipcRenderer.invoke('organise:tags:list'),
+    listPeople: (query?: string) => ipcRenderer.invoke('organise:people:list', { query }),
+    getPerson: (id: string) => ipcRenderer.invoke('organise:people:get', { id }),
+    updatePerson: (id: string, patch: Record<string, string>) => ipcRenderer.invoke('organise:people:update', { id, patch }),
+    resolveFact: (factId: number, accept: boolean) => ipcRenderer.invoke('organise:people:resolve-fact', { factId, accept }),
+    listCompanies: (query?: string) => ipcRenderer.invoke('organise:companies:list', { query }),
+    getCompany: (domain: string) => ipcRenderer.invoke('organise:companies:get', { domain }),
+    updateCompany: (domain: string, patch: Record<string, string>) => ipcRenderer.invoke('organise:companies:update', { domain, patch }),
+    draftCompanyDescription: (domain: string) => ipcRenderer.invoke('organise:companies:draft-description', { domain }),
+    /** Older meetings were indexed in the background: People and Companies refresh. */
+    onPeopleIndexed: (callback: () => void) => {
+      const subscription = () => callback();
+      ipcRenderer.on('organise:people-indexed', subscription);
+      return () => { ipcRenderer.removeListener('organise:people-indexed', subscription); };
+    },
+  },
   ragCancelQuery: (options: { meetingId?: string; global?: boolean }) =>
     ipcRenderer.invoke('rag:cancel-query', options),
   ragIsMeetingProcessed: (meetingId: string) =>
@@ -3050,6 +3386,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   stealthTapAvailable: () => ipcRenderer.invoke('stealth-tap:available'),
   stealthTapOpenSettings: () => ipcRenderer.invoke('stealth-tap:open-settings'),
   stealthTapStop: () => ipcRenderer.invoke('stealth-tap:stop'),
+  stealthReadClipboard: () => ipcRenderer.invoke('stealth-edit:read-clipboard'),
+  stealthWriteClipboard: (text: string) => ipcRenderer.invoke('stealth-edit:write-clipboard', text),
   stealthTapStart: () => ipcRenderer.invoke('stealth-tap:start'),
   stealthTapShouldAutoEngage: () => ipcRenderer.invoke('stealth-tap:should-auto-engage'),
   stealthTapRefreshIme: () => ipcRenderer.invoke('stealth-tap:refresh-ime'),
@@ -3063,8 +3401,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('ollama-error', sub);
     };
   },
-  onStealthTapState: (cb: (state: { active: boolean; reason?: string }) => void) => {
-    const sub = (_: any, state: { active: boolean; reason?: string }) => cb(state);
+  onStealthTapState: (cb: (state: { active: boolean; reason?: string; target?: 'overlay' | 'notes' }) => void) => {
+    const sub = (_: any, state: { active: boolean; reason?: string; target?: 'overlay' | 'notes' }) => cb(state);
     ipcRenderer.on('stealth-tap-state', sub);
     return () => {
       ipcRenderer.removeListener('stealth-tap-state', sub);
@@ -3093,6 +3431,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   profileGetStatus: () => ipcRenderer.invoke('profile:get-status'),
   profileSetMode: (enabled: boolean) => ipcRenderer.invoke('profile:set-mode', enabled),
   profileDelete: () => ipcRenderer.invoke('profile:delete'),
+  profileGetOwnAnswers: () => ipcRenderer.invoke('profile:get-own-answers'),
+  profileSaveOwnAnswer: (key: string, text: string) => ipcRenderer.invoke('profile:save-own-answer', key, text),
+  profileUseOwnAnswerDrafts: (keys?: string[]) => ipcRenderer.invoke('profile:use-own-answer-drafts', keys),
+  profileDraftOwnAnswers: () => ipcRenderer.invoke('profile:draft-own-answers'),
+  onProfileOwnAnswersUpdated: (callback: (data: { written: string[] }) => void) => {
+    const subscription = (_: any, data: { written: string[] }) => callback(data);
+    ipcRenderer.on('profile:own-answers-updated', subscription);
+    return () => { ipcRenderer.removeListener('profile:own-answers-updated', subscription); };
+  },
   profileGetProfile: () => ipcRenderer.invoke('profile:get-profile'),
   profileGetCompanyDossier: () => ipcRenderer.invoke('profile:get-company-dossier'),
   profileSelectFile: () => ipcRenderer.invoke('profile:select-file'),
@@ -3196,6 +3543,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Ambient AI Chat — when enabled, meetings run without mic/system audio capture
   getAmbientChatEnabled: () => ipcRenderer.invoke('get-ambient-chat-enabled'),
   setAmbientChatEnabled: (enabled: boolean) => ipcRenderer.invoke('set-ambient-chat-enabled', enabled),
+  // The running meeting captures no audio (started with Ambient AI Chat on)
+  getMeetingAudioCapture: () => ipcRenderer.invoke('meeting:get-audio-capture'),
+  onMeetingAudioCapture: (callback: (data: { withoutAudio: boolean }) => void) => {
+    const subscription = (_: any, data: { withoutAudio: boolean }) => callback(data);
+    ipcRenderer.on('meeting-audio-capture', subscription);
+    return () => {
+      ipcRenderer.removeListener('meeting-audio-capture', subscription);
+    };
+  },
   getAutoAnswerEnabled: () => ipcRenderer.invoke('get-auto-answer-enabled'),
   setAutoAnswerEnabled: (enabled: boolean) => ipcRenderer.invoke('set-auto-answer-enabled', enabled),
   getDirectAssistEnabled: () => ipcRenderer.invoke('get-direct-assist-enabled'),
@@ -3231,6 +3587,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('provider-data-scopes-changed', subscription);
     };
   },
+  getScreenshotDisplay: () => ipcRenderer.invoke('get-screenshot-display'),
+  setScreenshotDisplay: (preference: string) => ipcRenderer.invoke('set-screenshot-display', preference),
   getScreenUnderstandingMode: () => ipcRenderer.invoke('get-screen-understanding-mode'),
   setScreenUnderstandingMode: (mode: 'vision_first' | 'vision_only' | 'private_vision') =>
     ipcRenderer.invoke('set-screen-understanding-mode', mode),
@@ -3292,6 +3650,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Cropper API
   cropperConfirmed: (bounds: Electron.Rectangle) => ipcRenderer.send('cropper-confirmed', bounds),
   cropperCancelled: () => ipcRenderer.send('cropper-cancelled'),
+  cropperPickDisplay: () => ipcRenderer.send('cropper-display-picked'),
+  cropperDrag: (active: boolean) => ipcRenderer.send('cropper-drag', active === true),
   /** Launcher only: the boot reveal animation has fully landed. */
   notifyLauncherRevealComplete: () => ipcRenderer.send('launcher:reveal-complete'),
   onResetCropper: (callback: (data: { hudPosition: { x: number; y: number } }) => void) => {
@@ -3424,6 +3784,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   modesDeleteNoteSection: (id: string) => ipcRenderer.invoke('modes:delete-note-section', id),
   modesRemoveAllNoteSections: (modeId: string) =>
     ipcRenderer.invoke('modes:remove-all-note-sections', modeId),
+  modesApplyNoteTemplate: (modeId: string, templateId: string) =>
+    ipcRenderer.invoke('modes:apply-note-template', modeId, templateId),
+  modesGetDefaultNoteSections: (modeId: string) => ipcRenderer.invoke('modes:get-default-note-sections', modeId),
 
   // Meeting interface theme — see ElectronAPI interface for rationale.
   setMeetingInterfaceTheme: (theme: string) => {
@@ -3444,6 +3807,36 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('genie-animation:changed', handler);
     return () => {
       ipcRenderer.removeListener('genie-animation:changed', handler);
+    };
+  },
+  setKeepOverlaySizeEnabled: (enabled: boolean) => {
+    ipcRenderer.send('keep-overlay-size:set', enabled);
+  },
+  onKeepOverlaySizeChanged: (callback: (enabled: boolean) => void) => {
+    const handler = (_evt: unknown, enabled: boolean) => callback(enabled);
+    ipcRenderer.on('keep-overlay-size:changed', handler);
+    return () => {
+      ipcRenderer.removeListener('keep-overlay-size:changed', handler);
+    };
+  },
+  setOverlayButtonOrder: (order: string[]) => {
+    ipcRenderer.send('overlay-buttons:set', order);
+  },
+  onOverlayButtonOrderChanged: (callback: (order: string[]) => void) => {
+    const handler = (_evt: unknown, order: string[]) => callback(order);
+    ipcRenderer.on('overlay-buttons:changed', handler);
+    return () => {
+      ipcRenderer.removeListener('overlay-buttons:changed', handler);
+    };
+  },
+  setOverlayCustomButtons: (buttons: { id: string; name: string; prompt: string; instruction: string; screenshot: boolean }[]) => {
+    ipcRenderer.send('overlay-custom-buttons:set', buttons);
+  },
+  onOverlayCustomButtonsChanged: (callback: (buttons: unknown) => void) => {
+    const handler = (_evt: unknown, buttons: unknown) => callback(buttons);
+    ipcRenderer.on('overlay-custom-buttons:changed', handler);
+    return () => {
+      ipcRenderer.removeListener('overlay-custom-buttons:changed', handler);
     };
   },
 
@@ -3485,6 +3878,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 } as ElectronAPI);
+
+// Tell the main process this page has its bridge (preloadBridgeGuard.ts): a
+// page that loads without it gets reloaded, which it cannot ask for itself.
+try { ipcRenderer.send('natively:preload-ready'); } catch { /* the guard reloads us */ }
 
 // Renderer-side console forwarding to main-process log file.
 // When verbose logging is on, patch console.log/warn/error so that renderer

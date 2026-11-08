@@ -67,10 +67,13 @@ describe('resolveMeetingEvidence', () => {
     assert.deepEqual(r, { ports: [], scopeMeetingId: null, inLiveMeeting: false });
   });
 
-  test('live chunks → JIT port scoped to the live id PLUS the live-transcript port; scope id is the live id; in a live meeting', async () => {
+  // Since 2026-10-16 the JIT and live-transcript ports are merged into ONE
+  // ranked port (fuseMeetingPorts): as two ports, the packer compared cosine
+  // with BM25 scores and weak semantic matches took the evidence budget.
+  test('live chunks → JIT port scoped to the live id merged with the live-transcript port; scope id is the live id; in a live meeting', async () => {
     const calls = [];
     const r = resolveMeetingEvidence(input({ rag: rag(jitRetriever(calls)) }));
-    assert.equal(r.ports.length, 2);
+    assert.equal(r.ports.length, 1, 'one merged meeting port');
     assert.equal(r.scopeMeetingId, LIVE_ID);
     assert.equal(r.inLiveMeeting, true);
     await r.ports[0].retrieve({ decision: decision('what happened with kafka', { userId: 'local', sessionId: 'sess-1', meetingId: LIVE_ID }) });
@@ -96,7 +99,7 @@ describe('resolveMeetingEvidence', () => {
   test('the live-transcript port answers from raw speech the indexer has not reached', async () => {
     const r = resolveMeetingEvidence(input({ rag: rag(jitRetriever()) }));
     const d = decision('did anyone mention the elasticsearch window', { userId: 'local', sessionId: 'sess-1', meetingId: LIVE_ID });
-    const out = await r.ports[1].retrieve({ decision: d });
+    const out = await r.ports[0].retrieve({ decision: d });
     assert.ok(out.evidence.some((e) => e.sourceId === LIVE_TRANSCRIPT_SOURCE_ID && /elasticsearch relocation window/.test(e.content)));
   });
 

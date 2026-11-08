@@ -21,6 +21,7 @@
 import type { EvidenceScope, SourceType } from '../contracts/types';
 import type { RetrievalPort } from '../orchestration/orchestrator';
 import { createLegacyRetrievalPort } from './legacy-retrieval-port';
+import type { LegacyChunk } from './legacy-adapter';
 import { Bm25Index } from './bm25';
 import { looksLikeQuestion } from '../question/question-resolver';
 
@@ -40,13 +41,58 @@ export interface LiveTranscriptPortInput {
   sessionId: string;
   /** Speaker → role, as the session tracker labels them. */
   roleOf?: (speaker: string) => 'interviewer' | 'user' | 'assistant';
+  /** SessionTracker.getMeetingRecaps(): the meeting so far, block by block, oldest first. */
+  recaps?: ReadonlyArray<{ lines: number; text: string }>;
 }
 
 export const LIVE_TRANSCRIPT_SOURCE_ID = 'transcript:live';
+export const MEETING_RECAP_SOURCE_ID = 'transcript:recap';
+/**
+ * A request about the meeting as a whole (2026-10-15). Typed "Summarize the
+ * key decisions from this meeting so far" was answered from the six best
+ * windows, a few minutes of a three-hour meeting; for these the meeting recap
+ * is served first. Not "what did we decide about X": served for one topic, the
+ * recap's other decisions were blended into the answer ("the redesign decision
+ * was about versioning" for a redesign never discussed, measured 2026-10-15).
+ */
+export const MEETING_OVERVIEW_RE = /\b(?:summari[sz]e|summary|recap|catch (?:me|us) up|overview|(?:key|main|big(?:gest)?) (?:decisions?|points?|takeaways?|topics?)|action items?|so far)\b/i;
+/**
+ * The recap must fit the turn's evidence budget, or the packer drops it whole:
+ * past this many characters each block keeps only its first lines.
+ */
+export const MEETING_RECAP_MAX_CHARS = 4000;
+
+/** The recap as one evidence text, each block cut to an equal share of the cap. */
+export function renderMeetingRecap(recaps: ReadonlyArray<{ text: string }>, max = MEETING_RECAP_MAX_CHARS): string {
+  if (!recaps.length) return '';
+  const share = Math.floor(max / recaps.length);
+  const parts = recaps.map((r, i) => {
+    let body = '';
+    for (const line of r.text.split('\n').map((l) => l.trim()).filter(Boolean)) {
+      if (body && body.length + line.length + 1 > share) break;
+      body += (body ? '\n' : '') + line;
+    }
+    return `Part ${i + 1} of ${recaps.length}:\n${body.slice(0, Math.max(share, 80))}`;
+  });
+  return `Recap of the meeting so far, oldest first (a summary of what was said, not a quotation; the latest minutes are in the transcript):\n${parts.join('\n')}`;
+}
 /** Target size of one retrievable window of speech. */
 export const LIVE_TRANSCRIPT_CHUNK_CHARS = 600;
 /** Windows below this share are noise for the question, not evidence. */
 export const LIVE_TRANSCRIPT_MIN_NORMALIZED_SCORE = 0.2;
+/**
+ * The best-scoring window is served with the windows either side of it
+ * (2026-10-15). Speech states a figure apart from the words that say what it
+ * is: "let me do the budget thing … the number we landed on is four hundred and
+ * twelve thousand dollars" fell into one window and "that's the budget, that's
+ * approved" into the next, so "what budget did we approve?" found the second
+ * and the answer said no figure was stated. Measured on a 2,399-line meeting:
+ * 7 of 11 planted facts reached the top six windows, 9 of 11 with the best one
+ * widened, for ~1,100 more characters a question. Widening more windows, or
+ * overlapping them, found no more (overlap was worse: copies of one passage
+ * took several of the six places).
+ */
+export const LIVE_TRANSCRIPT_WIDENED_HITS = 1;
 
 const defaultRoleOf = (speaker: string): 'interviewer' | 'user' | 'assistant' =>
   speaker === 'user' ? 'user' : speaker === 'assistant' ? 'assistant' : 'interviewer';
@@ -149,21 +195,58 @@ export function stemSpeechToken(token: string): string {
 const stemSpeech = (text: string): string => normalizeSpeech(text).split(' ').map(stemSpeechToken).join(' ');
 
 /**
+ * The query-independent work on a window, cached by its text (2026-10-15).
+ * Each question rebuilt the index from scratch: ~25 ms at 6,000 lines, two
+ * thirds of it re-normalising every line (for restates()) and re-stemming
+ * windows that had not changed since the last question. Two strings per
+ * window (~2 KB): token arrays measured ~10 KB a window.
+ */
+interface PreparedWindow {
+  stemmed: string;
+  /** Lines normalised as restates() compares them, joined by '\n'. */
+  norm: string;
+}
+const PREPARED = new Map<string, PreparedWindow>();
+/** ~2x the windows of a ten-hour meeting (~1,600); past it the cache starts over. */
+const PREPARED_MAX = 3_000;
+const normLine = (line: string): string => normalizeSpeech(line.replace(/^[^:\n]{1,40}:\s*/, ''));
+function prepareWindow(text: string): PreparedWindow {
+  let p = PREPARED.get(text);
+  if (p) return p;
+  if (PREPARED.size >= PREPARED_MAX) PREPARED.clear();
+  p = { stemmed: stemSpeech(text), norm: text.split('\n').map(normLine).join('\n') };
+  PREPARED.set(text, p);
+  return p;
+}
+
+/** Could any line of this window restate the query? A substring pre-check on the cached text. */
+function mayRestate(p: PreparedWindow, q: { norm: string; words: Set<string> }): boolean {
+  if (!q.norm) return false;
+  if (q.words.size < 4) return p.norm.includes(q.norm);
+  let present = 0;
+  for (const w of q.words) if (p.norm.includes(w)) present++;
+  return present / q.words.size >= 0.9;
+}
+
+function prepareQuery(query: string): { norm: string; words: Set<string> } {
+  const norm = normalizeSpeech(query);
+  return { norm, words: new Set(norm.split(' ').filter((w) => w.length > 2)) };
+}
+
+/**
  * Does this spoken line restate the question being answered? Exact once
  * normalised, or — because the retrieval query is the CLEANED question (fillers
  * and stutters stripped) while the transcript holds what was actually said —
  * a line that carries nearly all of the question's words and little else.
  */
-function lineRestatesQuery(line: string, query: string): boolean {
-  const q = normalizeSpeech(query);
-  const l = normalizeSpeech(line.replace(/^[^:\n]{1,40}:\s*/, ''));
-  if (!q || !l) return false;
-  if (l === q) return true;
-  const qt = new Set(q.split(' ').filter((w) => w.length > 2));
-  const lt = l.split(' ').filter((w) => w.length > 2);
-  if (qt.size < 4) return false;
-  const shared = [...qt].filter((w) => lt.includes(w)).length;
-  return shared / qt.size >= 0.9 && lt.length <= qt.size * 1.5 + 2;
+function restates(lineNorm: string, q: { norm: string; words: Set<string> }): boolean {
+  if (!q.norm || !lineNorm) return false;
+  if (lineNorm === q.norm) return true;
+  const words = lineNorm.split(' ').filter((w) => w.length > 2);
+  if (q.words.size < 4 || words.length > q.words.size * 1.5 + 2) return false;
+  let shared = 0;
+  for (const w of q.words) if (words.includes(w)) shared++;
+  return shared / q.words.size >= 0.9;
 }
 
 export function createLiveTranscriptRetrievalPort(input: LiveTranscriptPortInput): RetrievalPort | null {
@@ -172,10 +255,12 @@ export function createLiveTranscriptRetrievalPort(input: LiveTranscriptPortInput
 
   const sourceId = LIVE_TRANSCRIPT_SOURCE_ID;
   const scope: EvidenceScope = { userId: input.userId, sessionId: input.sessionId };
-  const sourceTypes = new Map<string, SourceType>([[sourceId, 'MEETING_TRANSCRIPT']]);
-  const activeVersions = new Map<string, string>([[sourceId, 'live']]);
-  const chunkVersions = new Map<string, string>([[sourceId, 'live']]);
-  const sourceScopes = new Map<string, EvidenceScope>([[sourceId, scope]]);
+  const sources = [sourceId, MEETING_RECAP_SOURCE_ID];
+  const sourceTypes = new Map<string, SourceType>(sources.map((id) => [id, 'MEETING_TRANSCRIPT']));
+  const activeVersions = new Map<string, string>(sources.map((id) => [id, 'live']));
+  const chunkVersions = new Map<string, string>(sources.map((id) => [id, 'live']));
+  const sourceScopes = new Map<string, EvidenceScope>(sources.map((id) => [id, scope]));
+  const recapText = renderMeetingRecap(input.recaps ?? []);
   const provenance = process.env.NATIVELY_TEST_TRANSCRIPT_INJECTION === '1' ? 'TEST_TRANSCRIPT' as const : 'LIVE_STT' as const;
 
   return createLegacyRetrievalPort({
@@ -189,29 +274,60 @@ export function createLiveTranscriptRetrievalPort(input: LiveTranscriptPortInput
       // floor is measured against real speech, and a question is never handed
       // back as evidence for its own answer (2026-10-04, E12).
       const asksSomething = looksLikeQuestion(query);
+      const q = asksSomething ? prepareQuery(query) : null;
       const windows = chunks
-        .map((text, chunkIndex) => ({
-          chunkIndex,
-          text: asksSomething ? text.split('\n').filter((line) => !lineRestatesQuery(line, query)).join('\n') : text,
-        }))
+        .map((text, chunkIndex) => {
+          const prepared = prepareWindow(text);
+          if (!q || !mayRestate(prepared, q)) return { chunkIndex, text, prepared };
+          const lines = text.split('\n');
+          const norms = prepared.norm.split('\n');
+          const kept = lines.filter((_, k) => !restates(norms[k] ?? '', q)).join('\n');
+          return kept === text ? { chunkIndex, text, prepared } : { chunkIndex, text: kept, prepared: prepareWindow(kept) };
+        })
         .filter((w) => w.text.trim().length > 0);
       if (!windows.length) return [];
-      const index = new Bm25Index(windows.map((w, i) => ({ id: String(i), text: stemSpeech(w.text) })));
-      return index.scoreNormalized(stemSpeech(query))
-        .filter((s) => s.score >= LIVE_TRANSCRIPT_MIN_NORMALIZED_SCORE)
-        .slice(0, Math.max(1, opts.topK))
-        .map((s) => {
-          const w = windows[Number(s.id)];
-          return {
-            sourceId,
-            fileName: 'transcript:live',
-            text: w.text,
-            chunkIndex: w.chunkIndex,
-            score: s.score,
-            vectorScore: s.score,
-            provenance,
-          };
+      const index = new Bm25Index(windows.map((w, i) => ({ id: String(i), text: w.prepared.stemmed })));
+      const textOf = new Map(windows.map((w) => [w.chunkIndex, w.text]));
+      // A hit already served inside a widened one is not served twice.
+      const served = new Set<number>();
+      const out: LegacyChunk[] = [];
+      if (recapText && MEETING_OVERVIEW_RE.test(query)) {
+        out.push({
+          sourceId: MEETING_RECAP_SOURCE_ID,
+          fileName: 'transcript:recap',
+          text: recapText,
+          chunkIndex: 0,
+          score: 1,
+          vectorScore: 1,
+          provenance: 'MEETING_NOTE',
         });
+      }
+      for (const s of index.scoreNormalized(stemSpeech(query))
+        .filter((x) => x.score >= LIVE_TRANSCRIPT_MIN_NORMALIZED_SCORE)
+        .slice(0, Math.max(1, opts.topK))) {
+        const w = windows[Number(s.id)];
+        if (served.has(w.chunkIndex)) continue;
+        let text = w.text;
+        if (out.filter((c) => c.sourceId === sourceId).length < LIVE_TRANSCRIPT_WIDENED_HITS) {
+          const around = [w.chunkIndex - 1, w.chunkIndex, w.chunkIndex + 1];
+          // Neighbouring windows share their boundary utterance: keep one copy.
+          text = around.flatMap((i) => (textOf.get(i) ?? '').split('\n'))
+            .filter((line, i, all) => line.trim() && line !== all[i - 1])
+            .join('\n');
+          for (const i of around) served.add(i);
+        }
+        served.add(w.chunkIndex);
+        out.push({
+          sourceId,
+          fileName: 'transcript:live',
+          text,
+          chunkIndex: w.chunkIndex,
+          score: s.score,
+          vectorScore: s.score,
+          provenance,
+        });
+      }
+      return out;
     },
   });
 }

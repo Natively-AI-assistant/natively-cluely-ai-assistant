@@ -372,7 +372,6 @@ describe('mode detector gets the invite, not just its title', () => {
     const inputs = buildNotesInputs({ meetingId: 'm', startMs: T0, nowMs: T0, calendarEvent: EVENT, user: USER, callParticipants: ['Dana Fox', 'Zed'] });
     assert.deepEqual(inputs.participantNames, ['Priya Shah', 'Dana Fox', 'Tom Lee', 'Old Friend', 'Zed']);
     assert.equal(inputs.lastTimeBlock, '');
-    assert.match(inputs.titleHint, /with acme\.com, globex\.io; people: Dana Fox, Tom Lee, Old Friend, Zed/);
   });
 });
 
@@ -447,9 +446,9 @@ describe('user notes and spelling list in the prompts', () => {
     assert.match(captured, /MEETING CONTEXT/);
     assert.doesNotMatch(captured, /LAST TIME/);
     // "Dana", "Fox" and "Acme" come from the invite: allowed through the gate.
-    assert.equal(withCtx, 'Dana Fox from Acme confirmed the enterprise tier pricing for the rollout.');
+    assert.equal(withCtx.overview, 'Dana Fox from Acme confirmed the enterprise tier pricing for the rollout.');
     // Without the context the same names are new information and the polish is rejected.
-    assert.equal(await new SummaryPolisher(llm).polishOverview(params), null);
+    assert.equal((await new SummaryPolisher(llm).polishOverview(params)).overview, null);
   });
 
   test('the assembler threads the context into every chunk call', async () => {

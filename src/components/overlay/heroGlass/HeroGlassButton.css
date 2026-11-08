@@ -1,0 +1,704 @@
+/* Copied from natively-website src/components/buttons/LiquidGlassButton.css
+   (the hero overlay's buttons) for the Lavender meeting style. Only the
+   prefix differs, lg- -> hlg-, so it never meets the app's own older
+   .lg-button (src/ui-components/LiquidGlassButton.css); and the site's
+   --ease-out / --ease-hover are written in as their values. Keep the two in
+   step by re-copying, not by editing here. */
+
+/* src/ui-components/LiquidGlassButton.css
+ *
+ * macOS 27 "Liquid Glass" pill button. Every value here was measured off a
+ * 1206x410 reference screenshot rather than guessed — see design.md for the
+ * method and the numbers.
+ *
+ * Class and custom-property names are all `hlg-` / `--hlg-` prefixed because
+ * this stylesheet becomes global the moment the component is imported, and
+ * `@property` registrations are global no matter where they are declared.
+ */
+
+/* Registered so the press can interpolate the lens size. Global by spec. */
+@property --hlg-lens-w { syntax: "<length>"; inherits: true; initial-value: 200px; }
+@property --hlg-lens-h { syntax: "<length>"; inherits: true; initial-value: 150px; }
+
+/*
+  Liquid Glass is a FLAT material. There is no top-to-bottom body gradient —
+  all of the depth lives in a thin specular rim that traces the perimeter:
+  bright where the pill faces the light (top) and catches the bounce (bottom),
+  dark along the left and right caps. Modelling it as a glossy gradient is the
+  single most common way to get it wrong.
+
+    background   flat fill + a soft inner sheen that carries the rim inward
+    ::before     three inset rings (the bright falloff), aimed by two masks
+    ::after      a ring mask that drops the caps into shadow
+    .hlg-lens     the pointer-tracked highlight and local rim pickup
+*/
+.hlg-button {
+    /* Geometry — measured. */
+    --hlg-pill-h: 136px;
+    --hlg-label-size: 51px;
+    /* a pill by default; a host can square it off without touching the height */
+    --hlg-radius: calc(var(--hlg-pill-h) / 2);
+
+    /*
+      Tracking and the icon gap are em-relative so they scale with the label
+      instead of being pinned to 51px. At the measured size these are exactly
+      1.6px and 24px; change --hlg-label-size alone and they still hold.
+    */
+    --hlg-label-track: 0.03137em;   /* 1.6px at 51px */
+    --hlg-icon-gap: 0.47059em;      /* 24px at 51px */
+    --hlg-label-weight: 505;
+    /* measured at hero size; see .hlg-sm for why small text needs a real one */
+    --hlg-label-leading: 1;
+
+    /*
+      A token so a host can opt out. At hero size the measured SF Pro metrics
+      are the point; embedded in a UI that runs on its own face, matching the
+      neighbours matters more — see .hlg-sm.
+    */
+    --hlg-font:
+        -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+        InterVariable, Inter, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+
+    /*
+      How fast the specular rim dies away across the rounded caps. Expressed
+      as percentages of the pill width, so the fade scales with the button
+      instead of being pinned to the 535px reference. At that width these are
+      pixel-identical to the measured 24px / 62px / 142px, and because every
+      stop stays below 50% the two mirrored halves can never cross, however
+      narrow the pill gets.
+    */
+    --hlg-cap-0: 4.486%;
+    --hlg-cap-1: 11.589%;
+    --hlg-cap-2: 26.542%;
+
+    /*
+      One duration and one curve for the whole hover state, so the tint and
+      the lens arrive together — split timings read as two overlapping
+      changes rather than one material waking up. easeInOutSine starts and
+      ends at zero velocity, which is what "smooth" means for a cross-fade,
+      and being symmetric it is its own mirror: leaving traces the same path
+      as arriving, with no second curve to maintain.
+    */
+    --hlg-hover-dur: 300ms;
+    --hlg-hover-ease: cubic-bezier(0.37, 0, 0.63, 1);
+
+    /* Written by useLensTracking on pointermove; nothing else touches them. */
+    --hlg-mx: 50%;
+    --hlg-my: 50%;
+    --hlg-lens-w: 200px;
+    --hlg-lens-h: 150px;
+
+    appearance: none;
+    /*
+      The button centres its own content. Without this the content span is an
+      inline-flex sitting on the button's BASELINE, so its vertical position
+      follows line-height and font metrics rather than the box — which put the
+      label 1.5px low at 12px while looking fine at 51px.
+    */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    isolation: isolate;
+    height: var(--hlg-pill-h);
+    border: 0;
+    border-radius: var(--hlg-radius);
+    padding: 0 28px;
+    cursor: pointer;
+    overflow: hidden;
+    font: inherit;
+    /*
+      PINNED, not inherited, because every tracking and weight value here was
+      measured against SF Pro. Inheriting means the numbers silently stop being
+      true: in Natively, whose default sans is Inter, labels run +1.9% wide;
+      falling all the way to Arial they run +7.6% wide AND jump to bold,
+      because Arial has no 505 weight so the match algorithm rounds 505 up
+      to 700.
+    */
+    font-family: var(--hlg-font);
+    transition:
+        transform 110ms cubic-bezier(0.22, 1, 0.36, 1),
+        background-color var(--hlg-hover-dur) var(--hlg-hover-ease);
+    -webkit-tap-highlight-color: transparent;
+}
+
+/*
+  ::before — the bright specular rim. Three stacked inset rings give the
+  150/132/116 falloff measured off the reference, then two mask layers aim the
+  light: the vertical one keeps it on the top and bottom faces, the horizontal
+  one lets it die away across the caps, whose normals turn away from the light.
+  A uniform ring here is what makes a pill look like a plastic capsule.
+*/
+.hlg-button::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow:
+        inset 0 0 0 1px var(--hlg-rim-1),
+        inset 0 0 0 2px var(--hlg-rim-2),
+        inset 0 0 0 3px var(--hlg-rim-3);
+    -webkit-mask-image:
+        linear-gradient(180deg, #000 0%, #000 3%, transparent 15%, transparent 85%, #000 97%, #000 100%),
+        linear-gradient(90deg, transparent var(--hlg-cap-0), rgba(0, 0, 0, .82) var(--hlg-cap-1), #000 var(--hlg-cap-2), #000 calc(100% - var(--hlg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--hlg-cap-1)), transparent calc(100% - var(--hlg-cap-0)));
+    -webkit-mask-composite: source-in;
+    mask-image:
+        linear-gradient(180deg, #000 0%, #000 3%, transparent 15%, transparent 85%, #000 97%, #000 100%),
+        linear-gradient(90deg, transparent var(--hlg-cap-0), rgba(0, 0, 0, .82) var(--hlg-cap-1), #000 var(--hlg-cap-2), #000 calc(100% - var(--hlg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--hlg-cap-1)), transparent calc(100% - var(--hlg-cap-0)));
+    mask-composite: intersect;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/*
+  ::after — the caps sit in shadow. A ring mask holds it to the perimeter; the
+  vertical gradient keeps it clear of the lit top and bottom faces.
+*/
+.hlg-button::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 2px;
+    background: linear-gradient(180deg,
+        rgba(0, 0, 0, 0) 0%,
+        rgba(0, 0, 0, 0) 6%,
+        rgba(0, 0, 0, .90) 50%,
+        rgba(0, 0, 0, 0) 94%,
+        rgba(0, 0, 0, 0) 100%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            mask-composite: exclude;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/*
+  ---------------------------------------------------------------------------
+  Variants. Each supplies the flat tint, its hover tint, and the rim/lens
+  alphas keyed to that tint.
+
+  A note on specificity, because it bit once already. A bare `.hlg-button:hover`
+  ties `.hlg-button.hlg-green` at (0,2,0) and wins on source order alone, so a
+  variant declared after it would silently defeat the hover tint. The hover
+  rules below are written `.hlg-button:not(:disabled):hover`, which is (0,3,0)
+  and beats any single variant class outright — the guard is there for the
+  disabled state, but it makes the cascade robust for free.
+  ---------------------------------------------------------------------------
+*/
+.hlg-button.hlg-neutral {
+    background:
+        linear-gradient(180deg,
+            rgba(255, 255, 255, .070) 0%, rgba(255, 255, 255, 0) 11%,
+            rgba(255, 255, 255, 0) 89%, rgba(255, 255, 255, .070) 100%),
+        #555555;
+    --hlg-tint-hover: #707070;   /* achromatic, so brightness is the only lever */
+    --hlg-lens-tint: rgba(255, 255, 255, .055);
+    --hlg-lens-rim: rgba(255, 255, 255, .30);
+    --hlg-lens-rim-soft: rgba(255, 255, 255, .13);
+    --hlg-rim-1: rgba(255, 255, 255, .148);
+    --hlg-rim-2: rgba(255, 255, 255, .118);
+    --hlg-rim-3: rgba(255, 255, 255, .134);
+}
+
+.hlg-button.hlg-green {
+    background:
+        linear-gradient(180deg,
+            rgba(216, 255, 238, .055) 0%, rgba(216, 255, 238, 0) 11%,
+            rgba(216, 255, 238, 0) 89%, rgba(216, 255, 238, .060) 100%),
+        #1b352a;
+    --hlg-tint-hover: #12573a;   /* sat x2.0, lum x1.32, hue held at 155 */
+    --hlg-lens-tint: rgba(216, 255, 238, .05);
+    --hlg-lens-rim: rgba(233, 255, 245, .22);
+    --hlg-lens-rim-soft: rgba(233, 255, 245, .10);
+    --hlg-rim-1: rgba(233, 255, 245, .115);
+    --hlg-rim-2: rgba(233, 255, 245, .095);
+    --hlg-rim-3: rgba(233, 255, 245, .112);
+}
+
+/*
+  .hlg-action — the material in the HOST application's action colour, read from
+  its own tokens, so the button still reads as that app's primary action rather
+  than importing the reference's green.
+*/
+.hlg-button.hlg-action {
+    background:
+        linear-gradient(180deg,
+            rgba(255, 255, 255, .090) 0%, rgba(255, 255, 255, 0) 11%,
+            rgba(255, 255, 255, 0) 89%, rgba(255, 255, 255, .090) 100%),
+        var(--legacy-action-bg, #3b82f6);
+    --hlg-tint-hover: var(--legacy-action-hover, #60a5fa);
+    --hlg-lens-tint: rgba(228, 240, 255, .06);
+    --hlg-lens-rim: rgba(232, 243, 255, .30);
+    --hlg-lens-rim-soft: rgba(232, 243, 255, .13);
+    --hlg-rim-1: rgba(232, 243, 255, .148);
+    --hlg-rim-2: rgba(232, 243, 255, .118);
+    --hlg-rim-3: rgba(232, 243, 255, .134);
+}
+
+/*
+  .hlg-sky — a LIGHT material, which inverts the lighting logic everywhere, not
+  just in light mode.
+
+  On a light body a white bottom rim has nothing to do: the fill is already
+  brighter than any bounce. So the specular stays on the top face, the
+  underside darkens, and the caps keep their shadow — the same reasoning as the
+  light-theme treatment below, but baked in because here it is the BODY that is
+  light, not the surround.
+
+  The default #3a9ff7 sits halfway between the app's action blue (hue 217) and
+  sky-400 (hue 198) — both endpoints share a lightness, so the blend is a
+  straight hue walk with nothing else moving.
+
+  The label is white by request. Note that white on a fill this light is
+  2.80:1, under the 4.5:1 AA floor for 12px text — holding the hue and dropping
+  the fill to L42 (#0972ce) reaches 4.87:1 if that matters later.
+*/
+.hlg-button.hlg-sky {
+    background:
+        linear-gradient(180deg,
+            rgba(255, 255, 255, .22) 0%, rgba(255, 255, 255, 0) 14%,
+            rgba(255, 255, 255, 0) 100%),
+        var(--hlg-sky-bg, #3a9ff7);
+    --hlg-tint-hover: var(--hlg-sky-hover, #4dacff);
+    --hlg-lens-tint: rgba(255, 255, 255, .16);
+    --hlg-lens-rim: rgba(255, 255, 255, .42);
+    --hlg-lens-rim-soft: rgba(255, 255, 255, .18);
+    --hlg-rim-1: rgba(255, 255, 255, .50);
+    --hlg-rim-2: rgba(255, 255, 255, .22);
+    --hlg-rim-3: rgba(255, 255, 255, .12);
+    box-shadow:
+        inset 0 -1px 0 rgba(3, 43, 68, .26),
+        0 1px 2px rgba(3, 43, 68, .18),
+        0 4px 10px rgba(3, 43, 68, .12);
+}
+.hlg-sky .hlg-content { color: var(--hlg-sky-fg, #ffffff); }
+
+/* specular on the top face only — see above */
+.hlg-button.hlg-sky::before,
+.hlg-button.hlg-lavender::before,
+.hlg-button.hlg-paper::before {
+    -webkit-mask-image:
+        linear-gradient(180deg, #000 0%, #000 4%, transparent 30%, transparent 100%),
+        linear-gradient(90deg, transparent var(--hlg-cap-0), rgba(0, 0, 0, .82) var(--hlg-cap-1), #000 var(--hlg-cap-2), #000 calc(100% - var(--hlg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--hlg-cap-1)), transparent calc(100% - var(--hlg-cap-0)));
+    mask-image:
+        linear-gradient(180deg, #000 0%, #000 4%, transparent 30%, transparent 100%),
+        linear-gradient(90deg, transparent var(--hlg-cap-0), rgba(0, 0, 0, .82) var(--hlg-cap-1), #000 var(--hlg-cap-2), #000 calc(100% - var(--hlg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--hlg-cap-1)), transparent calc(100% - var(--hlg-cap-0)));
+}
+.hlg-button.hlg-sky::after { opacity: .30; }
+.hlg-button.hlg-lavender::after { opacity: .26; }
+.hlg-button.hlg-paper::after { opacity: .10; }
+
+/*
+  Light mode is a DERIVED material, not a measured one — the reference
+  screenshot is dark only, so this is the same lighting model reasoned through
+  rather than sampled.
+
+  What changes: on a dark stage the pill catches a bounce from below, so the
+  rim is bright top AND bottom. On a white card there is no bounce — the button
+  sits ON the card and casts a contact shadow instead. So the specular is kept
+  to the top face, the underside darkens, and a real shadow does the work the
+  bottom rim used to do. The layer structure is untouched; only the vertical
+  mask and a box-shadow move.
+*/
+[data-theme='light'] .hlg-button.hlg-action {
+    box-shadow:
+        inset 0 -1px 0 rgba(0, 0, 0, .20),
+        0 1px 2px rgba(16, 24, 40, .16),
+        0 4px 10px rgba(16, 24, 40, .10);
+}
+[data-theme='light'] .hlg-button.hlg-action::before {
+    -webkit-mask-image:
+        linear-gradient(180deg, #000 0%, #000 4%, transparent 26%, transparent 100%),
+        linear-gradient(90deg, transparent var(--hlg-cap-0), rgba(0, 0, 0, .82) var(--hlg-cap-1), #000 var(--hlg-cap-2), #000 calc(100% - var(--hlg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--hlg-cap-1)), transparent calc(100% - var(--hlg-cap-0)));
+    mask-image:
+        linear-gradient(180deg, #000 0%, #000 4%, transparent 26%, transparent 100%),
+        linear-gradient(90deg, transparent var(--hlg-cap-0), rgba(0, 0, 0, .82) var(--hlg-cap-1), #000 var(--hlg-cap-2), #000 calc(100% - var(--hlg-cap-2)), rgba(0, 0, 0, .82) calc(100% - var(--hlg-cap-1)), transparent calc(100% - var(--hlg-cap-0)));
+}
+/* the underside shadow already reads; a full cap ring would double it */
+[data-theme='light'] .hlg-button.hlg-action::after { opacity: .55; }
+[data-theme='light'] .hlg-button.hlg-action.hlg-sm::after { opacity: .32; }
+
+/*
+  ---------------------------------------------------------------------------
+  .hlg-sm — the material at UI scale rather than hero scale.
+
+  The rim does NOT scale with the pill. At 136px a 3px rim is 2% of the height;
+  at 32px it is 9%, and three stacked rings plus a 2px cap ring swallow the
+  button. Collapsing to a single hairline ring is what keeps it reading as
+  glass instead of as a bevel. Verified by rendering 136 / 64 / 44 / 32px side
+  by side.
+
+  It also hands the font back to the host: at this size the label sits beside
+  ordinary UI text and should match it, not the reference's SF Pro metrics.
+  ---------------------------------------------------------------------------
+*/
+.hlg-button.hlg-sm {
+    /* the exact rendered box of the control it replaces, so the row's
+       rhythm does not shift: 30px tall, 8px radius, 16px side padding */
+    --hlg-pill-h: 30px;
+    --hlg-label-size: 12px;
+    --hlg-label-weight: 600;
+    --hlg-font: inherit;
+    /* matches the neighbouring control; the reference's display tracking
+       reads as loose rather than crisp at 12px */
+    --hlg-label-track: 0;
+
+    /*
+      line-height: 1 is correct at 51px — it is what the reference was measured
+      with — but at 12px it clips the line box below the font's natural
+      ascent + descent, so the ink no longer sits centred in it and the label
+      lands 1.5px low. 16/12 is the host's own text-xs leading.
+    */
+    --hlg-label-leading: 1.33333;
+
+    /*
+      A pill, like the reference — --hlg-radius inherits calc(height / 2). Only
+      the box is matched to the control being replaced (30px tall, 16px side
+      padding) so the row's rhythm does not shift.
+    */
+    padding: 0 16px;
+
+    /*
+      The cap fade stays in percentages, as on the hero pill: the caps really
+      are semicircles here, so the specular has the same proportional run to
+      die away across. Every stop is under 50%, so the mirrored halves cannot
+      cross however short the label is.
+    */
+}
+.hlg-button.hlg-sm::before { box-shadow: inset 0 0 0 1px var(--hlg-rim-1); }
+/* short side edges on a rect, so the cap shadow needs far less weight */
+.hlg-button.hlg-sm::after  { padding: 1px; opacity: .5; }
+
+.hlg-content {
+    position: relative;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--hlg-icon-gap);
+    width: 100%;
+    font-size: var(--hlg-label-size);
+    line-height: var(--hlg-label-leading);
+    /*
+      455 / 505 are variable-font weights. They resolve wherever SF Pro is
+      present; elsewhere the stack falls back and they snap to 400 / 500.
+    */
+    font-weight: var(--hlg-label-weight);
+    letter-spacing: var(--hlg-label-track);
+    min-width: 0;   /* lets the label shrink so its ellipsis can engage */
+}
+
+/*
+  The pill's height is fixed, so a wrapped label does not make it taller — it
+  overflows and gets clipped through the middle of the second line. Constrained
+  to 300px, "Unmute this channel permanently" wrapped to three lines and 153px
+  inside a 136px button. A pill truncates; it does not wrap.
+
+  The trailing letter-spacing sits after the last glyph, which pushes the
+  optical centre left; a matching negative margin puts it back.
+*/
+.hlg-label {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    margin-right: calc(var(--hlg-label-track) * -1);
+}
+
+.hlg-neutral .hlg-content { color: #fafafa; }
+.hlg-green   .hlg-content { color: #e0fbd8; }
+.hlg-action  .hlg-content { color: var(--legacy-action-fg, #ffffff); }
+
+/* The icon slot only refuses to flex; sizing is the caller's — see design.md
+   for why an aspect-locked SVG cannot always hit a measured target box. */
+.hlg-icon {
+    display: flex;
+    align-items: center;
+    flex: none;
+}
+
+/*
+  The lens. Glass does not brighten uniformly when you point at it — it
+  refracts toward the pointer, and the rim picks up light only on the edge
+  nearest to it. One element carries both: a flat tint plus an inset ring,
+  shaped by a radial mask parked under the cursor. The mask does double duty,
+  localising the surface bloom AND the rim pickup in a single pass.
+*/
+.hlg-lens {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--hlg-lens-tint);
+    box-shadow:
+        inset 0 0 0 1px var(--hlg-lens-rim),
+        inset 0 0 0 2px var(--hlg-lens-rim-soft);
+    -webkit-mask-image: radial-gradient(var(--hlg-lens-w) var(--hlg-lens-h) at var(--hlg-mx) var(--hlg-my),
+        #000 0%, rgba(0, 0, 0, .5) 40%, transparent 74%);
+            mask-image: radial-gradient(var(--hlg-lens-w) var(--hlg-lens-h) at var(--hlg-mx) var(--hlg-my),
+        #000 0%, rgba(0, 0, 0, .5) 40%, transparent 74%);
+    opacity: 0;
+    /*
+      Opacity eases; POSITION NEVER DOES. Ease --hlg-mx/--hlg-my and the
+      highlight lags the cursor, which reads as a delayed glow rather than
+      refraction.
+    */
+    transition:
+        opacity var(--hlg-hover-dur) var(--hlg-hover-ease),
+        --hlg-lens-w 150ms ease,
+        --hlg-lens-h 150ms ease;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* the lens bloom is sized for a hero pill; at UI scale it must shrink with it */
+.hlg-button.hlg-sm .hlg-lens {
+    --hlg-lens-w: 90px;
+    --hlg-lens-h: 40px;
+}
+
+/* Only where a real pointer exists — on touch, :hover sticks after the tap. */
+@media (hover: hover) and (pointer: fine) {
+    .hlg-button:not(:disabled):hover .hlg-lens { opacity: 1; }
+
+    /*
+      The material also becomes more vivid under the pointer: the tint gains
+      saturation and a little luminance, staying on its own hue. The tint is
+      the last layer of the `background` shorthand, so it is background-color
+      and animates on its own — the sheen gradient above it is untouched.
+    */
+    .hlg-button:not(:disabled):hover { background-color: var(--hlg-tint-hover); }
+}
+
+/*
+  Keyboard parity: the lens is the button's affordance, so it should answer a
+  keyboard focus as well as a pointer. useLensTracking clears the inline
+  position on keyboard focus, so the bloom arrives centred rather than parked
+  wherever the pointer happened to leave it.
+*/
+.hlg-button:not(:disabled):focus-visible .hlg-lens { opacity: 1; }
+
+/* The press compresses the material: the pill gives, the lens tightens.
+   :active fires on pointer-down, so the feedback lands on the press. */
+.hlg-button:not(:disabled):active { transform: scale(.985); }
+.hlg-button:not(:disabled):active .hlg-lens {
+    opacity: 1;
+    --hlg-lens-w: 148px;
+    --hlg-lens-h: 112px;
+}
+.hlg-button.hlg-sm:not(:disabled):active .hlg-lens {
+    --hlg-lens-w: 66px;
+    --hlg-lens-h: 30px;
+}
+
+/*
+  Disabled dims the parts rather than fading the whole element. A blanket
+  `opacity: .45` takes the rim with it, so the button stops reading as glass at
+  all, and it drops the label to 3.74:1. Desaturating the body and dimming the
+  label separately keeps the material legible as itself at 5.14:1, while the
+  rim stays visible at half strength.
+*/
+.hlg-button:disabled { cursor: default; }
+.hlg-button:disabled.hlg-neutral { background-color: #3d3d3d; }
+.hlg-button:disabled.hlg-green   { background-color: #1a2a24; }
+.hlg-button:disabled.hlg-action  { filter: saturate(.4) brightness(.85); }
+.hlg-button:disabled::before { opacity: .45; }
+.hlg-button:disabled::after  { opacity: .55; }
+.hlg-button:disabled .hlg-content { opacity: .6; }
+.hlg-button:disabled .hlg-lens { opacity: 0; }
+
+.hlg-button:focus-visible {
+    outline: 3px solid rgba(175, 214, 255, .95);
+    outline-offset: 3px;
+}
+.hlg-button.hlg-sm:focus-visible {
+    outline-width: 2px;
+    outline-offset: 2px;
+}
+
+/*
+  prefers-contrast: more — the whole point of this material is a rim so subtle
+  it reads as light rather than as an edge, which is precisely what a
+  high-contrast user has asked not to rely on. Swap it for a defined border
+  and let the label sit at full strength.
+*/
+@media (prefers-contrast: more) {
+    .hlg-button {
+        box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .92);
+    }
+    .hlg-button.hlg-neutral { background-color: #4a4a4a; }
+    .hlg-button.hlg-green   { background-color: #103425; }
+    .hlg-neutral .hlg-content { color: #ffffff; }
+    .hlg-green   .hlg-content { color: #eaffe2; }
+    .hlg-button:focus-visible { outline-width: 4px; }
+}
+
+/*
+  Reduced motion keeps the feedback but drops the tracking: a still, centred
+  bloom instead of a highlight that chases the cursor. `!important` is what
+  makes the inline --hlg-mx/--hlg-my the JS writes inert, so the setting wins
+  live rather than needing a listener teardown.
+*/
+@media (prefers-reduced-motion: reduce) {
+    /* Colour is not vestibular, so the tint still cross-fades; motion goes. */
+    .hlg-button { transition: background-color var(--hlg-hover-dur) var(--hlg-hover-ease); }
+    .hlg-button:not(:disabled):active { transform: none; }
+    .hlg-lens {
+        transition: opacity var(--hlg-hover-dur) var(--hlg-hover-ease);
+        --hlg-mx: 50% !important;
+        --hlg-my: 50% !important;
+        --hlg-lens-w: 320px;
+        --hlg-lens-h: 190px;
+    }
+}
+
+/*
+  ---------------------------------------------------------------------------
+  Natively theme. The site is a LIGHT lavender paper world (#FAF8FE), so both
+  variants follow .hlg-sky's inverted lighting rather than the dark reference's:
+  specular on the top face only, a contact shadow doing the work the bottom
+  rim does on a dark stage. The mask swap lives with .hlg-sky above.
+  ---------------------------------------------------------------------------
+*/
+
+/*
+  .hlg-lavender — the primary action, as actual TRANSPARENT glass.
+
+  The fill is a tint, not a colour: rgba(156,111,243,.24) lets ~76% of
+  whatever is behind the pill through, and the backdrop pass blurs and
+  over-saturates it so the glass picks up the hero's gradient mesh the way
+  Apple's does. Move the button over a different part of the page and its
+  colour moves with it — that is the whole point, and it is why this cannot
+  be a hex.
+
+  The label had to stop being white. At this alpha the tint composites to
+  roughly #E3D5FB over the paper, where white runs about 1.3:1 — illegible,
+  not merely under AA. A deep lavender ink on the same hue reaches 7.4:1 and
+  is what light-mode Liquid Glass does anyway: the glass is the light thing,
+  the type is the dark thing. Contrast only improves wherever the mesh behind
+  is darker, so the measured figure is the floor rather than the average.
+*/
+.hlg-button.hlg-lavender {
+    background:
+        linear-gradient(180deg,
+            rgba(255, 255, 255, .42) 0%, rgba(255, 255, 255, .10) 18%,
+            rgba(255, 255, 255, 0) 100%),
+        var(--hlg-lav-bg, rgba(156, 111, 243, .24));
+    /* Hover thickens the tint rather than repainting it — the glass takes on
+       more colour while staying the same material. */
+    --hlg-tint-hover: var(--hlg-lav-hover, rgba(156, 111, 243, .36));
+    --hlg-lens-tint: rgba(255, 255, 255, .30);
+    --hlg-lens-rim: rgba(255, 255, 255, .78);
+    --hlg-lens-rim-soft: rgba(156, 111, 243, .26);
+    --hlg-rim-1: rgba(255, 255, 255, .78);
+    --hlg-rim-2: rgba(156, 111, 243, .30);
+    --hlg-rim-3: rgba(156, 111, 243, .12);
+    /* saturate() is what separates glass from frosted plastic — it amplifies
+       the colour bleeding through instead of just softening it. */
+    -webkit-backdrop-filter: blur(20px) saturate(190%);
+            backdrop-filter: blur(20px) saturate(190%);
+    /* The glow is now what marks this as the primary: the secondary is the
+       same material without the coloured light under it. */
+    box-shadow:
+        inset 0 -1px 0 rgba(90, 43, 176, .14),
+        0 1px 2px rgba(78, 46, 150, .10),
+        0 14px 30px -12px rgba(156, 111, 243, .55);
+}
+.hlg-lavender .hlg-content { color: var(--hlg-lav-fg, #3F2593); }
+/* .hlg-tinted — the lavender glass re-tinted by its host (--hlg-lav-bg, set to a
+   colour dense enough to carry it), so the label goes white. A class rather
+   than an inline variable so prefers-contrast below can still take it back. */
+.hlg-button.hlg-tinted { --hlg-lav-fg: #FFFFFF; }
+/* the cap shadow is a black gradient; on glass this clear it reads as dirt */
+.hlg-button.hlg-lavender::after { opacity: .10; }
+
+/*
+  .hlg-paper — the secondary: the same transparent glass as the primary, tinted
+  WHITE instead of lavender. That pairing is the hierarchy — one material, one
+  of the two coloured, and only the coloured one gets light under it.
+
+  A white tint over near-white paper barely composites, so the button would
+  vanish if the tint were doing the work. It is the rim and the contact shadow
+  that draw the edge here, which is why both are stronger than the primary's.
+*/
+.hlg-button.hlg-paper {
+    background:
+        linear-gradient(180deg,
+            rgba(255, 255, 255, .44) 0%, rgba(255, 255, 255, .16) 100%),
+        var(--hlg-paper-bg, rgba(255, 255, 255, .26));
+    --hlg-tint-hover: var(--hlg-paper-hover, rgba(255, 255, 255, .52));
+    --hlg-lens-tint: rgba(255, 255, 255, .38);
+    --hlg-lens-rim: rgba(255, 255, 255, .92);
+    --hlg-lens-rim-soft: rgba(255, 255, 255, .40);
+    --hlg-rim-1: rgba(255, 255, 255, .88);
+    --hlg-rim-2: rgba(255, 255, 255, .34);
+    --hlg-rim-3: rgba(255, 255, 255, .14);
+    -webkit-backdrop-filter: blur(20px) saturate(190%);
+            backdrop-filter: blur(20px) saturate(190%);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, .95),
+        inset 0 0 0 1px rgba(139, 107, 224, .14),
+        0 1px 2px rgba(46, 42, 56, .05),
+        0 12px 28px -14px rgba(46, 42, 56, .16);
+}
+.hlg-paper .hlg-content { color: #2E2A38; }
+.hlg-button.hlg-paper::after { opacity: .07; }
+/* the hairline has to close all the way round here — it IS the button's edge,
+   not a specular hint, so it does not get to die away across the caps */
+.hlg-button.hlg-paper::before {
+    -webkit-mask-image: none;
+            mask-image: none;
+}
+
+/*
+  Without a backdrop pass the tint is just a weak wash and the label loses its
+  ground, so fall back to the opaque fill these variants shipped with. Firefox
+  had backdrop-filter off by default until 103.
+*/
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .hlg-button.hlg-lavender { background-color: #E7DBFC; }
+    .hlg-button.hlg-paper { background-color: #FFFFFF; }
+}
+
+/*
+  .hlg-md — page scale. Between the 136px hero pill and .hlg-sm's 30px control:
+  the 48px / 15px box the site's CTAs already occupy, so swapping one in does
+  not move the row. Like .hlg-sm it hands the font back to the host — these
+  labels sit next to body copy, not on a keynote slide.
+*/
+.hlg-button.hlg-md {
+    --hlg-pill-h: 48px;
+    --hlg-label-size: 15px;
+    --hlg-label-weight: 600;
+    --hlg-label-leading: 1.2;
+    --hlg-label-track: 0;
+    --hlg-icon-gap: 0.66667em;   /* 10px at 15px */
+    --hlg-font: inherit;
+    --hlg-lens-w: 150px;
+    --hlg-lens-h: 64px;
+    padding: 0 26px;
+}
+/* two rings, not three: 3px on a 48px pill is 6% of the height and reads as a
+   bevel — the same reason .hlg-sm collapses to one */
+.hlg-button.hlg-md::before {
+    box-shadow:
+        inset 0 0 0 1px var(--hlg-rim-1),
+        inset 0 0 0 2px var(--hlg-rim-2);
+}
+.hlg-button.hlg-md:not(:disabled):active .hlg-lens {
+    --hlg-lens-w: 110px;
+    --hlg-lens-h: 48px;
+}
+
+/* An anchor is not a button: it inherits neither the reset nor the text
+   colour, and it carries an underline by default. */
+a.hlg-button { text-decoration: none; }
+
+@media (prefers-contrast: more) {
+    .hlg-button.hlg-lavender { background-color: #FFFFFF; --hlg-lav-fg: #2E1065; box-shadow: inset 0 0 0 2px #2E1065; }
+    .hlg-button.hlg-paper { background: #FFFFFF; box-shadow: inset 0 0 0 2px #2E2A38; }
+}
+
+.hlg-button:disabled.hlg-lavender { filter: saturate(.4) brightness(.92); }
+.hlg-button:disabled.hlg-paper    { filter: saturate(0); }

@@ -148,12 +148,14 @@ if (!todo.length) { console.log('nothing to do'); }
 
 // ---- connect + profile ----
 const envText = fs.readFileSync(path.resolve(process.env.NATIVELY_ENV_FILE || path.join(HERE, '..', '..', '.env')), 'utf8');
-// --provider agentrouter: the ONE key in the profile is AGENTROUTER_API_KEY instead, and the
-// app's own default repair picks the model (agentrouter/deepseek-v4-flash). For paired
-// direct-vs-gateway runs of the same questions.
+// --provider agentrouter: the ONE key in the profile is AGENTROUTER_API_KEY instead (or the
+// variable named by --key-var; on 2026-10-28 AGENTROUTER_API_KEY had no credit left and
+// AGENTROUTER_API_KEY_1 did), and the app's own default repair picks the model
+// (agentrouter/gpt-5.6-sol since 2026-10-28; deepseek-v4-flash before AgentRouter retired it).
+// For paired direct-vs-gateway runs of the same questions.
 const PROVIDER = opt('provider', 'deepseek');
 const envKey = (name) => (envText.match(new RegExp(`^${name}=(.*)$`, 'm'))?.[1] ?? '').trim().replace(/^["']|["']$/g, '').trim();
-const keyName = PROVIDER === 'agentrouter' ? 'AGENTROUTER_API_KEY' : 'DEEPSEEK_API_KEY';
+const keyName = opt('key-var', PROVIDER === 'agentrouter' ? 'AGENTROUTER_API_KEY' : 'DEEPSEEK_API_KEY');
 const dsKey = envKey(keyName);
 if (!dsKey) { console.error(`${keyName} not found in the env file (set NATIVELY_ENV_FILE).`); process.exit(2); }
 

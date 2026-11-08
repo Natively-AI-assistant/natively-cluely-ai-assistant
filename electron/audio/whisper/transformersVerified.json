@@ -1,0 +1,12 @@
+{
+  "_comment": "transformers.js versions whose internals whisperWorker.ts uses were checked on a real model. Written by `npm run verify:transformers`; do not add a version by hand.",
+  "verified": [
+    {
+      "version": "3.8.1",
+      "date": "2026-10-21",
+      "model": "Xenova/whisper-tiny",
+      "detected": ["french", "english", "french"],
+      "encoderRunsPerFinal": 1
+    }
+  ]
+}

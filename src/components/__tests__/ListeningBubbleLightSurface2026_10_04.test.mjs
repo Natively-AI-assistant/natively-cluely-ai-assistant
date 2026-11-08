@@ -7,8 +7,8 @@
 //
 // - The light branch takes its colours from the dark end of the emerald scale,
 //   and the contrast is measured here rather than trusted.
-// - Only the DEFAULT interface theme has a light panel. Glass and modern keep a
-//   dark one under the light app theme, so they must stay on the pale branch.
+// - Default follows the app theme and lavender is always light. Glass and modern
+//   keep a dark panel under the light app theme, so they stay on the pale branch.
 // - Both branches keep `bg-emerald-500/10`: the glass and modern recipes in
 //   index.css select on that class.
 // - On every panel the bars rest at 0.55, and on the dark ones the label is the
@@ -73,8 +73,11 @@ test('the listening block is found', () => {
   assert.ok(block.length > 0 && block.length < 3000);
 });
 
-test('only the default interface theme counts as a light surface', () => {
-  assert.ok(overlay.includes('const isLightSurface = isLightTheme && !isGlassTheme && !isModernTheme;'));
+// Which panels are light is interfaceThemeSurface()'s call (tested in
+// src/lib/__tests__/MeetingInterfaceThemeSurface2026_10_24.test.mjs): default
+// follows the app, glass and modern are dark, lavender is light.
+test('the light surface comes from interfaceThemeSurface, the one rule every window shares', () => {
+  assert.ok(overlay.includes("const isLightSurface = interfaceThemeSurface(interfaceTheme, isLightTheme ? 'light' : 'dark') === 'light';"));
 });
 
 test('the transcript and the label clear AA on the light panel', () => {

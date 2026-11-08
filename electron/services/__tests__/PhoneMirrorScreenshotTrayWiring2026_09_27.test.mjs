@@ -193,6 +193,7 @@ after(async () => {
 
 const settle = (ms) => new Promise((r) => setTimeout(r, ms));
 const lastTray = () => phone.of('attachments').at(-1)?.items;
+const lastRecording = () => phone.of('recording').at(-1)?.active;
 async function askFromPhone(message) {
   const before = streamChatCalls.length;
   phone.ws.send(JSON.stringify({ type: 'chat', message }));
@@ -266,13 +267,62 @@ describe('overlay → phone, executed', () => {
     assert.equal(typeof exposed.onPhoneMirrorDetach, 'function', 'the overlay can listen for it');
   });
 
-  test('a closed overlay leaves no tray on the phone', async () => {
+  test('the Answer button recording reaches the phone (its chip reads Stop)', async () => {
+    assert.equal(lastRecording(), false, 'not recording, replayed on connect');
+    exposed.phoneMirrorSetRecording(true);
+    await settle(40);
+    assert.equal(lastRecording(), true);
+    exposed.phoneMirrorSetRecording(false);
+    await settle(40);
+    assert.equal(lastRecording(), false);
+  });
+
+  test('another window cannot report a recording, nor a non-boolean', async () => {
+    const before = phone.of('recording').length;
+    onListeners.get('phone-mirror:recording')({ sender: launcher.webContents }, true);
+    onListeners.get('phone-mirror:recording')({ sender: overlay.webContents }, 'true');
+    await settle(40);
+    assert.equal(phone.of('recording').length, before);
+  });
+
+  test('a closed overlay leaves no tray and no recording on the phone', async () => {
     exposed.phoneMirrorSetAttachments([{ path: CAPTURE, preview: thumb(1) }]);
+    exposed.phoneMirrorSetRecording(true);
     await settle(40);
     assert.equal(lastTray().length, 1);
+    assert.equal(lastRecording(), true);
     overlay.webContents.fire('destroyed');
     await settle(40);
     assert.deepEqual(lastTray(), []);
+    assert.equal(lastRecording(), false);
+  });
+
+  // The Answer chip's stop is usually answered by live search (rag:query-live),
+  // which streamed only to the overlay: the chip's Thinking waited 45 s and
+  // then said nothing came back.
+  test('a live search answer to the voice question reaches the phone', async () => {
+    const asked = 'How would you shard the ledger?';
+    const searchWith = (stream) => () => ({ isReady: () => true, getLiveMeetingId: () => 'live-test', queryMeeting: stream });
+    appState.getRAGManager = searchWith(async function* () { yield 'By account '; yield 'id.'; });
+    try {
+      assert.deepEqual(await invokeHandlers.get('rag:query-live')({ sender: overlay.webContents }, { query: asked }), { success: true });
+      await settle(40);
+      const question = phone.of('user').at(-1);
+      assert.equal(question.content, asked);
+      assert.equal(question.awaiting, true, 'Thinking under it until the words arrive');
+      const id = question.id.replace(/^u:/, '');
+      assert.deepEqual(phone.of('token').filter((f) => f.streamId === id).map((f) => f.token), ['By account ', 'id.']);
+      assert.equal(phone.of('done').at(-1).streamId, id);
+
+      // Nothing found: the chat fallback publishes the question itself.
+      const questions = phone.of('user').length;
+      appState.getRAGManager = searchWith(async function* () { throw new Error('NO_RELEVANT_CONTEXT'); });
+      assert.deepEqual(await invokeHandlers.get('rag:query-live')({ sender: overlay.webContents }, { query: asked }), { fallback: true });
+      await settle(40);
+      assert.equal(phone.of('user').length, questions);
+    } finally {
+      delete appState.getRAGManager;
+    }
   });
 
   test('with no overlay to hold them, the phone\'s own photos still go with its question', async () => {
@@ -300,6 +350,21 @@ describe('the overlay reports its tray (renderer call sites)', () => {
     const body = effectAround('phoneMirrorImagesSent?.(', 'messages');
     assert.match(body, /msg\.hasScreenshot/);
     assert.match(body, /phoneMirrorImagesSent\?\.\(msg\.id, paths\)/);
+  });
+
+  test('every Answer / Stop recording change is reported', () => {
+    assert.match(effectAround('phoneMirrorSetRecording?.(', 'isManualRecording'), /phoneMirrorSetRecording\?\.\(isManualRecording\)/);
+  });
+
+  test('a Stop reports itself before its question goes out', () => {
+    // The effect runs after the question reached main; the phone would then
+    // add a second Thinking that nothing answers.
+    const stop = src.indexOf('setIsManualRecording(false);\n', src.indexOf('const handleAnswerNow = async'));
+    const reported = src.indexOf('window.electronAPI?.phoneMirrorSetRecording?.(false);', stop);
+    assert.ok(stop > 0 && reported > stop, 'reported at the stop');
+    for (const send of ['ragQueryLive?.(question)', 'streamGeminiChat(', 'beginDirectAssist(', 'handleWhatToSay()']) {
+      assert.ok(reported < src.indexOf(send, stop), `before ${send}`);
+    }
   });
 
   test('Remove from the phone leaves the overlay tray', () => {

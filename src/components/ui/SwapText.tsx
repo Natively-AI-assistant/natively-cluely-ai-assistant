@@ -37,6 +37,12 @@ const SwapText: React.FC<{
     onShownRef.current?.(shownKey);
   }, [shownKey]);
   const [phase, setPhase] = useState<'idle' | 'exit' | 'enter'>('idle');
+  // One per enter. Two changes in one update (a banner title changing twice
+  // quickly) ask for 'enter' while it already is 'enter': the phase alone would
+  // not change, the layout effect below would not run again, and the words
+  // would stay at is-enter-start, invisible, until the next change (seen live
+  // in the overlay, 2026-11-03).
+  const [enterSeq, setEnterSeq] = useState(0);
   const held = useRef<React.ReactNode>(children);
   if (shownKey === swapKey) held.current = children;
   const ref = useRef<HTMLSpanElement>(null);
@@ -66,6 +72,7 @@ const SwapText: React.FC<{
       setLeaving({ key: shownKey, node: held.current });
       setShownKey(swapKey);
       setPhase('enter');
+      setEnterSeq((n) => n + 1);
       if (leaveTimer.current) clearTimeout(leaveTimer.current);
       leaveTimer.current = setTimeout(() => {
         leaveTimer.current = null;
@@ -77,6 +84,7 @@ const SwapText: React.FC<{
     const t = setTimeout(() => {
       setShownKey(swapKey);
       setPhase('enter');
+      setEnterSeq((n) => n + 1);
     }, cssMs(ref.current, '--text-swap-dur', 150));
     return () => clearTimeout(t);
   }, [swapKey, shownKey, overlap]);
@@ -84,7 +92,7 @@ const SwapText: React.FC<{
     if (phase !== 'enter') return;
     void ref.current?.offsetHeight; // reflow: start from below, then transition back
     setPhase('idle');
-  }, [phase]);
+  }, [phase, enterSeq]);
   const cls = phase === 'exit' ? ' is-exit' : phase === 'enter' ? ' is-enter-start' : '';
   const current = (
     <span ref={ref} className={`t-text-swap${cls}`}>

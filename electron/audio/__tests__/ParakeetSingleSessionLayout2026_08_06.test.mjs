@@ -57,7 +57,8 @@ describe('Parakeet TDT v3 layout & integration', () => {
     test('isModelCached passes the parakeet-tdt layout through', () => {
         assert.match(
             managerSrc,
-            /if\s*\(sessionLayout\s*===\s*'parakeet-tdt'\)\s*return\s*isParakeetModelCached\(modelDir\);/,
+            // The repo picks the file set: a CoreML repo (Neural Engine) or the ONNX one.
+            /if\s*\(sessionLayout\s*===\s*'parakeet-tdt'\)\s*return\s*isParakeetModelCached\(modelDir,\s*modelId,\s*repo\);/,
             'isModelCached must branch on parakeet-tdt sessionLayout to call isParakeetModelCached.',
         );
     });

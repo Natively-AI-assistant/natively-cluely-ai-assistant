@@ -14,8 +14,13 @@ export const NotesRating: React.FC<{
     /** Changes with the notes' words: regenerated notes are unrated until rated. */
     contentKey?: string;
     isLight: boolean;
+    /**
+     * Asked above new notes for about one meeting in ten (notesFeedback.ts
+     * shouldPromptRating); otherwise the quiet row at the end of the notes.
+     */
+    prompted?: boolean;
     t: (s: string) => string;
-}> = ({ meetingId, versionId, contentKey, isLight, t }) => {
+}> = ({ meetingId, versionId, contentKey, isLight, prompted = false, t }) => {
     const [rating, setRating] = useState<'up' | 'down' | null>(null);
     const [comment, setComment] = useState('');
     const [askWhy, setAskWhy] = useState(false);
@@ -62,9 +67,9 @@ export const NotesRating: React.FC<{
     };
 
     return (
-        <section className="mb-8">
+        <section className={prompted ? 'mb-6' : 'mb-8'}>
             <div className="flex items-center gap-1">
-                <span className="text-[12.5px] text-text-tertiary mr-1.5">{t('Rate these notes')}</span>
+                <span className={`text-[12.5px] mr-1.5 ${prompted ? 'text-text-secondary' : 'text-text-tertiary'}`}>{prompted ? t('How were these notes?') : t('Rate these notes')}</span>
                 {thumb('up')}
                 {thumb('down')}
                 {sent && !askWhy && <span className="text-[12px] text-text-tertiary ml-1.5">{t('Thanks')}</span>}

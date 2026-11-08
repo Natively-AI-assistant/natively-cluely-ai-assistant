@@ -16,6 +16,7 @@ import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import '../index.css';
+import { NativelyWordmark } from '../components/NativelyWordmark';
 import type { TargetAndTransition } from 'framer-motion';
 
 // Mirrors Launcher.tsx:424-462 (PR #511). Copied rather than imported because
@@ -64,7 +65,7 @@ function FakeList({ onOpen }: { onOpen: (n: number) => void }) {
     return (
         <div className="h-full w-full flex flex-col bg-bg-primary text-text-primary overflow-hidden">
             <section className="bg-bg-elevated px-8 pt-6 pb-8 border-b border-border-subtle shrink-0">
-                <h1 className="text-3xl font-medium tracking-wide">My Natively</h1>
+                <h1 className="m-0"><NativelyWordmark height={27} className="block" /></h1>
             </section>
             <div className="flex-1 overflow-y-auto px-8 py-4 space-y-1">
                 {Array.from({ length: 14 }, (_, i) => (

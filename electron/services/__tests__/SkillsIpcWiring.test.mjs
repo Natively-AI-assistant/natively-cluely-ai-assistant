@@ -160,21 +160,24 @@ test('SkillsSettings renderer guards upload bridge methods and exposes the uploa
   // method itself) — this is the exact regression we protect against.
   assert.match(view, /await window\.electronAPI\.skillsUpload\(/);
 
-  // UI affordances — drag-and-drop zone, .md file picker, preview card,
-  // compact "Installed skills" list section.
-  // Folder uploads were removed in favour of the Advanced "open skills
-  // folder" escape hatch; only single-file (.md) uploads are in the
-  // in-flow UI now.
-  assert.match(view, /onDrop=/, 'upload card must be a drop target');
+  // UI affordances — drag-and-drop zone, .md file picker, preview card.
+  // Skills is the first section of Settings › Intelligence: the whole section
+  // is the drop target (2026-10-21; flat again, no card, since 2026-10-31),
+  // only single-file (.md) uploads are in the in-flow UI, and folders go in
+  // through the Open folder button beside its heading.
+  assert.match(view, /onDrop:/, 'the section must handle a drop');
   assert.match(view, /<input[\s\S]{0,200}type="file"[\s\S]{0,200}accept="\.md/,
     'must include a .md file picker');
   assert.match(view, /Install/, 'preview card must have an Install button');
   assert.match(view, /Cancel/, 'preview card must have a Cancel button');
-  assert.match(view, /Installed skills/,
-    'list section must be labeled "Installed skills"');
-  // Advanced section still exposes the manual folder option.
-  assert.match(view, /Advanced: open skills folder/,
-    'Advanced escape hatch must remain so users can add folders via OS file explorer');
+  assert.match(view, /<div className="relative select-text" \{\.\.\.dropTarget\}>/,
+    'the Skills section root itself must be the drop target');
+  assert.doesNotMatch(view, /SettingsPlaque/,
+    'Skills is laid out like every other Settings section, not as a card');
+  assert.match(view, /Drop a SKILL\.md on this section/,
+    'the section must say a file can be dropped on it');
+  assert.match(view, /onClick=\{\(\) => \{ void openFolder\(\); \}\}[\s\S]{0,120}Open folder/,
+    'Open folder must remain so users can add folders via the OS file manager');
 });
 
 test('preload exposes skillsRefresh / skillsOpenFolder on window.electronAPI', () => {
@@ -252,6 +255,18 @@ test('every preload ipcRenderer.invoke channel has a matching ipcMain.handle reg
         const text = fs.readFileSync(full, 'utf8');
         let mm;
         while ((mm = handleRe.exec(text)) !== null) registered.add(mm[1]);
+        // Also a channel named through a constant object in the same file:
+        // `export const GMAIL_CHANNELS = { connect: 'connectors:gmail-connect' }`
+        // registered as `safeHandle(GMAIL_CHANNELS.connect, …)`. Only the keys
+        // actually handled count, so an unused entry is still caught.
+        const tables = new Map();
+        for (const t of text.matchAll(/const\s+([A-Z][A-Z0-9_]*)\s*=\s*\{([^}]*)\}/g)) {
+          tables.set(t[1], new Map([...t[2].matchAll(/(\w+)\s*:\s*['"]([a-z0-9:_\-./]+)['"]/gi)].map((e) => [e[1], e[2]])));
+        }
+        for (const h of text.matchAll(/(?:ipcMain\.handle|safeHandle|registerStealthHandler|registerHandler)\(\s*([A-Z][A-Z0-9_]*)\.(\w+)\b/g)) {
+          const ch = tables.get(h[1])?.get(h[2]);
+          if (ch) registered.add(ch);
+        }
       }
     }
   };
@@ -471,23 +486,11 @@ test('SkillsSettings renderer guards the skillsDelete bridge and renders delete 
   assert.doesNotMatch(view, /handleToggleEnabled/,
     'handleToggleEnabled handler was removed');
 
-  // Hover-reveal animation matches the meeting-notes pattern in
-  // MeetingDetails.tsx:696 — subtle translate-y slide-up + 160ms ease-out,
-  // visible on hover (gated by hover-capable media query) AND focus-within
-  // (for keyboard users), plus the always-visible `@media(hover:none)`
-  // fallback for touch devices (no hover state to trigger on).
-  //
-  // Note: the strict ordering in the className is `[@media(hover:hover)]:group-hover:opacity-100`
-  // BEFORE `group-focus-within:opacity-100` — we use a lookahead-free match
-  // that allows arbitrary-value-wrapped Tailwind classes between them (the
-  // `[@media(hover:hover)]:group-hover:translate-y-0` in between contains a `g`
-  // character that doesn't break the regex).
-  assert.match(view,
-    /group-hover:opacity-100[\s\S]{0,80}group-focus-within:opacity-100/,
-    'delete button wrapper must reveal on both hover (group-hover) and keyboard focus (group-focus-within)');
-  assert.match(view,
-    /\[@media\(hover:none\)\]:opacity-100/,
-    'delete button must be always-visible on touch devices (no hover state) — meets the same a11y baseline as MeetingDetails');
+  // The delete button is always visible, like every other control on the
+  // Intelligence page (2026-10-21); it was a hover-reveal on the old cards.
+  // No hover-only control may come back: keyboard and touch users lose it.
+  assert.doesNotMatch(view, /group-hover:opacity-100/,
+    'the delete button must not hide behind hover');
 
   // Built-ins must NOT show a delete affordance — the manager blocks builtin
   // deletes, so the UI shouldn't even offer it. After the inline-confirm

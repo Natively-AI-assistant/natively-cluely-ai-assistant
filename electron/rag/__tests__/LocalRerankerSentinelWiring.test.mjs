@@ -19,7 +19,8 @@ function readSrc(relPath) {
 test('LocalReranker writes the onnx load sentinel before new Worker(...)', () => {
     const src = readSrc('electron/rag/LocalReranker.ts');
     const write = src.indexOf("writeOnnxLoadSentinel('reranker',");
-    const spawn = src.indexOf('this.worker = new Worker(this.getWorkerPath());', src.indexOf('private getWorker'));
+    // Wrapped in trackOnnxWorker() since 2026-10-14 so the quit path can find it.
+    const spawn = src.indexOf('this.worker = trackOnnxWorker(new Worker(this.getWorkerPath()));', src.indexOf('private getWorker'));
     assert.ok(write > -1, 'LocalReranker must write the reranker sentinel');
     assert.ok(spawn > -1, 'getWorker() must construct the Worker');
     assert.ok(write < spawn, 'sentinel write must happen BEFORE new Worker(...)');

@@ -60,7 +60,7 @@ export const CREDENTIAL_KEY_LABELS = {
   deepseekApiKey: 'DeepSeek',
   nvidiaNimApiKey: 'Nvidia Nim',
   openrouterApiKey: 'OpenRouter',
-  fluxionApiKey: 'Fluxion AI',
+  fluxionApiKey: 'Sidrune AI',
   agentrouterApiKey: 'AgentRouter',
   litellmApiKey: 'LiteLLM',
   ninerouterApiKey: '9Router',
@@ -77,6 +77,7 @@ export const CREDENTIAL_KEY_LABELS = {
   azureApiKey: 'Azure Speech',
   ibmWatsonApiKey: 'IBM Watson',
   sonioxApiKey: 'Soniox',
+  qwenAsrApiKey: 'Qwen ASR',
 };
 const SPEECH_KEY_OF = { groqSttApiKey: 'Groq', openAiSttApiKey: 'OpenAI' };
 const DESCRIBED_KEY = { customEmbeddingApiKey: PHRASE.customEmbeddings, customRerankerApiKey: PHRASE.customReranker };

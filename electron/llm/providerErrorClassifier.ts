@@ -149,6 +149,8 @@ export function classifyProviderError(err: any, text?: string): ProviderErrorCla
  */
 export function providerFailureUserMessage(err: unknown): string | null {
   if (!err) return null;
+  const own = accountOrSetupUserMessage(err);
+  if (own) return own;
   const rejection = providerRejectionUserMessage(err);
   if (rejection) return rejection;
   const c = classifyProviderError(err);
@@ -182,6 +184,38 @@ export function providerFailureUserMessage(err: unknown): string | null {
 // the answer (issue #543: a ChatGPT-plan Codex user pressed "What to answer"
 // and saw "could you ask that once more?" while the backend was saying
 // "The '<model>' model is not supported when using Codex with a ChatGPT account").
+// ── Not a provider's failure: the trial, the plan, or nothing set up ───────
+//
+// 2026-11-03. A trial whose AI allowance ran out was refused by the Natively
+// API, fell through every other provider (a trial has none) and ended on
+// "No AI provider configured. Please add at least one API key in Settings."
+// Every catch then read "api key" or "quota" as a provider's problem and said
+// "this looks like an API key or rate-limit issue. Check your API keys": the
+// wrong cause, and a fix that fixes nothing. These say what happened. The same
+// four sorts as the overlay's src/lib/chatFailure.mjs, in the same order; its
+// PROVIDER_FAILURE_SENTENCE_STARTS lists these openings (checked by test).
+const NATIVELY_SOURCE_RE = /\bNatively API\b/i;
+const NATIVELY_PLAN_LIMIT_RE = /\b(?:[a-z]+_)?(?:quota_exceeded|plan_limit|limit_exceeded|lifetime_exceeded)\b/;
+const NATIVELY_PLAN_EXPIRED_RE = /\b(?:subscription_expired|license_expired)\b/;
+const TRIAL_ENDED_RE = /\btrial[_ ](?:has[_ ])?(?:expired|ended)\b/i;
+const NO_PROVIDER_RE = /\bNo AI provider configured\b/;
+
+/**
+ * The line for a failure that is no provider's fault: the free trial ended,
+ * the Natively plan's limit was reached or the plan lapsed, or no AI provider
+ * is set up. Null for anything else.
+ */
+export function accountOrSetupUserMessage(err: unknown): string | null {
+  if (!err) return null;
+  const msg = String((err as { message?: unknown })?.message ?? err ?? '');
+  if (TRIAL_ENDED_RE.test(msg)) return 'Your free trial has ended. Pick a plan or add your own keys to keep getting answers.';
+  const natively = NATIVELY_SOURCE_RE.test(msg);
+  if (natively && NATIVELY_PLAN_LIMIT_RE.test(msg)) return "You've reached your Natively plan's limit. See Settings › Plans to keep getting answers.";
+  if (natively && NATIVELY_PLAN_EXPIRED_RE.test(msg)) return 'Your Natively plan has expired. Renew it in Settings › Plans to keep getting answers.';
+  if (NO_PROVIDER_RE.test(msg)) return 'No AI provider is set up yet. Add one in Settings › AI Providers.';
+  return null;
+}
+
 const PROVIDER_REJECTION_RE = /\bmodels?\b[^\n]{0,120}?\b(?:is not supported|not supported|is not available|not available|is not found|not found|does not exist|is not enabled|unsupported)\b|\bunsupported (?:value|parameter|model)\b|\bmodel_not_found\b|\binvalid[_ ]model\b/i;
 
 /** Fixed start of the rejection line, so downstream guards can recognise it

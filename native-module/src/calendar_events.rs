@@ -86,6 +86,18 @@ pub fn access_name(status: isize, has_usage: bool) -> &'static str {
     }
 }
 
+/// The status this process should act on. After the person presses Allow,
+/// authorizationStatusForEntityType: in the process that asked can keep
+/// answering NotDetermined (seen on macOS 27, 2026-10-18: TCC had recorded the
+/// grant and a fresh process read FullAccess). The prompt's own "granted"
+/// answer is the truth for the rest of this run.
+pub fn settled_access_name(status: isize, has_usage: bool, granted_this_run: bool) -> &'static str {
+    if status == 0 && granted_this_run {
+        return "fullAccess";
+    }
+    access_name(status, has_usage)
+}
+
 /// A window EventKit can answer, or None for a nonsense one.
 pub fn clamp_window(start_ms: f64, end_ms: f64) -> Option<(f64, f64)> {
     if !start_ms.is_finite() || !end_ms.is_finite() || end_ms <= start_ms {
@@ -151,12 +163,13 @@ pub fn get_calendar_events(start_ms: f64, end_ms: f64) -> AsyncTask<GetCalendarE
 
 #[cfg(target_os = "macos")]
 mod imp {
-    use super::{access_name, CalendarEventInfo, CalendarParticipant, MAX_EVENTS};
+    use super::{settled_access_name, CalendarEventInfo, CalendarParticipant, MAX_EVENTS};
     use block2::RcBlock;
     use objc2::rc::autoreleasepool;
     use objc2::runtime::{AnyClass, AnyObject, Bool, Sel};
     use objc2::{msg_send, sel};
     use std::ffi::{c_char, CStr, CString};
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::mpsc;
     use std::time::Duration;
 
@@ -168,6 +181,8 @@ mod imp {
     const ENTITY_EVENT: usize = 0;
     /// How long a permission prompt may stay unanswered.
     const PROMPT_WAIT: Duration = Duration::from_secs(300);
+    /// The person pressed Allow in this run (see `settled_access_name`).
+    static GRANTED_THIS_RUN: AtomicBool = AtomicBool::new(false);
 
     fn store_class() -> Option<&'static AnyClass> {
         AnyClass::get("EKEventStore")
@@ -233,7 +248,7 @@ mod imp {
         autoreleasepool(|_| {
             let Some(class) = store_class() else { return "unsupported" };
             let raw: isize = unsafe { msg_send![class, authorizationStatusForEntityType: ENTITY_EVENT] };
-            access_name(raw, has_usage_description(has_full_access_api(class)))
+            settled_access_name(raw, has_usage_description(has_full_access_api(class)), GRANTED_THIS_RUN.load(Ordering::SeqCst))
         })
     }
 
@@ -260,7 +275,9 @@ mod imp {
                     let _: () = msg_send![store, requestAccessToEntityType: ENTITY_EVENT, completion: &*block];
                 }
                 // The completion arrives on EventKit's own queue once the person answers.
-                let _ = rx.recv_timeout(PROMPT_WAIT);
+                if let Ok(true) = rx.recv_timeout(PROMPT_WAIT) {
+                    GRANTED_THIS_RUN.store(true, Ordering::SeqCst);
+                }
                 objc2::ffi::objc_release(store.cast());
             }
         });
@@ -392,6 +409,15 @@ mod tests {
         assert_eq!(access_name(3, false), "fullAccess", "already granted: nothing is asked");
         assert_eq!(access_name(4, true), "writeOnly");
         assert_eq!(access_name(99, true), "denied", "an unknown status never reads as access");
+    }
+
+    #[test]
+    fn a_grant_in_this_run_outranks_a_stale_not_determined() {
+        assert_eq!(settled_access_name(0, true, true), "fullAccess");
+        assert_eq!(settled_access_name(0, true, false), "notDetermined");
+        assert_eq!(settled_access_name(2, true, true), "denied", "a later refusal still counts");
+        assert_eq!(settled_access_name(4, true, true), "writeOnly");
+        assert_eq!(settled_access_name(3, true, false), "fullAccess");
     }
 
     #[test]

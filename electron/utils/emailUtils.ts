@@ -33,7 +33,10 @@ export function buildMailtoLink(to: string, subject: string, body: string): stri
     // URLSearchParams encodes spaces as '+', but mailto expects '%20'
     const queryString = params.toString().replace(/\+/g, '%20');
 
-    return `mailto:${encodeURIComponent(to)}?${queryString}`;
+    // Each address encoded on its own, the commas between them left as commas:
+    // RFC 6068's separator, which some mail clients do not read when encoded.
+    const recipients = to.split(',').map((a) => a.trim()).filter(Boolean).map(encodeURIComponent).join(',');
+    return `mailto:${recipients}?${queryString}`;
 }
 
 /**

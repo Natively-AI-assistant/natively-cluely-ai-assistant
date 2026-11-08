@@ -1,14 +1,16 @@
 // A reset that lands while async session work is still awaiting must win.
 //
-// compactTranscriptIfNeeded() summarizes the oldest 500 segments through the
-// recap LLM once a meeting passes 1800. MeetingPersistence.stopMeeting()
-// snapshots the transcript and calls session.reset() immediately, so a stop
-// during that call left the summary to resolve INTO THE NEXT SESSION: the
-// ended meeting's bullets were appended to the new session's epoch summaries
-// (and from there to its answers and saved notes), and the 500-entry eviction
-// ran against the new session's transcript, deleting it. Reproduced on main
-// before this fix: meeting B's 3 lines became 0 and meeting A's summary was
-// in meeting B's getFullSessionContext().
+// The rolling meeting recap (SessionTracker.recapIfDue, 2026-10-15; until then
+// compactTranscriptIfNeeded) summarises each block of spoken lines through the
+// recap LLM. MeetingPersistence.stopMeeting() snapshots the transcript and
+// calls session.reset() immediately, so a stop during that call used to leave
+// the summary to resolve INTO THE NEXT SESSION: the ended meeting's bullets
+// were appended to the new session's summaries (and from there to its answers
+// and saved notes), and the old compaction's 500-entry eviction ran against the
+// new session's transcript, deleting it. Reproduced on main before the
+// 2026-09-25 fix: meeting B's 3 lines became 0 and meeting A's summary was in
+// meeting B's getFullSessionContext(). Compaction no longer evicts anything,
+// but a recap that resolves after a reset must still be discarded.
 //
 // The phone-mirror and desktop chat paths have the same shape: they save the
 // answer after awaiting the provider, so a meeting stop or mode switch in
@@ -27,7 +29,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(__dirname, '../../../dist-electron/electron');
 const { SessionTracker } = await import(pathToFileURL(path.join(distDir, 'SessionTracker.js')).href);
 
-const COMPACTION_THRESHOLD = 1800;
+const RECAP_BLOCK = 400;
 
 function deferredRecap() {
   let resolve;
@@ -42,37 +44,38 @@ function deferredRecap() {
   return { recap, calls, resolve: (v) => resolve(v), reject: (e) => reject(e) };
 }
 
-// Fill past the threshold so the next addTranscript starts a compaction whose
-// recap call stays pending until the test releases it.
-function startCompaction(session, label) {
+// Add one full block so the recap of it starts and stays pending until the
+// test releases it.
+async function startRecap(session, label) {
   const t0 = Date.now();
-  for (let i = 0; i <= COMPACTION_THRESHOLD; i++) {
+  for (let i = 0; i < RECAP_BLOCK; i++) {
     session.addTranscript({ speaker: 'interviewer', text: `${label} line ${i}`, timestamp: t0 + i, final: true });
   }
+  await settle();
 }
 
 const settle = () => new Promise((r) => setImmediate(r));
 
-describe('transcript compaction vs session reset', () => {
-  test('control: with no reset, the summary is kept and the oldest 500 segments are evicted', async () => {
+describe('meeting recap vs session reset', () => {
+  test('control: with no reset, the recap is kept and no line is evicted', async () => {
     const s = new SessionTracker();
     const d = deferredRecap();
     s.setRecapLLM(d.recap);
-    startCompaction(s, 'meeting A');
-    assert.equal(d.calls.length, 1, 'compaction must have started exactly one recap call');
+    await startRecap(s, 'meeting A');
+    assert.equal(d.calls.length, 1, 'a full block must start exactly one recap call');
 
     d.resolve('- meeting A summary');
     await settle();
 
-    assert.deepEqual(s.transcriptEpochSummaries, ['- meeting A summary']);
-    assert.equal(s.getFullTranscript().length, COMPACTION_THRESHOLD + 1 - 500);
+    assert.deepEqual(s.getMeetingRecaps().map((r) => r.text), ['- meeting A summary']);
+    assert.equal(s.getFullTranscript().length, RECAP_BLOCK, 'nothing is evicted any more');
   });
 
   test('a summary that resolves after reset() is discarded and the new session keeps its transcript', async () => {
     const s = new SessionTracker();
     const d = deferredRecap();
     s.setRecapLLM(d.recap);
-    startCompaction(s, 'meeting A');
+    await startRecap(s, 'meeting A');
 
     s.reset(); // MeetingPersistence.stopMeeting()
     for (let i = 0; i < 3; i++) {
@@ -82,55 +85,54 @@ describe('transcript compaction vs session reset', () => {
     d.resolve('- MEETING A: acquisition price is $40M');
     await settle();
 
-    assert.deepEqual(s.transcriptEpochSummaries, [], 'the ended meeting\'s summary leaked into the new session');
+    assert.deepEqual(s.getMeetingRecaps(), [], 'the ended meeting\'s summary leaked into the new session');
     assert.deepEqual(
       s.getFullTranscript().map((seg) => seg.text),
       ['meeting B line 0', 'meeting B line 1', 'meeting B line 2'],
-      'the ended meeting\'s eviction ran against the new session\'s transcript',
     );
     assert.doesNotMatch(String(s.getFullSessionContext()), /MEETING A/);
   });
 
-  test('a recap failure after reset() does not push a fallback marker into the new session', async () => {
+  test('a recap failure after reset() leaves nothing in the new session', async () => {
     const s = new SessionTracker();
     const d = deferredRecap();
     s.setRecapLLM(d.recap);
-    startCompaction(s, 'meeting A');
+    await startRecap(s, 'meeting A');
 
     s.reset();
     d.reject(new Error('provider down'));
     await settle();
 
-    assert.deepEqual(s.transcriptEpochSummaries, []);
+    assert.deepEqual(s.getMeetingRecaps(), []);
   });
 
-  test('a mode-context clear does NOT discard an in-flight compaction (the transcript survives it)', async () => {
+  test('a mode-context clear does NOT discard an in-flight recap', async () => {
     const s = new SessionTracker();
     const d = deferredRecap();
     s.setRecapLLM(d.recap);
-    startCompaction(s, 'meeting A');
+    await startRecap(s, 'meeting A');
 
     s.clearSessionContext();
     d.resolve('- meeting A summary');
     await settle();
 
-    assert.deepEqual(s.transcriptEpochSummaries, ['- meeting A summary']);
-    assert.equal(s.getFullTranscript().length, COMPACTION_THRESHOLD + 1 - 500);
+    assert.deepEqual(s.getMeetingRecaps().map((r) => r.text), ['- meeting A summary']);
+    assert.equal(s.getFullTranscript().length, RECAP_BLOCK);
   });
 
-  test('a compaction can start again after a discarded one', async () => {
+  test('a recap can start again after a discarded one', async () => {
     const s = new SessionTracker();
     const first = deferredRecap();
     s.setRecapLLM(first.recap);
-    startCompaction(s, 'meeting A');
+    await startRecap(s, 'meeting A');
     s.reset();
     first.resolve('- stale');
     await settle();
 
     const second = deferredRecap();
     s.setRecapLLM(second.recap);
-    startCompaction(s, 'meeting B');
-    assert.equal(second.calls.length, 1, 'isCompacting was left set by the discarded run');
+    await startRecap(s, 'meeting B');
+    assert.equal(second.calls.length, 1, 'isRecapping was left set by the discarded run');
   });
 });
 

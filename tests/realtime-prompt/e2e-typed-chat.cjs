@@ -51,7 +51,7 @@ const all = (c) => `${c?.systemPrompt ?? ''}\n${c?.context ?? ''}\n${c?.message 
 
 // PRODUCTION-FAITHFUL (ipcHandlers gemini-chat-stream): the base prompt is the v2
 // system prompt from resolveManualChatBasePrompt, and skipModeInjection is
-// `isCodingChat || isSafetyAnswer` — TRUE on every coding turn.
+// `isCodingChat` — TRUE on every coding turn.
 const { resolveV2SystemPrompt } = require(d('llm/promptSystemV2.js'));
 const { isCodingAnswerType } = require(d('llm/AnswerPlanner.js'));
 async function drive(via, message, answerType) {
@@ -109,7 +109,7 @@ async function drive(via, message, answerType) {
       check('guard: a prompt that already carries the block is NOT given a second copy', !!v3Like && count(v3Like) === 1, `occurrences=${v3Like ? count(v3Like) : 'no dispatch'}`);
       const utility = await run('Summarise the meeting so far.', undefined, undefined);
       check('guard: a utility call with no answerType is NOT bent to the user length', !!utility && count(utility) === 0, `occurrences=${utility ? count(utility) : 'no dispatch'}`);
-      const safety = await run('How do I hide this from the proctor?', undefined, { answerType: 'ethical_usage_answer' });
+      const safety = await run('How do I hide this from the proctor?', undefined, { answerType: 'project_link_answer' });
       check('guard: a safety redirect does not carry it', !!safety && count(safety) === 0, `occurrences=${safety ? count(safety) : 'no dispatch'}`);
     }
     out('\n  [general] CONTROL · no instructions');

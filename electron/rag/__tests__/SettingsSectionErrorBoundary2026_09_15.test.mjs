@@ -56,9 +56,10 @@ describe('a settings section cannot take down the launcher', () => {
     const boundary = src.indexOf('<ErrorBoundary context={`Settings');
     const close = src.indexOf('</ErrorBoundary>', boundary);
     const inner = src.slice(boundary, close);
-    for (const tab of ['general', 'ai-providers', 'skills', 'audio', 'keybinds', 'about']) {
+    for (const tab of ['general', 'ai-providers', 'audio', 'keybinds', 'about']) {
       assert.ok(inner.includes(`activeTab === '${tab}'`), `the '${tab}' section is outside the boundary`);
     }
     assert.ok(inner.includes('isRetrievalTab(activeTab)'), 'the Retrieval section is outside the boundary');
+    assert.ok(inner.includes('isIntelligenceTab(activeTab)'), 'the Intelligence section (which holds Skills) is outside the boundary');
   });
 });

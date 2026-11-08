@@ -3,7 +3,7 @@ import { useLanguage, useT } from '../../i18n';
 import type { VisionModelState } from '../../types/electron';
 import { visionAutoText, visionStatusText, visionAnswerInForce, visionStatesShown, visionNotesKept } from './visionLine';
 import { Plus, Trash2, Edit2, AlertCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2, LogOut, Cloud, Server, Eye, Info, MessageSquare, Image, ImageOff, FileText, User, Boxes, ClipboardList, Laptop, KeyRound } from 'lucide-react';
-import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, type CodexModelCatalogResult, isModelAllowed, isOptInModelProvider, litellmModelLabel, gatewayModelLabel, ninerouterThinkingOptions, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
+import { CODEX_CLI_MODEL, cloudModelRows, codexCliSelectorId, codexModelOptions, type CodexModelCatalogResult, isModelAllowed, isOptInModelProvider, litellmModelLabel, gatewayModelLabel, ninerouterThinkingOptions, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
 import { PICKER_MENU_WIDTH, Presence, SettingsMenu, SettingsMotionReady, SwapLabel, capPickerLabel, useMotionReadyAfter } from './SettingsRow';
@@ -244,15 +244,14 @@ export const AIP_CSS = `
     --aip-border-strong: rgba(0,0,0,0.13);
     --aip-divider:       rgba(0,0,0,0.06);
 
-    /* --aip-card-bg and --aip-card-border are NOT redeclared here. Both are
-       expressions over tokens that already split by theme, so the single
-       declaration in ".aip-root" resolves to #EAECEF behind a rgba(0,0,0,0.07)
-       hairline here. Re-stating them would only create somewhere to drift.
-       #FFFFFF was considered and rejected: this panel renders on --bg-main
-       (#fafafa) inside a --bg-elevated (#FFFFFF) modal frame, so a white card
-       separates from its canvas by 5 steps and from the frame by 0 — it would
-       be carried entirely by the 7% hairline, which is the same skeleton
-       failure the dark side had. #EAECEF separates by 16. */
+    /* Light cards are the white plaque Plans & Billing uses (.natively-key-card
+       in index.css): near-white top to bottom, an 8% hairline and a soft floor
+       shadow (.aip-root[data-theme='light'] .aip-card below). The grey
+       --bg-item-surface fill read as unfinished next to it. White was once
+       rejected here because the canvas was #fafafa; it is #F2F2F7 now, so the
+       card lifts off it the same way the plaque does. */
+    --aip-card-bg:       linear-gradient(180deg, #FFFFFF 0%, #F8F8FA 100%);
+    --aip-card-border:   rgba(0,0,0,0.08);
     /* Unconsumed, as in dark. Held EQUAL to the card fill, which is what it has
        always meant here: cards in this panel have no light hover state. */
     --aip-card-bg-hover: var(--bg-item-surface);
@@ -448,7 +447,7 @@ export const AIP_CSS = `
       near-white hairline on a #1E1E21 canvas is a bug to inherit, not a
       grammar to match. Dividers here use --aip-divider.
 
-      No box-shadow. General has none in either theme, and the pair this rule
+      No box-shadow in dark (light takes the plaque's, below). The pair this rule
       used to carry never rendered anyway: "box-shadow" is "none | <shadow>#",
       so both "inset 0 1px 0 rgba(...), none" (dark) and "none, 0 1px 1px
       rgba(...)" (light) were invalid declarations and were dropped whole.
@@ -463,6 +462,12 @@ export const AIP_CSS = `
                 background   var(--aip-dur-travel) var(--aip-ease-out),
                 opacity      var(--aip-dur-travel) var(--aip-ease-out),
                 filter       var(--aip-dur-travel) var(--aip-ease-out);
+}
+/* The plaque's floor shadow, light only: dark cards are drawn by their fill. */
+.aip-root[data-theme='light'] .aip-card {
+    box-shadow: inset 0 1px 0 rgba(255,255,255,1),
+                0 1px 2px rgba(0,0,0,0.05),
+                0 4px 12px rgba(0,0,0,0.035);
 }
 /* NOTE: do not re-add a ".aip-card + .aip-card { margin-top }" rule. Every card stack
    in this file also carries a Tailwind "space-y-*", whose
@@ -1333,10 +1338,13 @@ select.aip-input { cursor:pointer; }
    .aip-subtitle is already 12px = General's "text-xs", and --aip-secondary
    already resolves to the same colour as --text-secondary in both themes
    (#6B7280 light; rgba(255,255,255,0.56) over the dark canvas ≈ #A0A0A0), so
-   the description role needs no change. */
-.aip-title     { font-size:15px; font-weight:600; letter-spacing:-0.012em; color: var(--aip-hero); }
+   the description role needs no change.
+   2026-11-01: .aip-title now really is 18px/700 (it had drifted to 15px/600,
+   so AI Providers, Retrieval, Embeddings and Reranker read smaller than
+   General and Audio). */
+.aip-title     { font-size:18px; line-height:28px; font-weight:700; color: var(--aip-hero); }
 .aip-subtitle  { font-size:12px; font-weight:400; color: var(--aip-secondary); }
-.aip-card-title{ font-size:13px; font-weight:600; letter-spacing:-0.008em; color: var(--aip-hero); }
+.aip-card-title{ font-size:14px; font-weight:700; color: var(--aip-hero); }
 .aip-meta      { font-size:11px; font-weight:400; line-height:1.45; color: var(--aip-secondary); }
 .aip-label     { font-size:10px; font-weight:600; text-transform:uppercase;
                  letter-spacing:0.05em; color: var(--aip-secondary); }
@@ -1558,7 +1566,9 @@ export const CLOUD_PROVIDERS = [
     // scoped to the key's group. The one provider here with a second required
     // setting — see the protocol selector passed as `extraControls` below.
     // Natively's partner link (sponsor): new sign-ups get $3 in API credit.
-    { id: 'fluxion' as const, name: 'Fluxion AI', placeholder: 'sk-...', url: FLUXION_REFERRAL_URL },
+    // Shown as Sidrune AI, Fluxion AI's name since Oct 2026. The id, the stored
+    // key and the API host are unchanged, so existing keys keep working.
+    { id: 'fluxion' as const, name: 'Sidrune AI', placeholder: 'sk-...', url: FLUXION_REFERRAL_URL },
     // A gateway like Fluxion: four models, key-scoped catalogue, NOT opt-in.
     // Nothing extra to configure — its protocol is chosen per model. "Get API
     // key" is Natively's own AgentRouter referral link.
@@ -1714,7 +1724,7 @@ export const AipProviderMark: React.FC<AipProviderMarkProps> = ({ provider, name
                 {/* 20px inside the 26px tile, where the inlined SVG marks get 16
                     (`.aip-tile--mark > svg`). Deliberately different: those are
                     two-colour vector glyphs that stay crisp small, while these are
-                    detailed raster artwork — Fluxion's monogram and LiteLLM's
+                    detailed raster artwork, like LiteLLM's
                     favicon — which need the extra pixels to be readable at all.
                     20 leaves 3px of breathing room per side.
 
@@ -2359,7 +2369,9 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                             onFocus={() => setActiveIndex(i)}
                                             title={inert
                                                 ? t('At least one model must stay on. Turn the provider off to hide it entirely.')
-                                                : m.id}
+                                                // Sidrune's ids carry the internal `fluxion/` routing prefix
+                                                // from before the rebrand; show the id Sidrune itself uses.
+                                                : m.id.replace(/^fluxion\//, '')}
                                             className="aip-model-toggle"
                                         >
                                             <Check size={11} strokeWidth={2.5} className="aip-model-check" aria-hidden="true" />
@@ -3540,7 +3552,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     };
 
     // --- Local (Codex CLI) ---
-    const [codexCliConfig, setCodexCliConfig] = useState({ enabled: false, path: 'codex', model: 'gpt-5.5', timeoutMs: 60000, sandboxMode: 'read-only' as string, serviceTier: 'default', modelReasoningEffort: undefined as string | undefined });
+    const [codexCliConfig, setCodexCliConfig] = useState({ enabled: false, path: 'codex', model: 'gpt-5.6-luna', timeoutMs: 60000, sandboxMode: 'read-only' as string, serviceTier: 'default', modelReasoningEffort: undefined as string | undefined });
     // The installed Codex CLI's model list (models_cache.json); null until read.
     const [codexModelCatalog, setCodexModelCatalog] = useState<CodexModelCatalogResult | null>(null);
     const [codexModelsRefreshing, setCodexModelsRefreshing] = useState(false);
@@ -3981,7 +3993,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
      * wipe them.
      */
     const effectiveModels = useCallback((provider: string): AipModelEntry[] => {
-        const preset = STANDARD_CLOUD_MODELS[provider];
         const out: AipModelEntry[] = [];
         const seen = new Set<string>();
         const push = (id: string, label: string) => {
@@ -3989,7 +4000,9 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             seen.add(id);
             out.push({ id, label });
         };
-        preset?.ids.forEach((id, i) => push(id, preset.names[i] || id));
+        // Presets, or for a LIVE_CATALOGUE_PROVIDERS entry with a fetched
+        // catalogue, that catalogue alone: its retired presets would only 503.
+        cloudModelRows(provider, cloudFetchedModels).forEach(({ id, name }) => push(id, name));
         // LiteLLM has no preset table and no `cloudFetchedModels` entry — its universe
         // is whatever the proxy reported, held UNPREFIXED in `litellmModels`. Prefix it
         // here so the allow-list stores the same `litellm/<model>` ids that
@@ -5342,8 +5355,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
 
             <div className="aip-card p-5 flex items-center justify-between gap-4">
                     <div className="min-w-0">
-                        <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Active Model')}</label>
-                        <p className="text-[10px] aip-muted mt-0.5">{t('Applies to new chats instantly.')}</p>
+                        <label className="block text-sm font-bold mb-0 aip-hero">{t('Active Model')}</label>
+                        <p className="text-xs aip-muted mt-0.5">{t('Applies to new chats instantly.')}</p>
                     </div>
                     <ModelSelect
                         containerClassName={AIP_ACTIVE_SELECT_CONTAINER}
@@ -5360,14 +5373,14 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
 
             <div className="aip-card p-5 flex items-center justify-between gap-4">
                     <div className="min-w-0">
-                        <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Background Model')}</label>
-                        <p className="text-[10px] aip-muted mt-0.5">{t('Runs Auto Answer, quick decisions and Fast Response Mode.')}</p>
+                        <label className="block text-sm font-bold mb-0 aip-hero">{t('Background Model')}</label>
+                        <p className="text-xs aip-muted mt-0.5">{t('Runs Auto Answer, quick decisions and Fast Response Mode.')}</p>
                         {/* Advisory only: a big pick silently re-creates the latency
                             problem the measured judge ladder exists to avoid, but a
                             hard filter would need a hand-maintained list that goes
                             stale on every model retirement. */}
                         {!isKnownFastModel(fastModel) && (
-                            <p className="text-[10px] aip-warn-fg mt-0.5 font-medium">{t('Large models make Auto Answer slower. Pick a small tier for the best results.')}</p>
+                            <p className="text-xs aip-warn-fg mt-0.5 font-medium">{t('Large models make Auto Answer slower. Pick a small tier for the best results.')}</p>
                         )}
                     </div>
                     <ModelSelect
@@ -5398,8 +5411,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
 
             <div className="aip-card p-5 flex items-center justify-between gap-4">
                     <div className="min-w-0">
-                        <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('AI Response Language')}</label>
-                        <p className="text-[10px] aip-muted mt-0.5">
+                        <label className="block text-sm font-bold mb-0 aip-hero">{t('AI Response Language')}</label>
+                        <p className="text-xs aip-muted mt-0.5">
                             {aiResponseLanguage === 'auto'
                                 ? t('Mirrors user\'s language automatically')
                                 : t('Language for AI suggestions and notes')
@@ -5448,7 +5461,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             <div className="aip-card p-5 flex items-center justify-between gap-4">
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                            <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Direct Assist')}</label>
+                            <label className="block text-sm font-bold mb-0 aip-hero">{t('Direct Assist')}</label>
                             {/* The Liquid Glass material rather than .aip-badge:
                                 a tag qualifies the title beside it, and this one
                                 carries no status, so it also drops the status dot
@@ -5465,10 +5478,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 5.31:1 if that ever needs to change. */}
                             <LiquidGlassBadge variant="sky">{t('Beta')}</LiquidGlassBadge>
                         </div>
-                        <p className="text-[10px] aip-muted mt-0.5">
+                        <p className="text-xs aip-muted mt-0.5">
                             {t('Sends your typed, spoken, screenshot, and page input straight to the model, unprocessed.')}
                         </p>
-                        <AipRevealNote text={directAssistError} className="text-[10px] aip-danger-fg mt-1" role="alert" />
+                        <AipRevealNote text={directAssistError} className="text-xs aip-danger-fg mt-1" role="alert" />
                     </div>
                     <AipSwitch
                         checked={directAssistEnabled}
@@ -5511,10 +5524,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             states the real requirement in full, as does the
                             card's title. A badge carries only what no other
                             control already says. */}
-                        <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Fast Response Mode')}</label>
+                        <label className="block text-sm font-bold mb-0 aip-hero">{t('Fast Response Mode')}</label>
                         {/* Says which model will answer: the Background Model when one
                             is picked, otherwise Auto's fastest connected model. */}
-                        <p className="text-[10px] aip-muted mt-0.5">{hasFastModelPick
+                        <p className="text-xs aip-muted mt-0.5">{hasFastModelPick
                             ? t('Answers with the Background Model, not the Active Model.')
                             : t('Uses the fastest available provider instead of your selected model.')}</p>
                         <AipRevealNote
@@ -5651,7 +5664,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             {/* Cloud Providers */}
             <div className="space-y-5">
                 <div>
-                    <h3 className="text-sm font-bold aip-hero mb-1">{t('Cloud Providers')}</h3>
+                    <h3 className="text-lg font-bold aip-hero mb-1">{t('Cloud Providers')}</h3>
                     <p className="text-xs aip-muted mb-2">{t('Add API keys to unlock cloud AI models.')}</p>
                 </div>
 
@@ -6447,7 +6460,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     <div className="flex items-start gap-2.5 min-w-0">
                         <AipProviderMark provider="ollama" name="Ollama" className="mt-0.5" />
                         <div className="min-w-0">
-                            <h3 className="text-sm font-bold aip-hero mb-1">{t('Local Models (Ollama)')}</h3>
+                            <h3 className="text-lg font-bold aip-hero mb-1">{t('Local Models (Ollama)')}</h3>
                             <p className="text-xs aip-muted">{t('Run open-source models locally.')}</p>
                         </div>
                     </div>
@@ -6586,7 +6599,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 <div className="flex items-center justify-between mb-2">
                     <div>
                         <div className="flex items-center gap-2 mb-1">
-                            <h3 className="text-sm font-bold aip-hero">{t('Custom Providers')}</h3>
+                            <h3 className="text-lg font-bold aip-hero">{t('Custom Providers')}</h3>
                             <AipBadge tone="warn" label={t('Experimental')} />
                         </div>
                         <p className="text-xs aip-muted">{t('Add your own AI endpoints via cURL.')}</p>

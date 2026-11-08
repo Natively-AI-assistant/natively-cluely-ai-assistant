@@ -18,7 +18,7 @@ const tiny = await import(
 );
 
 const MODES = ['general', 'looking-for-work', 'sales', 'recruiting', 'team-meet', 'lecture', 'technical-interview', 'seminar', 'custom'];
-const ACTIONS = ['assist', 'answer', 'what_to_say', 'clarify', 'brainstorm', 'followup', 'follow_up_questions', 'recap', 'code_hint', 'title', 'summary_json', 'followup_email'];
+const ACTIONS = ['assist', 'answer', 'what_to_say', 'clarify', 'brainstorm', 'followup', 'follow_up_questions', 'recap', 'code_hint', 'summary_json', 'followup_email'];
 const TIERS = ['cloud', 'local'];
 
 describe('composition matrix — every mode × action × tier composes', () => {
@@ -318,7 +318,7 @@ describe('assembled turn envelope + envelope detection (production wiring)', () 
 
 describe('generation profile (behavior test 34)', () => {
   test('live answers are low variance / low verbosity; brainstorm + email are medium', () => {
-    for (const a of ['answer', 'what_to_say', 'clarify', 'follow_up_questions', 'title', 'assist', 'followup']) {
+    for (const a of ['answer', 'what_to_say', 'clarify', 'follow_up_questions', 'assist', 'followup']) {
       assert.deepEqual(v2.recommendedGenerationProfile(a), { variance: 'low', verbosity: 'low' }, a);
     }
     for (const a of ['recap', 'summary_json', 'code_hint']) {
@@ -537,7 +537,7 @@ describe('mode×action voice contract (Phase 2, deterministic axis separation)',
 
   test('informational actions win over role voice in every role mode (benchmark class 6: sales+recap)', () => {
     for (const mode of MODES) {
-      for (const action of ['recap', 'follow_up_questions', 'summary_json', 'title', 'followup_email']) {
+      for (const action of ['recap', 'follow_up_questions', 'summary_json', 'followup_email']) {
         const p = v2.buildSystemPromptV2({ mode, action, tier: 'cloud' });
         assert.ok(p.includes('informational task: produce exactly the action'), `${mode}/${action}: shape-wins rule missing`);
       }
@@ -594,7 +594,7 @@ describe('silence gate (action-scoped: monitoring may be silent, invoked actions
   });
 
   test('deliberately invoked actions FORBID the sentinel (run-4 loss class: [[NO_ACTION]] on clarify/answer)', () => {
-    for (const action of ['what_to_say', 'clarify', 'answer', 'recap', 'follow_up_questions', 'followup', 'brainstorm', 'code_hint', 'title', 'summary_json', 'followup_email']) {
+    for (const action of ['what_to_say', 'clarify', 'answer', 'recap', 'follow_up_questions', 'followup', 'brainstorm', 'code_hint', 'summary_json', 'followup_email']) {
       const p = v2.buildSystemPromptV2({ mode: 'lecture', action, tier: 'cloud' });
       const gate = p.slice(p.indexOf('<silence_gate>'), p.indexOf('</silence_gate>'));
       assert.ok(gate.includes('NOT a valid response here'), `${action}: sentinel must be forbidden`);

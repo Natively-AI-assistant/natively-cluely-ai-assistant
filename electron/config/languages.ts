@@ -96,6 +96,17 @@ export const AUTO_DETECT_ALTERNATES = [
     'he-IL',
     'ms-MY',
     'fi-FI',
+    // Indian languages (2026-10-16). The relay pins them from auto-detect too;
+    // Soniox, ElevenLabs, Deepgram (all but Malayalam) and Google carry them.
+    'mr-IN',
+    'ta-IN',
+    'te-IN',
+    'bn-IN',
+    'gu-IN',
+    'kn-IN',
+    'ml-IN',
+    'pa-IN',
+    'ur-IN',
 ];
 
 export const RECOGNITION_LANGUAGES: Record<string, LanguageOption> = {
@@ -130,6 +141,15 @@ export const RECOGNITION_LANGUAGES: Record<string, LanguageOption> = {
     'hebrew': { label: 'Hebrew', code: 'hebrew', bcp47: 'he-IL', iso639: 'he', group: 'Hebrew' },
     'malay': { label: 'Malay', code: 'malay', bcp47: 'ms-MY', iso639: 'ms', group: 'Malay' },
     'finnish': { label: 'Finnish', code: 'finnish', bcp47: 'fi-FI', iso639: 'fi', group: 'Finnish' },
+    'marathi': { label: 'Marathi', code: 'marathi', bcp47: 'mr-IN', iso639: 'mr', group: 'Marathi' },
+    'tamil': { label: 'Tamil', code: 'tamil', bcp47: 'ta-IN', iso639: 'ta', group: 'Tamil' },
+    'telugu': { label: 'Telugu', code: 'telugu', bcp47: 'te-IN', iso639: 'te', group: 'Telugu' },
+    'bengali': { label: 'Bengali', code: 'bengali', bcp47: 'bn-IN', iso639: 'bn', group: 'Bengali' },
+    'gujarati': { label: 'Gujarati', code: 'gujarati', bcp47: 'gu-IN', iso639: 'gu', group: 'Gujarati' },
+    'kannada': { label: 'Kannada', code: 'kannada', bcp47: 'kn-IN', iso639: 'kn', group: 'Kannada' },
+    'malayalam': { label: 'Malayalam', code: 'malayalam', bcp47: 'ml-IN', iso639: 'ml', group: 'Malayalam' },
+    'punjabi': { label: 'Punjabi', code: 'punjabi', bcp47: 'pa-IN', iso639: 'pa', group: 'Punjabi' },
+    'urdu': { label: 'Urdu', code: 'urdu', bcp47: 'ur-IN', iso639: 'ur', group: 'Urdu' },
     'croatian': { label: 'Croatian', code: 'croatian', bcp47: 'hr-HR', iso639: 'hr', group: 'Croatian' },
     'estonian': { label: 'Estonian', code: 'estonian', bcp47: 'et-EE', iso639: 'et', group: 'Estonian' },
     'latvian': { label: 'Latvian', code: 'latvian', bcp47: 'lv-LV', iso639: 'lv', group: 'Latvian' },
@@ -196,6 +216,15 @@ export const AI_RESPONSE_LANGUAGES = [
     { label: 'Hebrew', code: 'Hebrew' },
     { label: 'Malay', code: 'Malay' },
     { label: 'Finnish', code: 'Finnish' },
+    { label: 'Marathi', code: 'Marathi' },
+    { label: 'Tamil', code: 'Tamil' },
+    { label: 'Telugu', code: 'Telugu' },
+    { label: 'Bengali', code: 'Bengali' },
+    { label: 'Gujarati', code: 'Gujarati' },
+    { label: 'Kannada', code: 'Kannada' },
+    { label: 'Malayalam', code: 'Malayalam' },
+    { label: 'Punjabi', code: 'Punjabi' },
+    { label: 'Urdu', code: 'Urdu' },
 ];
 
 /**

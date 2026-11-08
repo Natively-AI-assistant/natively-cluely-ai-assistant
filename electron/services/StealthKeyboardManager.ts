@@ -38,6 +38,14 @@ import { isVerboseLogging } from '../verboseLog';
  * to the renderer via `stealth-tap-state` ({active:false, error:'permission'})
  * and offer to open System Settings via the helper below.
  */
+/**
+ * The window a typing session feeds (2026-10-20). The overlay's chat input, or
+ * the notes window: both are typed into without taking focus, so one hook
+ * serves both, one at a time. Chosen by main from the window that asked
+ * (main.ts stealth-tap:start), never by a renderer.
+ */
+export type StealthTypingTarget = 'overlay' | 'notes';
+
 export class StealthKeyboardManager {
     private static instance: StealthKeyboardManager | null = null;
 
@@ -62,6 +70,11 @@ export class StealthKeyboardManager {
     /// enforce "hook engaged ⟹ overlay visible" on Windows (see start()).
     private overlayWindow: BrowserWindow | null = null;
     private overlayBoundsProvider: (() => OverlayBoundsInput | null) | null = null;
+    /// The notes window, the second typing sink (setNotesWindow).
+    private notesWindow: BrowserWindow | null = null;
+    private notesRegistrationToken = 0;
+    /// Which window the running session types into.
+    private target: StealthTypingTarget = 'overlay';
     /// Monotonic counter incremented on every setOverlayWindow call. The
     /// 'closed' listener captures the token at registration time and only
     /// nulls overlayWebContents if the token still matches. Without this,
@@ -185,6 +198,39 @@ export class StealthKeyboardManager {
     }
 
     /**
+     * Register the notes window as the second typing sink. Its keys go to it
+     * alone, and only while a session it started is running.
+     */
+    public setNotesWindow(win: BrowserWindow | null): void {
+        const myToken = ++this.notesRegistrationToken;
+        if (!win || win.isDestroyed()) {
+            this.notesWindow = null;
+            return;
+        }
+        this.notesWindow = win;
+        win.once('closed', () => {
+            if (this.notesRegistrationToken !== myToken) return;
+            this.notesWindow = null;
+            if (this.active && this.target === 'notes') this.stop();
+        });
+    }
+
+    /** The window the running session types into (meaningful while active). */
+    public getTarget(): StealthTypingTarget {
+        return this.target;
+    }
+
+    /** Stop the running session if it types into `target`. */
+    public stopIfTarget(target: StealthTypingTarget): void {
+        if (this.active && this.target === target) this.stop();
+    }
+
+    private targetWindow(target: StealthTypingTarget): BrowserWindow | null {
+        const win = target === 'notes' ? this.notesWindow : this.overlayWindow;
+        return win && !win.isDestroyed() ? win : null;
+    }
+
+    /**
      * True if stealth typing is usable right now.
      *
      * Beyond "the binary shipped with the tap", Windows must also decline when a
@@ -299,9 +345,23 @@ export class StealthKeyboardManager {
      * or Accessibility isn't granted; the renderer should drive the user
      * through the permission flow in that case.
      */
-    public start(): boolean {
+    public start(target: StealthTypingTarget = 'overlay'): boolean {
         if (!this.tap) return false;
-        if (this.active) return true;
+        if (this.active) {
+            if (this.target === target) return true;
+            // Another Natively window asked (the user clicked from the overlay's
+            // input into the notes, or back): the session moves there. The
+            // native hook needs no restart; only where keys are sent changes.
+            // Windows: the new window must be visible, as below.
+            if (process.platform === 'win32') {
+                const win = this.targetWindow(target);
+                if (!win || !win.isVisible()) return false;
+            }
+            this.target = target;
+            this.broadcastState({ active: true });
+            this.armIdleTimer();
+            return true;
+        }
 
         // Full stealth typing and the shortcut-guard share the single native
         // hook instance (ACTIVE_HOOK is one global slot). Free the tap from
@@ -315,12 +375,12 @@ export class StealthKeyboardManager {
         // Ctrl+B) would eat the user's keystrokes with no visible indicator and
         // nowhere to deliver them. Refuse in that case. macOS is unchanged — its
         // panel-based path predates this and has no equivalent hazard.
-        if (
-            process.platform === 'win32' &&
-            (!this.overlayWindow || this.overlayWindow.isDestroyed() || !this.overlayWindow.isVisible())
-        ) {
-            return false;
+        // The same holds for the notes window when it is the target.
+        if (process.platform === 'win32') {
+            const win = this.targetWindow(target);
+            if (!win || !win.isVisible()) return false;
         }
+        this.target = target;
 
         // ROUND 2 FIX (#12): Flip active=true BEFORE tap.start() so the
         // first captured callback (which can fire on the worker thread the
@@ -568,18 +628,24 @@ export class StealthKeyboardManager {
     }
 
     /**
-     * The app's global shortcuts as a chord table the native hook can swallow +
-     * self-dispatch. Windows only — macOS consumes shortcuts via Carbon/IOKit
-     * before the tap, so we pass an empty table there (the macOS tap ignores it
-     * anyway). Lazy require() to avoid a KeybindManager ↔ manager import cycle,
-     * matching hideAuxWindowsForStealth's pattern.
+     * The app's global shortcuts as a chord table for the native hook. Windows:
+     * the chords it swallows + self-dispatches. macOS: the tap sees keys before
+     * the Carbon hot keys, so it gets the app's Cmd+A/C/V/X binds to leave
+     * alone (it takes those four as edits otherwise). Lazy require() to avoid a
+     * KeybindManager ↔ manager import cycle, matching hideAuxWindowsForStealth's
+     * pattern.
      */
     private getAppChordTable(): Array<{ vk: number; mods: number; id: string }> {
-        if (process.platform !== 'win32') return [];
+        if (process.platform !== 'win32' && process.platform !== 'darwin') return [];
         try {
             // eslint-disable-next-line @typescript-eslint/no-var-requires
             const { KeybindManager } = require('./KeybindManager');
-            return KeybindManager.getInstance().getGlobalChordTable();
+            // Windows: the chords the hook swallows and dispatches itself.
+            // macOS: the app's Cmd+A/C/V/X binds, which the tap leaves to the
+            // hot key instead of running them as edits (macEditChord.ts).
+            return process.platform === 'win32'
+                ? KeybindManager.getInstance().getGlobalChordTable()
+                : KeybindManager.getInstance().getMacEditChordTable();
         } catch (e) {
             console.error('[StealthKeyboardManager] getAppChordTable failed:', e);
             return [];
@@ -621,27 +687,37 @@ export class StealthKeyboardManager {
         // the renderer's escSuppressUntilNextActive flag for the matching
         // half of the ordering invariant.
         if (ev.isKeyDown && ev.keyCode === 53) {
-            this.sendKeyToOverlay(ev);
+            this.sendKeyToTarget(ev);
             this.stop();
             return;
         }
         // Drop captured events that arrive after stop().
         if (!this.active) return;
         this.armIdleTimer();
-        this.sendKeyToOverlay(ev);
+        this.sendKeyToTarget(ev);
     }
 
-    private sendKeyToOverlay(ev: CapturedKey): void {
+    private sendKeyToTarget(ev: CapturedKey): void {
         // Captured keystrokes are sensitive — never fan out. Send only to
-        // the registered overlay webContents. If unset (e.g., overlay not
-        // yet created), drop. The user wouldn't see the result anyway.
+        // the window the session types into: the registered overlay
+        // webContents, or the notes window. If unset (e.g., overlay not yet
+        // created), drop. The user wouldn't see the result anyway.
+        if (this.target === 'notes') {
+            const notes = this.targetWindow('notes');
+            if (notes) notes.webContents.send('stealth-key-captured', ev);
+            return;
+        }
         if (this.overlayWebContents && !this.overlayWebContents.isDestroyed()) {
             this.overlayWebContents.send('stealth-key-captured', ev);
         }
     }
 
+    /**
+     * Every window hears the state, with the session's target, so each one
+     * acts only on its own session (the overlay must not expand for the notes).
+     */
     private broadcastState(state: { active: boolean; reason?: string }): void {
-        this.broadcast('stealth-tap-state', state);
+        this.broadcast('stealth-tap-state', { ...state, target: this.target });
     }
 
     private broadcast(channel: string, payload: unknown): void {

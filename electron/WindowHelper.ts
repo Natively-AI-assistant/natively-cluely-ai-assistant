@@ -61,6 +61,9 @@ export class WindowHelper {
   private launcherWindow: BrowserWindow | null = null;
   private overlayWindow: BrowserWindow | null = null;
   private isWindowVisible: boolean = false;
+  // Stop with the notepad open (2026-10-31): launcher mode is entered but its
+  // window waits until the notepad is closed (switchToLauncher's `hidden`).
+  private launcherShowOwed = false;
   // Position/Size tracking for Launcher
   private launcherPosition: { x: number; y: number } | null = null;
   private launcherSize: { width: number; height: number } | null = null;
@@ -1029,6 +1032,8 @@ export class WindowHelper {
    *                            screen with no other trace).
    */
   private attachRendererDiagnostics(win: BrowserWindow, tag: string): void {
+    // A page that loaded without its preload bridge is dead until reloaded.
+    require('./preloadBridgeGuard').attachPreloadBridgeGuard(win, tag);
     try {
       const wc = win.webContents;
 
@@ -2598,9 +2603,19 @@ export class WindowHelper {
 
   // --- Swapping Logic ---
 
-  public switchToOverlay(inactive?: boolean): void {
-    console.log(`[WindowHelper] Switching to OVERLAY (inactive: ${!!inactive})`);
+  /**
+   * `hidden` (2026-10-20, utils/meetingSurface.ts): a notepad meeting. Overlay
+   * mode and its placement exactly as a shown switch, but nothing is shown:
+   * the state Cmd/Ctrl+B's hide leaves (hideMainWindow), so the same shortcut
+   * shows it later through this path.
+   */
+  public switchToOverlay(inactive?: boolean, opts?: { hidden?: boolean }): void {
+    console.log(`[WindowHelper] Switching to OVERLAY (inactive: ${!!inactive}${opts?.hidden ? ', hidden' : ''})`);
     this.currentWindowMode = 'overlay';
+    // A hidden switch holds the overlay down against its own renderer's show
+    // requests (isOverlayHeldHidden); any real show releases it.
+    this.overlayHeldHidden = !!opts?.hidden;
+    this.launcherShowOwed = false;
     KeybindManager.getInstance().setMode('overlay'); // Adapted from public PR #123 — verify premium interaction
 
     // Show Overlay FIRST
@@ -2657,8 +2672,11 @@ export class WindowHelper {
 
       this.overlayWindow.setBounds(targetBounds);
       this.overlayBounds = this.overlayWindow.getBounds();
-      this.appState.recordNativeOomOutboundIpc(this.overlayWindow.webContents.id, 'ensure-expanded', []);
-      this.overlayWindow.webContents.send('ensure-expanded');
+      // Not for a hidden switch: the renderer's expansion asks main to show it.
+      if (!opts?.hidden) {
+        this.appState.recordNativeOomOutboundIpc(this.overlayWindow.webContents.id, 'ensure-expanded', []);
+        this.overlayWindow.webContents.send('ensure-expanded');
+      }
       // `ensure-expanded` guarantees the overlay renderer comes up expanded,
       // but the PILL only learns that after a renderer→main→pill round trip,
       // and its collapse gate is a 0.22s opacity fade (OverlayAuxWindows).
@@ -2673,6 +2691,11 @@ export class WindowHelper {
         expanded: true,
       });
 
+      if (opts?.hidden) {
+        this.applyOverlayAuxVisibility(false);
+        if (this.overlayWindow.isVisible()) this.overlayWindow.hide();
+        this.isWindowVisible = false;
+      } else
       // Restore opacity before showing (it may have been zeroed by hideMainWindow).
       // The opacity shield only matters when the overlay is actually going to be
       // capture-excluded, i.e. in undetectable mode — that is the only case where
@@ -2761,14 +2784,33 @@ export class WindowHelper {
     }
   }
 
-  public switchToLauncher(inactive?: boolean): void {
+  /**
+   * A notepad meeting (utils/meetingSurface.ts) keeps the overlay hidden. The
+   * overlay's renderer asks to be shown whenever it expands (an answer, a
+   * notice: NativelyInterface's isExpanded effect → 'show-window'), which would
+   * bring it back unasked; 'show-window' from the overlay is ignored while
+   * this holds. The user's own show (Cmd/Ctrl+B, a shortcut) goes through
+   * switchToOverlay and releases it; leaving the meeting does too.
+   */
+  private overlayHeldHidden = false;
+  public isOverlayHeldHidden(): boolean {
+    return this.overlayHeldHidden;
+  }
+
+  public switchToLauncher(inactive?: boolean, opts?: { hidden?: boolean }): void {
+    this.overlayHeldHidden = false;
     const requestedInactive = !!inactive;
-    console.log(`[WindowHelper] Switching to LAUNCHER (inactive: ${requestedInactive})`);
+    // `hidden`: enter launcher mode (keys, overlay down) but show no window yet;
+    // the launcher is owed until showOwedLauncher() or any later show here.
+    const hidden = !!opts?.hidden;
+    console.log(`[WindowHelper] Switching to LAUNCHER (inactive: ${requestedInactive}${hidden ? ', hidden' : ''})`);
     // Leaving the overlay (end meeting, etc.) must disengage stealth typing —
     // otherwise the hook keeps swallowing keystrokes with the overlay hidden.
     // No-op if not engaged, or at cold-start where this fires with no session.
     this.stopStealthTyping();
-    const wasLauncher = this.currentWindowMode === 'launcher';
+    // An owed show still counts as leaving the overlay, so it gets the app
+    // activation below exactly as the Stop it was deferred from would have.
+    const wasLauncher = this.currentWindowMode === 'launcher' && !this.launcherShowOwed;
     this.currentWindowMode = 'launcher';
     KeybindManager.getInstance().setMode('launcher'); // Adapted from public PR #123 — verify premium interaction
 
@@ -2807,8 +2849,13 @@ export class WindowHelper {
     // is still up until the "Hide Overlay SECOND" block below.
     this.applyOverlayAuxVisibility(false);
 
-    // Show Launcher FIRST
-    if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
+    // Show Launcher FIRST (a hidden switch shows nothing: another window, the
+    // notepad, is still up, so there is no no-window gap to guard against)
+    if (hidden) {
+      this.launcherShowOwed = true;
+      this.isWindowVisible = false;
+    } else if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
+      this.launcherShowOwed = false;
       if (process.platform === 'win32' && this.contentProtection) {
         // Opacity Shield: Show at 0 opacity first
         this.launcherWindow.setOpacity(0);
@@ -2862,6 +2909,7 @@ export class WindowHelper {
     if (
       process.platform === 'darwin' &&
       !inactive &&
+      !hidden &&
       !wasLauncher &&
       !this.appState.getUndetectable()
     ) {
@@ -2891,12 +2939,19 @@ export class WindowHelper {
     }
   }
 
+  /** Show the launcher a hidden switchToLauncher held back; false when none is owed. */
+  public showOwedLauncher(inactive?: boolean): boolean {
+    if (!this.launcherShowOwed || this.currentWindowMode !== 'launcher') return false;
+    this.switchToLauncher(inactive);
+    return true;
+  }
+
   // Simplified setWindowMode that just calls switchers
-  public setWindowMode(mode: 'launcher' | 'overlay', inactive?: boolean): void {
+  public setWindowMode(mode: 'launcher' | 'overlay', inactive?: boolean, opts?: { hidden?: boolean }): void {
     if (mode === 'launcher') {
-      this.switchToLauncher(inactive);
+      this.switchToLauncher(inactive, opts);
     } else {
-      this.switchToOverlay(inactive);
+      this.switchToOverlay(inactive, opts);
     }
   }
 

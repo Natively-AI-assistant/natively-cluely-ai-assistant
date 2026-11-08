@@ -82,8 +82,16 @@
    one quiet 200ms fade, no movement. */
 .cal-link-exit { transition: opacity 200ms ease; }
 .cal-link-exit.is-hiding { opacity: 0; }
+/* With the linked card's Calendar button to morph into, only the label leaves
+   (150ms --duration-quick, a text swap's 2px blur); the pill stays where the
+   button picks it up. Reduced motion: the plain fade. */
+.cal-link-morph .lg-content { transition: opacity 150ms ease-out, filter 150ms ease-out; }
+.cal-link-morph.is-hiding .lg-content { opacity: 0; filter: blur(2px); }
 @media (prefers-reduced-motion: reduce) {
   .cal-link-exit { transition: none; }
+  .cal-link-morph { transition: none; }
+  .cal-link-morph.is-hiding { opacity: 0; }
+  .cal-link-morph .lg-content { transition: none; }
 }
 
 /* A refused sign-in's message under Connect calendar. It grows down from the

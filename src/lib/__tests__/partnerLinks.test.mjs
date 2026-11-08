@@ -11,6 +11,8 @@ import assert from 'node:assert/strict';
 import {
   FLUXION_REFERRAL_URL,
   AGENTROUTER_REFERRAL_URL,
+  CREATORS_PROGRAM_URL,
+  AFFILIATE_PROGRAM_URL,
   SPONSORSHIP_EMAIL,
   SPONSORSHIP_GMAIL_COMPOSE_URL,
 } from '../partnerLinks.ts';
@@ -18,16 +20,18 @@ import {
 describe('FLUXION_REFERRAL_URL', () => {
   const u = new URL(FLUXION_REFERRAL_URL);
 
-  test('is an https link to the Fluxion registration page', () => {
+  test('is an https link to the Sidrune registration page', () => {
     assert.equal(u.protocol, 'https:');
-    assert.equal(u.hostname, 'fluxionai.world');
+    assert.equal(u.hostname, 'global.sidrune.ai');
     assert.equal(u.pathname, '/register');
+  });
+
+  test('is the sign-up link Evin gave (2026-11-03), character for character', () => {
+    assert.equal(FLUXION_REFERRAL_URL, 'https://global.sidrune.ai/register?promo=NATIVELY');
   });
 
   test("carries Natively's attribution parameters", () => {
     assert.deepEqual(Object.fromEntries(u.searchParams), {
-      source: 'github',
-      campaign: 'natively',
       promo: 'NATIVELY',
     });
   });
@@ -48,9 +52,20 @@ describe('AGENTROUTER_REFERRAL_URL', () => {
   });
 });
 
+describe('program pages on heynatively.com', () => {
+  test('creators and affiliate links point at their own pages', () => {
+    for (const [link, pathname] of [[CREATORS_PROGRAM_URL, '/creators'], [AFFILIATE_PROGRAM_URL, '/affiliate']]) {
+      const u = new URL(link);
+      assert.equal(u.hostname, 'heynatively.com', link);
+      assert.equal(u.pathname, pathname, link);
+      assert.equal(u.search, '', link);
+    }
+  });
+});
+
 describe('SPONSORSHIP_EMAIL', () => {
   test('is a single plain email address', () => {
-    assert.equal(SPONSORSHIP_EMAIL, 'natively.contact@gmail.com');
+    assert.equal(SPONSORSHIP_EMAIL, 'partnerships@heynatively.com');
     assert.match(SPONSORSHIP_EMAIL, /^[^\s@]+@[^\s@]+\.[^\s@]+$/);
   });
 });
@@ -86,13 +101,13 @@ describe('SPONSORSHIP_GMAIL_COMPOSE_URL', () => {
 
   test('contains no raw whitespace and percent-encodes the @ and /', () => {
     assert.doesNotMatch(SPONSORSHIP_GMAIL_COMPOSE_URL, /\s/);
-    assert.ok(SPONSORSHIP_GMAIL_COMPOSE_URL.includes('to=natively.contact%40gmail.com'));
+    assert.ok(SPONSORSHIP_GMAIL_COMPOSE_URL.includes('to=partnerships%40heynatively.com'));
   });
 });
 
 describe('partner links — shared invariants', () => {
   test('every outbound link is https with no credentials or fragment', () => {
-    for (const link of [FLUXION_REFERRAL_URL, AGENTROUTER_REFERRAL_URL, SPONSORSHIP_GMAIL_COMPOSE_URL]) {
+    for (const link of [FLUXION_REFERRAL_URL, AGENTROUTER_REFERRAL_URL, CREATORS_PROGRAM_URL, AFFILIATE_PROGRAM_URL, SPONSORSHIP_GMAIL_COMPOSE_URL]) {
       const u = new URL(link);
       assert.equal(u.protocol, 'https:', link);
       assert.equal(u.username, '', link);

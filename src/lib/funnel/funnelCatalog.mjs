@@ -30,12 +30,16 @@ export const ENTITLEMENTS = Object.freeze([
 /** Everything the app can send a buyer to. */
 export const CHECKOUT_PRODUCTS = Object.freeze([
   'api_standard', 'api_pro', 'api_max', 'api_ultra', 'pro_lifetime', 'pro_yearly',
+  // 2026-11-06: yearly API plans and the two one-time Pro packs.
+  'api_standard_yearly', 'api_pro_yearly', 'api_max_yearly', 'api_ultra_yearly',
+  'pack_light', 'pack_heavy',
 ])
 
 /** Every place in the app that can open a checkout page or offer a trial. */
 export const SURFACES = Object.freeze([
   'trial_card',            // the end-of-trial / see-your-options card
   'trial_promo',           // the "try Natively" card
+  'plans_card',            // the Natively Plans card after getting started
   'api_promo',             // the Natively API cards
   'api_settings',          // Settings › Plans, Natively API
   'pro_settings',          // Settings › Plans, Natively Pro
@@ -57,8 +61,8 @@ export const SURFACES = Object.freeze([
  * being added here.
  */
 export const CARD_IDS = Object.freeze([
-  'browser_extension', 'trial_promo', 'natively_api_new', 'max_ultra',
-  'natively_api_existing', 'profile_ad', 'jd_ad', 'review_prompt', 'support',
+  'plans', 'browser_extension', 'trial_promo', 'natively_api_new', 'max_ultra',
+  'natively_api_existing', 'profile_ad', 'jd_ad', 'review_prompt', 'support', 'demo_video',
 ])
 
 /**
@@ -90,11 +94,58 @@ export const ANSWER_FAILURE_CAUSES = Object.freeze([
   'app',           // a fault of the app's own
 ])
 
+/**
+ * What a meeting opens (Settings › Overlay's switcher, electron/utils/meetingSurface.ts):
+ * the overlay, or the notepad (the Granola-style notes window).
+ */
+export const MEETING_SURFACES = Object.freeze(['overlay', 'notepad'])
+
+/**
+ * The notepad's recipes, by id with "-" written "_" (enum values are [a-z0-9_]).
+ * Mirrors NOTE_RECIPES in electron/llm/noteRecipes.ts (funnelCatalogParity.test.mjs
+ * fails when a recipe is added there and not here).
+ */
+export const NOTE_RECIPE_IDS = Object.freeze([
+  'what_did_i_miss', 'sound_smart', 'suggest_questions', 'define', 'tldr', 'follow_up_email',
+  'todos', 'notes_shorter', 'notes_longer', 'affirm', 'content_plan', 'help_doc', 'build_brief',
+  'tickets', 'linkedin_brief', 'schedule_follow_up', 'help_me_decide',
+])
+
+/** What someone did in the notepad. Added 2026-11-01 to see whether the notepad is worth more work. */
+export const NOTEPAD_ACTIONS = Object.freeze([
+  'opened',            // the window came up
+  'closed',            // the user closed it
+  'notes_typed',       // typed into the page
+  'ask',               // asked a question of their own in Ask
+  'recipe',            // ran a recipe (chip, All recipes or "/"); `recipe` says which
+  'recipes_browsed',   // opened All recipes
+  'answer_copied',     // copied an Ask answer
+  'answer_retried',    // Retry on an answer that failed
+  'answers_closed',    // put the answers away (the down chevron)
+  'transcript_opened', // opened the live transcript
+  'transcript_searched',
+  'transcript_copied',
+  'image_attached',    // the ⋯ menu's Attach image
+  'line_shortened',    // the ⋯ menu's Shorten
+  'paused',            // paused transcription from the notepad
+  'stopped',           // ended the meeting from the notepad
+  'template_set',      // chose a note template ("/" or the gallery)
+  'templates_browsed', // opened the template gallery
+  'notes_written',     // the notes after Stop arrived in the notepad
+  'notes_rewritten',   // rewrote them in another template or mode
+  'notes_copied',
+  'share_opened',
+  'meeting_opened',    // Open meeting: the meeting's page in the launcher
+])
+
 /** What the user did with a card. Mirrors OUTCOMES in the same file. */
 export const CARD_OUTCOMES = Object.freeze(['shown', 'acted', 'later', 'never', 'interrupted'])
 
 const INT = 'int'
 const BOOL = 'bool'
+
+/** What ended a free trial, or is about to: its 30 minutes, or its AI allowance. */
+export const TRIAL_END_REASONS = Object.freeze(['clock', 'allowance'])
 
 export const FUNNEL_CATALOG = Object.freeze({
   // ── The install ──────────────────────────────────────────────────────────
@@ -107,11 +158,19 @@ export const FUNNEL_CATALOG = Object.freeze({
     has_api_key: BOOL,
     has_pro: BOOL,
     meetings_total: INT,
+    // What a meeting opens on this install today (Settings › Overlay).
+    surface: MEETING_SURFACES,
   },
   meeting_started: {
     first: BOOL,
     // Whose AI answers: ours (a plan or the trial), the user's own, or nobody's.
     ai: ['natively', 'own', 'none'],
+    // What it opened on: the overlay or the notepad.
+    surface: MEETING_SURFACES,
+    // Added 2026-11-02: Resume on a saved meeting (recording again into the
+    // same meeting). Sent only on a resume, which is not counted as a meeting
+    // of its own (meetings_total) and is never the first.
+    resumed: BOOL,
   },
   meeting_ended: {
     minutes: INT,
@@ -119,6 +178,16 @@ export const FUNNEL_CATALOG = Object.freeze({
     // How many answers the assistant gave in it. A count, never the answers: a
     // meeting with none is someone who started the app and got nothing from it.
     answers: INT,
+    // The notepad in this meeting: what it opened on, whether the notepad was
+    // up at any point, whether anything was typed in it, and how many questions
+    // and recipes Ask ran. Counts and yes/no only, never the notes.
+    surface: MEETING_SURFACES,
+    notepad_open: BOOL,
+    notes_typed: BOOL,
+    asks: INT,
+    recipes: INT,
+    // The resumed part of a meeting (meeting_started.resumed); `minutes` is that part's.
+    resumed: BOOL,
   },
 
   // A meeting the app never saw end: it was closed or it crashed while one was
@@ -172,12 +241,18 @@ export const FUNNEL_CATALOG = Object.freeze({
       'hwid_unavailable', 'network', 'server_error',
     ],
   },
-  trial_expired: {},
+  // What ended it (added 2026-11-03): its 30 minutes, or its AI allowance
+  // before them. Absent from builds before 2026-11-03.
+  trial_expired: {
+    reason: TRIAL_END_REASONS,
+  },
   // The meeting overlay's trial notice: it started by itself, it is about to
   // end, it has ended, or the automatic start failed and a manual one is offered.
   trial_notice: {
     state: ['started', 'ending', 'ended', 'failed'],
     action: ['shown', 'own_keys', 'plans', 'start', 'dismissed'],
+    // For ending and ended: the clock, or the AI allowance (added 2026-11-03).
+    reason: TRIAL_END_REASONS,
   },
   trial_card: {
     mode: ['active', 'expired'],
@@ -208,6 +283,23 @@ export const FUNNEL_CATALOG = Object.freeze({
   },
   paywall_hit: {
     feature: ['modes', 'profile_intelligence'],
+  },
+
+  // ── The notepad ──────────────────────────────────────────────────────────
+  // Added 2026-11-01: is the notepad worth more work? Who picks it over the
+  // overlay, and what they do in it. Never the notes, a question or an answer.
+  // Someone switched what a meeting opens, in Settings › Overlay.
+  meeting_surface_set: {
+    to: MEETING_SURFACES,
+  },
+  // At most once per action (and recipe) per phase per local day per install:
+  // which parts of the notepad someone used that day, not how often. How often
+  // is counted per meeting, on meeting_ended.
+  notepad_used: {
+    action: NOTEPAD_ACTIONS,
+    recipe: NOTE_RECIPE_IDS,
+    // No meeting, a meeting running, or after Stop.
+    phase: ['idle', 'live', 'ended'],
   },
 })
 

@@ -1,3 +1,4 @@
+import type { AssistCatchUp, AssistDailyBrief, AssistEvent, AssistLiveRecap, AssistMeetingBrief, AssistSender, LiveHelperAction } from './assist'
 // Phase 3 — DynamicActionPayload mirrors electron/services/dynamic-actions/DynamicAction.ts.
 // Kept as a structural interface (not a class import) to preserve the strict main↔renderer
 // type boundary — the renderer never imports from electron/* directly.
@@ -164,6 +165,19 @@ export interface ElectronAPI {
   // The model panel itself goes through its own `(window as any).electronAPI`
   // cast, so only the two read APIs SettingsOverlay calls are declared here.
   localWhisperGetModels?: () => Promise<{ models: any[]; activeModelId: string }>
+  /** People sharing the microphone: diarize the mic channel and split its voices at save. */
+  /** "About you" (Profile Intelligence › Cue Cards, Pro): a few lines the meeting notes prompt reads as the user's own bio. */
+  userBioGet?: () => Promise<{ bio: string }>
+  userBioSet?: (bio: string) => Promise<{ success: boolean; bio?: string; error?: string }>
+  /** The notes window's "Shorten": the tightened line, or null when it must not replace the original. */
+  liveNotesShortenLine?: (line: string) => Promise<{ text: string | null }>
+  /** The notes window's "Attach image": picks a picture, keeps it with the meeting, describes it for the notes. */
+  liveNotesAttachImage?: () => Promise<{ count: number; message?: string }>
+  /** Follow the meeting app's microphone (capture from the device Zoom/Teams/the browser uses). */
+  followMicDeviceGet?: () => Promise<{ enabled: boolean }>
+  followMicDeviceSet?: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
+  roomSpeakersGet?: () => Promise<{ enabled: boolean }>
+  roomSpeakersSet?: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
   localWhisperGetChannelConfig?: () => Promise<{
     enabled: boolean
     micModelId: string
@@ -178,7 +192,11 @@ export interface ElectronAPI {
     callback: (data: { path: string; preview: string }) => void
   ) => () => void
   onScreenshotAttached: (
-    callback: (data: { path: string; preview: string }) => void
+    /**
+     * `formulaCapture`: a page capture's formula images (#645), which replace an earlier capture's.
+     * `quiet`: the phone asked for or sent it, so the overlay lists it without showing itself.
+     */
+    callback: (data: { path: string; preview: string; formulaCapture?: string; quiet?: boolean }) => void
   ) => () => void
   onCaptureAndProcess: (
     callback: (data: { path: string; preview: string }) => void
@@ -196,6 +214,10 @@ export interface ElectronAPI {
   onDebugError: (callback: (error: string) => void) => () => void
   takeScreenshot: () => Promise<{ path: string; preview: string }>
   takeSelectiveScreenshot: () => Promise<{ path: string; preview: string; cancelled?: boolean }>
+  /** Paste a clipboard image into the overlay tray (issue #351). */
+  attachClipboardImage: () => Promise<{ empty?: true; success?: true; path?: string; error?: string }>
+  /** Drag-drop a local image file into the overlay tray (issue #351). */
+  attachLocalImage: (file: File) => Promise<{ success?: boolean; path?: string; error?: string }>
   moveWindowLeft: () => Promise<void>
   moveWindowRight: () => Promise<void>
   moveWindowUp: () => Promise<void>
@@ -330,7 +352,7 @@ export interface ElectronAPI {
   // bridge. Four user-facing categories over five server-side meters.
   getNativelyUsage: (force?: boolean) => Promise<import('./nativelyUsage').NativelyUsageResponse>
   getNativelyPlans: () => Promise<import('./nativelyUsage').NativelyPlansResponse>
-  getStoredCredentials: () => Promise<{ hasNativelyKey?: boolean; hasOwnAiKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDeepseekKey: boolean; hasNvidiaNimKey?: boolean; hasOpenrouterKey?: boolean; hasFluxionKey?: boolean; fluxionProtocol?: 'openai' | 'anthropic'; hasAgentRouterKey?: boolean; hasLitellmBaseURL?: boolean; litellmBaseURL?: string | null; litellmMaxTokens?: number | null; hasNinerouterBaseURL?: boolean; hasNinerouterKey?: boolean; ninerouterBaseURL?: string | null; ninerouterMaxTokens?: number | null; ninerouterThinking?: string | null; ninerouterModelMeta?: Record<string, { reasoning?: boolean; thinkingCanDisable?: boolean; thinkingFormat?: string }>; googleServiceAccountPath: string | null; sttProvider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; nvidiaNimSttModel?: string; sttModels?: { deepgram?: string; openai?: string }; hasSonioxKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; deepseekPreferredModel?: string; nvidia_nimPreferredModel?: string; openrouterPreferredModel?: string; fluxionPreferredModel?: string; agentrouterPreferredModel?: string; litellmPreferredModel?: string; ninerouterPreferredModel?: string; disabledProviders?: string[]; cloudEnabledModels?: Record<string, string[]>; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; openAiSttBaseUrl?: string }>
+  getStoredCredentials: () => Promise<{ hasNativelyKey?: boolean; hasOwnAiKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDeepseekKey: boolean; hasNvidiaNimKey?: boolean; hasOpenrouterKey?: boolean; hasFluxionKey?: boolean; fluxionProtocol?: 'openai' | 'anthropic'; hasAgentRouterKey?: boolean; hasLitellmBaseURL?: boolean; litellmBaseURL?: string | null; litellmMaxTokens?: number | null; hasNinerouterBaseURL?: boolean; hasNinerouterKey?: boolean; ninerouterBaseURL?: string | null; ninerouterMaxTokens?: number | null; ninerouterThinking?: string | null; ninerouterModelMeta?: Record<string, { reasoning?: boolean; thinkingCanDisable?: boolean; thinkingFormat?: string }>; googleServiceAccountPath: string | null; sttProvider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; nvidiaNimSttModel?: string; sttModels?: { deepgram?: string; openai?: string }; hasSonioxKey?: boolean; hasQwenAsrKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; deepseekPreferredModel?: string; nvidia_nimPreferredModel?: string; openrouterPreferredModel?: string; fluxionPreferredModel?: string; agentrouterPreferredModel?: string; litellmPreferredModel?: string; ninerouterPreferredModel?: string; disabledProviders?: string[]; cloudEnabledModels?: Record<string, string[]>; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; sttQwenAsrKey?: string; openAiSttBaseUrl?: string }>
   // R-10 resolution flow: ambiguous credential stores (names + last-4 only; null when nothing to resolve).
   getAmbiguousCredentialStores: () => Promise<{
     keyring: { keys: { name: string; last4: string }[]; mtimeIso: string | null };
@@ -361,14 +383,15 @@ export interface ElectronAPI {
   funnelTrack: (eventType: string, props?: Record<string, string | number | boolean>) => Promise<{ ok: boolean; result?: string; error?: string }>
   cardsImportLegacy: (legacy: import('../lib/cards/cardPolicy.mjs').LegacyCardHistory) => Promise<{ ok: boolean; ledger?: import('../lib/cards/cardPolicy.mjs').Ledger; error?: string }>
   onCardsChanged: (cb: (ledger: import('../lib/cards/cardPolicy.mjs').Ledger) => void) => () => void
-  onTrialEnded:   (cb: (data: { choice: string }) => void) => () => void
+  onTrialEnded:   (cb: (data: { choice: string; expiresAt?: string; showEndedCard?: boolean }) => void) => () => void
+  onTrialAllowanceLow?: (cb: (data: { expiresAt?: string | null }) => void) => () => void
   /** Emitted by `trial:start`, so a trial claimed mid-session unlocks Pro surfaces without a relaunch. */
   onTrialStarted: (cb: (data: { expiresAt: string; startedAt: string; usage?: { ai: number; ai_tokens?: number; stt_seconds: number; search: number }; limits?: { duration_ms: number; ai_requests: number; stt_minutes: number; search_requests: number } }) => void) => () => void
   /** A meeting with no AI is starting the free trial by itself. `pending`: on its way. `failed`: it could not (offline, rate limited), so the overlay offers the manual start. `settled`: done, one way or the other. */
   onTrialAutoStart: (cb: (data: { state: 'pending' | 'settled' } | { state: 'failed'; reason: 'unreachable' | 'rate_limited' }) => void) => () => void
 
   // STT Provider Management
-  setSttProvider: (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech') => Promise<{ success: boolean; error?: string }>
+  setSttProvider: (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech') => Promise<{ success: boolean; error?: string }>
   getSttProvider: () => Promise<string>
   getAppleSpeechLocales: () => Promise<{ available: boolean; supported: string[]; installed: string[]; reserved: string[]; maxReserved: number }>
   installAppleSpeechLocale: (locale: string) => Promise<{ ok: boolean; error?: string }>
@@ -384,8 +407,9 @@ export interface ElectronAPI {
   setIbmWatsonApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setGroqSttModel: (model: string) => Promise<{ success: boolean; error?: string }>
   setSonioxApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
+  setQwenAsrApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>
   setIbmWatsonRegion: (region: string) => Promise<{ success: boolean; error?: string }>
-  testSttConnection: (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim', apiKey: string, region?: string) => Promise<{ success: boolean; error?: string }>
+  testSttConnection: (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen' | 'nvidia_nim', apiKey: string, region?: string) => Promise<{ success: boolean; error?: string }>
 
   // STT Config Events (fired when STT provider/key changes during a meeting)
   onSttConfigChanged: (callback: (data: { configured: boolean; provider: string }) => void) => () => void
@@ -402,7 +426,7 @@ export interface ElectronAPI {
   disableHindsight: () => Promise<{ success: boolean; error?: string }>
 
   // Native Audio Service Events
-  onNativeAudioTranscript: (callback: (transcript: { speaker: string; text: string; final: boolean }) => void) => () => void
+  onNativeAudioTranscript: (callback: (transcript: { speaker: string; text: string; final: boolean; timestamp?: number }) => void) => () => void
   onNativeAudioSuggestion: (callback: (suggestion: { context: string; lastQuestion: string; confidence: number }) => void) => () => void
   onNativeAudioConnected: (callback: () => void) => () => void
   onNativeAudioDisconnected: (callback: () => void) => () => void
@@ -411,6 +435,7 @@ export interface ElectronAPI {
   onSuggestionError: (callback: (error: { error: string }) => void) => () => void
   generateSuggestion: (context: string, lastQuestion: string) => Promise<{ suggestion: string }>
   getInputDevices: () => Promise<Array<{ id: string; name: string }>>
+  setMeetingInputDevice?: (deviceId: string | null) => Promise<{ success: boolean }>
   getOutputDevices: () => Promise<Array<{ id: string; name: string }>>
   setRecognitionLanguage: (key: string) => Promise<{ success: boolean; error?: string }>
   getAiResponseLanguages: () => Promise<Array<{ label: string; code: string }>>
@@ -429,7 +454,7 @@ export interface ElectronAPI {
   onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; attempt: number; maxAttempts: number; terminal?: boolean; stuck?: boolean; titleKey?: string }) => void) => () => void
 
   // STT Status Events
-  onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number }) => void) => () => void
+  onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number; /** A stand-in carries the channel while `provider` is down. */ fallback?: { provider: string; notice: string } }) => void) => () => void
 
   getNativeAudioStatus: () => Promise<{ connected: boolean }>
 
@@ -447,6 +472,8 @@ export interface ElectronAPI {
     visionFailureReason?: 'no_vision_provider' | 'all_vision_failed' | 'privacy_blocked' | 'scope_blocked' | 'provider_timeout';
     imageCount?: number;
     usedImageInput?: boolean;
+    /** #647 Problem A: the screenshot answer was an assessment refusal that was retried with the capture cropped to the browser's page area. */
+    refusalRetry?: { cropped: boolean; improved: boolean };
   }>
   startDirectAssist: (request: DirectAssistRequest) => Promise<{
     accepted: boolean
@@ -464,14 +491,18 @@ export interface ElectronAPI {
   generateFollowUp: (intent: string, userRequest?: string) => Promise<{ refined: string | null; intent: string }>
   generateFollowUpQuestions: () => Promise<{ questions: string | null }>
   generateRecap: () => Promise<{ summary: string | null }>
+  /** The overlay's live helpers: What did I miss?, Define, Sound smart. Streams like Recap and Clarify. */
+  generateLiveHelper?: (action: LiveHelperAction, opts?: { sinceMs?: number }) => Promise<{ text: string | null }>
+  runNoteRecipe?: (input: { recipeId: string; extra?: string; meetingId?: string | null; phase: 'live' | 'ended'; notes?: string }) => Promise<{ text: string | null; error?: string }>
+  /** Settings › Overlay › Your buttons: rewrite the user's description into the button's contract (a fallback when no model answers). */
+  compileCustomButton?: (input: { name: string; description: string }) => Promise<{ instruction: string; source: 'model' | 'fallback' }>
+  /** A press of a custom button: runs like a live helper and streams into Recap's card. */
+  generateCustomButton?: (input: { name: string; instruction: string; imagePaths?: string[]; readMinutes?: number }) => Promise<{ text: string | null; error?: string }>
   submitManualQuestion: (question: string) => Promise<{ answer: string | null; question: string }>
   getIntelligenceContext: () => Promise<{ context: string; lastAssistantMessage: string | null; activeMode: string }>
   resetIntelligence: () => Promise<{ success: boolean; error?: string }>
 
   // Dynamic Action Button Mode
-  getActionButtonMode: () => Promise<'recap' | 'brainstorm'>
-  setActionButtonMode: (mode: 'recap' | 'brainstorm') => Promise<{ success: boolean }>
-  onActionButtonModeChanged: (callback: (mode: 'recap' | 'brainstorm') => void) => () => void
   onModeChanged: (callback: (data: { id: string | null; name: string | null; fileCount?: number; indexedCount?: number }) => void) => () => void
 
   // Modes
@@ -511,6 +542,8 @@ export interface ElectronAPI {
   modesUpdateNoteSection: (id: string, updates: { title?: string; description?: string }) => Promise<{ success: boolean; error?: string }>
   modesDeleteNoteSection: (id: string) => Promise<{ success: boolean; error?: string }>
   modesRemoveAllNoteSections: (modeId: string) => Promise<{ success: boolean; error?: string }>
+  modesGetDefaultNoteSections?: (modeId: string) => Promise<Array<{ title: string; description: string }>>
+  modesApplyNoteTemplate?: (modeId: string, templateId: string) => Promise<{ success: boolean; sections?: Array<{ id: string; modeId: string; title: string; description: string; sortOrder: number }>; error?: 'pro_required' | 'unknown_template' | 'unknown_mode' | 'write_failed' | string }>
 
   // Meeting Lifecycle
   startMeeting: (metadata?: any) => Promise<{ success: boolean; error?: string; code?: string }>
@@ -521,6 +554,8 @@ export interface ElectronAPI {
   getRecentMeetings: () => Promise<Array<{ id: string; title: string; date: string; duration: string; summary: string }>>
   getMeetingDetails: (id: string) => Promise<any>
   searchGlobalMeetings: (query: string, filters?: any) => Promise<{ enabled: boolean; results: any[] }>
+  /** Folders, tags, People and Companies. */
+  organise: OrganiseApi
   searchMemories?: (query: string) => Promise<{ enabled: boolean; results: Array<{ text: string; meetingId?: string; meetingTitle?: string; date?: string }> }>
   searchInMeeting: (query: string) => Promise<{ enabled: boolean; results: any[] }>
   generateLectureNotes: (opts?: { title?: string; course?: string }) => Promise<{ enabled: boolean; notes: any }>
@@ -536,6 +571,10 @@ export interface ElectronAPI {
   acceptDiagramRepair?: (payload: { originalSource: string; repairedSource: string }) => Promise<boolean>
   /** Save a diagram the renderer produced (svg text, base64 png, or Mermaid source). */
   exportDiagram?: (payload: { format: 'svg' | 'png' | 'mmd' | 'json' | 'csv'; data: string; name?: string }) => Promise<{ saved: boolean; canceled?: boolean; fileName?: string; silent?: boolean; error?: string }>
+  /** Meeting outputs: export, Slack, Notion, CRM notes, the local MCP server, follow-up style. */
+  meetingOutputs?: import('./meetingOutputs').MeetingOutputsApi
+  /** Settings › Connectors: webhooks, Zapier, automatic sending, API keys, Gmail (src/types/connectors.ts). */
+  connectors?: import('./connectors').ConnectorsApi
   /** The main process asks this window to draw a diagram for the phone. */
   onDiagramRenderRequest?: (callback: (request: { requestId: string; key: string; source: string }) => void) => () => void
   sendDiagramRenderResult?: (result: { requestId: string; key: string; ok: boolean; svg?: string }) => void
@@ -801,8 +840,8 @@ export interface ElectronAPI {
   testHindsightConnection: () => Promise<{ healthy: boolean; error?: string }>
   updateMeetingTitle: (id: string, title: string) => Promise<boolean>
   updateMeetingSummary: (id: string, updates: { overview?: string, actionItems?: string[], keyPoints?: string[], actionItemsTitle?: string, keyPointsTitle?: string }) => Promise<boolean>
-  regenerateMeetingSummary: (id: string, opts?: { templateType?: string; modeId?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }) => Promise<{ success: boolean; error?: string }>
-  regenerateMeetingFollowUp: (id: string, tone?: 'professional' | 'warm' | 'concise' | 'friendly') => Promise<{ success: boolean; error?: string }>
+  regenerateMeetingSummary: (id: string, opts?: { templateType?: string; modeId?: string; noteTemplateId?: string | null; tone?: 'professional' | 'warm' | 'concise' | 'friendly' | 'your_style' }) => Promise<{ success: boolean; error?: string }>
+  regenerateMeetingFollowUp: (id: string, tone?: 'professional' | 'warm' | 'concise' | 'friendly' | 'your_style') => Promise<{ success: boolean; error?: string }>
   updateMeetingSpeakerLabels: (id: string, labels: Record<string, string>) => Promise<{ success: boolean; labels?: Record<string, string>; notesUpdated?: boolean; error?: string }>
   deleteMeeting: (id: string) => Promise<boolean>
   setWindowMode: (mode: 'launcher' | 'overlay', inactive?: boolean) => Promise<void>
@@ -810,6 +849,12 @@ export interface ElectronAPI {
   onMeetingInterfaceThemeChanged: (callback: (theme: string) => void) => () => void
   setGenieAnimationEnabled: (enabled: boolean) => void
   onGenieAnimationChanged: (callback: (enabled: boolean) => void) => () => void
+  setKeepOverlaySizeEnabled: (enabled: boolean) => void
+  onKeepOverlaySizeChanged: (callback: (enabled: boolean) => void) => () => void
+  setOverlayButtonOrder: (order: string[]) => void
+  onOverlayButtonOrderChanged: (callback: (order: string[]) => void) => () => void
+  setOverlayCustomButtons: (buttons: { id: string; name: string; prompt: string; instruction: string; screenshot: boolean }[]) => void
+  onOverlayCustomButtonsChanged: (callback: (buttons: unknown) => void) => () => void
 
   // Phase 3 — Cluely-style dynamic action cards.
   onIntelligenceDynamicAction: (callback: (data: { action: DynamicActionPayload }) => void) => () => void
@@ -843,12 +888,14 @@ export interface ElectronAPI {
   onIntelligenceModeChanged: (callback: (data: { mode: string }) => void) => () => void
   onIntelligenceError: (callback: (data: { error: string, mode: string }) => void) => () => void;
   // Session Management
-  onSessionReset: (callback: () => void) => () => void;
+  /** With `resumedChat` when Resume continues a saved meeting: its earlier answers (src/lib/resumedChat.mjs). */
+  onSessionReset: (callback: (payload?: { resumedChat?: Array<{ type: string; timestamp: number; question: string; answer: string; source?: string; synthetic?: boolean; hasImages?: boolean }> }) => void) => () => void;
 
   // Streaming listeners
   streamGeminiChat: (message: string, imagePaths?: string[], context?: string, options?: { skipSystemPrompt?: boolean, ignoreKnowledgeMode?: boolean, liveQuestion?: boolean }) => Promise<void>
   onGeminiStreamToken: (callback: (token: string, meta?: { streamId?: number }) => void) => () => void
   onGeminiStreamDone: (callback: (data?: { finalText?: string; streamId?: number; incomplete?: boolean; incompleteReason?: string }) => void) => () => void
+  onGeminiStreamStarted: (callback: (data: { streamId: number }) => void) => () => void
   onGeminiStreamError: (callback: (error: string, meta?: { streamId?: number | null; source?: string }) => void) => () => void;
 
   // NOTE: onSkillsChanged broadcast subscription was removed. Skills are
@@ -934,6 +981,7 @@ export interface ElectronAPI {
   /** Link a saved meeting to one of those events, or unlink it (null). */
   setMeetingCalendarEvent: (meetingId: string, eventId: string | null) => Promise<{ success: boolean }>;
   openMailto: (params: { to: string; subject: string; body: string }) => Promise<{ success: boolean; error?: string }>;
+  getMailAppInfo?: () => Promise<{ name: string; icon?: string } | null>;
 
   // Audio Test
   startAudioTest: (deviceId?: string) => Promise<{ success: boolean }>;
@@ -990,20 +1038,72 @@ export interface ElectronAPI {
   /** Meeting detection (Settings › Calendar): offer to start when a call begins. */
   getMeetingDetectionEnabled?: () => Promise<boolean>
   setMeetingDetectionEnabled?: (on: boolean) => Promise<{ success: boolean; error?: string }>
+  /** Start automatically (Settings › Calendar): a detected call starts after a 10 s countdown. Default off. */
+  getMeetingAutoStartEnabled?: () => Promise<boolean>
+  setMeetingAutoStartEnabled?: (on: boolean) => Promise<{ success: boolean; error?: string }>
+  /** Calendar reminder lead time in minutes: 1, 2 or 5. */
+  getCalendarReminderMinutes?: () => Promise<number>
+  setCalendarReminderMinutes?: (minutes: number) => Promise<{ success: boolean; error?: string }>
+  /** The "meeting detected" offer for the launcher's panel (null clears it). autoStartAt: wall time of the automatic start. */
+  onMeetingOffer?: (callback: (offer: { id: string; title: string | null; app: string; body: string; autoStartAt: number | null } | null) => void) => () => void
+  getMeetingOffer?: () => Promise<{ id: string; title: string | null; app: string; body: string; autoStartAt: number | null } | null>
+  startMeetingOffer?: (id: string) => Promise<{ success: boolean }>
+  dismissMeetingOffer?: (id: string) => Promise<{ success: boolean }>
   getMeetingAutoStopEnabled?: () => Promise<boolean>
   setMeetingAutoStopEnabled?: (on: boolean) => Promise<{ success: boolean; error?: string }>
   getFollowMeetingMute?: () => Promise<boolean>
+  getDictationEnabled?: () => Promise<boolean>
+  setDictationEnabled?: (on: boolean) => Promise<{ success: boolean; error?: string }>
   setFollowMeetingMute?: (on: boolean) => Promise<{ success: boolean; error?: string }>
   getMeetingMuteState?: () => Promise<{ muted: boolean; app: string | null }>
   onMeetingMuteChanged?: (callback: (state: { muted: boolean; app: string | null }) => void) => () => void
   getScreenShareSnapshots?: () => Promise<boolean>
   setScreenShareSnapshots?: (on: boolean) => Promise<{ success: boolean; error?: string }>
   meetingAutoStopKeepGoing?: () => Promise<{ success: boolean }>
+  /** Pause / resume transcription during a meeting (the notepad's pill). */
+  getTranscriptionPaused?: () => Promise<boolean>
+  setTranscriptionPaused?: (paused: boolean) => Promise<{ success: boolean; paused: boolean }>
+  onTranscriptionPaused?: (callback: (data: { paused: boolean }) => void) => () => void
+  /** 0..1, the louder of mic and call audio, sent to the notepad while it is open. */
+  onMeetingAudioLevel?: (callback: (level: number) => void) => () => void
+  /** Assist (electron/services/assist): the daily brief, You owe, Brief me, the catch-up, Last time. */
+  assistGetDailyBrief?: (events: AssistEvent[]) => Promise<AssistDailyBrief>
+  assistGetMeetingBrief?: (event: AssistEvent, opts?: { refresh?: boolean }) => Promise<{ ok: true; brief: AssistMeetingBrief } | { ok: false; error: string }>
+  assistGetCatchUp?: () => Promise<AssistCatchUp | null>
+  assistDismissCatchUp?: (key: string) => Promise<{ ok: boolean }>
+  assistGetLiveRecap?: () => Promise<AssistLiveRecap>
+  assistDismissLiveRecap?: () => Promise<{ ok: boolean }>
+  onAssistLastTimeRecap?: (callback: (payload: AssistLiveRecap) => void) => () => void
+  getCatchUpEnabled?: () => Promise<boolean>
+  setCatchUpEnabled?: (on: boolean) => Promise<{ success: boolean; error?: string }>
+  assistGetSender?: () => Promise<AssistSender>
+  assistOpenMailDraft?: (url: string) => Promise<{ ok: boolean; error?: string }>
+  /** The calendar reminder's "Running late": open that draft in the launcher. */
+  onAssistReminderDraft?: (callback: (req: { kind: 'running_late' | 'no_show' | 'reschedule'; event: AssistEvent }) => void) => () => void
   meetingAutoStopTyping?: () => void
   /** The notes window (`?window=notes`): the overlay's Notes button, its own X. */
   notesWindowToggle?: () => Promise<{ open: boolean }>
   notesWindowClose?: () => Promise<{ success: boolean }>
   notesWindowIsOpen?: () => Promise<boolean>
+  liveNotesMeetingInfo?: () => Promise<{ live: boolean; title: string | null; people: number; event?: { id: string; title: string | null; startTime: string | null; endTime: string | null; link: string | null } | null; attendees?: Array<{ email: string; name: string | null }>; selfEmail?: string | null; speakers?: { me: string; them: string } }>
+  /** The notepad's title, typed by the user (the meeting is saved under it). */
+  /** Copy text from the notepad (main's clipboard: the window is never focused). */
+  notesWindowCopyText?: (text: string) => Promise<{ success: boolean }>
+  /** Write the OS clipboard from main: the Windows overlay is never a focused
+   *  document, which navigator.clipboard needs (src/lib/copyText.ts). */
+  clipboardWriteText?: (text: string) => Promise<{ success: boolean }>
+  liveNotesSetTitle?: (title: string) => Promise<{ success: boolean; title?: string | null }>
+  /** The note template for the running (or next) meeting's notes (noteTemplates.ts); null clears. Pro or a live trial. */
+  liveNotesSetTemplate?: (id: string | null) => Promise<{ success: boolean; error?: 'pro_required' | 'unknown_template' }>
+  liveNotesGetTemplate?: () => Promise<string | null>
+  /** The notepad's folder button: every folder and whether this meeting is in it (held until Stop saves it). */
+  /** The calendar's events around now, for "Link a different event". */
+  liveNotesCalendarCandidates?: () => Promise<Array<{ id: string; title: string; startTime: string; endTime: string; people: number }>>
+  liveNotesLinkEvent?: (eventId: string | null) => Promise<{ success: boolean }>
+  /** Add or remove a person on the linked event, for this meeting only. */
+  liveNotesSetAttendees?: (change: { add?: string; remove?: string }) => Promise<{ success: boolean; error?: string }>
+  getMeetingSurface?: () => Promise<'overlay' | 'notepad'>
+  setMeetingSurface?: (surface: 'overlay' | 'notepad') => Promise<{ success: boolean; error?: string }>
   onNotesWindowVisibility?: (callback: (open: boolean) => void) => () => void
   /** The notes window's text and the meeting it belongs to. */
   liveNotesGetState?: () => Promise<{ phase: 'idle' | 'live' | 'ended'; meetingId: string | null; text: string }>
@@ -1012,12 +1112,17 @@ export interface ElectronAPI {
   onLiveNotesState?: (callback: (state: { phase: 'idle' | 'live' | 'ended'; meetingId: string | null; text?: string }) => void) => () => void
   /** "Open meeting" in the notes window: the launcher opens that meeting. */
   notesWindowOpenMeeting?: (meetingId: string) => Promise<{ success: boolean }>
+  notesWindowOpenSavedMeeting?: (meetingId: string) => Promise<{ success: boolean; code?: string }>
+  resumeMeeting?: (meetingId: string, request?: { audio?: { inputDeviceId: string | null; outputDeviceId: string | null }; doNotPersist?: boolean }) => Promise<{ success: boolean; error?: string; code?: string }>
   onLauncherOpenMeeting?: (callback: (meetingId: string) => void) => () => void
   /** Earlier versions of a meeting's notes, oldest first. */
   getMeetingNotesVersions?: (meetingId: string) => Promise<Array<{ id: number; label: string; createdAt: number; templateType: string | null; detailedSummary: any }>>
   /** Thumbs up / down on the notes shown (current: versionId null). */
   rateMeetingNotes?: (input: { meetingId: string; rating: 'up' | 'down'; comment?: string; versionId?: number | null }) => Promise<{ success: boolean }>
   getMeetingNotesRating?: (input: { meetingId: string; versionId?: number | null }) => Promise<{ rating: 'up' | 'down'; comment: string | null } | null>
+  /** Compare two versions of the notes blind: A and B in a random order, named only after the pick. */
+  compareMeetingNotesStart?: (input: { meetingId: string; versions: [number | 'current', number | 'current'] }) => Promise<{ id: string; a: any; b: any } | null>
+  compareMeetingNotesPick?: (input: { id: string; choice: 'A' | 'B' | 'same'; reason?: string }) => Promise<{ choice: 'A' | 'B' | 'same'; saved: boolean; a: { version: 'current' | number; label: string; provider: string | null; model: string | null }; b: { version: 'current' | number; label: string; provider: string | null; model: string | null }; removed?: 'current' | number | null; promoted?: number | null } | null>
   onMeetingAutoStopNotice?: (callback: (data: { stopsAt: number | null }) => void) => () => void
   /** A notification's Start (a detected call, the calendar reminder), relayed by main to the launcher. */
   onMeetingStartRequest?: (callback: (req: { title?: string; calendarEventId?: string; via?: 'detected' | 'reminder' }) => void) => () => void
@@ -1040,7 +1145,7 @@ export interface ElectronAPI {
   // RAG (Retrieval-Augmented Generation) API
   ragQueryMeeting: (meetingId: string, query: string) => Promise<{ success?: boolean; fallback?: boolean; error?: string }>
   ragQueryLive: (query: string) => Promise<{ success?: boolean; fallback?: boolean; error?: string }>
-  ragQueryGlobal: (query: string) => Promise<{ success?: boolean; fallback?: boolean; error?: string }>
+  ragQueryGlobal: (query: string, scope?: { folderId?: string }) => Promise<{ success?: boolean; fallback?: boolean; error?: string }>
   ragCancelQuery: (options: { meetingId?: string; global?: boolean }) => Promise<{ success: boolean }>
   ragIsMeetingProcessed: (meetingId: string) => Promise<boolean>
   ragGetQueueStatus: () => Promise<{ pending: number; processing: number; completed: number; failed: number }>
@@ -1074,13 +1179,15 @@ export interface ElectronAPI {
   stealthTapAvailable: () => Promise<boolean>
   stealthTapOpenSettings: () => Promise<void>
   stealthTapStop: () => Promise<void>
+  stealthReadClipboard: () => Promise<string>
+  stealthWriteClipboard: (text: string) => Promise<void>
   stealthTapStart: () => Promise<boolean>
   /** False on macOS when a composition IME (Pinyin/Hangul/Kanji/…) is
    *  enabled — the tap captures below the IME and breaks composition, so
    *  the renderer falls back to plain DOM focus on click. */
   stealthTapShouldAutoEngage: () => Promise<boolean>
   stealthTapRefreshIme: () => Promise<boolean>
-  onStealthTapState: (cb: (state: { active: boolean; reason?: string }) => void) => () => void
+  onStealthTapState: (cb: (state: { active: boolean; reason?: string; target?: 'overlay' | 'notes' }) => void) => () => void
   onStealthKeyCaptured: (cb: (ev: { keyCode: number; chars: string; flags: number; isKeyDown: boolean }) => void) => () => void
 
   // Profile Engine API
@@ -1105,6 +1212,18 @@ export interface ElectronAPI {
   }>
   profileSetMode: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
   profileDelete: () => Promise<{ success: boolean; error?: string }>
+  // "Cue Cards": what the user says about themselves that no résumé states.
+  profileGetOwnAnswers: () => Promise<{
+    success: boolean;
+    error?: string;
+    questions: Array<{ key: string; label: string; hint: string; drafted: boolean; needsJob?: boolean; maxChars: number }>;
+    answers: Array<{ key: string; text: string; status: 'draft' | 'saved'; updatedAt?: string }>;
+    drafting: boolean;
+  }>;
+  profileSaveOwnAnswer: (key: string, text: string) => Promise<{ success: boolean; text?: string; error?: string }>;
+  profileUseOwnAnswerDrafts: (keys?: string[]) => Promise<{ success: boolean; changed?: number; error?: string }>;
+  profileDraftOwnAnswers: () => Promise<{ success: boolean; written?: string[]; error?: string }>;
+  onProfileOwnAnswersUpdated: (callback: (data: { written: string[] }) => void) => () => void;
   profileGetProfile: () => Promise<any>
   profileGetCompanyDossier: () => Promise<any | null>
   profileSelectFile: () => Promise<{ success?: boolean; cancelled?: boolean; filePath?: string; error?: string }>
@@ -1161,6 +1280,9 @@ export interface ElectronAPI {
   // Ambient AI Chat — when enabled, meetings run without mic/system audio capture
   getAmbientChatEnabled: () => Promise<boolean>;
   setAmbientChatEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
+  // The running meeting captures no audio (started with Ambient AI Chat on)
+  getMeetingAudioCapture?: () => Promise<{ withoutAudio: boolean }>;
+  onMeetingAudioCapture?: (callback: (data: { withoutAudio: boolean }) => void) => () => void;
   getAutoAnswerEnabled: () => Promise<boolean>;
   setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   getDirectAssistEnabled: () => Promise<boolean>;
@@ -1175,6 +1297,13 @@ export interface ElectronAPI {
   getProviderDataScopes: () => Promise<{ transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }>;
   setProviderDataScopes: (scopes: { transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }) => Promise<{ success: boolean; error?: string }>;
   onProviderDataScopesChanged: (callback: (scopes: { transcript?: boolean; screenshots?: boolean; reference_files?: boolean; profile_history?: boolean; embeddings?: boolean; post_call_summary?: boolean }) => void) => () => void;
+  getScreenshotDisplay: () => Promise<{
+    preference: string;
+    displays: Array<{ id: number; number: number; name: string; width: number; height: number; primary: boolean }>;
+  }>;
+  setScreenshotDisplay: (preference: string) => Promise<{ success: boolean; error?: string }>;
+  cropperPickDisplay: () => void;
+  cropperDrag: (active: boolean) => void;
   getScreenUnderstandingMode: () => Promise<'vision_first' | 'vision_only' | 'private_vision'>;
   setScreenUnderstandingMode: (mode: 'vision_first' | 'vision_only' | 'private_vision') => Promise<{ success: boolean; error?: string }>;
   onScreenUnderstandingModeChanged: (callback: (mode: 'vision_first' | 'vision_only' | 'private_vision') => void) => () => void;
@@ -1256,6 +1385,8 @@ export interface ElectronAPI {
   // question is sent, the screenshots it was sent with. Overlay window only.
   phoneMirrorSetAttachments?: (items: Array<{ path: string; preview: string }>) => void;
   phoneMirrorImagesSent?: (id: string, paths: string[]) => void;
+  // Phone Mirror's Speak chip reads Stop while the overlay's Speak button records.
+  phoneMirrorSetRecording?: (active: boolean) => void;
   onPhoneMirrorDetach?: (callback: (data: { path: string }) => void) => () => void;
   // Smart Browser Context v2 — auto-capture settings.
   browserContextGetSettings: () => Promise<BrowserContextSettings | { error: string }>;
@@ -1293,7 +1424,7 @@ export interface ElectronAPI {
  * electron/services/pageCaptureFallback.ts (main is the canonical source).
  */
 export interface PageCaptureFallbackNotice {
-  kind: 'not-connected' | 'needs-host-permission' | 'timeout' | 'no-tab' | 'error';
+  kind: 'not-connected' | 'needs-host-permission' | 'timeout' | 'no-tab' | 'error' | 'formulas';
   label: string;
   detail: string;
   reason: string;
@@ -1511,6 +1642,83 @@ export interface PhoneMirrorInfo {
   extPairedAt?: number;
   /** Resolved bind host — '127.0.0.1' for loopback-only, '0.0.0.0' when LAN-exposed. */
   bindAddress: string;
+}
+
+// ── Folders, tags, People, Companies (electron/services/organise) ──────────
+export type OrganiseRuleKind = 'title' | 'attendee' | 'mode'
+export interface OrganiseFolder {
+  id: string
+  name: string
+  position: number
+  meetingCount: number
+  rules: Array<{ kind: OrganiseRuleKind; value: string }>
+  /** When "Apply to past meetings" was offered for the current rules; null while still open. */
+  pastOfferedAt: number | null
+}
+export interface OrganiseTag { id: number; name: string; meetingCount: number }
+export interface OrganiseMeetingRow { id: string; title: string; date: string; duration: string; summary: string; summaryStatus?: string }
+export interface OrganisePerson {
+  id: string
+  name: string
+  email: string | null
+  title: string | null
+  company: string | null
+  companyDomain: string | null
+  meetingCount: number
+  lastMetAt: string | null
+}
+export interface OrganiseMeetingRef { id: string; title: string; date: string; startMs: number }
+export interface OrganiseActionItem { text: string; owner?: string; deadline?: string; meetingId: string; meetingTitle: string; date: string }
+export interface OrganiseFact {
+  id: number
+  kind: 'title' | 'company'
+  value: string
+  quote: string
+  status: 'suggested' | 'accepted' | 'dismissed'
+  meetingId: string
+  meetingTitle: string
+}
+export interface OrganisePersonDetail extends OrganisePerson {
+  notes: string | null
+  titleSource: string | null
+  companySource: string | null
+  meetings: OrganiseMeetingRef[]
+  openActionItems: OrganiseActionItem[]
+  lastMet: { meetingId: string; title: string; date: string; recap: string } | null
+  suggestions: OrganiseFact[]
+}
+export interface OrganiseCompany { domain: string; name: string; peopleCount: number; meetingCount: number; lastMetAt: string | null }
+export interface OrganiseCompanyDetail extends OrganiseCompany {
+  description: string | null
+  descriptionSource: string | null
+  notes: string | null
+  people: OrganisePerson[]
+  meetings: OrganiseMeetingRef[]
+  openActionItems: OrganiseActionItem[]
+}
+export interface OrganiseApi {
+  /** Older meetings were indexed in the background; refresh People / Companies. Returns the unsubscribe. */
+  onPeopleIndexed?: (callback: () => void) => () => void
+  listFolders: () => Promise<OrganiseFolder[]>
+  createFolder: (name: string) => Promise<OrganiseFolder | null>
+  renameFolder: (id: string, name: string) => Promise<boolean>
+  deleteFolder: (id: string) => Promise<boolean>
+  setFolderRules: (id: string, rules: Array<{ kind: OrganiseRuleKind; value: string }>) => Promise<{ saved: Array<{ kind: OrganiseRuleKind; value: string }>; offerPast: boolean } | null>
+  applyFolderRulesToPast: (id: string) => Promise<{ added: number }>
+  dismissPastOffer: (id: string) => Promise<boolean>
+  getMeeting: (meetingId: string) => Promise<{ folderIds: string[]; tags: string[] }>
+  setMeetingFolder: (meetingId: string, folderId: string, inFolder: boolean) => Promise<boolean>
+  setMeetingTags: (meetingId: string, tags: string[]) => Promise<string[] | null>
+  listMeetings: (filter: { folderId?: string; tag?: string }) => Promise<OrganiseMeetingRow[]>
+  listTags: () => Promise<OrganiseTag[]>
+  listPeople: (query?: string) => Promise<OrganisePerson[]>
+  getPerson: (id: string) => Promise<OrganisePersonDetail | null>
+  updatePerson: (id: string, patch: { name?: string; title?: string; company?: string; notes?: string }) => Promise<boolean>
+  resolveFact: (factId: number, accept: boolean) => Promise<boolean>
+  listCompanies: (query?: string) => Promise<OrganiseCompany[]>
+  getCompany: (domain: string) => Promise<OrganiseCompanyDetail | null>
+  updateCompany: (domain: string, patch: { name?: string; description?: string; descriptionSource?: 'user' | 'drafted'; notes?: string }) => Promise<boolean>
+  draftCompanyDescription: (domain: string) => Promise<{ text: string | null; reason?: 'no-notes' | 'not-enough' | 'failed' | 'not-allowed' }>
 }
 
 declare global {

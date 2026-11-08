@@ -106,7 +106,7 @@ const RESUME = hasFlag('resume');
 const FIRST_USEFUL_DEADLINE_MS = getArg('deadline') ? parseInt(getArg('deadline'), 10) : 30000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const CONTRACT_ENFORCED = new Set(['ethical_usage_answer', 'project_link_answer', 'source_code_evidence_answer', 'project_about_answer']);
+const CONTRACT_ENFORCED = new Set(['project_link_answer', 'source_code_evidence_answer', 'project_about_answer']);
 const resume = (h) => { try { return h.orchestrator?.activeResume?.structured_data ?? null; } catch { return null; } };
 const DIFFICULTY_BAND = (d) => (d === 'easy' ? 'easy' : d === 'direct' ? 'easy' : d === 'medium' ? 'medium' : 'difficult');
 
@@ -179,7 +179,6 @@ function score(c, answer, plan, tokens) {
   if (c.expectedVoice === 'first_person_candidate' && NATIVELY_LEAK_RE.test(text)) f.push('natively_identity_leak');
   if (FALSE_REFUSAL_RE.test(text) && (c.profileShouldBeUsed || c.publicLinkAllowedIfLoaded)) f.push('false_refusal');
   if (hasStealthLeak(text)) f.push('stealth_evasion_leak');
-  if (c.safetyRefusalExpected && plan.answerType !== 'ethical_usage_answer') f.push('safety_not_routed');
   if (c.publicLinkAllowedIfLoaded && c.linkLoadedInProfile === false && INVENTED_URL_RE.test(text)) f.push('invented_link');
   if (c.sourceCodeGroundingRequired && c.sourceLoadedInContext === false && FAKE_SOURCE_RE.test(text)) f.push('hallucinated_source');
   // visible reasoning leak (MiniMax-specific CRITICAL): a <think> tag or CoT preamble
@@ -250,7 +249,7 @@ async function runOne(h, mmClient, c, tokens) {
       plan = h.planAnswer({ question: c.question, source, speakerPerspective }); routingDoneMs = rec.ms();
       const isCoding = h.isCodingAnswerType(plan.answerType);
       const isContract = CONTRACT_ENFORCED.has(plan.answerType);
-      const isSafety = plan.answerType === 'ethical_usage_answer';
+      const isSafety = false;
       if (!isCoding && h.isBareFollowUp && h.isBareFollowUp(c.question)) {
         answer = h.buildContextFreeClarification('manual'); usedFastPath = true; firstTokenMs = rec.ms(); firstUsefulMs = firstTokenMs;
       }

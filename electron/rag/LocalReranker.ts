@@ -40,12 +40,12 @@ import path from 'path';
 import fs from 'fs';
 import { Worker } from 'worker_threads';
 import { resolveRagWorker } from './resolveRagWorker';
+import { retireOnnxWorkerAndWait, trackOnnxWorker } from '../utils/onnxWorkerShutdown';
 import { app } from 'electron';
 import {
     acquireOnnxSlot,
-    hasEnoughMemoryForOnnxSession,
-    getMinFreeGBForOnnxSession,
-    getAvailableMemoryGB,
+    checkMemoryForOnnxSession,
+    describeModelMemoryShortfall,
 } from '../utils/onnxThreadConfig';
 import {
     clearLoadSentinel as clearOnnxLoadSentinel,
@@ -126,6 +126,8 @@ const WORKER_RERANK_TIMEOUT_MS = 15_000; // a single rerank() call (bounded cand
 const RERANK_DISPOSE_DRAIN_MAX_MS = 30_000;
 /** Graceful ONNX release budget. Short: a quit must not wait on a wedged worker. */
 const WORKER_DISPOSE_TIMEOUT_MS = 3_000;
+/** How long teardown waits for a worker that was asked to exit; past it the worker is left to finish, never killed. */
+const WORKER_EXIT_WAIT_MS = 10_000;
 
 class LocalRerankerImpl {
     private worker: Worker | null = null;
@@ -265,7 +267,7 @@ class LocalRerankerImpl {
             // consume. Closes the cross-launch crashloop the previous version
             // shared with the Whisper bug.
             writeOnnxLoadSentinel('reranker', this.modelId);
-            this.worker = new Worker(this.getWorkerPath());
+            this.worker = trackOnnxWorker(new Worker(this.getWorkerPath()));
 
             this.worker.on('message', (msg: { type: string; requestId: number; scores?: number[]; error?: string }) => {
                 const pending = this.pendingRequests.get(msg.requestId);
@@ -447,10 +449,10 @@ class LocalRerankerImpl {
         // retriever falls back to cosine top-K ordering. We do NOT latch
         // `loadFailed = true` on a gate refusal (that's reserved for actual
         // load errors); a later, less-pressured moment can retry.
-        if (!hasEnoughMemoryForOnnxSession()) {
-            const availGB = getAvailableMemoryGB().toFixed(1);
+        const memory = checkMemoryForOnnxSession();
+        if (!memory.ok) {
             throw new Error(
-                `insufficient available memory (${availGB}GB < ${getMinFreeGBForOnnxSession()}GB) — skipping reranker load`,
+                `insufficient available memory (${describeModelMemoryShortfall(memory)}, measured by ${memory.source}) — skipping reranker load`,
             );
         }
 
@@ -590,15 +592,21 @@ class LocalRerankerImpl {
      * this is queued behind anything still running rather than freeing sessions
      * underneath a live `model(inputs)` call.
      *
-     * Bounded and best-effort in both directions: a worker that will not answer
-     * must never keep a model switch (or a quit) waiting, and losing the
-     * graceful release is strictly better than leaving the thread alive.
+     * Bounded and best-effort: a worker that will not answer must never keep a
+     * model switch (or a quit) waiting.
+     *
+     * The thread is then ASKED to exit, never terminated (2026-10-14). The
+     * dispose above times out exactly when the worker is still busy — inside a
+     * rerank that outlived the drain, or a session load — and terminate() on a
+     * worker inside a native ONNX call aborts the whole app
+     * (utils/onnxWorkerShutdown.ts). It leaves at its next idle point; its own
+     * exit handler releases the ONNX gate slot, as before.
      */
     private async releaseThenTerminate(worker: Worker): Promise<void> {
         try {
             await this.postTo(worker, { type: 'dispose' }, WORKER_DISPOSE_TIMEOUT_MS);
-        } catch { /* timed out or errored — terminate anyway */ }
-        try { await worker.terminate(); } catch { /* already gone */ }
+        } catch { /* timed out or errored — ask it to exit anyway */ }
+        await retireOnnxWorkerAndWait(worker, WORKER_EXIT_WAIT_MS);
     }
 
     /**

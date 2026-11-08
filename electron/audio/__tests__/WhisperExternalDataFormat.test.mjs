@@ -51,6 +51,7 @@ const inferenceCfgPath = path.resolve(
 
 const {
   getModelExternalDataFormat,
+  getModelDownloadRepo,
   isModelCached,
 } = await import(pathToFileURL(modelMgrPath).href);
 const { buildWorkerInitMessage } = await import(pathToFileURL(inferenceCfgPath).href);
@@ -67,7 +68,8 @@ const MEDIUM_EN = 'Xenova/whisper-medium.en';
 // Stage the onnx/ directory for a model with an explicit set of files. Each
 // entry is [name, bytes]. Returns the onnx dir path.
 function stageOnnx(modelId, files) {
-  const onnxDir = path.join(userData, 'whisper-models', modelId, 'onnx');
+  // Where a download of the model lands (its catalog repoId, else the id).
+  const onnxDir = path.join(userData, 'whisper-models', ...getModelDownloadRepo(modelId).split('/'), 'onnx');
   fs.mkdirSync(onnxDir, { recursive: true });
   for (const [name, bytes] of files) {
     fs.writeFileSync(path.join(onnxDir, name), Buffer.alloc(bytes, 1));

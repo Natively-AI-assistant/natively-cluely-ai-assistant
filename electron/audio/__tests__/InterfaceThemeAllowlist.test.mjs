@@ -53,9 +53,9 @@ function extractInterfaceThemeSetHandlerBody(src) {
 
 const handlerBody = extractInterfaceThemeSetHandlerBody(ipcSource);
 
-const EXPECTED_THEMES = ['default', 'liquid-glass', 'modern'];
+const EXPECTED_THEMES = ['default', 'liquid-glass', 'modern', 'lavender'];
 
-test('ipcHandlers.ts declares VALID_INTERFACE_THEMES Set with exactly the three valid keys', () => {
+test('ipcHandlers.ts declares VALID_INTERFACE_THEMES Set with exactly the valid keys', () => {
     // Locate the Set declaration. Accept either `new Set([...])` or
     // `new Set<string>([...])` flavours.
     const setDeclRe = /VALID_INTERFACE_THEMES\s*=\s*new\s+Set\s*(?:<[^>]+>)?\s*\(\s*\[([^\]]+)\]\s*\)/;

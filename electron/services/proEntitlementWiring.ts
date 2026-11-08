@@ -8,6 +8,7 @@
  */
 import { BrowserWindow } from 'electron';
 import { TRIAL_SENTINEL_KEY } from '../config/constants';
+import { nativelyApiBase } from './nativelyApiBase';
 import {
   createProEntitlementReconciler,
   type ActivateAnswer,
@@ -15,7 +16,7 @@ import {
   type ReconcilerStatus,
 } from './ProEntitlementReconciler';
 
-const API_BASE = (process.env.NATIVELY_API_URL || 'https://api.natively.software').replace(/\/+$/, '');
+const API_BASE = nativelyApiBase();
 
 type Reconciler = ReturnType<typeof createProEntitlementReconciler>;
 let instance: Reconciler | null = null;

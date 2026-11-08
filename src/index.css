@@ -14,6 +14,28 @@
   font-display: swap;
 }
 
+/* IBM Plex Serif Regular (SIL OFL 1.1, src/font/IBMPlexSerif/LICENSE-OFL.txt),
+   from @fontsource/ibm-plex-serif 5.3.0: the display serif for card headings
+   such as Connectors › MCP. Latin and Latin Extended only; other scripts fall
+   back through the font-plex-serif stack in tailwind.config.js. */
+@font-face {
+  font-family: 'IBM Plex Serif';
+  src: url('./font/IBMPlexSerif/ibm-plex-serif-latin-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'IBM Plex Serif';
+  src: url('./font/IBMPlexSerif/ibm-plex-serif-latin-ext-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -434,6 +456,13 @@
   filter: brightness(0) invert(1) !important;
 }
 
+/* Default light: the top pill's logo is drawn 15% bolder (the owner's call).
+   Black on a pale pill read thin beside the Hide label; same outline, only
+   the ring, bars and diagonal are thicker. */
+[data-theme='light'] [data-interface-theme='default'] .top-pill-logo {
+  content: url('./components/ui/natively-mark-bold.svg');
+}
+
 /* liquid-glass and modern themes always have a dark background panel,
    so the logo must always render white regardless of system light/dark mode. */
 [data-interface-theme="liquid-glass"] .force-black-icon,
@@ -452,7 +481,7 @@
    CLOUD_PROVIDERS has no `natively` entry, and the sidebar's Natively API item
    uses the <NativelyLogoMark> SVG. The app icon is a WHITE monochrome glyph on
    transparency, drawn for the dark theme, and an <img> cannot take the tile's
-   own ink the way `.natively-key-mark` does with a mask. On the pale light
+   own ink the way a CSS mask can. On the pale light
    tile it was therefore an invisible ghost. Light theme flattens it to black;
    dark theme leaves the artwork untouched.
 
@@ -527,6 +556,10 @@
   --overlay-shell-blur:         48px;
   --overlay-pill-blur:          28px;
 
+  /* The panel is dark whatever the app theme, so the accent must be the
+     dark-mode one: without this the light theme's periwinkle-600 landed on
+     the navy glass (the modern block already does the same with #8FB4F7). */
+  --accent-primary: var(--periwinkle-300);
 }
 
 /* Glass shell — pure CSS liquid-glass.
@@ -846,6 +879,140 @@
 }
 .overlay-bare-icon[data-state="on"] {
   color: var(--accent-primary);
+}
+
+/* Click-through pill (ClickThroughToggle). Idle it is the bare icon above;
+   while `data-phase="expanded"` it opens to the width its label needs and
+   takes a tinted box. Edge strength is a per-theme token: the dark panels
+   carry a 42% accent line, the pale light shell only a 20% hairline with the
+   caps as small white tiles, so the pill sits in the same family as the
+   `Ctrl + Shift + H` caps in the input above it. The two dark interface themes
+   paint a dark panel even under the light app theme, so they take the dark
+   values back. */
+.ov-ct {
+  --ov-ct-pill-bg: 16%;
+  --ov-ct-pill-line: 42%;
+  --ov-ct-key-line: 45%;
+  --ov-ct-key-bg: color-mix(in srgb, var(--accent-primary) 8%, transparent);
+  justify-content: flex-start;
+  padding: 0 0 0 6px;
+  overflow: hidden;
+  gap: 7px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+/* The pill's motion, one list per direction (transitions polish,
+   2026-10-30). It opens like a resize, 250ms on the smooth-out curve
+   (--duration-fast, --ease-smooth-out), and closes faster, 150ms
+   (--duration-quick), so the 3s settle and turning it off get out of the way.
+   The tint and edge ride with the width; the icon's colour is a 150ms state
+   swap (ease-in-out). transform and opacity are interaction-press's, as they
+   were. The list sits in a variable so a theme that restyles .interaction-base
+   (Lavender does) can hand the pill its own list back in one line. */
+.ov-ct {
+  --ov-ct-motion:
+    color 150ms ease-in-out,
+    background-color 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 200ms cubic-bezier(0.25, 1, 0.5, 1),
+    opacity 200ms;
+}
+.ov-ct[data-phase="expanded"] {
+  --ov-ct-motion:
+    color 150ms ease-in-out,
+    background-color 250ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 250ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 250ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 250ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 200ms cubic-bezier(0.25, 1, 0.5, 1),
+    opacity 200ms;
+}
+/* Doubled with .interaction-base, which comes later in this file and would
+   otherwise replace the list, dropping width and padding: the pill would snap. */
+.ov-ct.interaction-base {
+  transition: var(--ov-ct-motion);
+}
+[data-theme='light'] .ov-ct {
+  --ov-ct-pill-bg: 9%;
+  --ov-ct-pill-line: 20%;
+  --ov-ct-key-line: 26%;
+  --ov-ct-key-bg: rgba(255, 255, 255, 0.78);
+}
+[data-theme='light'] [data-interface-theme="liquid-glass"] .ov-ct,
+[data-theme='light'] [data-interface-theme="modern"] .ov-ct {
+  --ov-ct-pill-bg: 16%;
+  --ov-ct-pill-line: 42%;
+  --ov-ct-key-line: 45%;
+  --ov-ct-key-bg: color-mix(in srgb, var(--accent-primary) 8%, transparent);
+}
+.ov-ct[data-phase="expanded"] {
+  width: var(--ov-ct-w);
+  padding-left: 8px;
+  background: color-mix(in srgb, var(--accent-primary) var(--ov-ct-pill-bg), transparent);
+  border-color: color-mix(in srgb, var(--accent-primary) var(--ov-ct-pill-line), transparent);
+}
+.ov-ct-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0;
+  /* Closing, the words go with the pill at once (--duration-quick, no wait). */
+  transition: opacity 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Opening, the label is there at once and its keys and "to exit" arrive one
+   after another: each fades in, rises 4px and unblurs from 2px
+   (--distance-micro, --blur-small) over 150ms (--duration-quick), 40ms apart
+   (--duration-stagger), after an 80ms beat (--duration-micro) that lets the
+   pill start opening first. Four items end by 350ms. --ov-ct-i is each one's
+   place, set in ClickThroughToggle. */
+.ov-ct[data-phase="expanded"] .ov-ct-label {
+  opacity: 1;
+  transition: none;
+}
+@keyframes ov-ct-item-in {
+  from { opacity: 0; transform: translateY(4px); filter: blur(2px); }
+}
+.ov-ct[data-phase="expanded"] .ov-ct-label > * {
+  animation: ov-ct-item-in 150ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(80ms + var(--ov-ct-i, 0) * 40ms);
+}
+/* Turning on, the cursor gives a small pop (0.9 → 1, 250ms, --ease-bounce):
+   an entrance, so turning off gets none. */
+@keyframes ov-ct-icon-on {
+  from { transform: scale(0.9); }
+}
+.ov-ct[data-phase="expanded"] > svg {
+  animation: ov-ct-icon-on 250ms cubic-bezier(0.34, 1.36, 0.64, 1);
+}
+.ov-ct-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 5px;
+  border: 1px solid color-mix(in srgb, var(--accent-primary) var(--ov-ct-key-line), transparent);
+  background: var(--ov-ct-key-bg);
+  color: var(--accent-primary);
+  font: 500 10.5px/1 ui-sans-serif, system-ui, sans-serif;
+  flex: none;
+}
+/* Secondary, not muted: muted fell below 3:1 on the light pill; primary read
+   as foreign next to it. */
+.ov-ct-exit {
+  color: var(--overlay-text-secondary);
+  margin-left: 1px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ov-ct, .ov-ct[data-phase="expanded"] { --ov-ct-motion: none; }
+  .ov-ct-label { transition: none; }
+  .ov-ct[data-phase="expanded"] .ov-ct-label > *,
+  .ov-ct[data-phase="expanded"] > svg { animation: none; }
 }
 
 [data-interface-theme="modern"] .glass-shortcut-key,
@@ -2134,6 +2301,24 @@
    ─────────────────────────────────────────────────────────────────────── */
 
 /* Level 1 — Cards sitting on the canvas */
+/* Settings › Overlay's Overlay | Notepad switch (2026-10-31), as Apple's segmented control: the
+   chosen side is a lifted pill. Dark used --bg-elevated (#151515), darker than its own track, so the
+   pick read as a hole; dark now lifts it with a white tint, light keeps the white pill on grey. */
+.surface-switch { background: color-mix(in srgb, var(--text-primary) 6%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 6%, transparent); }
+.surface-switch-thumb { background: color-mix(in srgb, var(--text-primary) 16%, transparent); box-shadow: 0 1px 2px #0000004d, inset 0 0.5px 0 color-mix(in srgb, var(--text-primary) 12%, transparent); }
+[data-theme='light'] .surface-switch { background: var(--bg-input); box-shadow: inset 0 0 0 1px var(--border-subtle); }
+[data-theme='light'] .surface-switch-thumb { background: var(--bg-elevated); box-shadow: 0 1px 3px #0000001f, 0 0 0 0.5px #0000000f; }
+/* Dark settings cards (2026-10-31): the row icon tile (#27272A) and the dropdowns (#262626) are neutral
+   grey on a blue-grey card (#242429), so they read as darker holes. Lift both a step in the card's own
+   hue instead. Light is untouched. */
+:root:not([data-theme='light']) .bg-bg-card .bg-bg-item-surface.w-10.h-10,
+:root:not([data-theme='light']) .bg-bg-card .bg-bg-component.hover\:bg-bg-elevated { background: color-mix(in srgb, var(--text-primary) 5%, var(--bg-card)); }
+:root:not([data-theme='light']) .bg-bg-card .bg-bg-component.hover\:bg-bg-elevated:hover { background: color-mix(in srgb, var(--text-primary) 9%, var(--bg-card)); }
+/* Light settings (Evin, 2026-11-01): the row icon tiles are a soft white inside their border,
+   not systemGray5 (#E5E5EA) and not pure #FFF (too stark). #FAFAFC still reads lighter than
+   the panel (#F2F2F7). Covers General's rows, SettingsRow, Help and the Connectors Tile. */
+[data-theme='light'] #settings-panel-wrapper .bg-bg-item-surface.w-10.h-10,
+[data-theme='light'] #settings-panel-wrapper .bg-bg-item-surface.w-8.h-8 { background: #FAFAFC; }
 [data-theme='light'] .bg-bg-card {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
 }
@@ -3218,6 +3403,29 @@ body {
 }
 /* @diagram-card:end */
 
+/* The answer area fades out where it scrolls (the owner, 2026-10-30) instead
+   of slicing a bubble or a line with a straight edge above the buttons: up to
+   32px at the foot while there is more below, up to 24px at the head once it
+   has scrolled down from the top (the follow-up email's .mn-fu-msg values).
+   Each fade grows with the distance to its end, over the last 32px and first
+   24px of scroll, so at the very bottom, where a streaming answer sits, the
+   last line is whole, and an answer that fits (no scroll, so the timeline is
+   inactive) gets none. Guarded: without scroll timelines the two animations
+   would run at once to their end and leave a fade at the head for good. */
+@property --ov-fade-top { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --ov-fade-bottom { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@keyframes ov-scroll-fade-top { to { --ov-fade-top: 24px; } }
+@keyframes ov-scroll-fade-bottom { from { --ov-fade-bottom: 32px; } to { --ov-fade-bottom: 0px; } }
+@supports (animation-timeline: scroll()) {
+  .overlay-scroll-fade {
+    animation: ov-scroll-fade-top linear both, ov-scroll-fade-bottom linear both;
+    animation-timeline: scroll(self y), scroll(self y);
+    animation-range: 0px 24px, calc(100% - 32px) 100%;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--ov-fade-top), #000 calc(100% - var(--ov-fade-bottom)), transparent 100%);
+            mask-image: linear-gradient(to bottom, transparent 0, #000 var(--ov-fade-top), #000 calc(100% - var(--ov-fade-bottom)), transparent 100%);
+  }
+}
+
 .overlay-chip-surface {
   background: var(--overlay-chip-bg);
   border-color: transparent;
@@ -3794,10 +4002,19 @@ html[data-platform="linux"] body {
 
 /* The launcher matches the 16px macOS gives its window natively (where the
    rounding comes from the OS, not from CSS — nothing to change there). Only
-   the launcher: the aux windows keep 8px. */
+   the launcher: the aux windows keep 8px.
+
+   `contain: paint` is what makes the radius hold in EVERY launcher state.
+   `overflow: hidden` alone does not clip `position: fixed` descendants —
+   their containing block is the viewport, not body — so full-window fixed
+   layers (the boot splash's `fixed inset-0 bg-[#000000]`, the modal dimmer
+   in App.tsx) punched square corners back through the rounded window.
+   Containment makes body their containing block AND clips them to its
+   rounded border box. Body is already viewport-sized, so nothing moves. */
 html[data-platform="win32"][data-window="launcher"] body,
 html[data-platform="linux"][data-window="launcher"] body {
   border-radius: 16px !important;
+  contain: paint;
 }
 
 /* ───────────────────────────────────────────────────────────────────────
@@ -8119,6 +8336,13 @@ html[data-platform="linux"][data-window="launcher"] body {
 }
 
 /* 2. Text and Price Overrides in Light Mode */
+/* Dark: the struck list price had no colour of its own and inherited a dark
+   ink that vanished on the navy card. The light rule below overrides it. */
+.pricing-card-original-price {
+  color: rgba(255, 255, 255, 0.5);
+  text-decoration-color: rgba(255, 255, 255, 0.45);
+}
+
 [data-theme='light'] .pricing-card-original-price {
   color: rgba(15, 23, 42, 0.42) !important;
   text-decoration-color: rgba(15, 23, 42, 0.28) !important;
@@ -8532,26 +8756,6 @@ html[data-platform="linux"][data-window="launcher"] body {
     0 6px 20px rgba(0, 0, 0, 0.28) !important;
 }
 
-/* The same 24px blueprint grid the pricing surfaces carry, in neutral ink.
-   Individually invisible; it is one of the things that makes them read as a
-   set, and it costs no colour to keep. */
-.natively-key-card::before {
-  content: '' !important;
-  position: absolute !important;
-  inset: 0 !important;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.020) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.020) 1px, transparent 1px) !important;
-  background-size: 24px 24px !important;
-  pointer-events: none !important;
-  z-index: 0 !important;
-}
-
-.natively-key-card > * {
-  position: relative !important;
-  z-index: 1 !important;
-}
-
 /* Light: same construction, no hue — but CLEAN at the bottom. It used to fall
    to #EAECEF with an inner bottom shade and an 18px floor blur; on a white page
    those three stacked into a grey smudge along the lower edge (the owner's
@@ -8567,10 +8771,41 @@ html[data-platform="linux"][data-window="launcher"] body {
     0 4px 12px rgba(0, 0, 0, 0.035) !important;
 }
 
-[data-theme='light'] .natively-key-card::before {
-  background-image:
-    linear-gradient(rgba(0, 0, 0, 0.028) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.028) 1px, transparent 1px) !important;
+/* Settings › Intelligence › Skills while a file is dragged over it: a
+   periwinkle ring and a frosted veil carrying one line, so the whole section
+   reads as the target. It reaches 8px past the section, so the ring does not
+   touch the heading's first letter. It materialises (blur and scale with the
+   fade) in 180ms ease-out and leaves in 120ms; pointer-events stay off so
+   the section underneath keeps the drag. */
+.settings-drop-veil {
+  position: absolute;
+  inset: -8px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 14px;
+  pointer-events: none;
+  color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+  box-shadow: inset 0 0 0 2px var(--accent-primary);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  transform: scale(0.985);
+  transition: opacity 120ms ease-out, transform 120ms ease-out;
+}
+.settings-drop-veil[data-open='true'] {
+  opacity: 1;
+  transform: none;
+  transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1), transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-drop-veil, .settings-drop-veil[data-open='true'] { transform: none; transition: opacity 120ms ease; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .settings-drop-veil { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--bg-card); }
 }
 
 /* ── 2. The input, as a pressed-in well ───────────────────────────────────
@@ -8926,35 +9161,6 @@ html[data-platform="linux"][data-window="launcher"] body {
 
 [data-theme='light'] .natively-key-sub {
   color: var(--text-secondary) !important;
-}
-
-/* ── 5. The Natively mark ─────────────────────────────────────────────────
-   src/assets/logo.webp is a WHITE monochrome glyph on transparency, so on the
-   pale light plaque an <img> would be invisible. It is painted as a MASK
-   instead, which lets the mark take the plaque's own ink per theme. Both inks
-   are now achromatic: it was tier-card periwinkle in light theme, which made
-   the mark a second coloured element competing with the Activate button.
-
-   No squircle, no tinted well, no boxed header — just the mark, set on the
-   supporting-copy line. The URL arrives as a custom property set from the
-   TSX import so the bundler still fingerprints the asset. */
-.natively-key-mark {
-  width: 22px !important;
-  height: 22px !important;
-  flex-shrink: 0 !important;
-  background-color: rgba(255, 255, 255, 0.92) !important;
-  -webkit-mask-image: var(--natively-key-mark-src) !important;
-  mask-image: var(--natively-key-mark-src) !important;
-  -webkit-mask-size: contain !important;
-  mask-size: contain !important;
-  -webkit-mask-repeat: no-repeat !important;
-  mask-repeat: no-repeat !important;
-  -webkit-mask-position: center !important;
-  mask-position: center !important;
-}
-
-[data-theme='light'] .natively-key-mark {
-  background-color: #4B5563 !important;
 }
 
 /* ══ Pro License Active — the receipt, in the pricing cards' material ══════
@@ -9351,11 +9557,26 @@ html[data-platform="linux"][data-window="launcher"] body {
        Phone Mirror's amber LAN switch, …) and the app's periwinkle accent.
        --toggle-on also fills the meeting notes Usage question bubble
        (--bubble-user-bg; lifted toward white in light mode), so retuning it
-       repaints that bubble too. */
+       repaints that bubble too. The one exception is inside the Lavender
+       overlay's own panel, which takes its violet (overlayLavenderTheme.css). */
     --toggle-off: #474949;
     --toggle-on: #6688F5;
     --toggle-thumb: #e1ebfe;
     --toggle-focus-ring: rgba(102, 136, 245, 0.22);
+}
+/* Light theme only (2026-10-24): the near-black #474949 off track read as a
+   heavy dark pill on the white plaques, louder than the ON switches beside
+   it. Off is now Apple's light-mode track (systemGray5 on white), and the
+   knob goes white with a small lift shadow, which is what keeps it visible
+   on a light track. Dark mode keeps the shared values above. */
+[data-theme='light'] {
+    --toggle-off: #DEDEE3;
+    --toggle-thumb: #FFFFFF;
+}
+[data-theme='light'] .t-toggle-thumb {
+    box-shadow:
+        0 1px 2.5px rgba(0, 0, 0, 0.18),
+        0 0 0 0.5px rgba(0, 0, 0, 0.04);
 }
 .t-toggle {
     position: relative;
@@ -9843,25 +10064,6 @@ html[data-platform="linux"][data-window="launcher"] body {
 .mn-fu-gmail-room { display: inline-block; width: var(--mn-fu-gmail-room, 156px); height: 1px; }
 .mn-fu-gmail { position: absolute; right: 12px; bottom: calc(16px + (13px * 1.65) / 2 - 15px); }
 
-/* The follow-up draft's tone + Regenerate, in the notes' clear Liquid Glass.
-   The tone pill keeps its hover wash while its menu is open, so the open menu
-   reads as coming from it. Regenerate is the same glass as a 30px circle; its
-   arrows turn half a turn on hover (400ms, as before) and spin while the draft is
-   rewritten, when it stays lit rather than dimming (aria-busy), with the hover
-   wash, lens and press held off so it does not invite a second click. */
-.lg-button.lg-clear.lg-sm.mn-tone[aria-expanded='true'] { background-color: var(--lg-tint-hover); }
-.lg-button.lg-sm.mn-fu-regen { width: 30px; padding: 0; }
-.mn-fu-regen-turn { transition: transform 400ms cubic-bezier(0.23, 1, 0.32, 1); }
-@media (hover: hover) and (pointer: fine) {
-  .lg-button.mn-fu-regen:not([aria-busy='true']):hover .mn-fu-regen-turn { transform: rotate(-180deg); }
-}
-.lg-button.mn-fu-regen[aria-busy='true'] { cursor: default; }
-.lg-button.lg-clear.lg-sm.mn-fu-regen[aria-busy='true']:hover { background-color: var(--lg-clear-bg, rgba(255, 255, 255, .06)); }
-[data-theme='light'] .lg-button.lg-clear.lg-sm.mn-fu-regen[aria-busy='true']:hover { background-color: var(--lg-clear-bg-light, rgba(17, 17, 26, .04)); }
-.lg-button.mn-fu-regen[aria-busy='true']:hover .lg-lens { opacity: 0; }
-.lg-button.lg-sm.mn-fu-regen[aria-busy='true']:active { transform: none; }
-@media (prefers-reduced-motion: reduce) { .mn-fu-regen-turn { transition: none; } }
-
 /* The notes' action row (MeetingDetails NotesActions). While notes regenerate
    the buttons dim (LiquidGlassButton's :disabled rim, cap and label opacities);
    here that eases over 150 ms instead of snapping, both ways. Show evidence's
@@ -9955,6 +10157,39 @@ html[data-platform="linux"][data-window="launcher"] body {
 .mn-swap-out { animation: mn-swap-exit var(--text-swap-dur) var(--text-swap-ease) forwards; }
 .mn-swap-in  { animation: mn-swap-enter var(--text-swap-dur) var(--text-swap-ease) var(--text-swap-dur) backwards; }
 
+/* Settings › Connectors › MCP card (connectors/McpCard.tsx, Swap): the Turn
+   on/off label, the status line, step 1 and the setup hint change in place on
+   #04's order and values (old exits up, new rises from below; 4px, 2px blur,
+   ease-in-out). The exit is shortened to 120ms and the entry starts 70ms in, so
+   the two barely overlap and never read on top of each other. Keyframes, so the
+   swap runs on the compositor while the setup panel folds on the main thread.
+   The leaving copy is out of flow at the same width: --block fills its line
+   (wrapping text), the inline form is as wide as its text and never wraps. */
+.mcp-swap { display: inline-grid; position: relative; }
+.mcp-swap--block { display: grid; }
+.mcp-swap > * { grid-area: 1 / 1; min-width: 0; }
+.mcp-swap > .mcp-swap-out {
+  position: absolute; top: 0; left: 0;
+  pointer-events: none;
+  animation: mcp-swap-exit 120ms ease-in-out forwards;
+}
+.mcp-swap:not(.mcp-swap--block) > * { white-space: nowrap; }
+.mcp-swap--block > .mcp-swap-out { right: 0; }
+.mcp-swap-in { animation: mcp-swap-enter 150ms ease-in-out 70ms backwards; }
+@keyframes mcp-swap-exit {
+  to { opacity: 0; transform: translateY(-4px); filter: blur(2px); }
+}
+@keyframes mcp-swap-enter {
+  from { opacity: 0; transform: translateY(4px); filter: blur(2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* A plain cross-fade: no travel, no blur. */
+  .mcp-swap > .mcp-swap-out { animation: mcp-swap-fade-out 120ms linear forwards; }
+  .mcp-swap-in { animation: mcp-swap-fade-in 120ms linear backwards; }
+}
+@keyframes mcp-swap-fade-out { to { opacity: 0; } }
+@keyframes mcp-swap-fade-in { from { opacity: 0; } }
+
 /* The header's right slot: Generate before a draft exists, the tone +
    Regenerate group after. Both sit in one grid cell (so the header never
    changes height) and cross-fade with the icon swap's blur and timing, at
@@ -9995,6 +10230,403 @@ html[data-platform="linux"][data-window="launcher"] body {
   from { opacity: 0.5; filter: blur(2px); }
 }
 .mn-fu-body-in { animation: mn-fu-body-in 400ms ease-in-out; }
+
+/* ── Follow-up sheet (the header's Follow-up email button) ──
+   A modal, so it grows from its own centre rather than from the button:
+   opacity, scale 0.96 and an 8px rise on the strong ease-out, 250ms; it
+   leaves quicker and quieter than it came (150ms, to 0.98). The dim fades
+   with it. Inside, the rows (To, Subject, message, footer) rise one stagger
+   step apart, as the notes' t-stagger does, so the sheet reads as assembled
+   rather than switched on. A first draft lands the same way: "Writing…"
+   fades out, then Subject and the message rise in. scale and translate are
+   the individual transform properties, so the panel's own transform keeps it
+   centred. Radix waits for the closing animation before unmounting. */
+.mn-fu-sheet {
+  --fu-in: 250ms;
+  --fu-out: 150ms;
+  --fu-ease: cubic-bezier(0.23, 1, 0.32, 1);
+  --fu-step: 40ms;
+}
+/* The send: one pill in the Usage question's lavender glass (.lg-lavender,
+   the website's CTA; .lg-bubble-lavender is the same material), holding two
+   click areas: "Send with Gmail" and the ^ for every other way to send, no
+   line between them. The pill is a div, so its own padding goes and each half
+   pads itself. Light is .lg-lavender as it ships; dark takes
+   .lg-bubble-lavender's dark values (denser tint, quiet sheen, light label). */
+.lg-button.lg-sm.mn-fu-send { padding: 0; }
+.mn-fu-send .lg-content { height: 100%; gap: 0; }
+.mn-fu-send-main,
+.mn-fu-send-more {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.mn-fu-send-main { gap: 7px; padding: 0 5px 0 13px; border-radius: 999px 0 0 999px; }
+.mn-fu-send-more { padding: 0 11px 0 5px; border-radius: 0 999px 999px 0; }
+/* No block lights up under the ^: the chevron itself moves. Hovered, it lifts
+   toward the menu it opens (or, open, dips toward closing it); pressed, it
+   squeezes; and the pill does not sink under a press on it. `translate` and
+   `scale` are the individual properties, so the inline scaleY flip keeps its
+   own transform. */
+.mn-fu-send-more svg {
+  transition:
+    transform var(--dropdown-close-dur) var(--dropdown-ease),
+    translate 220ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    scale 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.mn-fu-send-more[aria-expanded='true'] svg {
+  transition:
+    transform var(--dropdown-open-dur) var(--dropdown-ease),
+    translate 220ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    scale 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@media (hover: hover) {
+  .mn-fu-send-more:not(:disabled):hover svg { translate: 0 -2px; }
+  .mn-fu-send-more[aria-expanded='true']:not(:disabled):hover svg { translate: 0 2px; }
+}
+.mn-fu-send-more:not(:disabled):active svg { scale: 0.85; }
+.lg-button.mn-fu-send:has(.mn-fu-send-more:active) { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .mn-fu-send-more svg,
+  .mn-fu-send-more[aria-expanded='true'] svg { transition: none; }
+  .mn-fu-send-more:not(:disabled):hover svg,
+  .mn-fu-send-more[aria-expanded='true']:not(:disabled):hover svg { translate: none; }
+}
+/* The meeting-notes ask bar's send (MeetingDetails.tsx, ASK_ORB_SIZE), also the
+   top bar's search-all-meetings chat (GlobalChatOverlay.tsx): the
+   website's round send button in the same lavender glass. A circle, so no side
+   padding, and the rim stops are lengths: the whole button is cap. */
+.lg-button.lg-sm.mn-ask-send {
+  width: var(--lg-pill-h);
+  padding: 0;
+  --lg-cap-0: 2px;
+  --lg-cap-1: 6px;
+  --lg-cap-2: calc(var(--lg-pill-h) / 2);
+}
+.mn-ask-send .lg-content,
+.mn-ask-send .lg-label { display: flex; align-items: center; justify-content: center; }
+.mn-ask-send .lg-content { height: 100%; width: 100%; }
+/* The meeting page's "Open in notepad" (MeetingDetails header, 2026-11-02): the
+   Follow-up email button's clear glass as a 30px circle, icon only, so the
+   header gains a quiet action rather than a second label. Rim stops are lengths,
+   as on the send orb: the whole button is cap. */
+.lg-button.lg-sm.mn-icon-btn {
+  width: var(--lg-pill-h);
+  padding: 0;
+  --lg-cap-0: 2px;
+  --lg-cap-1: 6px;
+  --lg-cap-2: calc(var(--lg-pill-h) / 2);
+}
+.mn-icon-btn .lg-content,
+.mn-icon-btn .lg-label { display: flex; align-items: center; justify-content: center; }
+.mn-icon-btn .lg-content { height: 100%; width: 100%; }
+
+/* Resume beside the Ask bar (MeetingDetails, 2026-11-02): the notepad's
+   listening pill at rest, three still grey bars and the word (Evin chose this
+   over a record mark and a play icon). A quiet wash on hover, as the ask bar's
+   own surface; nothing moves, the bars are still on purpose. */
+.mn-resume { transition: background-color 150ms ease-out; }
+.mn-resume:not(:disabled):hover { background-color: rgba(255, 255, 255, .06); }
+[data-theme='light'] .mn-resume:not(:disabled):hover { background-color: rgba(17, 17, 26, .04); }
+.mn-resume:focus-visible { outline: 2px solid var(--accent-primary, #6B74F0); outline-offset: 2px; }
+.mn-resume-bars { display: inline-flex; align-items: center; gap: 2px; height: 18px; }
+.mn-resume-bars > span { width: 3px; height: 10px; border-radius: 2px; background: #636366; }
+.mn-resume-bars > span:nth-child(2) { height: 18px; }
+[data-theme='light'] .mn-resume-bars > span { background: #A1A1A6; }
+/* Empty box: grey, and not pressable (disabled). Owner: "greyed out if nothing
+   is typed in, if typed in the periwinkle tint". Only background-COLOR changes
+   (the sheen image stays), so the base .lg-button background-color transition
+   fades it into the lavender as the first character lands; the glyph, rim and
+   glow fade with it. Light is the old disc's grey #8E8E93 with its white arrow;
+   dark is the dark-mode system grey #636366, with the same white arrow (owner:
+   "arrow color should be whitish, the circle surrounding it greyish"). */
+/* Motion (owner: "better animation while switching from grey to periwinkle
+   and back, also hover"). Waking (grey -> lavender) is the invitation: 250ms
+   --ease-smooth-out for the fill, glow, rim and arrow ink together, while the
+   arrow pops from .86 on --ease-bounce, so the button visibly arms the moment
+   the first character lands. Going back to grey gets out of the way: 150ms,
+   same curve, no bounce (never bounce a close). Each rule carries the
+   transition for the state it lands IN, which is how the two directions get
+   their own timing. The rim and arrow ink read --lg-lav-* variables, so the
+   properties that consume them (::before box-shadow, .lg-content color)
+   carry the transitions. The arrow moves with the individual `scale` and
+   `translate` properties so Tailwind's rotate-45 transform is untouched. */
+.lg-button.mn-ask-send {
+  transition:
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1),           /* press: Emil's strong ease-out */
+    background-color 250ms cubic-bezier(0.22, 1, 0.36, 1),    /* --duration-fast, --ease-smooth-out */
+    box-shadow 250ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.lg-button.mn-ask-send::before { transition: box-shadow 250ms cubic-bezier(0.22, 1, 0.36, 1); }
+.mn-ask-send .lg-content { transition: color 250ms cubic-bezier(0.22, 1, 0.36, 1); }
+.mn-ask-send svg {
+  transition:
+    scale 250ms cubic-bezier(0.34, 1.36, 0.64, 1),            /* --ease-bounce: pops as it arms */
+    translate 250ms cubic-bezier(0.34, 1.36, 0.64, 1);        /* hover out: settles back softly */
+}
+.lg-button.mn-ask-send:disabled,
+.lg-button.mn-ask-send:disabled::before {
+  transition:
+    background-color 150ms cubic-bezier(0.22, 1, 0.36, 1),    /* --duration-quick: the close */
+    box-shadow 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Full-strength white arrow on the grey (owner: "arrow color should be white"):
+   the material's disabled rule dims .lg-content to .6, which read as grey-on-grey. */
+.lg-button.mn-ask-send:disabled .lg-content { opacity: 1; transition: color 150ms cubic-bezier(0.22, 1, 0.36, 1); }
+.mn-ask-send:disabled svg {
+  scale: .86;
+  transition: scale 150ms cubic-bezier(0.22, 1, 0.36, 1), translate 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Hover: the material's own lens bloom and tint (ui-components), plus the
+   arrow leaning 1.5px the way it points, quick in (150ms) and softer out
+   (the 250ms bounce above). Pointer devices only; :hover sticks after a tap. */
+@media (hover: hover) and (pointer: fine) {
+  .mn-ask-send:not(:disabled):hover svg {
+    translate: 1.5px -1.5px;
+    transition: scale 250ms cubic-bezier(0.34, 1.36, 0.64, 1), translate 150ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+/* Press: .985 is sized for wide pills; a 36px disc needs .95 to register. */
+.lg-button.mn-ask-send:not(:disabled):active { transform: scale(.95); }
+.lg-button.lg-lavender.lg-lav-tinted.mn-ask-send:disabled {
+  --lg-lav-fg: #FFFFFF;
+  --lg-lav-rim: rgba(255, 255, 255, .18);
+  --lg-lav-glow: transparent;
+  background-color: #636366;
+}
+[data-theme='light'] .lg-button.lg-lavender.lg-lav-tinted.mn-ask-send:disabled {
+  --lg-lav-fg: #FFFFFF;
+  --lg-lav-rim: rgba(255, 255, 255, .50);
+  --lg-lav-under: rgba(0, 0, 0, .10);
+  --lg-lav-drop: rgba(0, 0, 0, .08);
+  --lg-lav-glow: transparent;
+  background-color: #8E8E93;
+}
+/* Reduced motion keeps the colour fades (they explain the state change) and
+   drops everything that moves: the pop, the lean and the press. */
+@media (prefers-reduced-motion: reduce) {
+  .mn-ask-send svg,
+  .mn-ask-send:disabled svg { transition: none; scale: none; }
+  .mn-ask-send:not(:disabled):hover svg { translate: none; }
+  .lg-button.mn-ask-send:not(:disabled):active { transform: none; }
+}
+/* The pill's own hover tint, which the re-tint's background shorthand would otherwise tie with. */
+@media (hover: hover) {
+  .lg-button.lg-lavender:is(.mn-fu-send, .lg-lav-tinted):not([aria-disabled='true']):not(:disabled):hover { background-color: var(--lg-lav-hover); }
+}
+.mn-fu-send-main:disabled,
+.mn-fu-send-more:disabled { cursor: default; }
+.mn-fu-send-main:disabled > * { opacity: .5; }
+.mn-fu-send[aria-disabled='true'] { opacity: .5; }
+.mn-fu-send[aria-disabled='true']:active { transform: none; }
+/* The same re-tint for any other lavender pill that sits on a Settings or
+   meeting-notes canvas: Settings › Connectors' one action (.lg-lav-tinted). */
+.lg-button.lg-lavender:is(.mn-fu-send, .lg-lav-tinted) {
+  --lg-lav-fg: #E6DDFD;
+  --lg-lav-hover: rgba(156, 111, 243, .40);
+  --lg-lav-rim: rgba(255, 255, 255, .22);
+  --lg-lav-under: rgba(0, 0, 0, .24);
+  --lg-lav-drop: transparent;
+  --lg-lav-glow: rgba(156, 111, 243, .30);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .12) 0, rgba(255, 255, 255, .03) 6px, rgba(255, 255, 255, 0) 100%),
+    rgba(156, 111, 243, .30);
+}
+[data-theme='light'] .lg-button.lg-lavender:is(.mn-fu-send, .lg-lav-tinted) {
+  --lg-lav-fg: #3F2593;
+  --lg-lav-hover: rgba(156, 111, 243, .36);
+  --lg-lav-rim: rgba(255, 255, 255, .78);
+  --lg-lav-under: rgba(90, 43, 176, .14);
+  --lg-lav-drop: rgba(78, 46, 150, .10);
+  --lg-lav-glow: rgba(156, 111, 243, .55);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .42) 0%, rgba(255, 255, 255, .10) 18%, rgba(255, 255, 255, 0) 100%),
+    rgba(156, 111, 243, .24);
+}
+
+/* Settings › Connectors: a connector row in a settings card lights faintly
+   under the pointer (a 4% wash of the ink, so it shows on the card in both
+   themes, where bg-elevated would vanish into the light card) and the press
+   lands at once. */
+.cx-row { transition: background-color 150ms ease-out; }
+@media (hover: hover) { .cx-row:hover { background-color: color-mix(in srgb, var(--text-primary) 4%, transparent); } }
+.cx-row:active { background-color: color-mix(in srgb, var(--text-primary) 7%, transparent); transition-duration: 0ms; }
+/* The toolbar's left side moves its glyphs, never a fill. The tone's ^ flips
+   to "v" while its menu is open and, hovered, lifts toward the menu (open:
+   dips toward closing it), as the send's ^; Regenerate's arrows turn half a
+   circle on hover. `translate` and `rotate` are their own properties, so the
+   inline flip and the spin while rewriting keep their transforms. */
+.mn-fu-tone-mark {
+  transition:
+    transform var(--dropdown-close-dur) var(--dropdown-ease),
+    translate 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.mn-fu-tone[aria-expanded='true'] .mn-fu-tone-mark {
+  transition:
+    transform var(--dropdown-open-dur) var(--dropdown-ease),
+    translate 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.mn-fu-turn { transition: rotate 450ms cubic-bezier(0.34, 1.4, 0.64, 1); }
+@media (hover: hover) {
+  .mn-fu-tone:not(:disabled):hover .mn-fu-tone-mark { translate: 0 -1.5px; }
+  .mn-fu-tone[aria-expanded='true']:not(:disabled):hover .mn-fu-tone-mark { translate: 0 1.5px; }
+  .mn-fu-tool:not(:disabled):hover .mn-fu-turn { rotate: 180deg; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mn-fu-tone-mark,
+  .mn-fu-tone[aria-expanded='true'] .mn-fu-tone-mark,
+  .mn-fu-turn { transition: none; }
+  .mn-fu-tone .mn-fu-tone-mark { translate: none !important; }
+  .mn-fu-tool .mn-fu-turn { rotate: none !important; }
+}
+/* ── Success check (transitions.dev 10) ──────────────────────────────
+   Verbatim from 10-success-check.md: fade + rotate + blur + Y-bob on the
+   wrapper, the path stroke-drawn after an 80ms delay. Used by the follow-up
+   sheet's send when a Gmail send goes. */
+:root {
+  --check-opacity-dur: 500ms;
+  --check-rotate-dur: 500ms;
+  --check-rotate-from: 80deg;
+  --check-bob-dur: 500ms;
+  --check-y-amount: 40px;
+  --check-blur-dur: 500ms;
+  --check-blur-from: 10px;
+  --check-path-dur: 500ms;
+  --check-path-delay: 80ms;
+  --check-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-opacity: cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-rotate: cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-bob: cubic-bezier(0.34, 1.35, 0.64, 1);
+  --check-ease-path: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.t-success-check {
+  display: inline-block;
+  transform-origin: center;
+  opacity: 0;
+  will-change: transform, opacity, filter;
+}
+.t-success-check svg { display: block; overflow: visible; }
+.t-success-check svg path {
+  stroke-dasharray: 20;
+  stroke-dashoffset: 20;
+}
+.t-success-check[data-state="in"] {
+  animation:
+    t-check-fade   var(--check-opacity-dur) var(--check-ease-opacity) forwards,
+    t-check-rotate var(--check-rotate-dur)  var(--check-ease-rotate)  forwards,
+    t-check-blur   var(--check-blur-dur)    var(--check-ease-out)     forwards,
+    t-check-bob    var(--check-bob-dur)     var(--check-ease-bob)     forwards;
+}
+.t-success-check[data-state="in"] svg path {
+  animation: t-check-draw var(--check-path-dur) var(--check-ease-path) var(--check-path-delay, 0ms) forwards;
+}
+@keyframes t-check-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes t-check-rotate {
+  from { transform: rotate(var(--check-rotate-from)); }
+  to   { transform: rotate(0deg); }
+}
+@keyframes t-check-blur {
+  from { filter: blur(var(--check-blur-from)); }
+  to   { filter: blur(0); }
+}
+@keyframes t-check-bob {
+  from { translate: 0 var(--check-y-amount); }
+  to   { translate: 0 0; }
+}
+@keyframes t-check-draw { to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .t-success-check { animation: none !important; opacity: 1; }
+  .t-success-check svg path { animation: none !important; stroke-dashoffset: 0 !important; }
+}
+
+/* The send's check, in a 13px slot inside a 32px pill: the recipe's 40px bob
+   and 10px blur are for a standalone badge, so they come down to the icon's
+   scale (6px, 3px). The path is 13.46 long (4.24 + 9.22), so 15, not the
+   recipe's placeholder 20. Green that holds on the lavender glass. */
+.mn-fu-sent-check { --check-y-amount: 6px; --check-blur-from: 3px; color: #4ADE80; }
+[data-theme='light'] .mn-fu-sent-check { color: #16A34A; }
+.mn-fu-sent-check svg path { stroke-dasharray: 15; stroke-dashoffset: 15; }
+
+/* Press feedback on the sheet's quiet controls (the X, Regenerate, the tone):
+   a small squeeze under the finger, on `scale` so Regenerate's hover turn and
+   the tone ^'s lift keep their own properties. Their transition lists carry
+   `scale` (MeetingDetails.tsx). */
+.mn-fu-tool:not(:disabled):active { scale: 0.92; }
+.mn-fu-tone:not(:disabled):active { scale: 0.97; }
+@media (prefers-reduced-motion: reduce) {
+  .mn-fu-tool:not(:disabled):active,
+  .mn-fu-tone:not(:disabled):active { scale: none; }
+}
+
+/* The note under the email ("Written in your style", a send or save error,
+   "Add who it goes to.") rises in on #04's values (4px, 2px blur) rather than
+   popping in. Keyed on its text, so a new note replays it. */
+@keyframes mn-fu-note-in { from { opacity: 0; translate: 0 4px; filter: blur(2px); } }
+.mn-fu-note { animation: mn-fu-note-in 250ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .mn-fu-note { animation: none; }
+}
+
+/* The message fades out where it scrolls, instead of a line over the toolbar:
+   a 32px fade at the foot while there is more below, and 24px at the head
+   once it has scrolled down from the top. A scroll-driven animation sets the
+   two lengths, so an email that fits (no scroll, so the timeline is inactive)
+   gets none, and each fade goes as its end is reached. */
+@property --fu-fade-top { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --fu-fade-bottom { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@keyframes mn-fu-msg-fade {
+  0%   { --fu-fade-top: 0px;  --fu-fade-bottom: 32px; }
+  8%   { --fu-fade-top: 24px; }
+  92%  { --fu-fade-bottom: 32px; }
+  100% { --fu-fade-top: 24px; --fu-fade-bottom: 0px; }
+}
+.mn-fu-msg {
+  --fu-fade-top: 0px;
+  --fu-fade-bottom: 0px;
+  animation: mn-fu-msg-fade linear both;
+  animation-timeline: scroll(self y);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fu-fade-top), #000 calc(100% - var(--fu-fade-bottom)), transparent 100%);
+          mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fu-fade-top), #000 calc(100% - var(--fu-fade-bottom)), transparent 100%);
+}
+@keyframes mn-fu-sheet-in { from { opacity: 0; scale: 0.96; translate: 0 8px; } }
+@keyframes mn-fu-sheet-out { to { opacity: 0; scale: 0.98; } }
+@keyframes mn-fu-fade-in { from { opacity: 0; } }
+@keyframes mn-fu-fade-out { to { opacity: 0; } }
+@keyframes mn-fu-rise { from { opacity: 0; translate: 0 6px; filter: blur(2px); } }
+@keyframes mn-fu-sink { to { opacity: 0; filter: blur(2px); } }
+.mn-fu-sheet[data-state='open'] { animation: mn-fu-sheet-in var(--fu-in) var(--fu-ease); }
+.mn-fu-sheet[data-state='closed'] { animation: mn-fu-sheet-out var(--fu-out) var(--fu-ease) forwards; }
+.mn-fu-dim[data-state='open'] { animation: mn-fu-fade-in 200ms cubic-bezier(0.23, 1, 0.32, 1); }
+.mn-fu-dim[data-state='closed'] { animation: mn-fu-fade-out 150ms cubic-bezier(0.23, 1, 0.32, 1) forwards; }
+.mn-fu-sheet[data-state='open'] .mn-fu-row {
+  animation: mn-fu-rise 300ms var(--fu-ease) both;
+  animation-delay: calc(60ms + var(--i, 0) * var(--fu-step));
+}
+.mn-fu-land {
+  animation: mn-fu-rise 350ms var(--fu-ease) both;
+  animation-delay: calc(var(--i, 0) * var(--fu-step));
+}
+.mn-fu-writing-out { animation: mn-fu-sink 150ms var(--fu-ease) forwards; }
+/* With the genie (MeetingDetails, GenieModal) the card pours out whole: no
+   scale-up of its own, and the rows are at rest from the first frame, since
+   the genie cuts its bands from the live card and rows still rising would pour
+   out blank. The variables above stay, for a first draft's landing. */
+.mn-fu-sheet.mn-fu-genie[data-state] { animation: none; }
+.mn-fu-sheet.mn-fu-genie[data-state] .mn-fu-row { animation: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mn-fu-sheet[data-state='open'] { animation-name: mn-fu-fade-in; }
+  .mn-fu-sheet[data-state='closed'] { animation-name: mn-fu-fade-out; }
+  .mn-fu-sheet[data-state='open'] .mn-fu-row,
+  .mn-fu-land,
+  .mn-fu-writing-out { animation: none; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .mn-swap-out { display: none; }
@@ -10659,15 +11291,17 @@ html[data-platform="linux"][data-window="launcher"] body {
   -webkit-mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask) !important;
   mask-image: var(--lgc-face-mask-top), var(--lgc-cap-mask) !important;
 }
-[data-theme='light'] [data-interface-theme] .pricing-card-yearly {
-  box-shadow:
-    inset 0 -1px 0 rgba(15, 23, 42, 0.10),
-    0 6px 18px rgba(15, 23, 42, 0.12) !important;
-}
-[data-theme='light'] [data-interface-theme] .pricing-card-lifetime {
-  box-shadow:
-    inset 0 -1px 0 rgba(15, 23, 42, 0.10),
-    0 6px 18px rgba(15, 23, 42, 0.12) !important;
+/* The floor only, no outer contact shadow. The two cards sit in the Plans
+   accordion, whose .t-acc-panel-inner is overflow: hidden for its height
+   animation, so the 0 6px 18px shadow was cut off flush with the cards' sides
+   and hung under each one as a square grey block. The :hover selectors tie the
+   light hover rules near the top of this file (0,4,0) and win on order, so
+   hovering no longer brings back a bigger clipped blue glow. */
+[data-theme='light'] [data-interface-theme] .pricing-card-yearly,
+[data-theme='light'] [data-interface-theme] .pricing-card-lifetime,
+[data-theme='light'] [data-interface-theme] .pricing-card-yearly:hover,
+[data-theme='light'] [data-interface-theme] .pricing-card-lifetime:hover {
+  box-shadow: inset 0 -1px 0 rgba(15, 23, 42, 0.10) !important;
 }
 
 /* ── 3. The purchase buttons ──────────────────────────────────────────────
@@ -11516,6 +12150,24 @@ html[data-platform="linux"][data-window="launcher"] body {
   box-shadow: inset 0 0 0 1px rgba(38, 59, 175, 0.32);
 }
 
+/* The seasonal sale pill ("HALLOWEEN −24%") is flat on both cards (Evin,
+   2026-11-06): Lifetime's drops its blue tint and hairline while a sale runs
+   and wears the same plain violet fill as Yearly's, which never had them.
+   Outside a sale Lifetime's BEST VALUE pill keeps the rules above. The second
+   selector outranks the light-mode Lifetime rules, including the older one
+   near the top ("BEST VALUE" pill) that still adds a 1px border and a sheen. */
+[data-interface-theme] .pricing-card-lifetime .badge-best-value.badge-sale,
+[data-theme] [data-interface-theme] .pricing-card-lifetime .badge-best-value.badge-sale {
+  background: rgba(139, 92, 246, 0.15) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: inherit !important;
+}
+[data-interface-theme] .pricing-card-lifetime .badge-best-value.badge-sale::before,
+[data-theme] [data-interface-theme] .pricing-card-lifetime .badge-best-value.badge-sale::before {
+  box-shadow: none;
+}
+
 /* The teaser plaque is a smaller sibling of the two pricing cards, so it takes
    their texture too. It was given the noise in the round that rebuilt it, and
    leaving it there would make it the one surface in this tab still wearing the
@@ -11700,6 +12352,16 @@ html[data-platform="linux"][data-window="launcher"] body {
 .nat-caret-mirror > .nat-caret-text {
   visibility: hidden;
   flex: none;
+}
+/* Select all (Ctrl/Cmd+A while stealth typing): the input can't show its own
+   selection (never focused on Windows, readOnly under the tap), so the mirror
+   paints one: the glyph-width copy turns visible with transparent glyphs and a
+   selection-coloured fill laid over the real text. */
+.nat-caret-mirror > .nat-caret-text.nat-caret-selected {
+  visibility: visible;
+  color: transparent;
+  background: color-mix(in srgb, var(--accent-primary) 32%, transparent);
+  border-radius: 2px;
 }
 .nat-caret {
   flex: none;
@@ -12154,6 +12816,330 @@ html[data-tooltips='off'] .t-tt {
   }
 }
 /* @overlay-motion:end */
+
+/* The notes window's listening bars (NotesWindow.tsx, 2026-10-20): three green
+   bars that move while the meeting runs, as Granola's pill shows. Still for
+   reduced motion. */
+.notes-listening-bars { display: inline-flex; align-items: center; gap: 2px; height: 14px; }
+.notes-listening-bars > span { width: 3px; height: 100%; border-radius: 2px; background: #34c759; transform-origin: center; animation: notes-listening-bar 1.1s ease-in-out infinite; }
+.notes-listening-bars > span:nth-child(2) { animation-delay: -0.35s; }
+.notes-listening-bars > span:nth-child(3) { animation-delay: -0.7s; }
+@keyframes notes-listening-bar { 0%, 100% { transform: scaleY(0.45); } 50% { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .notes-listening-bars > span { animation: none; transform: scaleY(0.8); } }
+/* The bars follow the real level once main sends it (NotesWindow: meeting-audio-level). */
+.notes-listening-bars.notes-level > span { animation: none; transition: transform 120ms linear; }
+
+/* The notepad's page (components/notes/NotesEditor.tsx, Tiptap). */
+.notes-editor { font-size: 15px; line-height: 1.65; color: var(--text-primary); caret-color: var(--text-primary); min-height: 100%; }
+.notes-editor > * + * { margin-top: 0.35em; }
+.notes-editor h1 { font-size: 21px; line-height: 1.3; font-weight: 600; margin-top: 0.9em; }
+.notes-editor h2 { font-size: 17.5px; line-height: 1.35; font-weight: 600; margin-top: 0.8em; }
+.notes-editor h3 { font-size: 15.5px; line-height: 1.4; font-weight: 600; margin-top: 0.7em; }
+.notes-editor > :first-child { margin-top: 0; }
+.notes-editor ul:not([data-type="taskList"]) { list-style: disc; padding-left: 1.3em; }
+.notes-editor ol { list-style: decimal; padding-left: 1.45em; }
+.notes-editor li > p { margin: 0; }
+.notes-editor li + li { margin-top: 0.15em; }
+.notes-editor ul[data-type="taskList"] { list-style: none; padding-left: 0.1em; }
+.notes-editor ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 0.55em; }
+.notes-editor ul[data-type="taskList"] li > label { flex: none; margin-top: 0.28em; user-select: none; }
+.notes-editor ul[data-type="taskList"] li > div { flex: 1; min-width: 0; }
+.notes-editor ul[data-type="taskList"] li[data-checked="true"] > div { color: var(--text-tertiary); text-decoration: line-through; }
+.notes-editor .contains-task-list { list-style: none; padding-left: 0.1em; }
+.notes-editor .task-list-item input[type="checkbox"] { margin-right: 0.5em; vertical-align: -1px; }
+.notes-editor input[type="checkbox"] { width: 14px; height: 14px; accent-color: var(--text-primary); cursor: pointer; }
+.notes-editor a { color: var(--text-primary); text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--text-tertiary); }
+.notes-editor hr { border: none; border-top: 1px solid color-mix(in srgb, var(--text-tertiary) 40%, transparent); margin: 1em 0; }
+.notes-editor p.is-editor-empty:first-child::before { content: attr(data-placeholder); float: left; height: 0; pointer-events: none; color: var(--text-tertiary); }
+.notes-editor .notes-find-hit { background: rgba(255, 204, 0, 0.28); border-radius: 2px; }
+.notes-editor .notes-find-current { background: rgba(255, 204, 0, 0.6); }
+.notes-editor .notes-hook-selection { background: rgba(10, 132, 255, 0.28); }
+/* Typing through the hook the page has no focus, so its caret is drawn. */
+.notes-editor .notes-hook-caret { display: inline-block; width: 0; height: 1.15em; vertical-align: text-bottom; border-left: 1.5px solid var(--text-primary); margin-right: -1.5px; animation: notes-hook-caret 1.1s steps(1) infinite; pointer-events: none; }
+@keyframes notes-hook-caret { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .notes-editor .notes-hook-caret { animation: none; } }
+
+/* ── The notepad in Natively's colours (2026-10-30) ─────────────────────────
+   Was Granola's cream and olive (2026-10-20). Layout and sizes are unchanged;
+   only the tokens moved, so every part of the notepad follows from here.
+   Both modes are NEUTRAL: the owner rejected lavender-tinted surfaces in dark,
+   then in light ("the tint", 10-30). Light = Apple greys (#F9F9FB page,
+   white raised, #1D1D1F / #6E6E73 / #A1A1A6 ink, #E3E3E8 rules); dark =
+   #1C1C1F, raised #28272C. Colour lives only on accents, in pastel
+   periwinkle / blueberry / lavender ("i like pastel colors", 10-30):
+   periwinkle #A9B8FF checkboxes and focus (dark #B8C6FF), the three
+   listening bars one of each, your lines on periwinkle #DFE5FF with
+   blueberry ink #2A3480, theirs on lavender #F3EEFD, ticks and accent text
+   deep blueberry #4A5BD4 (5.9:1). Pastel fills carry dark ink, never white.
+   Find highlights stay yellow; red still means 3 s of silence.
+   Scoped to the notepad (NotesWindow root `.notepad`). */
+.notepad {
+  --np-surface: #f9f9fb; --np-elevated: #ffffff; --np-ink: #1d1d1f; --np-ink-strong: #111113;
+  --np-ink-secondary: #6e6e73; --np-ink-tertiary: #a1a1a6; --np-placeholder: #a1a1a6; --np-title-placeholder: #a1a1a6;
+  --np-hairline: #e3e3e8; --np-ring: #dcdce2; --np-wash: #0000000a; --np-wash-strong: #00000012;
+  --np-caret: #6b7ff0; --np-selection: #b8c6ff80; --np-accent: #4a5bd4; --np-focus: #a9b8ff; --np-focus-ring: #c9d3ff73;
+  --np-green: #9db0ff; --np-red: #d70015; --np-chevron: #6e6e73; --np-stop: #6e6e73; --np-ask-placeholder: #8e8e93;
+  --np-marker: #a1a1a6; --np-track: #f2f2f7; --np-thumb-border: #dcdce1;
+  --np-bubble-me: #dfe5ff; --np-bubble-me-ink: #2a3480; --np-bubble-them: #f3eefd; --np-bubble-them-ink: #1d1d1f;
+  --np-highlight-faint: #00000008; --np-shadow-pill: 0 1px 2px #0000000d, 0 6px 16px -6px #00000024;
+  --np-shadow-pop: 0 16px 32px -12px #0000002e, 0 4px 8px -4px #00000014;
+  --np-event: #c4b3fb; --np-check: #a9b8ff; --np-check-ink: #2a3480;
+  --np-bar-1: #9db0ff; --np-bar-2: #7086f0; --np-bar-3: #c4b3fb; --np-jump: #ffffffcc; --np-jump-hover: #f2f2f7cc;
+  /* Note templates gallery: labels, the section text, the icon tiles and the
+     scrim behind the dialog. */
+  --np-label: #6e6e73; --np-ink-soft: #1d1d1fe0; --np-tile: #f2f2f7; --np-scrim: #0000004d;
+  background: var(--np-surface); color: var(--np-ink);
+}
+.notepad[data-np-theme="dark"] {
+  --np-surface: #1c1c1f; --np-elevated: #28272c; --np-ink: #ececf0; --np-ink-strong: #ffffff;
+  --np-ink-secondary: #a3a2ab; --np-ink-tertiary: #75747d; --np-placeholder: #75747d; --np-title-placeholder: #75747d;
+  --np-hairline: #ffffff1a; --np-ring: #ffffff17; --np-wash: #ffffff0d; --np-wash-strong: #ffffff14;
+  --np-caret: #b8c6ff; --np-selection: #a9b8ff40; --np-accent: #b8c6ff; --np-focus: #a9b8ffa6; --np-focus-ring: #a9b8ff26;
+  --np-green: #a9b8ff; --np-red: #ff6b6b; --np-chevron: #a3a2ab; --np-stop: #a3a2ab; --np-ask-placeholder: #8a8992;
+  --np-marker: #8a8992; --np-track: #151517; --np-thumb-border: #3a393f;
+  --np-bubble-me: #a9b8ff33; --np-bubble-me-ink: #e4e9ff; --np-bubble-them: #34333a; --np-bubble-them-ink: #ececf0;
+  --np-highlight-faint: #ffffff0a; --np-shadow-pill: 0 4px 10px -4px #00000059;
+  --np-shadow-pop: 0 16px 32px -12px #000000a6, 0 4px 8px -4px #00000059;
+  --np-event: #c9b8fb; --np-check: #b8c6ff; --np-check-ink: #1c1c1f;
+  --np-bar-1: #a9b8ff; --np-bar-2: #8ea2ff; --np-bar-3: #c9b8fb; --np-jump: #28272ccc; --np-jump-hover: #36353bcc;
+  --np-label: #a3a2ab; --np-ink-soft: #ececf0e0; --np-tile: #ffffff12; --np-scrim: #000000a6;
+}
+/* The Note templates gallery: the notepad's neutral greys, white cards and a
+   deep blueberry Apply. A dialog over the notepad, so in dark it sits one
+   step lighter than the page. (Class name kept from its lavender days.) */
+.notepad .np-lavender {
+  --np-surface: #fcfcfd; --np-elevated: #ffffff; --np-ink: #1d1d1f; --np-ink-strong: #111113;
+  --np-ink-secondary: #6e6e73; --np-ink-tertiary: #a1a1a6; --np-placeholder: #a1a1a6; --np-label: #6e6e73;
+  --np-ink-soft: #1d1d1fe0; --np-hairline: #e3e3e8; --np-ring: #e3e3e8;
+  --np-wash: #0000000a; --np-wash-strong: #00000012; --np-accent: #4a5bd4;
+  --np-tile: #eef0ff; --np-tile-ink: #4a5bd4;
+  --np-card: #ffffff;
+  --np-cta: #4a5bd4; --np-cta-ink: #ffffff; --np-scrim: #0000004d;
+  --np-search-fill: #f2f2f7; --np-search-hover: #ebebf0; --np-search-lift: 0 2px 8px -2px #0000001f;
+  --np-shadow-pop: 0 24px 60px -24px #00000047, 0 4px 12px -4px #0000001a;
+}
+.notepad[data-np-theme="dark"] .np-lavender {
+  --np-surface: #232227; --np-elevated: #2c2b31; --np-ink: #ececf0; --np-ink-strong: #ffffff;
+  --np-ink-secondary: #a3a2ab; --np-ink-tertiary: #75747d; --np-placeholder: #75747d; --np-label: #a3a2ab;
+  --np-ink-soft: #ececf0e0; --np-hairline: #ffffff1a; --np-ring: #ffffff17;
+  --np-wash: #ffffff0d; --np-wash-strong: #ffffff14; --np-accent: #b9a1f6;
+  --np-tile: #ffffff12; --np-tile-ink: #cdbdf9;
+  --np-card: #1c1c1f; --np-cta: #b9a1f6; --np-cta-ink: #1c1c1f; --np-scrim: #000000a6;
+  --np-search-fill: #ffffff0f; --np-search-hover: #ffffff17; --np-search-lift: 0 2px 8px -2px #00000066;
+}
+/* The gallery's search: a filled pill, no outline at rest; typing lifts it to
+   the card colour with a hairline and a soft shadow (no focus ring). */
+.np-search {
+  background: var(--np-search-fill, var(--np-wash));
+  box-shadow: inset 0 0 0 1px transparent;
+  transition: background-color 150ms ease-out, box-shadow 150ms ease-out;
+}
+.np-search:hover { background: var(--np-search-hover, var(--np-wash-strong)); }
+.np-search:focus-within {
+  background: var(--np-elevated);
+  box-shadow: inset 0 0 0 1px var(--np-ring), var(--np-search-lift, 0 1px 2px #0000000f);
+}
+.np-search-clear { transition: background-color 120ms ease-out, transform 120ms ease-out; }
+.np-search-clear:hover { background: var(--np-wash-strong); }
+.np-search-clear:active { transform: scale(0.92); }
+@media (prefers-reduced-motion: reduce) { .np-search, .np-search-clear { transition: none; } }
+.notepad ::selection { background: var(--np-selection); }
+/* The pills, panels and popovers: the elevated surface with a 0.5px ring. */
+/* A full 1px ring: 0.5px vanishes at 1x scale (most Windows screens) and on the light page. */
+.np-elevated { background: var(--np-elevated); box-shadow: var(--np-shadow-pill), 0 0 0 1px var(--np-ring); transition: box-shadow 300ms cubic-bezier(0.22, 1, 0.36, 1); }
+.notepad[data-np-theme="dark"] .np-elevated { box-shadow: var(--np-shadow-pill), inset 0 0 0 0.5px var(--np-ring); }
+.np-pop { background: var(--np-elevated); border-radius: 12px; box-shadow: var(--np-shadow-pop), 0 0 0 1px var(--np-ring); transform-origin: top left; animation: np-pop-in 75ms ease-out; }
+@keyframes np-pop-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+/* Granola's popups leave as they came: 75 ms back to .95 and out. */
+.np-pop[data-closing] { animation: np-pop-out 75ms ease-in forwards; pointer-events: none; }
+@keyframes np-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes np-pop-out { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
+/* The floating panel's plate: the pills sit on it once a panel opens. */
+.np-plate { background: var(--np-elevated); box-shadow: var(--np-shadow-pill), 0 0 0 1px var(--np-ring); }
+.notepad[data-np-theme="dark"] .np-plate { box-shadow: var(--np-shadow-pill), inset 0 0 0 0.5px var(--np-ring); }
+/* A pill on the open plate drops its own ring and shadow (Granola: ring only when idle). */
+.np-elevated.np-flat, .notepad[data-np-theme="dark"] .np-elevated.np-flat { box-shadow: none; }
+/* Find in the transcript (Granola's): every match yellow, the current one amber with a short blink. */
+.np-hit { background: #fde047; color: #18181b; border-radius: 0.25rem; box-shadow: -1px 0 #fde047, 1px 0 #fde047; }
+.np-hit[data-current] { background: #f59e0b; box-shadow: -1px 0 #f59e0b, 1px 0 #f59e0b; animation: np-beep 200ms ease-in-out; }
+@keyframes np-beep { from { box-shadow: 1px 0 0 4px #f59e0b, -1px 0 0 4px #f59e0b; } to { box-shadow: -1px 0 #f59e0b, 1px 0 #f59e0b; } }
+/* Ask's "Thinking": three dots, 1 s, a quarter second apart. (Live transcript lines dropped theirs 2026-10-31.) */
+/* "Writing your notes" (NotesEnhanced.tsx), as Granola 7.722.1 draws its generating card: an
+   elevated 40px pill with a 16px spinner, and Granola's grey text sweep (.grayscale-text-pulse):
+   full ink with a narrow lighter band (46/50/54%) on a 320% image, 2.2s linear, left to right. */
+.np-writing-pill { background: var(--np-elevated); color: var(--np-ink); box-shadow: var(--np-shadow-pop), 0 0 0 0.5px var(--np-ring); }
+/* The pill's words: transitions.dev shimmer text (#15), in the notepad's own ink so it
+   follows the notepad's light and dark (the app's --text-* do not). Its timing variables
+   are set here too: the app sets them only on the meeting page (.mn-root, .mn-followup),
+   so in the notepad the band had no animation and no size, and the words stayed flat grey. */
+.np-writing-pill .t-shimmer {
+  --shimmer-dur: 2000ms;
+  --shimmer-band: 400%;
+  --shimmer-ease: linear;
+  --shimmer-base: var(--np-ink-tertiary);
+  --shimmer-highlight: var(--np-ink-strong);
+}
+.np-spinner { box-sizing: border-box; width: 16px; height: 16px; flex-shrink: 0; border-radius: 9999px; border: 2px solid var(--np-ink-secondary); border-bottom-color: transparent; animation: np-spin 1s linear infinite; }
+@keyframes np-spin { to { transform: rotate(360deg); } }
+.np-sweep-text {
+  background-image: linear-gradient(90deg, var(--np-ink) 0%, var(--np-ink) 46%, var(--np-ink-secondary) 50%, var(--np-ink) 54%, var(--np-ink) 100%);
+  background-repeat: no-repeat; background-size: 320% 100%; background-position: 100% 50%;
+  -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
+  animation: np-sweep 2.2s linear infinite;
+}
+@keyframes np-sweep { from { background-position: 100% 50%; } to { background-position: 0% 50%; } }
+@media (prefers-reduced-motion: reduce) {
+  .np-spinner { animation-duration: 3s; }
+  .np-sweep-text { animation: none; background-image: none; color: var(--np-ink); -webkit-text-fill-color: currentColor; }
+}
+/* The user's own notes under the pill while the notes are written (NotesEnhanced), each
+   line on the sweep 140ms after the one above, so it runs down the page as Granola's does. */
+/* The notes written down the page behind the pill (NotesEnhanced, 2026-11-01, from the
+   owner's recording of Granola). Each line slides up out from under the pill, grey, then
+   takes its own ink; the keyframe ends without a colour so it settles on the inline one.
+   The pill sits over the bottom of the newest line and, once the notes run past the
+   window, stops above the Ask bar while the rest are written behind it. */
+.np-write-line { animation: np-write-in 500ms ease-in-out both, np-write-ink 900ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+/* Lines written out of sight under the stopped pill: they only settle grey-to-ink as it leaves.
+   Its own keyframe name: a name the line already finished (np-write-ink) would not restart. */
+.np-write-late { animation: np-write-late 900ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes np-write-late {
+  0%, 30% { color: var(--np-ink-tertiary); }
+}
+/* Arrival: the "text reveal" tokens (500ms ease-in-out, 12px, 3px blur). */
+@keyframes np-write-in {
+  from { opacity: 0; transform: translateY(12px); filter: blur(3px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+/* Granola's grey-to-ink settle: grey for the first 30%, then its own inline colour. */
+@keyframes np-write-ink {
+  0%, 30% { color: var(--np-ink-tertiary); }
+}
+/* Over the newest line's last 12px by `translate`, not a negative margin: when the pill leaves,
+   AnimatePresence pins it where it stands and a margin would apply twice (a 12px hop up as it
+   starts to fade, 2026-11-01). It takes no height in the page (margin-bottom), so taking it
+   away moves nothing. */
+.np-write-head { position: sticky; bottom: 8rem; z-index: 10; translate: 0 -0.75rem; margin-bottom: -2.5rem; }
+/* Below the pill is page, not notes: once it stops above the Ask bar (8rem: the
+   NotesWindow bottom bar is My notes|Enhanced + Ask + 27.5px), the lines still being
+   written stay hidden under it, as Granola's do, until the pill leaves. */
+.np-write-head::after { content: ''; position: absolute; left: -2rem; right: -2rem; top: 100%; height: 10rem; background: linear-gradient(to bottom, transparent, var(--np-surface) 12px); pointer-events: none; }
+.np-fade-in-soft { animation: np-fade-in 400ms ease-in-out both; }
+@media (prefers-reduced-motion: reduce) { .np-write-line, .np-write-late, .np-fade-in-soft { animation: none; } }
+.np-sweep-notes { display: flex; flex-direction: column; gap: 6px; max-width: 41.5rem; }
+.np-sweep-line { display: flex; align-items: baseline; gap: 10px; font-size: 15px; line-height: 1.6; }
+.np-sweep-heading { font-weight: 600; font-size: 16px; margin-top: 8px; }
+.np-sweep-heading:first-child { margin-top: 0; }
+.np-sweep-dot { flex-shrink: 0; width: 5px; height: 5px; border-radius: 9999px; background: var(--np-ink-tertiary); transform: translateY(-3px); }
+.np-sweep-box { flex-shrink: 0; width: 13px; height: 13px; border-radius: 4px; box-shadow: inset 0 0 0 1.25px var(--np-ink-tertiary); transform: translateY(1px); }
+/* Ask answers drawn from Markdown (NotepadAnswer.tsx): points with a hanging indent and a gap between them. */
+.np-md .np-md-block + .np-md-block { margin-top: 10px; }
+.np-md .np-md-block + .np-md-head { margin-top: 14px; }
+.np-md .np-md-head + .np-md-block { margin-top: 4px; }
+.np-md .np-md-li > .np-md-block + .np-md-block, .np-md .np-md-li > .np-md-ul, .np-md .np-md-li > .np-md-ol { margin-top: 6px; }
+.np-md .np-md-ul { list-style: none; padding: 0; margin: 0; }
+.np-md .np-md-ul > .np-md-li { position: relative; padding-left: 16px; }
+.np-md .np-md-ul > .np-md-li::before { content: ''; position: absolute; left: 3px; top: calc(0.79em - 2px); width: 5px; height: 5px; border-radius: 9999px; background: var(--np-ink-tertiary); }
+.np-md .np-md-ol { list-style: decimal; padding: 0 0 0 20px; margin: 0; }
+.np-md .np-md-ol > .np-md-li::marker { color: var(--np-ink-secondary); font-variant-numeric: tabular-nums; }
+.np-md .np-md-li > p { margin: 0; }
+.np-md .np-md-quote > p { margin: 0; }
+.np-md :not(pre) > .np-md-code { background: var(--np-wash-strong); border-radius: 4px; padding: 1px 4px; }
+.np-md .np-md-table { border-collapse: collapse; }
+.np-md .np-md-table th, .np-md .np-md-table td { padding: 4px 10px 4px 0; text-align: left; border-bottom: 0.5px solid var(--np-hairline); vertical-align: top; }
+.np-md .np-md-table th { font-weight: 600; color: var(--np-ink-strong); }
+/* Ask's "Thinking": the overlay's sweep (.natively-thinking-label), in notepad ink. No dots. */
+.natively-thinking-label.np-thinking { --natively-thinking-base: var(--np-ink-tertiary); --natively-thinking-sweep: var(--np-ink); }
+/* A new question or answer arrives from 10px below. */
+.np-arrive { animation: np-arrive 200ms ease-out; }
+@keyframes np-arrive { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+/* The closed Ask pill lights faintly under the pointer. */
+.np-glow { position: relative; isolation: isolate; }
+.np-glow::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; z-index: -1; pointer-events: none; opacity: 0; transition: opacity 300ms;
+  background: radial-gradient(1024px circle at var(--np-x, 50%) var(--np-y, 50%), color-mix(in srgb, var(--np-focus) 7%, transparent) 0, transparent 500px);
+}
+.np-glow:hover::before { opacity: 1; }
+/* Back to the newest line, over the transcript. */
+.np-jump { background: var(--np-jump); box-shadow: var(--np-shadow-pop), 0 0 0 0.5px var(--np-ring); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); transition: background-color 150ms; }
+.np-jump:hover { background: var(--np-jump-hover); }
+.np-outline { box-shadow: inset 0 0 0 0.5px var(--np-hairline); }
+.np-wash:hover, .np-wash[aria-expanded="true"] { background: var(--np-wash); }
+/* The chip and folder button paint their hover 3px inside the hairline, as Granola's do. */
+.np-chip { position: relative; isolation: isolate; }
+.np-chip::before { content: ''; position: absolute; inset: 3px; border-radius: 9999px; z-index: -1; background: transparent; transition: background-color 75ms; }
+.np-chip:hover::before, .np-chip[aria-expanded="true"]::before { background: var(--np-wash); }
+/* Listening bars: 3 bars 3px wide, 2px apart, in a 13×20 box; red after 3s of silence. */
+.notepad .notes-listening-bars { height: 20px; width: 13px; gap: 2px; }
+.notepad .notes-listening-bars > span { width: 3px; border-radius: 9999px; background: var(--np-green); transition: background-color 300ms; }
+/* One pastel per bar: periwinkle, blueberry, lavender. Silence and pause still repaint all three. */
+.notepad .notes-listening-bars > span:nth-child(1) { --np-green: var(--np-bar-1); }
+.notepad .notes-listening-bars > span:nth-child(2) { --np-green: var(--np-bar-2); }
+.notepad .notes-listening-bars > span:nth-child(3) { --np-green: var(--np-bar-3); }
+.notepad .notes-listening-bars.np-silent > span { background: var(--np-red); }
+.notepad .notes-listening-bars.np-paused > span { background: var(--np-ink-tertiary); animation: none; transform: scaleY(0.55); }
+.notepad .notes-listening-bars.notes-level > span { transition: transform 300ms ease-in-out, background-color 300ms; }
+/* Resume on a saved notepad meeting (NotesWindow, 2026-11-02): the listening
+   pill's bars at rest, still and grey, beside the word. Same shape as the
+   meeting page's (.mn-resume-bars). */
+.notepad .np-resume-bars { display: inline-flex; align-items: center; gap: 2px; height: 18px; }
+.notepad .np-resume-bars > span { width: 3px; height: 10px; border-radius: 9999px; background: var(--np-ink-tertiary); }
+.notepad .np-resume-bars > span:nth-child(2) { height: 18px; }
+/* The editor: 15px, line height 1.5, no space between paragraphs; headings at body size. */
+.notepad .notes-editor { font-size: 15px; line-height: 1.5; color: var(--np-ink); caret-color: var(--np-caret); }
+.notepad .notes-editor > * + * { margin-top: 0; }
+.notepad .notes-editor h1, .notepad .notes-editor h2, .notepad .notes-editor h3 { font-size: 15px; line-height: 1.5; font-weight: 600; color: var(--np-ink-strong); margin-top: 0; }
+.notepad .notes-editor h1 { position: relative; }
+.notepad .notes-editor h1::before { content: '#'; position: absolute; left: -20px; color: var(--np-ink-tertiary); opacity: 0.6; font-weight: 400; }
+.notepad .notes-editor ul:not([data-type="taskList"]) { list-style: disc; padding-left: 0; margin-left: 24px; padding-bottom: 8px; }
+.notepad .notes-editor ul:not([data-type="taskList"]) ul { list-style: circle; }
+.notepad .notes-editor ul:not([data-type="taskList"]) ul ul { list-style: square; }
+.notepad .notes-editor ol { list-style: decimal; padding-left: 0; margin-left: 24px; padding-bottom: 8px; }
+.notepad .notes-editor ol ol { list-style: lower-alpha; }
+.notepad .notes-editor ol ol ol { list-style: lower-roman; }
+.notepad .notes-editor li::marker { color: var(--np-marker); }
+.notepad .notes-editor li + li { margin-top: 0; }
+.notepad .notes-editor ul[data-type="taskList"] { padding-left: 0; padding-bottom: 8px; }
+.notepad .notes-editor ul[data-type="taskList"] li { gap: 8px; }
+.notepad .notes-editor ul[data-type="taskList"] li > label { margin-top: 3px; }
+.notepad .notes-editor ul[data-type="taskList"] li[data-checked="true"] > div { color: inherit; text-decoration: none; }
+.notepad .notes-editor input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none; width: 16px; height: 16px; margin: 0; border-radius: 5px;
+  background: var(--np-elevated); box-shadow: inset 0 0 0 1px var(--np-hairline); display: grid; place-content: center; cursor: pointer;
+}
+.notepad .notes-editor input[type="checkbox"]:checked { background: var(--np-check); box-shadow: none; }
+.notepad .notes-editor input[type="checkbox"]:checked::after {
+  content: ''; width: 9px; height: 5px; border-left: 1.75px solid var(--np-check-ink, var(--np-surface)); border-bottom: 1.75px solid var(--np-check-ink, var(--np-surface));
+  transform: translateY(-1px) rotate(-45deg);
+}
+.notepad .notes-editor a { color: inherit; text-decoration-color: var(--np-ink-tertiary); }
+.notepad .notes-editor p.is-editor-empty:first-child::before { color: var(--np-placeholder); }
+.notepad .notes-editor .notes-find-hit { background: #fde04766; }
+.notepad .notes-editor .notes-find-current { background: #f59e0b99; border-radius: 0.25rem; animation: np-beep 200ms ease-in-out; }
+.notepad .notes-editor .notes-hook-selection { background: var(--np-selection); }
+.notepad .notes-editor .notes-hook-caret { border-left-color: var(--np-caret); }
+/* Ctrl/Cmd+A in a hook-typed one-line field: the window has no focus, so the
+   input's own selection would not paint. NotesWindow sets the text's width. */
+.notepad input[data-hook-selected="true"] { background-image: linear-gradient(var(--np-selection), var(--np-selection)); background-repeat: no-repeat; background-origin: content-box; background-position: left center; background-size: var(--hook-sel-w, 0px) 1.3em; }
+/* The scroll fades under the toolbar and above the bottom bar. */
+.np-fade-top { background: linear-gradient(to bottom, var(--np-surface), transparent); }
+/* The page's top fade under the heading (2026-11-01): fades in once the page scrolls, out when back at the top
+   (transitions.dev tokens: a plain fade, 150ms ease-out, no movement or blur). */
+.np-page-fade { opacity: 0; transition: opacity 150ms ease-out; }
+.np-page-fade[data-shown="true"] { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .np-page-fade { transition: none; } }
+.np-fade-bottom { background: linear-gradient(to top, var(--np-surface) 40%, transparent); }
+/* The Ask field's focus (a hook-typed field shows it too: the window has no focus then). */
+/* Ask keeps its fill while open, so the page never shows through as the plate fades in behind it.
+   Every ring is an outer shadow, so the closed pill's edge eases into the focus ring (250 ms) and back (150 ms). */
+.np-ask { background: var(--np-elevated); box-shadow: 0 0 0 1px transparent; transition: box-shadow 150ms cubic-bezier(0.22, 1, 0.36, 1); }
+.np-ask[data-engaged="true"] { box-shadow: 0 0 0 1px var(--np-focus), 0 0 0 3px var(--np-focus-ring); transition-duration: 250ms; }
+/* The closed Ask pill keeps the pill's ring and shadow; .np-ask above would otherwise wipe them (it read as no edge on the light page). */
+.np-ask.np-elevated:not([data-engaged="true"]) { box-shadow: var(--np-shadow-pill), 0 0 0 1px var(--np-ring); }
+/* After Stop: the My notes / Enhanced / Transcript switch, its thumb sliding. */
+.np-track { background: var(--np-track); box-shadow: inset 0 0 0 0.5px var(--np-ring); }
+.np-thumb { background: var(--np-elevated); box-shadow: inset 0 0 0 0.5px var(--np-thumb-border); transition: left 260ms cubic-bezier(.16,1,.3,1), width 260ms cubic-bezier(.16,1,.3,1); }
+@media (prefers-reduced-motion: reduce) { .np-pop, .np-pop[data-closing], .np-hit[data-current], .np-arrive, .notepad .notes-editor .notes-find-current { animation: none; } .np-thumb, .np-glow::before { transition: none; } }
 
 /* ── Theme switch: one tight dissolve of the whole window ───────────────────
    lib/themeTransition.mjs flips html[data-theme] inside a View Transition and

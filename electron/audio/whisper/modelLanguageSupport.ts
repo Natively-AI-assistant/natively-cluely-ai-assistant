@@ -110,6 +110,15 @@ const WHISPER_LANGUAGE_BY_ISO639: Record<string, string> = {
   he: 'hebrew',
   ms: 'malay',
   fi: 'finnish',
+  mr: 'marathi',
+  ta: 'tamil',
+  te: 'telugu',
+  bn: 'bengali',
+  gu: 'gujarati',
+  kn: 'kannada',
+  ml: 'malayalam',
+  pa: 'punjabi',
+  ur: 'urdu',
   hr: 'croatian',
   et: 'estonian',
   lv: 'latvian',
@@ -123,7 +132,10 @@ const WHISPER_LANGUAGE_BY_ISO639: Record<string, string> = {
  * Resolves what the host passes on WorkerTranscribeMessage.language — the
  * app's internal settings key ('english-us', 'french', 'auto'; see
  * RECOGNITION_LANGUAGES) — to the Whisper language name transformers.js
- * expects, or null for 'auto'/unknown (Whisper then auto-detects).
+ * expects, or null for 'auto'/unknown. transformers.js 3.8.1 does NOT detect a
+ * language on null: it transcribes as English ("TODO: Implement language
+ * detection" in WhisperForConditionalGeneration). The worker detects it
+ * itself (detectedWhisperLanguage below).
  *
  * Also accepts raw BCP-47 tags ('en-US') and bare iso639 codes ('en') for
  * compatibility with the worker's previous LANG_MAP contract.
@@ -139,6 +151,32 @@ export function resolveWhisperLanguage(languageKeyOrTag: string): string | null 
   // BCP-47 ('en-US') or bare iso639 ('en')
   const iso = raw.split('-')[0].toLowerCase();
   return WHISPER_LANGUAGE_BY_ISO639[iso] ?? null;
+}
+
+/**
+ * The language a multilingual Whisper hears in a clip: of the `<|xx|>` tokens
+ * the app supports (WHISPER_LANGUAGE_BY_ISO639), the one with the highest
+ * logit at the first decoder step after <|startoftranscript|>, which is how
+ * Whisper's own detect_language works. `language` is the name
+ * resolveWhisperLanguage gives; `probability` is its share of a softmax over
+ * those tokens only, so a caller can ignore an unsure guess. Null when no
+ * supported token is in the vocabulary.
+ */
+export function detectedWhisperLanguage(
+  logits: ArrayLike<number>,
+  langToId: Record<string, number>,
+): { language: string; probability: number } | null {
+  const scored: Array<{ name: string; logit: number }> = [];
+  for (const [token, id] of Object.entries(langToId ?? {})) {
+    const code = /^<\|([a-z]+)\|>$/.exec(token)?.[1];
+    const name = code ? WHISPER_LANGUAGE_BY_ISO639[code] : undefined;
+    if (!name || !(id >= 0 && id < logits.length) || !Number.isFinite(logits[id])) continue;
+    scored.push({ name, logit: logits[id] });
+  }
+  if (scored.length === 0) return null;
+  const best = scored.reduce((a, b) => (b.logit > a.logit ? b : a));
+  const total = scored.reduce((sum, s) => sum + Math.exp(s.logit - best.logit), 0);
+  return { language: best.name, probability: 1 / total };
 }
 
 /**
@@ -176,8 +214,9 @@ function isNemotronModel(modelId: string): boolean {
  *    through resolveNemotronLangId() (the verified transcription-ready tier,
  *    including the documented en-IN/en-AU/en-CA → en-US inference and the
  *    ar-SA → ar-AR alias). 'auto' excluded — Nemotron has no auto-detect.
- *  - Parakeet TDT: the 25 European languages in its training vocabulary + auto.
- *    The only model offered PARAKEET_ONLY_LANGUAGE_KEYS.
+ *  - Parakeet TDT v3: the 25 European languages in its training vocabulary +
+ *    auto. The only model offered PARAKEET_ONLY_LANGUAGE_KEYS. (v2 is
+ *    English-only and takes the last branch.)
  *  - Multilingual Whisper family: everything except PARAKEET_ONLY_LANGUAGE_KEYS,
  *    including 'auto'.
  *  - English-only models: the English variants only, language locked.
@@ -190,7 +229,9 @@ export function getLocalModelLanguageSupport(modelId: string): LocalModelLanguag
       .map(([key]) => key);
     return { languageSelectable: true, accentSelectable: true, allowedLanguageKeys: allowed };
   }
-  if (isParakeetTdtModel(modelId)) {
+  // Parakeet v2 shares v3's session layout but is English-only, so it falls
+  // through to the English-only branch below.
+  if (isParakeetTdtModel(modelId) && !isEnglishOnlyLocalModel(modelId)) {
     const allowed = Object.entries(RECOGNITION_LANGUAGES)
       .filter(([key, lang]) => key === 'auto' || PARAKEET_TDT_SUPPORTED_ISO639.has(lang.iso639))
       .map(([key]) => key);

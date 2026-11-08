@@ -249,7 +249,7 @@ test('Open Settings is the onboarding glass in the card\'s blue, in both themes'
     }
   }
   assert.ok(rendered.includes("blue:  '#007AFF'"));
-  assert.ok(button.includes('className="lg-sm lg-wide"'), 'rim for this scale, cap stops for a container-set width');
+  assert.ok(button.includes("className={glass ? 'lg-sm lg-wide' : 'lg-sm lg-wide lg-green-light'}"), 'rim for this scale, cap stops for a container-set width');
   assert.ok(!button.includes("'action'"), 'no longer the flat action fill');
   // This card is opaque and its blur layers were bisected against an OOM.
   assert.ok(button.includes("backdropFilter: 'none'") && button.includes("WebkitBackdropFilter: 'none'"));
@@ -321,4 +321,31 @@ test('the alert in the macOS guide draws its two buttons in the same glass, as p
   assert.ok(!footer.includes('--lg-radius'));
   // These two belong to the macOS guide only; Windows is shown its own page.
   assert.ok(/: isMac\s*\? <GuideSteps isLight=\{isLight\}/.test(rendered));
+});
+
+test('Windows re-reads on a timer while open, one read at a time', () => {
+  // The interval comes from the platform-injected policy, so the card never
+  // branches on the OS itself (both branches: permissionRowPolicy.test.mjs).
+  assert.ok(rendered.includes('const every = statusPollIntervalMs(platform);'));
+  assert.ok(rendered.includes('if (!ready || every === null) return;'), 'no timer before the card is up, or where the policy says none');
+  assert.ok(/if \(reading\) return;[\s\S]{0,80}reading = true;[\s\S]{0,80}refreshStatus\(\)\.finally\(\(\) => \{ reading = false; \}\)/.test(rendered),
+    'a read still in flight skips the tick');
+  assert.ok(rendered.includes('return () => window.clearInterval(id);'), 'the timer stops when the card closes');
+  assert.ok(rendered.includes('}, [ready, platform, refreshStatus]);'));
+});
+
+test('Continue is the lighter green on every platform', () => {
+  // The plain lg-green body read as black on the light card and all but
+  // vanished on the dark one. No platform branch: macOS and Windows match.
+  assert.ok(rendered.includes('variant="green" label="Continue"'));
+  assert.ok(!/isWin[^\n]*lg-green-light|lg-green-light[^\n]*isWin|lighter=/.test(rendered), 'no per-platform green');
+  const css = readFileSync(resolve(__dirname, '../../../ui-components/LiquidGlassButton.css'), 'utf8');
+  const body = css.match(/\.lg-button\.lg-green\.lg-green-light \{([\s\S]*?)\n\}/);
+  assert.ok(body, 'lg-green-light is defined');
+  assert.ok(body[1].includes('#2f7350'), 'the lighter body');
+  assert.ok(body[1].includes('--lg-tint-hover: #37835c'), 'its own hover tint');
+  // Declared before the hover rules it ties at (0,3,0), so hover still wins.
+  assert.ok(css.indexOf('.lg-button.lg-green.lg-green-light {') < css.indexOf('.lg-button:not(:disabled):hover {'));
+  assert.match(css, /@media \(prefers-contrast: more\)[\s\S]*\.lg-button\.lg-green\.lg-green-light \{ background-color: #103425; \}/,
+    'high contrast keeps the darker green');
 });

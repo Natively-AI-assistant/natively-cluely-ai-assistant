@@ -1,6 +1,6 @@
 {
   "name": "natively",
-  "version": "2.9.2",
+  "version": "3.1.0",
   "main": "dist-electron/electron/main.js",
   "engines": {
     "node": ">=22.13.0"
@@ -42,6 +42,7 @@
     "test:lib": "node --experimental-strip-types --test \"src/lib/**/__tests__/**/*.test.mjs\"",
     "test:components": "node --experimental-strip-types --test \"src/components/**/__tests__/**/*.test.mjs\"",
     "test:scripts": "node --test \"scripts/__tests__/**/*.test.mjs\"",
+    "verify:transformers": "node scripts/verify-transformers-upgrade.mjs",
     "test:company-research-spend": "npm run build:electron && node --test premium/electron/knowledge/__tests__/CompanyResearchForceRefresh2026_09_21.test.mjs src/components/__tests__/CompanyResearchCtaWiring2026_09_21.test.mjs",
     "test:ci": "npm run typecheck:electron && npm run build && npm test && npm run test:intelligence && npm run test:lib && npm run test:components && npm run test:scripts && npm run test:company-research-spend",
     "test:modes": "npm run build:electron && node --test \"electron/services/__tests__/Mode*.test.mjs\" electron/services/__tests__/ProfileIntelligenceGate.test.mjs electron/services/__tests__/NativelyApiE2E.test.mjs",
@@ -120,6 +121,7 @@
     "test:node-runner": "npm run build:electron && node --test \"electron/services/__tests__/**/*.test.mjs\" \"electron/lib/__tests__/**/*.test.mjs\" \"electron/llm/__tests__/**/*.test.mjs\" \"electron/llm/codeVerification/__tests__/**/*.test.mjs\" \"electron/audio/__tests__/**/*.test.mjs\" \"electron/rag/__tests__/**/*.test.mjs\" \"electron/utils/__tests__/**/*.test.mjs\" \"electron/update/**/*.test.mjs\"",
     "test:api-smoke": "npm run build:electron && node scripts/run-with-env.mjs --default-tmpdir NATIVELY_TEST_USERDATA=natively-test-userdata --set ELECTRON_RUN_AS_NODE=1 -- electron --test electron/services/__tests__/NativelyApiE2E.test.mjs",
     "build:apple-speech": "node scripts/build-apple-speech.js",
+    "build:parakeet-ane": "node scripts/build-parakeet-ane.js",
     "test:css:cta-liquid-glass": "electron tests/css/cta-liquid-glass.check.mjs",
     "test:css:clear-variant": "electron tests/css/clear-variant-liquid-glass.check.mjs",
     "test:css:thinking-label": "electron tests/css/thinking-label.check.mjs",
@@ -155,7 +157,8 @@
       "!**/*.log",
       "!**/*.pdf",
       "!**/.git",
-      "!**/node_modules/@typescript/**"
+      "!**/node_modules/@typescript/**",
+      "!**/*.map"
     ],
     "asarUnpack": [
       "**/*.node",
@@ -430,11 +433,18 @@
     "@google/genai": "^1.44.0",
     "@grpc/grpc-js": "^1.14.5",
     "@grpc/proto-loader": "^0.8.0",
-    "@huggingface/transformers": "^3.8.1",
+    "@huggingface/transformers": "3.8.1",
     "@radix-ui/react-dialog": "1.1.15",
     "@radix-ui/react-toast": "1.2.15",
     "@tanstack/react-query": "^5.103.1",
     "@tavily/core": "^0.7.13",
+    "@tiptap/core": "3.31.4",
+    "@tiptap/extension-list": "3.31.4",
+    "@tiptap/extensions": "3.31.4",
+    "@tiptap/markdown": "3.31.4",
+    "@tiptap/pm": "3.31.4",
+    "@tiptap/react": "3.31.4",
+    "@tiptap/starter-kit": "3.31.4",
     "@types/qrcode": "^1.5.6",
     "axios": "^1.20.0",
     "better-sqlite3": "12.11.1",

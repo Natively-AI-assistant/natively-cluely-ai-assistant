@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { loadNativeModule } from './nativeModuleLoader';
 import { normalizeSpeechEdge } from './speechEdge';
+import { rendererCaptureFallbackActive } from './fallback/fallbackPolicy';
 
 // RustMicCapture is the native Rust class (napi-rs) that captures microphone input.
 // Uses LAZY init — the native monitor is NOT created in the constructor. Constructing
@@ -10,7 +11,13 @@ import { normalizeSpeechEdge } from './speechEdge';
 // The native monitor is constructed in start() (the only point at which capture is
 // actually requested) and in the post-stop() pre-warm path (gated on preWarmEnabled).
 const NativeModule: any = loadNativeModule();
-const { MicrophoneCapture: RustMicCapture } = NativeModule || {};
+// Without the native module on Windows, Chromium captures instead (renderer
+// fallback, electron/audio/fallback/fallbackPolicy.ts): the stand-in class has
+// the native surface, so everything below is unchanged.
+const RustMicCapture: any = rendererCaptureFallbackActive(!!NativeModule?.MicrophoneCapture)
+    ? (console.warn('[MicrophoneCapture] Native audio module unavailable: using the Chromium capture fallback.'),
+       require('./fallback/rendererCaptureMonitor').RendererMicCapture)
+    : NativeModule?.MicrophoneCapture;
 
 export class MicrophoneCapture extends EventEmitter {
     private monitor: any = null;
@@ -86,6 +93,19 @@ export class MicrophoneCapture extends EventEmitter {
             } else if (typeof this.monitor.get_native_sample_rate === 'function') {
                 return this.monitor.get_native_sample_rate();
             }
+        }
+        return 0;
+    }
+
+    /**
+     * Channels the device delivers before one is kept (2-4 on many laptop mic
+     * arrays). Diagnostics only; the emitted PCM is always mono. 0 when the
+     * monitor cannot say (an older native build, the Chromium fallback).
+     */
+    public getChannelCount(): number {
+        if (this.monitor && typeof this.monitor.getChannelCount === 'function') {
+            const n = this.monitor.getChannelCount();
+            return Number.isFinite(n) ? n : 0;
         }
         return 0;
     }

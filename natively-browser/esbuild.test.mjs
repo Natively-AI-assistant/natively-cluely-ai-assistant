@@ -17,6 +17,10 @@ const rootDir = path.dirname(fileURLToPath(import.meta.url));
 await build({
   entryPoints: [
     path.join(rootDir, 'src', 'extract.ts'),
+    // Rendered formulas -> text (issue #645).
+    path.join(rootDir, 'src', 'math-text.ts'),
+    // Formulas with no text -> an image with the capture (issue #645).
+    path.join(rootDir, 'src', 'formula-sheet.ts'),
     path.join(rootDir, 'src', 'service-worker.ts'),
     // Smart Browser Context v2 pure modules (registry + classifier + extractors).
     path.join(rootDir, 'src', 'capture', 'registry', 'registry.ts'),
@@ -31,9 +35,13 @@ await build({
     path.join(rootDir, 'src', 'meeting-tabs.ts'),
     // What the Meet reader reads from a Meet page.
     path.join(rootDir, 'src', 'meet-dom.ts'),
+    // Which toolbar icon goes with Chrome's theme.
+    path.join(rootDir, 'src', 'toolbar-icon.ts'),
     // Shared DOM helpers for the extractors, and origin match-pattern derivation.
     path.join(rootDir, 'src', 'capture', 'extractors', 'dom-helpers.ts'),
     path.join(rootDir, 'src', 'capture', 'originPattern.ts'),
+    // The popup's shortcut keycaps: ⌘ on a Mac, Ctrl elsewhere.
+    path.join(rootDir, 'src', 'hotkey-label.ts'),
   ],
   bundle: true,
   outdir: path.join(rootDir, 'dist-test'),

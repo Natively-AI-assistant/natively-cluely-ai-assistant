@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useT } from '../i18n';
-import { ToggleLeft, ToggleRight, Search, Calendar, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch, Sparkles, ArrowUpRight } from 'lucide-react';
-import { generateMeetingPDF } from '../utils/pdfGenerator';
-import icon from "./icon.png";
+import { ToggleLeft, ToggleRight, Search, Calendar, Globe, Clock, ChevronRight, LayoutGrid, RefreshCw, Eye, EyeOff, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Bell, DownloadCloud, CheckCircle, AlertCircle, User, Sparkles, ArrowUpRight } from 'lucide-react';
+import { ProfileIntelligenceIcon } from './ProfileIntelligenceIcon';
+import { NativelyWordmark } from './NativelyWordmark';
 import mainui from "../UI_comp/mainui.png";
 import UpcomingCalendarCard from './ui/UpcomingCalendarCard';
+import AssistToday from './assist/AssistToday';
+import type { AssistEvent } from '../types/assist';
 import { useToggleInit } from './settings/useToggleInit';
 import { noteUpcomingEvents, warmCalendarSnapshot } from '../lib/calendarSnapshot.mjs';
 import { plainMeetingTitle } from '../lib/codingAnswer.mjs';
@@ -55,7 +57,10 @@ interface Meeting {
  */
 export type LauncherRequest =
     | { kind: 'search'; seq: number }
-    | { kind: 'meeting'; id: string; seq: number };
+    | { kind: 'meeting'; id: string; seq: number }
+    // The calendar reminder's "Running late" (main: assist/reminderDraftWindow):
+    // back to the list, with that event's draft open.
+    | { kind: 'reminder-draft'; event: AssistEvent; draftKind: 'running_late' | 'no_show' | 'reschedule'; seq: number };
 
 interface LauncherProps {
     request?: LauncherRequest | null;
@@ -385,19 +390,6 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
     // meetings" hit). Cleared by any other navigation so a later open starts on
     // the summary as usual.
     const [selectedMomentMs, setSelectedMomentMs] = useState<number | null>(null);
-    const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
-    const [menuEntered, setMenuEntered] = useState(false);
-
-    useEffect(() => {
-        setMenuEntered(false);
-    }, [activeMenuId]);
-
-    // Global click listener to close menu
-    useEffect(() => {
-        const handleClickOutside = () => setActiveMenuId(null);
-        window.addEventListener('click', handleClickOutside);
-        return () => window.removeEventListener('click', handleClickOutside);
-    }, []);
 
     // Notify parent if we are on the main launcher list view; also feed the
     // orchestrator's homepage-mounted clock.
@@ -448,7 +440,6 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
         setSelectedMeeting(null);
         setSelectedMomentMs(null);
     }, [isGlobalChatOpen]);
-
     // Open a search hit BY ID at the moment it was said. The hit may be older than
     // the 50 meetings this list holds, so it is fetched directly rather than looked
     // up in `meetings`. Returns false when it cannot be opened (caller falls back).
@@ -468,11 +459,18 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
     // search hit is; one that no longer exists (the demo meeting deleted, say)
     // leaves the Launcher where it is.
     const [searchOpenRequest, setSearchOpenRequest] = useState(0);
+    const [reminderDraftRequest, setReminderDraftRequest] = useState<{ event: AssistEvent; kind: 'running_late' | 'no_show' | 'reschedule'; seq: number } | null>(null);
     const handledRequest = useRef(request?.seq ?? 0);
     useEffect(() => {
         if (!request || request.seq === handledRequest.current) return;
         handledRequest.current = request.seq;
         if (request.kind === 'search') setSearchOpenRequest(request.seq);
+        else if (request.kind === 'reminder-draft') {
+            setSelectedMeeting(null);
+            setSelectedMomentMs(null);
+            setIsGlobalChatOpen(false);
+            setReminderDraftRequest({ event: request.event, kind: request.draftKind, seq: request.seq });
+        }
         else void openMeetingAtMoment(request.id);
         // openMeetingAtMoment only reads setters and the IPC bridge.
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -707,7 +705,7 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                             title={t("Profile Intelligence")}
                             className={`p-2 text-text-secondary hover:text-text-primary transition-all duration-300 ${isLight ? 'hover:drop-shadow-[0_0_6px_rgba(0,0,0,0.25)]' : 'hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]'}`}
                         >
-                            <UserSearch size={18} />
+                            <ProfileIntelligenceIcon size={18} />
                         </button>
                         
                         <AnimatePresence>
@@ -737,7 +735,7 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                             ? 'bg-blue-500 bg-opacity-10 text-blue-500'
                                             : 'bg-blue-500 bg-opacity-15 text-blue-400'
                                         }`}>
-                                            <UserSearch size={18} />
+                                            <ProfileIntelligenceIcon size={18} />
                                         </div>
                                         <div className="flex-1 pt-[2px]">
                                             <h3 className="text-[14px] font-semibold tracking-[-0.015em] mb-1 flex items-center gap-2">
@@ -897,7 +895,9 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                         title={t("Settings")}
                         className={`p-2 text-text-secondary hover:text-text-primary transition-all duration-300 ${isLight ? 'hover:drop-shadow-[0_0_6px_rgba(0,0,0,0.25)]' : 'hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]'}`}
                     >
-                        <Settings size={18} />
+                        <svg width={18} height={18} viewBox="1.2 1.2 21.6 21.6" fill="none">
+                            <path fillRule="evenodd" d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0Z" fill="currentColor" opacity="0.9"/>
+                        </svg>
                     </button>
                     {!isMac && <WindowControls />}
                 </div>
@@ -956,7 +956,11 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                 className={`relative h-full w-full ${meetingChatOpen ? '!transform-none' : ''}`}
                                 variants={contentVariants}
                             >
+                                {/* Keyed by meeting: the page copies its meeting into state once, so
+                                    opening another meeting over an open page (the notes window's
+                                    "Open meeting", a search hit) kept the old page and its Ask. */}
                                 <MeetingDetails
+                                    key={selectedMeeting.id}
                                     meeting={selectedMeeting}
                                     initialMomentMs={selectedMomentMs ?? undefined}
                                     onBack={handleBack}
@@ -985,7 +989,11 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                     {/* 1.5. Hero Header (Title + Controls + CTA) */}
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-4">
-                                            <h1 className="text-3xl font-celeb-light font-medium text-text-primary tracking-wide drop-shadow-sm">{t('My Natively')}</h1>
+                                            {/* The website's and the extension's "natively" wordmark, at the
+                                                navbar's 27px; currentColor, so it follows the theme. */}
+                                            <h1 className="m-0 shrink-0 text-text-primary">
+                                                <NativelyWordmark height={27} className="block" />
+                                            </h1>
 
                                             {/* Refresh Button */}
                                             <button
@@ -1171,9 +1179,16 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                                             transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
                                                             className="flex items-center gap-3"
                                                         >
-                                                            <img
-                                                                src={icon} alt="Logo" className="w-[18px] h-[18px] object-contain brightness-0 invert drop-shadow-[0_1px_2px_rgba(0,0,0,0.1)] opacity-90"
-                                                            />
+                                                            {/* The brand mark (brand/natively-mark-white.svg) drawn
+                                                                inline: its ring and strokes are heavier than icon.png's,
+                                                                which read thin at 18px on this button. icon.png stays
+                                                                as it is for the other screens that use it. */}
+                                                            <svg
+                                                                viewBox="106 106 812 812" aria-hidden
+                                                                className="w-[18px] h-[18px] shrink-0 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.1)] opacity-90"
+                                                            >
+                                                                <path fill="currentColor" d="M512 106 A406 406 0 1 1 512 918 A406 406 0 1 1 512 106 Z M512 181 A331 331 0 1 0 512 843 A331 331 0 1 0 512 181 Z M288 194.91 H363 V829.09 H288 Z M661 194.91 H736 V829.09 H661 Z M269.75 211 L359.44 211 L754.25 813 L664.56 813 Z" />
+                                                            </svg>
                                                             <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)] text-[20px] leading-none">
                                                                 {t('Start Natively')}
                                                             </span>
@@ -1204,6 +1219,7 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                             meetings={visibleMeetings}
                                             totalCount={upcomingMeetings.length}
                                             loading={!eventsLoaded}
+                                            onOpenSettings={() => onOpenSettings('calendar')}
                                         />
                                     </div>
                                 </div>
@@ -1214,16 +1230,31 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                 <section className="px-8 py-8 min-h-full">
                                     <div className="max-w-4xl mx-auto space-y-8">
 
+                                        {/* The list holds meeting names only. The one thing above it is
+                                            the calendar reminder's "Running late" draft, shown only when
+                                            the reminder asks for it (assist/AssistToday). */}
+                                        <AssistToday
+                                            isLight={isLight}
+                                            draftRequest={reminderDraftRequest}
+                                        />
+
                                         {/* Iterating Date Groups */}
                                         {sortedGroups.map((label) => (
                                             <section key={label}>
                                                 <h3 className="text-[13px] font-medium text-text-secondary mb-3 pl-1">{label}</h3>
                                                 <div className="space-y-1">
+                                                    {/* A deleted row fades and folds its height away (a close:
+                                                        --duration-fast on --ease-smooth-out) so the rows below
+                                                        slide up instead of jumping. Reduced motion just fades. */}
+                                                    <AnimatePresence initial={false}>
                                                     {groupedMeetings[label].map((m) => (
                                                         <motion.div
                                                             key={m.id}
                                                             layoutId={`meeting-${m.id}`}
-                                                            className="group relative flex items-center justify-between px-3 py-2 rounded-lg bg-transparent hover:bg-bg-elevated transition-colors"
+                                                            exit={prefersReducedMotion
+                                                                ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0.15 } }
+                                                                : { opacity: 0, height: 0, paddingTop: 0, paddingBottom: 0, marginTop: 0, pointerEvents: 'none', transition: { duration: 0.25, ease: [0.22, 1, 0.36, 1] } }}
+                                                            className="group relative flex items-center justify-between px-3 py-2 rounded-lg bg-transparent hover:bg-bg-elevated transition-colors overflow-hidden"
                                                             onClick={() => handleOpenMeeting(m)}
                                                         >
                                                             <div className={`font-medium text-[14px] max-w-[60%] truncate ${m.title === 'Processing...' ? 'text-blue-400 italic animate-pulse' : 'text-text-primary'}`}>
@@ -1233,7 +1264,7 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                                             {/* Time & Duration Section */}
                                                             <div className="flex items-center gap-4">
                                                                 {m.title === 'Processing...' ? (
-                                                                    <div className="flex items-center gap-2 transition-all duration-200 ease-out group-hover:opacity-0 group-hover:translate-x-2 delayed-hover-exit">
+                                                                    <div className="flex items-center gap-2 transition-[opacity,transform] duration-[250ms] ease-sculpted group-hover:duration-150 group-hover:opacity-0 group-hover:translate-x-1 motion-reduce:group-hover:translate-x-0">
                                                                         <RefreshCw size={12} className="animate-spin text-blue-500" />
                                                                         <span className="text-xs text-blue-500 font-medium">{t('Finalizing...')}</span>
                                                                     </div>
@@ -1244,92 +1275,37 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                                                         </span>
 
                                                                         {/* Time Text (Should fade out on hover) */}
-                                                                        <span className="text-[13px] text-text-secondary font-medium min-w-[60px] text-right transition-all duration-200 ease-out group-hover:opacity-0 group-hover:translate-x-2 delayed-hover-exit">
+                                                                        <span className="text-[13px] text-text-secondary font-medium min-w-[60px] text-right transition-[opacity,transform] duration-[250ms] ease-sculpted group-hover:duration-150 group-hover:opacity-0 group-hover:translate-x-1 motion-reduce:group-hover:translate-x-0">
                                                                             {formatTime(m.date)}
                                                                         </span>
                                                                     </>
                                                                 )}
                                                             </div>
 
-                                                            {/* Context Menu Trigger (Slides in on hover) */}
-                                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 translate-x-4 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:translate-x-0">
+                                                            {/* Delete (slides in on hover). Export lives inside the meeting
+                                                                note, so the row only carries delete, and one click deletes.
+                                                                Hover-in is a 250ms slide from 8px with a 2px blur while the
+                                                                time steps 4px aside in 150ms; hover-out is a quick 150ms
+                                                                with no blur so it gets out of the way. */}
+                                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 translate-x-2 blur-[2px] transition-[opacity,transform,filter] duration-150 ease-sculpted group-hover:duration-[250ms] group-hover:opacity-100 group-hover:translate-x-0 group-hover:blur-0 motion-reduce:translate-x-0 motion-reduce:blur-0">
                                                                 <button
-                                                                    className="p-1.5 text-text-secondary hover:text-text-primary transition-colors"
-                                                                    onClick={(e) => {
+                                                                    className={`h-[23px] px-3 rounded-full text-[12px] font-medium leading-none whitespace-nowrap text-text-secondary transition-[color,background-color,transform] duration-150 ease-sculpted active:scale-[0.96] motion-reduce:active:scale-100 ${isLight ? 'bg-black/[0.05] hover:bg-red-500/10 hover:text-red-500' : 'bg-white/[0.08] hover:bg-red-500/15 hover:text-red-400'}`}
+                                                                    onClick={async (e) => {
                                                                         e.stopPropagation();
-                                                                        setActiveMenuId(activeMenuId === m.id ? null : m.id);
+                                                                        if (window.electronAPI && window.electronAPI.deleteMeeting) {
+                                                                            const success = await window.electronAPI.deleteMeeting(m.id);
+                                                                            if (success) {
+                                                                                setMeetings(prev => prev.filter(meeting => meeting.id !== m.id));
+                                                                            }
+                                                                        }
                                                                     }}
                                                                 >
-                                                                    <MoreHorizontal size={16} />
+                                                                    {t('Delete')}
                                                                 </button>
                                                             </div>
-
-                                                            {/* Dropdown Menu */}
-                                                            <AnimatePresence>
-                                                                {activeMenuId === m.id && (
-                                                                    <motion.div
-                                                                        key={`meeting-menu-${m.id}`}
-                                                                        initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                                                                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                                                                        exit={{ opacity: 0, scale: 0.95, y: 5 }}
-                                                                        transition={{ duration: 0.1 }}
-                                                                        className={`absolute right-0 top-full mt-1 w-[90px] backdrop-blur-xl rounded-lg shadow-2xl z-50 overflow-hidden border ${isLight ? 'bg-bg-elevated border-border-muted shadow-[0_8px_24px_rgba(0,0,0,0.12)]' : 'bg-[#1E1E1E]/80 border-white/10'}`}
-                                                                        onClick={(e) => e.stopPropagation()}
-                                                                        onMouseEnter={() => setMenuEntered(true)}
-                                                                        onMouseLeave={() => {
-                                                                            if (menuEntered) setActiveMenuId(null);
-                                                                        }}
-                                                                    >
-                                                                        <div className="p-1 flex flex-col gap-0.5">
-                                                                            <button
-                                                                                className={`w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-text-primary rounded-lg transition-colors text-left ${isLight ? 'hover:bg-bg-item-surface' : 'hover:bg-white/10'}`}
-                                                                                onClick={async () => {
-                                                                                    setActiveMenuId(null);
-                                                                                    analytics.trackPdfExported();
-                                                                                    // Resolve full details when available, else fall back to the
-                                                                                    // list item. Wrapped in one try/catch so a failure anywhere —
-                                                                                    // including the CJK-font load inside generateMeetingPDF — is
-                                                                                    // surfaced instead of becoming an unhandled rejection.
-                                                                                    let target = m;
-                                                                                    try {
-                                                                                        if (window.electronAPI && window.electronAPI.getMeetingDetails) {
-                                                                                            const fullMeeting = await window.electronAPI.getMeetingDetails(m.id).catch((e) => {
-                                                                                                console.error("Failed to fetch details for PDF", e);
-                                                                                                return null;
-                                                                                            });
-                                                                                            if (fullMeeting) target = fullMeeting;
-                                                                                        }
-                                                                                        await generateMeetingPDF(target);
-                                                                                    } catch (e) {
-                                                                                        console.error("Failed to export meeting PDF", e);
-                                                                                    }
-                                                                                }}
-                                                                            >
-                                                                                <Download size={13} />
-                                                                                {t('Export')}
-                                                                            </button>
-                                                                            <button
-                                                                                className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-red-400 hover:bg-red-500/10 hover:text-red-300 rounded-lg transition-colors text-left"
-                                                                                onClick={async () => {
-                                                                                    if (window.electronAPI && window.electronAPI.deleteMeeting) {
-                                                                                        const success = await window.electronAPI.deleteMeeting(m.id);
-                                                                                        if (success) {
-                                                                                            // Optimistic update or refetch
-                                                                                            setMeetings(prev => prev.filter(meeting => meeting.id !== m.id));
-                                                                                        }
-                                                                                    }
-                                                                                    setActiveMenuId(null);
-                                                                                }}
-                                                                            >
-                                                                                <Trash2 size={13} />
-                                                                                {t('Delete')}
-                                                                            </button>
-                                                                        </div>
-                                                                    </motion.div>
-                                                                )}
-                                                            </AnimatePresence>
                                                         </motion.div>
                                                     ))}
+                                                    </AnimatePresence>
                                                 </div>
                                             </section>
                                         ))}
@@ -1371,7 +1347,9 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                         {/* Liquid Icon Orb */}
                         <div className="relative flex items-center justify-center w-9 h-9 rounded-full bg-gradient-to-b from-blue-400/20 to-blue-600/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] border border-white/5">
                             <div className="absolute inset-0 rounded-full bg-blue-500/20 blur-md" />
-                            <RefreshCw size={15} className="text-blue-300 animate-[spin_2s_linear_infinite] drop-shadow-[0_0_5px_rgba(59,130,246,0.6)]" />
+                            {/* Light: a darker blue and no glow, as ProviderChangeNotice's ORB does;
+                                the dark theme's pale blue-300 vanished into the pale disc. */}
+                            <RefreshCw size={15} className={`relative animate-[spin_2s_linear_infinite] ${isLight ? 'text-blue-600' : 'text-blue-300 drop-shadow-[0_0_5px_rgba(59,130,246,0.6)]'}`} />
                         </div>
 
                         {/* Text Content */}
@@ -1395,6 +1373,7 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                 }}
                 initialQuery={submittedGlobalQuery}
             />
+
         </div >
     );
 };

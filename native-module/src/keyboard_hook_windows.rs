@@ -62,6 +62,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use crate::edit_shortcut::{windows_edit_key, FLAG_CTRL as EDIT_FLAG_CTRL};
 use crate::app_chord::{
     app_chords_from_inputs, match_app_chord, AppChord, AppChordInput, MOD_ALT, MOD_CTRL, MOD_SHIFT,
 };
@@ -336,18 +337,15 @@ unsafe fn keyboard_hook_inner(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
             // Deliver on the SAME threadsafe callback as ordinary keys, tagged
             // with the action id so StealthKeyboardManager dispatches it instead
             // of typing it into the overlay.
-            let delivered = send_payload(&state, CapturedKey {
+            if let Some(swallowed) = deliver_and_swallow(&state, vk, CapturedKey {
                 key_code: 0,
                 chars: String::new(),
                 flags: 0,
                 is_key_down: true,
                 is_outside_mouse_down: false,
                 app_chord_id: id,
-            });
-            if delivered {
-                let mut ups = state.swallowed_ups.lock().unwrap_or_else(|p| p.into_inner());
-                ups.insert(vk);
-                return LRESULT(1);
+            }) {
+                return swallowed;
             }
             // No live callback ⟹ nowhere to dispatch. Fall through so the OS /
             // RegisterHotKey can still handle it — never swallow a key with
@@ -361,6 +359,32 @@ unsafe fn keyboard_hook_inner(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
     // falls past this and swallows typing into the overlay below.)
     if state.shortcut_only.load(Ordering::Acquire) {
         return pass();
+    }
+
+    // ── EDITING SHORTCUTS (Ctrl+V/A/C/X) ──
+    // The pass-through below sends every Ctrl combo to the foreground app, which
+    // made Ctrl+V paste into the meeting app instead of the overlay being typed
+    // in. Keep just these four: deliver them tagged with the Ctrl flag (the
+    // renderer runs paste/select-all/copy/cut) and swallow the down and its up,
+    // like an app chord. App chords matched above still win. Ctrl alone: not
+    // with Alt, so AltGr text is untouched, and not with Shift, so Ctrl+Shift
+    // shortcuts still reach the meeting app. Ctrl+Backspace / Ctrl+Delete come
+    // as Backspace (mac keycode 51) with the Ctrl flag, so the renderer deletes
+    // the last word (windows_edit_key has the rules).
+    if is_key_down {
+        if let Some((key_code, chars)) = windows_edit_key(vk, ctrl, alt, modifier_held(VK_SHIFT)) {
+            if let Some(swallowed) = deliver_and_swallow(&state, vk, CapturedKey {
+                key_code,
+                chars: chars.to_string(),
+                flags: EDIT_FLAG_CTRL,
+                is_key_down: true,
+                is_outside_mouse_down: false,
+                app_chord_id: String::new(),
+            }) {
+                return swallowed;
+            }
+            // Nowhere to deliver: let the OS have it rather than lose it.
+        }
     }
 
     if (ctrl || alt) && !altgr {
@@ -645,6 +669,18 @@ fn send_payload(state: &HookState, payload: CapturedKey) -> bool {
         }
         None => false,
     }
+}
+
+/// Deliver a key-down the hook keeps from the foreground app (an app chord or an
+/// editing key), then swallow it and remember to swallow its key-up. `None` when
+/// there was no live callback: the caller passes the key on, since a swallowed
+/// key with nowhere to go is lost input.
+fn deliver_and_swallow(state: &HookState, vk: u32, payload: CapturedKey) -> Option<LRESULT> {
+    if !send_payload(state, payload) {
+        return None;
+    }
+    state.swallowed_ups.lock().unwrap_or_else(|p| p.into_inner()).insert(vk);
+    Some(LRESULT(1))
 }
 
 #[inline]

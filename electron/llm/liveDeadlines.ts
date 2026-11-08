@@ -21,6 +21,8 @@
 // 134-second hang). See raceStreamWithDeadline() below.
 
 import type { AnswerType } from './AnswerPlanner';
+import { withStreamActivity, type StreamActivity } from './streamActivity';
+export { noteStreamActivity } from './streamActivity';
 
 /** First-useful-token budget by difficulty (ms). Mirrors the planner targets. */
 export const LIVE_FIRST_USEFUL_BUDGET_MS = {
@@ -412,6 +414,20 @@ export function regenerationBudgetMs(opts: { routeBudgetMs: number; elapsedMs: n
 }
 
 export const LIVE_INTER_TOKEN_STALL_MS = 8000;
+/**
+ * Ceiling on answer text held back by a transport that is visibly alive (#680).
+ *
+ * The stall guard still fires after LIVE_INTER_TOKEN_STALL_MS of silence. It
+ * waits longer only while the transport keeps receiving bytes for this stream
+ * (streamActivity.ts; today only Codex reports them), and never longer than
+ * this since the last answer text. A connection that sends nothing gets no
+ * extension, and keepalives alone cannot hold a stuck request open past it.
+ *
+ * Sized off sanitized Codex traces (2026-10-25): text held for 4.2-8.2 s in 5 of
+ * 8 gpt-6-luna coding answers, 17.5 s once on gpt-6.1-sol, each hold ending in
+ * the complete rest of the answer. 20 s clears every one of them.
+ */
+export const LIVE_HELD_OUTPUT_MAX_MS = 20000;
 /** Benchmark per-question hard timeout — the outer wrapper that must never be exceeded. */
 export const BENCHMARK_PER_QUESTION_HARD_TIMEOUT_MS = 30000;
 
@@ -689,6 +705,12 @@ export interface StreamObservation {
   firstUsefulBudgetMs: number;
   /** The stall budget this stream actually ran under. */
   interTokenStallMs: number;
+  /**
+   * Longest wait past `interTokenStallMs` that transport activity bought
+   * (LIVE_HELD_OUTPUT_MAX_MS). 0 when the stall budget was never exceeded;
+   * absent on observations built outside raceStreamWithDeadline.
+   */
+  heldPastStallMs?: number;
   /** True when the deadline was disabled (prefetch) and nothing could fire. */
   speculative: boolean;
 }
@@ -717,6 +739,11 @@ export async function raceStreamWithDeadline(opts: {
   onFirstUsefulTimeout?: () => void;
   /** Called on an inter-token stall after streaming began (for telemetry). */
   onStallTimeout?: () => void;
+  /**
+   * How long after the last answer text the guard may keep waiting while the
+   * transport still reports activity. Defaults to LIVE_HELD_OUTPUT_MAX_MS.
+   */
+  heldOutputMaxMs?: number;
   /** Bail predicate (e.g. superseded by a newer generation). */
   shouldAbort?: () => boolean;
   /**
@@ -746,7 +773,7 @@ export async function raceStreamWithDeadline(opts: {
   const {
     stream, firstUsefulDeadlineMs: fuMs, interTokenStallMs = LIVE_INTER_TOKEN_STALL_MS,
     isSpeculative = false, onToken, isUsefulYet, onFirstUsefulTimeout, onStallTimeout, shouldAbort, onCleanup,
-    observe,
+    observe, heldOutputMaxMs = LIVE_HELD_OUTPUT_MAX_MS,
   } = opts;
   const iterator = (stream as AsyncIterable<string>)[Symbol.asyncIterator]();
   const start = Date.now();
@@ -760,6 +787,24 @@ export async function raceStreamWithDeadline(opts: {
   let chunkCount = 0;
   let outputChars = 0;
   const interChunkGapsMs: number[] = [];
+  // Bytes the transport received for THIS stream (#680). Only answer text
+  // resets the stall clock; later activity can extend it, up to
+  // heldOutputMaxMs after the last text. Never before the first useful token.
+  const activity: StreamActivity = { lastAt: null };
+  let heldPastStallMs = 0;
+  const noteHeld = (now: number) => {
+    if (activity.lastAt == null || activity.lastAt <= lastTokenAt) return;
+    heldPastStallMs = Math.max(heldPastStallMs, now - lastTokenAt - interTokenStallMs);
+  };
+  const stallDeadlineAt = (): number => {
+    const silentAt = lastTokenAt + interTokenStallMs;
+    const activeAt = activity.lastAt;
+    if (activeAt == null || activeAt <= lastTokenAt) return silentAt;
+    return Math.max(silentAt, Math.min(activeAt + interTokenStallMs, lastTokenAt + heldOutputMaxMs));
+  };
+  // A next() still pending when the guard chose to keep waiting. Racing it
+  // again rather than calling next() a second time keeps one pull in flight.
+  let pendingNext: Promise<IteratorResult<string>> | null = null;
   // Fire-and-forget cleanup. A generator stuck in `await sleep()` (a hung
   // provider) will NOT honor iterator.return() until its await unblocks, so we
   // must NOT `await` the cleanup on the deadline path — that would re-introduce
@@ -785,6 +830,7 @@ export async function raceStreamWithDeadline(opts: {
         error,
         firstUsefulBudgetMs: fuMs,
         interTokenStallMs,
+        heldPastStallMs,
         speculative: isSpeculative,
       });
     } catch { /* measurement must never break a turn */ }
@@ -799,7 +845,7 @@ export async function raceStreamWithDeadline(opts: {
         if (!useful) useful = isUsefulYet();
         const remaining = !useful
           ? Math.max(50, fuMs - (Date.now() - start))
-          : Math.max(50, interTokenStallMs - (Date.now() - lastTokenAt));
+          : Math.max(50, stallDeadlineAt() - Date.now());
         let timer: ReturnType<typeof setTimeout> | undefined;
         const deadline = new Promise<typeof DEADLINE>((r) => { timer = setTimeout(() => r(DEADLINE), remaining); });
         // DEFUSE the racing next() promise: if the deadline wins, this promise is
@@ -807,8 +853,12 @@ export async function raceStreamWithDeadline(opts: {
         // rejects (timeout / 429 / socket reset) it would surface as an
         // unhandledRejection (fatal in Electron main). Attach a no-op catch so the
         // loser can never be an unhandled rejection (code-review 2026-06-05, HIGH).
-        const nextP = iterator.next();
-        nextP.catch(() => { /* loser of the race — defused */ });
+        let nextP: Promise<IteratorResult<string>> | null = pendingNext;
+        if (!nextP) {
+          nextP = withStreamActivity(activity, () => iterator.next());
+          nextP.catch(() => { /* loser of the race — defused */ });
+        }
+        pendingNext = nextP;
         res = await Promise.race([nextP, deadline]);
         if (timer) clearTimeout(timer);
         if (res === DEADLINE) {
@@ -817,13 +867,19 @@ export async function raceStreamWithDeadline(opts: {
             onFirstUsefulTimeout?.();
             return 'first_useful_timeout';
           }
+          // The transport received bytes since the deadline was set: the
+          // answer is held, not stalled. Wait on the same pull.
+          if (stallDeadlineAt() > Date.now()) continue;
+          noteHeld(Date.now());
           cleanup('stall_timeout');
           onStallTimeout?.();
           return 'stall_timeout';
         }
+        pendingNext = null;
       } else {
         res = await iterator.next();
       }
+      if (useful && !isSpeculative) noteHeld(Date.now());
       if (res.done) { cleanup('done'); return 'done'; }
       const now = Date.now();
       if (firstTokenAt == null) firstTokenAt = now;

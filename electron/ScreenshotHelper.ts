@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from "uuid"
 import util from "util"
 import sharp, { type OverlayOptions } from "sharp"
 import { exec as execShell } from "child_process"
+import { FORMULA_IMAGE_PREFIX } from "./services/formulaScreenshotHandoff"
 
 // Module-level: promisified shell exec created once per process lifetime.
 // Uses the shell-capable exec variant (not execFile) because Linux screenshot
@@ -480,6 +481,14 @@ export class ScreenshotHelper {
   private screenshotQueue: string[] = []
   private extraScreenshotQueue: string[] = []
   private readonly MAX_SCREENSHOTS = 5
+  // The extension's formula images (#645), one list per capture, kept apart
+  // from the queues so they never push out the user's own screenshots.
+  private formulaImageCaptures: string[][] = []
+  // The first and last formula number each of those shows.
+  private formulaImageRanges = new Map<string, [number, number]>()
+  // The newest capture's, and the one before it in case an answer is still
+  // reading those.
+  private readonly MAX_FORMULA_IMAGE_CAPTURES = 2
 
   private readonly screenshotDir: string
   private readonly extraScreenshotDir: string
@@ -848,6 +857,40 @@ export class ScreenshotHelper {
     return imagePath
   }
 
+  /**
+   * Save one page capture's formula images (#645). They join neither queue, so
+   * they never push out a screenshot; the captures before the last two are
+   * deleted.
+   */
+  public async addFormulaImages(
+    images: Array<{ data: Buffer; ext: 'jpg' | 'png' | 'webp'; formulas?: [number, number] }>,
+  ): Promise<string[]> {
+    const dir = this.view === 'queue' ? this.screenshotDir : this.extraScreenshotDir
+    const paths: string[] = []
+    try {
+      for (const image of images) {
+        const imagePath = path.join(dir, `${FORMULA_IMAGE_PREFIX}${uuidv4()}.${image.ext}`)
+        await fs.promises.writeFile(imagePath, image.data)
+        paths.push(imagePath)
+        if (image.formulas) this.formulaImageRanges.set(imagePath, image.formulas)
+      }
+    } catch (error) {
+      paths.forEach((p) => this.formulaImageRanges.delete(p))
+      await Promise.all(paths.map((p) => fs.promises.unlink(p).catch(() => {})))
+      throw error
+    }
+    this.formulaImageCaptures.push(paths)
+    const removed = this.formulaImageCaptures.splice(0, Math.max(0, this.formulaImageCaptures.length - this.MAX_FORMULA_IMAGE_CAPTURES)).flat()
+    removed.forEach((p) => this.formulaImageRanges.delete(p))
+    await Promise.all(removed.map((p) => fs.promises.unlink(p).catch(() => {})))
+    return paths
+  }
+
+  /** The first and last formula number a formula image shows, if known. */
+  public formulaRangeOf(imagePath: string): [number, number] | undefined {
+    return this.formulaImageRanges.get(imagePath)
+  }
+
   public getView(): "queue" | "solutions" {
     return this.view
   }
@@ -887,6 +930,12 @@ export class ScreenshotHelper {
       })
     })
     this.extraScreenshotQueue = []
+
+    this.formulaImageCaptures.flat().forEach((imagePath) => {
+      fs.unlink(imagePath, () => {})
+    })
+    this.formulaImageCaptures = []
+    this.formulaImageRanges.clear()
   }
 
   /**
@@ -954,6 +1003,8 @@ export class ScreenshotHelper {
   ): Promise<{ success: boolean; error?: string }> {
     try {
       await fs.promises.unlink(path)
+      this.formulaImageCaptures = this.formulaImageCaptures.map((paths) => paths.filter((p) => p !== path))
+      this.formulaImageRanges.delete(path)
       if (this.view === "queue") {
         this.screenshotQueue = this.screenshotQueue.filter(
           (filePath) => filePath !== path

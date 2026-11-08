@@ -88,6 +88,12 @@ export interface MeetingEndDetectorOptions {
     checkWords?: number;
     /** Fewer words than this: nothing to judge, the model is not asked. */
     minCheckWords?: number;
+    /**
+     * A meeting younger than this never ends by the release or model layers
+     * (a mic blip in the first minutes is not an ending); only inactivity can
+     * stop it. 0 here by default; the app passes 3 minutes.
+     */
+    minMeetingMs?: number;
     /** The inactivity stop is off (Undetectable: a stop would show the launcher on its own). */
     inactivityEnabled?: boolean;
 }
@@ -139,6 +145,8 @@ export class MeetingEndDetector {
             resumeCooldownMs: options.resumeCooldownMs ?? 60_000,
             checkWords: options.checkWords ?? 100,
             minCheckWords: options.minCheckWords ?? 8,
+            // Off here by default (the detector's own contract); the app passes 3 minutes (wireMeetingAutoStop).
+            minMeetingMs: options.minMeetingMs ?? 0,
             inactivityEnabled: options.inactivityEnabled ?? true,
         };
         this.now = deps.now ?? Date.now;
@@ -394,6 +402,11 @@ export class MeetingEndDetector {
         }
         if (count < this.o.minCheckWords) {
             this.log(`${this.callApp} released the microphone (${why}); too little transcript to judge, falling back to the inactivity stop`);
+            return;
+        }
+        const age = (this.deps.now?.() ?? Date.now()) - this.startedAt;
+        if (age < this.o.minMeetingMs) {
+            this.log(`${this.callApp} released the microphone (${why}); the meeting is only ${Math.round(age / 1000)} s old, too early to end it, falling back to the inactivity stop`);
             return;
         }
         this.checkInFlight = true;

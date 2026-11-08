@@ -6,7 +6,7 @@ These Terms &amp; Conditions ("**Terms**") govern your use of **Natively** — i
 
 By installing the app, clicking "Continue" on the startup screen, activating a Pro license, saving a Natively API key, or otherwise using the Service, you **agree to these Terms** and to the [Refund Policy](https://natively.software/refundpolicy) and [Privacy Policy](https://natively.software/privacy), each of which is incorporated by reference. If you don't agree to all of them, please don't use the Service.
 
-The Service is built and operated by a single developer ("**Natively**", "**we**", "**us**"). We've tried to write these Terms in plain English. If anything is unclear, email **natively.contact@gmail.com**. We aim to reply within **24–72 hours on weekdays**. We may not respond on weekends or Indian public holidays.
+The Service is built and operated by a single developer ("**Natively**", "**we**", "**us**"). We've tried to write these Terms in plain English. If anything is unclear, email **legal@heynatively.com**. We aim to reply within **24–72 hours on weekdays**. We may not respond on weekends or Indian public holidays.
 
 > **Please read sections 11 (AI outputs), 12 (honest feedback vs. defamation), 14 (disclaimers), 16 (limitation of liability), and 20 (governing law &amp; dispute resolution) carefully — they limit our liability, restrict the kind of statements you can make about us, and require disputes to be resolved in a specific way.**
 
@@ -27,7 +27,7 @@ You may use the desktop app with your own provider keys (BYOK) without buying ei
 
 ### 1.3 Heads-up on reliability
 
-Because Natively integrates many third-party services, the surface area is wider than a typical closed-source product, and once in a while something may not behave exactly as expected. We treat reports as a priority and ship fixes regularly, often in the next update. **Please report bugs at `natively.contact@gmail.com` rather than opening a payment dispute or publicly characterising a bug as misconduct** — see section 12 (honest feedback vs. defamation) and the [Refund Policy](https://natively.software/refundpolicy) for more.
+Because Natively integrates many third-party services, the surface area is wider than a typical closed-source product, and once in a while something may not behave exactly as expected. We treat reports as a priority and ship fixes regularly, often in the next update. **Please report bugs at `support@heynatively.com` rather than opening a payment dispute or publicly characterising a bug as misconduct** — see section 12 (honest feedback vs. defamation) and the [Refund Policy](https://natively.software/refundpolicy) for more.
 
 ### 1.4 Beta &amp; preview features
 
@@ -116,7 +116,7 @@ Natively does not claim any ownership of your outputs, does not use your outputs
 
 ### 3.6 Bulk, team, or educational licensing
 
-Bulk, team, multi-seat, classroom, bootcamp, or institutional licensing is not provided through the standard checkout. If you'd like to license Pro for more than one person — for example, for a small team, a hiring agency, a coaching practice, a bootcamp cohort, or a university course — please email **natively.contact@gmail.com** and we'll set up a separate written arrangement. Standard single-user licenses purchased through the website may not be deployed to multiple individuals.
+Bulk, team, multi-seat, classroom, bootcamp, or institutional licensing is not provided through the standard checkout. If you'd like to license Pro for more than one person — for example, for a small team, a hiring agency, a coaching practice, a bootcamp cohort, or a university course — please email **sales@heynatively.com** and we'll set up a separate written arrangement. Standard single-user licenses purchased through the website may not be deployed to multiple individuals.
 
 ---
 
@@ -237,7 +237,7 @@ Because Natively is local-first, **backing up your local Natively data (database
 
 ### 8.6 Security &amp; vulnerability reporting
 
-Please do **not** report security vulnerabilities through public GitHub issues or social media. Send security reports to **natively.contact@gmail.com** following the disclosure process described in our [Security Policy](https://github.com/evinjohnn/natively-cluely-ai-assistant/blob/main/SECURITY.md). We acknowledge security reports within 72 hours and treat them as a priority.
+Please do **not** report security vulnerabilities through public GitHub issues or social media. Send security reports to **security@heynatively.com** following the disclosure process described in our [Security Policy](https://github.com/evinjohnn/natively-cluely-ai-assistant/blob/main/SECURITY.md). We acknowledge security reports within 72 hours and treat them as a priority.
 
 ### 8.7 Communications from us
 
@@ -342,7 +342,7 @@ What is not protected, and what may give rise to legal action under the **defama
 - Continuing to repeat statements about Natively in public after we have, in good faith and with evidence, **brought to your attention that they are false**, and you have no reasonable basis to continue.
 - Coordinated brigading, mass-reporting, or organised harassment campaigns against the Service or the developer based on knowingly false claims.
 
-**Important clarification:** A small bug, a confusing UI, a feature you couldn't figure out, or a result that disappointed you is not, on its own, evidence of misconduct on our part. We'd genuinely rather hear about it at `natively.contact@gmail.com` and fix it than read a public accusation that we acted in bad faith. Please give us that chance.
+**Important clarification:** A small bug, a confusing UI, a feature you couldn't figure out, or a result that disappointed you is not, on its own, evidence of misconduct on our part. We'd genuinely rather hear about it at `support@heynatively.com` and fix it than read a public accusation that we acted in bad faith. Please give us that chance.
 
 ### 12.3 Remedies
 
@@ -350,7 +350,7 @@ Where conduct of the kind described in section 12.2 causes us reputational, comm
 
 ### 12.4 Takedown procedure
 
-If you believe content posted about Natively is false, please email **natively.contact@gmail.com** with a description of the content, where it is posted, and the basis on which you believe it is inaccurate. We will respond within 24–72 hours on weekdays.
+If you believe content posted about Natively is false, please email **legal@heynatively.com** with a description of the content, where it is posted, and the basis on which you believe it is inaccurate. We will respond within 24–72 hours on weekdays.
 
 ---
 
@@ -478,7 +478,7 @@ We may give you legal notice by emailing the address associated with your Native
 
 ### 19.2 Notices to us
 
-You must give us legal notice in writing by email to **natively.contact@gmail.com**, with a clear subject line indicating that the message is a legal notice. Notice is deemed given when we acknowledge receipt by reply. Email is the **exclusive** channel for valid legal notice — service through social media, GitHub issues, comments, third-party platforms, or any other channel does not constitute valid notice.
+You must give us legal notice in writing by email to **legal@heynatively.com**, with a clear subject line indicating that the message is a legal notice. Notice is deemed given when we acknowledge receipt by reply. Email is the **exclusive** channel for valid legal notice — service through social media, GitHub issues, comments, third-party platforms, or any other channel does not constitute valid notice.
 
 ---
 
@@ -490,7 +490,7 @@ These Terms, the Refund Policy, the Privacy Policy, and any dispute, claim, or c
 
 ### 20.2 Step 1 — try to resolve it directly
 
-Before commencing any formal dispute-resolution process, you agree to **first contact us at `natively.contact@gmail.com`** with a written description of the dispute and a proposed resolution, and to allow us **at least thirty (30) days** to respond and attempt to resolve the dispute in good faith. We agree to do the same if we have a dispute with you.
+Before commencing any formal dispute-resolution process, you agree to **first contact us at `legal@heynatively.com`** with a written description of the dispute and a proposed resolution, and to allow us **at least thirty (30) days** to respond and attempt to resolve the dispute in good faith. We agree to do the same if we have a dispute with you.
 
 ### 20.3 Step 2 — exclusive forum / arbitration
 
@@ -567,7 +567,7 @@ We may update the Service and these Terms over time as the product evolves. Mate
 
 For anything to do with these Terms, refunds, billing, abuse reports, defamation concerns, security disclosures, legal notices, or general questions:
 
-**Email:** natively.contact@gmail.com
+**Email:** legal@heynatively.com
 
 We aim to reply within **24–72 hours on weekdays**. We may not respond on weekends or Indian public holidays — if you write in over a weekend, please expect a reply early the following week.
 

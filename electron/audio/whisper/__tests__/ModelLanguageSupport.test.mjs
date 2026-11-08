@@ -57,6 +57,8 @@ const OFFICIAL_WHISPER_NAMES = new Set([
   'danish', 'czech', 'hungarian', 'vietnamese', 'thai', 'greek', 'bulgarian',
   'hebrew', 'malay', 'finnish',
   'croatian', 'estonian', 'latvian', 'lithuanian', 'maltese', 'slovak', 'slovenian',
+  // openai/whisper tokenizer.py: mr, ta, te, bn, gu, kn, ml, pa, ur (2026-10-16).
+  'marathi', 'tamil', 'telugu', 'bengali', 'gujarati', 'kannada', 'malayalam', 'punjabi', 'urdu',
 ]);
 
 test('every catalog model has a language-support entry with keys drawn from RECOGNITION_LANGUAGES', () => {

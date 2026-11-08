@@ -39,7 +39,7 @@ const HUMANIZE_ANSWER_TYPES: ReadonlySet<AnswerType> = new Set<AnswerType>([
 const STRUCTURE_PRESERVED_TYPES: ReadonlySet<AnswerType> = new Set<AnswerType>([
   'coding_question_answer', 'dsa_question_answer', 'system_design_answer',
   'debugging_question_answer', 'technical_concept_answer', 'lecture_answer',
-  'project_link_answer', 'source_code_evidence_answer', 'ethical_usage_answer',
+  'project_link_answer', 'source_code_evidence_answer',
 ]);
 
 /** Should the PROMPT DIRECTIVE be added? (narrow curated set, up-front prevention.) */

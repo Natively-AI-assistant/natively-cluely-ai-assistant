@@ -20,6 +20,8 @@
 //                    protection; Process Disguise names in SettingsOverlay
 //   stealth typing   StealthKeyboardManager: Accessibility on macOS only
 //   code runners     electron/llm/codeVerification localRunner candidates
+//   meeting surface  electron/utils/meetingSurface.ts + NotesWindow close (⌘W / Alt+F4)
+//   stealth edits    src/lib/stealthEdit.mjs word delete (⌥ / Ctrl + Backspace)
 //   meeting detect   native-module meeting_signals.rs: macOS 14+ reads which apps
 //                    hold the microphone (CoreAudio) and window titles (Screen
 //                    Recording); Windows reads the microphone consent store and
@@ -30,14 +32,16 @@
 // no prices or trial lengths. Point at UI labels instead.
 //
 // `clips` says which screen recordings of the real app a platform may be shown.
-// Every recording was made on macOS (re-recorded 2026-09-30), so a clip is shown on
-// Windows only when a frame-by-frame review found nothing macOS-only in it —
-// no ⌘ keycap, no Apple Speech row, no macOS disguise names, no macOS-only
-// permission. A Windows-only row missing from a clip is not treated as
-// misleading (Settings › General there also lists Protect Natively shortcuts).
+// Every recording was made on macOS (all re-recorded 2026-11-01 for 3.0), so a
+// clip is shown on Windows only when a frame-by-frame review found nothing
+// macOS-only in it: no ⌘ keycap, no Apple Speech row, no macOS disguise names,
+// no macOS-only permission or app. A Windows-only row missing from a clip is not
+// treated as misleading (Settings › General there also lists Protect Natively
+// shortcuts).
 //   answer        the overlay answering a spoken question; ⌘ ⇧ H keycaps → macOS
 //   autoanswer    the overlay answering on its own; same ⌘ ⇧ H keycaps → macOS
-//   overlay       a typed question and the quick settings popup; ⌘ keycaps → macOS
+//   overlay       the overlay mid-call: What to answer? on a live question;
+//                 same ⌘ ⇧ H keycaps → macOS
 //   permissions   the permissions card, which lists Screen Recording → macOS
 //   speech        Audio's provider list, which includes Apple Speech → macOS
 //   model         AI Providers' Active Model menu → both
@@ -45,13 +49,21 @@
 //                 "Best for this Mac" → macOS
 //   stealth       General › Process Disguise names macOS apps → macOS
 //   verify        General › Show advanced settings › Verify coding answers → both
-//   sync          Companion; its extension row shows ⌘+Y → macOS
 //   phone         the Phone Mirror page on a phone; nothing from the desktop OS → both
+//   sync          Companion: Phone Mirror on, the pairing code (blurred); its
+//                 browser extension row shows a ⌘ keycap → macOS
 //   modes         Launcher › Modes → both
 //   profile       Launcher › Profile Intelligence → both
+//   buttons       Settings › Overlay › Your buttons, making one → both
+//   notepad       the meeting notepad live: notes, transcript, What did I miss → both
 //   notes         Launcher › a meeting's notes, transcript and Ask → both
-//   followup      a meeting's Follow-up email being written → both
-//   calendar      Settings › Calendar connecting a demo week, and Detect meetings → both
+//   followup      the Follow-up email sheet; its send menu names the Mac's own
+//                 Mail app with Apple's icon → macOS
+//   share         a meeting's Share menu, Copy → both
+//   mcp           Settings › Connectors › MCP (the command is blurred) → both
+//   calendar      Settings › Calendar connecting a demo week, and Detect meetings;
+//                 its source list has the Apple Calendar row, which Windows
+//                 does not offer (calendarSourcesFor) → macOS
 //   search        Launcher search finding a meeting (its step says "Open
 //                 search", not a key) → both
 
@@ -61,8 +73,9 @@ export const HELP_PLATFORMS = /** @type {const} */ (['darwin', 'win32']);
 
 /** Every recording the pane can show, in the order the guides use them. */
 export const HELP_CLIP_IDS = /** @type {const} */ ([
-  'answer', 'autoanswer', 'overlay', 'permissions', 'speech', 'model', 'retrieval', 'stealth', 'verify', 'sync', 'phone',
-  'modes', 'profile', 'notes', 'followup', 'calendar', 'search',
+  'permissions', 'speech', 'model', 'calendar', 'modes', 'profile',
+  'overlay', 'buttons', 'notepad', 'answer', 'autoanswer', 'stealth', 'phone', 'sync', 'verify',
+  'notes', 'followup', 'share', 'mcp', 'search', 'retrieval',
 ]);
 
 /** @param {unknown} platform @returns {platform is HelpPlatform} */
@@ -181,10 +194,23 @@ export function getPlatformFacts(platform) {
         // meeting tab playing sound, which the browser extension reports
         // (detectMeeting.ts, micUsers === null).
         meetingDetection: 'On macOS 13 and earlier it needs the browser extension.',
+        // Audio › "Use the meeting app's microphone" is drawn on macOS only
+        // (SettingsOverlay, isMac around FollowMicDeviceSettings).
+        followMeetingMic: true,
+        // Apple Calendar is registered on darwin only (calendar/providers/registry.ts).
+        appleCalendar: true,
+        // Reading Zoom and Teams for names, the meeting ID and mute needs
+        // Accessibility on macOS (desktopCallSpeakers.ts); Windows asks nothing.
+        callDetailsNeedAccessibility: true,
+        // NotesWindow: ⌘W closes the notepad like its X (main.ts close handling).
+        closeNotepadKeys: ['⌘', 'W'],
+        // stealthEdit.mjs: delete a word while stealth typing.
+        wordDeleteKeys: ['⌥', 'Backspace'],
         clips: {
-          answer: true, autoanswer: true, overlay: true, permissions: true, speech: true, model: true,
-          retrieval: true, stealth: true, verify: true, sync: true, phone: true, modes: true, profile: true,
-          notes: true, followup: true, calendar: true, search: true,
+          permissions: true, speech: true, model: true, calendar: true, modes: true, profile: true,
+          overlay: true, buttons: true, notepad: true, answer: true, autoanswer: true, stealth: true,
+          phone: true, sync: true, verify: true, notes: true, followup: true, share: true, mcp: true,
+          search: true, retrieval: true,
         },
       };
     case 'win32':
@@ -211,11 +237,17 @@ export function getPlatformFacts(platform) {
         pythonCommand: 'python or py',
         sqliteBundled: false,
         meetingDetection: null,
+        followMeetingMic: false,
+        appleCalendar: false,
+        callDetailsNeedAccessibility: false,
+        closeNotepadKeys: ['Alt', 'F4'],
+        wordDeleteKeys: ['Ctrl', 'Backspace'],
         // Nothing has been recorded on Windows; see `clips` above.
         clips: {
-          answer: false, autoanswer: false, overlay: false, permissions: false, speech: false, model: true,
-          retrieval: false, stealth: false, verify: true, sync: false, phone: true, modes: true, profile: true,
-          notes: true, followup: true, calendar: true, search: true,
+          permissions: false, speech: false, model: true, calendar: false, modes: true, profile: true,
+          overlay: false, buttons: true, notepad: true, answer: false, autoanswer: false, stealth: false,
+          phone: true, sync: false, verify: true, notes: true, followup: false, share: true, mcp: true,
+          search: true, retrieval: false,
         },
       };
   }

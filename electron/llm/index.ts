@@ -38,7 +38,7 @@ export { checkAnswerRelevance } from "./AnswerRelevanceChecker";
 export type { AnswerRelevanceResult } from "./AnswerRelevanceChecker";
 export { planNextAssistantAction } from "./PlannerDecision";
 export type { PlannerDecision, PlannerDecisionKind, PlannerInput } from "./PlannerDecision";
-export { planAnswer, formatAnswerPlanForPrompt, shapedCodingTemplate, isCodingAnswerType, shouldScaffold, isStealthEvasionQuestion, isJdFactualLookupNotNegotiationAdvice } from "./AnswerPlanner";
+export { planAnswer, formatAnswerPlanForPrompt, shapedCodingTemplate, isCodingAnswerType, shouldScaffold, isJdFactualLookupNotNegotiationAdvice } from "./AnswerPlanner";
 export { detectAnswerStyle, styleSuppressesScaffold } from "./answerStyle";
 export type { AnswerStyle, AnswerStyleResult } from "./answerStyle";
 export { detectExplicitCodingContract, isCodingContinuation, isBareCodeRequest, looksLikeCodingAnswer, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode } from "./codingFollowup";
@@ -117,7 +117,7 @@ export {
   LIVE_USER_ENDPOINT_MAX_TOTAL_HARD_TIMEOUT_MS, USER_ENDPOINT_MIN_SAMPLES_TO_NARROW,
   USER_ENDPOINT_LATENCY_MARGIN_MS,
   LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS, LIVE_VISION_TOTAL_HARD_TIMEOUT_MS,
-  LIVE_INTER_TOKEN_STALL_MS, BENCHMARK_PER_QUESTION_HARD_TIMEOUT_MS,
+  LIVE_INTER_TOKEN_STALL_MS, LIVE_HELD_OUTPUT_MAX_MS, BENCHMARK_PER_QUESTION_HARD_TIMEOUT_MS,
   MAX_STREAM_OUTPUT_CHARS, MAX_SUMMARY_OUTPUT_CHARS,
   CODING_REGEN_ABORT_CHARS,
   isCompleteShortAnswer,
@@ -158,7 +158,6 @@ export {
     ASSIST_MODE_PROMPT,
     FOLLOWUP_MODE_PROMPT,
     WHAT_TO_ANSWER_PROMPT,
-    GROQ_TITLE_PROMPT,
     GROQ_SUMMARY_JSON_PROMPT,
     FOLLOWUP_EMAIL_PROMPT,
     GROQ_FOLLOWUP_EMAIL_PROMPT,

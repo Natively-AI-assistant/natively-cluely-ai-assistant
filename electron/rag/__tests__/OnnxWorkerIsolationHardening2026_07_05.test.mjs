@@ -133,8 +133,11 @@ describe('worker isolation — source guards', () => {
     // regression: the bounded options are still computed and still passed.
     // Assert the invariant (bounded options reach session_options) rather than
     // one particular way of writing it.
-    assert.match(src, /const\s+sessionOptions\s*=\s*getBoundedOnnxSessionOptions\(\)/,
+    // Since 2026-10-15 the host may raise only the intra-op thread count for
+    // Whisper (init.intraOpThreads); both branches start from the bounded options.
+    assert.match(src, /const\s+sessionOptions\s*=[^;]*getBoundedOnnxSessionOptions\(\)[^;]*;/,
       'bounded ONNX session options must be computed in the worker');
+    assert.doesNotMatch(src, /enableCpuMemArena:\s*true/, 'the thread override must not turn the arena back on');
     assert.match(src, /session_options:\s*(sessionOptions|getBoundedOnnxSessionOptions\(\))/,
       'the bounded options must actually be passed as session_options on the pipeline');
   });

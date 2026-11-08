@@ -8,6 +8,9 @@
  * `<svg>`/`<script>`/inline-style cruft). Instead:
  *
  *   1. Mozilla Readability on a clone of the document -> clean article/job/doc text.
+ *      On a known coding platform the registry's statement container wins
+ *      instead: Readability keeps only the highest-scoring section there
+ *      (HackerRank: Sample Input/Output), losing the statement and Constraints.
  *   2. Fallback to `body.innerText` (script/style/noscript excluded) for app-like
  *      pages where Readability returns null.
  *   3. Prepend page <title>, the user's current selection, and the visible
@@ -15,10 +18,34 @@
  *   4. Cap at DOM_CONTEXT_MAX_CHARS, trimming the body from the END so the
  *      title + selection (the highest-signal front matter) always survive.
  *
+ * Before 1 and 2, rendered formulas in the clone are replaced with their text
+ * (math-text.ts). A formula drawn only as SVG paths becomes
+ * `[formula N, see image]` and its SVG is returned in `formulas`, for the
+ * content script to draw into an image (formula-sheet.ts) that goes with the
+ * text; finishFormulaImages then turns the ones it could not draw into
+ * `[formula not captured]`, counted in `unreadableFormulas`. The selection
+ * gets the same treatment when it holds a formula.
+ *
  * Everything here is dependency-injected (document, a Readability factory, a
  * selection getter) so it can be unit-tested under `node --test` with a tiny
  * fake DOM and no browser.
  */
+
+import {
+  containsFormula,
+  countFormulaMarkers,
+  countUnreadableFormulas,
+  FORMULA_IN_IMAGE_RE,
+  formulaInImage,
+  FormulaTokens,
+  FORMULAS_NOTE,
+  inlineFormulas,
+  TOKEN_RE,
+  UNREADABLE_FORMULA,
+  type InlineFormulasOptions,
+} from './math-text';
+import { DEFAULT_REGISTRY, findPlatform, normalizeHost } from './capture/registry/registry';
+import { blockText, outermost } from './capture/extractors/dom-helpers';
 
 // Mirror of DOM_CONTEXT_MAX_CHARS in electron/config/constants.ts and
 // src/constants/domCapture.ts. This is a separate package so we cannot import
@@ -44,6 +71,18 @@ export interface ExtractDeps {
   readabilityFactory?: ReadabilityFactory;
   /** Returns the user's current text selection, if any. */
   getSelection?: () => string;
+  /**
+   * A detached copy of the selection's markup, or null when nothing is
+   * selected. Read instead of getSelection when it holds a formula, whose SVG
+   * has no text in getSelection's string.
+   */
+  getSelectionFragment?: () => Node | null;
+  /**
+   * Self-contained SVG markup for a formula with no text (its outer element),
+   * or null when it cannot be drawn. Without it, such formulas are sent as
+   * UNREADABLE_FORMULA.
+   */
+  serializeFormula?: (formula: Element) => string | null;
 }
 
 export type PageType = 'coding' | 'article' | 'app';
@@ -52,13 +91,48 @@ export interface ExtractResult {
   /** The final, capped text to POST as `{ dom: ... }`. */
   text: string;
   /** Which body path produced the content — useful for the popup status. */
-  source: 'readability' | 'innertext' | 'selection' | 'empty';
+  source: 'readability' | 'statement' | 'innertext' | 'selection' | 'empty';
   /** Page title, post-trim, for telemetry/popup. */
   title: string;
   /** Detected page class, biasing extraction + shown in the desktop chip. */
   pageType: PageType;
   /** First non-empty content line, for the desktop preview chip. */
   firstLine: string;
+  /**
+   * Formulas in the sent text that had no text equivalent on the page (drawn
+   * only as SVG paths) and show as UNREADABLE_FORMULA. Above 0, the text alone
+   * is missing part of the page.
+   */
+  unreadableFormulas: number;
+  /** SVG markup of formula N at index N - 1, for each `[formula N, see image]` in `text`. */
+  formulas: string[];
+}
+
+/** Formula markers of every kind, placeholders included. */
+function formulaGaps(text: string): number {
+  return countFormulaMarkers(text) + (text.match(TOKEN_RE) || []).length;
+}
+
+/**
+ * The capture after the content script tried to draw its formulas: each
+ * `[formula N, see image]` whose N is not in `drawn` becomes UNREADABLE_FORMULA.
+ */
+export function finishFormulaImages(result: ExtractResult, drawn: ReadonlySet<number>): ExtractResult {
+  if (!result.formulas.length) return result;
+  // A formula that repeats has one number: missing, it counts once.
+  const missing = new Set<number>();
+  const text = result.text.replace(FORMULA_IN_IMAGE_RE, (marker, n: string) => {
+    if (drawn.has(Number(n))) return marker;
+    missing.add(Number(n));
+    return UNREADABLE_FORMULA;
+  });
+  return {
+    ...result,
+    text,
+    firstLine: firstContentLine(text),
+    unreadableFormulas: countUnreadableFormulas(result.text.replace(FORMULAS_NOTE, '')) + missing.size,
+    formulas: result.formulas.map((svg, i) => (drawn.has(i + 1) ? svg : '')),
+  };
 }
 
 function collapseWhitespace(s: string): string {
@@ -73,17 +147,56 @@ function collapseWhitespace(s: string): string {
 }
 
 /** `body.innerText` with script/style/noscript subtrees removed first. */
-function innerTextFallback(doc: Document): string {
+function innerTextFallback(doc: Document, formulas: InlineFormulasOptions): string {
   const body = doc.body;
   if (!body) return '';
   // Clone so we can strip non-content nodes without touching the live page.
   const clone = body.cloneNode(true) as HTMLElement;
+  // Formulas first: MathJax 2 keeps each TeX source in a <script> dropped below.
+  inlineFormulas(clone as never, formulas);
   const drop = clone.querySelectorAll('script, style, noscript, template');
   drop.forEach((n) => n.parentNode?.removeChild(n));
-  // innerText respects visibility/line-breaks; textContent does not. Prefer
-  // innerText when available (jsdom/real browser), else fall back to textContent.
-  const text = (clone as { innerText?: string }).innerText ?? clone.textContent ?? '';
+  // A detached clone's innerText is its textContent in Chrome (no layout), so
+  // a real node is read block by block; innerText only for a shim without one.
+  const text = clone.childNodes
+    ? blockText(clone)
+    : ((clone as { innerText?: string }).innerText ?? clone.textContent ?? '');
   return collapseWhitespace(text);
+}
+
+/**
+ * The problem statement of a known coding platform, read from the registry's
+ * statement selectors on a clone with formulas inlined. '' when the page is
+ * not a known platform or the selectors match nothing.
+ */
+function platformStatement(doc: Document, formulas: InlineFormulasOptions): string {
+  let host = '';
+  let url = '';
+  try {
+    host = (doc as any).location?.hostname || '';
+    url = (doc as any).location?.href || '';
+  } catch { /* no location in tests */ }
+  if (!host) return '';
+  const rule = findPlatform(DEFAULT_REGISTRY, normalizeHost(host), url);
+  const selectors = rule?.platformHints?.statementSelectors;
+  if (!selectors?.length) return '';
+  for (const sel of selectors) {
+    let nodes: Element[] = [];
+    try {
+      nodes = outermost(doc.querySelectorAll(sel));
+    } catch {
+      continue;
+    }
+    const parts: string[] = [];
+    for (const el of nodes) {
+      const clone = el.cloneNode(true) as Element;
+      inlineFormulas(clone as never, { ...formulas, sources: doc as never });
+      const t = blockText(clone);
+      if (t) parts.push(t);
+    }
+    if (parts.length) return parts.join('\n\n'); // first selector with content wins
+  }
+  return '';
 }
 
 /** Visible <h1..h3> headings, in document order, as a hierarchy outline. */
@@ -131,10 +244,24 @@ function extractCodeBlocks(doc: Document): string {
     }
   };
 
+  // A <sup>/<sub> inside code is an exponent or index, never a code character:
+  // LeetCode's `10<sup>4</sup>` would otherwise read "104". Only those blocks
+  // are read from a clone; the rest stay verbatim.
+  const codeText = (el: Element): string | null => {
+    try {
+      if (!el.querySelector?.('sup, sub')) return el.textContent;
+      const clone = el.cloneNode(true);
+      inlineFormulas(clone as never);
+      return clone.textContent;
+    } catch {
+      return el.textContent;
+    }
+  };
+
   // <pre> and standalone <code> (skip <code> nested in <pre> — already captured).
-  doc.querySelectorAll('pre').forEach((el) => push(el.textContent));
+  doc.querySelectorAll('pre').forEach((el) => push(codeText(el)));
   doc.querySelectorAll('code').forEach((el) => {
-    if (!el.closest('pre')) push(el.textContent);
+    if (!el.closest('pre')) push(codeText(el));
   });
 
   // Live editors. Monaco renders each line in .view-line; join with newlines.
@@ -194,7 +321,7 @@ function firstContentLine(text: string): string {
     const line = raw.trim();
     if (!line) continue;
     // Skip our own front-matter labels.
-    if (/^(TITLE|SELECTED TEXT|CODE ON PAGE|HEADINGS)\b/.test(line)) continue;
+    if (/^(TITLE|SELECTED TEXT|CODE ON PAGE|HEADINGS|FORMULAS)\b/.test(line)) continue;
     if (line === '---') continue;
     return line.slice(0, 160);
   }
@@ -204,11 +331,13 @@ function firstContentLine(text: string): string {
 function tryReadability(
   doc: Document,
   factory: ReadabilityFactory | undefined,
+  formulas: InlineFormulasOptions,
 ): ReadabilityResult | null {
   if (!factory) return null;
   try {
     // Readability mutates its input — always parse a clone.
     const clone = doc.cloneNode(true) as Document;
+    inlineFormulas(clone as never, formulas);
     const result = factory(clone).parse();
     if (result && typeof result.textContent === 'string' && result.textContent.trim().length > 0) {
       return result;
@@ -235,30 +364,36 @@ function assemble(
   limit: number,
   /** Optional hard cap on the body portion (coding pages demote prose body). */
   bodyCap?: number,
-): string {
+  /** Front-matter line saying some formulas could not be read. */
+  formulasNote = '',
+): { text: string; body: string } {
   const parts: string[] = [];
   if (title) parts.push(`TITLE: ${title}`);
   if (selection) parts.push(`SELECTED TEXT:\n${selection}`);
   // Code goes in front matter (never trimmed) and is explicitly marked verbatim so
   // the model uses the EXACT signature/structure instead of inventing one.
   if (code) parts.push(`CODE ON PAGE (verbatim — use this exact structure, names, and signature):\n${code}`);
+  if (formulasNote) parts.push(formulasNote);
   if (outline) parts.push(`HEADINGS:\n${outline}`);
   const frontMatter = parts.join('\n\n');
 
   const cappedBody = bodyCap != null && body.length > bodyCap ? body.slice(0, bodyCap) : body;
 
-  if (!cappedBody) return frontMatter.slice(0, limit);
-  if (!frontMatter) return cappedBody.slice(0, limit);
+  if (!cappedBody) return { text: frontMatter.slice(0, limit), body: '' };
+  if (!frontMatter) {
+    const only = cappedBody.slice(0, limit);
+    return { text: only, body: only };
+  }
 
   const separator = '\n\n---\n\n';
   const reserved = frontMatter.length + separator.length;
   if (reserved >= limit) {
     // Front matter alone fills the budget — keep as much of it as fits.
-    return frontMatter.slice(0, limit);
+    return { text: frontMatter.slice(0, limit), body: '' };
   }
   const bodyBudget = limit - reserved;
   const trimmedBody = cappedBody.length > bodyBudget ? cappedBody.slice(0, bodyBudget) : cappedBody;
-  return `${frontMatter}${separator}${trimmedBody}`;
+  return { text: `${frontMatter}${separator}${trimmedBody}`, body: trimmedBody };
 }
 
 /**
@@ -276,16 +411,17 @@ export function extractPageContent(deps: ExtractDeps): ExtractResult {
   const limit = DOM_CONTEXT_MAX_CHARS;
 
   const rawTitle = (doc.title || '').replace(/\s+/g, ' ').trim();
+  const tokens = new FormulaTokens(deps.serializeFormula);
   // Selection: don't collapse internal newlines for the primary-selection case so
   // highlighted code keeps its structure; light-trim only.
-  const selectionRaw = (deps.getSelection ? deps.getSelection() : '') || '';
+  const selectionRaw = selectionText(deps, tokens.options(doc));
   const selection = selectionRaw.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
   const outline = headingOutline(doc);
   // Capture code BEFORE Readability runs (it mutates a clone, but we read the live
   // doc here so editor DOM is intact).
   const code = extractCodeBlocks(doc);
 
-  const readable = tryReadability(doc, deps.readabilityFactory);
+  const readable = tryReadability(doc, deps.readabilityFactory, tokens.options());
   const readableLen = readable?.textContent ? readable.textContent.trim().length : 0;
   const pageType = classifyPage(doc, readableLen, code.length > 0);
 
@@ -295,30 +431,82 @@ export function extractPageContent(deps: ExtractDeps): ExtractResult {
   // SELECTION-FIRST: if the user highlighted something substantial, that IS the
   // question. Make it the body and drop the noisy page body (keep title + code +
   // headings as thin grounding context).
-  if (selection.length >= SELECTION_PRIMARY_MIN) {
-    const text = assemble(
+  // Measured as sent: a placeholder is shorter than the marker that replaces it.
+  if (selection.replace(TOKEN_RE, formulaInImage(1)).length >= SELECTION_PRIMARY_MIN) {
+    const assembled = assemble(
       title,
       `(answer about THIS highlighted text)\n${selection}`,
       outline,
       code,
       '', // no page body — the selection is the signal
       limit,
+      undefined,
+      formulaGaps(selection) > 0 ? FORMULAS_NOTE : '',
     );
-    return { text, source: text ? 'selection' : 'empty', title, pageType, firstLine: firstContentLine(text) };
+    return finishText(assembled.text, assembled.text ? 'selection' : 'empty', title, pageType, tokens, limit);
   }
 
   let body = '';
   let source: ExtractResult['source'] = 'empty';
-  if (readable && readable.textContent) {
+  const statement = pageType === 'coding' ? platformStatement(doc, tokens.options()) : '';
+  if (statement) {
+    body = statement;
+    source = 'statement';
+  } else if (readable && readable.textContent) {
     body = collapseWhitespace(readable.textContent);
     source = 'readability';
   } else {
-    body = innerTextFallback(doc);
+    body = innerTextFallback(doc, tokens.options());
     if (body) source = 'innertext';
   }
 
   // Coding pages: cap the prose body so the verbatim code/signature dominates.
   const bodyCap = pageType === 'coding' ? CODING_BODY_CAP : undefined;
-  const text = assemble(title, selection, outline, code, body, limit, bodyCap);
-  return { text, source: text ? source : 'empty', title, pageType, firstLine: firstContentLine(text) };
+  const cappedLen = bodyCap != null ? Math.min(body.length, bodyCap) : body.length;
+  const note = formulaGaps(selection) + formulaGaps(body.slice(0, cappedLen)) > 0 ? FORMULAS_NOTE : '';
+  let assembled = assemble(title, selection, outline, code, body, limit, bodyCap, note);
+  // The note's own length can push every marker out of the body budget; then
+  // nothing is missing from what is sent, and no image will be asked for.
+  if (note && formulaGaps(selection) + formulaGaps(assembled.body) === 0) {
+    assembled = assemble(title, selection, outline, code, body, limit, bodyCap);
+  }
+  return finishText(assembled.text, assembled.text ? source : 'empty', title, pageType, tokens, limit);
+}
+
+function finishText(
+  assembled: string,
+  source: ExtractResult['source'],
+  title: string,
+  pageType: PageType,
+  tokens: FormulaTokens,
+  limit: number,
+): ExtractResult {
+  const { text, formulas } = tokens.finish(assembled, limit);
+  return {
+    text,
+    source,
+    title,
+    pageType,
+    firstLine: firstContentLine(text),
+    // The note names the marker; only the ones standing for a formula count.
+    unreadableFormulas: countUnreadableFormulas(text.replace(FORMULAS_NOTE, '')),
+    formulas,
+  };
+}
+
+/**
+ * The selection's text. A formula in it is drawn as SVG, which the selection
+ * string leaves out, so then its markup is read instead, formulas inlined.
+ */
+function selectionText(deps: ExtractDeps, formulas: InlineFormulasOptions): string {
+  const raw = (deps.getSelection ? deps.getSelection() : '') || '';
+  let fragment: Node | null = null;
+  try {
+    fragment = deps.getSelectionFragment?.() ?? null;
+  } catch {
+    fragment = null;
+  }
+  if (!fragment || !containsFormula(fragment as never)) return raw;
+  inlineFormulas(fragment as never, formulas);
+  return blockText(fragment) || raw;
 }

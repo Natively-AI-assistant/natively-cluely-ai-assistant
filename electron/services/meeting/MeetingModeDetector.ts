@@ -7,6 +7,7 @@
 // confidence. Ties and weak signals → low confidence → general.
 
 import type { TranscriptSegment } from '../../SessionTracker';
+import { emailDomain, isGenericEmailDomain } from './meetingNotesContext';
 
 export type DetectableTemplateType =
   | 'general'
@@ -23,7 +24,12 @@ export interface ModeDetectionInput {
   transcript: TranscriptSegment[];
   calendarTitle?: string;
   calendarDescription?: string;
+  /** Who was in the meeting by name (invite and meeting app). Only counted: a very large audience leans Lecture / Seminar. */
   participants?: string[];
+  /** The invite's addresses. With `userEmail`, they say whether the meeting was all colleagues or had another company on it. */
+  participantEmails?: string[];
+  /** The user's own address (the connected calendar account). */
+  userEmail?: string;
   // Only the first N ms of transcript are weighted (defaults to 5 min).
   openingWindowMs?: number;
 }
@@ -137,6 +143,15 @@ export class MeetingModeDetector {
       }
     }
 
+    // Who was there. Only from addresses, and only when the user's own
+    // company is known (a personal-mail user has no colleagues to compare
+    // with). Small weights: they tip a meeting the transcript already leans
+    // towards, never decide one by themselves (the 3-point floor below).
+    for (const p of participantSignals(input)) {
+      scores[p.type] += p.w;
+      signals.push(p.label);
+    }
+
     // Pick the best non-general score.
     let best: DetectableTemplateType = 'general';
     let bestScore = 0;
@@ -157,6 +172,61 @@ export class MeetingModeDetector {
 
     return { templateType: best, confidence: round2(confidence), scores, signals: dedupe(signals) };
   }
+}
+
+const PARTICIPANT_WEIGHT_INTERNAL = 2;
+const PARTICIPANT_WEIGHT_EXTERNAL = 1;
+/** People in the meeting at which it reads as an audience. */
+const LARGE_AUDIENCE = 30;
+
+/** Same organisation: equal domains, or one a subdomain of the other. */
+function sameOrg(a: string, b: string): boolean {
+  return a === b || a.endsWith(`.${b}`) || b.endsWith(`.${a}`);
+}
+
+/**
+ * Signals from who was there. From the invite's addresses:
+ *   - everyone else at the user's own company: an internal meeting (Team Meet)
+ *   - someone from another company (not personal mail): a meeting with a
+ *     customer or prospect leans Sales
+ * and from the headcount: 30 or more people leans Lecture and Seminar.
+ * Nothing when addresses or the user's company are unknown and the room is
+ * small, so a meeting with no invite scores exactly as it always did.
+ */
+export function participantSignals(input: Pick<ModeDetectionInput, 'participants' | 'participantEmails' | 'userEmail'>): Array<{ type: DetectableTemplateType; w: number; label: string }> {
+  const out: Array<{ type: DetectableTemplateType; w: number; label: string }> = [];
+  // A room this size is a talk, not a conversation. Counted from names or
+  // addresses, whichever list is longer; both lean the same way, by one point.
+  const headcount = Math.max(
+    new Set((input.participants || []).map((n) => (typeof n === 'string' ? n.trim().toLowerCase() : '')).filter(Boolean)).size,
+    new Set((input.participantEmails || []).map((e) => (typeof e === 'string' ? e.trim().toLowerCase() : '')).filter(Boolean)).size,
+  );
+  if (headcount >= LARGE_AUDIENCE) {
+    out.push({ type: 'lecture', w: 1, label: 'participants:large-audience' });
+    out.push({ type: 'seminar', w: 1, label: 'participants:large-audience' });
+  }
+  return [...out, ...domainSignals(input)];
+}
+
+function domainSignals(input: Pick<ModeDetectionInput, 'participantEmails' | 'userEmail'>): Array<{ type: DetectableTemplateType; w: number; label: string }> {
+  const userDomain = emailDomain(typeof input.userEmail === 'string' ? input.userEmail.trim().toLowerCase() : '');
+  if (!userDomain || isGenericEmailDomain(userDomain)) return [];
+  const user = String(input.userEmail).trim().toLowerCase();
+  const others = [...new Set((input.participantEmails || [])
+    .map((e) => (typeof e === 'string' ? e.trim().toLowerCase() : ''))
+    .filter((e) => e && e !== user))]
+    .map((e) => emailDomain(e))
+    .filter((d): d is string => !!d);
+  if (others.length === 0) return [];
+  const internal = others.filter((d) => sameOrg(d, userDomain));
+  const externalCompanies = others.filter((d) => !sameOrg(d, userDomain) && !isGenericEmailDomain(d));
+  if (internal.length === others.length) {
+    return [{ type: 'team-meet', w: PARTICIPANT_WEIGHT_INTERNAL, label: 'participants:all-internal' }];
+  }
+  if (externalCompanies.length > 0) {
+    return [{ type: 'sales', w: PARTICIPANT_WEIGHT_EXTERNAL, label: 'participants:external-company' }];
+  }
+  return [];
 }
 
 function clamp01(n: number): number { return Math.max(0, Math.min(1, n)); }

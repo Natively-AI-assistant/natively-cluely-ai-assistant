@@ -103,7 +103,7 @@ describe('phone mirror: content without the gist, gist on its own', () => {
   beforeEach(async () => {
     if (svc.isRunning()) await svc.stop({ persist: false });
     svc.history = [];
-    svc.livePartial = null;
+    svc.liveStreams.clear();
     svc.setAnswerRenderer(null);
     const info = await svc.start({ exposeOnLan: false, persist: false });
     port = info.port;

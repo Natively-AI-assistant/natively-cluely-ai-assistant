@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { SttErrorCategory } from '../../lib/sttErrorMapper';
+import { copyText } from '../../lib/copyText';
 
 interface ChannelCardProps {
     /** Channel name displayed in header */
@@ -30,6 +31,7 @@ const providerLabel = (provider?: string): string => {
         azure: 'Azure',
         ibmwatson: 'IBM Watson',
         soniox: 'Soniox',
+        qwen: 'Qwen ASR',
         natively: 'Natively Pro',
     };
     return labels[provider.toLowerCase()] || provider;
@@ -45,7 +47,7 @@ const ChannelCard: React.FC<ChannelCardProps> = ({
 
     const handleCopy = () => {
         if (cleanedError) {
-            navigator.clipboard.writeText(cleanedError);
+            copyText(cleanedError).catch(() => {});
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         }

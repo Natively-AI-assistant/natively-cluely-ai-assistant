@@ -68,10 +68,20 @@ const executeAll = async (
 ): Promise<Verdict> => {
   const results: RunResult[] = [];
   for (const tc of cases) {
-    results.push(await run(language, code, entry, tc, hints));
+    const r = await run(language, code, entry, tc, hints);
+    results.push(r);
+    // The rest would hit the same wall (every case compiles the same code with
+    // the same toolchain); don't hold a runner slot for N more timeouts.
+    if (r.unverifiable) break;
   }
-  const firstFailure = results.find(r => r.status !== 'pass');
+  // A real failure (the code ran or compiled and was wrong) drives the
+  // correction. A run that says nothing about the code (RunResult.unverifiable)
+  // never does: with no real failure, the answer is unverified, not wrong.
+  const firstFailure = results.find(r => r.status !== 'pass' && !r.unverifiable);
   const passedCount = results.filter(r => r.status === 'pass').length;
+  if (!firstFailure && results.some(r => r.unverifiable)) {
+    return { ...emptyVerdict('unverifiable', language), backend: 'local', results, total: results.length, passedCount };
+  }
   return {
     passed: results.length > 0 && !firstFailure,
     skipped: false,
@@ -251,6 +261,10 @@ export const verifyCodingAnswer = async (opts: VerifyCodingOptions): Promise<Ver
     const t0 = nowMs();
     let verdict = await executeAll(language, codeBlock.code, entry, cases, run, hints);
     emit('code_executed', { language, backend: 'local', ms: nowMs() - t0, total: verdict.total, passed: verdict.passedCount });
+    if (verdict.skipped) {
+      emit('code_verify_skipped', { reason: 'unverifiable', language });
+      return { verdict };
+    }
 
     if (verdict.passed) {
       emit('code_verify_passed', { language, total: verdict.total });

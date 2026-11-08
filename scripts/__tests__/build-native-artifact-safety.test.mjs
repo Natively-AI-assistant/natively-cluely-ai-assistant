@@ -34,7 +34,7 @@ const LAST_GOOD = 'LAST-GOOD-BINARY';
  * paraphrase of it. `buildSucceeds:false` makes the stubbed napi build throw
  * exactly the way execSync does on a non-zero exit.
  */
-function runBuildNative({ buildSucceeds, artifactWritten = ARTIFACT }) {
+function runBuildNative({ buildSucceeds, artifactWritten = ARTIFACT, linkCheck = () => {} }) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-build-native-'));
   const nativeDir = path.join(tmp, 'native-module');
   fs.mkdirSync(nativeDir, { recursive: true });
@@ -65,6 +65,7 @@ function runBuildNative({ buildSucceeds, artifactWritten = ARTIFACT }) {
   };
 
   const fakeRequire = (id) => {
+    if (String(id).endsWith('native-link-checks.cjs')) return stubLinkChecks(linkCheck);
     if (id === 'os' || id === 'node:os') return fakeOs;
     if (id === 'child_process' || id === 'node:child_process') return fakeChildProcess;
     return require(id);
@@ -86,6 +87,34 @@ function runBuildNative({ buildSucceeds, artifactWritten = ARTIFACT }) {
 // `require` is not defined in an ESM module scope; build a CJS one.
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
+const linkChecks = require('../lib/native-link-checks.cjs');
+
+/**
+ * build-native.js's view of native-link-checks.cjs. The checks have their own
+ * tests (native-link-checks.test.mjs) and the fake artifacts here are not PE
+ * images, so the Windows check is a no-op unless a test passes the real one.
+ */
+function stubLinkChecks(assertNoDynamicVcRuntime = () => {}) {
+  return { ...linkChecks, assertNoDynamicVcRuntime };
+}
+
+test('a built Windows module that fails the VC runtime check aborts the build and restores the last-good one', () => {
+  const { nativeDir, remaining, threw } = runBuildNative({
+    buildSucceeds: true,
+    linkCheck: linkChecks.assertNoDynamicVcRuntime,
+  });
+  assert.ok(threw, 'a module that cannot load on a PC without the VC++ runtime must fail the build');
+  assert.match(String(threw.message), /not a PE image/);
+  assert.equal(
+    fs.readFileSync(path.join(nativeDir, ARTIFACT), 'utf8'),
+    LAST_GOOD,
+    `the rejected module must not stay in the name the app loads; files: ${JSON.stringify(remaining)}`
+  );
+  const rejected = remaining.filter((f) => f.startsWith(`${ARTIFACT}.rejected-`));
+  assert.equal(rejected.length, 1, 'the rejected module is kept aside for inspection');
+  assert.equal(fs.readFileSync(path.join(nativeDir, rejected[0]), 'utf8'), 'FRESH-BINARY');
+  assert.ok(!remaining.some((f) => f.includes('.stale-')), 'no orphaned stale copy for the next sweep to delete');
+});
 
 test('a FAILED Windows build leaves the previous .node in place', () => {
   const { nativeDir, remaining, threw } = runBuildNative({ buildSucceeds: false });
@@ -175,6 +204,7 @@ test('a rescue copy survives the next run\'s stale sweep', () => {
     spawnSync: () => ({ status: 0, stdout: '', stderr: '' }),
   };
   const fakeRequire = (id) => {
+    if (String(id).endsWith('native-link-checks.cjs')) return stubLinkChecks();
     if (id === 'os' || id === 'node:os') return fakeOs;
     if (id === 'child_process' || id === 'node:child_process') return fakeChildProcess;
     return require(id);

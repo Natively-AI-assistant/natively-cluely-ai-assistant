@@ -1,5 +1,44 @@
+# macOS: two frameworks are linked WEAK so the module still loads on the oldest
+# macOS the app supports (12.0, the Electron 43 minimum).
+#   CoreAudio        — AudioHardwareCreateProcessTap / AudioHardwareDestroyProcessTap
+#                      exist only from macOS 14.2. Linked strong, dyld refused the
+#                      whole module ("Symbol not found") on 12.x, 13.x and
+#                      14.0-14.1, so the mic, system audio and every other native
+#                      export were gone there, not just the tap. speaker/core_audio.rs
+#                      gates the tap at runtime on 14.4 and falls back to
+#                      ScreenCaptureKit, so the weak symbols are never called below it.
+#   ScreenCaptureKit — the framework itself first shipped in macOS 12.3.
+# Weak linking changes nothing where a symbol exists; scripts/lib/native-link-checks.cjs
+# (run by build-native.js) fails the build if one goes strong again, or if any
+# private framework is linked strong. (cidre's default "full" feature set linked
+# the private MobileDevice and ~40 frameworks the module never used; Cargo.toml
+# now names only the cidre modules the code imports.)
 [target.x86_64-apple-darwin]
-rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+rustflags = [
+  "-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup",
+  "-C", "link-arg=-weak_framework", "-C", "link-arg=CoreAudio",
+  "-C", "link-arg=-weak_framework", "-C", "link-arg=ScreenCaptureKit",
+]
 
 [target.aarch64-apple-darwin]
-rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+rustflags = [
+  "-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup",
+  "-C", "link-arg=-weak_framework", "-C", "link-arg=CoreAudio",
+  "-C", "link-arg=-weak_framework", "-C", "link-arg=ScreenCaptureKit",
+]
+
+# Windows: link the C runtime statically. With the default dynamic CRT the module
+# imports VCRUNTIME140.dll, which nothing next to it provides (bundle-vc-runtime.cjs
+# only puts the runtime beside onnxruntime-node), so on a PC that never installed the
+# Visual C++ Redistributable the module failed to load with "The specified module
+# could not be found" and the mic and system audio were both unavailable.
+# This is napi-rs's own recommended setting for Windows; cc honours it for the
+# C code in webrtc-vad. scripts/lib/native-link-checks.cjs checks the import table.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.i686-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

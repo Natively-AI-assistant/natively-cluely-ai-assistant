@@ -43,6 +43,10 @@ export interface LoopbackAuthOptions {
     /** The sentence the callback page and Settings show for a failed exchange. */
     failureReason(err: unknown): string;
     timeoutMs?: number;
+    /** Names the sign-in in the port-failure message; "Calendar" by default. */
+    label?: string;
+    /** Aborting stops waiting: the port closes and the promise rejects. */
+    signal?: AbortSignal;
 }
 
 export function runLoopbackAuth(opts: LoopbackAuthOptions): Promise<void> {
@@ -101,17 +105,22 @@ export function runLoopbackAuth(opts: LoopbackAuthOptions): Promise<void> {
         const timeout = setTimeout(() => {
             finish(() => reject(new CalendarSourceError('Sign-in wasn’t finished within five minutes. Connect again.')));
         }, opts.timeoutMs ?? 5 * 60_000);
+        if (opts.signal) {
+            const onAbort = () => finish(() => reject(new CalendarSourceError('Sign-in was cancelled.')));
+            if (opts.signal.aborted) { onAbort(); return; }
+            opts.signal.addEventListener('abort', onAbort, { once: true });
+        }
 
         const primary = http.createServer(handler);
         servers.push(primary);
         primary.on('error', (err) => {
-            finish(() => reject(new CalendarSourceError('Calendar sign-in could not open a local callback port.', { cause: err })));
+            finish(() => reject(new CalendarSourceError(`${opts.label ?? 'Calendar'} sign-in could not open a local callback port.`, { cause: err })));
         });
         // Port 0: the OS picks a free port. Both providers accept any loopback port.
         primary.listen(0, '127.0.0.1', () => {
             const address = primary.address() as AddressInfo | null;
             if (!address || typeof address === 'string') {
-                finish(() => reject(new CalendarSourceError('Calendar sign-in could not open a local callback port.')));
+                finish(() => reject(new CalendarSourceError(`${opts.label ?? 'Calendar'} sign-in could not open a local callback port.`)));
                 return;
             }
             redirectUri = `http://${opts.redirectHost}:${address.port}`;

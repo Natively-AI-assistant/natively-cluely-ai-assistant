@@ -12,11 +12,12 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Play } from 'lucide-react';
 import nativelyMark from '../../assets/logo.webp';
 import { useT } from '../../i18n';
 import { useWelcomeTheme, useRise, LavenderButton } from './welcomeShared';
 import { fillText } from './i18nText';
+import { DEMO_VIDEO_URL, openDemoVideo } from '../../lib/demoVideo';
 
 const TERMS_URL = 'https://natively.software/termsandconditions';
 const PRIVACY_URL = 'https://natively.software/privacy';
@@ -63,6 +64,14 @@ export const WelcomeLeft: React.FC<Props> = ({ onGetStarted }) => {
           <motion.div {...rise(0.3)} style={{ marginTop: -6, fontSize: 13, fontWeight: 500, letterSpacing: '-0.005em', color: t.quiet }}>
             {tr('Your 30 free minutes start with your first meeting. No card needed.')}
           </motion.div>
+          {/* For someone who would rather watch first. A quiet text link, not a
+              second button, so Get started stays the one thing to press. */}
+          <motion.a {...rise(0.34)} href={DEMO_VIDEO_URL} onClick={(e) => { e.preventDefault(); void openDemoVideo(); }}
+            className="inline-flex items-center underline-offset-2 hover:underline"
+            style={{ gap: 6, fontSize: 13, fontWeight: 500, letterSpacing: '-0.005em', color: t.body }}>
+            <Play size={12} strokeWidth={2.25} aria-hidden />
+            {tr('Watch a 9-minute demo')}
+          </motion.a>
         </div>
         <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: t.faint }}>
           {fillText(tr('By continuing, you agree to our {terms} and {privacy}.'), {

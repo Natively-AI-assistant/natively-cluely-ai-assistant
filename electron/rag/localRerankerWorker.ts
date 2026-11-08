@@ -23,8 +23,12 @@ import {
   hasSentenceTransformerHead, loadSentenceTransformerHead, scoreWithHead,
   type SentenceTransformerHead,
 } from './sentenceTransformerHead';
+import { trustSystemCertificates } from '../utils/systemCertificates';
 
 if (!parentPort) throw new Error('localRerankerWorker must be run as a Worker thread');
+
+// A non-bundled reranker downloads on this thread, and the CA list is per thread.
+trustSystemCertificates();
 
 let model: any = null;
 let tokenizer: any = null;
@@ -128,6 +132,19 @@ async function disposeAll(): Promise<void> {
 let queue: Promise<void> = Promise.resolve();
 
 parentPort.on('message', (msg: any) => {
+  if (msg?.type === 'shutdown') {
+    // Cooperative stop — see electron/utils/onnxWorkerShutdown.ts. The host
+    // never calls worker.terminate() on this worker: doing that while an ONNX
+    // run() or session load is on this thread aborts the whole app. A message
+    // is only delivered when this thread is idle, so no native call is in
+    // flight here, and process.exit() in a worker thread stops this thread
+    // only.
+    //
+    // Deliberately NOT put on the queue below: the host has already drained
+    // what it was owed (or the app is quitting), and anything still queued is
+    // abandoned on purpose.
+    process.exit(0);
+  }
   queue = queue.then(() => handleMessage(msg)).catch(() => { /* handled below */ });
 });
 

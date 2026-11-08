@@ -55,13 +55,23 @@ export interface PostCallEnhancements {
 //     field are deliberately KEPT so already-saved notes still parse.)
 export const INCLUDE_COACHING_INSIGHTS: boolean = false;
 
+// The transcript fallback for action items (the summary's own list is added
+// after). Three shapes:
+//   "<someone> will / should / need(s) to / must <task>"
+//   "Action: / Todo: / Follow up: <task>"
+//   "<verb> <object>" as an instruction: the line STARTS with the verb
+//     ("Send me the deck by Friday"), and the verb stays in the task.
+// "can" / "could" are offers, not promises, and are not read: "I can go into
+// the details", said by the other side, was filed as the user's task, and
+// "I can't share that information" became the task "that information"
+// (2026-10-17, the launcher's Loose Ends).
 const ACTION_PATTERNS = [
-  /\b(?:i|we|you|he|she|they|[A-Z][a-z]+)\s+(?:will|should|need to|needs to|must|can|could)\s+(.+?)(?:\s+(?:by|before|on|after)\s+([^.!?]+))?[.!?]?$/i,
+  /\b(?:i|we|you|he|she|they|[A-Z][a-z]+)\s+(?:will|should|need to|needs to|must)\s+(.+?)(?:\s+(?:by|before|on|after)\s+([^.!?]+))?[.!?]?$/i,
   /\b(?:action|todo|follow up):\s*(.+?)(?:\s+(?:by|before|on|after)\s+([^.!?]+))?[.!?]?$/i,
-  /\b(?:send|share|schedule|book|prepare|review|follow up|circle back|introduce|email)\s+(.+?)(?:\s+(?:by|before|on|after)\s+([^.!?]+))?[.!?]?$/i,
+  /^(?:please\s+)?((?:send|share|schedule|book|prepare|review|follow up|circle back|introduce|email)\s+.+?)(?:\s+(?:by|before|on|after)\s+([^.!?]+))?[.!?]?$/i,
 ];
 
-const OWNER_PATTERN = /\b(I|we|you|he|she|they|[A-Z][a-z]+)\s+(?:will|should|need to|needs to|must|can|could)\b/;
+const OWNER_PATTERN = /\b(I|we|you|he|she|they|[A-Z][a-z]+)\s+(?:will|should|need to|needs to|must)\b/;
 const DEADLINE_PATTERN = /\b(?:by|before|on|after)\s+([^.!?]+)$/i;
 
 export function buildPostCallEnhancements(params: {
@@ -115,7 +125,7 @@ export function extractStructuredActionItems(
       if (!match) continue;
       const owner = text.match(OWNER_PATTERN)?.[1];
       const deadline = match[2] ?? text.match(DEADLINE_PATTERN)?.[1];
-      addItem(match[1] ?? text, segment.timestamp, normalizeOwner(owner), deadline);
+      addItem(match[1] ?? text, segment.timestamp, normalizeOwner(owner, segment.speaker), deadline);
       break;
     }
   }
@@ -212,10 +222,20 @@ function normalizeActionText(value: string): string {
     .trim();
 }
 
-function normalizeOwner(owner?: string): string | undefined {
+/**
+ * The owner as the listener means it, read from who spoke ('user' is the
+ * user's own microphone). "I" is the user only on the user's side; from the
+ * other side it is the speaker, who is not the user, so it is left unowned.
+ * "you" is the reverse: the user when the other side says it, someone else
+ * when the user does. The launcher's Loose Ends lists only the user's items
+ * (assistPeople.ownerIsUser, where "Me" and "You" both mean the user).
+ */
+export function normalizeOwner(owner: string | undefined, speaker?: string): string | undefined {
   if (!owner) return undefined;
   const normalized = owner.trim();
-  if (/^i$/i.test(normalized)) return 'Me';
+  const mine = speaker === 'user';
+  if (/^i$/i.test(normalized)) return mine ? 'Me' : undefined;
+  if (/^you$/i.test(normalized)) return mine ? undefined : 'You';
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 

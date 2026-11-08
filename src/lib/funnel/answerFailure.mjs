@@ -33,10 +33,10 @@ const NOT_SENT = new Set([
 ]);
 
 /**
- * Not a failure to answer: the user stopped it, or Natively cut a long or
- * repeating answer short (the answer was given).
+ * Not a failure to answer: the user stopped it, or Natively cut a long,
+ * repeating or stalled answer short (the answer was given, in part).
  */
-const NOT_A_FAILURE = new Set(['CANCELLED', 'OUTPUT_LIMIT', 'OUTPUT_REPETITION']);
+const NOT_A_FAILURE = new Set(['CANCELLED', 'OUTPUT_LIMIT', 'OUTPUT_REPETITION', 'OUTPUT_STALLED']);
 
 /** The overlay's cause names that the catalogue spells differently. */
 const RENAMED = Object.freeze({ brokeOff: 'broke_off', tooLarge: 'too_large', waited: 'timeout' });

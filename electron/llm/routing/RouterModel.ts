@@ -20,6 +20,7 @@ import { Worker } from 'worker_threads';
 import path from 'path';
 import fs from 'fs';
 import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession } from '../../utils/onnxThreadConfig';
+import { retireOnnxWorker, trackOnnxWorker } from '../../utils/onnxWorkerShutdown';
 import {
   writeLoadSentinel, clearLoadSentinel, consumePoisonedOnnxLoad, isSentinelWithinTtl,
 } from '../../utils/onnxLoadSentinel';
@@ -152,7 +153,7 @@ export class RouterModel {
   private getWorker(): Worker {
     if (this.worker) return this.worker;
     writeLoadSentinel('router', ROUTER_MODEL_ID);
-    const w = new Worker(this.workerPath());
+    const w = trackOnnxWorker(new Worker(this.workerPath()));
     w.on('message', (msg: any) => {
       if (msg?.type === 'status') {
         this.status = msg.status;
@@ -302,9 +303,14 @@ export class RouterModel {
     const w = this.worker;
     this.worker = null;
     // terminate() can fire mid-run and abort the process, which Natively has
-    // already hit once. Detaching the listeners first means a late message from
-    // a dying worker cannot reach a disposed host.
-    w?.removeAllListeners();
-    void w?.terminate().catch(() => { /* teardown is best effort */ });
+    // already hit once — so the worker is asked to exit instead, and leaves at
+    // its next idle point (utils/onnxWorkerShutdown.ts). Detaching the
+    // listeners first means a late message from it cannot reach a disposed
+    // host; the no-op 'error' listener stays because a Worker 'error' nobody
+    // listens for is an uncaught exception in this process.
+    if (!w) return;
+    w.removeAllListeners();
+    w.on('error', () => { /* retired */ });
+    retireOnnxWorker(w);
   }
 }

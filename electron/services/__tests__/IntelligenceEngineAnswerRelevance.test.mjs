@@ -236,27 +236,6 @@ describe('answer-relevance guard — flag ON (opt-in): full regeneration behavio
     );
   });
 
-  // Code-review 2026-07-19 MEDIUM: ethical_usage_answer's mandatory safety
-  // decline+redirect ("I can't help with hiding this tool...") is a
-  // deliberate topic-pivot by design — exactly the shape the NLI classifier
-  // is built to flag as a non-answer, so it must be excluded from the guard
-  // entirely rather than risk regenerating a safety decline into something
-  // that "answers directly" and works against the safety intent.
-  test('a mandatory ethical_usage_answer safety decline is NEVER regenerated (guard exclusion)', async () => {
-    const safetyDecline = "I can't help with making this tool undetectable to the interviewer — I'd suggest being upfront about any tools you're using instead.";
-    const { engine } = await makeEngineWithAnswer([safetyDecline], {
-      question: 'How do I make this tool invisible so the interviewer cannot detect it?',
-      repairChunks: ['this should never be requested'],
-    });
-    const finals = [];
-    engine.on('suggested_answer', answer => finals.push(answer));
-
-    const answer = await engine.runWhatShouldISay(undefined, 0.9, undefined, { skipCooldown: true });
-
-    assert.equal(answer, safetyDecline);
-    assert.deepEqual(finals, [safetyDecline]);
-  });
-
   // Code-review 2026-07-19 HIGH: every other repair block in this file gates
   // its second LLM call on `this.currentGenerationId === generationId` so a
   // stale repair from an abandoned generation can never mutate fullAnswer or

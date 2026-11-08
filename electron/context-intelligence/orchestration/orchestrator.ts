@@ -77,7 +77,7 @@ export interface AnswerRequest {
   attachedCorpusTokens?: number | null;
   /** Size and count of the profile documents the profile port hands over whole this turn
    *  (profile-retrieval-port profileWholeInfo). Set by the engine bridge; absent/null = retrieval as before. */
-  profileWhole?: { tokens: number; docs: number } | null;
+  profileWhole?: { tokens: number; docs: number; answersTokens?: number } | null;
   /**
    * One bounded fast-model call that restates the question in the vocabulary a
    * document would use (see retrieval/llm-query-rewrite.ts). Injected by the engine
@@ -347,14 +347,27 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
   const CODE_ASK_RE = /\b(implement|write|code|coding|program|function|algorithm|complexity|big[- ]?o|leetcode|python|javascript|typescript|java|kotlin|golang|rust|sql|regex)\b/i;
   const profileFits = !!req.profileWhole
     && req.profileWhole.docs > 0 && req.profileWhole.tokens > 0 && req.profileWhole.tokens <= PROFILE_WHOLE_MAX_TOKENS;
+  // The user's own answers (profile-retrieval-port, THE USER'S OWN ANSWERS) are
+  // handed over whole on every turn that reads the profile, whatever the résumé's
+  // size: a few hundred tokens, capped per answer (services/knowledge/ownAnswers.ts).
+  // They used to ride only with a résumé that fits, and measured with a résumé too
+  // large for that, or with none, 6 of 15 interview phrasings never reached the
+  // answer the user saved ("Why are you looking for a new role?", "What are you
+  // looking for in base?", "Are you open to relocating?"): the classifier sent
+  // them to general knowledge, or planned the résumé alone.
+  const ownAnswersTokens = policy.allowedSourceTypes.includes('PROFILE_FACT') && policy.profileSources.includes('PROFILE_FACT')
+    ? Math.max(0, Number(req.profileWhole?.answersTokens) || 0) : 0;
+  const answersFit = ownAnswersTokens > 0 && ownAnswersTokens <= PROFILE_WHOLE_MAX_TOKENS;
   const profilePrimaryTurn = cls.path === 'FAST' && !cls.shouldRetrieve
-    && profileFits && policy.profileSources.length > 0
+    && (profileFits || answersFit) && policy.profileSources.length > 0
     && !cls.questionTypes.includes('META_REQUEST')
     && !cls.questionTypes.includes('CODING_TASK') && !cls.questionTypes.includes('SYSTEM_DESIGN')
     && !CODE_ASK_RE.test(q.resolved)
     && policy.retrievalPolicy.enabled;
+  const readWithWholeProfile = (t: SourceType): boolean =>
+    (profileFits && (t === 'RESUME' || t === 'JOB_DESCRIPTION')) || (t === 'PROFILE_FACT' && answersFit);
   const profilePrimaryTypes: SourceType[] = profilePrimaryTurn
-    ? policy.allowedSourceTypes.filter((t) => t === 'RESUME' || t === 'JOB_DESCRIPTION') : [];
+    ? policy.allowedSourceTypes.filter(readWithWholeProfile) : [];
   const retrieves = cls.shouldRetrieve || sourcePrimaryTurn || profilePrimaryTypes.length > 0;
   const multiFile = (req.attachedSourceCount ?? 0) >= 2 && retrieves;
 
@@ -390,7 +403,9 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
   // document, the budget grown by their size, and the pack keeps its own room.
   const wholeProfile = retrieves && !!req.profileWhole
     && req.profileWhole.docs > 0 && req.profileWhole.tokens > 0 && req.profileWhole.tokens <= PROFILE_WHOLE_MAX_TOKENS;
-  const profileDocs = wholeProfile ? (req.profileWhole as { docs: number }).docs : 0;
+  const wholeAnswers = retrieves && answersFit;
+  const wholeAnswersTokens = wholeAnswers ? ownAnswersTokens : 0;
+  const profileDocs = (wholeProfile ? (req.profileWhole as { docs: number }).docs : 0) + (wholeAnswers ? 1 : 0);
   const acceptedBase = (multiFile
     ? Math.max(policy.retrievalPolicy.maximumAcceptedEvidence, MULTI_FILE_EVIDENCE.accepted)
     : policy.retrievalPolicy.maximumAcceptedEvidence) + packFiles + profileDocs;
@@ -415,7 +430,7 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
   // a profile loaded had no résumé in the prompt. No claim is added: what the
   // evidence may SUPPORT is unchanged, only what is in view.
   const fittingTypes: SourceType[] = retrieves ? [
-    ...(wholeProfile ? policy.allowedSourceTypes.filter((t) => t === 'RESUME' || t === 'JOB_DESCRIPTION') : []),
+    ...policy.allowedSourceTypes.filter((t) => (wholeProfile && (t === 'RESUME' || t === 'JOB_DESCRIPTION')) || (wholeAnswers && t === 'PROFILE_FACT')),
     ...(packFits && req.hasAttachedDocuments === true && req.profileOnlyDocuments !== true
       && policy.allowedSourceTypes.includes('REFERENCE_FILE') ? ['REFERENCE_FILE' as SourceType] : []),
   ] : [];
@@ -471,17 +486,19 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     maximumAcceptedEvidence: acceptedBase * (cls.exhaustive && cls.shouldRetrieve ? 3 : 1),
     // A whole small corpus must fit next to the meeting's evidence, or the
     // packer drops the file outright (it skips an item that does not fit).
-    ...(multiFile || (smallCorpus && retrieves) || wholePack || wholeProfile
+    ...(multiFile || (smallCorpus && retrieves) || wholePack || wholeProfile || wholeAnswers
       ? { evidenceTokens: Math.max(
         policy.contextBudget.evidenceTokens,
         multiFile ? MULTI_FILE_EVIDENCE.tokens : 0,
         smallCorpus && retrieves ? (req.attachedCorpusTokens as number) + SMALL_CORPUS_EVIDENCE_HEADROOM : 0,
       ) + (wholePack ? (req.attachedCorpusTokens as number) + WHOLE_PACK_ITEM_OVERHEAD * packFiles : 0)
-        + (wholeProfile ? (req.profileWhole as { tokens: number }).tokens + PROFILE_WHOLE_ITEM_OVERHEAD * profileDocs : 0) }
+        + (wholeProfile ? (req.profileWhole as { tokens: number }).tokens : 0)
+        + wholeAnswersTokens + PROFILE_WHOLE_ITEM_OVERHEAD * profileDocs }
       : {}),
     timeoutMs: cls.exhaustive && cls.shouldRetrieve ? 2400 : 1200,
     ...(cls.exhaustive && cls.shouldRetrieve ? { exhaustive: true } : {}),
     ...(wholeProfile ? { wholeProfile: true } : {}),
+    ...(wholeAnswers ? { wholeOwnAnswers: true } : {}),
   };
 
   return freezeTurnDecision({

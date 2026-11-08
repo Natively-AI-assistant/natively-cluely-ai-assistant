@@ -26,7 +26,7 @@ import {
 } from '../../llm/visionCapability';
 import {
   readActiveCustomProvider, readActiveCurlProvider, readActiveModelId, readActiveSelection, readFixedVisionModels,
-  readOllamaRecordTarget, readUsingOllama,
+  readOAuthRecordReader, readOllamaRecordTarget, readUsingOllama,
 } from '../../llm/activeCustomProvider';
 import { gatewaySeatReadsImages, readsImages, resolveVision } from '../../llm/visionResolver';
 import { normalizeVisionBaseURL, storedVisionAnswer, storedVisionOverride, storedVisionTest } from '../../llm/visionCapabilityStore';
@@ -42,13 +42,21 @@ export interface VisionProviderBuildInputs {
    * stores the screen's text so a later turn can quote it.
    */
   purpose?: 'prepass' | 'record';
+  /**
+   * May a signed-in Codex or Antigravity model write the record (oauthModel)?
+   * Default yes. Automatic screen-share snapshots say no: they fire every
+   * 10-30 s, show other people's screens, and would spend the user's ChatGPT
+   * or Google quota beside their live answers (code review, 2026-10-24).
+   */
+  allowOAuthRecord?: boolean;
 }
 
 /**
  * Produce the ordered list of vision providers for the given mode. Order is:
  *   vision_first / vision_only: Natively → OpenAI → Gemini Flash-Lite →
  *                                Gemini Flash → Claude → Gemini Pro → Groq Scout
- *                                → LiteLLM → NVIDIA NIM → Ollama → Codex → Custom
+ *                                → LiteLLM → NVIDIA NIM → … → signed-in Codex /
+ *                                Antigravity (record only) → Ollama → Codex → Custom
  *   private_vision: Ollama → Codex → local Custom only
  */
 export function buildVisionProviders(
@@ -58,7 +66,7 @@ export function buildVisionProviders(
   // CredentialsManager that a test cannot reach from outside.
   credentials: CredentialsManager = CredentialsManager.getInstance(),
 ): VisionProviderConfig[] {
-  const providers: VisionProviderConfig[] = [];
+  const providers: Array<VisionProviderConfig | null> = [];
 
   // With a LOCAL model selected the pre-pass stays off cloud providers (Evin,
   // 2026-10-01). Before this, an Ollama or local-endpoint user's screenshot
@@ -105,6 +113,8 @@ export function buildVisionProviders(
     // catalogue still seats it.
     providers.push(ninerouter(credentials, inputs));
     providers.push(deepseek(credentials, inputs));
+    // Last of the cloud rungs: only when nothing above can read the screen.
+    providers.push(oauthModel(inputs));
   }
 
   // Local providers — always allowed, including in private_vision.
@@ -274,8 +284,11 @@ function codex(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): V
   // never called." becomes false on the one screenshot path that is wired.
   //
   // This is inert TODAY only because `supportsVision: false` and `invoke`
-  // throws. If you enable CLI vision, you MUST also set `isLocal: false` (or
-  // give the chain a separate `isOnDevice` predicate). Note
+  // throws. Do not enable it: Codex already reads screenshots for the RECORD
+  // through oauthModel() (2026-10-24), and turning this on would add a second
+  // Codex attempt to every chain. If it is ever enabled for the pre-pass
+  // instead, it MUST also keep `isLocal: false` (or the chain needs a separate
+  // `isOnDevice` predicate). Note
   // electron/llm/visionPolicy.ts deliberately does NOT share this predicate —
   // its `isLocalVisionProvider()` is Ollama-only for exactly this reason.
   return {
@@ -488,7 +501,7 @@ function fluxion(creds: CredentialsManager, _inputs: VisionProviderBuildInputs):
   const modelId = isSelected ? activeModelId : '';
   return {
     id: 'fluxion',
-    displayName: modelId ? `Fluxion (${modelId.replace(/^fluxion\//, '')})` : 'Fluxion',
+    displayName: modelId ? `Sidrune (${modelId.replace(/^fluxion\//, '')})` : 'Sidrune',
     modelId,
     isLocal: false,
     isConfigured: !!apiKey && isSelected,
@@ -557,6 +570,41 @@ function deepseek(creds: CredentialsManager, _inputs: VisionProviderBuildInputs)
     scopeAllowsScreenshots: true,
     hint: 'generic',
     invoke: async (p) => callLLMHelperVision('deepseek', p),
+  };
+}
+
+function oauthModel(inputs: VisionProviderBuildInputs): VisionProviderConfig | null {
+  // The after-the-answer RECORD only, the same split as the Ollama rung. Codex
+  // and Antigravity sign in with OAuth, so this registry saw no key for either
+  // and a user with no vision key of any other kind had no rung at all: every
+  // screenshot ended `all_vision_failed` and no follow-up could quote the
+  // screen (issue #647). The streaming chain already sends the screenshot to
+  // them in the answer, so they write the record too rather than leave it
+  // empty. Which one, and when, is LLMHelper.getOAuthRecordReader's rule —
+  // the streaming chain's own availability rule.
+  //
+  // Never the PRE-PASS: Codex is a reasoning route that cannot transcribe a
+  // screen inside its 6 s, and a rung that always times out there would add
+  // that much to every screenshot answer (see codex()).
+  //
+  // A cloud send, so it sits inside `cloudAllowed`: "Keep screenshots on this
+  // device" never reaches it.
+  // Absent, not "not configured", outside the record: it can never run there,
+  // and a skipped entry in every pre-pass ledger would read as a failure.
+  if (inputs.purpose !== 'record') return null;
+  const reader = inputs.allowOAuthRecord !== false ? readOAuthRecordReader() : null;
+  return {
+    id: 'oauth_model',
+    displayName: !reader ? 'Codex / Antigravity'
+      : reader.family === 'codex-cli' ? `Codex CLI (${reader.model})`
+      : `Antigravity (${reader.model.replace(/^antigravity:/, '')})`,
+    modelId: reader?.model,
+    isLocal: false,
+    isConfigured: !!reader,
+    supportsVision: !!reader,
+    scopeAllowsScreenshots: true,
+    hint: 'generic',
+    invoke: async (p) => callLLMHelperVision('oauth_model', p),
   };
 }
 

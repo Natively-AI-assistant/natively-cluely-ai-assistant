@@ -79,6 +79,9 @@ export class FollowUpLLM {
             yield* this.llmHelper.streamChat(message, undefined, fittedContext, prompt, true);
         } catch (e) {
             console.error("[FollowUpLLM] Stream Failed:", e);
+            // Thrown on, not swallowed: see ClarifyLLM.generateStream. The
+            // engine reports it with the provider's reason (runFollowUp).
+            throw e;
         }
     }
 }

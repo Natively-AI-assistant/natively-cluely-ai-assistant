@@ -2,6 +2,9 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CalendarCheck } from 'lucide-react';
 import { useT, useLanguage } from '../../i18n';
 import calendarBackdrop from '../../UI_comp/calendar.jpg';
+import demoFaceMaya from '../../assets/demo-faces/maya.webp';
+import demoFaceRavi from '../../assets/demo-faces/ravi.webp';
+import demoFaceDaniel from '../../assets/demo-faces/daniel.webp';
 import ConnectCalendarButton from './ConnectCalendarButton';
 import { reconcileStack, settleEntering, dropLeft, arrivalSteps, padStack, isSlotKey, type StackEntry } from './bannerStack.mjs';
 import './UpcomingCalendarCard.css';
@@ -9,6 +12,7 @@ import './textsReveal.css';
 import { useTextsReveal } from './useTextsReveal';
 import GlassSurface from '../../ui-components/GlassSurface';
 import '../../ui-components/liquidglas2.0/LiquidGlassCta.css';
+import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
 
 export interface CalendarAttendee {
     email: string;
@@ -44,6 +48,8 @@ interface UpcomingCalendarCardProps {
      * before the real meetings arrive.
      */
     loading?: boolean;
+    /** Opens Settings › Calendar. Without it the linked card has no settings button. */
+    onOpenSettings?: () => void;
     className?: string;
 }
 
@@ -468,18 +474,19 @@ const MeetingBanner: React.FC<{ meeting: CalendarMeeting; now: number }> = ({ me
             <div className="cal-banner-body h-full flex items-center gap-2">
                 <MeetingTile when={when} />
                 <div className="min-w-0 flex-1 flex flex-col gap-[4px]">
-                    <h4 title={meeting.title} className="text-[13px] font-semibold text-white leading-none tracking-[-0.01em] truncate">
+                    <h4 title={meeting.title} className="cal-ink text-[13px] font-semibold leading-none tracking-[-0.01em] truncate">
                         {meeting.title}
                     </h4>
                     <span className="text-[11px] font-medium leading-none tabular-nums truncate">
                         {when.lead && (
                             <>
-                                <span className="text-cyan-200/90">{when.lead}</span>
+                                <span className="cal-lead">{when.lead}</span>
                                 {/* Real spaces, not margins, so it reads "Today 4:15 pm", not "Today4:15 pm". */}
-                                {' '}<span className="text-white/35 mx-[2px]" aria-hidden>·</span>{' '}
+                                {' '}<span className="cal-lead opacity-60 mx-[2px]" aria-hidden>·</span>{' '}
                             </>
                         )}
-                        <span className={when.countdown && when.soon ? 'text-amber-200' : 'text-white/70'}>{when.time}</span>
+                        {/* The accent, as on the sample card (.cal-classic-when); amber in the last 15 minutes. */}
+                        <span className={when.countdown && when.soon ? 'cal-soon' : 'cal-accent'}>{when.time}</span>
                     </span>
                 </div>
                 {attendees.length > 0 && (
@@ -525,11 +532,11 @@ const SlotBanner: React.FC<{ front: boolean; loading: boolean }> = ({ front, loa
                 ) : (
                     <>
                         <span className={`cal-tile${front ? '' : ' is-open'}`} aria-hidden>
-                            {front && <CalendarCheck size={14} className="text-cyan-200/90" strokeWidth={2} />}
+                            {front && <CalendarCheck size={14} className="cal-accent" strokeWidth={2} />}
                         </span>
                         <span className="min-w-0 flex flex-col gap-[4px]">
-                            <span className="text-[13px] font-semibold text-white leading-none tracking-[-0.01em] truncate">{line1}</span>
-                            <span className="text-[11px] text-white/70 font-medium leading-none truncate">{line2}</span>
+                            <span className="cal-ink text-[13px] font-semibold leading-none tracking-[-0.01em] truncate">{line1}</span>
+                            <span className="cal-muted text-[11px] font-medium leading-none truncate">{line2}</span>
                         </span>
                     </>
                 )}
@@ -538,8 +545,41 @@ const SlotBanner: React.FC<{ front: boolean; loading: boolean }> = ({ front, loa
     );
 };
 
+/**
+ * The linked card's settings button: Connect calendar's glass
+ * (ConnectCalendarButton GLASS_STYLE) a size down, so it reads as secondary
+ * to the heading and fits between it and the deck.
+ */
+const SETTINGS_GLASS_STYLE = {
+    '--lg-sky-bg': 'rgba(255, 255, 255, .12)',
+    '--lg-sky-hover': 'rgba(255, 255, 255, .20)',
+    '--lg-pill-h': '32px',
+    '--lg-label-size': '12.5px',
+    padding: '0 16px',
+} as React.CSSProperties;
+
 /** Matches the snippet's fixed 200ms `.is-hiding` fade (UpcomingCalendarCard.css). */
 const HEADING_HIDE_MS = 200;
+
+/**
+ * Connect calendar becomes the linked card's Calendar button: the pill
+ * contracts to a circle where the button will sit, then grows into it, and
+ * "Calendar →" comes up as it settles. Two 250ms halves (--duration-fast) on
+ * --ease-smooth-out, a resize and position change; the label is a text swap
+ * (2px blur, --blur-small) in the last 40%.
+ */
+const MORPH_MS = 500;
+const MORPH_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
+
+/** A pill's centre and size in the card's own px (the Launcher can scale the card). */
+type PillBox = { cx: number; cy: number; w: number; h: number };
+function pillBox(el: Element | null | undefined, root: HTMLElement | null): PillBox | null {
+    if (!el || !root) return null;
+    const r = root.getBoundingClientRect();
+    const b = el.getBoundingClientRect();
+    const k = r.width / (root.offsetWidth || r.width) || 1;
+    return { cx: (b.left + b.width / 2 - r.left) / k, cy: (b.top + b.height / 2 - r.top) / k, w: b.width / k, h: b.height / k };
+}
 
 /** After the user comes back from the browser, a beat before the heading changes, so they see it happen. */
 const RETURN_BEAT_MS = 450;
@@ -583,18 +623,23 @@ const CalendarHeading: React.FC<{ line1: string; line2: string; reveal?: boolean
 };
 
 /**
- * Before linking: a sample meeting where yours will be, the one the classic
- * backdrop (calender.png) had painted in (a Q2 roadmap review, two faces), now
- * drawn as ONE of the linked state's own banners, in the front banner's
- * place, so a sign-in swaps the sample for the real thing in place. One, not
- * a deck: the cards behind it crowded Connect calendar and competed with it.
- * The title is the
- * short form, which fits beside the tile whole. Its time is the next 4:30 pm,
- * so it never reads as a meeting that has passed. Decorative: hidden from screen readers, never under the pointer (no
- * pops), faces without photos (nothing is fetched for sample people), and it
- * leaves with the heading.
+ * Before linking: a sample meeting where yours will be, drawn as the classic
+ * backdrop (calender.png, removed in 5a28cca0) painted it: a rounded navy
+ * glass card with the tops of two more stacked behind it. The title over
+ * "Today · 4:30 – 5:15 pm" on the left; on the right three people's photos
+ * with "+2" under them. Only the sample looks like this; a linked calendar gets
+ * the deck of pill banners. Its time is the next 4:30 pm, so it never reads as
+ * a meeting that has passed. Decorative: hidden from screen readers and never
+ * under the pointer. The photos are free stock portraits bundled with the app
+ * (src/assets/demo-faces/SOURCES.md), so nothing is fetched.
  */
-const DEMO_ATTENDEES: CalendarAttendee[] = [{ email: '', name: 'Maya Reyes' }, { email: '', name: 'Ravi Lal' }];
+const DEMO_ATTENDEES: CalendarAttendee[] = [
+    { email: '', name: 'Maya Reyes', photoUrl: demoFaceMaya },
+    { email: '', name: 'Ravi Lal', photoUrl: demoFaceRavi },
+    { email: '', name: 'Daniel Ortiz', photoUrl: demoFaceDaniel },
+];
+/** People on the invite beyond the faces shown: the "+2". */
+const DEMO_MORE_ATTENDEES = 2;
 const demoMeeting = (title: string, now: number): CalendarMeeting => {
     const start = new Date(now);
     start.setHours(16, 30, 0, 0);
@@ -603,11 +648,39 @@ const demoMeeting = (title: string, now: number): CalendarMeeting => {
 };
 const DemoMeetingStack: React.FC<{ hiding: boolean }> = ({ hiding }) => {
     const t = useT();
+    const { lang } = useLanguage();
     const [now] = useState(() => Date.now());
+    const meeting = demoMeeting(t('Q2 Product Roadmap Review'), now);
+    const when = meetingWhen(meeting, now, lang);
+    const range = rangeOf(new Date(meeting.startTime), new Date(meeting.endTime!));
     return (
         <div className={`cal-demo cal-link-exit${hiding ? ' is-hiding' : ''}`} aria-hidden="true">
-            <div className="t-stack cal-stack h-[44px]">
-                <div data-depth={0} className="t-stack-banner"><MeetingBanner meeting={demoMeeting(t('Q2 Roadmap Review'), now)} now={now} /></div>
+            <div className="cal-classic">
+                <span className="cal-classic-peek cal-classic-peek--back" />
+                <span className="cal-classic-peek cal-classic-peek--mid" />
+                <div className="cal-classic-card">
+                    <div className="min-w-0 flex-1 flex flex-col gap-[5px]">
+                        <h4 className="cal-classic-title truncate">{meeting.title}</h4>
+                        <span className="cal-classic-when tabular-nums truncate">
+                            {when.lead && (
+                                <>
+                                    {when.lead}
+                                    {/* Real spaces, as in the deck's time line. */}
+                                    {' '}<span className="cal-classic-dot" aria-hidden>·</span>{' '}
+                                </>
+                            )}
+                            {range}
+                        </span>
+                    </div>
+                    <div className="cal-classic-people">
+                        <span className="flex -space-x-[7px]">
+                            {DEMO_ATTENDEES.map((a, ai) => (
+                                <AttendeeAvatar key={a.name} attendee={a} identity={a.name || String(ai)} z={DEMO_ATTENDEES.length - ai + 1} />
+                            ))}
+                        </span>
+                        <span className="cal-classic-more tabular-nums">+{DEMO_MORE_ATTENDEES}</span>
+                    </div>
+                </div>
             </div>
         </div>
     );
@@ -626,6 +699,7 @@ const UpcomingCalendarCard: React.FC<UpcomingCalendarCardProps> = ({
     meetings: allMeetings = [],
     totalCount,
     loading = false,
+    onOpenSettings,
     className = '',
 }) => {
     const t = useT();
@@ -643,6 +717,11 @@ const UpcomingCalendarCard: React.FC<UpcomingCalendarCardProps> = ({
     // A refused sign-in's message is showing under Connect calendar.
     const [connectError, setConnectError] = useState(false);
     const [revealLinkedHeading, setRevealLinkedHeading] = useState(false);
+    // Where Connect calendar's pill sat as the card linked, for the Calendar
+    // button to morph out of (see MORPH_MS). Only a fresh sign-in sets it.
+    const rootRef = useRef<HTMLDivElement>(null);
+    const connectRef = useRef<HTMLDivElement>(null);
+    const morphFrom = useRef<PillBox | null>(null);
     const handleConnected = (info: { fresh: boolean }) => {
         if (info.fresh) {
             setRevealLinkedHeading(true);
@@ -654,7 +733,10 @@ const UpcomingCalendarCard: React.FC<UpcomingCalendarCardProps> = ({
         if (linkHold === 'none') return;
         let timer: number | undefined;
         if (linkHold === 'hiding') {
-            timer = window.setTimeout(() => setLinkHold('none'), prefersReducedMotion() ? 0 : HEADING_HIDE_MS);
+            timer = window.setTimeout(() => {
+                morphFrom.current = pillBox(connectRef.current?.querySelector('.lg-button'), rootRef.current);
+                setLinkHold('none');
+            }, prefersReducedMotion() ? 0 : HEADING_HIDE_MS);
             return () => window.clearTimeout(timer);
         }
         const back = () => { timer = window.setTimeout(() => setLinkHold('hiding'), RETURN_BEAT_MS); };
@@ -698,9 +780,13 @@ const UpcomingCalendarCard: React.FC<UpcomingCalendarCardProps> = ({
         return () => window.clearTimeout(timer);
     }, [settling]);
     // A four-deep deck, popped from the middle, rises into the heading: it
-    // gives way (fades) while that is so.
+    // gives way (fades) while that is so. The settings button under it, nearer
+    // the deck, gives way on its own, so a card that only reaches the button
+    // leaves the heading alone.
     const [headingCovered, setHeadingCovered] = useState(false);
+    const [settingsCovered, setSettingsCovered] = useState(false);
     const headerRef = useRef<HTMLDivElement>(null);
+    const settingsRef = useRef<HTMLDivElement>(null);
     // Every card at rest pops, placeholder slots included: a gap in the deck
     // says so when hovered rather than ignoring the pointer.
     const pickable = entries.filter((e) => e.phase === 'rest');
@@ -742,18 +828,47 @@ const UpcomingCalendarCard: React.FC<UpcomingCalendarCardProps> = ({
             const highest = Math.min(...Array.from({ length: deepest + 1 }, (_, j) => topOf(j, pd)));
             const header = headerRef.current?.getBoundingClientRect();
             setHeadingCovered(!!header && highest < header.bottom);
+            const settings = settingsRef.current?.getBoundingClientRect();
+            setSettingsCovered(!!settings && highest < settings.bottom);
         }
     };
+    // The morph itself. Width, height and radius rather than a scale, so the
+    // caps stay round at every size; the button is centred in its row, so
+    // only the vertical offset has to follow the changing height.
+    useLayoutEffect(() => {
+        const from = morphFrom.current;
+        morphFrom.current = null;
+        const btn = settingsRef.current?.querySelector<HTMLElement>('.lg-button');
+        const to = pillBox(btn, rootRef.current);
+        if (!showLinked || !from || !btn || !to || prefersReducedMotion()) return;
+        const top = to.cy - to.h / 2;
+        const shape = (w: number, h: number, dx = 0, dy = 0) => ({
+            width: `${w}px`, height: `${h}px`, borderRadius: `${h / 2}px`, transform: `translate(${dx}px, ${dy}px)`,
+        });
+        const pill = btn.animate([
+            { ...shape(from.w, from.h, from.cx - to.cx, from.cy - (top + from.h / 2)), easing: MORPH_EASE },
+            { ...shape(to.h, to.h), offset: 0.5, easing: MORPH_EASE },
+            shape(to.w, to.h),
+        ], { duration: MORPH_MS });
+        const label = btn.querySelector('.lg-content')?.animate([
+            { opacity: 0, filter: 'blur(2px)' },
+            { opacity: 0, filter: 'blur(2px)', offset: 0.6, easing: 'ease-in-out' },
+            { opacity: 1, filter: 'blur(0)' },
+        ], { duration: MORPH_MS });
+        return () => { pill.cancel(); label?.cancel(); };
+    }, [showLinked]);
+
     const releasePick = () => {
         if (picked) {
             setPicked(null);
             setSettling(true);
         }
         if (headingCovered) setHeadingCovered(false);
+        if (settingsCovered) setSettingsCovered(false);
     };
 
     return (
-        <div className={`rounded-xl overflow-hidden bg-bg-elevated relative flex flex-col shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)] ${className}`}>
+        <div ref={rootRef} className={`rounded-xl overflow-hidden bg-bg-elevated relative flex flex-col shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)] ${className}`}>
             {/* Backdrop image. The curtain is plain, so it needs no tint once meetings stack over it. */}
             <div className="absolute inset-0">
                 <img
@@ -780,13 +895,13 @@ const UpcomingCalendarCard: React.FC<UpcomingCalendarCardProps> = ({
                     onPointerMove={trackPick}
                     onPointerLeave={releasePick}
                 >
-                    {/* The heading 30.5px down (14px layer padding + 16.5px); the
-                        deck pinned to the bottom, its front card 12px off the edge
-                        (pb-3), as it always sat. A popped third card stops ~25px
-                        under the heading. */}
+                    {/* The heading 24px down (14px layer padding + 10px), level
+                        with "Link your calendar to" (pt-6) so the line doesn't
+                        jump when the card links; the deck pinned to the bottom,
+                        its front card 12px off the edge (pb-3), as it always sat. */}
                     <div
                         ref={headerRef}
-                        className={`cal-stack-header relative flex justify-center text-center pt-[16.5px]${headingCovered ? ' is-covered' : ''}`}
+                        className={`cal-stack-header relative flex justify-center text-center pt-[10px]${headingCovered ? ' is-covered' : ''}`}
                     >
                         <CalendarHeading
                             key={headingKind}
@@ -795,6 +910,27 @@ const UpcomingCalendarCard: React.FC<UpcomingCalendarCardProps> = ({
                             reveal={revealLinkedHeading || headingKind !== firstHeadingKind.current}
                         />
                     </div>
+
+                    {/* Settings › Calendar, 10px under the heading's second line.
+                        Its bottom (112px) stays clear of the deck's hover
+                        reach (119.6px), so pointing at it never pops a card;
+                        a popped card that rises over it fades it. */}
+                    {onOpenSettings && (
+                        <div
+                            ref={settingsRef}
+                            className={`cal-settings relative flex justify-center mt-[10px]${settingsCovered ? ' is-covered' : ''}`}
+                        >
+                            <LiquidGlassButton
+                                variant="sky"
+                                className="lg-sm"
+                                style={SETTINGS_GLASS_STYLE}
+                                onClick={onOpenSettings}
+                                tabIndex={settingsCovered ? -1 : undefined}
+                            >
+                                {t('Calendar settings')}
+                            </LiquidGlassButton>
+                        </div>
+                    )}
 
                     {/* The three soonest meetings as a banner stack, soonest in
                         front: always three deep. Entries stay in a fixed order;
@@ -837,8 +973,13 @@ const UpcomingCalendarCard: React.FC<UpcomingCalendarCardProps> = ({
                         />
                     </div>
 
-                    {/* Leaves with the heading, on the same quiet 200ms fade. */}
-                    <div className={`relative z-[1] cal-link-exit${linkHold === 'hiding' ? ' is-hiding' : ''}`}>
+                    {/* Leaves with the heading, on the same quiet 200ms fade;
+                        with a Calendar button to become, only its label goes
+                        and the pill stays for the morph (MORPH_MS). */}
+                    <div
+                        ref={connectRef}
+                        className={`relative z-[1] ${onOpenSettings ? 'cal-link-morph' : 'cal-link-exit'}${linkHold === 'hiding' ? ' is-hiding' : ''}`}
+                    >
                         <ConnectCalendarButton
                             className="-translate-x-0.5"
                             onConnect={handleConnected}

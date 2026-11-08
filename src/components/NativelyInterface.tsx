@@ -2,12 +2,15 @@ import { animate, AnimatePresence, motion, motionValue, useMotionValue, useTrans
 import {
   ArrowRight,
   ArrowDown,
+  BookOpen,
   ChevronDown,
   Code,
   Copy,
   Check,
+  Crop,
   Globe,
   HelpCircle,
+  History,
   Image,
   Keyboard,
   Lightbulb,
@@ -15,21 +18,23 @@ import {
   MessageSquare,
   Mic,
   MicOff,
-  NotebookPen,
   Pencil,
-  PointerOff,
+  Quote,
   RefreshCw,
+  Repeat2,
   SlidersHorizontal,
   X,
 } from 'lucide-react';
 import {
   mergeRollingTranscriptFinal,
-  mergeRollingTranscriptPartial,
+  rollingTranscriptWithPartial,
 } from '../../electron/utils/rollingTranscriptState.ts';
-import { categorizeSttError } from '../lib/sttErrorMapper';
+import { categorizeSttError, sttConnectionCause, sttLocalModelCause } from '../lib/sttErrorMapper';
 import { splitGistLine, splitGistLineStreaming, collapseBlockGaps } from '../lib/displayMarkup';
+import { resumedChatMessages, resumedDirectHistory } from '../lib/resumedChat.mjs';
 
 import type { SkillSummary } from '../types/electron';
+import { copyText } from '../lib/copyText';
 
 function SkillPicker({
   skills,
@@ -178,9 +183,7 @@ const CodeBlockChrome = ({ lang, code }: { lang: string; code: string }) => {
     if (timer.current) clearTimeout(timer.current);
   }, []);
   const handleCopy = () => {
-    const p = navigator.clipboard?.writeText(code);
-    if (!p) return;
-    p.then(() => {
+    copyText(code).then(() => {
       setCopied(true);
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => setCopied(false), 2000);
@@ -255,6 +258,8 @@ import {
 import { decideStreamingHeightCommit } from '../lib/streamingHeightDecision.mjs';
 import { mergeTranscriptChunks } from '../lib/transcriptMerge.mjs';
 import { createTranscriptTailWaiter } from '../lib/answerTailWait.mjs';
+import { audioWarningAction } from '../lib/audioWarningAction.mjs';
+import { backspace, deleteWord, editCommand, editShortcutLetter, isWordDelete, paste, pastedText, typed } from '../lib/stealthEdit.mjs';
 import {
   applyWhatToAnswerNullFeedbackMessages,
   finalizeStreamingByIntentMessages,
@@ -322,7 +327,7 @@ import {
   pinnedViewportBudget,
   type OverlayResizeDirection,
 } from '../lib/overlayCustomSize.mjs';
-import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch, resolveChatStreamSurfaceError } from '../lib/chatStreamGuard.mjs';
+import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch, resolveChatStreamSurfaceError, isStaleDesktopChatEvent } from '../lib/chatStreamGuard.mjs';
 import { buildDirectWhatToSayPayload } from '../lib/directAssistWhatToSayPayload.mjs';
 import { chatFailureFromError, isProviderFailureSentence } from '../lib/chatFailure.mjs';
 import {
@@ -338,6 +343,10 @@ import {
   type DirectAssistFallbackHop,
   type DirectAssistFallbackNotice,
 } from '../lib/directAssistFailure.mjs';
+import { addAttachment, revealsOverlay, withoutFormulaImages } from '../lib/attachmentTray.mjs';
+import { createPendingScreenshots } from '../lib/pendingScreenshots.mjs';
+import { imageFilesFromDrop, overlayPasteAction } from '../lib/overlayImageDrop.mjs';
+import { shouldSkipLiveRagForChatFollowUp } from '../lib/liveRagFollowUpGate.mjs';
 import {
   applyFirstStreamingToken,
   commitStreamingFlush,
@@ -365,10 +374,20 @@ import {
   REVEAL_WORD_CLASS,
 } from '../lib/textRevealAnimation.mjs';
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism-light';
-import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { oneLight as oneLightBase } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { vividDarkCodeTheme, VIVID_DARK_LINE_NUMBER_COLOR } from '../lib/codeTheme';
 
 registerPrismLanguages();
+
+// oneLight paints hsl(230,1%,98%) on the <pre> and <code>. customStyle only
+// clears the <pre>; the <code> kept its fill, and in the streaming view (one
+// inline highlighter per line) that showed as a white bar behind every line.
+// The code block's own card is the background, so the theme's must go.
+const oneLight = {
+  ...oneLightBase,
+  'code[class*="language-"]': { ...oneLightBase['code[class*="language-"]'], background: 'transparent' },
+  'pre[class*="language-"]': { ...oneLightBase['pre[class*="language-"]'], background: 'transparent' },
+};
 // import { ModelSelector } from './ui/ModelSelector'; // REMOVED
 import 'katex/dist/katex.min.css';
 import DOMPurify from 'dompurify';
@@ -401,8 +420,12 @@ import { genMessageId } from '../utils/messageId';
 import { mapLanguageForPrism, isBlockCode } from '../utils/prismLanguage';
 import { registerPrismLanguages } from '../utils/registerPrismLanguages';
 import { useShortcuts } from '../hooks/useShortcuts';
+import ClickThroughToggle from './ui/ClickThroughToggle';
 import { analytics, detectProviderType, reportAnswerFailed } from '../lib/analytics/analytics.service';
-import type { MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
+import { interfaceThemeSurface, isCssOwnedInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
+import { isBuiltinOverlayButtonId, overlayRowOf, useOverlayButtonOrder, type BuiltinOverlayButtonId, type OverlayButtonId } from '../lib/overlayButtonOrder';
+import { getOverlayCustomButton, overlayCustomReadMinutes, useOverlayCustomButtons, type OverlayCustomButtonId } from '../lib/overlayCustomButtons';
+import { OVERLAY_BUTTONS, overlayButtonFace } from './overlay/overlayButtons';
 import {
   getGlassOverlayAppearance,
   getOverlayAppearance,
@@ -410,7 +433,7 @@ import {
 } from '../lib/overlayAppearance';
 import { NegotiationCoachingCard } from '../premium';
 import type { DynamicActionPayload } from '../types/electron';
-import { getCodexCliModelDisplayName, gatewayModelLabel, litellmModelLabel } from '../utils/modelUtils';
+import { getCodexCliModelDisplayName, gatewayModelLabel, litellmModelLabel, modelChipName } from '../utils/modelUtils';
 import { getModifierSymbol, isMac, isWindows } from '../utils/platformUtils';
 import { acceleratorToKeys } from '../utils/keyboardUtils';
 import { DynamicActionBar } from './dynamic-actions/DynamicActionBar';
@@ -429,7 +452,11 @@ import ChromeFold from './overlay/ChromeFold';
 import { useOverlayTrial } from './overlay/useOverlayTrial';
 import { TrialChip, TrialNoticeBanner } from './overlay/TrialNotice';
 import { AutoStopNoticeBanner, useMeetingAutoStopNotice } from './overlay/AutoStopNotice';
+import { useAmbientChatMeeting } from './overlay/AmbientChatNotice';
+import { LastTimeRecapBanner, useLastTimeRecap } from './overlay/LastTimeRecapNotice';
+import type { LiveHelperAction } from '../types/assist';
 import { useMeetingMute } from './overlay/useMeetingMute';
+import { HeroGlassButton } from './overlay/heroGlass/HeroGlassButton';
 
 // PERF: hoisted plugin arrays. ReactMarkdown receives `remarkPlugins` and
 // `rehypePlugins` as new array literals if defined inline at the call site —
@@ -443,6 +470,7 @@ const REMARK_PLUGINS = [remarkGfm, remarkMath];
 const REHYPE_PLUGINS: any[] = [[rehypeKatex, { throwOnError: false, strict: false, errorColor: '#cc0000' }]];
 
 import { DOM_CONTEXT_MAX_CHARS } from '../constants/domCapture';
+import { isKeepOverlaySizeEnabled, subscribeKeepOverlaySize } from '../lib/overlaySizeSetting';
 
 // ── Streaming-height headroom buffer (native OS window resize during token
 // streaming) ─────────────────────────────────────────────────────────────
@@ -1014,6 +1042,8 @@ export const StreamingHighlightedCode = React.memo(
 interface MessageRowProps {
   msg: Message;
   isLightTheme: boolean;
+  /** Lavender: your question is the hero's lavender pill (overlay/heroGlass). */
+  isLavenderTheme?: boolean;
   appearance: any;
   renderMessageText: (msg: Message) => React.ReactNode;
 }
@@ -1160,6 +1190,7 @@ const MessageRow = React.memo(
   function MessageRow({
     msg,
     isLightTheme,
+    isLavenderTheme = false,
     appearance: _appearance,
     renderMessageText,
   }: MessageRowProps) {
@@ -1209,7 +1240,9 @@ const MessageRow = React.memo(
               }
               ${
                 msg.role === 'user'
-                  ? isLightTheme
+                  ? isLavenderTheme
+                    ? 'hlg-button hlg-lavender hlg-sm hero-bubble'
+                    : isLightTheme
                     ? 'bg-blue-500/10 backdrop-blur-md border border-blue-500/20 text-blue-900 rounded-[20px] rounded-tr-[4px] shadow-sm font-medium'
                     : 'bg-blue-600/20 backdrop-blur-md border border-blue-500/30 text-blue-100 rounded-[20px] rounded-tr-[4px] shadow-sm font-medium'
                   : ''
@@ -1396,6 +1429,7 @@ const MessageRow = React.memo(
   (prev, next) =>
     prev.msg === next.msg &&
     prev.isLightTheme === next.isLightTheme &&
+    prev.isLavenderTheme === next.isLavenderTheme &&
     prev.appearance === next.appearance &&
     prev.renderMessageText === next.renderMessageText,
 );
@@ -1410,9 +1444,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   overlayOpacity = OVERLAY_OPACITY_DEFAULT,
   interfaceTheme = 'default',
 }) => {
-  const isLightTheme = useResolvedTheme() === 'light';
+  // Every style but glass and modern follows the app's light or dark theme
+  // (Lavender too since 2026-10-31). The hook runs on every render: behind `||` it was skipped while the theme
+  // was Lavender, and flipping in or out of Lavender changed the hook order
+  // and crashed the overlay ("Should have a queue").
+  const resolvedTheme = useResolvedTheme();
+  const isLightTheme = resolvedTheme === 'light';
   const isGlassTheme = interfaceTheme === 'liquid-glass';
   const isModernTheme = interfaceTheme === 'modern';
+  // Lavender draws its buttons with the website hero's own button
+  // (overlay/heroGlass), not the chip classes the other styles share.
+  const isLavenderTheme = interfaceTheme === 'lavender';
   const shellRef = React.useRef<HTMLDivElement>(null);
   const t = useT();
   const [isExpanded, setIsExpanded] = useState(true);
@@ -1420,9 +1462,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const trial = useOverlayTrial();
   // The automatic stop's "stops in 1 minute" notice, and typing reported to main.
   const autoStop = useMeetingAutoStopNotice();
+  // Ambient AI Chat: this meeting captures no audio (overlay/AmbientChatNotice.tsx).
+  const ambientChat = useAmbientChatMeeting();
+  // Such a meeting says so from its start ("Mic is off"). ✕ hides it until the
+  // mic button is pressed; it drops when the meeting gets audio (main clears
+  // ambientChat.on), and the next audio-less meeting shows it again.
+  const [ambientMicDismissed, setAmbientMicDismissed] = useState(false);
+  useEffect(() => {
+    if (!ambientChat.on) setAmbientMicDismissed(false);
+  }, [ambientChat.on]);
+  const showAmbientMicNotice = ambientChat.on && !ambientMicDismissed;
+  // "Last time" for a recurring meeting (overlay/LastTimeRecapNotice.tsx).
+  const lastTime = useLastTimeRecap();
   // Muted in Zoom / Teams / Meet: the mic is transcribed as silence (main: MeetingMuteSync).
   const meetingMute = useMeetingMute();
   const [inputValue, setInputValue] = useState('');
+  // Latest committed value, for the mount-only stealth key listener's copy/cut.
+  const inputValueRef = useRef('');
+  inputValueRef.current = inputValue;
   const [availableSkills, setAvailableSkills] = useState<SkillSummary[]>([]);
   const [skillPickerIndex, setSkillPickerIndex] = useState(0);
   const { shortcuts, isShortcutPressed, conflicts: shortcutConflicts, globalShortcutsEnabled } = useShortcuts();
@@ -1444,11 +1501,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing'
   >('awaiting-audio');
   const [sttInterviewerError, setSttInterviewerError] = useState<string>('');
+  // A stand-in provider carries a channel while its own is down (main:
+  // audio/sttFailover.ts): main's sentence, "Transcribing with X while Y is down."
+  const [sttUserFallback, setSttUserFallback] = useState<string>('');
+  const [sttInterviewerFallback, setSttInterviewerFallback] = useState<string>('');
   const [sttInterviewerProvider, setSttInterviewerProvider] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   // The notes window (`?window=notes`) is open: the Notes button shows it.
-  const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [conversationContext, setConversationContext] = useState<string>('');
   const [isManualRecording, setIsManualRecording] = useState(false);
   const isRecordingRef = useRef(false); // Ref to track recording state (avoids stale closure)
@@ -1494,6 +1554,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // looked broken ("Screenshot attached" with no explanation, 2026-08-18).
   const [captureFallback, setCaptureFallback] = useState<
     import('../types/electron').PageCaptureFallbackNotice & { at: number } | null
+  >(null);
+
+  // #647 Problem A: the last screenshot answer came back as an assessment
+  // refusal and was retried with the capture cropped to the browser's page
+  // area. `refusalRetry.cropped` says a crop was made and the banner below
+  // suggests a selective screenshot; `improved` says the retry answered and
+  // the banner's "Answer re-asked" line tells the user the answer they see
+  // is the retried one.
+  const [refusalRetryNotice, setRefusalRetryNotice] = useState<
+    { at: number; cropped: boolean; improved: boolean } | null
   >(null);
 
   // The structured capture (Smart Browser Context v2) that arrived with the last
@@ -1653,6 +1723,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           // A page context arrived — retire any stale "fell back to screenshot"
           // notice so the pills can't contradict each other.
           setCaptureFallback(null);
+          // An earlier capture's formula images number another page's formulas.
+          setAttachedContext((prev) => withoutFormulaImages(prev));
           setPageContext({
             title: meta?.title?.trim() || hostnameFromUrl(meta?.url) || 'Captured page',
             url: meta?.url,
@@ -1954,6 +2026,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // Debounce partial STT ticks so answer/solution rows are not drowned in re-renders.
   const rollingPartialDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRollingPartialRef = useRef<string | null>(null);
+  // The bar's committed finals; the live partial is drawn after them and never
+  // committed (see rollingTranscriptWithPartial).
+  const rollingCommittedRef = useRef('');
   const interviewerSpeakingRef = useRef(false);
   const pinAnswerPanelRef = useRef<() => void>(() => {});
   const [voiceInput, setVoiceInput] = useState(''); // Accumulated user voice input
@@ -1988,6 +2063,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // the state so the captured-key handler can early-out without depending
   // on React's render cycle for stop signals.
   const [stealthTapActive, setStealthTapActive] = useState<boolean>(false);
+  // Ctrl/Cmd+A while stealth typing selects the whole box (it has no caret, so
+  // "everything" is the only selection); the next keystroke replaces it. Ref for
+  // the mount-only key listener, state to paint the highlight.
+  const stealthAllSelectedRef = useRef(false);
+  const stealthSelectedValueRef = useRef('');
+  const [stealthAllSelected, setStealthAllSelectedState] = useState(false);
+  const markStealthAllSelected = useCallback((on: boolean) => {
+    stealthAllSelectedRef.current = on;
+    stealthSelectedValueRef.current = on ? inputValueRef.current : '';
+    setStealthAllSelectedState(on);
+  }, []);
+  // A selection ends with the session, and with the text it covered: Esc, a
+  // submit, or any other path that puts new text in the box.
+  useEffect(() => {
+    if (stealthAllSelectedRef.current && (!stealthTapActive || inputValue !== stealthSelectedValueRef.current)) {
+      markStealthAllSelected(false);
+    }
+  }, [stealthTapActive, inputValue, markStealthAllSelected]);
   const stealthTapActiveRef = useRef<boolean>(false);
   const caretMirrorRef = useRef<HTMLDivElement>(null);
   // While the stealth hook is engaged the input is never DOM-focused (always
@@ -2018,6 +2111,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const handleManualSubmitRef = useRef<() => void>(() => {});
   /** Blocks concurrent typed submits (double-click / key repeat) before React state updates. */
   const manualSubmitInFlightRef = useRef(false);
+  // A question typed while the previous answer still streams (2026-11-06). The
+  // flag above used to stay set until that answer FINISHED, so Enter did
+  // nothing and the question sat in the box. It is now released once the
+  // question is sent; main stops the older stream. The older stream's last
+  // tokens, done and error are kept out of the new card: from a send until
+  // main's gemini-stream-started for it, every desktop chat event is an older
+  // stream's, and after it the floor is that stream's id minus one
+  // (isStaleDesktopChatEvent). The sequence number keeps a replaced send's own
+  // error path off the new card.
+  const awaitingChatStreamStartRef = useRef(false);
+  const replacedChatStreamFloorRef = useRef<number | null>(null);
+  const manualSubmitSeqRef = useRef(0);
+  // Refs only, so the stream listeners (mounted once) can call any render's copy.
+  const staleDesktopChatEvent = (streamId: unknown, source: unknown) => isStaleDesktopChatEvent(
+    { awaitingStart: awaitingChatStreamStartRef.current, floor: replacedChatStreamFloorRef.current },
+    typeof streamId === 'number' ? streamId : undefined,
+    typeof source === 'string' ? source : undefined,
+  );
   const lastManualSubmitRef = useRef<{ text: string; atMs: number } | null>(null);
   /** Blocks duplicate quick-action LLM calls (Clarify, Follow-up, Brainstorm, Answer). */
   const overlayActionInFlightRef = useRef(new Set<string>());
@@ -2122,11 +2233,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // handleWhatToSay() can access it even in React 18 concurrent mode (where
   // a plain setTimeout(0) may fire before setAttachedContext flushes).
   const pendingCaptureRef = useRef<{ path: string; preview: string } | null>(null);
+  // ⌘/Ctrl+H captures still in flight. A send pressed in that ~0.5 s gap waits
+  // for them and takes them along (src/lib/pendingScreenshots.mjs).
+  const pendingShotsRef = useRef(createPendingScreenshots<{ path: string; preview: string }>());
 
   // Latent Context State (Screenshots attached but not sent)
-  const [attachedContext, setAttachedContext] = useState<Array<{ path: string; preview: string }>>(
-    [],
-  );
+  const [attachedContext, setAttachedContext] = useState<
+    Array<{ path: string; preview: string; formulaCapture?: string }>
+  >([]);
   // Phone Mirror: preview → path of every screenshot the tray held lately, so a
   // sent question card (which keeps only previews) can name its screenshots.
   const phoneShotPathsRef = useRef(new Map<string, string>());
@@ -2326,39 +2440,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     };
   }, []);
 
-  // Dynamic Action Button Mode (Recap vs Brainstorm)
-  const [actionButtonMode, setActionButtonMode] = useState<'recap' | 'brainstorm'>('recap');
-  // The shortcut listeners further down subscribe once and read the slot
-  // through this ref, as they read their handlers through handlersRef. Read
-  // from the closure it was always the first render's 'recap', so Cmd/Ctrl+3
-  // ran Recap with the button showing Brainstorm (2026-10-10).
-  const actionButtonModeRef = useRef(actionButtonMode);
-  actionButtonModeRef.current = actionButtonMode;
-
-  useEffect(() => {
-    // Load persisted mode
-    window.electronAPI
-      ?.getActionButtonMode?.()
-      ?.then((mode: 'recap' | 'brainstorm') => {
-        if (mode) setActionButtonMode(mode);
-      })
-      .catch(() => {});
-
-    // Listen for live changes from SettingsPopup / IPC
-    const unsubscribe = window.electronAPI?.onActionButtonModeChanged?.(
-      (mode: 'recap' | 'brainstorm') => {
-        setActionButtonMode(mode);
-      },
-    );
-    return () => {
-      unsubscribe?.();
-    };
-  }, []);
-
-  const useDarkCodeTheme = !isLightTheme || isGlassTheme || isModernTheme;
-  // Glass and modern keep a dark panel under the light app theme, so only the
-  // default interface theme ever puts the chat's content on a light surface.
-  const isLightSurface = isLightTheme && !isGlassTheme && !isModernTheme;
+  // Glass and modern keep a dark panel under the light app theme; default and
+  // lavender follow the app.
+  const isLightSurface = interfaceThemeSurface(interfaceTheme, isLightTheme ? 'light' : 'dark') === 'light';
+  // Lavender's code sits in a well of its own glass (2026-10-30), light or
+  // dark with the app (2026-10-31), so it takes the matching code theme.
+  const useDarkCodeTheme = !isLightSurface;
   const codeTheme = useDarkCodeTheme ? vividDarkCodeTheme : oneLight;
   const codeLineNumberColor = useDarkCodeTheme ? VIVID_DARK_LINE_NUMBER_COLOR : 'rgba(24,24,24,0.4)';
   // Header only shows for the light theme and the modern/glass interface
@@ -2366,13 +2453,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // [data-interface-theme] variables) — the new vivid-black default dark
   // theme drops the header row in favor of a floating hover-reveal language
   // tag + copy button (see HighlightedCode / StreamingHighlightedCode).
-  const showCodeHeader = !useDarkCodeTheme || isModernTheme || isGlassTheme;
+  const showCodeHeader = !useDarkCodeTheme || isModernTheme || isGlassTheme || isLavenderTheme;
   const appearance = useMemo(
     () =>
-      isGlassTheme
+      isCssOwnedInterfaceTheme(interfaceTheme)
         ? getGlassOverlayAppearance()
         : getOverlayAppearance(overlayOpacity, isLightTheme ? 'light' : 'dark'),
-    [overlayOpacity, isLightTheme, isGlassTheme],
+    [overlayOpacity, isLightTheme, interfaceTheme],
   );
   const overlayPanelClass = 'overlay-text-primary';
   const codeBlockClass = 'overlay-code-block-surface';
@@ -2682,18 +2769,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // new is that the slack now also exists on the VERTICAL axis, and at the
   // panel's fully expanded width.
   const SHELL_WIDTH_EXPANDED = WINDOW_WIDTH - OVERLAY_PANEL_INSET * 2;
-  // The quick-action row's single-line width in EACH mode, measured from two
-  // hidden copies of the row (0 until the first measure). The collapsed panel
-  // grows past its default only as far as the row needs, so Interview Mode's
-  // Brainstorm chip never pushes Answer onto a second line in any language.
+  // The quick-action row's single-line width, measured from a hidden copy of
+  // the row (0 until the first measure). The collapsed panel grows past its
+  // default only as far as the row needs, so the five buttons picked in
+  // Settings › Overlay never push one onto a second line in any language.
   // See the measuring effect after handleManualResizeToggle.
-  const [quickRowNeeds, setQuickRowNeeds] = useState({ recap: 0, brainstorm: 0 });
-  // The mode whose chip label is ON SCREEN. It trails actionButtonMode: a
-  // longer label waits for the panel to make room, and a shorter one is swapped
-  // in before the panel narrows. Until they agree the panel holds the wider of
-  // the two, so the row never wraps mid-change.
-  const [shownActionMode, setShownActionMode] = useState(actionButtonMode);
-  const quickRowNeed = Math.max(quickRowNeeds[actionButtonMode], quickRowNeeds[shownActionMode]);
+  const [quickRowNeed, setQuickRowNeed] = useState(0);
   const SHELL_WIDTH_COLLAPSED = collapsedWidthForRow(
     collapsedWidthFor(SHELL_WIDTH_EXPANDED),
     SHELL_WIDTH_EXPANDED,
@@ -2822,6 +2903,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // fresh auto-behaviour. NOT cleared on scroll (that would spring it back open
   // the moment the user nudges the wheel — the exact fight we're killing).
   const manualWidthOverrideRef = useRef<number | null>(null);
+  // Settings → Advanced → "Keep overlay size" (overlaySizeSetting.ts), on by
+  // default: the width a code answer opened, a width set with the resize button
+  // and a dragged height all stay for the next answers. Off: the overlay narrows
+  // when no code is in view and each new answer starts from the automatic size.
+  // A ref, read on the token path; a change applies from the next resize.
+  const holdOverlaySizeRef = useRef<boolean>(isKeepOverlaySizeEnabled());
+  useEffect(() => {
+    const follow = () => { holdOverlaySizeRef.current = isKeepOverlaySizeEnabled(); };
+    follow();
+    return subscribeKeepOverlaySize(follow);
+  }, []);
   // `isShellWide` drives the resize button's icon (Maximize2 ↔ Minimize2). It is
   // derived from the live shellWidth motion value crossing the midpoint, so it
   // self-reconciles for BOTH manual toggles and automatic code-expansion — the
@@ -2974,6 +3066,22 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         });
         setIsExpanded(true);
       }
+    });
+    return () => unsub?.();
+  }, []);
+
+  // A route flow (default-output change, device-mismatch switch, Settings
+  // reconfigure) just rebuilt the system capture on a working device, so a
+  // terminal "system audio gave up" banner describes a capture that no longer
+  // exists. Only terminal ones: a non-terminal warning (e.g. "meeting audio is
+  // on another device") may still be true, and is shown once per meeting.
+  // Permission banners are left alone — a rebuild fixes neither.
+  useEffect(() => {
+    const unsub = window.electronAPI?.onDeviceSelectionApplied?.((payload) => {
+      if (payload.kind !== 'output' || payload.fellBack) return;
+      setSystemAudioWarning((w) => (
+        w?.kind === 'audio-capture-failure' && w.channel === 'system' && w.terminal ? null : w
+      ));
     });
     return () => unsub?.();
   }, []);
@@ -3602,11 +3710,34 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       });
       if (decision.action === 'none') return;
       if (decision.action === 'snap') {
+        // A stopped tween never runs its onComplete, so the observer hold it
+        // armed and its settle are lost with it. The first quick-action answer
+        // is that case: the answer starts streaming mid-expand ('streaming'
+        // snap), grows the panel while every observer report is skipped, and
+        // the hold then expires on its timer with nothing left to report.
+        // Traced live: a 310px window under a 352px panel, footer cut off,
+        // until the next press re-measured. Do what onComplete does.
+        // The target is set before the window lead is awaited, the tween ref
+        // only once it runs; a snap in that gap leaves the same hold behind.
+        const interruptedTween =
+          viewportTweenRef.current !== null || viewportTweenTargetRef.current !== null;
         viewportTweenRef.current?.stop();
         viewportTweenRef.current = null;
         viewportTweenTargetRef.current = null;
         viewportAppliedRef.current = decision.height;
         viewportHeight.set(decision.height);
+        // A width transition owns the hold and settles it itself; so does a drag.
+        if (interruptedTween && !animationControlsRef.current && !isResizingRef.current) {
+          heightReportSuppressedUntilRef.current = 0;
+          requestAnimationFrame(() => {
+            measureVerticalCapRef.current?.();
+            const settled = contentRef.current?.offsetHeight ?? 0;
+            if (settled > 0) {
+              resizeOverlayWindow(settled);
+              syncStreamingHeightBaseline(settled);
+            }
+          });
+        }
         return;
       }
       // Already travelling to exactly this height — let it finish rather than
@@ -4184,59 +4315,52 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   }, [shellWidth, startTransition, SHELL_WIDTH_COLLAPSED, SHELL_WIDTH_EXPANDED]);
 
   // ── Collapsed width follows the quick-action row ──────────────────────────
-  // Interview Mode swaps Recap for Brainstorm, and in several languages that
-  // chip is long enough to push Answer onto a second line at the default
-  // collapsed width. So the row is measured from layout and the collapsed
-  // width grows to fit it (collapsedWidthForRow: never below the default,
-  // never above the expanded width). English with Inter fits the default and
-  // never moves.
+  // The row holds whichever five buttons Settings › Overlay put there, and in
+  // several languages a long pick (What did I miss?, Brainstorm) pushes the
+  // last chip onto a second line at the default collapsed width. So the row is
+  // measured from layout and the collapsed width grows to fit it
+  // (collapsedWidthForRow: never below the default, never above the expanded
+  // width). English with Inter and the default five fits the default.
+  const overlayButtonOrder = useOverlayButtonOrder();
+  const overlayRow = overlayRowOf(overlayButtonOrder);
+  const overlayCustomButtons = useOverlayCustomButtons();
   const quickRowRef = useRef<HTMLDivElement>(null);
-  const recapRowMeasureRef = useRef<HTMLDivElement>(null);
-  const brainstormRowMeasureRef = useRef<HTMLDivElement>(null);
+  const rowMeasureRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const row = quickRowRef.current;
     const card = shellRef.current;
-    const recapRow = recapRowMeasureRef.current;
-    const brainstormRow = brainstormRowMeasureRef.current;
-    if (!row || !card || !recapRow || !brainstormRow || typeof ResizeObserver === 'undefined') return;
+    const measureRow = rowMeasureRef.current;
+    if (!row || !card || !measureRow || typeof ResizeObserver === 'undefined') return;
     const px = (v: string) => parseFloat(v) || 0;
     const measure = () => {
-      // The hidden rows are the real chips laid out on one line at their
-      // natural width, so their width IS the single-line need; add the card
+      // The hidden row is the real chips laid out on one line at their
+      // natural width, so its width IS the single-line need; add the card
       // chrome around the row (its borders: card width minus row width).
       const chrome = px(getComputedStyle(card).width) - px(getComputedStyle(row).width);
-      const next = {
-        recap: px(getComputedStyle(recapRow).width) + chrome,
-        brainstorm: px(getComputedStyle(brainstormRow).width) + chrome,
-      };
-      setQuickRowNeeds((prev) =>
-        Math.abs(prev.recap - next.recap) < 0.25 && Math.abs(prev.brainstorm - next.brainstorm) < 0.25
-          ? prev
-          : next,
-      );
+      const next = px(getComputedStyle(measureRow).width) + chrome;
+      setQuickRowNeed((prev) => (Math.abs(prev - next) < 0.25 ? prev : next));
     };
     measure();
-    // Fires on language changes and when Inter finishes loading over the
-    // fallback font. Neither the mode nor Answer/Stop moves these rows.
+    // Fires on language changes, when Inter finishes loading over the
+    // fallback font, and when Settings › Overlay changes the row's buttons.
+    // Answer/Stop does not move this row.
     const ro = new ResizeObserver(measure);
-    ro.observe(recapRow);
-    ro.observe(brainstormRow);
+    ro.observe(measureRow);
     return () => ro.disconnect();
   }, []);
 
   // When the collapsed width changes, move a panel that is resting at (or
   // heading to) the old collapsed width onto the new one. Expanded, dragged
-  // and custom widths are left alone. Only an Interview Mode change animates —
-  // the width follows the mode in the same render, so that is known exactly;
-  // the first measure and a late-loading font snap, inside the reflow they
-  // come with. A spring already in flight is redirected, never stopped: its
-  // completion is what settles the window height.
-  const quickRowModeKey = `${actionButtonMode}|${shownActionMode}`;
-  const appliedModeKeyRef = useRef(quickRowModeKey);
+  // and custom widths are left alone. Only a change of the row's buttons
+  // animates; the first measure and a late-loading font snap, inside the
+  // reflow they come with. A spring already in flight is redirected, never
+  // stopped: its completion is what settles the window height.
+  const quickRowKey = overlayRow.join('|');
+  const appliedRowKeyRef = useRef(quickRowKey);
   const appliedCollapsedRef = useRef(SHELL_WIDTH_COLLAPSED);
   useLayoutEffect(() => {
-    const modeDriven = appliedModeKeyRef.current !== quickRowModeKey;
-    appliedModeKeyRef.current = quickRowModeKey;
+    const rowDriven = appliedRowKeyRef.current !== quickRowKey;
+    appliedRowKeyRef.current = quickRowKey;
     const previous = appliedCollapsedRef.current;
     appliedCollapsedRef.current = SHELL_WIDTH_COLLAPSED;
     if (previous === SHELL_WIDTH_COLLAPSED) return;
@@ -4249,43 +4373,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (manualWidthOverrideRef.current !== null) {
       manualWidthOverrideRef.current = SHELL_WIDTH_COLLAPSED;
     }
-    if (inFlight || (modeDriven && hasRenderedExpandedRef.current)) {
+    if (inFlight || (rowDriven && hasRenderedExpandedRef.current)) {
       startTransition(SHELL_WIDTH_COLLAPSED);
       return;
     }
     transitionTargetRef.current = SHELL_WIDTH_COLLAPSED;
     shellWidth.set(SHELL_WIDTH_COLLAPSED);
-  }, [SHELL_WIDTH_COLLAPSED, quickRowModeKey, shellWidth, startTransition]);
-
-  // The chip label the swap is heading to. A longer label waits until the
-  // panel is wide enough for the row; if nothing is widening the panel (it is
-  // expanded, dragged, or the window is too narrow) it swaps at once.
-  const [labelActionMode, setLabelActionMode] = useState(actionButtonMode);
-  useEffect(() => {
-    if (labelActionMode === actionButtonMode) return;
-    const target = actionButtonMode;
-    const fits = () => shellWidth.get() + 0.5 >= quickRowNeeds[target];
-    const swap = () => setLabelActionMode(target);
-    if (fits()) {
-      swap();
-      return;
-    }
-    const unsubscribe = shellWidth.on('change', () => {
-      if (fits()) swap();
-    });
-    const raf = requestAnimationFrame(() => {
-      if (animationControlsRef.current === null) swap();
-    });
-    const timer = setTimeout(swap, 1200);
-    return () => {
-      unsubscribe();
-      cancelAnimationFrame(raf);
-      clearTimeout(timer);
-    };
-  }, [actionButtonMode, labelActionMode, quickRowNeeds, shellWidth]);
-  const handleModeLabelShown = useCallback((key: string) => {
-    setShownActionMode(key === 'brainstorm' ? 'brainstorm' : 'recap');
-  }, []);
+  }, [SHELL_WIDTH_COLLAPSED, quickRowKey, shellWidth, startTransition]);
 
   // ── Free-form resize handles ──────────────────────────────────────────────
   // EAST-side directions only ('e', 's', 'se'). A west-side handle would need
@@ -4772,7 +4866,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         hasContent: messages.length > 0,
         overlayOpacity,
         themeMode: isLightTheme ? 'light' : 'dark',
-        interfaceTheme: isGlassTheme ? 'liquid-glass' : isModernTheme ? 'modern' : 'default',
+        interfaceTheme,
       })
       .catch(() => {});
   }, [
@@ -4781,8 +4875,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     messages.length,
     overlayOpacity,
     isLightTheme,
-    isGlassTheme,
-    isModernTheme,
+    interfaceTheme,
   ]);
 
   useEffect(() => {
@@ -5046,7 +5139,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       stableVisibilityTimerRef.current = null;
       const target = pendingVisibilityRef.current;
       pendingVisibilityRef.current = null;
-      if (target !== null && target !== codeExpandedRef.current) {
+      if (target !== null && target !== codeExpandedRef.current && !(target === false && holdOverlaySizeRef.current)) {
         startTransition(target ? SHELL_WIDTH_EXPANDED : SHELL_WIDTH_COLLAPSED);
       }
     }, STABILITY_MS);
@@ -5349,15 +5442,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     return () => unsubscribe();
   }, []);
 
-  // The notes window opens and closes outside this window (its own X, a
-  // meeting starting); follow it so the Notes button reads right.
-  useEffect(() => {
-    let cancelled = false;
-    window.electronAPI?.notesWindowIsOpen?.().then((open) => { if (!cancelled) setIsNotesOpen(open === true); }).catch(() => {});
-    const off = window.electronAPI?.onNotesWindowVisibility?.((open) => setIsNotesOpen(open));
-    return () => { cancelled = true; off?.(); };
-  }, []);
-
   // Sync Window Visibility with Expanded State
   useEffect(() => {
     // First run is the mount-time isExpanded=true. main.startMeeting() has
@@ -5475,7 +5559,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // Session Reset Listener - Clears UI when a NEW meeting starts
   useEffect(() => {
     if (!window.electronAPI?.onSessionReset) return;
-    const unsubscribe = window.electronAPI.onSessionReset(() => {
+    const unsubscribe = window.electronAPI.onSessionReset((payload) => {
       console.log('[NativelyInterface] Resetting session state...');
       window.electronAPI?.cancelChatStream?.();
       chatStreamIdRef.current = null;
@@ -5558,6 +5642,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         rollingPartialDebounceRef.current = null;
       }
       pendingRollingPartialRef.current = null;
+      rollingCommittedRef.current = '';
       setRollingTranscript('');
       setIsInterviewerSpeaking(false);
       interviewerSpeakingRef.current = false;
@@ -5570,6 +5655,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       setSttInterviewerError('');
       // Optionally reset connection status if needed, but connection persists
 
+      // A resumed meeting (2026-11-03): its earlier answers come back, so the
+      // chat carries on where it stopped; typed turns are Direct history too.
+      const earlier = resumedChatMessages(payload?.resumedChat);
+      if (earlier.length > 0) {
+        setMessages(earlier as Message[]);
+        directAssistHistoryRef.current = resumedDirectHistory(payload?.resumedChat);
+      }
+
       // Track new conversation/session if applicable?
       // Actually 'app_opened' is global, 'assistant_started' is overlay.
       // Maybe 'conversation_started' event?
@@ -5578,14 +5671,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     return () => unsubscribe();
   }, []);
 
-  const handleScreenshotAttach = (data: { path: string; preview: string }) => {
-    setIsExpanded(true);
-    setAttachedContext((prev) => {
-      // Prevent duplicates and cap at 5
-      if (prev.some((s) => s.path === data.path)) return prev;
-      const updated = [...prev, data];
-      return updated.slice(-5); // Keep last 5
-    });
+  const handleScreenshotAttach = (data: { path: string; preview: string; formulaCapture?: string; quiet?: boolean }) => {
+    // A phone capture or photo is quiet: it joins the tray (which the phone
+    // shows) without the overlay popping up on the desktop.
+    const { quiet, ...item } = data;
+    if (revealsOverlay({ quiet })) setIsExpanded(true);
+    setAttachedContext((prev) => addAttachment(prev, item));
   };
 
   // STT Status listener — must survive isExpanded changes.
@@ -5595,11 +5686,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (data.channel === 'user') {
         setSttUserStatus(data.state);
         setSttUserProvider(data.provider);
+        setSttUserFallback(data.fallback?.notice ?? '');
         if (data.error) setSttUserError(data.error);
         if (data.state === 'connected' || data.state === 'awaiting-audio') setSttUserError('');
       } else if (data.channel === 'interviewer') {
         setSttInterviewerStatus(data.state);
         setSttInterviewerProvider(data.provider);
+        setSttInterviewerFallback(data.fallback?.notice ?? '');
         if (data.error) setSttInterviewerError(data.error);
         if (data.state === 'connected' || data.state === 'awaiting-audio') setSttInterviewerError('');
       }
@@ -6570,6 +6663,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // to the auto cap before the token lays out, so the growth is one motion.
     if (
       heightPinIsCeilingRef.current &&
+      !holdOverlaySizeRef.current &&
       streamingMsgIdRef.current !== heightPinStreamIdRef.current
     ) {
       heightPinIsCeilingRef.current = false;
@@ -6631,7 +6725,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // First token of a NEW stream (id not yet reserved) → relinquish any manual
     // width pin so this answer gets fresh auto-resize behaviour. Done before the
     // eager-expand check below so a new coding answer can still grow the shell.
-    if (streamingMsgIdRef.current === null && manualWidthOverrideRef.current !== null) {
+    if (streamingMsgIdRef.current === null && manualWidthOverrideRef.current !== null && !holdOverlaySizeRef.current) {
       manualWidthOverrideRef.current = null;
     }
 
@@ -7534,7 +7628,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       const text = pendingRollingPartialRef.current;
       pendingRollingPartialRef.current = null;
       if (text == null) return;
-      setRollingTranscript((prev) => mergeRollingTranscriptPartial(prev, text));
+      setRollingTranscript(rollingTranscriptWithPartial(rollingCommittedRef.current, text));
     }, 80);
   }, []);
 
@@ -7546,7 +7640,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const text = pendingRollingPartialRef.current;
     pendingRollingPartialRef.current = null;
     if (text != null) {
-      setRollingTranscript((prev) => mergeRollingTranscriptPartial(prev, text));
+      setRollingTranscript(rollingTranscriptWithPartial(rollingCommittedRef.current, text));
     }
   }, []);
 
@@ -7630,7 +7724,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         flushRollingPartialPreview();
         interviewerSpeakingRef.current = false;
         setIsInterviewerSpeaking(false);
-        setRollingTranscript((prev) => mergeRollingTranscriptFinal(prev, transcript.text));
+        rollingCommittedRef.current = mergeRollingTranscriptFinal(rollingCommittedRef.current, transcript.text);
+        setRollingTranscript(rollingCommittedRef.current);
 
         setTimeout(() => {
           setIsInterviewerSpeaking(false);
@@ -8001,6 +8096,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           if (streamingIntentRef.current === data.mode) flushToken();
           discardEmptyPlaceholder(data.mode);
         }
+        // A follow-up's placeholder is named for its refinement ('shorten',
+        // 'rephrase', ...), not for the engine's 'follow_up' mode: it is the
+        // live stream's intent while that refinement is in flight.
+        const refining = streamingIntentRef.current;
+        if (data.mode === 'follow_up' && refining && overlayActionInFlightRef.current.has(`follow_up:${refining}`)) {
+          flushToken();
+          discardEmptyPlaceholder(refining);
+        }
         // What to Answer sometimes words its own failure: for a provider
         // failure the engine follows this event with a sentence as the answer.
         // The notice is posted regardless, so a failure is never silent, and
@@ -8058,6 +8161,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     );
   }, [attachedContext]);
 
+  // Phone Mirror's Speak chip toggles this recording, so the phone shows it
+  // too: Stop while recording, Speak again once it ends. Reported on every
+  // change, including the false on mount, which clears one left by a reload.
+  useEffect(() => {
+    window.electronAPI?.phoneMirrorSetRecording?.(isManualRecording);
+  }, [isManualRecording]);
+
   // The phone took one off its tray (it shows this tray), so it leaves here.
   useEffect(() => {
     return window.electronAPI?.onPhoneMirrorDetach?.(({ path }) => {
@@ -8094,6 +8204,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // (placeholder intent 'what_to_answer') and code_hint (no placeholder call
   // at all). Hardcoded English, matching existing precedent in this file (the
   // 3 screenshot-branch strings below are not run through useT()).
+  // When the user last touched the overlay (a click or a key), and the touch
+  // before that one: the press of What did I miss? is itself a touch, so it
+  // reads `previous`.
+  const lastOverlayTouchRef = useRef<{ last: number | null; previous: number | null }>({ last: null, previous: null });
+  useEffect(() => {
+    const note = () => {
+      const r = lastOverlayTouchRef.current;
+      r.previous = r.last;
+      r.last = Date.now();
+    };
+    window.addEventListener('pointerdown', note, true);
+    window.addEventListener('keydown', note, true);
+    return () => {
+      window.removeEventListener('pointerdown', note, true);
+      window.removeEventListener('keydown', note, true);
+    };
+  }, []);
+
   const QUICK_ACTION_LABELS: Record<string, string> = {
     what_to_say: 'What should I say?',
     recap: 'Recap',
@@ -8103,6 +8231,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     brainstorm: 'Brainstorm',
     'follow_up:shorten': 'Shorten',
     'follow_up:rephrase': 'Rephrase',
+    'live:catch_me_up': 'What did I miss?',
+    'live:define': 'Define',
+    'live:follow_up_questions': 'Follow-up questions',
+    'live:sound_smart': 'Sound smart',
   };
 
   const handleWhatToSay = async (promptInstruction?: string | React.MouseEvent) => {
@@ -8120,6 +8252,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       typeof promptInstruction === 'string' ? promptInstruction : undefined;
     setIsExpanded(true);
     setIsProcessing(true);
+    // ⌘H then ⌘Enter in one motion: wait for a screenshot still capturing.
+    const lateShots = await pendingShotsRef.current.settle();
     // Capture and clear attached image context.
     // Also merge in any screenshot from the capture-and-process shortcut that
     // arrived via pendingCaptureRef before the React state flush (React 18 fix).
@@ -8129,8 +8263,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const questionCardId = genMessageId();
     let currentAttachments = attachedContext;
     if (pending && !currentAttachments.some((s) => s.path === pending.path)) {
-      currentAttachments = [...currentAttachments, pending].slice(-5);
+      currentAttachments = addAttachment(currentAttachments, pending);
     }
+    for (const shot of lateShots) currentAttachments = addAttachment(currentAttachments, shot);
 
     if (currentAttachments.length > 0) {
       setAttachedContext([]);
@@ -8189,7 +8324,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // segments so a question split by punctuation/finalization stays intact,
         // while older meeting discussion cannot become the primary request.
         const directTranscriptSnapshot = pendingRollingPartialRef.current
-          ? mergeRollingTranscriptPartial(rollingTranscript, pendingRollingPartialRef.current)
+          ? rollingTranscriptWithPartial(rollingCommittedRef.current, pendingRollingPartialRef.current)
           : rollingTranscript;
         const interviewerRequest = directTranscriptSnapshot
           .split('  ·  ')
@@ -8322,6 +8457,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       setLatestVisionProviderUsed(result.visionProviderUsed);
       setLatestVisionModelUsed(result.visionModelUsed);
       setLatestVisionFailureReason(result.visionFailureReason);
+      // #647 Problem A: an assessment refusal was retried with the capture
+      // cropped to the browser's page area. The banner says what happened
+      // and suggests the selective screenshot for next time; the retried
+      // answer has already replaced the refusal in `result.answer`.
+      setRefusalRetryNotice(result.refusalRetry ? { ...result.refusalRetry, at: Date.now() } : null);
       if (result.answer == null) {
         // A quiet note, not a sentence at reading size where an answer would
         // be: main's own reason when it gives one, ours otherwise.
@@ -8392,8 +8532,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     analytics.trackCommandExecuted('follow_up_' + intent);
 
     try {
-      await window.electronAPI.generateFollowUp(intent);
+      const result = await window.electronAPI.generateFollowUp(intent);
+      // Nothing came back: cancelled, or overtaken by an answer (see
+      // handleClarify). A real failure arrives as onIntelligenceError.
+      if (!result?.refined) discardEmptyPlaceholder(intent);
     } catch (err) {
+      discardEmptyPlaceholder(intent);
       setMessages((prev) => [
         ...prev,
         {
@@ -8471,6 +8615,46 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       ]);
     } finally {
       endOverlayAction('follow_up_questions');
+      setIsProcessing(false);
+    }
+  };
+
+  // The live helpers: What did I miss?, Define, Sound smart (main:
+  // llm/liveHelpers.ts). Each streams into the row of the action it reads
+  // like: Recap's card for the first two, Clarify's line for Sound smart.
+  // What did I miss? looks back to the user's last touch of the overlay
+  // before this press (lastOverlayTouchRef), held by main to 3-20 minutes.
+  const handleLiveHelper = async (action: LiveHelperAction) => {
+    const actionKey = `live:${action}`;
+    const shownAs = action === 'sound_smart' ? 'clarify' : 'recap';
+    const sinceMs = lastOverlayTouchRef.current.previous;
+    if (!tryBeginOverlayAction(actionKey)) return;
+    setIsExpanded(true);
+    setIsProcessing(true);
+    setMessages((prev) => [
+      ...prev,
+      { id: genMessageId(), role: 'user', text: QUICK_ACTION_LABELS[actionKey], isQuickActionLabel: true },
+    ]);
+    prepareIntelligenceStreamPlaceholder(shownAs);
+    analytics.trackCommandExecuted(`live_${action}`);
+
+    try {
+      const result = await window.electronAPI.generateLiveHelper?.(action, action === 'catch_me_up' && sinceMs ? { sinceMs } : undefined);
+      // Nothing came back: cancelled, or overtaken by an answer (see
+      // handleClarify). A real failure arrives as onIntelligenceError.
+      if (!result?.text) discardEmptyPlaceholder(shownAs);
+    } catch (err) {
+      discardEmptyPlaceholder(shownAs);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: genMessageId(),
+          role: 'system',
+          ...failedLine(err),
+        },
+      ]);
+    } finally {
+      endOverlayAction(actionKey);
       setIsProcessing(false);
     }
   };
@@ -8634,11 +8818,20 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // streamId guard (audit finding #3): drop tokens from a superseded chat stream so
     // a phone-mirror or stale desktop stream can't bleed into the active bubble. Tokens
     // without a streamId (back-compat) are always accepted.
+    // The id main gave the question just sent: older desktop streams are below it.
+    cleanups.push(
+      window.electronAPI.onGeminiStreamStarted((data) => {
+        if (typeof data?.streamId !== 'number') return;
+        replacedChatStreamFloorRef.current = data.streamId - 1;
+        awaitingChatStreamStartRef.current = false;
+      }),
+    );
     cleanups.push(
       window.electronAPI.onGeminiStreamToken((token, meta) => {
         // Direct Assist owns this overlay row while active. A legacy token that
         // was already queued before cancellation must never be adopted into it.
         if (activeDirectAssistRef.current) return;
+        if (staleDesktopChatEvent(meta?.streamId, (meta as any)?.source)) return;
         const decision = resolveChatStreamToken(
           chatStreamIdRef.current, meta?.streamId,
           chatStreamSourceRef.current, (meta as any)?.source,
@@ -8654,6 +8847,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     cleanups.push(
       window.electronAPI.onGeminiStreamDone((data) => {
         if (activeDirectAssistRef.current) return;
+        // Replaced by a newer typed question: the new question owns the card
+        // and the spinner, so nothing here is released either.
+        if (staleDesktopChatEvent(data?.streamId, (data as any)?.source)) return;
         // Ignore a done from a superseded stream (audit finding #3) so it can't
         // tear down a newer stream's row. A done without a streamId is honored
         // (back-compat). On an honored done we clear the adopted id.
@@ -8829,6 +9025,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           }
           return;
         }
+        if (staleDesktopChatEvent(meta?.streamId, meta?.source)) return;
         if (typeof meta?.streamId === 'number'
           && chatStreamIdRef.current !== null
           && meta.streamId !== chatStreamIdRef.current) return;
@@ -9140,6 +9337,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         isRecordingRef.current = false;
         answerStopInFlightRef.current = false;
         setIsManualRecording(false);
+        // Told now, ahead of the question below: the [isManualRecording]
+        // effect reports it only after the question has reached main, and the
+        // phone would then add a second Thinking that nothing answers.
+        window.electronAPI?.phoneMirrorSetRecording?.(false);
         setManualTranscript('');
 
         const currentAttachments = attachedContext;
@@ -9263,19 +9464,38 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
         try {
           let prompt = '';
+          // A follow-up skipped past live RAG goes the way typed chat does (V3:
+          // conversation ring + live-meeting evidence). On the caller-owned
+          // speaking prompt it kept the history but lost the transcript the
+          // previous answer came from, and disowned that answer.
+          let followUpViaChat = false;
+
+          // Prior turns only — the new user bubble was just queued via
+          // setMessages, so React state here is still the previous ring.
+          const conversationContextForSubmit = buildConversationContextFromMessages(messages);
+          // A prior user turn is enough: answers are `system` rows, and every
+          // answer follows a user row (typed, spoken or a quick-action label).
+          const hasPriorChat = messages.some((m) => m.role === 'user');
 
           if (currentAttachments.length > 0) {
             prompt = `You are a helper. The user has provided a screenshot and a spoken question/command.
 User said: "${question}"
-
+${conversationContextForSubmit ? `\nPrior conversation context:\n${conversationContextForSubmit}\n` : ''}
 Instructions:
 1. Analyze the screenshot in the context of what the user said.
 2. Provide a direct, helpful answer.
 3. Be concise.`;
           } else {
-            const ragResult = await window.electronAPI.ragQueryLive?.(question);
-            if (ragResult?.success) {
-              return;
+            // Issue #552: live RAG answers from transcript chunks alone and
+            // never sees prior chat. Referential follow-ups skip it and go the
+            // typed-chat route below; self-contained questions still hit
+            // ragQueryLive.
+            followUpViaChat = shouldSkipLiveRagForChatFollowUp(question, { hasPriorChat });
+            if (!followUpViaChat) {
+              const ragResult = await window.electronAPI.ragQueryLive?.(question);
+              if (ragResult?.success) {
+                return;
+              }
             }
 
             prompt = `You are a real-time interview assistant. The user just repeated or paraphrased a question from their interviewer.
@@ -9285,7 +9505,7 @@ Instructions:
 3. Keep the answer conversational but informative (2-4 sentences ideal)
 4. Do NOT include phrases like "The question is..." - just give the answer directly
 5. Format for speaking out loud, not for reading
-
+${conversationContextForSubmit ? `\nPrior conversation context:\n${conversationContextForSubmit}\n` : ''}
 Provide only the answer, nothing else.`;
           }
 
@@ -9297,21 +9517,25 @@ Provide only the answer, nothing else.`;
           // surface. The desktop done/error handlers both clear it again.
           chatStreamIdRef.current = null;
           chatStreamSourceRef.current = 'desktop';
+          // As for a typed question: older desktop streams' events are dropped
+          // until main names this one's (isStaleDesktopChatEvent).
+          awaitingChatStreamStartRef.current = true;
           requestStartTimeRef.current = Date.now();
           await window.electronAPI.streamGeminiChat(
             question,
             currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
-            prompt,
+            followUpViaChat ? conversationContextForSubmit : prompt,
             // `liveQuestion`: a turn of this session (unlike a question about a
             // past meeting), so main decides the diagram contract for it with
             // the design that is on the table.
-            { skipSystemPrompt: true, liveQuestion: true },
+            followUpViaChat ? { liveQuestion: true } : { skipSystemPrompt: true, liveQuestion: true },
           );
         } catch (err) {
           // R-17: a throw from invoke() never reaches the main process, so no
           // gemini-stream-error follows and nothing else releases the claim we
           // took above. Left set, it would pin the guard to 'desktop' and block
           // every phone turn — the bug this fix removes, inverted.
+          awaitingChatStreamStartRef.current = false;
           chatStreamIdRef.current = null;
           chatStreamSourceRef.current = null;
           setIsProcessing(false);
@@ -9343,6 +9567,14 @@ Provide only the answer, nothing else.`;
       // A previous Stop may still be collecting its transcript tail; starting
       // now would wipe voiceInput while that snapshot is being taken.
       if (answerStopInFlightRef.current) return;
+      // Ambient AI Chat: main captured no audio for this meeting, so a
+      // recording would draw "Listening..." with nothing able to arrive in it
+      // (issue #679). Go where a Stop with nothing heard goes (issue #540).
+      if (ambientChat.on) {
+        setAmbientMicDismissed(false);
+        void handlersRef.current.handleWhatToSay();
+        return;
+      }
       setVoiceInput('');
       voiceInputRef.current = '';
       setManualTranscript('');
@@ -9370,7 +9602,7 @@ Provide only the answer, nothing else.`;
     // Timing: the moment this request was accepted (content-free; see diagramTimings).
     diagramRequestAtRef.current = performance.now();
     warmDiagramRendererOnIdle();
-    if (!inputValue.trim() && attachedContext.length === 0) return;
+    if (!inputValue.trim() && attachedContext.length === 0 && !pendingShotsRef.current.inFlight()) return;
 
     const rawUserText = inputValue;
     const userText = inputValue.trim();
@@ -9391,10 +9623,23 @@ Provide only the answer, nothing else.`;
     lastManualSubmitRef.current = { text: userText, atMs: nowMs };
     analytics.trackChatQuestionSent();
 
-    const currentAttachments = attachedContext;
-
-    // Clear inputs immediately
+    // Cleared now, before the wait below (2026-11-06): what is typed during
+    // it is the next question, and clearing after the wait erased it.
     setInputValue('');
+
+    // ⌘H then Enter in one motion: wait for a screenshot still capturing.
+    let currentAttachments = attachedContext;
+    for (const shot of await pendingShotsRef.current.settle()) {
+      currentAttachments = addAttachment(currentAttachments, shot);
+    }
+    if (!userText && currentAttachments.length === 0) {
+      // Empty input sent only for a capture that then failed: nothing to send.
+      manualSubmitInFlightRef.current = false;
+      lastManualSubmitRef.current = last;
+      return;
+    }
+
+    // Clear the tray (the input was cleared before the wait above)
     setAttachedContext([]);
 
     // Seal any in-flight streaming rows from a previous turn before we
@@ -9501,6 +9746,7 @@ Provide only the answer, nothing else.`;
     setIsProcessing(true);
     pinAnswerPanel();
     const conversationContextForSubmit = buildConversationContextFromMessages(messages);
+    const mySubmit = ++manualSubmitSeqRef.current;
 
     try {
       // No RAG pre-flight here (issue #552). It used to intercept every typed
@@ -9515,15 +9761,26 @@ Provide only the answer, nothing else.`;
       // Pass imagePath if attached, AND conversation context
       // R-17: claim the desktop surface before the round-trip (see the note at
       // the other streamGeminiChat call site).
+      // Until main names this question's stream, every desktop chat event is
+      // an older question's and is dropped (isStaleDesktopChatEvent).
+      awaitingChatStreamStartRef.current = true;
       chatStreamIdRef.current = null;
       chatStreamSourceRef.current = 'desktop';
       requestStartTimeRef.current = Date.now();
+      // Sent: the next question may go while this one streams (main stops this
+      // stream for it). The double-press dedupe above still applies.
+      manualSubmitInFlightRef.current = false;
       await window.electronAPI.streamGeminiChat(
         userText || 'Analyze this screenshot',
         currentAttachments.length > 0 ? currentAttachments.map((s) => s.path) : undefined,
         conversationContextForSubmit, // Pass freshly-derived context so "answer this" works
       );
     } catch (err) {
+      // A newer question replaced this one (main stopped this stream): its card,
+      // claim and spinner belong to that question now.
+      if (mySubmit !== manualSubmitSeqRef.current) return;
+      // No stream will start for a send that failed.
+      awaitingChatStreamStartRef.current = false;
       // R-17: release the claim taken above — see the note at the other call site.
       chatStreamIdRef.current = null;
       chatStreamSourceRef.current = null;
@@ -9548,7 +9805,56 @@ Provide only the answer, nothing else.`;
         ];
       });
     } finally {
-      manualSubmitInFlightRef.current = false;
+      if (mySubmit === manualSubmitSeqRef.current) manualSubmitInFlightRef.current = false;
+    }
+  };
+
+  // A button the user made (Settings › Overlay › Your buttons). It runs like
+  // Define: main puts the button's contract in the system prompt as its
+  // action, with the mode and the core rules, and reads the conversation as
+  // context (llm/customButtons.ts); the answer streams into Recap's card.
+  // With "Screenshot every press" the screen goes with it.
+  const handleCustomButton = async (id: OverlayCustomButtonId) => {
+    const button = getOverlayCustomButton(id);
+    if (!button) return;
+    const actionKey = `custom:${button.id}`;
+    if (!tryBeginOverlayAction(actionKey)) return;
+    setIsExpanded(true);
+    setIsProcessing(true);
+    setMessages((prev) => [
+      ...prev,
+      { id: genMessageId(), role: 'user', text: button.name, isQuickActionLabel: true },
+    ]);
+    analytics.trackCommandExecuted(button.screenshot ? 'custom_button_screenshot' : 'custom_button');
+
+    try {
+      const imagePaths: string[] = [];
+      if (button.screenshot) {
+        try {
+          const shot = await window.electronAPI.takeScreenshot();
+          if (shot?.path) imagePaths.push(shot.path);
+        } catch (err) {
+          console.warn('[custom-button] screenshot failed; asking without it:', err);
+        }
+      }
+      prepareIntelligenceStreamPlaceholder('recap');
+      // A button saved before its contract was written runs on the user's own words.
+      const instruction = button.instruction || button.prompt;
+      const result = await window.electronAPI.generateCustomButton?.({ name: button.name, instruction, imagePaths, readMinutes: overlayCustomReadMinutes(button.prompt) });
+      if (!result?.text) discardEmptyPlaceholder('recap');
+    } catch (err) {
+      discardEmptyPlaceholder('recap');
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: genMessageId(),
+          role: 'system',
+          ...failedLine(err),
+        },
+      ]);
+    } finally {
+      endOverlayAction(actionKey);
+      setIsProcessing(false);
     }
   };
 
@@ -9742,7 +10048,7 @@ Provide only the answer, nothing else.`;
             >
               {isThinking ? (
                 <div className="flex items-center min-h-[24px] py-0.5">
-                  <span className="natively-thinking-label text-[13px]">{t('Thinking...')}</span>
+                  <span className="natively-thinking-label text-[13px]">{t('Thinking')}</span>
                 </div>
               ) : (
                 msg.text
@@ -9803,7 +10109,7 @@ Provide only the answer, nothing else.`;
                */}
               {!msg.text && (
                 <div className="flex items-center min-h-[24px] py-0.5">
-                  <span className="natively-thinking-label text-[13px]">{t('Thinking...')}</span>
+                  <span className="natively-thinking-label text-[13px]">{t('Thinking')}</span>
                 </div>
               )}
             </div>
@@ -10368,11 +10674,7 @@ Provide only the answer, nothing else.`;
         handleFollowUpQuestions();
       } else if (isShortcutPressed(e, 'dynamicAction4')) {
         e.preventDefault();
-        if (actionButtonModeRef.current === 'brainstorm') {
-          handleBrainstorm();
-        } else {
-          handleRecap();
-        }
+        handleRecap();
       } else if (isShortcutPressed(e, 'answer')) {
         e.preventDefault();
         handleAnswerNow();
@@ -10460,9 +10762,12 @@ Provide only the answer, nothing else.`;
     },
     takeScreenshot: async () => {
       try {
-        const data = await window.electronAPI.takeScreenshot();
-        if (data && data.path) {
-          handleScreenshotAttach(data as { path: string; preview: string });
+        const data = await pendingShotsRef.current.track(
+          window.electronAPI.takeScreenshot() as Promise<{ path: string; preview: string } | null>,
+        );
+        // A send pressed while this was capturing already took it along.
+        if (data && data.path && !pendingShotsRef.current.claimed(data.path)) {
+          handleScreenshotAttach(data);
         }
       } catch (err) {
         console.error('Error triggering screenshot:', err);
@@ -10501,9 +10806,12 @@ Provide only the answer, nothing else.`;
     },
     takeScreenshot: async () => {
       try {
-        const data = await window.electronAPI.takeScreenshot();
-        if (data && data.path) {
-          handleScreenshotAttach(data as { path: string; preview: string });
+        const data = await pendingShotsRef.current.track(
+          window.electronAPI.takeScreenshot() as Promise<{ path: string; preview: string } | null>,
+        );
+        // A send pressed while this was capturing already took it along.
+        if (data && data.path && !pendingShotsRef.current.claimed(data.path)) {
+          handleScreenshotAttach(data);
         }
       } catch (err) {
         console.error('Error triggering screenshot:', err);
@@ -10579,10 +10887,7 @@ Provide only the answer, nothing else.`;
       // The answer can start before the tray effect records this one.
       phoneShotPathsRef.current.set(data.preview, data.path);
 
-      setAttachedContext((prev) => {
-        if (prev.some((s) => s.path === data.path)) return prev;
-        return [...prev, data].slice(-5);
-      });
+      setAttachedContext((prev) => addAttachment(prev, data));
 
       // Use requestAnimationFrame so we wait for at least one paint cycle —
       // more reliable than setTimeout(0) under React 18 concurrent scheduling.
@@ -10743,10 +11048,8 @@ Provide only the answer, nothing else.`;
       else if (action === 'shorten') handlers.handleFollowUp('shorten');
       else if (action === 'followUp') handlers.handleFollowUpQuestions();
       else if (action === 'recap') handlers.handleRecap();
-      else if (action === 'dynamicAction4') {
-        if (actionButtonModeRef.current === 'brainstorm') handlers.handleBrainstorm();
-        else handlers.handleRecap();
-      } else if (action === 'answer') handlers.handleAnswerNow();
+      else if (action === 'dynamicAction4') handlers.handleRecap();
+      else if (action === 'answer') handlers.handleAnswerNow();
       else if (action === 'clarify') handlers.handleClarify();
       else if (action === 'codeHint') handlers.handleCodeHint();
       else if (action === 'brainstorm') handlers.handleBrainstorm();
@@ -10799,7 +11102,12 @@ Provide only the answer, nothing else.`;
     // listeners see the same binding.
     let escSuppressUntilNextActive = false;
 
-    const unsubState = window.electronAPI.onStealthTapState(({ active, reason }) => {
+    const unsubState = window.electronAPI.onStealthTapState(({ active: anyActive, reason, target }) => {
+      // The hook also types into the notes window (2026-10-20); a session of
+      // its own is the only one the overlay shows or expands for. A notes
+      // session still proves the hook works here.
+      if (anyActive) isCgEventTapAvailableRef.current = true;
+      const active = anyActive && (target ?? 'overlay') === 'overlay';
       stealthTapActiveRef.current = active;
       setStealthTapActive(active);
       if (active) {
@@ -10822,14 +11130,12 @@ Provide only the answer, nothing else.`;
       // CONTRACT WITH RUST: keyboard_tap.rs pass-through filter (R3)
       // returns the event unmodified for ANY system-modifier key
       // (Cmd / Ctrl / Option / Fn) and for ALL F-keys, so the OS
-      // routes those normally to the foreground app. Consequence:
-      // (ev.flags & CMD) is NEVER true here, neither is OPT or CTRL.
-      // The previous round had Cmd+Enter / Cmd+Backspace / Cmd+A /
-      // Option+Backspace branches — all dead code under R3. Removed
-      // to prevent a false sense of feature support; if Rust ever
-      // changes the filter to deliver Cmd events, those branches
-      // need to be REINTRODUCED with explicit testing, not
-      // resurrected from a TODO.
+      // routes those normally to the foreground app. The exceptions
+      // (native-module/src/edit_shortcut.rs, both hooks): Cmd/Ctrl+V/A/C/X
+      // arrive tagged CMD (macOS) or CTRL (Windows), and word delete
+      // arrives as Backspace tagged OPT (macOS) or CTRL (Windows).
+      // Nothing else with a modifier reaches this listener, so there is
+      // no Cmd+Enter or Cmd+Backspace branch.
 
       // Esc handled regardless of active state (main process broadcasts
       // it BEFORE stopping the tap, so we get here while still active;
@@ -10859,9 +11165,46 @@ Provide only the answer, nothing else.`;
       if (!stealthTapActiveRef.current) return; // ignore other events after stop
       if (!ev.isKeyDown) return; // we only act on keyDown
 
+      // Ctrl/Cmd+V/A/C/X: the hooks deliver these instead of passing them to the
+      // foreground app (native-module/src/edit_shortcut.rs). Never typed as text.
+      const editLetter = editShortcutLetter(ev);
+      if (editLetter === 'v') {
+        // Issue #351: text first, then a clipboard image (diagram / PDF
+        // snippet). Excel, Word and PowerPoint put a picture of the copied text
+        // beside the text, so an image-first paste would attach it instead.
+        // attachClipboardImage broadcasts screenshot-attached itself.
+        void (async () => {
+          try {
+            const text = await window.electronAPI.stealthReadClipboard?.();
+            // Not after the session ended (Esc, a submit on macOS), and on top
+            // of any keys typed while the clipboard was read.
+            if (!pastedText(text) && stealthTapActiveRef.current && !escSuppressUntilNextActive) {
+              const result = await window.electronAPI.attachClipboardImage?.();
+              if (result?.error) console.warn('[stealth] pasted image not attached:', result.error);
+              return;
+            }
+            if (!stealthTapActiveRef.current || escSuppressUntilNextActive || !pastedText(text)) return;
+            const allSelected = stealthAllSelectedRef.current;
+            if (allSelected) markStealthAllSelected(false);
+            setInputValue((prev) => paste({ value: prev, allSelected }, text ?? '').value);
+          } catch {
+            /* ignore */
+          }
+        })();
+        return;
+      }
+      if (editLetter) {
+        const next = editCommand({ value: inputValueRef.current, allSelected: stealthAllSelectedRef.current }, editLetter);
+        if (next.copy !== undefined) window.electronAPI.stealthWriteClipboard?.(next.copy).catch(() => {});
+        markStealthAllSelected(next.allSelected);
+        if (next.value !== inputValueRef.current) setInputValue(next.value);
+        return;
+      }
+
       switch (ev.keyCode) {
         case 36: // Return
         case 76: // Numpad Enter
+          markStealthAllSelected(false);
           handleManualSubmitRef.current();
           // macOS parity: on macOS the input holds real DOM focus, so submitting
           // leaves the caret in the box and the user can type the next message
@@ -10873,9 +11216,17 @@ Provide only the answer, nothing else.`;
             window.electronAPI.stealthTapStop().catch(() => {});
           }
           return;
-        case 51: // Backspace — delete one char
-          setInputValue((prev) => prev.slice(0, -1));
+        case 51: { // Backspace — word-delete with the modifier (Ctrl on Windows,
+          // Option on macOS; the hooks tag it), else one char or the whole selection.
+          const wasSelected = stealthAllSelectedRef.current;
+          if (wasSelected) markStealthAllSelected(false);
+          if (isWordDelete(ev)) {
+            setInputValue((prev) => deleteWord({ value: prev, allSelected: wasSelected }).value);
+          } else {
+            setInputValue((prev) => backspace({ value: prev, allSelected: wasSelected }).value);
+          }
           return;
+        }
         // ROUND 4 FIX (#6): Tab (48) and arrows (123-126) used to
         // be no-op'd here. They're now passed through at the Rust
         // layer (keyboard_tap.rs F-key whitelist) so they reach the
@@ -10897,7 +11248,9 @@ Provide only the answer, nothing else.`;
         ev.chars !== '\n' &&
         ev.chars !== '\t'
       ) {
-        setInputValue((prev) => prev + ev.chars);
+        const wasSelected = stealthAllSelectedRef.current;
+        if (wasSelected) markStealthAllSelected(false);
+        setInputValue((prev) => typed({ value: prev, allSelected: wasSelected }, ev.chars).value);
       }
     });
 
@@ -11128,30 +11481,69 @@ Provide only the answer, nothing else.`;
   const shouldShowSttSummaryPill =
     !sttNotConfigured && !sttFailed && !sttReconnecting &&
     (sttUserStatus === 'preparing' || sttInterviewerStatus === 'preparing');
-  const sttStatusBanner: { tone: 'warning' | 'error'; title: string; message: string } | null =
+  // What to do depends on why. An antivirus re-signing the connection, or a
+  // firewall dropping it, was reported as "check your provider and its key",
+  // and a customer reinstalled ten times before turning their antivirus off.
+  const sttConnectionAdvice = (() => {
+    const cause = sttConnectionCause([
+      sttUserStatus === 'failed' || sttUserStatus === 'reconnecting' ? sttUserError : '',
+      sttInterviewerStatus === 'failed' || sttInterviewerStatus === 'reconnecting' ? sttInterviewerError : '',
+    ]);
+    if (cause === 'secure-connection') return t('Antivirus HTTPS scanning or a network filter is intercepting the connection. Allow Natively in your antivirus, or turn off its HTTPS scanning for Natively.');
+    if (cause === 'unreachable') return t('Natively cannot reach the transcription service. Check your internet connection, and allow Natively in your firewall and antivirus.');
+    return null;
+  })();
+  // An on-device model has no key and no provider to check (issue #707: a
+  // Windows user whose local model was refused for memory was told to check
+  // its key). A local failure is terminal, so only a failed channel counts.
+  const sttLocalModelAdvice = (() => {
+    const cause = sttLocalModelCause([
+      sttUserStatus === 'failed' ? sttUserError : '',
+      sttInterviewerStatus === 'failed' ? sttInterviewerError : '',
+    ]);
+    if (cause === 'memory') return t('There is not enough free memory for the local model. Close other apps, or choose a smaller local model in Settings → Audio.');
+    if (cause === 'download') return t('The local model has not finished downloading. Check your internet connection, or choose a cloud provider in Settings → Audio.');
+    if (cause === 'model') return t('The local speech model stopped. Restart the meeting, or choose another local model or a cloud provider in Settings → Audio.');
+    return null;
+  })();
+  // kind picks the icon: only a live reconnect spins. The backup-provider
+  // banner used the same spinning arrows, and a user whose key was stopped for
+  // quota reported it as "transcription reconnecting" (user log 2026-11-03).
+  const sttStatusBanner: { tone: 'warning' | 'error'; kind: 'stopped' | 'reconnecting' | 'backup'; title: string; message: string } | null =
     sttNotConfigured
       ? null
       : sttFailed && !audioFailureBannerActive
         ? {
             tone: 'error',
+            kind: 'stopped',
             title: t('Transcription Stopped'),
             // Two lines: what stopped, then what to do. The provider's own
             // error (often a bare status like "401 Unauthorized") is not
             // shown; a code on screen explains nothing.
-            message:
+            message: `${
               sttUserStatus === 'failed' && sttInterviewerStatus === 'failed'
-                ? t('Nothing is being transcribed right now. Check your transcription provider and its key in Settings.')
+                ? t('Nothing is being transcribed right now.')
                 : sttUserStatus === 'failed'
-                  ? t('Your microphone is no longer being transcribed. Check your transcription provider and its key in Settings.')
-                  : t('Interviewer audio is no longer being transcribed. Check your transcription provider and its key in Settings.'),
+                  ? t('Your microphone is no longer being transcribed.')
+                  : t('Interviewer audio is no longer being transcribed.')
+            } ${sttConnectionAdvice ?? sttLocalModelAdvice ?? t('Check your transcription provider and its key in Settings.')}`,
           }
         : sttReconnecting && !sttFailed
           ? {
               tone: 'warning',
+              kind: 'reconnecting',
               title: t('Transcription Reconnecting'),
-              message: t('The connection to your speech-to-text provider dropped. Retrying.'),
+              message: `${t('The connection to your speech-to-text provider dropped.')} ${sttConnectionAdvice ?? t('Retrying.')}`,
             }
-          : null;
+          : (sttUserFallback || sttInterviewerFallback)
+            ? {
+                // Still transcribing, on a stand-in: a warning, not a failure.
+                tone: 'warning',
+                kind: 'backup',
+                title: t('Transcribing on a backup provider'),
+                message: sttInterviewerFallback || sttUserFallback,
+              }
+            : null;
   // Whether the vision chip will render (mirrors the IIFE's early-return guard).
   const visionPillFailed = screenContextStatus === 'failed' || !!latestVisionFailureReason;
   const visionPillSucceeded =
@@ -11218,7 +11610,7 @@ Provide only the answer, nothing else.`;
       .filter(Boolean)
       .join('\n');
     try {
-      await navigator.clipboard.writeText(report);
+      await copyText(report);
     } catch {
       const ta = document.createElement('textarea');
       ta.value = report;
@@ -11250,7 +11642,7 @@ Provide only the answer, nothing else.`;
         process around this window. This window is exactly the shell card. */}
     <div
       ref={contentRef}
-      data-interface-theme={isGlassTheme ? 'liquid-glass' : isModernTheme ? 'modern' : 'default'}
+      data-interface-theme={interfaceTheme}
       // CENTERED (mx-auto) in the fixed-width window: the window never
       // width-resizes, so centering is stable — the panel's center (and the
       // pill window centered over this window) never moves as the panel
@@ -11474,37 +11866,20 @@ Provide only the answer, nothing else.`;
                   payload.channel).
                 */
                 const rawTitleKey = systemAudioWarning.titleKey ?? '';
-                const reasonIsMicrophone = rawTitleKey.toLowerCase().includes('microphone');
-                const reasonIsScreenRecording = rawTitleKey
-                  .toLowerCase()
-                  .includes('screen recording');
-                // Neither pane fixes a same-device input/output loop: the user
-                // has to change the OUTPUT device. No verified deep link for
-                // the Sound pane exists in this codebase, so this falls to the
-                // already-wired internal-Settings fallback rather than sending
-                // the user somewhere confidently wrong.
-                const reasonIsAudioDeviceConfig = rawTitleKey
-                  .toLowerCase()
-                  .includes('same device');
-                const wantsMicrophonePane =
-                  reasonIsMicrophone ||
-                  (!reasonIsScreenRecording &&
-                    !reasonIsAudioDeviceConfig &&
-                    systemAudioWarning.kind === 'audio-capture-failure' &&
-                    systemAudioWarning.channel === 'mic');
-                const wantsScreenCapturePane =
-                  !wantsMicrophonePane &&
-                  !reasonIsAudioDeviceConfig &&
-                  (reasonIsScreenRecording ||
-                    systemAudioWarning.kind === 'screen-recording-permission' ||
-                    systemAudioWarning.channel === 'system');
-                const deepLinkUrl = !isMac
-                  ? null
-                  : wantsMicrophonePane
-                  ? 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'
-                  : wantsScreenCapturePane
-                  ? 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'
-                  : null;
+                // Where the one action goes, per platform (audioWarningAction.mjs):
+                // a macOS privacy pane, Windows mic privacy settings, or
+                // Natively Settings → Audio. The old fallback opened the
+                // quick-settings popover off-screen (-10000,-10000), so on
+                // Windows every "Open Settings" did nothing visible.
+                const warningAction = audioWarningAction({
+                  platform: isMac ? 'darwin' : isWindows ? 'win32' : 'other',
+                  kind: systemAudioWarning.kind,
+                  channel: systemAudioWarning.channel,
+                  titleKey: systemAudioWarning.titleKey,
+                  message: systemAudioWarning.message,
+                });
+                const deepLinkUrl = warningAction.type === 'external' ? warningAction.url : null;
+                const wantsMicrophonePane = warningAction.type === 'external' && warningAction.pane === 'microphone';
 
                 // Identity of THIS warning, so visiting a pane for one problem
                 // does not promote the button on a different problem that
@@ -11589,10 +11964,10 @@ Provide only the answer, nothing else.`;
                                 // restart meaningful, so that click is what
                                 // promotes the button.
                                 setPermissionPaneVisited(warningIdentity);
-                              } else {
-                                // Windows / unknown channel / device-config
-                                // faults: fall back to internal Settings.
-                                window.electronAPI?.toggleSettingsWindow?.();
+                              } else if (warningAction.type === 'mic-privacy') {
+                                window.electronAPI?.openMicSettings?.();
+                              } else if (warningAction.type === 'settings-tab') {
+                                window.electronAPI?.openSettingsTab?.(warningAction.tab);
                               }
                             }}
                             title={
@@ -11600,14 +11975,18 @@ Provide only the answer, nothing else.`;
                                 ? wantsMicrophonePane
                                   ? t('Open macOS Microphone privacy settings')
                                   : t('Open macOS Screen Recording privacy settings')
-                                : t('Open Natively Settings')
+                                : warningAction.type === 'mic-privacy'
+                                ? t('Open Windows microphone privacy settings')
+                                : t('Open Natively audio settings')
                             }
                           >
                             {deepLinkUrl
                               ? wantsMicrophonePane
                                 ? t('Open Mic Settings')
                                 : t('Open Screen Settings')
-                              : t('Open Settings')}
+                              : warningAction.type === 'mic-privacy'
+                              ? t('Open Mic Settings')
+                              : t('Open Audio Settings')}
                           </OverlayBannerButton>
                         )}
                         {/*
@@ -11629,6 +12008,12 @@ Provide only the answer, nothing else.`;
               })()}
               </ChromeFold>
 
+              {/* A recurring meeting started: what last time's notes left open
+                  (overlay/LastTimeRecapNotice.tsx; main: AssistService). */}
+              <ChromeFold show={!!lastTime.recap} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-last-time">
+              {lastTime.recap && <LastTimeRecapBanner state={lastTime} />}
+              </ChromeFold>
+
               {/* The free trial that starts by itself with a meeting: it began,
                   it is nearly over, it ran out, or it could not start
                   (overlay/TrialNotice.tsx). Never blocks the overlay. */}
@@ -11641,6 +12026,32 @@ Provide only the answer, nothing else.`;
                   (overlay/AutoStopNotice.tsx; main: MeetingEndDetector). */}
               <ChromeFold show={autoStop.stopsAt !== null} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-auto-stop">
               {autoStop.stopsAt !== null && <AutoStopNoticeBanner notice={autoStop} />}
+              </ChromeFold>
+
+              {/* An Ambient AI Chat meeting, from its start: users turn the
+                  setting on thinking it is something good, then report the mic
+                  as broken. Say why, and turn it off from here; main starts
+                  the meeting's capture (setAmbientChatEnabled). */}
+              <ChromeFold show={showAmbientMicNotice} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-ambient-mic">
+              {showAmbientMicNotice && (
+                <OverlayBanner
+                  className="mx-4"
+                  tone="warning"
+                  icon={<MicOff strokeWidth={2.2} />}
+                  title={t('Mic is off')}
+                  message={t('Ambient AI Chat is on, so this meeting is not being heard or transcribed.')}
+                  onDismiss={() => setAmbientMicDismissed(true)}
+                  dismissLabel={t('Dismiss')}
+                  actions={
+                    <OverlayBannerButton
+                      variant="primary"
+                      onClick={() => window.electronAPI?.setAmbientChatEnabled?.(false)}
+                    >
+                      {t('Turn on mic')}
+                    </OverlayBannerButton>
+                  }
+                />
+              )}
               </ChromeFold>
 
               {/* PR #173: STT Not Configured Warning Banner */}
@@ -11684,7 +12095,11 @@ Provide only the answer, nothing else.`;
                 <OverlayBanner
                   className="mx-4"
                   tone={sttStatusBanner.tone}
-                  icon={sttStatusBanner.tone === 'error' ? <MicOff strokeWidth={2.2} /> : <RefreshCw strokeWidth={2.2} className="ov-banner-spin" />}
+                  icon={sttStatusBanner.kind === 'stopped'
+                    ? <MicOff strokeWidth={2.2} />
+                    : sttStatusBanner.kind === 'backup'
+                      ? <Repeat2 strokeWidth={2.2} />
+                      : <RefreshCw strokeWidth={2.2} className="ov-banner-spin" />}
                   title={sttStatusBanner.title}
                   message={sttStatusBanner.message}
                   actions={sttStatusBanner.tone === 'error' ? (
@@ -11716,6 +12131,37 @@ Provide only the answer, nothing else.`;
                   message={captureFallback.detail}
                   onDismiss={() => setCaptureFallback(null)}
                   dismissLabel={t('Dismiss page capture notice')}
+                  // The detail sends the user to pair or re-pair the extension
+                  // in Settings → Companion (tab id phone-mirror); take them there.
+                  actions={captureFallback.detail.includes('Settings → Companion') ? (
+                    <OverlayBannerButton
+                      variant="primary"
+                      onClick={() => window.electronAPI?.openSettingsTab?.('phone-mirror')}
+                    >
+                      {t('Open Companion')}
+                    </OverlayBannerButton>
+                  ) : undefined}
+                />
+              )}
+              </ChromeFold>
+
+              {/* #647 Problem A: the screenshot answer came back as an
+                  assessment refusal and was retried with the capture cropped
+                  to the browser's page area. Warning tone: the answer the
+                  user sees is degraded, and the selective screenshot
+                  (⌘/Ctrl+Shift+H) is the way around it. */}
+              <ChromeFold show={!!refusalRetryNotice} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-refusal-retry">
+              {refusalRetryNotice && (
+                <OverlayBanner
+                  className="mx-4"
+                  tone="warning"
+                  icon={<Crop strokeWidth={2.2} />}
+                  title={t('Answer was retried without the browser border')}
+                  message={refusalRetryNotice.improved
+                    ? t('The screenshot included the browser border, which can read as a live test. Answer re-asked with just the page. Next time, crop out the browser with a selective screenshot.')
+                    : t('The screenshot included the browser border, which can read as a live test. Next time, crop out the browser with a selective screenshot.')}
+                  onDismiss={() => setRefusalRetryNotice(null)}
+                  dismissLabel={t('Dismiss')}
                 />
               )}
               </ChromeFold>
@@ -11829,6 +12275,35 @@ Provide only the answer, nothing else.`;
               )}
               </ChromeFold>
 
+              {/* Windows: the same failure (the keyboard hook would not
+                  start) sets this state, but the banner above is macOS-only,
+                  so stealth typing just did nothing. There is no permission
+                  to grant; the usual cause is security software blocking the
+                  low-level hook. */}
+              <ChromeFold show={isWindows && stealthPermissionMissing} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-stealth-hook-blocked">
+              {isWindows && stealthPermissionMissing && (
+                <OverlayBanner
+                  className="mx-4"
+                  data-stealth-ignore="true"
+                  title={t('Stealth Typing Blocked')}
+                  message={t('Windows did not let Natively capture typing. This is usually security software blocking the keyboard hook. Allow Natively there, then try again.')}
+                  onDismiss={() => setStealthPermissionMissing(false)}
+                  dismissLabel={t('Dismiss')}
+                  dismissButtonProps={{ 'data-stealth-ignore': 'true' }}
+                  actions={
+                    <OverlayBannerButton
+                      variant="primary"
+                      onClick={() => { void window.electronAPI.stealthTapStart?.(); }}
+                      title={t('Try to start stealth typing again')}
+                      data-stealth-ignore="true"
+                    >
+                      {t('Try Again')}
+                    </OverlayBannerButton>
+                  }
+                />
+              )}
+              </ChromeFold>
+
               {/* Phase 3 — Dynamic action card row (Cluely-style live triggers).
                                 Appears between status pills and rolling transcript so users see
                                 actionable suggestions in their primary scan path. Bar self-hides
@@ -11895,7 +12370,7 @@ Provide only the answer, nothing else.`;
               {showAnswerPanel && (
                 <motion.div
                   ref={scrollContainerRef}
-                  className={`relative flex-1 overflow-y-auto overflow-x-hidden ${hasChatContent ? 'p-4 space-y-3' : 'p-0'} no-drag isolate`}
+                  className={`overlay-scroll-fade relative flex-1 overflow-y-auto overflow-x-hidden ${hasChatContent ? 'p-4 space-y-3' : 'p-0'} no-drag isolate`}
                   layout={false}
                   style={{ scrollbarWidth: 'none', maxHeight: scrollMaxH, minHeight: scrollMinH }}
                 >
@@ -11921,6 +12396,7 @@ Provide only the answer, nothing else.`;
                       key={msg.id}
                       msg={msg}
                       isLightTheme={isLightTheme}
+                      isLavenderTheme={isLavenderTheme}
                       appearance={appearance}
                       renderMessageText={renderMessageText}
                     />
@@ -11980,7 +12456,7 @@ Provide only the answer, nothing else.`;
                       (m) => m.role === 'system' && m.isStreaming,
                     ) && (
                     <div className="flex justify-start my-2.5 min-h-[24px] items-center">
-                      <span className="natively-thinking-label text-[13px]">{t('Thinking...')}</span>
+                      <span className="natively-thinking-label text-[13px]">{t('Thinking')}</span>
                     </div>
                   )}
                   <div ref={messagesEndRef} />
@@ -12056,7 +12532,7 @@ Provide only the answer, nothing else.`;
                       onClick={handleJumpToLatest}
                       aria-label={t('Jump to latest')}
                       title={t('Jump to latest')}
-                      data-interface-theme={isGlassTheme ? 'liquid-glass' : isModernTheme ? 'modern' : 'default'}
+                      data-interface-theme={interfaceTheme}
                       // NOT overlay-resize-toggle-surface/appearance.shellStyle
                       // despite matching ResizeToggle everywhere else on this
                       // button (motion, size, gloss sheen): that surface is
@@ -12222,19 +12698,18 @@ Provide only the answer, nothing else.`;
                   // not DOM text, so the copies never show up in textContent,
                   // text queries or text search.
                   const ghost = (text: string) => <span className="ov-ghost-label" data-label={text} />;
-                  const modeChipContent = (mode: 'recap' | 'brainstorm') =>
-                    mode === 'brainstorm' ? (
-                      <span className="flex items-center gap-1.5">
-                        <Lightbulb className="w-3 h-3 opacity-70" /> {t('Brainstorm')}
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1.5">
-                        <RefreshCw className="w-3 h-3 opacity-70" /> {t('Recap')}
-                      </span>
-                    );
-                  const answerContent = (
+                  // Lavender: the hero's paper pill (hlg-*), icon and label in its slots.
+                  const heroChipClass = 'hlg-sm hero-pill hero-hotkey interaction-base interaction-press shrink-0';
+                  const heroIcon = (Icon: typeof Mic) => <Icon size={11} strokeWidth={2} />;
+                  // From the shared list, so Settings › Overlay draws the same word.
+                  const answerLabel = t(OVERLAY_BUTTONS.answer.label);
+                  const answerContent = isLavenderTheme ? (
+                    <span className="flex items-center gap-[5px]">
+                      <Mic size={11} strokeWidth={2} /> {answerLabel}
+                    </span>
+                  ) : (
                     <span className="flex items-center gap-1.5">
-                      <Mic className="w-3 h-3 opacity-70" /> {t('Answer')}
+                      <Mic className="w-3 h-3 opacity-70" /> {answerLabel}
                     </span>
                   );
                   const stopContent = (
@@ -12243,14 +12718,18 @@ Provide only the answer, nothing else.`;
                       {t('Stop')}
                     </span>
                   );
-                  // The Answer chip is as wide as its wider label: invisible
-                  // copies of both share one grid cell with the live label, so
-                  // Answer ⇄ Stop never slides the rest of the row sideways.
+                  // The voice chip is labelled Speak, not Answer (the owner,
+                  // 2026-10-30: "Answer" sat beside "What to answer?"; you
+                  // speak a question and Stop sends it). Speak over Ask for
+                  // its width, close to Answer's. It is as wide as its wider
+                  // label: invisible copies of both share one grid cell with
+                  // the live label, so Speak ⇄ Stop never slides the rest of
+                  // the row sideways.
                   const answerSizers = (
                     <>
                       <span className="ov-chip-sizer flex items-center gap-1.5" aria-hidden>
                         <span className="w-3 h-3 shrink-0" />
-                        {ghost(t('Answer'))}
+                        {ghost(answerLabel)}
                       </span>
                       <span className="ov-chip-sizer flex items-center gap-1.5" aria-hidden>
                         <span className="w-1.5 h-1.5 shrink-0" />
@@ -12258,62 +12737,88 @@ Provide only the answer, nothing else.`;
                       </span>
                     </>
                   );
-                  // The row laid out on one line for one mode, invisible and
-                  // inert: its width is what the collapsed panel needs (see the
-                  // measuring effect). Same classes and icons as the real
-                  // chips; spans, not buttons, and CSS-drawn labels.
-                  const measureRow = (mode: 'recap' | 'brainstorm', ref: React.RefObject<HTMLDivElement | null>) => (
-                    <div ref={ref} className="ov-row-measure flex flex-nowrap items-center gap-1.5 px-4" aria-hidden inert>
-                      <span className={chipClass} style={appearance.chipStyle}>
-                        <Pencil className="w-3 h-3 opacity-70" />
-                        {ghost(t('What to answer?'))}
+                  // The row laid out on one line, invisible and inert: its
+                  // width is what the collapsed panel needs (see the measuring
+                  // effect). Same classes and icons as the real chips; spans,
+                  // not buttons, and CSS-drawn labels.
+                  const measureChip = (id: OverlayButtonId) => {
+                    if (isLavenderTheme) {
+                      const { Icon, label } = overlayButtonFace(id, t, overlayCustomButtons);
+                      return (
+                        <span key={id} className={`hlg-button hlg-lavender ${heroChipClass}${id === 'answer' ? ' min-w-[74px]' : ''}`}>
+                          <span className="hlg-content">
+                            {id === 'answer' ? (
+                              <span className="hlg-label"><span className="ov-chip-stack">{answerSizers}</span></span>
+                            ) : (
+                              <>
+                                <span className="hlg-icon">{heroIcon(Icon)}</span>
+                                <span className="hlg-label">{ghost(label)}</span>
+                              </>
+                            )}
+                          </span>
+                        </span>
+                      );
+                    }
+                    if (id === 'answer') {
+                      return (
+                        <span key={id} className={answerChipClass(false)} style={appearance.chipStyle}>
+                          <span className="ov-chip-stack">{answerSizers}</span>
+                        </span>
+                      );
+                    }
+                    const { Icon, label } = overlayButtonFace(id, t, overlayCustomButtons);
+                    return (
+                      <span key={id} className={chipClass} style={appearance.chipStyle}>
+                        <Icon className="w-3 h-3 opacity-70" />
+                        {ghost(label)}
                       </span>
-                      <span className={chipClass} style={appearance.chipStyle}>
-                        <MessageSquare className="w-3 h-3 opacity-70" />
-                        {ghost(t('Clarify'))}
-                      </span>
-                      <span className={chipClass} style={appearance.chipStyle}>
-                        {mode === 'brainstorm' ? (
-                          <Lightbulb className="w-3 h-3 opacity-70" />
-                        ) : (
-                          <RefreshCw className="w-3 h-3 opacity-70" />
-                        )}
-                        {ghost(mode === 'brainstorm' ? t('Brainstorm') : t('Recap'))}
-                      </span>
-                      <span className={chipClass} style={appearance.chipStyle}>
-                        <HelpCircle className="w-3 h-3 opacity-70" />
-                        {ghost(t('Follow Up Question'))}
-                      </span>
-                      <span className={answerChipClass(false)} style={appearance.chipStyle}>
-                        <span className="ov-chip-stack">{answerSizers}</span>
-                      </span>
-                    </div>
-                  );
-                  return (
-                    <>
-                      <div
-                        ref={quickRowRef}
-                        className={`ov-chip-row ov-quickrow-pad flex flex-wrap justify-center items-center gap-1.5 px-4 pb-3 max-w-full overflow-visible ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3 is-bare'}`}
-                      >
-                        <button onClick={handleWhatToSay} className={chipClass} style={appearance.chipStyle}>
-                          <Pencil className="w-3 h-3 opacity-70" /> {t('What to answer?')}
-                        </button>
-                        <button onClick={handleClarify} className={chipClass} style={appearance.chipStyle}>
-                          <MessageSquare className="w-3 h-3 opacity-70" /> {t('Clarify')}
-                        </button>
+                    );
+                  };
+                  const onBuiltinChip: Record<Exclude<BuiltinOverlayButtonId, 'answer'>, () => void> = {
+                    what_to_answer: () => void handleWhatToSay(),
+                    clarify: () => void handleClarify(),
+                    recap: () => void handleRecap(),
+                    follow_up: () => void handleFollowUpQuestions(),
+                    brainstorm: () => void handleBrainstorm(),
+                    catch_me_up: () => void handleLiveHelper('catch_me_up'),
+                    define: () => void handleLiveHelper('define'),
+                    sound_smart: () => void handleLiveHelper('sound_smart'),
+                  };
+                  // The user's own buttons ask their prompt (handleCustomButton).
+                  const onChip = (id: Exclude<OverlayButtonId, 'answer'>) =>
+                    isBuiltinOverlayButtonId(id) ? onBuiltinChip[id] : () => void handleCustomButton(id);
+                  const chip = (id: OverlayButtonId) => {
+                    if (isLavenderTheme) {
+                      if (id === 'answer') {
+                        return (
+                          <HeroGlassButton
+                            key={id}
+                            variant="lavender"
+                            onClick={handleAnswerNow}
+                            className={`${heroChipClass} min-w-[74px]${isManualRecording ? ' hero-recording' : ''}`}
+                          >
+                            <span className="ov-chip-stack">
+                              {answerSizers}
+                              <span className="flex justify-center">
+                                <SwapText swapKey={isManualRecording ? 'stop' : 'answer'}>
+                                  {isManualRecording ? stopContent : answerContent}
+                                </SwapText>
+                              </span>
+                            </span>
+                          </HeroGlassButton>
+                        );
+                      }
+                      const { Icon, label } = overlayButtonFace(id, t, overlayCustomButtons);
+                      return (
+                        <HeroGlassButton key={id} variant="lavender" onClick={onChip(id)} className={heroChipClass} icon={heroIcon(Icon)}>
+                          {label}
+                        </HeroGlassButton>
+                      );
+                    }
+                    if (id === 'answer') {
+                      return (
                         <button
-                          onClick={shownActionMode === 'brainstorm' ? handleBrainstorm : handleRecap}
-                          className={chipClass}
-                          style={appearance.chipStyle}
-                        >
-                          <SwapText swapKey={labelActionMode} onShown={handleModeLabelShown}>
-                            {modeChipContent(labelActionMode)}
-                          </SwapText>
-                        </button>
-                        <button onClick={handleFollowUpQuestions} className={chipClass} style={appearance.chipStyle}>
-                          <HelpCircle className="w-3 h-3 opacity-70" /> {t('Follow Up Question')}
-                        </button>
-                        <button
+                          key={id}
                           onClick={handleAnswerNow}
                           className={answerChipClass(isManualRecording)}
                           style={isManualRecording ? undefined : appearance.chipStyle}
@@ -12327,9 +12832,28 @@ Provide only the answer, nothing else.`;
                             </span>
                           </span>
                         </button>
+                      );
+                    }
+                    const { Icon, label } = overlayButtonFace(id, t, overlayCustomButtons);
+                    return (
+                      <button key={id} onClick={onChip(id)} className={chipClass} style={appearance.chipStyle}>
+                        <Icon className="w-3 h-3 opacity-70" /> {label}
+                      </button>
+                    );
+                  };
+                  return (
+                    <>
+                      <div
+                        ref={quickRowRef}
+                        className={`ov-chip-row ov-quickrow-pad flex flex-wrap justify-center px-4 items-center gap-1.5 pb-3 max-w-full overflow-visible ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3 is-bare'}`}
+                      >
+                        {/* One row: the five buttons picked in Settings ›
+                            Overlay, in its order. */}
+                        {overlayRow.map(chip)}
                       </div>
-                      {measureRow('recap', recapRowMeasureRef)}
-                      {measureRow('brainstorm', brainstormRowMeasureRef)}
+                      <div ref={rowMeasureRef} className="ov-row-measure flex flex-nowrap items-center gap-1.5 px-4" aria-hidden inert>
+                        {overlayRow.map(measureChip)}
+                      </div>
                     </>
                   );
                 })()}
@@ -12360,13 +12884,61 @@ Provide only the answer, nothing else.`;
                                     overlay no longer accidentally engage the
                                     tap and break inputs in Settings/Model
                                     Selector windows. */}
-                <div className="relative group" data-stealth-engage="true">
+                <div
+                  className="relative group"
+                  data-stealth-engage="true"
+                  onDragOver={(e) => {
+                    // Issue #351: accept image files from Finder/Explorer.
+                    if (![...e.dataTransfer.types].includes('Files')) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'copy';
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const files = imageFilesFromDrop(e.dataTransfer.files);
+                    void Promise.all(
+                      files.map(async (file) => {
+                        try {
+                          const result = await window.electronAPI.attachLocalImage?.(file);
+                          if (result && !result.success) console.warn('[overlay] dropped image not attached:', result.error);
+                        } catch (err) {
+                          console.warn('[overlay] attachLocalImage failed:', err);
+                        }
+                      }),
+                    );
+                  }}
+                >
                   <input
                     ref={textInputRef}
                     data-testid="overlay-chat-input"
                     type="text"
                     value={inputValue}
                     onChange={(e) => { setInputValue(e.target.value); setSkillPickerIndex(0); }}
+                    onPaste={(e) => {
+                      // Issue #351: Cmd/Ctrl+V with only an image on the
+                      // clipboard attaches it like a screenshot; any text
+                      // pastes natively (see overlayPasteAction).
+                      const action = overlayPasteAction(e.clipboardData);
+                      const attachClipboardImage = window.electronAPI.attachClipboardImage;
+                      if (action.kind !== 'image' || !attachClipboardImage) return;
+                      e.preventDefault();
+                      void (async () => {
+                        try {
+                          const result = await attachClipboardImage();
+                          if (result?.success) return;
+                          // Windows: a file copied in Explorer is a file
+                          // reference, not a picture, so readImage is empty.
+                          const fromFiles = await Promise.all(
+                            action.files.map((file) => window.electronAPI.attachLocalImage?.(file)),
+                          );
+                          if (!fromFiles.some((r) => r?.success)) {
+                            console.warn('[overlay] pasted image not attached:', result?.error ?? 'no image on the clipboard');
+                          }
+                        } catch (err) {
+                          console.warn('[overlay] attachClipboardImage failed:', err);
+                        }
+                      })();
+                    }}
                     onKeyDown={(e) => {
                       if (filteredSkills.length > 0 && skillPickerQuery !== null) {
                         if (e.key === 'ArrowUp') {
@@ -12438,7 +13010,7 @@ Provide only the answer, nothing else.`;
                       aria-hidden="true"
                       className="nat-caret-mirror pl-3 pr-10 py-2.5 text-[13px] leading-relaxed"
                     >
-                      <span className="nat-caret-text">{inputValue}</span>
+                      <span className={`nat-caret-text ${stealthAllSelected ? 'nat-caret-selected' : ''}`}>{inputValue}</span>
                       <span className="nat-caret" />
                     </div>
                   )}
@@ -12509,17 +13081,24 @@ Provide only the answer, nothing else.`;
 
                         window.electronAPI.toggleModelSelector({ x, y, activate: false });
                       }}
-                      className={`
+                      className={isLavenderTheme
+                        // The hero's model chip: a paper pill in the mono face.
+                        ? 'hlg-button hlg-lavender hlg-sm hero-pill hero-mono shrink-0 interaction-base interaction-press'
+                        : `
                                                 flex items-center gap-1 pl-3 pr-1.5 h-7
                                                 border rounded-[9px] transition-colors
                                                 text-xs font-medium text-left shrink-0
                                                 interaction-base interaction-press
                                                 ${controlSurfaceClass}
                                             `}
-                      style={{ ...appearance.controlStyle, width: MODEL_SELECTOR_WIDTH }}
+                      style={isLavenderTheme ? { width: MODEL_SELECTOR_WIDTH } : { ...appearance.controlStyle, width: MODEL_SELECTOR_WIDTH }}
                     >
+                      {isLavenderTheme && <span className="hlg-lens" aria-hidden="true" />}
+                      <span className={isLavenderTheme ? 'hlg-content' : 'contents'}>
                       <ModelSelectorLabel>
-                        {(() => {
+                        {/* The model's own name only, in every style: no
+                            provider, no prefix, no slug (modelChipName). */}
+                        {modelChipName((() => {
                           const m = currentModel;
                           const codexCliName = getCodexCliModelDisplayName(m);
                           if (codexCliName) return codexCliName;
@@ -12574,9 +13153,14 @@ Provide only the answer, nothing else.`;
                           // Retired 2026-09-10; DeepSeek serves it as deepseek-flash (V4.1).
                           if (m === 'deepseek-v4-flash') return 'DeepSeek V4.1 Flash';
                           return m;
-                        })()}
+                        })())}
                       </ModelSelectorLabel>
-                      <ChevronDown size={12} className="shrink-0 transition-transform" />
+                      {isLavenderTheme ? (
+                        <svg className="shrink-0" width="8" height="8" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M3 4l2 2 2-2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                      ) : (
+                        <ChevronDown size={12} className="shrink-0 transition-transform" />
+                      )}
+                      </span>
                     </button>
 
                     <div className="relative">
@@ -12612,52 +13196,57 @@ Provide only the answer, nothing else.`;
                       </button>
                     </div>
 
-                    {/* Notes: the notes window, where the user types their own notes for
-                        this meeting; they go into the meeting notes at Stop. */}
+                    {/* No Notes button in any style (the owner, 2026-10-30): the
+                        notepad is reached from Settings › Overlay, so the row keeps
+                        settings and click-through only. */}
+                    {/* Mouse Passthrough Toggle. Opens into a pill with the
+                        exit hotkey when turned on — once click-through is on
+                        this button can no longer be clicked, so the hotkey is
+                        the only way back (ClickThroughToggle). */}
                     <div className="relative">
-                      <button
-                        onClick={() => { void window.electronAPI?.notesWindowToggle?.(); }}
-                        data-state={isNotesOpen ? 'open' : undefined}
-                        aria-label={t('Notes')}
-                        aria-pressed={isNotesOpen}
-                        className="w-7 h-7 rounded-[9px] flex items-center justify-center interaction-base interaction-press overlay-bare-icon"
-                      >
-                        <NotebookPen className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
-                    {/* Mouse Passthrough Toggle */}
-                    <div className="relative">
-                      <button
-                        onClick={() => {
+                      <ClickThroughToggle
+                        on={isMousePassthrough}
+                        onToggle={() => {
                           const newState = !isMousePassthrough;
                           setIsMousePassthrough(newState);
                           window.electronAPI?.setOverlayMousePassthrough?.(newState);
                         }}
-                        data-state={isMousePassthrough ? 'on' : undefined}
-                        className="w-7 h-7 rounded-[9px] flex items-center justify-center interaction-base interaction-press overlay-bare-icon"
-                      >
-                        <PointerOff className="w-3.5 h-3.5" />
-                      </button>
+                        keys={shortcuts.toggleMousePassthrough || [getModifierSymbol('cmd'), 'Shift', 'B']}
+                        exitLabel={t('to exit')}
+                        ariaLabel={t('Toggle Mouse Passthrough')}
+                      />
                     </div>
                   </div>
 
-                  <button
-                    onClick={handleManualSubmit}
-                    disabled={!inputValue.trim()}
-                    className={`
-                                    w-7 h-7 rounded-full flex items-center justify-center
-                                    interaction-base interaction-press
-                                    ${
-                                      inputValue.trim()
-                                        ? 'bg-[#007AFF] text-white shadow-lg shadow-blue-500/20 hover:bg-[#0071E3]'
-                                        : 'overlay-icon-surface overlay-text-muted cursor-not-allowed'
-                                    }
-                                `}
-                    style={inputValue.trim() ? undefined : appearance.iconStyle}
-                  >
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
+                  {isLavenderTheme ? (
+                    // The hero's send bead (its SEND_STYLE and arrow glyph).
+                    <HeroGlassButton
+                      variant="lavender"
+                      onClick={handleManualSubmit}
+                      disabled={!inputValue.trim()}
+                      className="hlg-sm hero-send interaction-base interaction-press"
+                      aria-label={t('Send')}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 11 11" fill="none" aria-hidden="true"><path d="M2.5 5.5H8.5M6 3l2.5 2.5L6 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </HeroGlassButton>
+                  ) : (
+                    <button
+                      onClick={handleManualSubmit}
+                      disabled={!inputValue.trim()}
+                      className={`
+                                      w-7 h-7 rounded-full flex items-center justify-center
+                                      interaction-base interaction-press
+                                      ${
+                                        inputValue.trim()
+                                          ? 'bg-[#007AFF] text-white shadow-lg shadow-blue-500/20 hover:bg-[#0071E3]'
+                                          : 'overlay-icon-surface overlay-text-muted cursor-not-allowed'
+                                      }
+                                  `}
+                      style={inputValue.trim() ? undefined : appearance.iconStyle}
+                    >
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
 

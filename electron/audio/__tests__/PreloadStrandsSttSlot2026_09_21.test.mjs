@@ -52,6 +52,10 @@ function fakeWorker() {
   const w = new EventEmitter();
   w.terminated = 0;
   w.terminate = () => { w.terminated++; return Promise.resolve(1); };
+  // The cooperative stop (utils/onnxWorkerShutdown.ts): a real worker answers
+  // this by exiting itself with code 0 at its next idle point.
+  w.shutdownRequests = 0;
+  w.postMessage = (msg) => { if (msg?.type === 'shutdown') w.shutdownRequests++; };
   return w;
 }
 
@@ -90,11 +94,12 @@ test('MODEL SWITCH: a starving live channel makes the preloader yield its idle W
   const w = await preloaderHolds('warm');
   const mic = await gate.acquireOnnxSlot('high', 1);
   assert.equal(modelPreloader.yieldUnclaimedWorkerIfStarving(), 'yielded');
-  assert.equal(w.terminated, 1, 'an idle warm worker has never run a transcribe: safe to terminate');
+  assert.equal(w.shutdownRequests, 1, 'the idle warm worker is asked to exit');
+  assert.equal(w.terminated, 0, 'BUG: no ONNX worker is ever terminate()d — even "idle" is a claim about another thread');
   assert.equal(gate.isHighPriorityOnnxBudgetExhausted(), false, 'its slot is released immediately, not on a later exit event');
   const system = await gate.acquireOnnxSlotWithin('high', 1, 150, 'system'); // no longer starves
   assert.equal(modelPreloader.isWarm(MODEL), false);
-  // terminate() exits non-zero. A teardown we asked for is NOT a model load failure:
+  // A teardown we asked for is NOT a model load failure, whatever code it exits with:
   w.emit('exit', 1);
   assert.equal(modelPreloader.recentFailures.has(MODEL), false, 'BUG: a requested yield armed the 5-minute preload cooldown');
   mic(); system();

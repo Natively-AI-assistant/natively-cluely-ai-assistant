@@ -10,8 +10,11 @@
    --pi-tertiary (35% white, ~3:1), because a meeting's time is text people
    read, not decoration. */
 .cal-pane {
-  --cp-border: rgba(255, 255, 255, 0.07);
-  --cp-card-bg: rgba(255, 255, 255, 0.015);
+  /* Dark cards are the same flat fill as every other Settings card
+     (bg-card, rgb 36,36,41) with no outline: --border-subtle is transparent
+     in dark. A 1.5% white fill under a white hairline read as a hollow box. */
+  --cp-border: transparent;
+  --cp-card-bg: var(--bg-card);
   --cp-hero: #ffffff;
   --cp-primary: rgba(255, 255, 255, 0.85);
   --cp-secondary: rgba(255, 255, 255, 0.55);
@@ -31,7 +34,9 @@
 }
 .cal-pane[data-theme='light'] {
   --cp-border: rgba(0, 0, 0, 0.08);
-  --cp-card-bg: rgba(0, 0, 0, 0.015);
+  /* The white plaque every other Settings card uses in light
+     (.natively-key-card in index.css); a 1.5% black tint read as grey. */
+  --cp-card-bg: linear-gradient(180deg, #FFFFFF 0%, #F8F8FA 100%);
   --cp-hero: #111827;
   --cp-primary: #374151;
   /* PI's light grey (#6b7280) is tuned for its WHITE panel; Settings' light
@@ -49,15 +54,16 @@
 }
 
 /* ── Page label (PI .pi-section-label) ── */
+/* "Upcoming" is a section heading: General's 18px/700 (text-lg font-bold). */
 .cp-label {
-  font-size: 14px;
-  line-height: 1.3;
-  font-weight: 600;
+  font-size: 18px;
+  line-height: 28px;
+  font-weight: 700;
   color: var(--cp-hero);
   margin: 0;
 }
 .cp-desc {
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--cp-secondary);
   margin: 4px 0 0;
@@ -119,6 +125,11 @@
   background: var(--cp-card-bg);
   padding: 14px 16px;
 }
+.cal-pane[data-theme='light'] .cp-card {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 1),
+              0 1px 2px rgba(0, 0, 0, 0.05),
+              0 4px 12px rgba(0, 0, 0, 0.035);
+}
 .cp-card-header {
   display: flex;
   align-items: center;
@@ -136,11 +147,12 @@
   color: var(--cp-secondary);
   flex-shrink: 0;
 }
+/* Card titles are row titles: General's 14px/700 (text-sm font-bold), above
+   the 12px description, not below it. */
 .cp-card-label {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--cp-hero);
-  letter-spacing: -0.01em;
   margin: 0;
 }
 .cp-card-daynum {
@@ -246,8 +258,28 @@
    replaces did. */
 .cp-pill--start { background: var(--cp-btn-bg-hover); border-color: transparent; color: var(--cp-accent); font-weight: 600; }
 .cp-pill--start:hover:not(:disabled) { background: color-mix(in srgb, var(--cp-accent) 16%, transparent); color: var(--cp-accent); }
+/* The chosen reminder lead (1 / 2 / 5 min): a soft periwinkle fill with a
+   matching hairline, so the choice reads as coloured, not just as grey with
+   blue text. Hover keeps it; the press scale still applies. */
+.cp-pill.is-selected,
+.cp-pill.is-selected:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--periwinkle-300) 16%, transparent);
+  border-color: color-mix(in srgb, var(--periwinkle-300) 30%, transparent);
+  color: var(--cp-accent);
+  font-weight: 600;
+}
+/* Light: periwinkle-100 fill, -200 hairline, -700 text (6.4:1 on the fill). */
+.cal-pane[data-theme='light'] .cp-pill.is-selected,
+.cal-pane[data-theme='light'] .cp-pill.is-selected:hover:not(:disabled) {
+  background: var(--periwinkle-100);
+  border-color: var(--periwinkle-200);
+}
 /* Refresh landed: the check and "Up to date" wear the accent for their moment. */
 .cp-pill.is-done { color: var(--cp-accent); }
+/* Connect: a flat pill. The stronger tint as a plain fill, no outline, primary
+   ink, so it stands out from the quiet pills without a colour. */
+.cp-pill--flat { border-color: transparent; background: var(--cp-btn-bg-hover); color: var(--cp-primary); font-weight: 600; }
+.cp-pill--flat:hover:not(:disabled) { background: color-mix(in srgb, var(--cp-primary) 16%, transparent); }
 /* A row's Join: the same pill, smaller. */
 .cp-pill--sm { padding: 3px 10px; font-size: 11px; gap: 5px; }
 /* The empty box's call to action: PI's Upload file, which is primary-coloured text. */
@@ -261,9 +293,16 @@
   align-items: center;
   gap: 10px;
   padding: 9px 10px 9px 14px;
-  border: 1px solid var(--cp-input-border);
+  /* The account rows are cards too: the card's fill and edge in both themes. */
+  border: 1px solid var(--cp-border);
   border-radius: var(--cp-r-lg);
-  background: var(--cp-btn-bg);
+  background: var(--cp-card-bg);
+}
+/* Light: plus the white plaque's lift. */
+.cal-pane[data-theme='light'] .cp-file {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 1),
+              0 1px 2px rgba(0, 0, 0, 0.05),
+              0 4px 12px rgba(0, 0, 0, 0.035);
 }
 .cp-file-main {
   min-width: 0;
@@ -305,6 +344,11 @@
   align-items: center;
   gap: 14px;
   text-align: center;
+}
+/* Dark: the card fill instead of an outline, like the cards around it. */
+.cal-pane:not([data-theme='light']) .cp-empty {
+  background: var(--cp-card-bg);
+  border-color: var(--cp-border);
 }
 .cp-empty p { margin: 0; font-size: 13px; color: var(--cp-secondary); }
 

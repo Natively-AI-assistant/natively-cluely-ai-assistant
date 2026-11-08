@@ -19,8 +19,9 @@ import { app } from "electron"
 import fs from "fs"
 import path from "path"
 import { loadNativeModule } from "../audio/nativeModuleLoader"
+import { nativelyApiBase } from "./nativelyApiBase"
 
-const NATIVELY_API_URL = (process.env.NATIVELY_API_URL || "https://api.natively.software").replace(/\/+$/, "")
+const NATIVELY_API_URL = nativelyApiBase()
 const REVIEW_STATE_FILE = "review-state.json"
 
 // Pure eligibility logic is in ReviewPromptLogic.ts (testable without Electron),

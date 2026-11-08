@@ -57,8 +57,13 @@ test('the hook swallows a matching app chord and self-dispatches it (never passe
   // Checked as separate robust substrings rather than one long span.
   const matchBranch = inner.slice(inner.indexOf('if is_key_down && ctrl {'));
   assert.match(matchBranch, /app_chord_id: id,/, 'BUG: a matched chord must be delivered tagged with the action id.');
-  assert.match(matchBranch, /swallowed_ups[\s\S]{0,120}\.insert\(vk\)/, 'BUG: the swallowed down-vk must be recorded so its up is swallowed too.');
-  assert.match(matchBranch, /return LRESULT\(1\)/, 'BUG: a matched chord key-down must be swallowed (LRESULT(1)), never passed through.');
+  // Delivered, recorded and swallowed through the hook's one helper, which the
+  // editing keys share (PR #633).
+  assert.match(matchBranch, /if let Some\(swallowed\) = deliver_and_swallow\(&state, vk, CapturedKey \{/, 'BUG: a matched chord must go through deliver_and_swallow.');
+  assert.match(matchBranch, /return swallowed;/, 'BUG: a matched chord key-down must be swallowed, never passed through.');
+  const helper = rust.slice(rust.indexOf('fn deliver_and_swallow('));
+  assert.match(helper, /^fn deliver_and_swallow\(state: &HookState, vk: u32, payload: CapturedKey\) -> Option<LRESULT> \{\s*if !send_payload\(state, payload\) \{\s*return None;\s*\}/, 'BUG: nowhere to deliver must mean pass the key on.');
+  assert.match(helper, /swallowed_ups[\s\S]{0,120}\.insert\(vk\);\s*Some\(LRESULT\(1\)\)/, 'BUG: the swallowed down-vk must be recorded so its up is swallowed too.');
 });
 
 test('the matching key-UP is swallowed too (no half a sequence reaches the app)', () => {

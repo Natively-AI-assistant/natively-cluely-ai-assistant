@@ -3,6 +3,7 @@ import { describeProbeError } from './probeError';
 import { IEmbeddingProvider } from './IEmbeddingProvider';
 import { embeddingSpaceKey } from '../embeddingSpace';
 import { TRIAL_SENTINEL_KEY } from '../../config/constants';
+import { nativelyApiBase } from '../../services/nativelyApiBase';
 
 /**
  * Natively-managed embeddings via POST /v1/embed.
@@ -108,7 +109,7 @@ export class NativelyEmbeddingProvider implements IEmbeddingProvider {
   private readonly trialToken?: string;
 
   constructor(private apiKey: string, opts: NativelyEmbeddingOptions = {}) {
-    this.baseUrl = (opts.baseUrl || process.env.NATIVELY_API_URL || 'https://api.natively.software').replace(/\/+$/, '');
+    this.baseUrl = (opts.baseUrl || nativelyApiBase()).replace(/\/+$/, '');
     this.trialToken = opts.trialToken;
     // Deliberately NOT the same space key as the direct-Gemini provider, even
     // though the server runs the same model at the same dimensionality. The two

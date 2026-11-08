@@ -40,6 +40,7 @@ export const CARD_SPACING_MS = 60_000;
 
 export type ToasterId =
   | 'permissions'
+  | 'plans'
   | 'browser_extension'
   | 'profile_intelligence'
   | 'modes_manager'
@@ -51,7 +52,8 @@ export type ToasterId =
   | 'natively_api_existing'
   | 'profile_ad'
   | 'jd_ad'
-  | 'max_ultra';
+  | 'max_ultra'
+  | 'demo_video';
 
 export interface OrchestratorState {
   version: string;

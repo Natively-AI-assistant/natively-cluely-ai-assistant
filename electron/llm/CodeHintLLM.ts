@@ -3,6 +3,9 @@ import { CODE_HINT_PROMPT, buildCodeHintMessage } from "./prompts";
 import { TINY_CODE_HINT_PROMPT } from "./tinyPrompts";
 import { resolveV2SystemPrompt, v2TierForPromptTier } from "./promptSystemV2";
 
+/** Shown when the provider call fails; it is not a hint, so it is never recorded as one. */
+export const CODE_HINT_STREAM_FAILED = "I couldn't analyze the screenshot. Make sure your code is visible and try again.";
+
 export class CodeHintLLM {
     private llmHelper: LLMHelper;
 
@@ -27,7 +30,9 @@ export class CodeHintLLM {
         questionContext?: string,
         questionSource?: 'screenshot' | 'transcript' | null,
         transcriptContext?: string,
-        v3?: { system: string; user: string }
+        v3?: { system: string; user: string },
+        /** The conversation so far, for a pinned question (which takes no transcript). */
+        history?: string,
     ): AsyncGenerator<string> {
         try {
             // No capability gate here (2026-10-01). streamChat sends every
@@ -44,7 +49,8 @@ export class CodeHintLLM {
             const message = buildCodeHintMessage(
                 questionContext ?? null,
                 questionSource ?? null,
-                transcriptContext ?? null
+                transcriptContext ?? null,
+                history ?? null,
             );
 
             const promptOverride = v3?.system
@@ -76,7 +82,7 @@ export class CodeHintLLM {
             );
         } catch (error) {
             console.error("[CodeHintLLM] Stream failed:", error);
-            yield "I couldn't analyze the screenshot. Make sure your code is visible and try again.";
+            yield CODE_HINT_STREAM_FAILED;
         }
     }
 }

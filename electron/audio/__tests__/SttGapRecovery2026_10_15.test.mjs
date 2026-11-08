@@ -232,6 +232,20 @@ test('a replay-capable provider replays itself first, then other saved providers
     assert.equal(gap.REPLAY_CAPABLE_PROVIDERS.has('natively'), false, 'a second Natively session would collide with the live one');
 });
 
+test('Qwen can replay its own missed audio and serve as a configured cloud fallback', () => {
+    assert.deepEqual(gap.planRecoveryTranscribers({
+        primaryProvider: 'qwen', effectiveProvider: 'qwen', localOnly: false,
+        configuredCloud: ['qwen'], localModelAvailable: false,
+    }), [{ id: 'qwen', kind: 'same-provider' }]);
+    assert.deepEqual(gap.planRecoveryTranscribers({
+        primaryProvider: 'soniox', effectiveProvider: 'soniox', localOnly: false,
+        configuredCloud: ['qwen'], localModelAvailable: false,
+    }), [
+        { id: 'soniox', kind: 'same-provider' },
+        { id: 'qwen', kind: 'cloud' },
+    ]);
+});
+
 test('local-only transcription never sends recovery audio to a cloud provider', async () => {
     for (const input of [
         { primaryProvider: 'local-whisper', effectiveProvider: 'local-whisper', localOnly: false },

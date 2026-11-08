@@ -1,5 +1,6 @@
 // electron/services/OllamaManager.ts
 import { ChildProcess, spawn } from 'child_process';
+import { resolveOllamaExecutable } from './ollamaExecutable';
 import treeKill from 'tree-kill';
 import { ProviderStatusRegistry } from './ProviderStatusRegistry';
 import type { ProviderStatus } from './providerStatus';
@@ -235,7 +236,11 @@ export class OllamaManager {
         this.clearPoll();
         this.isAppManaged = true;
 
-        const child = spawn('ollama', ['serve'], {
+        // Not the bare name: a Finder/Dock launch has no Homebrew PATH
+        // (ollamaExecutable.ts).
+        const executable = resolveOllamaExecutable();
+        console.log(`[OllamaManager] Starting ${executable} serve`);
+        const child = spawn(executable, ['serve'], {
           detached: false, // Keep attached to app lifecycle
           windowsHide: true, // Hide terminal on Windows
           stdio: 'ignore', // We don't care about its logs

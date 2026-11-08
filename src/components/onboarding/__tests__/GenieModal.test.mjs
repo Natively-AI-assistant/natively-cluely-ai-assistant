@@ -527,6 +527,7 @@ test('pictures: a card whose content is new each time keeps none', () => {
   // A see-through (Liquid Glass) card keeps none either: a picture bakes in the
   // backdrop from when it was taken, so the next open would pour out a stale one.
   assert.ok(code('components/HindsightStatusBanner.tsx').includes('keepPictures={false}'), 'long-term memory notice (glass)');
+  assert.ok(code('components/onboarding/PlansToaster.tsx').includes('keepPictures={false}'), 'Natively Plans card (glass)');
   assert.ok(code('components/trial/FreeTrialModal.tsx').includes('keepPictures={false}'), 'trial usage');
 });
 

@@ -39,6 +39,9 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
     const [subject, setSubject] = useState('');
     const [emailBody, setEmailBody] = useState('');
 
+    // The draft as the model wrote it, so what the user changed before sending can be told apart.
+    const generatedRef = useRef('');
+
     // State
     const [isGenerating, setIsGenerating] = useState(false);
     const [hasGeneratedOnce, setHasGeneratedOnce] = useState(false);
@@ -110,6 +113,7 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
             const generatedBody = await window.electronAPI?.generateFollowupEmail(input);
             if (generatedBody) {
                 setEmailBody(generatedBody);
+                generatedRef.current = generatedBody;
             }
         } catch (error) {
             console.error('Failed to generate email:', error);
@@ -127,13 +131,21 @@ const FollowUpEmailModal: React.FC<FollowUpEmailModalProps> = ({ isOpen, onClose
         generateEmail();
     };
 
+    // The user's own edit of the draft teaches Natively how they write (kept on this
+    // computer only, and only when they changed it): Settings › Connectors › Writing.
+    const rememberFinalText = () => {
+        void window.electronAPI?.meetingOutputs?.recordFollowUpSent({ meetingId: meeting.id, finalText: emailBody, draftText: generatedRef.current }).catch(() => {});
+    };
+
     const handleSendGmail = async () => {
+        rememberFinalText();
         const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(recipientEmail)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}`;
         await window.electronAPI?.openExternal(gmailUrl);
         onClose();
     };
 
     const handleSendDefault = async () => {
+        rememberFinalText();
         await window.electronAPI?.openMailto({
             to: recipientEmail,
             subject: subject,

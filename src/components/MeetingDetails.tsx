@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useId, useMemo } from 'react';
 import { useT } from '../i18n';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
-import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight, RefreshCw, Info, Eye, EyeOff, History, Pencil, X, ChevronRight, ChevronLeft, SquarePen, FileText } from 'lucide-react';
+import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight, RefreshCw, Info, Eye, EyeOff, History, Pencil, X, ChevronRight, ChevronLeft, FileText, Columns2, NotebookPen } from 'lucide-react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { genMessageId } from '../utils/messageId';
 import { mapLanguageForPrism, isBlockCode } from '../utils/prismLanguage';
 import { registerPrismLanguages } from '../utils/registerPrismLanguages';
@@ -11,16 +12,17 @@ import GlassSurface from '../ui-components/GlassSurface';
 // .lg-bubble (the Usage tab's question bubble).
 // Imported here rather than left to arrive through Launcher's LiquidGlassBadge import.
 import '../ui-components/LiquidGlassButton.css';
-import { LiquidGlassButton } from '../ui-components/LiquidGlassButton';
+import { LiquidGlassButton, useLensTracking } from '../ui-components/LiquidGlassButton';
+import { isMac } from '../utils/platformUtils';
 import EditableTextBlock from './EditableTextBlock';
-import NativelyLogo from './icon.png';
+import { NativelyWordmark } from './NativelyWordmark';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism-light';
 import { vividDarkCodeTheme } from '../lib/codeTheme';
 import { splitGistLine } from '../lib/displayMarkup';
 import { splitIntoWordRuns } from '../lib/textRevealAnimation.mjs';
-import { followUpRecipients, recipientSummary, gmailComposeUrl } from '../lib/followUpRecipients.mjs';
+import { followUpRecipients, gmailComposeUrl, outlookComposeUrl } from '../lib/followUpRecipients.mjs';
 import { reflowFlattenedList, leadingItem, techniqueLabel, techniqueFromApproach, extractComplexity, isNotApplicable, splitTrailingAnswer, plainTitle, breakGluedLines, fixBoldSpacing, latexParensToDollars, stripLeadingReasoning, stripStrayGistLines, plainEmailText, plainMeetingTitle } from '../lib/codingAnswer.mjs';
 import { normalizeFinalizedMarkdownMath } from '../lib/streamingMarkdown';
 import { DiagramAwareMarkdown } from './diagram/DiagramAwareMarkdown';
@@ -31,10 +33,23 @@ import { groupTranscriptTurns, isHiddenQualityNote } from '../lib/meetingNotesVi
 import { CalendarLinkChip, type CalendarEventSnapshot } from './meeting/CalendarLinkChip';
 // Your notes, earlier versions, Source and rating (2026-10-15).
 import { ConfirmDialog } from './ui/ConfirmDialog';
+import { GenieModal } from './ui/GenieModal';
+import { useGenieAnimationEnabled } from '../lib/genieAnimationSetting';
+import { ShareMenu } from './meeting/ShareMenu';
+import { followUpChanges, settleFollowUpSave, type FollowUpText } from './meeting/outputsView';
 import { NotesVersionTabs } from './meeting/NotesVersionTabs';
+import { fallbackNoteSections } from './notes/notepadView';
 import { NoteSource } from './meeting/NoteSource';
 import { NotesRating } from './meeting/NotesRating';
-import { noteLineTime, notesContentKey, notesWereEdited, versionTabs, type VersionKey } from './meeting/notesView';
+import { NotesTemplatePicker } from './meeting/NotesTemplatePicker';
+import { NotesCompare, type CompareReveal } from './meeting/NotesCompare';
+import { readableNotesMarkdown } from './notes/notesEditorModel';
+import { comparePair, shouldPromptRating, templatePickerOptions } from './meeting/notesFeedback';
+import { noteLineTime, notesContentKey, notesLabel, notesWereEdited, versionTabs, type VersionKey } from './meeting/notesView';
+import { copyText } from '../lib/copyText';
+import { resumeSpot } from '../../electron/services/meeting/meetingResume';
+import { resumeSavedMeeting } from '../lib/startMeetingRequest';
+import { joinSpeakers, mergeOffers, renameSpeaker, speakerChips, type SpeakerChip } from '../lib/speakerMerge';
 
 registerPrismLanguages();
 
@@ -96,24 +111,22 @@ const ASK_BAR_SATURATION_DARK = 1.4;
 const ASK_BAR_SATURATION_LIGHT = 1.2;
 
 /*
- * The send orb — a plain circle, deliberately.
+ * The send orb — the website's send button (heynatively.com/chat): a round
+ * button in the lavender Liquid Glass, deep lavender arrow. Owner request,
+ * 2026-10-30: "this should be liquid glass like in the website". It was a
+ * solid grey/white disc, on the reasoning that a second glass surface inside
+ * the pill's would compete with it; the site draws exactly that and it reads.
  *
- * It sits ON the pill, and the pill is already the glass: it refracts, it
- * tints, it carries a rim. A second refracting surface nested inside that one
- * competes with it — two lenses 8px apart, each bending the other's output —
- * and at 30px the result reads as an artefact rather than as a material. So
- * the orb contributes no glass of its own and lets the body's show through
- * around it.
+ * The material is .lg-lavender (ui-components), re-tinted for dark by
+ * .lg-lav-tinted (index.css) as the follow-up email's send pill is; the
+ * round box, rim stops and glyph are .mn-ask-send (index.css). Grey and
+ * disabled while the box is empty; lavender once something is typed.
  *
- * Which leaves it doing the one job a send affordance has: being findable. A
- * solid disc against the pill's translucency is the strongest possible signal
- * for that, and it inverts by theme so the contrast survives both.
+ * 36px in the 48px bar with an even 6px inset, the site's proportion (its
+ * button fills about three quarters of the bar's height); 30px read as a dot.
  */
-const ASK_ORB_SIZE = 30;
-/** The disc: white on the dark pill, grey on the light one. */
-const ASK_ORB_FILL = { dark: '#FFFFFF', light: '#8E8E93' };
-/** The arrow, chosen against its own disc rather than against the theme. */
-const ASK_ORB_GLYPH = { dark: '#111113', light: '#FFFFFF' };
+const ASK_ORB_SIZE = 36;
+const ASK_ORB_INSET = (ASK_BAR_HEIGHT - ASK_ORB_SIZE) / 2;
 
 const formatTime = (ms: number) => {
     const date = new Date(ms);
@@ -217,12 +230,7 @@ const CopyButton: React.FC<{ text: string }> = ({ text }) => {
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
     useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
     const handle = () => {
-        // navigator.clipboard is undefined outside a secure context; the optional
-        // chain guards .writeText but the whole expression is then undefined, so
-        // guard the promise before calling .then/.catch on it.
-        const p = navigator.clipboard?.writeText(text);
-        if (!p) return;
-        p.then(() => {
+        copyText(text).then(() => {
             setCopied(true);
             if (timer.current) clearTimeout(timer.current);
             timer.current = setTimeout(() => setCopied(false), 2000);
@@ -735,13 +743,13 @@ const UsageInteraction: React.FC<{
                         </motion.div>
                     )}
                     {interaction.question && (<>
-                    {/* .lg-bubble (ui-components): the original Liquid Glass material on the
-                        Settings toggle's periwinkle blue (--toggle-on, lifted toward white in light
-                        mode), with nothing painted around it and no hover effect. Fill and
-                        foreground come from --bubble-user-* in index.css; the radius stays here.
-                        White text on the fill is 3.28:1 (2.35:1 in light mode) — an accepted AA
-                        shortfall, recorded in PeriwinkleContrastGuard.test.mjs. */}
-                    <motion.div {...enter({ x: 8 }, staggerDelay)} className="lg-bubble px-5 py-2.5 rounded-2xl rounded-tr-sm max-w-[80%] text-[15px] leading-relaxed select-text">
+                    {/* .lg-bubble.lg-bubble-lavender (ui-components): the website's question
+                        card in "The whole call, distilled" — lavender Liquid Glass, deep lavender
+                        semibold label, soft lavender glow. Its shape too: there 31px tall at 11px
+                        text, 14px side padding, corners 14/4/14/14; scaled by 15/11 here that is
+                        a 42px line, 19px padding, corners 19/5.5/19/19. Material and ink live in
+                        the CSS; the shape stays here. */}
+                    <motion.div {...enter({ x: 8 }, staggerDelay)} className="lg-bubble lg-bubble-lavender px-[19px] py-[9px] rounded-[19px] rounded-tr-[5.5px] max-w-[80%] text-[15px] font-semibold leading-relaxed select-text">
                         {interaction.question}
                     </motion.div>
                     {/* Same row as the answer's timestamp below (USAGE_TIME_ROW): equal
@@ -753,13 +761,13 @@ const UsageInteraction: React.FC<{
                 </div>
             )}
 
-            {/* AI answer — open canvas (no bubble): a small logo + name line, then the
-                body full width beneath it, then the hover-revealed timestamp. */}
+            {/* AI answer — open canvas (no bubble): the website's "natively" wordmark,
+                then the body full width beneath it, then the hover-revealed timestamp.
+                14px tall puts its x-height (7.8px) a touch over the 13px label it replaced. */}
             {interaction.answer && (
                 <motion.div {...enter({ y: 8 }, staggerDelay + 0.08)} className="group/a">
-                    <div className="mb-2 flex items-center gap-2 select-none">
-                        <img src={NativelyLogo} alt="" aria-hidden="true" className="w-4 h-4 object-contain force-black-icon opacity-60" />
-                        <span className="text-[13px] font-medium leading-none text-text-secondary">Natively</span>
+                    <div className="mb-2 flex items-center select-none">
+                        <NativelyWordmark height={14} className="block shrink-0 text-text-secondary" />
                     </div>
                     <div className="min-w-0">
                         <div className="text-text-secondary text-[15px] leading-relaxed max-w-none select-text">
@@ -858,10 +866,9 @@ const UsageImageViewer: React.FC<{
     );
 };
 
-type FollowUpTone = 'professional' | 'warm' | 'concise' | 'friendly';
-
-/** The dropdown snippet's --dropdown-close-dur (index.css, .mn-followup). */
-const TONE_MENU_CLOSE_MS = 150;
+// 'your_style': the user's own voice, from the writing samples of the mode the
+// meeting ran under. Offered (and the default) only when that mode has samples.
+type FollowUpTone = 'professional' | 'warm' | 'concise' | 'friendly' | 'your_style';
 
 /**
  * The notes' actions, in the app's Liquid Glass (ui-components/design.md):
@@ -884,7 +891,9 @@ const NotesActions: React.FC<{
     onRegenerate: () => void;
     onRegenerateAsSuggested: () => void;
     onToggleEvidence: () => void;
-}> = ({ isRegenerating, showEvidence, suggestion, onRegenerate, onRegenerateAsSuggested, onToggleEvidence }) => {
+    /** More of the same small buttons after Show evidence: Regenerate as, Compare (2026-10-15). */
+    children?: React.ReactNode;
+}> = ({ isRegenerating, showEvidence, suggestion, onRegenerate, onRegenerateAsSuggested, onToggleEvidence, children }) => {
     const t = useT();
     const reduce = useReducedMotion();
     const isLight = useResolvedTheme() === 'light';
@@ -940,6 +949,7 @@ const NotesActions: React.FC<{
                     {evidenceLabel}
                 </SwapText>
             </LiquidGlassButton>
+            {children}
             {/* The suggestion settles in (fade, 2px blur, 250ms) when detection offers one
                 and fades out quicker (150ms) once it has been taken. Not on the page's
                 first paint: the notes' own reveal is already playing then. */}
@@ -964,148 +974,6 @@ const NotesActions: React.FC<{
                     </motion.div>
                 )}
             </AnimatePresence>
-        </div>
-    );
-};
-
-// Tone picker for the follow-up draft. Picking a tone rewrites the draft in it.
-// Must be a named component (not an IIFE) so React can track its hooks stably.
-// Motion is transitions.dev's menu dropdown: the menu grows from the trigger's
-// top-right corner (it sits at the page's right edge) and closes quicker and
-// quieter than it opens, with .is-closing held for the close duration.
-const ToneDropdown: React.FC<{
-    followUpTone: FollowUpTone;
-    isRegeneratingFollowUp: boolean;
-    onSelect: (tone: FollowUpTone) => void;
-}> = ({ followUpTone, isRegeneratingFollowUp, onSelect }) => {
-    const t = useT();
-    const isLight = useResolvedTheme() === 'light';
-    const toneOptions: { value: FollowUpTone; label: string }[] = [
-        { value: 'professional', label: t('Professional') },
-        { value: 'warm',         label: t('Warm')         },
-        { value: 'concise',      label: t('Concise')      },
-        { value: 'friendly',     label: t('Friendly')     },
-    ];
-    const [open, setOpen] = useState(false);
-    const [closing, setClosing] = useState(false);
-    const rootRef = useRef<HTMLDivElement>(null);
-    // LiquidGlassButton keeps its own ref (the lens), so the trigger is found in the wrapper.
-    const trigger = () => rootRef.current?.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ?? null;
-    const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
-    const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-    const menuId = useId();
-
-    const openMenu = () => {
-        clearTimeout(closeTimer.current);
-        setClosing(false);
-        setOpen(true);
-    };
-    // `refocus`: hand focus back to the trigger (Escape, a pick) rather than
-    // letting it fall to <body> when the menu goes inert.
-    const close = (refocus: boolean) => {
-        setOpen(false);
-        setClosing(true);
-        clearTimeout(closeTimer.current);
-        closeTimer.current = setTimeout(() => setClosing(false), TONE_MENU_CLOSE_MS);
-        if (refocus) trigger()?.focus({ preventScroll: true });
-    };
-    useEffect(() => () => clearTimeout(closeTimer.current), []);
-    // Opening moves focus onto the current tone, so the arrow keys work at once and
-    // the trigger's focus ring does not sit around it while the menu is up.
-    useEffect(() => {
-        if (!open) return;
-        const selected = toneOptions.findIndex(o => o.value === followUpTone);
-        itemRefs.current[Math.max(0, selected)]?.focus({ preventScroll: true });
-        const onDown = (e: MouseEvent) => {
-            if (rootRef.current && !rootRef.current.contains(e.target as Node)) close(false);
-        };
-        document.addEventListener('mousedown', onDown);
-        return () => document.removeEventListener('mousedown', onDown);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open]);
-
-    const onMenuKeyDown = (e: React.KeyboardEvent) => {
-        const items = itemRefs.current.filter(Boolean) as HTMLButtonElement[];
-        const at = items.indexOf(document.activeElement as HTMLButtonElement);
-        const go = (i: number) => { e.preventDefault(); items[(i + items.length) % items.length]?.focus(); };
-        if (e.key === 'ArrowDown') go(at + 1);
-        else if (e.key === 'ArrowUp') go(at - 1);
-        else if (e.key === 'Home') go(0);
-        else if (e.key === 'End') go(items.length - 1);
-        else if (e.key === 'Escape') { e.preventDefault(); close(true); }
-        else if (e.key === 'Tab') close(false);
-    };
-
-    return (
-        <div ref={rootRef} className="relative">
-            {/* The notes' clear Liquid Glass pill (ui-components/LiquidGlassButton), like
-                Regenerate and Show evidence; it holds its hover wash while the menu is
-                open (.mn-tone, index.css). */}
-            <LiquidGlassButton
-                variant="clear"
-                className="lg-sm mn-tone"
-                disabled={isRegeneratingFollowUp}
-                onClick={() => (open ? close(false) : openMenu())}
-                onKeyDown={(e) => { if (e.key === 'ArrowDown' && !open) { e.preventDefault(); openMenu(); } }}
-                aria-haspopup="menu"
-                aria-expanded={open}
-                aria-controls={menuId}
-            >
-                <span className="inline-flex items-center gap-1">
-                    {/* Every tone stacked invisibly in one cell: the trigger is always as wide
-                        as the longest label, so it never jumps on a pick and the menu under
-                        it can be exactly its width. */}
-                    <span className="grid text-center">
-                        {toneOptions.map(o => (
-                            <span key={o.value} aria-hidden="true" className="invisible col-start-1 row-start-1">{o.label}</span>
-                        ))}
-                        <span className="col-start-1 row-start-1">{toneOptions.find(o => o.value === followUpTone)?.label ?? t('Tone')}</span>
-                    </span>
-                    {/* Flips (scaleY) rather than turns, so the "v" becomes a "^" in place:
-                        with the menu's open (250ms), and its quicker close (150ms). */}
-                    <ChevronDown
-                        className="w-3 h-3 opacity-60"
-                        strokeWidth={2.5}
-                        style={{ transform: `scaleY(${open ? -1 : 1})`, transition: `transform ${open ? 'var(--dropdown-open-dur)' : 'var(--dropdown-close-dur)'} var(--dropdown-ease)` }}
-                    />
-                </span>
-            </LiquidGlassButton>
-            {/* Exactly the trigger's width (left-0 right-0 of its wrapper). Tone names are
-                centred, and each row's centre sits under the trigger's label, not the
-                menu's middle: the trigger's chevron (12px + 4px gap) pushes its label
-                8px left, so the rows pad 16px more on the right (pl-3 / pr-7). */}
-            <div
-                id={menuId}
-                role="menu"
-                data-origin="top-center"
-                inert={!open}
-                onKeyDown={onMenuKeyDown}
-                className={`t-dropdown${open ? ' is-open' : closing ? ' is-closing' : ''} absolute left-0 right-0 top-full mt-1 z-50 p-[3px] rounded-lg border ${isLight
-                    ? 'bg-white border-black/[0.08] shadow-[0_6px_20px_rgba(0,0,0,0.12),0_1px_2px_rgba(0,0,0,0.06)]'
-                    : 'bg-[#1C1C1F] border-white/[0.08] shadow-[0_6px_20px_rgba(0,0,0,0.5),0_1px_2px_rgba(0,0,0,0.3)]'}`}
-            >
-                {toneOptions.map((opt, i) => {
-                    const selected = followUpTone === opt.value;
-                    return (
-                        <button
-                            key={opt.value}
-                            ref={(el) => { itemRefs.current[i] = el; }}
-                            type="button"
-                            role="menuitemradio"
-                            aria-checked={selected}
-                            tabIndex={-1}
-                            onClick={() => { close(true); if (!selected) onSelect(opt.value); }}
-                            className={`w-full h-[26px] flex items-center justify-center pl-3 pr-7 rounded-[5px] text-center text-[12px] font-medium focus-visible:outline-none transition-colors ${selected
-                                ? 'text-text-primary'
-                                : 'text-text-secondary hover:text-text-primary focus-visible:text-text-primary'} ${isLight
-                                ? 'hover:bg-black/[0.05] focus-visible:bg-black/[0.05]'
-                                : 'hover:bg-white/[0.06] focus-visible:bg-white/[0.06]'}`}
-                        >
-                            <span>{opt.label}</span>
-                        </button>
-                    );
-                })}
-            </div>
         </div>
     );
 };
@@ -1135,6 +1003,11 @@ const participantsSummary = (names: string[]): string => {
     return `${names.slice(0, 2).join(', ')} and ${names.length - 2} others`;
 };
 
+// A template section that is itself the Summary ("Summary", "TL;DR"; not "Study
+// summary"). The General mode seeded on new installs has one, so drawing the tldr
+// as its own Summary above it showed two (2026-10-31). Same test as notepadView.
+const isSummarySectionTitle = (title?: string | null): boolean => /^\s*(?:summary|tl;?\s*dr)\s*:?\s*$/i.test(title || '');
+
 const isNextStepsSectionTitle = (title?: string | null): boolean => {
     const t = (title || '').trim();
     if (!t) return false;
@@ -1142,7 +1015,7 @@ const isNextStepsSectionTitle = (title?: string | null): boolean => {
 };
 
 interface Evidence { speakerId?: string; speakerName?: string; speaker?: string; timestampMs?: number; timestamp?: number; quote?: string; segmentId?: string }
-interface FollowUpDraftObj { type?: string; subject?: string; body: string; tone?: string }
+interface FollowUpDraftObj { type?: string; subject?: string; body: string; tone?: string; styled?: boolean }
 
 interface Meeting {
     id: string;
@@ -1175,6 +1048,8 @@ interface Meeting {
         speakerConfidence?: Record<string, number>;
         /** Names proposed after the meeting for a voice left unnamed; the rename field starts from one. */
         speakerSuggestions?: Array<{ id: string; name: string; certainty?: string; applied?: boolean }>;
+        /** After a Resume: voices that came back under a new number, and who from the first part they may be (lib/speakerMerge.ts). */
+        speakerMerges?: Array<{ id: string; candidates: string[] }>;
         crossMeeting?: { stillOpen?: string[] };
         recipes?: Record<string, string>;
         /** Set when the user edited these notes by hand (Regenerate asks first). */
@@ -1222,6 +1097,8 @@ interface Meeting {
     summaryStatus?: MeetingSummaryStatus;
     /** What the user typed in the notes window during the meeting, exactly as typed. */
     userNotes?: string;
+    /** What it was taken on (2026-11-02): decides where Resume lives (meetingResume.ts). None on older meetings. */
+    surface?: 'overlay' | 'notepad';
 }
 
 // Mirrors SummaryStatus in electron/services/meeting/MeetingSummaryV3.ts. The
@@ -1251,6 +1128,9 @@ const SUMMARY_IN_PROGRESS: ReadonlySet<string> = new Set<MeetingSummaryStatus>([
 
 /** Matches the Texts-reveal snippet's fixed 200ms `.is-hiding` fade (index.css). */
 const FOLLOW_UP_HIDE_MS = 200;
+
+/** The Follow-up email dialog's layer: ShareMenu's dialogs' 400, above the chat overlay's 300. */
+const FOLLOW_UP_DIALOG_LAYER = 400;
 
 /** The text-swap snippet's --text-swap-dur (index.css, .mn-followup). */
 const SWAP_MS = 150;
@@ -1282,32 +1162,6 @@ const SwapText: React.FC<{ value: string; sizers: React.ReactNode[]; children: R
             {sizers.map((node, i) => <span key={`z${i}`} aria-hidden="true" className="mn-swap-sizer">{node}</span>)}
             {leaving && <span key={`o${leaving.key}`} aria-hidden="true" className="mn-swap-out">{leaving.node}</span>}
             <span key={`i${value}`} className={swapped ? 'mn-swap-in' : undefined}>{children}</span>
-        </span>
-    );
-};
-
-/**
- * A width that follows its content with an ease instead of a jump: the inner
- * span is measured (ResizeObserver) and the outer one transitions to it
- * (.mn-autow in index.css — a resize: 250ms, --ease-smooth-out). Used where a
- * label changes length and the pill around it should grow into the new one,
- * rather than holding the longest label's width all the time. The first
- * measure lands without a transition, so nothing animates on first paint.
- */
-const AutoWidth: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const innerRef = useRef<HTMLSpanElement>(null);
-    const [width, setWidth] = useState<number | null>(null);
-    useLayoutEffect(() => {
-        const el = innerRef.current;
-        if (!el || typeof ResizeObserver === 'undefined') return;
-        const ro = new ResizeObserver(() => setWidth(el.offsetWidth));
-        ro.observe(el);
-        setWidth(el.offsetWidth);
-        return () => ro.disconnect();
-    }, []);
-    return (
-        <span className="mn-autow" style={width === null ? undefined : { width }}>
-            <span ref={innerRef} className="mn-autow-in">{children}</span>
         </span>
     );
 };
@@ -1372,129 +1226,378 @@ const SpeakerNameInput: React.FC<{
     );
 };
 
-/** Copy for the follow-up card: Copy → Check is transitions.dev's icon swap. */
-// The notes header's Copy, exactly: quiet text that brightens on hover, no card
-// behind it, Copy → Check icon swap and a Copy → Copied label swap.
-const FollowUpCopyButton: React.FC<{ copied: boolean; onCopy: () => void }> = ({ copied, onCopy }) => {
+/** The dropdown snippet's --dropdown-close-dur (index.css, .mn-followup). */
+const TONE_MENU_CLOSE_MS = 150;
+
+// Tone picker for the follow-up draft. Picking a tone rewrites the draft in it.
+// Must be a named component (not an IIFE) so React can track its hooks stably.
+// It leads the follow-up sheet's toolbar as quiet text with a ^, brightening
+// on hover and while open, no fill behind it. Motion is transitions.dev's menu dropdown: the menu grows
+// upward from the trigger's corner and closes quicker and quieter than it opens,
+// with .is-closing held for the close duration.
+const ToneDropdown: React.FC<{
+    followUpTone: FollowUpTone;
+    isRegeneratingFollowUp: boolean;
+    onSelect: (tone: FollowUpTone) => void;
+    /** The meeting's mode has writing samples (Modes Manager): "Your style" is
+        offered, last, under a hairline. Only then: with none, it is not offered,
+        even for a draft once written in it (the trigger then says "Tone"). */
+    offerYourStyle: boolean;
+}> = ({ followUpTone, isRegeneratingFollowUp, onSelect, offerYourStyle }) => {
     const t = useT();
+    const isLight = useResolvedTheme() === 'light';
+    // The menu grows upward, so the last row sits next to the trigger: the presets
+    // run formal to casual, and "Your style" (the default) ends the list, set apart.
+    const toneOptions: { value: FollowUpTone; label: string }[] = [
+        { value: 'professional', label: t('Professional') },
+        { value: 'concise',      label: t('Concise')      },
+        { value: 'warm',         label: t('Warm')         },
+        { value: 'friendly',     label: t('Friendly')     },
+        ...(offerYourStyle ? [{ value: 'your_style' as const, label: t('Your style') }] : []),
+    ];
+    const [open, setOpen] = useState(false);
+    const [closing, setClosing] = useState(false);
+    const rootRef = useRef<HTMLDivElement>(null);
+    const trigger = () => rootRef.current?.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ?? null;
+    const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+    const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const menuId = useId();
+
+    const openMenu = () => {
+        clearTimeout(closeTimer.current);
+        setClosing(false);
+        setOpen(true);
+    };
+    // `refocus`: hand focus back to the trigger (Escape, a pick) rather than
+    // letting it fall to <body> when the menu goes inert.
+    const close = (refocus: boolean) => {
+        setOpen(false);
+        setClosing(true);
+        clearTimeout(closeTimer.current);
+        closeTimer.current = setTimeout(() => setClosing(false), TONE_MENU_CLOSE_MS);
+        if (refocus) trigger()?.focus({ preventScroll: true });
+    };
+    useEffect(() => () => clearTimeout(closeTimer.current), []);
+    // Opening moves focus onto the current tone, so the arrow keys work at once and
+    // the trigger's focus ring does not sit around it while the menu is up.
+    useEffect(() => {
+        if (!open) return;
+        const selected = toneOptions.findIndex(o => o.value === followUpTone);
+        itemRefs.current[Math.max(0, selected)]?.focus({ preventScroll: true });
+        const onDown = (e: MouseEvent) => {
+            if (rootRef.current && !rootRef.current.contains(e.target as Node)) close(false);
+        };
+        document.addEventListener('mousedown', onDown);
+        return () => document.removeEventListener('mousedown', onDown);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open]);
+
+    const onMenuKeyDown = (e: React.KeyboardEvent) => {
+        const items = itemRefs.current.filter(Boolean) as HTMLButtonElement[];
+        const at = items.indexOf(document.activeElement as HTMLButtonElement);
+        const go = (i: number) => { e.preventDefault(); items[(i + items.length) % items.length]?.focus(); };
+        if (e.key === 'ArrowDown') go(at + 1);
+        else if (e.key === 'ArrowUp') go(at - 1);
+        else if (e.key === 'Home') go(0);
+        else if (e.key === 'End') go(items.length - 1);
+        else if (e.key === 'Escape') { e.preventDefault(); close(true); }
+        else if (e.key === 'Tab') close(false);
+    };
+
     return (
-        <button
-            type="button"
-            onClick={onCopy}
-            aria-label={copied ? t('Copied') : t('Copy follow-up email')}
-            className="shrink-0 flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-text-primary transition-[color,opacity]"
-        >
-            <span className="t-icon-swap w-3.5 h-3.5" data-state={copied ? 'b' : 'a'} aria-hidden="true">
-                <Copy className="t-icon w-3.5 h-3.5" data-icon="a" size={14} />
-                <Check className="t-icon w-3.5 h-3.5 text-emerald-500" data-icon="b" size={14} />
-            </span>
-            <SwapText value={copied ? 'copied' : 'copy'} sizers={[t('Copy'), t('Copied')]}>
-                {copied ? t('Copied') : t('Copy')}
-            </SwapText>
-        </button>
+        <div ref={rootRef} className="relative">
+            <button
+                type="button"
+                className={`mn-fu-tone h-8 flex items-center text-[13px] font-medium transition-[color,opacity,scale] duration-150 disabled:opacity-40 ${open ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary'}`}
+                disabled={isRegeneratingFollowUp}
+                onClick={() => (open ? close(false) : openMenu())}
+                onKeyDown={(e) => { if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !open) { e.preventDefault(); openMenu(); } }}
+                aria-haspopup="menu"
+                aria-expanded={open}
+                aria-controls={menuId}
+            >
+                <span className="inline-flex items-center gap-1.5">
+                    {/* Every tone stacked invisibly in one cell: the trigger is always as wide
+                        as the longest label, so the footer never shifts on a pick. */}
+                    <span className="grid text-left">
+                        {toneOptions.map(o => (
+                            <span key={o.value} aria-hidden="true" className="invisible col-start-1 row-start-1">{o.label}</span>
+                        ))}
+                        <span className="col-start-1 row-start-1">{toneOptions.find(o => o.value === followUpTone)?.label ?? t('Tone')}</span>
+                    </span>
+                    {/* One "^" (the menu opens upward), "v" while open; it lifts toward
+                        the menu on hover, as the send's ^ does (index.css, .mn-fu-tone). */}
+                    <ChevronDown
+                        className="mn-fu-tone-mark w-3.5 h-3.5 opacity-60"
+                        strokeWidth={2.5}
+                        style={{ transform: `scaleY(${open ? 1 : -1})` }}
+                        aria-hidden="true"
+                    />
+                </span>
+            </button>
+            {/* Above the trigger and exactly its width plus the rows' 10px inset each
+                side (pulled back by -left-2.5): the tone names start over the label and
+                the selected one's check ends under the ^. The trigger is as wide as the
+                longest tone, so every name fits. */}
+            <div
+                id={menuId}
+                role="menu"
+                data-origin="bottom-left"
+                inert={!open}
+                onKeyDown={onMenuKeyDown}
+                className={`t-dropdown${open ? ' is-open' : closing ? ' is-closing' : ''} absolute -left-2.5 bottom-full mb-1.5 w-[calc(100%+20px)] z-50 p-[3px] rounded-[10px] border ${isLight
+                    ? 'bg-white border-black/[0.08] shadow-[0_6px_20px_rgba(0,0,0,0.12),0_1px_2px_rgba(0,0,0,0.06)]'
+                    : 'bg-[#2C2C2E] border-white/[0.08] shadow-[0_6px_20px_rgba(0,0,0,0.5),0_1px_2px_rgba(0,0,0,0.3)]'}`}
+            >
+                {toneOptions.map((opt, i) => {
+                    const selected = followUpTone === opt.value;
+                    return (
+                        <React.Fragment key={opt.value}>
+                        {opt.value === 'your_style' && (
+                            <div role="separator" className={`mx-[7px] my-[3px] h-px ${isLight ? 'bg-black/[0.08]' : 'bg-white/[0.08]'}`} />
+                        )}
+                        <button
+                            ref={(el) => { itemRefs.current[i] = el; }}
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={selected}
+                            tabIndex={-1}
+                            onClick={() => { close(true); if (!selected) onSelect(opt.value); }}
+                            className={`w-full h-7 flex items-center gap-1.5 px-[7px] rounded-[7px] text-left text-[13px] font-medium whitespace-nowrap focus-visible:outline-none transition-colors ${selected
+                                ? 'text-text-primary'
+                                : 'text-text-secondary hover:text-text-primary focus-visible:text-text-primary'} ${isLight
+                                ? 'hover:bg-black/[0.05] focus-visible:bg-black/[0.05]'
+                                : 'hover:bg-white/[0.06] focus-visible:bg-white/[0.06]'}`}
+                        >
+                            <span>{opt.label}</span>
+                            {selected && <Check className="ml-auto w-3.5 h-3.5 shrink-0" strokeWidth={2.5} aria-hidden="true" />}
+                        </button>
+                        </React.Fragment>
+                    );
+                })}
+            </div>
+        </div>
     );
 };
 
-/**
- * The follow-up draft as a mail card: a header strip with the subject and Copy,
- * then the message. It enters as a Transitions.dev "Texts reveal" (the same
- * wiring as UpcomingCalendarCard's heading): at rest it carries `.is-shown`
- * from the first paint, so a saved draft never animates; with `reveal` (a draft
- * that just came back from Generate) it mounts without it, commits that start
- * state with one reflow, then adds it, and the card rises in. While the draft is
- * rewritten (`busy`) the message dims; the rewrite then settles in by `bodyKey`.
- */
-const FollowUpDraftCard: React.FC<{
-    reveal: boolean;
-    subjectLabel?: React.ReactNode;
-    subject?: React.ReactNode;
-    subjectText?: string;
-    body: React.ReactNode;
-    bodyKey: number;
-    busy: boolean;
-    copied: boolean;
-    onCopy: () => void;
-    isLight: boolean;
-    /** Everyone on the meeting's calendar invite (followUpRecipients): the To line. */
-    recipients?: Array<{ email: string; name?: string }>;
-    /** Opens the draft in Gmail, addressed to them. */
-    onEmail?: () => void;
-}> = ({ reveal, subjectLabel, subject, subjectText, body, bodyKey, busy, copied, onCopy, isLight, recipients, onEmail }) => {
-    const t = useT();
-    const ref = useRef<HTMLDivElement>(null);
-    const [shown, setShown] = useState(!reveal);
-    // The room at the end of the text is the button's real width (labels differ by
-    // language), measured, plus a 16px gap; 156px is only the first-paint guess.
-    const gmailRef = useRef<HTMLDivElement>(null);
-    const [gmailWidth, setGmailWidth] = useState<number | null>(null);
-    useLayoutEffect(() => {
-        const el = gmailRef.current;
-        if (!el || typeof ResizeObserver === 'undefined') return;
-        const ro = new ResizeObserver(() => setGmailWidth(el.offsetWidth));
-        ro.observe(el);
-        setGmailWidth(el.offsetWidth);
-        return () => ro.disconnect();
-    }, [!!onEmail]);
-    useLayoutEffect(() => {
-        if (shown) return;
-        void ref.current?.offsetHeight;
-        setShown(true);
-    }, [shown]);
+/** Google's G (as CalendarSettings' GoogleMark). */
+const GoogleG: React.FC<{ size: number }> = ({ size }) => (
+    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" style={{ flexShrink: 0 }}>
+        <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
+            <path fill="#4285F4" d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z" />
+            <path fill="#34A853" d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z" />
+            <path fill="#FBBC05" d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.734 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z" />
+            <path fill="#EA4335" d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z" />
+        </g>
+    </svg>
+);
+
+/** Apple Mail's mark (the blue tile, the white envelope), for the macOS Mail row
+ *  until the system reports the default mail app's own icon. */
+const AppleMailMark: React.FC = () => {
+    const id = useId();
     return (
-        <div ref={ref} className={`t-stagger${shown ? ' is-shown' : ''}`}>
-            {/* Mail rows: To (the invite, as Fathom's recap does) and Subject + Copy,
-                then the message, roomier than the rows; "Open in Gmail" is the one
-                send-like action, so it sits at the foot of the draft as a glass button. */}
-            <div className={`t-stagger-line t-stagger-line--1 rounded-2xl border overflow-hidden ${isLight ? 'border-black/[0.08] bg-white/70' : 'border-white/[0.08] bg-white/[0.025]'}`}>
-                {recipients && recipients.length > 0 && (
-                    <div className={`flex items-center gap-2.5 min-h-10 px-4 py-1.5 border-b ${isLight ? 'border-black/[0.06]' : 'border-white/[0.06]'}`}>
-                        <p className="min-w-0 flex-1 truncate text-[12.5px] select-text" title={recipients.map((r) => r.email).join(', ')}>
-                            <span className="text-text-tertiary mr-1">{t('To:')}</span>{' '}
-                            <span className="text-text-primary">{recipientSummary(recipients)}</span>
-                        </p>
-                    </div>
-                )}
-                <div className={`flex items-center gap-2.5 min-h-10 px-4 py-1.5 border-b ${isLight ? 'border-black/[0.06]' : 'border-white/[0.06]'}`}>
-                    {subject && (
-                        <p className="min-w-0 flex-1 truncate text-[12.5px] select-text" title={subjectText}>
-                            {/* mr-1 on top of the literal space: a clear gap after the label that
-                                still reads "Subject: …" when the line is selected or copied. */}
-                            <span className="text-text-tertiary mr-1">{subjectLabel}</span>{' '}
-                            <span className="font-medium text-text-primary">{subject}</span>
-                        </p>
-                    )}
-                    <div className="ml-auto shrink-0">
-                        <FollowUpCopyButton copied={copied} onCopy={onCopy} />
-                    </div>
-                </div>
-                {/* "Open in Gmail" sits on the sign-off's line, at the right: the text ends
-                    with an invisible space the button's width (it wraps to a line of its
-                    own if the last line is long), and the button is pinned over that
-                    line, centred on it. Copying uses the draft text, not this DOM. */}
-                <div className="relative" style={gmailWidth ? { '--mn-fu-gmail-room': `${gmailWidth + 16}px` } as React.CSSProperties : undefined}>
-                    <pre
-                        aria-busy={busy}
-                        className={`px-4 py-4 text-[13px] text-text-secondary leading-[1.65] whitespace-pre-wrap font-sans select-text cursor-text transition-opacity duration-[250ms] ease-in-out ${busy ? 'opacity-50' : ''}`}
+        <svg viewBox="0 0 16 16" width={16} height={16} aria-hidden="true" style={{ flexShrink: 0 }}>
+            <defs>
+                <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stopColor="#4FB8FF" />
+                    <stop offset="1" stopColor="#1670F5" />
+                </linearGradient>
+            </defs>
+            <rect width="16" height="16" rx="3.6" fill={`url(#${CSS.escape(id)})`} />
+            <rect x="3" y="4.6" width="10" height="6.8" rx="1.1" fill="#FFFFFF" />
+            <path d="M3.5 5.2 8 8.5l4.5-3.3" fill="none" stroke="#1670F5" strokeOpacity="0.45" strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    );
+};
+
+/** Microsoft's four squares, for Outlook (as CalendarSettings' MicrosoftMark). */
+const MicrosoftMark: React.FC<{ size: number }> = ({ size }) => (
+    <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true" style={{ flexShrink: 0 }}>
+        <path fill="#F25022" d="M2 2h9.5v9.5H2z" />
+        <path fill="#7FBA00" d="M12.5 2H22v9.5h-9.5z" />
+        <path fill="#00A4EF" d="M2 12.5h9.5V22H2z" />
+        <path fill="#FFB900" d="M12.5 12.5H22V22h-9.5z" />
+    </svg>
+);
+
+// The follow-up sheet's send: "Send with Gmail" and, joined to it, a ^ that
+// opens the other ways to send it: Outlook (on the web), and the computer's own
+// mail app by its real name and icon (mail-app-info; "Mail app" when the system
+// has none to report). One lavender glass pill (.mn-fu-send, index.css); the menu is the tone menu's dropdown, grown upward from the right corner.
+// The note the send leaves when Gmail is connected and the To line is empty.
+const FU_NO_RECIPIENTS = 'Add who it goes to.';
+
+const FollowUpSendButton: React.FC<{
+    label: string;
+    /** Every label the send can show (Gmail connected: ask, sending, sent), so the pill holds the widest. */
+    labels: string[];
+    /** A Gmail send just went: the G turns into a drawn check for a moment. */
+    sent: boolean;
+    /** The whole control: no draft to send yet. */
+    disabled: boolean;
+    /** Gmail alone: a send in flight, or no one to send it to. */
+    gmailDisabled: boolean;
+    gmailTitle?: string;
+    mailApp: { name: string; icon?: string } | null;
+    onGmail: () => void;
+    onOutlook: () => void;
+    onMailApp: () => void;
+}> = ({ label, labels, sent, disabled, gmailDisabled, gmailTitle, mailApp, onGmail, onOutlook, onMailApp }) => {
+    const t = useT();
+    const isLight = useResolvedTheme() === 'light';
+    const [open, setOpen] = useState(false);
+    const [closing, setClosing] = useState(false);
+    const rootRef = useRef<HTMLDivElement>(null);
+    const lens = useLensTracking<HTMLDivElement>();
+    const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+    const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const menuId = useId();
+    // The button itself is Gmail, so the menu holds the others: Outlook, and the
+    // computer's mail app by the name and icon the system reports. Until it has
+    // reported (or when it cannot), macOS shows Mail, its own default, and
+    // Windows a plain "Mail app".
+    const items: { key: string; label: string; icon: React.ReactNode; run: () => void }[] = [
+        { key: 'outlook', label: 'Outlook', icon: <MicrosoftMark size={14} />, run: onOutlook },
+        {
+            key: 'mail-app',
+            label: mailApp?.name || (isMac ? 'Mail' : t('Mail app')),
+            icon: mailApp?.icon
+                ? <img src={mailApp.icon} alt="" width={16} height={16} className="shrink-0" draggable={false} />
+                : isMac ? <AppleMailMark /> : <Mail className="w-[15px] h-[15px] text-text-secondary" aria-hidden="true" />,
+            run: onMailApp,
+        },
+    ];
+
+    const close = (refocus: boolean) => {
+        setOpen(false);
+        setClosing(true);
+        clearTimeout(closeTimer.current);
+        closeTimer.current = setTimeout(() => setClosing(false), TONE_MENU_CLOSE_MS);
+        if (refocus) rootRef.current?.querySelector<HTMLButtonElement>('.mn-fu-send-more')?.focus({ preventScroll: true });
+    };
+    const openMenu = () => {
+        clearTimeout(closeTimer.current);
+        setClosing(false);
+        setOpen(true);
+    };
+    useEffect(() => () => clearTimeout(closeTimer.current), []);
+    useEffect(() => { if (disabled && open) close(false); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [disabled]);
+    // Opening moves focus onto the first app that can send, so the arrow keys work at once.
+    useEffect(() => {
+        if (!open) return;
+        itemRefs.current.find((el) => el && !el.disabled)?.focus({ preventScroll: true });
+        const onDown = (e: MouseEvent) => {
+            if (rootRef.current && !rootRef.current.contains(e.target as Node)) close(false);
+        };
+        document.addEventListener('mousedown', onDown);
+        return () => document.removeEventListener('mousedown', onDown);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open]);
+
+    const onMenuKeyDown = (e: React.KeyboardEvent) => {
+        const els = itemRefs.current.filter((el): el is HTMLButtonElement => !!el && !el.disabled);
+        const at = els.indexOf(document.activeElement as HTMLButtonElement);
+        const go = (i: number) => { e.preventDefault(); els[(i + els.length) % els.length]?.focus(); };
+        if (e.key === 'ArrowDown') go(at + 1);
+        else if (e.key === 'ArrowUp') go(at - 1);
+        else if (e.key === 'Home') go(0);
+        else if (e.key === 'End') go(els.length - 1);
+        else if (e.key === 'Escape') { e.preventDefault(); close(true); }
+        else if (e.key === 'Tab') close(false);
+    };
+
+    return (
+        <div ref={rootRef} className="relative">
+            {/* One pill in the Usage question's lavender glass (.lg-lavender, re-tinted
+                for dark in .mn-fu-send as .lg-bubble-lavender is): two click areas in
+                it, the send and the ^, with no line between them. A div wearing the
+                glass classes, since a button cannot hold two buttons; the lens follows
+                the pointer as on any LiquidGlassButton. */}
+            <div
+                ref={lens.ref}
+                onPointerMove={lens.onPointerMove}
+                className="lg-button lg-lavender lg-sm mn-fu-send"
+                aria-disabled={disabled || undefined}
+            >
+                <span className="lg-lens" aria-hidden="true" />
+                <span className="lg-content">
+                    <button
+                        type="button"
+                        className="mn-fu-send-main"
+                        onClick={onGmail}
+                        onFocus={lens.onFocus}
+                        disabled={disabled || gmailDisabled}
+                        title={gmailTitle}
                     >
-                        <span key={bodyKey} className={`block${bodyKey > 0 ? ' mn-fu-body-in' : ''}`}>
-                            {body}
-                            {onEmail && <span aria-hidden="true" className="mn-fu-gmail-room" />}
+                        {/* G → check when a send goes (#09's icon swap, the check drawn by
+                            #10's success check, sized down for the pill in index.css), and the
+                            label changes in place (#04's text swap) at the widest label's width,
+                            so the pill never jumps. */}
+                        <span className="t-icon-swap w-[13px] h-[13px]" data-state={sent ? 'b' : 'a'} aria-hidden="true">
+                            <span className="t-icon grid place-items-center" data-icon="a"><GoogleG size={13} /></span>
+                            <span className="t-icon grid place-items-center" data-icon="b">
+                                {sent && (
+                                    <span className="t-success-check mn-fu-sent-check" data-state="in">
+                                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                                            <path d="M3.5 8.5l3 3 6-7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                                        </svg>
+                                    </span>
+                                )}
+                            </span>
                         </span>
-                    </pre>
-                    {onEmail && (
-                        <div ref={gmailRef} className="mn-fu-gmail">
-                            <LiquidGlassButton
-                                variant="clear"
-                                className="lg-sm"
-                                onClick={onEmail}
-                                aria-label={t('Open the email in Gmail')}
-                                icon={<Mail className="w-3.5 h-3.5" strokeWidth={2.2} />}
-                            >
-                                {t('Open in Gmail')}
-                            </LiquidGlassButton>
-                        </div>
-                    )}
-                </div>
+                        <SwapText value={label} sizers={labels}>{label}</SwapText>
+                    </button>
+                    <button
+                        type="button"
+                        className="mn-fu-send-more"
+                        disabled={disabled}
+                        onClick={() => (open ? close(false) : openMenu())}
+                        onFocus={lens.onFocus}
+                        onKeyDown={(e) => { if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !open) { e.preventDefault(); openMenu(); } }}
+                        aria-label={t('Other ways to send')}
+                        title={t('Other ways to send')}
+                        aria-haspopup="menu"
+                        aria-expanded={open}
+                        aria-controls={menuId}
+                    >
+                        {/* "^" while closed (the menu opens upward), "v" while open, as the
+                            tone's; its motion (flip, hover lift, press) is in index.css. */}
+                        <ChevronDown
+                            className="w-3.5 h-3.5"
+                            strokeWidth={2.5}
+                            style={{ transform: `scaleY(${open ? 1 : -1})` }}
+                        />
+                    </button>
+                </span>
+            </div>
+            <div
+                id={menuId}
+                role="menu"
+                aria-label={t('Other ways to send')}
+                data-origin="bottom-right"
+                inert={!open}
+                onKeyDown={onMenuKeyDown}
+                className={`t-dropdown${open ? ' is-open' : closing ? ' is-closing' : ''} absolute right-0 bottom-full mb-1.5 min-w-[168px] z-50 p-1 rounded-[12px] border ${isLight
+                    ? 'bg-white border-black/[0.08] shadow-[0_8px_28px_rgba(0,0,0,0.14),0_1px_2px_rgba(0,0,0,0.06)]'
+                    : 'bg-[#2C2C2E] border-white/[0.08] shadow-[0_8px_28px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.3)]'}`}
+            >
+                {items.map((item, i) => (
+                    <button
+                        key={item.key}
+                        ref={(el) => { itemRefs.current[i] = el; }}
+                        type="button"
+                        role="menuitem"
+                        tabIndex={-1}
+                        onClick={() => { close(true); item.run(); }}
+                        className={`w-full h-8 flex items-center gap-2.5 px-2.5 rounded-[8px] text-left text-[13px] font-medium whitespace-nowrap text-text-primary focus-visible:outline-none transition-colors disabled:opacity-40 ${isLight
+                            ? 'hover:bg-black/[0.05] focus-visible:bg-black/[0.05]'
+                            : 'hover:bg-white/[0.07] focus-visible:bg-white/[0.07]'} disabled:hover:bg-transparent`}
+                    >
+                        <span className="grid place-items-center w-4 h-4 shrink-0">{item.icon}</span>
+                        <span className="truncate">{item.label}</span>
+                    </button>
+                ))}
             </div>
         </div>
     );
@@ -1792,6 +1895,12 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     // version, not the words), so the rating reloads for new notes, but not for
     // a follow-up draft or a speaker rename.
     const ratedNotesKey = useMemo(() => notesContentKey(meeting.detailedSummary), [meeting.detailedSummary]);
+    // Thumbs sampling: asked above the current notes while they are new, for
+    // about one meeting in ten, the same meetings every time (notesFeedback.ts).
+    const promptRating = useMemo(
+        () => versionKey === 'current' && shouldPromptRating(baseMeeting.id, baseMeeting.detailedSummary, Date.now()),
+        [versionKey, baseMeeting.id, baseMeeting.detailedSummary],
+    );
     const [activeTab, setActiveTab] = useState<NotesTab>('summary');
     // How the tab panel arrives after the reader switches tabs (see switchTab):
     // from the side of travel, or a plain fade. null until the first switch, so
@@ -1806,7 +1915,6 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const mainRef = useRef<HTMLElement | null>(null);
     const transcriptListRef = useRef<HTMLDivElement | null>(null);
     const [query, setQuery] = useState('');
-    const [isCopied, setIsCopied] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
     // Usage tab: the screenshot preview being viewed full size (UsageImageViewer).
     const [imageViewer, setImageViewer] = useState<{ images: string[]; index: number } | null>(null);
@@ -1844,7 +1952,8 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         let timer: ReturnType<typeof setTimeout> | undefined;
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.key !== 'Escape' || e.defaultPrevented || isChatOpen) return;
-            const el = e.target as HTMLElement | null;
+            // A synthetic Escape dispatched on window has no element target.
+            const el = e.target instanceof Element ? e.target : null;
             if (el?.closest('input, textarea, select, [contenteditable="true"]')) return;
             if (document.querySelector('[role="dialog"], [aria-modal="true"]')) return;
             timer = setTimeout(() => { if (!e.defaultPrevented) onBack(); }, 0);
@@ -1876,6 +1985,13 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const v3Questions = meeting.detailedSummary?.openQuestions || [];
     const v3Risks = meeting.detailedSummary?.risks || [];
     const v3Tldr = meeting.detailedSummary?.tldr || [];
+    const templateHasSummary = (meeting.detailedSummary?.sectionsV3 || []).some((s) => s.bullets?.length > 0 && isSummarySectionTitle(s.title));
+    // The notes' sections: the template's, or with no template (no mode active, none picked in
+    // the notepad) Decisions and Action items from the call's own lists (fallbackNoteSections).
+    const templateSections = meeting.detailedSummary?.sectionsV3 || [];
+    const noteSections: typeof templateSections = templateSections.length > 0
+        ? templateSections
+        : fallbackNoteSections(meeting.detailedSummary as any) as unknown as typeof templateSections;
     const v3WhatChanged = meeting.detailedSummary?.whatChanged || [];
     const v3Mode = meeting.detailedSummary?.mode;
     const v3SummaryStatus = meeting.summaryStatus;
@@ -1898,27 +2014,33 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     // An email: plain text on screen, in Copy and in the Gmail link, so model markdown (**Problem:**) is stripped once, here.
     const followUpBody = plainEmailText(typeof rawFollowUp === 'string' ? rawFollowUp : (rawFollowUp?.body || ''));
     const followUpSubject = typeof rawFollowUp === 'string' ? undefined : rawFollowUp?.subject;
-    const followUpDraftTone = (typeof rawFollowUp === 'string' ? undefined : rawFollowUp?.tone) as 'professional' | 'warm' | 'concise' | 'friendly' | undefined;
+    const followUpDraftTone = (typeof rawFollowUp === 'string' ? undefined : rawFollowUp?.tone) as FollowUpTone | undefined;
     const hasFollowUpDraft = followUpBody.trim().length > 0;
+    // Written in the user's own voice: the samples of the mode this meeting ran
+    // under (Modes Manager, "Follow-ups in your style"). No switch: a mode with
+    // samples uses them, so there is nothing here to turn off.
+    const followUpStyled = typeof rawFollowUp === 'object' && rawFollowUp?.styled === true;
 
     // Regenerate / evidence-jump / speaker-rename UI state.
     const [isRegenerating, setIsRegenerating] = useState(false);
     const [isRegeneratingFollowUp, setIsRegeneratingFollowUp] = useState(false);
     // Selected follow-up tone, shown in the selector. Seeded from the saved draft's tone.
-    const [followUpTone, setFollowUpTone] = useState<'professional' | 'warm' | 'concise' | 'friendly'>(followUpDraftTone || 'professional');
-    // Local "Copied!" confirmation for the follow-up copy button.
-    const [followUpCopied, setFollowUpCopied] = useState(false);
+    const [followUpTone, setFollowUpTone] = useState<FollowUpTone>(followUpDraftTone || 'professional');
+    // Whether the mode this meeting ran under (General when none is recorded) has
+    // writing samples (Modes Manager): then "Your style" is in the tone list, and
+    // the first draft is written in it. Main resolves the mode, as the draft does.
+    const followUpStyleModeId: string | undefined = (meeting.detailedSummary as any)?.mode?.selectedModeId;
+    const [modeHasStyle, setModeHasStyle] = useState(false);
     // The last Generate / Regenerate of the draft came back without one.
     const [followUpFailed, setFollowUpFailed] = useState(false);
-    // The first draft's entrance. 'armed' by a Generate click on a meeting with no
-    // draft: once the draft lands, the hint fades out in place (FOLLOW_UP_HIDE_MS),
-    // then 'reveal' mounts the draft to play its staggered rise. A draft already
+    // The first draft's entrance. 'armed' when the first draft is asked for: once
+    // it lands, the "Writing…" line fades out (FOLLOW_UP_HIDE_MS), then 'reveal'
+    // brings Subject and the message in (.mn-fu-land). A draft already
     // saved when the notes open never arms, so it never animates.
     const [followUpEntrance, setFollowUpEntrance] = useState<'none' | 'armed' | 'reveal'>('none');
     // Bumped when a Regenerate / tone change rewrites an existing draft, so the new
-    // text settles in (FollowUpDraftCard's bodyKey) instead of snapping.
+    // text settles in (the sheet's message is keyed by it) instead of snapping.
     const [followUpBodyKey, setFollowUpBodyKey] = useState(0);
-    const followUpRegenTipId = useId();
     useEffect(() => {
         if (followUpEntrance !== 'armed' || !hasFollowUpDraft) return;
         const id = setTimeout(() => setFollowUpEntrance('reveal'), FOLLOW_UP_HIDE_MS);
@@ -2222,10 +2344,6 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         return () => { cancelled = true; if (timer) clearTimeout(timer); off?.(); };
     }, [isSummaryGenerating, meeting.id]);
 
-    const copyRecipe = (text: string) => {
-        navigator.clipboard?.writeText(text || '').catch(() => { /* swallow */ });
-    };
-
     const loadNotesVersions = async () => {
         try {
             const list = await window.electronAPI?.getMeetingNotesVersions?.(meeting.id);
@@ -2246,15 +2364,147 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
                 // Keep the tone selector in sync with the regenerated draft.
                 const fu = (fresh as Meeting).detailedSummary?.followUpDraft;
                 const tone = typeof fu === 'string' ? undefined : fu?.tone;
-                if (tone === 'professional' || tone === 'warm' || tone === 'concise' || tone === 'friendly') setFollowUpTone(tone);
+                if (tone === 'professional' || tone === 'warm' || tone === 'concise' || tone === 'friendly' || tone === 'your_style') setFollowUpTone(tone);
             }
         } catch { /* swallow */ }
+    };
+
+    // Back to the notepad, and Resume (2026-11-02, services/meeting/meetingResume.ts).
+    // Both wait while another meeting runs: it owns the notepad and the microphone.
+    const [meetingRunning, setMeetingRunning] = useState(false);
+    useEffect(() => {
+        const api = window.electronAPI;
+        let cancelled = false;
+        api?.getMeetingActive?.().then((active) => { if (!cancelled) setMeetingRunning(!!active); }).catch(() => { /* assume none */ });
+        const off = api?.onMeetingStateChanged?.((d) => setMeetingRunning(!!d?.isActive));
+        return () => { cancelled = true; off?.(); };
+    }, []);
+    // A resumed meeting is saved again under this id at its Stop: pick up the new
+    // notes being written (the generation poll above takes it from there) and the
+    // earlier notes kept as a version.
+    useEffect(() => {
+        if (isSummaryGenerating) return;
+        const off = window.electronAPI?.onMeetingsUpdated?.(async () => {
+            try {
+                const fresh = await window.electronAPI?.getMeetingDetails?.(meeting.id) as Meeting | undefined;
+                if (fresh && SUMMARY_IN_PROGRESS.has(fresh.summaryStatus ?? '')) {
+                    setMeeting(fresh);
+                    void loadNotesVersions();
+                }
+            } catch { /* the page keeps what it shows */ }
+        });
+        return () => { off?.(); };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isSummaryGenerating, meeting.id]);
+    const [resumeBusy, setResumeBusy] = useState(false);
+    const [resumeNotice, setResumeNotice] = useState<string | null>(null);
+    useEffect(() => {
+        if (!resumeNotice) return;
+        const timer = setTimeout(() => setResumeNotice(null), 4_000);
+        return () => clearTimeout(timer);
+    }, [resumeNotice]);
+    const resumeProblem = (code?: string): string => (
+        code === 'meeting-running' ? t('Stop the meeting that is running first.')
+            : code === 'not-found' ? t('This meeting could not be found.')
+                    : code === 'mic-permission-denied' ? t('Natively needs microphone access to record.')
+                        : t('Could not resume this meeting.')
+    );
+    // Overlay meetings resume here; a notepad meeting resumes in the notepad (and
+    // older meetings, which never stored it, count as overlay meetings).
+    const resumeOnPage = resumeSpot(baseMeeting.surface) === 'page';
+    // Notes still being written do not hold Resume back: the resumed Stop writes
+    // them over the whole meeting (meetingResume.resumeBlockReason).
+    const resumeDisabled = meetingRunning || resumeBusy;
+    const resumeHint = meetingRunning ? t('Stop the meeting that is running first')
+        : t('Keep recording into this meeting');
+    const resumeMeeting = async () => {
+        if (resumeDisabled) return;
+        setResumeBusy(true);
+        try {
+            const result = await resumeSavedMeeting(meeting.id);
+            if (!result.success) setResumeNotice(resumeProblem(result.code));
+        } catch {
+            setResumeNotice(resumeProblem());
+        } finally {
+            setResumeBusy(false);
+        }
+    };
+    const openInNotepad = async () => {
+        if (meetingRunning) return;
+        try {
+            const result = await window.electronAPI?.notesWindowOpenSavedMeeting?.(meeting.id);
+            if (result && !result.success) setResumeNotice(result.code === 'meeting-running' ? t('Stop the meeting that is running first.') : t('Could not open the notepad.'));
+        } catch {
+            setResumeNotice(t('Could not open the notepad.'));
+        }
     };
 
     // Set when regenerating AS the auto-detected mode was refused because that mode
     // needs Pro (the same gate as switching to it) — the suggestion then says so
     // instead of spinning and silently doing nothing.
     const [detectedNeedsPro, setDetectedNeedsPro] = useState(false);
+
+    // Regenerate as (2026-10-15): every template the user has, from the Modes
+    // Manager. A template main refused for want of Pro (the same gate as the
+    // suggestion above, notesTemplateGate.ts) is marked, and the page says so
+    // with the way to the plans.
+    const [templateModes, setTemplateModes] = useState<Array<{ id: string; name: string; templateType: string }>>([]);
+    useEffect(() => {
+        let live = true;
+        window.electronAPI?.modesGetAll?.()
+            .then((list) => { if (live && Array.isArray(list)) setTemplateModes(list.map((m) => ({ id: m.id, name: m.name, templateType: m.templateType }))); })
+            .catch(() => { /* no picker */ });
+        return () => { live = false; };
+    }, []);
+    const [templatesNeedingPro, setTemplatesNeedingPro] = useState<ReadonlySet<string>>(() => new Set());
+    const [gatedTemplateName, setGatedTemplateName] = useState<string | null>(null);
+    // A refusal is only remembered until the plan changes: buying Pro, entering
+    // a key, or a trial starting or ending forgets it (main checks again anyway).
+    useEffect(() => {
+        const forget = () => {
+            setTemplatesNeedingPro(new Set());
+            setGatedTemplateName(null);
+            setDetectedNeedsPro(false);
+        };
+        const offs = [
+            window.electronAPI?.onLicenseStatusChanged?.(forget),
+            window.electronAPI?.onTrialStarted?.(forget),
+            window.electronAPI?.onTrialEnded?.(forget),
+        ];
+        return () => { for (const off of offs) { try { off?.(); } catch { /* gone */ } } };
+    }, []);
+
+    // Compare (2026-10-15): two versions side by side as A and B, blind until
+    // the pick (main: services/meeting/notesCompare.ts).
+    const [compare, setCompare] = useState<{ id: string; a: any; b: any } | null>(null);
+    const [compareReveal, setCompareReveal] = useState<CompareReveal | null>(null);
+    const [compareBusy, setCompareBusy] = useState(false);
+    useEffect(() => { setCompare(null); setCompareReveal(null); }, [baseMeeting.id]);
+    const openCompare = async () => {
+        const pair = comparePair(versionKey, notesVersions);
+        if (!pair || compareBusy || !window.electronAPI?.compareMeetingNotesStart) return;
+        setCompareBusy(true);
+        try {
+            const started = await window.electronAPI.compareMeetingNotesStart({ meetingId: baseMeeting.id, versions: pair });
+            if (started) { setCompareReveal(null); setCompare(started); }
+        } catch { /* nothing to compare */ } finally { setCompareBusy(false); }
+    };
+    const pickCompare = async (choice: 'A' | 'B' | 'same', reason: string) => {
+        if (!compare || compareBusy || !window.electronAPI?.compareMeetingNotesPick) return;
+        setCompareBusy(true);
+        try {
+            const res = await window.electronAPI.compareMeetingNotesPick({ id: compare.id, choice, ...(reason.trim() ? { reason: reason.trim() } : {}) });
+            if (res) {
+                setCompareReveal(res);
+                // The losing version is gone (an earlier winner became the notes):
+                // show the current notes and the tabs that are left.
+                if (res.removed != null) {
+                    setVersionKey('current');
+                    await Promise.all([reloadMeeting(), loadNotesVersions()]);
+                }
+            }
+        } catch { /* the pick stays open */ } finally { setCompareBusy(false); }
+    };
 
     // Regenerating over notes the user edited asks first (the edits go; the
     // current version stays in its tab). Holds the request until answered.
@@ -2277,32 +2527,142 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
                 await reloadMeeting();
                 await loadNotesVersions();
                 setVersionKey('current');
-            } else if (res?.error === 'pro_required') setDetectedNeedsPro(true);
+                setGatedTemplateName(null);
+                // It went through this time (Pro or a trial since): no longer marked.
+                const okId = opts?.modeId;
+                if (okId) setTemplatesNeedingPro((prev) => { if (!prev.has(okId)) return prev; const next = new Set(prev); next.delete(okId); return next; });
+            } else if (res?.error === 'pro_required') {
+                // From the picker: that template is marked and the page says why.
+                // Otherwise the suggestion's own refusal, as before.
+                const picked = opts?.modeId && opts.modeId !== v3Mode?.detectedModeId
+                    ? templateModes.find((m) => m.id === opts.modeId) : undefined;
+                if (picked) {
+                    setTemplatesNeedingPro((prev) => new Set(prev).add(picked.id));
+                    setGatedTemplateName(picked.name);
+                } else setDetectedNeedsPro(true);
+            }
         } catch { /* swallow */ } finally { setIsRegenerating(false); }
     };
 
-    const copyFollowUp = () => {
-        copyRecipe((followUpSubject ? `Subject: ${followUpSubject}\n\n` : '') + followUpBody);
-        setFollowUpCopied(true);
-        setTimeout(() => setFollowUpCopied(false), 1500);
+    // ── Editing the follow-up ──
+    // The sheet's Subject and message are fields. An edit is saved with the
+    // meeting on blur and when the sheet closes; Reset drops it. Both send
+    // buttons use the text on screen, edited or not, and tell main it was used:
+    // an edited body then becomes a writing sample for "Follow-ups in your
+    // style" (one per meeting, outputs/followUpEdit.ts). An edit stays pending
+    // (on screen, and in the sends) until main has saved it; a failed save
+    // keeps it and says so, with a retry (meeting/outputsView.ts).
+    const [fuText, setFuText] = useState<FollowUpText | null>(null);
+    const [fuSaveError, setFuSaveError] = useState<string | null>(null);
+    // What the sheet shows and the sends use: the pending edit, else what is saved.
+    const fuShownSubject = fuText?.subject ?? followUpSubject ?? '';
+    const fuShownBody = fuText?.body ?? followUpBody;
+    const followUpText = () => ({ subject: fuShownSubject, body: fuShownBody });
+    const saveFollowUp = async (used: boolean) => {
+        const pending = fuText;
+        const api = window.electronAPI?.meetingOutputs;
+        if (!api) return;
+        const changes = followUpChanges(pending, { subject: followUpSubject, body: followUpBody });
+        const changed = changes.subject !== undefined || changes.body !== undefined;
+        if (!changed) {
+            // Nothing to save (or only an emptied body, which is not saved): show what is saved.
+            if (pending) setFuText(null);
+            setFuSaveError(null);
+            if (!used) return;
+        }
+        let res: Awaited<ReturnType<typeof api.saveFollowUpEdit>> | null = null;
+        try {
+            res = await api.saveFollowUpEdit({ meetingId: meeting.id, ...changes, used });
+        } catch { res = null; }
+        if (res?.ok && res.draft) {
+            const saved = res.draft;
+            setMeeting(prev => ({ ...prev, detailedSummary: { ...prev.detailedSummary!, followUpDraft: saved } }));
+        }
+        if (!changed || !pending) return;
+        setFuText((cur) => settleFollowUpSave(cur, pending, res).pending);
+        setFuSaveError(settleFollowUpSave(null, pending, res).error);
     };
+    const editFollowUp = (patch: { subject?: string; body?: string }) =>
+        setFuText((cur) => ({ subject: cur?.subject ?? followUpSubject ?? '', body: cur?.body ?? followUpBody, ...patch }));
+
+    // Whether the follow-up sends through Gmail (connected in Settings › Connectors), and how far a send got.
+    const [gmailSend, setGmailSend] = useState<{ connected: boolean; state: 'idle' | 'confirm' | 'sending' | 'sent'; message?: string }>({ connected: false, state: 'idle' });
+    useEffect(() => {
+        let live = true;
+        // Locked (no Pro or trial: connectors are Pro) sends through Gmail's compose window instead, as when not connected.
+        void window.electronAPI?.connectors?.getGmailStatus?.().then((g) => { if (live && g) setGmailSend((cur) => ({ ...cur, connected: !!g.connected && !g.locked })); }).catch(() => {});
+        return () => { live = false; };
+    }, [meeting.id]);
 
     // The follow-up's recipients: everyone on the meeting's calendar invite.
     const followUpTo = followUpRecipients(meeting?.calendarEvent?.attendees);
+    // The sheet's To line: the invite's people to start with, then whatever is
+    // typed there. Sends go to the addresses in it (comma or space separated).
+    const [fuToDraft, setFuToDraft] = useState<string | null>(null);
+    const fuToRowRef = useRef<HTMLSpanElement>(null);
+    const fuToInputRef = useRef<HTMLInputElement>(null);
+    useEffect(() => { setFuToDraft(null); }, [meeting.id]);
+    const fuToShown = fuToDraft ?? followUpTo.map((r) => r.email).join(', ');
+    const fuToList = () => fuToShown.split(/[,;\s]+/).filter((a) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(a));
     // Gmail's compose window, addressed and filled in, in the calendar's own
     // Google account (followUpRecipients.mjs says why Gmail over mailto).
     const emailFollowUp = async () => {
+        // Gmail connected (Settings › Connectors): send from the user's own Gmail.
+        // Two presses, so a stray click never emails a client: the first asks,
+        // the second sends what is on screen.
+        if (gmailSend.connected) {
+            if (gmailSend.state === 'sending') return;
+            // No one to send it to: say so where it is fixed (#12's shake on the To
+            // line, the cursor put in it) rather than greying the button out.
+            if (fuToList().length === 0) {
+                setGmailSend((g) => ({ ...g, state: 'idle', message: FU_NO_RECIPIENTS }));
+                const row = fuToRowRef.current;
+                if (row) { row.classList.remove('t-notice-shake'); void row.offsetWidth; row.classList.add('t-notice-shake'); }
+                fuToInputRef.current?.focus();
+                return;
+            }
+            if (gmailSend.state !== 'confirm') {
+                setGmailSend((g) => ({ ...g, state: 'confirm', message: undefined }));
+                window.setTimeout(() => setGmailSend((g) => (g.state === 'confirm' ? { ...g, state: 'idle' } : g)), 5000);
+                return;
+            }
+            const { subject, body } = followUpText();
+            setGmailSend((g) => ({ ...g, state: 'sending' }));
+            void saveFollowUp(true);
+            const res = await window.electronAPI?.connectors?.sendGmailFollowUp({ meetingId: meeting.id, to: fuToList(), subject, body }).catch(() => undefined);
+            setGmailSend((g) => (res?.ok
+                ? { ...g, state: 'sent', message: undefined }
+                : { ...g, state: 'idle', message: res?.message || 'The email was not sent. Try again.' }));
+            // "Sent" and its check stay a moment, then the button is the send again.
+            if (res?.ok) window.setTimeout(() => setGmailSend((g) => (g.state === 'sent' ? { ...g, state: 'idle' } : g)), 2400);
+            return;
+        }
+        // Read before the await: the text on screen when the button was pressed.
+        const { subject, body } = followUpText();
+        void saveFollowUp(true);
         const status = await window.electronAPI?.getCalendarStatus?.().catch(() => null);
         const url = gmailComposeUrl({
-            to: followUpTo.map((r) => r.email),
-            subject: followUpSubject || '',
-            body: followUpBody,
+            to: fuToList(),
+            subject,
+            body,
             account: status?.connected ? status.email : undefined,
         });
         await window.electronAPI?.openExternal?.(url);
     };
+    // "Send with default client": the system's mail app (Mail, Outlook…), filled in.
+    const mailFollowUp = async () => {
+        const { subject, body } = followUpText();
+        void saveFollowUp(true);
+        await window.electronAPI?.openMailto?.({ to: fuToList().join(','), subject, body }).catch(() => undefined);
+    };
+    // Outlook on the web's compose window, filled in (the send menu).
+    const outlookFollowUp = async () => {
+        const { subject, body } = followUpText();
+        void saveFollowUp(true);
+        await window.electronAPI?.openExternal?.(outlookComposeUrl({ to: fuToList(), subject, body }));
+    };
 
-    const handleRegenerateFollowUp = async (tone?: 'professional' | 'warm' | 'concise' | 'friendly') => {
+    const handleRegenerateFollowUp = async (tone?: FollowUpTone) => {
         if (isRegeneratingFollowUp || !window.electronAPI?.regenerateMeetingFollowUp) return;
         setIsRegeneratingFollowUp(true);
         setFollowUpFailed(false);
@@ -2319,10 +2679,55 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         } catch { setFollowUpFailed(true); setFollowUpEntrance('none'); } finally { setIsRegeneratingFollowUp(false); }
     };
 
-    const handleSaveSpeakerLabel = async (speakerId: string, name: string) => {
-        const existing = meeting.detailedSummary?.speakerLabels || {};
-        const next = { ...existing, [speakerId]: name.trim() };
-        if (!name.trim()) delete next[speakerId];
+    // The header's Follow-up email button. One press is the email: with no draft
+    // yet it opens the dialog and starts writing one (in "Your style" or the mode's
+    // tone, as Generate did), and the dialog shows it being written.
+    const [followUpOpen, setFollowUpOpen] = useState(false);
+    // Another meeting: no "Your style" until its own mode answers, never the last one's.
+    useEffect(() => { setModeHasStyle(false); }, [meeting.id]);
+    // Asked each time the sheet opens (the only place the picker is), so samples
+    // added or removed in the Modes Manager since then show (or drop) "Your style".
+    useEffect(() => {
+        if (!followUpOpen) return;
+        let live = true;
+        const api = (window.electronAPI as any)?.meetingOutputs;
+        if (!api?.getWritingStyleForMeeting) { setModeHasStyle(false); return; }
+        api.getWritingStyleForMeeting(meeting.id)
+            .then((st: { sampleCount?: number } | null) => { if (live) setModeHasStyle(!!st && (st.sampleCount || 0) > 0); })
+            .catch(() => { if (live) setModeHasStyle(false); });
+        return () => { live = false; };
+    }, [meeting.id, followUpStyleModeId, followUpOpen]);
+    // Settings › Advanced › Genie animation: the sheet opens with the genie, or its own scale-up.
+    const genieOn = useGenieAnimationEnabled();
+    // The computer's own mail app by name and icon, for the send menu; read once,
+    // the first time the sheet opens.
+    const [mailApp, setMailApp] = useState<{ name: string; icon?: string } | null>(null);
+    const mailAppAsked = useRef(false);
+    useEffect(() => {
+        if (!followUpOpen || mailAppAsked.current) return;
+        mailAppAsked.current = true;
+        void window.electronAPI?.getMailAppInfo?.().then((info) => { if (info?.name) setMailApp(info); }).catch(() => {});
+    }, [followUpOpen]);
+    const openFollowUp = () => {
+        setFollowUpOpen(true);
+        if (!hasFollowUpDraft && !isRegeneratingFollowUp) void handleRegenerateFollowUp();
+    };
+    // Regenerate: the email written again from the notes, in the tone on the picker
+    // (without it a rewrite fell back to the default and lost a picked tone). It
+    // drops unsaved edits and puts the invite's people back on the To line.
+    const resetFollowUp = () => {
+        if (isRegeneratingFollowUp) return;
+        setFuText(null);
+        setFuSaveError(null);
+        setFuToDraft(null);
+        void handleRegenerateFollowUp(followUpTone);
+    };
+
+    // A rename covers every id the person was saved under (one chip, lib/speakerMerge.ts).
+    const handleSaveSpeakerLabel = async (chip: SpeakerChip, name: string) => {
+        await saveSpeakerLabels(renameSpeaker(meeting.detailedSummary?.speakerLabels, chip, name));
+    };
+    const saveSpeakerLabels = async (next: Record<string, string>) => {
         setMeeting(prev => ({ ...prev, detailedSummary: { ...(prev.detailedSummary as any), speakerLabels: next } }));
         setEditingSpeaker(null);
         try {
@@ -2484,7 +2889,9 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
         }
     };
 
-    const handleCopy = async () => {
+    // Share › Copy: the tab you are on, as text. True once it is on the clipboard
+    // (the Share button then reads "Copied" for a moment).
+    const handleCopy = async (): Promise<boolean> => {
         let textToCopy = '';
 
         if (activeTab === 'summary' && meeting.detailedSummary) {
@@ -2531,7 +2938,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                 `.trim();
             }
         } else if (activeTab === 'yours') {
-            textToCopy = meeting.userNotes || '';
+            textToCopy = readableNotesMarkdown(meeting.userNotes || '');
         } else if (activeTab === 'transcript' && meeting.transcript) {
             textToCopy = meeting.transcript.map(t => `[${formatTime(t.timestamp)}] ${resolveSpeakerName(t.speakerId || t.speaker)}: ${t.text}`).join('\n');
         } else if (activeTab === 'usage' && meeting.usage) {
@@ -2539,14 +2946,14 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
             textToCopy = meeting.usage.map(u => `Q: ${u.question || ''}\nA: ${usageAnswerText(u.answer)}`).join('\n\n');
         }
 
-        if (!textToCopy) return;
+        if (!textToCopy) return false;
 
         try {
-            await navigator.clipboard.writeText(textToCopy);
-            setIsCopied(true);
-            setTimeout(() => setIsCopied(false), 2000);
+            await copyText(textToCopy);
+            return true;
         } catch (err) {
             console.error('Failed to copy content:', err);
+            return false;
         }
     };
 
@@ -2646,7 +3053,15 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                     Kept inside <main> (rather than hoisted above it) so it shares the scroll box's
                     content width: a two-container split would offset this column from the one below
                     by the scrollbar width on platforms with classic (non-overlay) scrollbars. */}
-                <div className={`sticky top-0 z-20 ${isLight ? 'bg-bg-secondary' : 'bg-bg-elevated'}`}>
+                {/* The header's paint fades out over its last 24px (inside the empty pb-8 strip
+                    below the tabs), so notes scrolling under it dissolve instead of being cut at
+                    a hard edge. A background gradient rather than a mask: a mask would also clip
+                    the Share / calendar popovers that open out of this box. At rest the strip has
+                    no content behind it, so the page looks unchanged until you scroll. */}
+                <div
+                    className="sticky top-0 z-20"
+                    style={{ backgroundImage: `linear-gradient(to bottom, var(${isLight ? '--bg-secondary' : '--bg-elevated'}) calc(100% - 24px), transparent)` }}
+                >
                     {/* No entrance of its own (nor on the body below): Launcher's page
                         transition brings the whole page in, and a second fade + 10px lift
                         under it multiplied the two opacities, so the page arrived dimmer
@@ -2655,7 +3070,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                     <div className="max-w-4xl mx-auto px-8 pt-8 pb-8">
                     {/* Meta Info & Actions Row */}
                     <div className="flex items-start justify-between mb-6">
-                        <div className="w-full pr-4">
+                        <div className="w-full min-w-0 pr-4">
                             {/* Date formatting could be improved to use meeting.date if it's an ISO string */}
                             <div className="text-xs text-text-tertiary font-medium mb-1">
                                 {new Date(meeting.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
@@ -2675,9 +3090,10 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                 so the real title lands without moving the tabs. */}
                             {/* The title rides the same handoff as the body (see
                                 handoffExit/handoffEnter) rather than snapping from bar to
-                                text. Only the OUTGOING layer is taken out of flow, so a
-                                long title still sizes this box for itself — a fixed height
-                                here would clip the two-line case. */}
+                                text. Only the OUTGOING layer is taken out of flow, so the
+                                title still sizes this box for itself. The title is one line
+                                (2026-10-18): a generated one is at most 50 characters, and a
+                                longer calendar or typed one ends in an ellipsis. */}
                             <div className="relative">
                                 <AnimatePresence initial={false} mode="popLayout">
                                     {isSummaryGenerating ? (
@@ -2690,12 +3106,14 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                             <SkeletonLine w={260} h={22} tone="strong" />
                                         </motion.div>
                                     ) : (
-                                        <motion.div key="title" {...(() => { const r = revealLead(); return { className: r.cls.trim() || undefined, style: r.style }; })()}>
+                                        // The whole name on hover: a calendar or typed title can be
+                                        // longer than the line and ends in an ellipsis.
+                                        <motion.div key="title" title={plainMeetingTitle(meeting.title)} {...(() => { const r = revealLead(); return { className: r.cls.trim() || undefined, style: r.style }; })()}>
                                             <EditableTextBlock
                                                 initialValue={plainMeetingTitle(meeting.title)}
                                                 onSave={handleTitleSave}
                                                 tagName="h1"
-                                                className="text-3xl font-bold text-text-primary tracking-tight -ml-2 px-2 py-1 rounded-md transition-colors"
+                                                className="text-3xl font-bold text-text-primary tracking-tight -ml-2 px-2 py-1 rounded-md transition-colors truncate"
                                                 multiline={false}
                                             />
                                         </motion.div>
@@ -2704,8 +3122,35 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                             </div>
                         </div>
 
-                        {/* Moved Actions: Follow-up & Share (REMOVED per user request) */}
-                        {/* <div className="flex items-center gap-2 mt-1"> ... </div> */}
+                        {/* Follow-up email — a meeting-level action, so it sits by the title
+                            rather than at the foot of the notes. It opens the draft in a dialog
+                            (FollowUpDialog below) and writes one first if there is none yet. */}
+                        <div className="shrink-0 flex items-center gap-2">
+                            {/* Back to the notepad (2026-11-02): the notepad opens on this
+                                meeting. Icon only, so the header stays one quiet action wide. */}
+                            <LiquidGlassButton
+                                variant="clear"
+                                className="lg-sm mn-generate mn-icon-btn"
+                                onClick={() => { void openInNotepad(); }}
+                                disabled={meetingRunning}
+                                aria-label={t('Open in notepad')}
+                                title={meetingRunning ? t('Stop the meeting that is running first') : t('Open in notepad')}
+                            >
+                                <NotebookPen className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden />
+                            </LiquidGlassButton>
+                            {meeting.detailedSummary && (
+                                <LiquidGlassButton
+                                    variant="clear"
+                                    className="lg-sm mn-generate"
+                                    onClick={openFollowUp}
+                                    disabled={isSummaryGenerating}
+                                    aria-haspopup="dialog"
+                                    icon={<Mail className="w-3.5 h-3.5" strokeWidth={2.2} />}
+                                >
+                                    {t('Follow-up email')}
+                                </LiquidGlassButton>
+                            )}
+                        </div>
                     </div>
 
                     {/* Tabs */}
@@ -2749,27 +3194,20 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                             the pointer) and which swaps in place when the tab changes. opacity
                             joins the transition so the disabled dim fades out as notes land. */}
                         {(() => {
-                            // One label on every tab: what it copies is the tab you are on.
-                            const copyLabel = t('Copy');
                             return (
                                 <div className="flex items-center gap-5 min-w-0">
                                     {/* Which calendar event this was: linked, or offered when a calendar
-                                        is connected. A meeting-level action, so it sits with Copy rather
+                                        is connected. A meeting-level action, so it sits with Share rather
                                         than on the date line. See meeting/CalendarLinkChip. */}
                                     <CalendarLinkChip meetingId={meeting.id} meetingTitle={meeting.title} event={meeting.calendarEvent} isLight={isLight} onChanged={reloadMeeting} />
-                                    <button
-                                        onClick={handleCopy}
-                                        disabled={activeTab === 'summary' && isSummaryGenerating}
-                                        className="shrink-0 flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-text-primary transition-[color,opacity] disabled:opacity-40 disabled:cursor-default disabled:hover:text-text-secondary"
-                                    >
-                                        <span className="t-icon-swap w-3.5 h-3.5" data-state={isCopied ? 'b' : 'a'} aria-hidden="true">
-                                            <Copy className="t-icon w-3.5 h-3.5" data-icon="a" size={14} />
-                                            <Check className="t-icon w-3.5 h-3.5 text-emerald-500" data-icon="b" size={14} />
-                                        </span>
-                                        <SwapText value={isCopied ? 'copied' : 'copy'} sizers={[copyLabel, t('Copied')]}>
-                                            {isCopied ? t('Copied') : copyLabel}
-                                        </SwapText>
-                                    </button>
+                                    {/* Copy (the tab you are on), export and send: PDF, a shareable file,
+                                        a link, Slack, Notion, CRM (meeting/ShareMenu). */}
+                                    <ShareMenu
+                                        meetingId={meeting.id}
+                                        disabled={isSummaryGenerating}
+                                        hasTranscript={(meeting.transcript?.length ?? 0) > 0}
+                                        onCopy={handleCopy}
+                                    />
                                 </div>
                             );
                         })()}
@@ -2833,6 +3271,26 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                         {isRegenerating ? t('Generating…') : t('Try again')}
                                     </SwapText>
                                 </motion.button>
+                            </motion.div>
+                        ) : compare ? (
+                            /* Compare: the two versions blind, in place of the notes (their
+                               version tabs and template names would give the answer away). */
+                            <motion.div
+                                key="compare"
+                                initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
+                                animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                                transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
+                            >
+                                <NotesCompare
+                                    a={compare.a}
+                                    b={compare.b}
+                                    reveal={compareReveal}
+                                    busy={compareBusy}
+                                    isLight={isLight}
+                                    onPick={(choice, reason) => { void pickCompare(choice, reason); }}
+                                    onClose={() => { setCompare(null); setCompareReveal(null); }}
+                                    t={t}
+                                />
                             </motion.div>
                         ) : (
                             <motion.div
@@ -2938,9 +3396,44 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                         ? { modeId: v3Mode.detectedModeId }
                                                         : { templateType: (v3Mode?.detectedModeName || '').toLowerCase() })}
                                                     onToggleEvidence={() => setShowEvidence(v => !v)}
-                                                />
+                                                >
+                                                    {/* Regenerate as any template; it names the one that wrote the notes shown. */}
+                                                    <NotesTemplatePicker
+                                                        options={templatePickerOptions(templateModes, v3Mode)}
+                                                        currentName={notesLabel(meeting.detailedSummary)}
+                                                        disabled={isRegenerating}
+                                                        needsPro={templatesNeedingPro}
+                                                        isLight={isLight}
+                                                        onPick={(opt) => { setGatedTemplateName(null); void handleRegenerate({ modeId: opt.id }); }}
+                                                        t={t}
+                                                    />
+                                                    {/* Compare two versions blind: only with an earlier version kept. */}
+                                                    {notesVersions.length > 0 && (
+                                                        <LiquidGlassButton
+                                                            variant="clear"
+                                                            className="lg-sm"
+                                                            onClick={() => { void openCompare(); }}
+                                                            disabled={isRegenerating || compareBusy}
+                                                            icon={<Columns2 className="w-3.5 h-3.5" strokeWidth={2.2} />}
+                                                        >
+                                                            {t('Compare')}
+                                                        </LiquidGlassButton>
+                                                    )}
+                                                </NotesActions>
                                             );
                                         })()}
+                                        {gatedTemplateName && (
+                                            <p className="w-full flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-text-secondary">
+                                                <span>{`${gatedTemplateName} ${t('notes need Natively Pro')}`}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { void window.electronAPI?.openSettingsTab?.('plans'); }}
+                                                    className="text-[12.5px] font-medium text-text-primary hover:underline"
+                                                >
+                                                    {t('See plans')}
+                                                </button>
+                                            </p>
+                                        )}
                                         {v3SummaryStatus && v3SummaryStatus !== 'completed' && (
                                             <span className="inline-flex items-center gap-1.5 text-[11px] text-amber-400">
                                                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
@@ -2951,6 +3444,20 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                 ); })()}
 
                                 {/* 3. Mode auto-detect suggestion: now the blue glass button at the end of the actions row above. */}
+
+                                {/* New notes ask for a rating up here for about one meeting in ten
+                                    (notesFeedback.ts, by the meeting's id); otherwise the quiet
+                                    row stays at the end of the notes. */}
+                                {isV3Summary && promptRating && (
+                                    <NotesRating
+                                        meetingId={meeting.id}
+                                        versionId={null}
+                                        contentKey={ratedNotesKey}
+                                        isLight={isLight}
+                                        prompted
+                                        t={t}
+                                    />
+                                )}
 
                                 {/* 4. Cross-meeting recall — still-open carryover from prior meetings (Phase 13). */}
                                 {isV3Summary && meeting.detailedSummary?.crossMeeting?.stillOpen && meeting.detailedSummary.crossMeeting.stillOpen.length > 0 && (() => { const c = cardIn(); return (
@@ -2974,7 +3481,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                 ); })()}
 
                                 {/* Summary on top — outcome-first, grounded. Then the mode's template sections below. */}
-                                {isV3Summary && v3Tldr.length > 0 && (() => { const h = revealBlock(); return (
+                                {isV3Summary && v3Tldr.length > 0 && !templateHasSummary && (() => { const h = revealBlock(); return (
                                     <section className="mb-8">
                                         <h2 className={`text-lg font-semibold text-text-primary mb-4${h.cls}`} style={h.style} data-rw={h['data-rw']}>{t('Summary')}</h2>
                                         <ul className="space-y-3">
@@ -2998,10 +3505,10 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
 
                                 {/* The mode's note-section TEMPLATE — the primary notes layout (e.g. Questions and
                                     responses, Discovery, Action items). Rendered right under Summary, in template order.
-                                    Empty sections are dropped server-side. */}
-                                {isV3Summary && meeting.detailedSummary?.sectionsV3 && meeting.detailedSummary.sectionsV3.length > 0 && (
+                                    Empty sections are dropped server-side. With no template, Decisions and Action items. */}
+                                {isV3Summary && noteSections.length > 0 && (
                                     <>
-                                        {meeting.detailedSummary.sectionsV3
+                                        {noteSections
                                             .filter(section => SHOW_NEXT_STEPS || !isNextStepsSectionTitle(section.title))
                                             .map((section) => {
                                             const h = revealBlock();
@@ -3072,7 +3579,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                 )}
 
                                 {/* Thumbs up / down on the notes shown, kept on this machine. */}
-                                {isV3Summary && (
+                                {isV3Summary && !promptRating && (
                                     <NotesRating
                                         meetingId={meeting.id}
                                         versionId={versionKey === 'current' ? null : versionKey}
@@ -3182,107 +3689,6 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                         </ul>
                                     </section>
                                 )}
-
-                                {/* V3 follow-up draft — written on demand: notes save without one and
-                                    offer Generate. Once written: a mail card with Copy, plus tone and
-                                    Regenerate in the header. Motion: .mn-followup in index.css. */}
-                                {isV3Summary && (() => { const h = revealBlock(); const hasFollowUp = hasFollowUpDraft; return (
-                                    <section className="mb-8 mn-followup">
-                                        <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-                                            <h2 className={`text-lg font-semibold text-text-primary${h.cls}`} style={h.style} data-rw={h['data-rw']}>{t('Follow-up email')}</h2>
-                                            {/* One slot, two states that cross-fade in place: Generate before a
-                                                draft exists, the tone + Regenerate group after. */}
-                                            <div className="mn-fu-actions">
-                                                <div data-active={!hasFollowUp} inert={hasFollowUp}>
-                                                    {/* Generate — the only thing that writes a first draft. No tone
-                                                        argument: the mode's natural tone, changeable once it exists.
-                                                        Liquid Glass, the clear pill of the notes' action row with its
-                                                        ice-blue hover (.mn-generate, index.css); press feedback is the
-                                                        glass's own. While writing it stays lit and shimmers
-                                                        "Generating…" rather than dimming (aria-disabled, not disabled). */}
-                                                    <LiquidGlassButton
-                                                        variant="clear"
-                                                        className="lg-sm mn-generate"
-                                                        onClick={() => { if (!isRegeneratingFollowUp) handleRegenerateFollowUp(); }}
-                                                        aria-disabled={isRegeneratingFollowUp || undefined}
-                                                        aria-busy={isRegeneratingFollowUp}
-                                                        icon={<SquarePen className="w-3.5 h-3.5" strokeWidth={2.2} />}
-                                                    >
-                                                        {/* Sized to the label on screen: "Generate" at rest, and the pill
-                                                            grows into "Generating…" as the text swaps (AutoWidth), rather
-                                                            than reserving that width after "Generate" all the time. */}
-                                                        <AutoWidth>
-                                                            <SwapText value={isRegeneratingFollowUp ? 'busy' : 'idle'} sizers={[isRegeneratingFollowUp ? t('Generating…') : t('Generate')]}>
-                                                                {isRegeneratingFollowUp
-                                                                    ? <span className="t-shimmer" data-text={t('Generating…')}>{t('Generating…')}</span>
-                                                                    : t('Generate')}
-                                                            </SwapText>
-                                                        </AutoWidth>
-                                                    </LiquidGlassButton>
-                                                </div>
-                                                <div data-active={hasFollowUp} inert={!hasFollowUp} className="flex items-center gap-2">
-                                                    <ToneDropdown
-                                                        followUpTone={followUpTone}
-                                                        isRegeneratingFollowUp={isRegeneratingFollowUp}
-                                                        onSelect={(tone) => { setFollowUpTone(tone); handleRegenerateFollowUp(tone); }}
-                                                    />
-                                                    {/* Regenerate — a round clear-glass button with the committed .t-tt
-                                                        tooltip; the arrows turn on hover and spin while rewriting. While
-                                                        rewriting it stays lit (aria-disabled, not disabled), like Generate
-                                                        (.mn-fu-regen, index.css). */}
-                                                    <span className="t-tt-wrap">
-                                                        <LiquidGlassButton
-                                                            variant="clear"
-                                                            className="lg-sm mn-fu-regen t-tt-trigger"
-                                                            onClick={() => { if (!isRegeneratingFollowUp) handleRegenerateFollowUp(); }}
-                                                            aria-disabled={isRegeneratingFollowUp || undefined}
-                                                            aria-busy={isRegeneratingFollowUp}
-                                                            aria-label={isRegeneratingFollowUp ? t('Regenerating…') : t('Regenerate')}
-                                                            aria-describedby={followUpRegenTipId}
-                                                        >
-                                                            <span className="mn-fu-regen-turn flex" aria-hidden="true">
-                                                                <RefreshCw
-                                                                    className={`w-3.5 h-3.5 ${isRegeneratingFollowUp && !prefersReducedMotion ? 'animate-spin' : ''}`}
-                                                                    strokeWidth={2.2}
-                                                                />
-                                                            </span>
-                                                        </LiquidGlassButton>
-                                                        <span className="t-tt" id={followUpRegenTipId} role="tooltip">{t('Regenerate')}</span>
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        {/* Transitions.dev "Texts reveal" (.t-stagger). Nothing moves while the
-                                            draft is being written — only the button says so. When a first draft
-                                            lands, the hint fades out in place, then the card rises in
-                                            (FollowUpDraftCard). Only the visible block takes part in the notes'
-                                            reveal cascade. */}
-                                        {(() => {
-                                            const hintHiding = hasFollowUp && followUpEntrance === 'armed';
-                                            const hintText = followUpFailed ? t("Couldn't write the email. Try again.") : t('Write a follow-up email from these notes when you need one.');
-                                            return !hasFollowUp || hintHiding ? (
-                                                <div className={`t-stagger${hintHiding ? ' is-hiding' : ' is-shown'}`}>
-                                                    <p className="t-stagger-line text-[12.5px] text-text-tertiary leading-relaxed">{revealWords(hintText)}</p>
-                                                </div>
-                                            ) : (
-                                                <FollowUpDraftCard
-                                                    reveal={followUpEntrance === 'reveal'}
-                                                    subjectLabel={followUpSubject ? revealWords(t('Subject:')) : undefined}
-                                                    subject={followUpSubject ? revealWords(followUpSubject) : undefined}
-                                                    subjectText={followUpSubject}
-                                                    body={revealWords(followUpBody)}
-                                                    bodyKey={followUpBodyKey}
-                                                    busy={isRegeneratingFollowUp}
-                                                    copied={followUpCopied}
-                                                    onCopy={copyFollowUp}
-                                                    isLight={isLight}
-                                                    recipients={followUpTo}
-                                                    onEmail={followUpTo.length > 0 ? emailFollowUp : undefined}
-                                                />
-                                            );
-                                        })()}
-                                    </section>
-                                ); })()}
 
                                 {/* Action Items - Only show if there are items */}
                                 {!isV3Summary && meeting.detailedSummary?.actionItems && meeting.detailedSummary.actionItems.length > 0 && (
@@ -3418,26 +3824,6 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     still parse; restore this <section> from git history if the
                                     flag is ever flipped back on. */}
 
-                                {/* Phase 7 — Follow-up email draft (legacy V2: string). V3 renders its own above. */}
-                                {!isV3Summary && typeof meeting.detailedSummary?.followUpDraft === 'string' && meeting.detailedSummary.followUpDraft.trim() && (
-                                    <section className="mb-8">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <h2 className="text-lg font-semibold text-text-primary">{t('Follow-up Draft')}</h2>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    const fu = meeting.detailedSummary?.followUpDraft;
-                                                    navigator.clipboard?.writeText(typeof fu === 'string' ? fu : '').catch(() => { /* swallow */ });
-                                                }}
-                                                className="text-[11px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-text-secondary border border-white/10 transition-colors"
-                                            >
-                                                {t('Copy')}
-                                            </button>
-                                        </div>
-                                        <pre className="text-[12.5px] text-text-secondary leading-relaxed whitespace-pre-wrap font-sans select-text cursor-text p-3 rounded-[10px] border border-white/10 bg-white/[0.02]">{meeting.detailedSummary.followUpDraft}</pre>
-                                    </section>
-                                )}
-
                                 {/* Mode-specific sections (when active mode has a notes template) */}
                                 {!isV3Summary && meeting.detailedSummary?.sections && meeting.detailedSummary.sections.length > 0 && (
                                     <div className="space-y-8">
@@ -3471,7 +3857,10 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                         {activeTab === 'yours' && (
                             <section>
                                 {hasUserNotes ? (
-                                    <p className="text-text-primary text-[15px] leading-relaxed whitespace-pre-wrap break-words select-text cursor-text">{meeting.userNotes}</p>
+                                    // The notepad writes markdown (2026-10-20): headings, lists, checkboxes, bold.
+                                    <div className="notes-editor notes-editor-read text-text-primary break-words select-text cursor-text">
+                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{readableNotesMarkdown(meeting.userNotes || '')}</ReactMarkdown>
+                                    </div>
                                 ) : (
                                     <p className="text-text-tertiary">{t('No notes were typed in this meeting.')}</p>
                                 )}
@@ -3487,6 +3876,18 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                         .filter(e => !['system', 'ai', 'assistant', 'model'].includes((e.speaker || '').toLowerCase()))
                                         .map(e => e.speaker)));
                                     if (speakers.length === 0) return null;
+                                    const speakerIdOf = (sp: string) => (sp || '').toLowerCase().replace(/^(user|me)$/, 'me').replace(/^(interviewer|them|other|system|assistant)$/, 'speaker_1').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'unknown';
+                                    const rawOf = new Map<string, string>();
+                                    for (const sp of speakers) { const sid = speakerIdOf(sp); if (!rawOf.has(sid)) rawOf.set(sid, sp); }
+                                    const labelsNow = meeting.detailedSummary?.speakerLabels;
+                                    // Ids saved under the same name are one person (a voice joined after a Resume).
+                                    const chips = speakerChips([...rawOf.keys()], labelsNow);
+                                    const chipOf = (sid: string): SpeakerChip => chips.find(c => c.ids.includes(sid)) ?? { id: sid, ids: [sid] };
+                                    const nameOf = (sid: string) => resolveSpeakerName(rawOf.get(sid) ?? sid);
+                                    const join = (chip: SpeakerChip, target: string) => {
+                                        setEditingSpeaker(null);
+                                        void saveSpeakerLabels(joinSpeakers(labelsNow, chip, chipOf(target), nameOf(target)));
+                                    };
                                     // Leaving the field (Save, Cancel, Enter, Esc) hands its on-screen
                                     // width to the chip that replaces it, so the pill eases back down
                                     // rather than snapping. offsetWidth, not a rect: layout width,
@@ -3494,7 +3895,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     const endSpeakerEdit = (id: string, save: boolean, from: Element) => {
                                         const field = from.closest<HTMLElement>('[data-speaker-editor]');
                                         if (field) setChipMorph({ id, from: field.offsetWidth });
-                                        if (save) handleSaveSpeakerLabel(id, speakerDraft);
+                                        if (save) handleSaveSpeakerLabel(chipOf(id), speakerDraft);
                                         else setEditingSpeaker(null);
                                     };
                                     return (
@@ -3505,9 +3906,11 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                 -out, index.css) and eases to its own, and the chips after it are
                                                 pushed along by that width in normal flow. It used to swap in a
                                                 single frame to a pill about four times the chip's width. */}
-                                            {speakers.map((sp) => {
-                                                const display = resolveSpeakerName(sp);
-                                                const id = (sp || '').toLowerCase().replace(/^(user|me)$/, 'me').replace(/^(interviewer|them|other|system|assistant)$/, 'speaker_1').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'unknown';
+                                            {chips.map((chip) => {
+                                                const id = chip.id;
+                                                const display = nameOf(id);
+                                                // After a Resume: who from the first part this voice may be.
+                                                const offers = mergeOffers(chip, meeting.detailedSummary?.speakerMerges, labelsNow);
                                                 const morphFrom = chipMorph?.id === id ? chipMorph.from : null;
                                                 const morphStyle = morphFrom != null ? { '--mn-chip-from-w': `${morphFrom}px` } as React.CSSProperties : undefined;
                                                 if (editingSpeaker === id) {
@@ -3554,12 +3957,28 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                                     <X className="w-3 h-3" strokeWidth={2.5} />
                                                                 </motion.button>
                                                             </span>
+                                                            {offers.length > 0 && (
+                                                                <span className="inline-flex items-center gap-1 pl-1 border-l border-border-subtle">
+                                                                    {offers.map(c => (
+                                                                        <button
+                                                                            key={c}
+                                                                            type="button"
+                                                                            onMouseDown={e => e.preventDefault()}
+                                                                            onClick={() => join(chip, c)}
+                                                                            className="inline-flex items-center h-5 px-2 rounded-full text-[11px] text-text-secondary hover:text-text-primary hover:bg-white/[0.08] transition-colors"
+                                                                            title={`${t('Same person as')} ${nameOf(c)}`}
+                                                                        >
+                                                                            {nameOf(c)}
+                                                                        </button>
+                                                                    ))}
+                                                                </span>
+                                                            )}
                                                         </span>
                                                     );
                                                 }
                                                 return (
+                                                    <React.Fragment key={id}>
                                                     <motion.button
-                                                        key={id}
                                                         type="button"
                                                         onClick={e => {
                                                             setChipMorph({ id, from: e.currentTarget.offsetWidth });
@@ -3581,6 +4000,25 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                             <Pencil className="w-2.5 h-2.5 text-text-tertiary" strokeWidth={2} />
                                                         </span>
                                                     </motion.button>
+                                                    {offers.length > 0 && (
+                                                        // One person from the first part: one click joins them. Several: the
+                                                        // rename field opens with each of them to pick from.
+                                                        <button
+                                                            type="button"
+                                                            onClick={e => {
+                                                                if (offers.length === 1) { join(chip, offers[0]); return; }
+                                                                const chipEl = e.currentTarget.previousElementSibling as HTMLElement | null;
+                                                                if (chipEl) setChipMorph({ id, from: chipEl.offsetWidth });
+                                                                setEditingSpeaker(id);
+                                                                setSpeakerDraft(display);
+                                                            }}
+                                                            className="-ml-1 inline-flex items-center h-7 px-2 rounded-full text-[11px] text-text-tertiary hover:text-text-primary hover:bg-white/[0.06] transition-colors"
+                                                            title={t('The same person as someone before the Resume')}
+                                                        >
+                                                            {offers.length === 1 ? `${t('Same as')} ${nameOf(offers[0])}?` : t('Same as…?')}
+                                                        </button>
+                                                    )}
+                                                    </React.Fragment>
                                                 );
                                             })}
                                         </div>
@@ -3684,7 +4122,48 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                 `fixed inset-0 z-[300]` in a8c1ac82 (the sheet-style dimming); at the old
                 z-50 the bar vanished under it the moment a chat opened. z-[310] clears it.
                 Same stacking context: neither is portaled. */}
-            <div className={`absolute bottom-0 left-0 right-0 p-6 flex justify-center pointer-events-none ${isChatOpen ? 'z-[310]' : 'z-20'}`}>
+            <div className={`absolute bottom-0 left-0 right-0 p-6 flex justify-center items-center gap-2.5 pointer-events-none ${isChatOpen ? 'z-[310]' : 'z-20'}`}>
+                {resumeNotice && (
+                    <p role="status" className="absolute left-0 right-0 bottom-[84px] text-center text-[12px] leading-4 text-text-secondary pointer-events-none">{resumeNotice}</p>
+                )}
+                {/* Resume (2026-11-02), Granola's: recording again into this meeting.
+                    Overlay meetings only; a notepad meeting resumes in the notepad.
+                    The same glass as the Ask bar, three still bars like the
+                    notepad's listening pill. Steps aside while the chat is open:
+                    the bar is the chat's input then. */}
+                {resumeOnPage && !isChatOpen && (
+                    <GlassSurface
+                        width="auto"
+                        height={ASK_BAR_HEIGHT}
+                        borderRadius={ASK_BAR_HEIGHT / 2}
+                        borderWidth={ASK_BAR_EDGE}
+                        blur={ASK_BAR_MAP_BLUR}
+                        brightness={60}
+                        opacity={0.9}
+                        distortionScale={isLight ? ASK_BAR_DISTORTION_LIGHT : ASK_BAR_DISTORTION_DARK}
+                        redOffset={0}
+                        greenOffset={0}
+                        blueOffset={0}
+                        yChannel="B"
+                        displace={0.5}
+                        tint={isLight ? ASK_BAR_TINT_LIGHT : ASK_BAR_TINT_DARK}
+                        saturation={isLight ? ASK_BAR_SATURATION_LIGHT : ASK_BAR_SATURATION_DARK}
+                        className="shrink-0 pointer-events-auto"
+                        contentClassName="glass-surface__content--bare"
+                    >
+                        <button
+                            type="button"
+                            onClick={() => { void resumeMeeting(); }}
+                            disabled={resumeDisabled}
+                            aria-busy={resumeBusy || undefined}
+                            title={resumeHint}
+                            className="mn-resume h-full pl-4 pr-[18px] flex items-center gap-[9px] rounded-full text-sm font-medium text-text-primary disabled:opacity-50 disabled:cursor-default"
+                        >
+                            <span className="mn-resume-bars" aria-hidden><span /><span /><span /></span>
+                            {t('Resume')}
+                        </button>
+                    </GlassSurface>
+                )}
                 {/* Refractive glass, not a blurred pane. The pill floats over the
                     scrolling notes, so the material is only readable as glass if
                     what passes behind it BENDS — a plain backdrop-blur reads as
@@ -3730,24 +4209,24 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={handleInputKeyDown}
                         placeholder={t("Ask about this meeting...")}
-                        className="w-full h-full pl-5 pr-12 bg-transparent border-0 text-sm text-text-primary placeholder-text-tertiary/70 focus:outline-none"
+                        className="w-full h-full pl-5 pr-14 bg-transparent border-0 text-sm text-text-primary placeholder-text-tertiary/70 focus:outline-none"
                     />
-                    {/* Positioned at 9px rather than with a translate, so the
-                        transform channel stays free for the press. */}
-                    <button
-                        type="button"
-                        onClick={handleSubmitQuestion}
-                        aria-label={t('Ask about this meeting...')}
-                        className="absolute right-2 top-[9px] inline-flex items-center justify-center rounded-full border-0 p-0 appearance-none cursor-pointer transition-transform duration-150 ease-out active:scale-[0.94]"
-                        style={{
-                            width: ASK_ORB_SIZE,
-                            height: ASK_ORB_SIZE,
-                            background: ASK_ORB_FILL[isLight ? 'light' : 'dark'],
-                            color: ASK_ORB_GLYPH[isLight ? 'light' : 'dark'],
-                        }}
-                    >
-                        <ArrowUp size={14} className="rotate-45" />
-                    </button>
+                    {/* Positioned by its inset rather than with a translate, so
+                        the transform channel stays free for the press. */}
+                    {/* The span holds the position (.lg-button sets its own
+                        position: relative for the rim and lens layers). */}
+                    <span className="absolute flex" style={{ top: ASK_ORB_INSET, right: ASK_ORB_INSET }}>
+                        <LiquidGlassButton
+                            variant="lavender"
+                            onClick={handleSubmitQuestion}
+                            disabled={!query.trim()}
+                            aria-label={t('Ask about this meeting...')}
+                            className="lg-sm lg-lav-tinted mn-ask-send"
+                            style={{ '--lg-pill-h': `${ASK_ORB_SIZE}px` } as React.CSSProperties}
+                        >
+                            <ArrowUp size={18} strokeWidth={2.5} className="rotate-45" />
+                        </LiquidGlassButton>
+                    </span>
                 </GlassSurface>
             </div>
 
@@ -3772,6 +4251,253 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                     setSubmittedQuery(newQuery);
                 }}
             />
+
+            {/* Follow-up email, opened from the header button: a compose sheet in the
+                notes page's language, on the toasters' card size (SupportToaster,
+                UpdateModal, BrowserExtensionToaster: 600 wide, 440 tall, radius 20,
+                40px side insets). A sheet of paper lifted off the page (white on the
+                grey page, a step lighter in dark), so it never reads as more page; a
+                plain title and a round close; To and Subject
+                as an envelope between edge-to-edge hairlines; the message, which
+                scrolls inside the fixed height; then one toolbar: the tone and two icon tools on the left,
+                and the send on the right, Gmail with a ^ for the other mail apps. A Radix portal inside the window (as ConfirmDialog and
+                ShareMenu's dialogs), so it stays under the window's content protection;
+                .mn-followup carries the motion variables, since the portal sits outside
+                .mn-root, and .mn-fu-sheet is the sheet's own motion (index.css). Edits
+                save on blur and when the sheet closes. Escape first closes the tone
+                menu, then the sheet. */}
+            {meeting.detailedSummary && (() => {
+                const rule = isLight ? 'border-black/[0.07]' : 'border-white/[0.07]';
+                // The toolbar's icon tools (and the close): no fill behind them, the glyph
+                // brightens, and Regenerate's arrows turn on hover (.mn-fu-tool, index.css).
+                const tool = `mn-fu-tool grid place-items-center w-8 h-8 rounded-lg text-text-tertiary hover:text-text-primary transition-[color,opacity,scale] duration-150 disabled:opacity-40 disabled:hover:text-text-tertiary`;
+                const writingFirst = !hasFollowUpDraft || followUpEntrance === 'armed';
+                const toCount = fuToList().length;
+                const noRecipients = gmailSend.message === FU_NO_RECIPIENTS;
+                const gmailLabel = !gmailSend.connected ? 'Send with Gmail'
+                    : gmailSend.state === 'confirm' ? `Send to ${toCount === 1 ? '1 person' : `${toCount} people`}?`
+                    : gmailSend.state === 'sending' ? 'Sending…'
+                    : gmailSend.state === 'sent' ? 'Sent' : 'Send with Gmail';
+                const note = gmailSend.message ? <span role="alert">{t(gmailSend.message)}</span>
+                    : fuSaveError ? (
+                        <>
+                            <span role="alert">{t(fuSaveError)}</span>{' '}
+                            <button type="button" className="font-medium text-text-secondary hover:text-text-primary transition-colors" onClick={() => { void saveFollowUp(false); }}>
+                                {t('Try again')}
+                            </button>
+                        </>
+                    ) : followUpStyled && hasFollowUpDraft && !writingFirst ? t('Written in your style') : null;
+                const sheetBody = (
+                    <>
+                        {/* Title and close, in the row (an animating
+                            row painted over a floated close button and swallowed its clicks). */}
+                        {/* Up near the top: the X's glyph sits 24px from the top and 24px from
+                            the right edge, square in the corner (the 28px button holds a 15px
+                            glyph 6.5px in from its edges, so the button sits 17.5px in each
+                            way), and the title shares its centre line on the content's 40px
+                            inset; 8px below them to the To line. */}
+                        <div className="mn-fu-row shrink-0 flex items-center justify-between gap-4 pt-[17.5px] pb-2 pl-10 pr-[17.5px]" style={{ '--i': 0 } as React.CSSProperties}>
+                            <DialogPrimitive.Title className="min-w-0 text-[15px] leading-7 font-semibold tracking-[-0.01em] text-text-primary">{t('Follow-up email')}</DialogPrimitive.Title>
+                            <DialogPrimitive.Close aria-label={t('Close')} className={`${tool} rounded-full w-7 h-7 text-text-tertiary`}>
+                                <X size={15} strokeWidth={2.2} />
+                            </DialogPrimitive.Close>
+                        </div>
+
+                        <label className={`mn-fu-row flex items-center gap-3 h-11 shrink-0 px-10 border-t ${rule}`} style={{ '--i': 1 } as React.CSSProperties}>
+                            {/* The shake runs on this inner line, not the row: the row's
+                                entrance owns its `animation` and would replay. */}
+                            <span
+                                ref={fuToRowRef}
+                                onAnimationEnd={(e) => e.currentTarget.classList.remove('t-notice-shake')}
+                                className="flex min-w-0 flex-1 items-center gap-3"
+                            >
+                                <span className={`w-[52px] shrink-0 text-[13px] transition-colors duration-150 ${noRecipients ? 'text-red-500' : 'text-text-tertiary'}`}>{t('To')}</span>
+                                <input
+                                    ref={fuToInputRef}
+                                    type="text"
+                                    value={fuToShown}
+                                    onChange={(e) => {
+                                        setFuToDraft(e.target.value);
+                                        if (noRecipients) setGmailSend((g) => (g.message === FU_NO_RECIPIENTS ? { ...g, message: undefined } : g));
+                                    }}
+                                    placeholder="name@example.com"
+                                    aria-invalid={noRecipients || undefined}
+                                    spellCheck={false}
+                                    autoComplete="off"
+                                    className="min-w-0 flex-1 bg-transparent p-0 border-0 outline-none text-[13px] text-text-primary placeholder:text-text-tertiary/70"
+                                />
+                            </span>
+                        </label>
+                        <label className={`mn-fu-row flex items-center gap-3 h-11 shrink-0 px-10 border-y ${rule}`} style={{ '--i': 2 } as React.CSSProperties}>
+                            <span className="w-[52px] shrink-0 text-[13px] text-text-tertiary">{t('Subject')}</span>
+                            <input
+                                type="text"
+                                value={writingFirst ? '' : fuShownSubject}
+                                disabled={writingFirst}
+                                readOnly={isRegeneratingFollowUp}
+                                onChange={(e) => editFollowUp({ subject: e.target.value })}
+                                onBlur={() => { if (fuText) void saveFollowUp(false); }}
+                                spellCheck
+                                className={`min-w-0 flex-1 bg-transparent p-0 border-0 outline-none text-[13px] font-semibold text-text-primary transition-opacity ${isRegeneratingFollowUp && hasFollowUpDraft ? 'opacity-50' : ''}${followUpEntrance === 'reveal' ? ' mn-fu-land' : ''}`}
+                            />
+                        </label>
+
+                        {/* The message, sized to its text (field-sizing) and at least the
+                            space left, so a click anywhere in it writes; a long one scrolls
+                            inside the card's fixed height. While a first draft is written
+                            the space says so (the shimmer), then fades; the message rises in.
+                            A rewrite dims what is there, then the new text settles in. */}
+                        {/* The row (its entrance) around the scroller (its fade): the fade is a
+                            scroll-driven animation, and the row's entrance owns `animation`. */}
+                        <div className="mn-fu-row relative min-h-0 flex-auto flex flex-col" style={{ '--i': 3 } as React.CSSProperties}>
+                        <div className="mn-fu-msg custom-scrollbar min-h-0 flex-1 overflow-y-auto">
+                            {writingFirst ? (
+                                <div className={`px-10 pt-4 text-[14px] leading-[1.7] text-text-tertiary${hasFollowUpDraft ? ' mn-fu-writing-out' : ''}`}>
+                                    {followUpFailed ? (
+                                        <p>
+                                            {t("Couldn't write the email.")}{' '}
+                                            <button type="button" className="font-medium text-text-secondary hover:text-text-primary transition-colors" onClick={() => { void handleRegenerateFollowUp(); }}>
+                                                {t('Try again')}
+                                            </button>
+                                        </p>
+                                    ) : isRegeneratingFollowUp || hasFollowUpDraft ? (
+                                        <p className="t-shimmer" data-text={t('Writing the email from these notes…')}>{t('Writing the email from these notes…')}</p>
+                                    ) : (
+                                        <p>
+                                            <button type="button" className="font-medium text-text-secondary hover:text-text-primary transition-colors" onClick={() => { void handleRegenerateFollowUp(); }}>
+                                                {t('Write a follow-up email from these notes')}
+                                            </button>
+                                        </p>
+                                    )}
+                                </div>
+                            ) : (
+                                <textarea
+                                    key={followUpBodyKey}
+                                    value={fuShownBody}
+                                    readOnly={isRegeneratingFollowUp}
+                                    onChange={(e) => editFollowUp({ body: e.target.value })}
+                                    onBlur={() => { if (fuText) void saveFollowUp(false); }}
+                                    aria-label={t('Follow-up email')}
+                                    spellCheck
+                                    className={`block w-full min-h-full [field-sizing:content] resize-none overflow-hidden bg-transparent px-10 pt-4 pb-4 border-0 outline-none font-sans text-[14px] leading-[1.7] text-text-primary transition-opacity${isRegeneratingFollowUp ? ' opacity-50' : ''}${followUpBodyKey > 0 ? ' mn-fu-body-in' : followUpEntrance === 'reveal' ? ' mn-fu-land' : ''}`}
+                                    style={followUpBodyKey > 0 ? undefined : { '--i': 1 } as React.CSSProperties}
+                                />
+                            )}
+                        </div>
+                        </div>
+                        {/* Keyed on what it says, so each new note rises in (.mn-fu-note). */}
+                        {note && <p key={gmailSend.message || fuSaveError || 'style'} className="mn-fu-note shrink-0 px-10 pb-3 text-[12px] text-text-tertiary">{note}</p>}
+
+                        {/* One toolbar: tone and Regenerate on the left; the system's
+                            Gmail as the one filled button, its ^ for every other way to send. */}
+                        <div className="mn-fu-row shrink-0 flex items-center pl-10 pr-6 py-3" style={{ '--i': 4 } as React.CSSProperties}>
+                            {hasFollowUpDraft && !writingFirst && (
+                                <>
+                                    <ToneDropdown
+                                        followUpTone={followUpTone}
+                                        isRegeneratingFollowUp={isRegeneratingFollowUp}
+                                        onSelect={(tone) => { setFollowUpTone(tone); setFuText(null); handleRegenerateFollowUp(tone); }}
+                                        offerYourStyle={modeHasStyle}
+                                    />
+                                    {/* 20px from the tone's chevrons to the glyph, which sits 8.5px
+                                        inside its 32px button. */}
+                                    <button
+                                        type="button"
+                                        className={`ml-[11.5px] ${tool}`}
+                                        onClick={resetFollowUp}
+                                        disabled={isRegeneratingFollowUp}
+                                        aria-busy={isRegeneratingFollowUp}
+                                        aria-label={t('Regenerate')}
+                                        title={t('Regenerate')}
+                                    >
+                                        <RefreshCw className={`mn-fu-turn w-[15px] h-[15px] ${isRegeneratingFollowUp && !prefersReducedMotion ? 'animate-spin' : ''}`} aria-hidden="true" />
+                                    </button>
+                                </>
+                            )}
+                            <div className="ml-auto">
+                                <FollowUpSendButton
+                                    label={t(gmailLabel)}
+                                    labels={gmailSend.connected
+                                        ? ['Send with Gmail', `Send to ${toCount === 1 ? '1 person' : `${toCount} people`}?`, 'Sending…', 'Sent'].map((l) => t(l))
+                                        : [t(gmailLabel)]}
+                                    sent={gmailSend.state === 'sent'}
+                                    disabled={writingFirst}
+                                    gmailDisabled={gmailSend.state === 'sending'}
+                                    mailApp={mailApp}
+                                    onGmail={() => { void emailFollowUp(); }}
+                                    onOutlook={() => { void outlookFollowUp(); }}
+                                    onMailApp={() => { void mailFollowUp(); }}
+                                />
+                            </div>
+                        </div>
+                    </>
+                );
+                // The sheet's surface, on the Radix panel or, with the genie, on its card
+                // (`shadow` is the stand-in's while the card is cut into bands).
+                const surface = isLight ? 'bg-white border-black/[0.06]' : 'bg-[#1C1C1E] border-white/[0.08]';
+                const shadow = isLight ? '0 24px 70px rgba(0,0,0,0.16), 0 2px 8px rgba(0,0,0,0.05)' : '0 24px 70px rgba(0,0,0,0.6), 0 2px 8px rgba(0,0,0,0.35)';
+                const keepMenuEscape = (e: KeyboardEvent) => { if ((e.target as HTMLElement | null)?.closest?.('[role="menu"]')) e.preventDefault(); };
+                return (
+                <DialogPrimitive.Root
+                    open={followUpOpen}
+                    onOpenChange={(open) => {
+                        if (!open && fuText) void saveFollowUp(false);
+                        // A landed first draft has played its entrance; reopening shows it at rest.
+                        if (!open && followUpEntrance === 'reveal') setFollowUpEntrance('none');
+                        setFollowUpOpen(open);
+                    }}
+                >
+                    {genieOn ? (
+                        // Genie on (Settings › Advanced, the default): the sheet pours out of
+                        // the window's bottom edge and back into it, as every other card in
+                        // the app (GenieModal). Radix still owns the dialog: focus trap,
+                        // Escape, outside click, title. Its Content is force-mounted so it
+                        // stays on the card while the genie drains it away; GenieModal
+                        // unmounts it once the close has played. No pictures kept: the
+                        // sheet shows a different meeting's email each time.
+                        <DialogPrimitive.Portal forceMount>
+                            <GenieModal
+                                open={followUpOpen}
+                                label="Follow-up email"
+                                keepPictures={false}
+                                zIndex={FOLLOW_UP_DIALOG_LAYER}
+                                backdropClassName={isLight ? 'bg-black/[0.16]' : 'bg-black/55'}
+                                wrapClassName="w-[600px] max-w-[92vw] h-[min(440px,86vh)]"
+                                cardClassName={`border ${surface} ${isLight
+                                    ? 'shadow-[0_24px_70px_rgba(0,0,0,0.16),0_2px_8px_rgba(0,0,0,0.05)]'
+                                    : 'shadow-[0_24px_70px_rgba(0,0,0,0.6),0_2px_8px_rgba(0,0,0,0.35)]'}`}
+                                shadow={shadow}
+                                radius={20}
+                            >
+                                <DialogPrimitive.Content
+                                    forceMount
+                                    aria-describedby={undefined}
+                                    onEscapeKeyDown={keepMenuEscape}
+                                    className="mn-followup mn-fu-sheet mn-fu-genie h-full flex flex-col outline-none"
+                                >
+                                    {sheetBody}
+                                </DialogPrimitive.Content>
+                            </GenieModal>
+                        </DialogPrimitive.Portal>
+                    ) : (
+                    // Genie off: the sheet's own scale-up and staggered rows (.mn-fu-sheet).
+                    <DialogPrimitive.Portal>
+                        <DialogPrimitive.Overlay className={`mn-fu-dim fixed inset-0 ${isLight ? 'bg-black/[0.16]' : 'bg-black/55'}`} style={{ zIndex: FOLLOW_UP_DIALOG_LAYER }} />
+                        <DialogPrimitive.Content
+                            aria-describedby={undefined}
+                            onEscapeKeyDown={keepMenuEscape}
+                            className={`mn-followup mn-fu-sheet fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] max-w-[92vw] h-[min(440px,86vh)] flex flex-col rounded-[20px] border outline-none ${surface} ${isLight
+                                ? 'shadow-[0_24px_70px_rgba(0,0,0,0.16),0_2px_8px_rgba(0,0,0,0.05)]'
+                                : 'shadow-[0_24px_70px_rgba(0,0,0,0.6),0_2px_8px_rgba(0,0,0,0.35)]'}`}
+                            style={{ zIndex: FOLLOW_UP_DIALOG_LAYER }}
+                        >
+                            {sheetBody}
+                        </DialogPrimitive.Content>
+                    </DialogPrimitive.Portal>
+                    )}
+                </DialogPrimitive.Root>
+                );
+            })()}
 
             {/* Regenerating over hand-edited notes: the in-app confirm, never window.confirm. */}
             <ConfirmDialog

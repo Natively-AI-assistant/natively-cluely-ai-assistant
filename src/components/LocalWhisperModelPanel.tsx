@@ -26,6 +26,9 @@ interface ModelInfo {
     status: 'available' | 'missing' | 'downloading' | 'error' | 'cancelled' | 'interrupted';
     errorMessage?: string;
     requiresAppleSilicon?: boolean;
+    // Installed from an older, heavier copy; a lighter one can be downloaded
+    // (modelManager.isModelUpgradeAvailable). The model stays usable throughout.
+    upgradeAvailable?: boolean;
 }
 
 interface HardwareInfo {
@@ -198,7 +201,7 @@ function formatSize(mb: number): string {
  */
 const FAMILY_RULES: Array<{ id: string; label: string; note: string; test: (name: string) => boolean }> = [
     { id: 'moonshine', label: 'Moonshine', note: 'Smallest and quickest to start', test: (n) => /^moonshine/i.test(n) },
-    { id: 'parakeet', label: 'Parakeet', note: 'NVIDIA FastConformer TDT, Multilingual (25 languages)', test: (n) => /^parakeet/i.test(n) },
+    { id: 'parakeet', label: 'Parakeet', note: 'NVIDIA FastConformer TDT. v2: English; v3: Multilingual (25 languages)', test: (n) => /^parakeet/i.test(n) },
     { id: 'nemotron', label: 'Nemotron', note: 'NVIDIA FastConformer-RNNT, real streaming, multilingual', test: (n) => /^nemotron/i.test(n) },
     { id: 'distil', label: 'Distil-Whisper', note: 'Compressed Whisper, near-equal accuracy', test: (n) => /^distil/i.test(n) },
     { id: 'whisper', label: 'Whisper', note: 'Original OpenAI checkpoints', test: () => true },
@@ -234,6 +237,8 @@ export function LocalWhisperModelPanel({ onModelConfigChanged }: LocalWhisperMod
     
     const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
     const [downloadingSet, setDownloadingSet] = useState<Set<string>>(new Set());
+    // Why the last update of an installed model did not finish, by model id.
+    const [upgradeErrors, setUpgradeErrors] = useState<Record<string, string>>({});
     const [recoveryNotice, setRecoveryNotice] = useState<RecoveryNotice | null>(null);
     const [onnxNotices, setOnnxNotices] = useState<Partial<Record<OnnxRecoveryNotice['family'], OnnxRecoveryNotice>>>({});
     const [loading, setLoading] = useState(true);
@@ -321,8 +326,18 @@ export function LocalWhisperModelPanel({ onModelConfigChanged }: LocalWhisperMod
                 }
                 setDownloadingSet(nextDownloading);
                 setDownloadProgress(prev => ({ ...prev, ...nextProgress }));
+                // A failed or stopped UPDATE leaves the model installed and
+                // working: it keeps 'available' and the failure is a line under
+                // the Update button, not a Retry in place of the model.
+                const upgradeIds = new Set((modelsRes?.models ?? []).filter((m: any) => m.upgradeAvailable).map((m: any) => m.id));
+                const nextUpgradeErrors: Record<string, string> = {};
+                for (const id of [...interruptedIds, ...errorIds]) {
+                    if (upgradeIds.has(id)) nextUpgradeErrors[id] = 'The update did not finish.';
+                }
+                setUpgradeErrors(nextUpgradeErrors);
                 if (interruptedIds.length || cancelledIds.length || errorIds.length) {
                     setModels(prev => prev.map(m => {
+                        if (upgradeIds.has(m.id)) return m;
                         if (interruptedIds.includes(m.id)) return { ...m, status: 'interrupted' as const };
                         if (cancelledIds.includes(m.id)) return { ...m, status: 'cancelled' as const };
                         if (errorIds.includes(m.id)) return { ...m, status: 'error' as const, errorMessage: 'Download was interrupted.' };
@@ -400,7 +415,14 @@ export function LocalWhisperModelPanel({ onModelConfigChanged }: LocalWhisperMod
         const unsubError = electronAPI?.onLocalWhisperDownloadError?.((data: { modelId: string; error: string }) => {
             setDownloadingSet(prev => { const s = new Set(prev); s.delete(data.modelId); return s; });
             setDownloadProgress(prev => { const d = { ...prev }; delete d[data.modelId]; return d; });
-            setModels(prev => prev.map(m => m.id === data.modelId ? { ...m, status: 'error', errorMessage: data.error } : m));
+            setModels(prev => prev.map(m => {
+                if (m.id !== data.modelId) return m;
+                if (m.upgradeAvailable) {
+                    setUpgradeErrors(e => ({ ...e, [m.id]: data.error || 'The update did not finish.' }));
+                    return m;
+                }
+                return { ...m, status: 'error', errorMessage: data.error };
+            }));
         });
         
         return () => { unsubProgress?.(); unsubComplete?.(); unsubError?.(); };
@@ -408,14 +430,22 @@ export function LocalWhisperModelPanel({ onModelConfigChanged }: LocalWhisperMod
 
     const handleDownload = async (modelId: string) => {
         if (downloadingSet.has(modelId)) return;
+        // An update downloads next to a working copy: the row stays 'available'
+        // (still selectable, still in use) and only gains a progress bar.
+        const isUpgrade = models.some(m => m.id === modelId && m.upgradeAvailable);
         setDownloadingSet(prev => new Set([...prev, modelId]));
-        setModels(prev => prev.map(m => m.id === modelId ? { ...m, status: 'downloading' } : m));
+        setUpgradeErrors(prev => { const d = { ...prev }; delete d[modelId]; return d; });
+        if (!isUpgrade) setModels(prev => prev.map(m => m.id === modelId ? { ...m, status: 'downloading' } : m));
         setDownloadProgress(prev => ({ ...prev, [modelId]: 0 }));
 
         const result = await electronAPI?.localWhisperStartDownload?.(modelId);
         if (!result?.success && result?.error !== 'already-downloading') {
             setDownloadingSet(prev => { const s = new Set(prev); s.delete(modelId); return s; });
             setDownloadProgress(prev => { const d = { ...prev }; delete d[modelId]; return d; });
+            if (isUpgrade) {
+                setUpgradeErrors(prev => ({ ...prev, [modelId]: result?.error ?? 'The update did not start.' }));
+                return;
+            }
             setModels(prev => prev.map(m => m.id === modelId
                 ? { ...m, status: 'error', errorMessage: result?.error ?? 'Download failed' }
                 : m
@@ -434,7 +464,8 @@ export function LocalWhisperModelPanel({ onModelConfigChanged }: LocalWhisperMod
         // the UI responsive immediately, optimistically clear local state.
         setDownloadingSet(prev => { const s = new Set(prev); s.delete(modelId); return s; });
         setDownloadProgress(prev => { const d = { ...prev }; delete d[modelId]; return d; });
-        setModels(prev => prev.map(m => m.id === modelId
+        // A stopped update leaves the installed copy as it was.
+        setModels(prev => prev.map(m => m.id === modelId && !m.upgradeAvailable
             ? { ...m, status: 'cancelled' as const, errorMessage: undefined }
             : m
         ));
@@ -777,6 +808,8 @@ export function LocalWhisperModelPanel({ onModelConfigChanged }: LocalWhisperMod
                                     const isRecommended = hardware?.recommendedModel === model.id;
                                     const inUseLabel = inUseLabels.get(model.id);
                                     const isInUse = inUseLabel !== undefined;
+                                    const canUpgrade = isAvailable && model.upgradeAvailable === true;
+                                    const upgradeError = canUpgrade ? upgradeErrors[model.id] : undefined;
 
                                     return (
                                         // Every row gets the same surface. The in-use row used to carry an
@@ -861,6 +894,21 @@ export function LocalWhisperModelPanel({ onModelConfigChanged }: LocalWhisperMod
                                                     "Download was interrupted. Click Install to retry." while the
                                                     button beside them said "Retry" — pointing at a control that
                                                     was not there. */}
+                                                {/* Plain secondary text, like the failure line below: nothing is
+                                                    wrong, the model works as it is. The size on the line above is
+                                                    already the download size of the lighter copy. */}
+                                                {canUpgrade && !isDownloading && (
+                                                    <div className="mt-1.5 text-[11px]" style={{ color: 'var(--aip-secondary)' }}>
+                                                        {t('Lighter version available: same results, less memory.')}
+                                                    </div>
+                                                )}
+                                                {upgradeError && !isDownloading && (
+                                                    <div className="mt-1 flex items-start gap-1.5 text-[11px]" style={{ color: 'var(--aip-danger)' }}>
+                                                        <AlertCircle size={12} className="shrink-0 mt-[1px]" />
+                                                        <span>{t(upgradeError)}</span>
+                                                    </div>
+                                                )}
+
                                                 {isFailed && (
                                                     <div className="mt-1.5 flex items-start gap-1.5 text-[11px]" style={{ color: 'var(--aip-danger)' }}>
                                                         <AlertCircle size={12} className="shrink-0 mt-[1px]" />
@@ -892,7 +940,19 @@ export function LocalWhisperModelPanel({ onModelConfigChanged }: LocalWhisperMod
                                                     </button>
                                                 )}
 
-                                                {isAvailable && (
+                                                {canUpgrade && !isDownloading && (
+                                                    <button
+                                                        onClick={() => handleDownload(model.id)}
+                                                        className="aip-btn"
+                                                        data-size="row"
+                                                        title={t('Download the lighter version. The current one keeps working until it finishes.')}
+                                                    >
+                                                        <Download size={13} />
+                                                        <span>{t('Update')}</span>
+                                                    </button>
+                                                )}
+
+                                                {isAvailable && !isDownloading && (
                                                     <button
                                                         onClick={() => handleDelete(model.id)}
                                                         className="aip-btn"

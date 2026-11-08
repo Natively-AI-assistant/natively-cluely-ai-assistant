@@ -484,7 +484,7 @@ test('a store link that did not open says so, offers the link, and records nothi
   assert.ok(install.includes("(await window.electronAPI.openExternal(CHROME_STORE_URL))?.ok === true"), 'reads the answer');
   assert.ok(install.includes('else { setStoreFailed(true); setOpening(false); }'), 'stays open, no outcome');
   assert.ok(rendered.includes("Couldn't open the Chrome Web Store."));
-  assert.ok(rendered.includes('navigator.clipboard?.writeText(CHROME_STORE_URL)'), 'the link to copy');
+  assert.ok(rendered.includes('copyText(CHROME_STORE_URL)'), 'the link to copy');
 });
 
 test('host: connecting retires the card', () => {

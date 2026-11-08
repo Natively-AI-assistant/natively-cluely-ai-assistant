@@ -54,7 +54,8 @@ test('the button, its Settings preview and the dropdown all use MODEL_SELECTOR_W
     assert.match(toggle, /width: MODEL_SELECTOR_WIDTH/);
     assert.doesNotMatch(toggle, /min-w-\[/);
 
-    const preview = read('src/components/SettingsOverlay.tsx');
+    // The preview is OverlayMockup (General's opacity preview and Settings › Overlay).
+    const preview = read('src/components/settings/OverlayMockup.tsx');
     const previewChip = preview.slice(preview.lastIndexOf('<div', preview.indexOf('<ModelSelectorLabel>')), preview.indexOf('<ModelSelectorLabel>'));
     assert.match(previewChip, /width: MODEL_SELECTOR_WIDTH/);
 

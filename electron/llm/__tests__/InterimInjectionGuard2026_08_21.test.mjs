@@ -10,8 +10,7 @@
 // newest interviewer turn on every press. extractLatestQuestion returned it
 // byte-for-byte as "the question" (86/86 injected presses; 0/66 non-injected
 // presses had a blob question), freezing 20/85 answers on the interviewer's
-// opening monologue and routing 17 of them into ethical_usage_answer via a
-// cross-sentence stealth-classifier false positive.
+// opening monologue and freezing 20/85 answers.
 //
 // The fix is a shared pure resolver: containment (cut everything already
 // covered by finals, keep only the novel tail), a length cap backstop, and a

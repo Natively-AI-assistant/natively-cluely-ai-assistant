@@ -40,6 +40,19 @@ test('the TypeScript native compiler is excluded from the shipped app', () => {
   );
 });
 
+test('source maps are excluded from the shipped app', () => {
+  // scripts/build-electron.js bundles every electron/**/*.ts as its own entry with
+  // sourcemap: true, so each map repeats the shared graph: 2.9.2 shipped 1257 MB of
+  // .map files inside app.asar (#660). Nothing at runtime reads them: no
+  // setSourceMapsEnabled, --enable-source-maps or source-map-support in the app.
+  // The same pattern also drops dependencies' maps from node_modules.
+  const files = pkg.build?.files ?? [];
+  assert.ok(
+    files.includes('!**/*.map'),
+    'build.files must exclude **/*.map (over 1 GB of source maps otherwise ships)'
+  );
+});
+
 test('every build path that packs a mac app also ensures BOTH canvas arches', () => {
   // THE REGRESSION THIS GUARDS: the release workflow deliberately does NOT use
   // `npm run app:build:signed` (its stage list avoids a rimraf/native-rebuild race),

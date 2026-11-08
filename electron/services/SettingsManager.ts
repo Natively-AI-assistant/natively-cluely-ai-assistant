@@ -6,6 +6,9 @@ export interface AppSettings {
     /** The Calendar account name whose full-name mentions in saved notes were carried
      *  to the first name (calendarNameMigration); set once per name. */
     calendarFirstNameMigratedFor?: string;
+    /** Saved notes were cleaned of models' "empty" placeholders (GitHub #662,
+     *  placeholderNotesMigration); set once. */
+    placeholderNotesCleaned?: boolean;
     // Only boot-critical or non-encrypted settings should live here.
     // In the future, other non-secret data like 'language' or 'theme'
     // can be moved here from CredentialsManager to allow early boot access.
@@ -35,6 +38,10 @@ export interface AppSettings {
     // while idle. Off by default — the hotkey's existing behavior is unchanged
     // until the user opts in from Settings > General.
     ambientChatEnabled?: boolean;
+    /** Ambient AI Chat was turned off once for installs upgraded from an older
+     *  build (turnAmbientChatOffOnce); set once, after which the user's own
+     *  choice stands. */
+    ambientChatResetOnUpgrade?: boolean;
     // Automatic answers after the interviewer finishes a question. Off by
     // default: until the user opts in from Settings > General, an answer is
     // produced only by the What-to-Answer hotkey, exactly as before. The
@@ -45,6 +52,13 @@ export interface AppSettings {
     // microphone use) to link a session to its calendar event exactly and to
     // offer to start one. Local only. Unset = on.
     meetingDetectionEnabled?: boolean;
+    // Start automatically (2026-10-15, Settings › Calendar under Detect
+    // meetings): a detected call starts Natively after a 10 s countdown on the
+    // "meeting detected" offer unless Not now is pressed. Unset = off.
+    meetingAutoStartEnabled?: boolean;
+    // Calendar reminder lead time in minutes (2026-10-15, Settings › Calendar):
+    // 1, 2 or 5. Unset = 2, the reminder's time before it was configurable.
+    calendarReminderMinutes?: number;
     // End meetings automatically when the call ends (2026-10-15,
     // services/meeting/MeetingEndDetector.ts): the call's app lets go of the
     // microphone, its browser tab closes, or nothing is said for
@@ -52,10 +66,21 @@ export interface AppSettings {
     meetingAutoStopEnabled?: boolean;
     // Minutes of silence before the inactivity stop. No UI yet. Unset = 15.
     meetingInactivityStopMinutes?: number;
+    // The catch-up after back-to-back meetings (2026-10-15,
+    // services/assist/backToBack.ts): decisions and the user's action items
+    // across meetings with short gaps, as one launcher card. Unset = on.
+    assistCatchUpEnabled?: boolean;
+    // The longest gap (minutes) between two meetings of one block. No UI. Unset = 15.
+    assistCatchUpGapMinutes?: number;
     // Follow the meeting app's mute (2026-10-15, Settings › Audio): while the
     // user is muted in Zoom / Teams / Meet (read from the app, never changed),
     // the mic channel carries silence of the same length. Unset = on.
     followMeetingMute?: boolean;
+    // Dictation (2026-10-15, Settings › Audio; services/dictation): its
+    // shortcut (Keybinds › Dictate to Clipboard) records the mic and puts the
+    // tidied text on the clipboard. The shortcut is registered only while on.
+    // Unset = off.
+    dictationEnabled?: boolean;
     // Snapshot shared screens (2026-10-15, Settings › Calendar): while someone
     // else shares a screen in a Zoom / Teams call, a picture every 10 s, kept
     // when it changed, described by the user's vision model for the notes.
@@ -64,7 +89,9 @@ export interface AppSettings {
     // The notes window (`?window=notes`, 2026-10-15): where it was and how big,
     // and whether it was open when last used, so a meeting starting reopens it
     // (without taking focus) for someone who keeps it open.
-    notesWindowState?: { x: number; y: number; width: number; height: number; open: boolean };
+    notesWindowState?: { x: number; y: number; width: number; height: number; open: boolean; layout?: number };
+    /** What a meeting opens: the overlay or the notepad (utils/meetingSurface.ts). */
+    meetingSurface?: 'overlay' | 'notepad';
     // Direct Assist is the opt-in, single-provider answer path. It deliberately
     // bypasses meeting retrieval and the legacy answer-orchestration pipeline.
     // Keep the persisted default OFF during rollout; the operator kill switch
@@ -134,7 +161,7 @@ export interface AppSettings {
     // setting to disable that floor.
     browserAutoDetectCoding?: boolean;        // default true
     browserAutoAttachCoding?: boolean;        // default true
-    browserAskBeforeUnknown?: boolean;        // default true
+    browserAskBeforeUnknown?: boolean;        // default true ("Hold back unsure pages")
     browserAiClassifierEnabled?: boolean;     // default false (opt-in)
     browserAutoDetectJobDescriptions?: boolean; // default false
     browserAutoDetectDeveloperDocs?: boolean; // default false
@@ -156,6 +183,19 @@ export interface AppSettings {
     localWhisperPerChannelEnabled?: boolean;
     localWhisperModelMic?: string;
     localWhisperModelSystem?: string;
+    /** Tell apart people sharing the microphone (a room): diarize the mic
+     *  channel and split its voices at save (meeting/roomSpeakers.ts). Off by
+     *  default; needs a provider with diarization (Deepgram). */
+    roomSpeakersEnabled?: boolean;
+    /** Follow the meeting app's microphone: capture from the device Zoom/Teams/
+     *  the browser is using, when the user has not pinned one. Off by default;
+     *  macOS 14+ only (the OS names the app's device there). */
+    followMeetingAppMicDevice?: boolean;
+    /** "About you" (Profile Intelligence › Cue Cards): a few lines in the user's
+     *  own words (role, team, what they care about) that the meeting notes prompt
+     *  reads, like Granola's bio. At most 600 characters; empty = not used. Pro or
+     *  trial only (services/proAccess.ts); a free user's text is kept, not read. */
+    userBio?: string;
     // Phase 6 — TelemetryService toggle. Defaults to true (local-only JSONL).
     // When false, no telemetry is written to disk and no sinks fire.
     telemetryEnabled?: boolean;
@@ -266,6 +306,9 @@ export interface AppSettings {
     //   vision_only    — Stricter: require vision-capable provider. No text-only provider fallback. No OCR fallback.
     //   private_vision — Local vision only (Ollama image-capable / Codex local / approved local custom). Never call cloud vision. Hard error if no local vision provider available.
     screenUnderstandingMode?: 'vision_first' | 'vision_only' | 'private_vision';
+    /** Which screen the full-screenshot shortcut captures: 'overlay' (default),
+     *  'cursor', or 'display:<id>' (electron/screenshotDisplay.ts). */
+    screenshotDisplay?: string;
     // When true (default) and the active mode is a technical / coding interview, prefer
     // direct vision LLM over structured-extract-then-answer for lowest latency.
     technicalInterviewVisionFirst?: boolean;
@@ -615,6 +658,22 @@ export class SettingsManager {
             console.error('[SettingsManager] Failed to read settings file; continuing READ-ONLY for this session:', e);
             this.settings = {};
             this.settingsUnreadable = true;
+        }
+        this.turnAmbientChatOffOnce();
+    }
+
+    // Ambient AI Chat skips capture and STT for every meeting, and builds before
+    // the overlay's "Ambient" chip showed nothing about it, so users who had
+    // switched it on read it as broken transcription (#679, #696). Turn it off
+    // once when this build first loads an older settings.json. The marker is set
+    // in memory on every path, including a fresh install, so it is persisted by
+    // the same write that turns the setting back on and the reset never repeats.
+    private turnAmbientChatOffOnce(): void {
+        if (this.settings.ambientChatResetOnUpgrade) return;
+        this.settings.ambientChatResetOnUpgrade = true;
+        if (this.settings.ambientChatEnabled === true) {
+            console.warn('[SettingsManager] Turning Ambient AI Chat off once after the upgrade');
+            this.set('ambientChatEnabled', false);
         }
     }
 

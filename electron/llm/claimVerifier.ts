@@ -61,11 +61,17 @@ export function claimVerifierKind(input: { modeId: string | null | undefined; qu
   // Real-time prompt and 5 of 5 with one, 1.6 to 3.3 s after the answer had finished. With the pass off the answer was
   // final 2.0 to 3.6 s after the press, not 4.1 to 6.6 s, and nothing on screen was replaced (10 of 10).
   // Judged on and off (gpt-6-astra, 2026-10-13, 70 questions a mode): Technical Interview 9.11 with the pass and 9.11
-  // without, 8 hard fails either way, so it is off there. Looking for work 9.31 with it and 9.17 without, hard fails
-  // 2 against 6, so it stays on there: it rescues answers that invent a history when no résumé is loaded (the
-  // edited rows of the two modes with the evidence missing: 5.58 as drafted, 7.49 as shown).
-  // NATIVELY_CLAIM_VERIFIER_INTERVIEW=1 restores the Technical Interview pass for a judged comparison.
-  if (mode === 'looking-for-work') return 'personal';
+  // without, 8 hard fails either way, so it went off there first. Looking for work 9.31 with it and 9.17 without,
+  // hard fails 2 against 6 (it rescues answers that invent a history when no résumé is loaded: the edited rows of the
+  // two modes with the evidence missing, 5.58 as drafted, 7.49 as shown). That run predates Cue Cards.
+  // ONE PASS IN LOOKING FOR WORK TOO (2026-10-15, owner's decision after the app re-test: the pass still replaced 9 of
+  // 11 streamed answers there, 3 of 4 even with the user's own saved answer, and made them final 6.5 to 8 s after the
+  // press instead of 3.5 to 5). The judged cost above is accepted.
+  // NATIVELY_CLAIM_VERIFIER_INTERVIEW=1 restores both interview passes for a judged comparison.
+  if (mode === 'looking-for-work') {
+    if (process.env.NATIVELY_CLAIM_VERIFIER_INTERVIEW !== '1') return null;
+    return 'personal';
+  }
   if (mode === 'technical-interview') {
     if (process.env.NATIVELY_CLAIM_VERIFIER_INTERVIEW !== '1') return null;
     return TI_PERSONAL_RE.test(q) || DRAFT_PERSONAL_RE.test(draft) ? 'personal' : null;

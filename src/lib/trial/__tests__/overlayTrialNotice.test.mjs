@@ -8,8 +8,9 @@ const t0 = 1_800_000_000_000;
 const trial = { expiresAt: t0 + 30 * MIN, announcedAt: t0, liveThisMeeting: true };
 const at = (ms, extra = {}) => overlayTrialNotice({ now: t0 + ms, ...trial, ...extra });
 
-const NOTHING = { banner: null, chip: null, minutesLeft: null };
-const counting = (minutesLeft, tone = 'ok') => ({ banner: null, chip: { minutesLeft, tone }, minutesLeft });
+const NOTHING = { banner: null, chip: null, minutesLeft: null, reason: null };
+const counting = (minutesLeft, tone = 'ok') => ({ banner: null, chip: { minutesLeft, tone }, minutesLeft, reason: null });
+const ENDED = { banner: 'ended', chip: null, minutesLeft: null, reason: 'clock' };
 
 test('no trial, nothing failed: the overlay shows nothing', () => {
   assert.deepEqual(overlayTrialNotice({ now: t0 }), NOTHING);
@@ -19,7 +20,7 @@ test('no trial, nothing failed: the overlay shows nothing', () => {
 test('a trial that just started: the banner alone, which says the minutes itself', () => {
   // No countdown beside it: "started: 30 minutes" and "30 min left" would say
   // the same thing twice. The countdown is what the banner folds into.
-  assert.deepEqual(at(0), { banner: 'started', chip: null, minutesLeft: 30 });
+  assert.deepEqual(at(0), { banner: 'started', chip: null, minutesLeft: 30, reason: null });
 });
 
 test('the started banner folds away by itself, leaving the countdown', () => {
@@ -43,11 +44,11 @@ test('minutes are rounded up, and never read zero while the trial is live', () =
 
 test('the warning starts at exactly five minutes left', () => {
   assert.deepEqual(at(30 * MIN - TRIAL_ENDING_MS - 1), counting(6));
-  assert.deepEqual(at(30 * MIN - TRIAL_ENDING_MS), { banner: 'ending', chip: { minutesLeft: 5, tone: 'warning' }, minutesLeft: 5 });
+  assert.deepEqual(at(30 * MIN - TRIAL_ENDING_MS), { banner: 'ending', chip: { minutesLeft: 5, tone: 'warning' }, minutesLeft: 5, reason: 'clock' });
 });
 
 test('the warning has no close: it stays, with the amber countdown, until the trial ends', () => {
-  const warning = (minutesLeft) => ({ banner: 'ending', chip: { minutesLeft, tone: 'warning' }, minutesLeft });
+  const warning = (minutesLeft) => ({ banner: 'ending', chip: { minutesLeft, tone: 'warning' }, minutesLeft, reason: 'clock' });
   assert.deepEqual(at(27 * MIN, { dismissed: { started: true, ending: true } }), warning(3));
   assert.deepEqual(at(30 * MIN - 1, { dismissed: { started: true, ending: true } }), warning(1));
 });
@@ -58,8 +59,8 @@ test('a trial that starts with under five minutes left warns instead of announci
 
 test('at the expiry instant the trial has ended: banner, no countdown', () => {
   assert.equal(at(30 * MIN - 1).banner, 'ending');
-  assert.deepEqual(at(30 * MIN), { banner: 'ended', chip: null, minutesLeft: null });
-  assert.deepEqual(at(45 * MIN), { banner: 'ended', chip: null, minutesLeft: null });
+  assert.deepEqual(at(30 * MIN), ENDED);
+  assert.deepEqual(at(45 * MIN), ENDED);
 });
 
 test('the ended banner cannot be closed away', () => {
@@ -71,7 +72,7 @@ test('a trial that ran out before this meeting is not announced as ended in it',
 });
 
 test('an automatic start that failed offers the manual start, and cannot be closed away', () => {
-  const FAILED = { banner: 'failed', chip: null, minutesLeft: null };
+  const FAILED = { banner: 'failed', chip: null, minutesLeft: null, reason: null };
   assert.deepEqual(overlayTrialNotice({ now: t0, startFailed: 'unreachable' }), FAILED);
   assert.deepEqual(overlayTrialNotice({ now: t0, startFailed: 'rate_limited' }), FAILED);
   // Closed, it would hand the overlay to "Transcription Not Configured", which
@@ -82,7 +83,7 @@ test('an automatic start that failed offers the manual start, and cannot be clos
 });
 
 test('a trial that is live wins over an earlier failed start', () => {
-  assert.deepEqual(at(0, { startFailed: 'unreachable' }), { banner: 'started', chip: null, minutesLeft: 30 });
+  assert.deepEqual(at(0, { startFailed: 'unreachable' }), { banner: 'started', chip: null, minutesLeft: 30, reason: null });
 });
 
 test('a clock that runs behind the server never shows more minutes than a trial has', () => {
@@ -90,10 +91,32 @@ test('a clock that runs behind the server never shows more minutes than a trial 
   // Twenty seconds behind made the banner read "started: 31 minutes".
   const behind = { now: t0, expiresAt: t0 + 30 * MIN + 20_000, announcedAt: t0, liveThisMeeting: true };
   assert.equal(overlayTrialNotice(behind).minutesLeft, 31, 'without the length, the raw difference');
-  assert.deepEqual(overlayTrialNotice({ ...behind, durationMs: 30 * MIN }), { banner: 'started', chip: null, minutesLeft: 30 });
+  assert.deepEqual(overlayTrialNotice({ ...behind, durationMs: 30 * MIN }), { banner: 'started', chip: null, minutesLeft: 30, reason: null });
   assert.equal(overlayTrialNotice({ ...behind, now: t0 + 60_000, announcedAt: null, durationMs: 30 * MIN }).chip.minutesLeft, 30);
   // The length is a cap, never a floor, and a bad one is ignored.
   assert.equal(overlayTrialNotice({ ...behind, now: t0 + 10 * MIN, announcedAt: null, durationMs: 30 * MIN }).chip.minutesLeft, 21);
   assert.equal(overlayTrialNotice({ ...behind, durationMs: NaN }).minutesLeft, 31);
   assert.equal(overlayTrialNotice({ ...behind, durationMs: 0 }).minutesLeft, 31);
+});
+
+// ── The AI allowance (2026-11-03) ──────────────────────────────────────────
+
+test('a nearly used AI allowance warns however many minutes are left', () => {
+  assert.deepEqual(at(3 * MIN, { allowanceLow: true, announcedAt: null }),
+    { banner: 'ending', chip: { minutesLeft: 27, tone: 'warning' }, minutesLeft: 27, reason: 'allowance' });
+  // It replaces the started banner too: the warning matters more.
+  assert.equal(at(0, { allowanceLow: true }).banner, 'ending');
+  assert.equal(at(0, { allowanceLow: false }).banner, 'started');
+  assert.equal(at(0, { allowanceLow: 'yes' }).banner, 'started', 'only a real true warns');
+});
+
+test('in the last five minutes the clock is the reason, whatever the allowance says', () => {
+  assert.equal(at(27 * MIN, { allowanceLow: true }).reason, 'clock');
+});
+
+test('the ended banner says what ended the trial', () => {
+  assert.equal(at(30 * MIN).reason, 'clock');
+  assert.equal(at(30 * MIN, { endedBy: 'allowance' }).reason, 'allowance');
+  assert.equal(at(30 * MIN, { endedBy: 'other' }).reason, 'clock');
+  assert.equal(at(30 * MIN, { endedBy: 'allowance' }).banner, 'ended');
 });

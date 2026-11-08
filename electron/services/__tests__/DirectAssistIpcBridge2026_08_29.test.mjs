@@ -124,7 +124,7 @@ test('provider_switch is forwarded in order without being swallowed into the ter
   assert.ok(fallThroughAt > switchAt, 'provider_switch branch must precede the terminal fall-through');
 
   const switchBlock = streamBlock.slice(switchAt, fallThroughAt);
-  assert.match(switchBlock, /sendDirectAssistEvent\(event\.sender, streamEvent\)/);
+  assert.match(switchBlock, /sendDirectAssistEvent(?:AndMirror)?\(event\.sender, streamEvent\)/);
   assert.match(switchBlock, /continue;/);
   // It must never touch lastSequence: a switch's sequence is a snapshot of
   // the delta counter (always 0), not a slot of its own.
@@ -138,7 +138,7 @@ test('provider_switch is forwarded in order without being swallowed into the ter
   // rewrite is exactly what this assertion catches.
   assert.doesNotMatch(
     switchBlock,
-    /sendDirectAssistEvent\([^)]*\{/,
+    /sendDirectAssistEvent(?:AndMirror)?\([^)]*\{/,
     'provider_switch must forward the streamEvent object itself, not a hand-rebuilt payload',
   );
 });
@@ -345,10 +345,13 @@ test('Direct Assist transcribes its own screenshot AFTER the answer, never befor
   // (…unless the cached text was made while the screenshot was being kept on
   // this device and that setting is now off: then it is read again. Behaviour:
   // OnDeviceScreenText2026_10_01.test.mjs.)
-  assert.match(helper, /if \(cached\?\.description && !stale\) return cached\.description;/);
+  // A hit is returned as is (2026-11-06: after noting its names for lookups by name).
+  assert.match(helper, /if \(cached\?\.description && !stale\) \{\s*rememberTranscribedNames\(imagePaths, sha\);\s*return cached\.description;\s*\}/);
   // Reaches the extraction prompt. Every pre-existing call site passed an action
   // that took the "answer concisely" branch instead.
-  assert.match(helper, /userAction: 'transcribe'/);
+  // (2026-11-06: through one `read(userAction)` closure, shared with the
+  // backup read; ScreenMemoryEverySurface2026_11_06.test.mjs.)
+  assert.match(helper, /const result = await read\('transcribe'\);/);
   // ONE policy, never a third policy: a transcription is still a screenshot
   // leaving the device.
   assert.match(helper, /localOnly: settings\.getScreenUnderstandingMode\(\) === 'private_vision'/);
@@ -415,6 +418,7 @@ test('a transcribed history turn does not consume the image-validation budget', 
   assert.ok(preAt >= 0, 'the description pre-pass must exist');
   assert.ok(preAt < budgetAt, 'descriptions must be resolved BEFORE the budget is spent');
   assert.match(normalizeBlock, /if \(describedByTurn\.has\(i\)\) continue;/);
-  // And the per-turn record reuses that result rather than hashing again.
-  assert.match(normalizeBlock, /imageDescription: describedByTurn\.get\(index\) \?\? '',/);
+  // And the per-turn record reuses that result rather than hashing again; a
+  // backup read (2026-11-06) fills in only for a screen not sent at all.
+  assert.match(normalizeBlock, /imageDescription: describedByTurn\.get\(index\)\s*\?\? \(backupRead/);
 });

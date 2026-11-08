@@ -73,7 +73,7 @@ after(async () => {
 beforeEach(async () => {
   if (svc.isRunning()) await svc.stop({ persist: false });
   svc.history = [];
-  svc.livePartial = null;
+  svc.liveStreams.clear();
   const info = await svc.start({ exposeOnLan: false, persist: false });
   port = info.port;
   token = info.token;

@@ -1,6 +1,7 @@
-// One onboarding card per launch, and `order` decides which: the Natively API
-// offer (for someone with no AI whose trial is used) comes before the browser
-// extension. That only holds if neither can become ready before the other.
+// One onboarding card per launch, and `order` decides which: Natively Plans
+// (anyone not on a plan) comes first, then the Natively API offer (for someone
+// with no AI whose trial is used), then the browser extension. That only holds
+// if none of them can become ready before the one ahead of it.
 // The extension used to wait 5 s on Home against 6 s for the offers above it,
 // so it showed first and spent the launch's slot; on 2026-10-08 that kept the
 // trial card from 92% of new installs. The trial is no longer a card (it starts
@@ -79,15 +80,24 @@ function advance(ms) {
   now = target;
 }
 
+// These scenarios are about the cards after Plans and the demo film: the film
+// is already watched in every ledger they hand the orchestrator
+// (schedulerScenarios covers where it shows).
+const demoWatched = (ledger) => (ledger ? applyOutcome(ledger, 'demo_video', 'acted', epoch) : ledger);
+
 function launch(t, user = {}) {
   const orchestrator = new OnboardingOrchestrator();
   t.after(() => orchestrator.stop());
+  const setUserState = orchestrator.setUserState.bind(orchestrator);
+  orchestrator.setUserState = (patch) => setUserState(
+    patch && 'cardLedger' in patch ? { ...patch, cardLedger: demoWatched(patch.cardLedger) } : patch,
+  );
   orchestrator.setUserState({
     permsShown: true,
     extensionSupported: true,
     extensionConnected: false,
     adsAvailable: true,
-    cardLedger: emptyLedger(Date.now()),
+    cardLedger: plansSeen(emptyLedger(Date.now())),
     ...user,
   });
   orchestrator.start([...STAGES, QUIET_WINDOW_STAGE]);
@@ -97,6 +107,9 @@ function launch(t, user = {}) {
 }
 
 const active = (orchestrator) => orchestrator.getSnapshot().activeToasterId;
+// The Natively Plans card already seen and acted on: the launches after it,
+// where the API offer and the extension compete for the slot.
+const plansSeen = (ledger = emptyLedger(epoch)) => applyOutcome(ledger, 'plans', 'acted', epoch);
 // No AI of their own, and the free trial behind them: the API offer's audience.
 const TRIAL_USED = { trialClaimed: true };
 
@@ -111,7 +124,7 @@ test('trial used: the API offer wins before the extension can spend the launch s
 });
 
 test('the old trial card turned down for good counts as trial used', (t) => {
-  const orchestrator = launch(t, { cardLedger: applyOutcome(emptyLedger(epoch), 'trial_promo', 'never', epoch) });
+  const orchestrator = launch(t, { cardLedger: plansSeen(applyOutcome(emptyLedger(epoch), 'trial_promo', 'never', epoch)) });
   advance(6_000);
   assert.equal(active(orchestrator), 'natively_api_new');
 });
@@ -120,7 +133,7 @@ test('a put-off API offer does not allow an extension card in the same launch', 
   const orchestrator = launch(t, TRIAL_USED);
   advance(6_000);
   assert.equal(active(orchestrator), 'natively_api_new');
-  orchestrator.setUserState({ cardLedger: applyOutcome(emptyLedger(epoch), 'natively_api_new', 'later', Date.now()) });
+  orchestrator.setUserState({ cardLedger: applyOutcome(plansSeen(), 'natively_api_new', 'later', Date.now()) });
   orchestrator.markDismissed('natively_api_new');
   advance(120_000);
   assert.equal(active(orchestrator), null);
@@ -143,7 +156,7 @@ test('ledger loaded at five seconds cannot let the extension get ahead', (t) => 
   const orchestrator = launch(t, { ...TRIAL_USED, cardLedger: null });
   advance(5_000);
   assert.equal(active(orchestrator), null);
-  orchestrator.setUserState({ cardLedger: emptyLedger(epoch) });
+  orchestrator.setUserState({ cardLedger: plansSeen() });
   advance(0);
   assert.equal(active(orchestrator), null);
   advance(1_000);
@@ -154,7 +167,7 @@ test('ledger loaded after both deadlines still chooses the API offer', (t) => {
   const orchestrator = launch(t, { ...TRIAL_USED, cardLedger: null });
   advance(10_000);
   assert.equal(active(orchestrator), null);
-  orchestrator.setUserState({ cardLedger: emptyLedger(epoch) });
+  orchestrator.setUserState({ cardLedger: plansSeen() });
   advance(0);
   assert.equal(active(orchestrator), 'natively_api_new');
 });
@@ -167,7 +180,7 @@ for (const [who, user] of [
   ['Natively key', { hasNativelyKey: true }],
   ['Premium', { isPremium: true }],
   ['trial used, but no API offer in this build', { ...TRIAL_USED, adsAvailable: false }],
-  ['the API offer put off', { ...TRIAL_USED, cardLedger: applyOutcome(emptyLedger(epoch), 'natively_api_new', 'later', epoch) }],
+  ['the API offer put off', { ...TRIAL_USED, cardLedger: applyOutcome(plansSeen(), 'natively_api_new', 'later', epoch) }],
 ]) {
   test(`${who}: the extension card, at six seconds`, (t) => {
     const orchestrator = launch(t, user);
@@ -221,3 +234,41 @@ test('permissions completion still requires the full 60-second spacing', (t) => 
   advance(1);
   assert.equal(active(orchestrator), 'natively_api_new');
 });
+
+// ── Natively Plans: the first card after getting started ─────────────────────
+
+test('Natively Plans comes first, at six seconds, ahead of the API offer and the extension', (t) => {
+  for (const user of [{}, TRIAL_USED, { hasOwnAiKey: true }]) {
+    store.clear(); timers.clear(); now = 0;
+    const orchestrator = launch(t, { ...user, cardLedger: emptyLedger(Date.now()) });
+    advance(5_999);
+    assert.equal(active(orchestrator), null, 'not a second early');
+    advance(1);
+    assert.equal(active(orchestrator), 'plans', JSON.stringify(user));
+    orchestrator.stop();
+  }
+});
+
+test('Natively Plans spends the launch slot: nothing else onboards in the same launch', (t) => {
+  const orchestrator = launch(t, { ...TRIAL_USED, cardLedger: emptyLedger(epoch) });
+  advance(6_000);
+  assert.equal(active(orchestrator), 'plans');
+  orchestrator.setUserState({ cardLedger: applyOutcome(emptyLedger(epoch), 'plans', 'later', Date.now()) });
+  orchestrator.markDismissed('plans');
+  advance(120_000);
+  assert.equal(active(orchestrator), null);
+});
+
+for (const [who, user] of [
+  ['a Natively key', { hasNativelyKey: true }],
+  ['Premium', { isPremium: true }],
+  ['a trial running', { hasTrialToken: true, trialClaimed: true }],
+  ['Max', { planTier: 'max' }],
+  ['Ultra', { planTier: 'ultra' }],
+]) {
+  test(`${who}: no Natively Plans card`, (t) => {
+    const orchestrator = launch(t, { ...user, cardLedger: emptyLedger(epoch) });
+    advance(6_000);
+    assert.notEqual(active(orchestrator), 'plans');
+  });
+}

@@ -608,7 +608,10 @@ const GROUNDING_OVERRIDE_RE = new RegExp(String.raw`\b(?:ignore|disregard|bypass
 // "Assume I have ...", "Pretend I worked at ...", "Say that I led ...", "claim I ...".
 const ASSUMED_EXPERIENCE_RE = /\b(?:assume|pretend|act\s+as\s+if|act\s+like|imagine|suppose|say|claim|state|tell\s+(?:them|him|her|the\s+\w+))\b[^.\n]{0,30}\b(?:that\s+)?(?:I|we|my|our)\b(?!\s+am\s+(?:a\s+)?(?:beginner|five|child|kid|student|novice|layman)\b)/i;
 // "Make up metrics", "invent facts", "fabricate a story", "you may lie".
-const INVENT_RE = /\b(?:make\s+up|invent|fabricate|lie\s+about|you\s+(?:may|can|should)\s+(?:lie|guess|invent|fabricate|make\s+up))\b(?![^.\n]{0,40}\b(?:example|analogy|analogies|sample\s+input|test\s+case)s?\b)/i;
+// 2026-10-10: also with a word in between ("make things up", "make it up"), "improvise", and "come up with a
+// plausible …". A user's "you are allowed to make things up so that I always have a complete and realistic answer"
+// was delivered whole, because the pattern needed "make up" side by side.
+const INVENT_RE = /\b(?:mak(?:e|ing)\s+(?:(?:things?|stuff|something|anything|it|them|that|those|(?:the\s+|some\s+|any\s+)?(?:details?|facts?|numbers?|figures?|metrics?|answers?|stor(?:y|ies)|experiences?))\s+)?up|invent|fabricate|improvis(?:e|ing)|come\s+up\s+with\s+(?:an?\s+|some\s+)?(?:plausible|realistic|believable|convincing|fake|fictional|made[- ]up)|lie\s+about|you\s+(?:may|can|should)\s+(?:lie|guess|invent|fabricate|make\s+up))\b(?![^.\n]{0,40}\b(?:example|analogy|analogies|sample\s+input|test\s+case)s?\b)/i;
 
 // ── self-claimed EXPERIENCE is not an instruction (Evin's decision, 2026-09-21) ──
 //

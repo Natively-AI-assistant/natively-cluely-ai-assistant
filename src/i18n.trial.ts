@@ -64,6 +64,19 @@ const ROWS: Record<string, Row> = {
     'プランを選ぶか自分のキーを追加すると、引き続き回答を受け取れます。',
     'Elige un plan o añade tus propias claves para seguir recibiendo respuestas.',
   ],
+  // When the trial's AI allowance, not its clock, is what runs out (2026-11-03).
+  "The trial's AI answers are nearly used. Pick a plan or add your own keys to keep getting answers.": [
+    'Ответы ИИ в пробном периоде почти закончились. Выберите тариф или добавьте свои ключи, чтобы и дальше получать ответы.',
+    '试用的 AI 回答即将用完。选择套餐或添加你自己的密钥，以继续获得回答。',
+    'トライアルの AI 回答はまもなく上限です。プランを選ぶか自分のキーを追加すると、引き続き回答を受け取れます。',
+    'Las respuestas de IA de la prueba casi se han agotado. Elige un plan o añade tus propias claves para seguir recibiendo respuestas.',
+  ],
+  "The trial's AI answers are used up. Pick a plan or add your own keys to keep getting answers.": [
+    'Ответы ИИ в пробном периоде закончились. Выберите тариф или добавьте свои ключи, чтобы и дальше получать ответы.',
+    '试用的 AI 回答已用完。选择套餐或添加你自己的密钥，以继续获得回答。',
+    'トライアルの AI 回答は上限に達しました。プランを選ぶか自分のキーを追加すると、引き続き回答を受け取れます。',
+    'Las respuestas de IA de la prueba se han agotado. Elige un plan o añade tus propias claves para seguir recibiendo respuestas.',
+  ],
   'See plans': ['Посмотреть тарифы', '查看套餐', 'プランを見る', 'Ver planes'],
 
   // ── It could not start by itself ──

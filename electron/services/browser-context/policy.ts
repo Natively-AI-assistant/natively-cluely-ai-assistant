@@ -26,7 +26,7 @@ export const SENSITIVE_CATEGORIES: ReadonlySet<BrowserContextCategory> = new Set
 ]);
 
 /** Coding categories eligible to auto-attach at sufficient confidence. */
-const CODING_CATEGORIES: ReadonlySet<BrowserContextCategory> = new Set([
+export const CODING_CATEGORIES: ReadonlySet<BrowserContextCategory> = new Set([
   'coding_problem',
   'coding_editor',
   'interview_assessment',

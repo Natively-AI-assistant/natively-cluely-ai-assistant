@@ -13,6 +13,7 @@ import { isMac } from '../../utils/platformUtils';
 import { NativelyGlyph } from './help/HelpGraphics';
 import { Disclosure, DisclosureChevron } from '../ui/AccordionSection';
 import { SettingsToggle } from './SettingsToggle';
+import { copyText } from '../../lib/copyText';
 
 // Companion is built from the parts General and Audio are built from, not from a
 // system of its own: Audio's section heading, General's row (40px tile,
@@ -189,7 +190,7 @@ function useCopyFlash(ms = 1200): [boolean, (text: string | null) => Promise<voi
     async (text: string | null) => {
       if (!text) return;
       try {
-        await navigator.clipboard.writeText(text);
+        await copyText(text);
         setCopied(true);
         clearTimeout(timer.current);
         timer.current = setTimeout(() => setCopied(false), ms);
@@ -286,6 +287,8 @@ interface CtxOption {
   desc: string;
   Icon: React.ComponentType<{ size?: number }>;
   experimental?: boolean;
+  /** Has no effect while this other switch is off, so it shows disabled. */
+  requires?: keyof BrowserContextSettings;
 }
 
 // Resolved BrowserContextSettings field → the IPC's browser* setting key.
@@ -303,13 +306,8 @@ const PRIMARY_CTX: CtxOption[] = [
     label: 'Auto-attach coding context',
     Icon: Paperclip,
     desc: 'Capture the problem and attach it when you ask for an answer.',
-  },
-  {
-    field: 'askBeforeUnknown',
-    ipcKey: 'browserAskBeforeUnknown',
-    label: 'Ask before attaching unknown pages',
-    Icon: HelpCircle,
-    desc: "If a page can't be classified confidently, ask before attaching it.",
+    // The capture path attaches only pages auto-detect recognised.
+    requires: 'autoDetectCoding',
   },
 ];
 
@@ -322,6 +320,16 @@ const MORE_CTX: CtxOption[] = [
     label: 'AI page classifier',
     Icon: Sparkles,
     desc: 'Classify unknown pages from sanitized metadata.',
+  },
+  {
+    // Stored as browserAskBeforeUnknown; nothing asks, so a coding page the
+    // classifier is unsure about is left for a manual capture (autoContextVerdict).
+    field: 'askBeforeUnknown',
+    ipcKey: 'browserAskBeforeUnknown',
+    label: 'Hold back unsure pages',
+    Icon: HelpCircle,
+    desc: "When the classifier isn't sure a page is a coding problem, leave it for you to capture.",
+    requires: 'aiClassifierEnabled',
   },
   {
     field: 'autoDetectJobDescriptions',
@@ -575,11 +583,12 @@ const CompanionRow: React.FC<{
 );
 
 // General's switch, with General's track colours passed exactly as it passes them.
-const Switch: React.FC<{ checked: boolean; onChange: () => void; label: string }> = ({ checked, onChange, label }) => (
+const Switch: React.FC<{ checked: boolean; onChange: () => void; label: string; disabled?: boolean }> = ({ checked, onChange, label, disabled }) => (
   <SettingsToggle
     checked={checked}
     onChange={onChange}
     label={label}
+    disabled={disabled}
     className={checked ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
   />
 );
@@ -876,7 +885,10 @@ export const PhoneMirrorSettings: React.FC = () => {
   const onLan = view.bindAddress === '0.0.0.0';
   const arming = armDeadline !== null;
   const onArmExpired = useCallback(() => setArmDeadline(null), []);
-  const moreOnCount = MORE_CTX.filter((o) => ctx[o.field]).length;
+  // A switch that is on but waiting on another (Hold back unsure pages, on by
+  // default, does nothing until the AI classifier is on) is not counted until
+  // that one is on.
+  const moreOnCount = MORE_CTX.filter((o) => ctx[o.field] && (!o.requires || ctx[o.requires])).length;
 
   const phoneBusyShown = useSettledFlag(busy === 'enable' || busy === 'disable');
   const lanBusyShown = useSettledFlag(busy === 'lan');
@@ -996,6 +1008,7 @@ export const PhoneMirrorSettings: React.FC = () => {
             void onToggleCtx(o.field, o.ipcKey);
           }}
           label={t(o.label)}
+          disabled={o.requires ? !ctx[o.requires] : undefined}
         />
       }
     />

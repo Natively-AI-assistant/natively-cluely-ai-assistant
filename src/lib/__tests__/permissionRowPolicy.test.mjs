@@ -9,9 +9,14 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+
 import {
   describePermRow,
   allPermissionsResolved,
+  statusPollIntervalMs,
 } from '../permissionRowPolicy.mjs';
 
 describe('describePermRow — microphone, darwin', () => {
@@ -206,5 +211,37 @@ describe('allPermissionsResolved', () => {
       allPermissionsResolved('darwin', { microphone: 'restricted', screen: 'granted' }),
       true,
     );
+  });
+});
+
+describe('statusPollIntervalMs', () => {
+  test('win32 re-reads every 2 s while the card is open', () => {
+    assert.equal(statusPollIntervalMs('win32'), 2000);
+  });
+
+  test('darwin relies on the focus refresh, never a timer', () => {
+    assert.equal(statusPollIntervalMs('darwin'), null);
+  });
+
+  test('any other or unknown platform does not poll', () => {
+    for (const platform of ['linux', 'freebsd', undefined, null, '']) {
+      assert.equal(statusPollIntervalMs(platform), null, String(platform));
+    }
+  });
+
+  // The 2 s timer is only cheap because the win32 branch of permissions:check
+  // reads the microphone and nothing else. A capture probe added there would
+  // run on every tick, so this pins the two together.
+  test('the win32 check the timer calls runs no capture probe', () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const ipc = readFileSync(resolve(here, '../../../electron/ipcHandlers.ts'), 'utf8');
+    const start = ipc.indexOf("safeHandle('permissions:check'");
+    assert.ok(start > 0, 'permissions:check handler found');
+    const win = ipc.indexOf("process.platform === 'win32'", start);
+    const end = ipc.indexOf('// Linux', win);
+    assert.ok(win > start && end > win, 'win32 branch found');
+    const branch = ipc.slice(win, end);
+    assert.match(branch, /getMediaAccessStatus\('microphone'\)/);
+    assert.doesNotMatch(branch, /desktopCapturer|getSources|await /);
   });
 });

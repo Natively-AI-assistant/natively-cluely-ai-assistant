@@ -131,12 +131,15 @@ describe('the user\'s notes with the meeting (database)', () => {
     const fakeSession = (startedAt, transcript, metadata) => {
         let lines = [...transcript];
         let meta = metadata;
+        let start = startedAt;
         return {
             flushInterimTranscript() {},
-            getSessionStartTime: () => startedAt,
+            getSessionStartTime: () => start,
+            markMeetingStart: (at) => { start = at; },
             getMeetingMetadata: () => meta,
-            getFullTranscript: () => lines,
-            getFullUsage: () => [],
+            // Stop and the live copy save the whole meeting (2026-10-15).
+            getPersistableTranscript: () => lines,
+            getPersistableUsage: () => [],
             getFullSessionContext: () => '',
             reset() { lines = []; meta = null; },
         };

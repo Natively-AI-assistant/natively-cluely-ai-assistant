@@ -10,6 +10,7 @@ import {
 } from './keybindRegistrationState';
 import { isRegisterableAccelerator, probeAccelerator } from './acceleratorValidation';
 import { buildChordTable, type Win32Chord } from './winChord';
+import { buildMacEditChordTable, type MacEditChord } from './macEditChord';
 import { SettingsManager } from './SettingsManager';
 
 export interface KeybindConfig {
@@ -40,7 +41,7 @@ export const DEFAULT_KEYBINDS: KeybindConfig[] = [
     { id: 'chat:clarify', label: 'Clarify', accelerator: 'CommandOrControl+2', isGlobal: true, defaultAccelerator: 'CommandOrControl+2' },
     { id: 'chat:dynamicAction4', label: 'Recap / Brainstorm', accelerator: 'CommandOrControl+3', isGlobal: true, defaultAccelerator: 'CommandOrControl+3' },
     { id: 'chat:followUp', label: 'Follow Up', accelerator: 'CommandOrControl+4', isGlobal: true, defaultAccelerator: 'CommandOrControl+4' },
-    { id: 'chat:answer', label: 'Answer / Record', accelerator: 'CommandOrControl+5', isGlobal: true, defaultAccelerator: 'CommandOrControl+5' },
+    { id: 'chat:answer', label: 'Speak', accelerator: 'CommandOrControl+5', isGlobal: true, defaultAccelerator: 'CommandOrControl+5' },
     { id: 'chat:codeHint', label: 'Get Code Hint', accelerator: 'CommandOrControl+6', isGlobal: true, defaultAccelerator: 'CommandOrControl+6' },
     { id: 'chat:brainstorm', label: 'Brainstorm Approaches', accelerator: 'CommandOrControl+7', isGlobal: true, defaultAccelerator: 'CommandOrControl+7' },
     // Accepts the overlay's suggestion card (DynamicActionBar). Global like the
@@ -73,6 +74,11 @@ export const DEFAULT_KEYBINDS: KeybindConfig[] = [
     { id: 'window:move-down', label: 'Move Window Down', accelerator: 'CommandOrControl+Shift+Down', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Down' },
     { id: 'window:move-left', label: 'Move Window Left', accelerator: 'CommandOrControl+Shift+Left', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Left' },
     { id: 'window:move-right', label: 'Move Window Right', accelerator: 'CommandOrControl+Shift+Right', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Right' },
+
+    // Dictation (services/dictation): press to record the mic, press again to
+    // copy the tidied text to the clipboard. Registered only while Settings ›
+    // Audio › Dictation is on (shouldRegister), so by default it takes no key.
+    { id: 'dictation:toggle', label: 'Dictate to Clipboard', accelerator: 'CommandOrControl+Shift+D', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+D' },
 ];
 
 export class KeybindManager {
@@ -110,6 +116,16 @@ export class KeybindManager {
         this.notifyChordsChanged();
     }
 
+    /**
+     * A setting that decides whether some shortcut is registered changed
+     * (Settings › Audio › Dictation): re-register and re-arm the Windows guard.
+     */
+    public refreshRegistrations(): void {
+        this.registerGlobalShortcuts();
+        this.notifyChordsChanged();
+        this.broadcastUpdate();
+    }
+
     public getGlobalShortcutsEnabled(): boolean {
         return SettingsManager.getInstance().get('globalShortcutsEnabled') !== false;
     }
@@ -128,6 +144,9 @@ export class KeybindManager {
         // OS-wide. Without it a hidden stealth window (no Dock/taskbar icon)
         // has no way back short of the tray or a relaunch.
         if (!this.getGlobalShortcutsEnabled()) return actionId === 'general:toggle-visibility';
+        // Dictation's key is taken from other apps only while dictation is on,
+        // in both modes (in a meeting a press says why it is refused).
+        if (actionId === 'dictation:toggle') return SettingsManager.getInstance().get('dictationEnabled') === true;
         if (this.activeMode === 'overlay') return true;
 
         // In launcher mode, register visibility shortcuts. window:move-* is NOT
@@ -190,6 +209,13 @@ export class KeybindManager {
      */
     public getGlobalChordTable(): Win32Chord[] {
         return buildChordTable(
+            Array.from(this.keybinds.values()).filter(kb => this.shouldRegister(kb.id)),
+        );
+    }
+
+    /** The macOS tap's table: the app's own Cmd+A/C/V/X binds (macEditChord.ts). */
+    public getMacEditChordTable(): MacEditChord[] {
+        return buildMacEditChordTable(
             Array.from(this.keybinds.values()).filter(kb => this.shouldRegister(kb.id)),
         );
     }

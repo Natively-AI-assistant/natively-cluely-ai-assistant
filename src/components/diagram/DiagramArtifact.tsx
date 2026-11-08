@@ -69,6 +69,7 @@ import {
   prefersReducedMotion,
   type DiagramExportFormat,
 } from '../../lib/diagram/diagramRuntime';
+import { copyText } from '../../lib/copyText';
 
 export type DiagramArtifactKind = 'mermaid' | 'chart' | 'notation';
 
@@ -175,9 +176,7 @@ function useCopied(): [boolean, (text: string) => void] {
     if (timer.current) clearTimeout(timer.current);
   }, []);
   const copy = useCallback((text: string) => {
-    const p = navigator.clipboard?.writeText(text);
-    if (!p) return;
-    p.then(() => {
+    copyText(text).then(() => {
       setCopied(true);
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => setCopied(false), 1800);

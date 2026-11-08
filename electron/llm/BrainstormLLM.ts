@@ -38,6 +38,9 @@ const activeModeRealTimePrompt: RealTimePromptReader = () => {
     }
 };
 
+/** Shown when the provider call fails; it is not a brainstorm, so it is never recorded as one. */
+export const BRAINSTORM_STREAM_FAILED = "I couldn't generate brainstorm approaches. Make sure your question is visible and try again.";
+
 export class BrainstormLLM {
     private llmHelper: LLMHelper;
     private readRealTimePrompt: RealTimePromptReader;
@@ -122,7 +125,7 @@ export class BrainstormLLM {
             yield* this.llmHelper.streamChat(message, imagePaths, undefined, promptOverride, true);
         } catch (error) {
             console.error("[BrainstormLLM] Stream failed:", error);
-            yield "I couldn't generate brainstorm approaches. Make sure your question is visible and try again.";
+            yield BRAINSTORM_STREAM_FAILED;
         }
     }
 }

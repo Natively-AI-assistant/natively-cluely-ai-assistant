@@ -1,4 +1,5 @@
 import type { WorkerInitMessage } from './types';
+import { getBoundedOnnxSessionOptions } from '../../utils/onnxThreadConfig';
 
 /**
  * Resolves the optimal ONNX Runtime execution providers and per-module
@@ -92,11 +93,38 @@ function dtypeSizeFactor(dtype: string | Record<string, string>): number {
  * consistent. The cacheDir lookup is lazy (avoids importing electron from
  * this leaf module).
  */
-export function buildWorkerInitMessage(modelId: string): WorkerInitMessage {
+export function buildWorkerInitMessage(
+    modelId: string,
+    opts: { forDownload?: boolean } = {},
+): WorkerInitMessage {
     // Late require — modelManager imports electron, which isn't available
     // when this module is first loaded in some contexts (test harnesses).
-    const { getModelsDir, getModelSizeBytes, getModelExternalDataFormat } = require('./modelManager');
+    const { getModelsDir, getModelSizeBytes, getModelExternalDataFormat, resolveModelSourceRepo, isModelCached, isModelDownloadComplete, getModelDownloadRepo, getResumableDownloadFiles } = require('./modelManager');
     const { executionProviders, dtype } = resolveInferenceConfig();
+    const cacheDir = getModelsDir();
+    // Which repo's files to load: the current export, or the one an earlier
+    // version downloaded when only that is on disk (see WhisperModelInfo.repoId).
+    // A download (the download service's worker) always targets the current
+    // export, even next to an older copy: that is how a model is updated.
+    // On a failure, the id itself, which is what every model loaded before.
+    let sourceRepoId: string = modelId;
+    try {
+        sourceRepoId = opts.forDownload
+            ? getModelDownloadRepo(modelId)
+            : resolveModelSourceRepo(modelId, dtype, cacheDir);
+    } catch {
+        sourceRepoId = modelId;
+    }
+    // Not installed: the worker fetches the big files itself, resumably, before
+    // pipeline() (see resumableDownload.ts). Best-effort: on any failure here
+    // transformers.js downloads them as it always did.
+    let resumableFiles: string[] = [];
+    try {
+        const missing = opts.forDownload ? !isModelDownloadComplete(modelId, dtype) : !isModelCached(modelId, dtype);
+        if (missing) resumableFiles = getResumableDownloadFiles(modelId, dtype);
+    } catch {
+        resumableFiles = [];
+    }
     // Catalog download size — progress-bar denominator from byte zero. The
     // lookup is best-effort: if it's missing (unknown id) or the call fails
     // for any reason, we send 0 and the worker falls back to summing the
@@ -132,10 +160,33 @@ export function buildWorkerInitMessage(modelId: string): WorkerInitMessage {
     } catch {
         sessionLayout = undefined;
     }
+    // Parakeet TDT: the folder chosen above decides the engine. Its CoreML
+    // repo (only ever chosen on a Mac that can use the Neural Engine) runs on
+    // the helper; the ONNX files under the id run on the CPU, as before.
+    // Best-effort like the lookups above: a failure means the ONNX engine.
+    let parakeetBackend: { parakeetBackend: 'coreml-ane'; aneHelperPath: string } | undefined;
+    if (sessionLayout === 'parakeet-tdt') {
+        try {
+            const { parakeetCoreMlModelForRepo, resolveParakeetBackend } = require('./parakeet/aneBackend');
+            const resolved = resolveParakeetBackend();
+            if (parakeetCoreMlModelForRepo(sourceRepoId)?.modelId === modelId
+                && resolved.backend === 'coreml-ane' && resolved.helperPath) {
+                parakeetBackend = { parakeetBackend: 'coreml-ane', aneHelperPath: resolved.helperPath };
+            }
+        } catch {
+            parakeetBackend = undefined;
+        }
+    }
     return {
         type: 'init',
         modelId,
-        cacheDir: getModelsDir(),
+        ...(sourceRepoId !== modelId ? { sourceRepoId } : {}),
+        ...(parakeetBackend ?? {}),
+        ...(resumableFiles.length > 0 ? { resumableFiles } : {}),
+        ...(isWhisperEncoderModel(modelId, sessionLayout)
+            ? { intraOpThreads: getBoundedOnnxSessionOptions('whisper-encode').intraOpNumThreads }
+            : {}),
+        cacheDir,
         // Nemotron and Parakeet TDT opt OUT of the platform accelerator — see
         // resolveNemotronExecutionProviders() / resolveParakeetExecutionProviders()
         // for the measurements.
@@ -149,6 +200,19 @@ export function buildWorkerInitMessage(modelId: string): WorkerInitMessage {
         useExternalDataFormat,
         sessionLayout,
     };
+}
+
+/**
+ * Whisper and Distil-Whisper, the models whose encoder pads every call to 30 s
+ * and so gets the multi-thread default (see OnnxWorkload 'whisper-encode').
+ * Moonshine, Parakeet and Nemotron are excluded.
+ */
+export function isWhisperEncoderModel(
+    modelId: string,
+    sessionLayout?: 'encoder-decoder' | 'single' | 'nemotron-rnnt' | 'parakeet-tdt',
+): boolean {
+    if (sessionLayout && sessionLayout !== 'encoder-decoder') return false;
+    return /(^|\/)(distil-)?whisper[-/]/i.test(modelId);
 }
 
 /**

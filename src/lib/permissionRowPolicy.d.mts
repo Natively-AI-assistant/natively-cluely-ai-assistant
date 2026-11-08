@@ -34,3 +34,5 @@ export function allPermissionsResolved(
   platform: string | undefined | null,
   statuses: { microphone: RowStatus | string; screen: RowStatus | string },
 ): boolean;
+
+export function statusPollIntervalMs(platform: string | undefined | null): number | null;

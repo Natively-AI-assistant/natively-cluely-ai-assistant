@@ -17,6 +17,7 @@ import type { CaptureRegistry } from './registry/registry-types';
 import { buildSafeMetadata, classifyTab } from './classifier/tab-classifier';
 import { gatherPageSignals } from './page-signals';
 import { runExtractor } from './extractors';
+import { countUnreadableFormulas, FORMULA_IN_IMAGE_RE, FORMULAS_NOTE, UNREADABLE_FORMULA } from '../math-text';
 import type { BrowserContextCategory, CaptureMode, ContextEnvelope, SafeWebsiteMetadata, TabCandidate } from './types';
 
 export interface SmartCaptureDeps {
@@ -74,6 +75,11 @@ export interface SmartCaptureDeps {
    * made the request. The other paths are unaffected.
    */
   codingEnabled?: boolean;
+  /**
+   * SVG markup of a formula the page gives no text for, to draw into an image
+   * (#645). Only when the desktop takes formula images; see runExtractor.
+   */
+  serializeFormula?: (formula: Element) => string | null;
 }
 
 /** Policies that may auto-attach without an explicit user action. */
@@ -95,6 +101,8 @@ export interface SmartCaptureResult {
    * page to the AI either).
    */
   safeMetadata?: SafeWebsiteMetadata;
+  /** SVG markup of formula N at index N - 1, for each `[formula N, see image]` (with serializeFormula). */
+  formulas?: string[];
 }
 
 /** A short, lowercased visible-text sample for keyword signals (not transmitted). */
@@ -178,7 +186,7 @@ export function smartCapture(deps: SmartCaptureDeps): SmartCaptureResult {
   }
 
   const platform = findPlatform(registry, host, url);
-  const { envelope, dom } = runExtractor({
+  const { envelope, dom, formulas } = runExtractor({
     document: deps.document,
     getSelection: deps.getSelection,
     readabilityFactory: deps.readabilityFactory,
@@ -192,7 +200,44 @@ export function smartCapture(deps: SmartCaptureDeps): SmartCaptureResult {
     // for EXPERIMENTAL full-page mode and for an AI-approved unknown page (the
     // desktop AI judged it worth capturing, so a bare selection is not enough).
     fullPage: deps.fullPageMode || (deps.aiApproved && candidate.matchedCategory === 'unknown'),
+    serializeFormula: deps.serializeFormula,
   });
 
-  return { candidate, envelope, dom, blocked: false, safeMetadata };
+  return { candidate, envelope, dom, blocked: false, safeMetadata, ...(formulas ? { formulas } : {}) };
+}
+
+/**
+ * The capture after the content script tried to draw its formulas: each
+ * `[formula N, see image]` whose N is not in `drawn` becomes
+ * [formula not captured], in the dom and in the envelope alike. The markup is
+ * dropped: the images carry what is drawn. `unreadableFormulas` counts the
+ * formulas no image shows, each missing number once.
+ */
+export function finishSmartFormulaImages(
+  result: SmartCaptureResult,
+  drawn: ReadonlySet<number>,
+): SmartCaptureResult & { unreadableFormulas: number } {
+  const missing = new Set<number>();
+  const finish = (text: string) =>
+    text.replace(FORMULA_IN_IMAGE_RE, (marker, n: string) => {
+      if (drawn.has(Number(n))) return marker;
+      missing.add(Number(n));
+      return UNREADABLE_FORMULA;
+    });
+  const unreadable = countUnreadableFormulas(result.dom.replace(FORMULAS_NOTE, ''));
+  const dom = finish(result.dom);
+  let envelope = result.envelope;
+  if (envelope) {
+    const payload: Record<string, unknown> = { ...(envelope.payload as unknown as Record<string, unknown>) };
+    for (const [key, value] of Object.entries(payload)) {
+      if (typeof value === 'string') payload[key] = finish(value);
+    }
+    envelope = {
+      ...envelope,
+      meta: { ...envelope.meta, ...(envelope.meta.title ? { title: finish(envelope.meta.title) } : {}) },
+      payload: payload as unknown as typeof envelope.payload,
+    };
+  }
+  const { formulas: _drawnFrom, ...rest } = result;
+  return { ...rest, dom, envelope, unreadableFormulas: unreadable + missing.size };
 }

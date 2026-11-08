@@ -4,15 +4,24 @@
  * @huggingface/transformers' pipeline() call. Nemotron does not go through
  * that pipeline (raw ONNX sessions via NemotronEngine — see whisperWorker.ts's
  * `nemotron-rnnt` init branch), so this module owns the download step
- * explicitly: fetch each required file over HTTP, write to a `.partial`
+ * explicitly: fetch each required file over HTTP, write to a `.partial.*`
  * sibling, then atomically rename into place so a killed process never
  * leaves a file that looks complete but isn't.
+ *
+ * The partial name is unique per download (pid + time + random), the same
+ * scheme Parakeet uses. It used to be one fixed `<file>.partial`: two workers
+ * fetching the same model wrote into the same partial, the first to finish
+ * renamed it away, and the second's rename threw "no such file or directory" —
+ * which was then read as a corrupt model and deleted the copy that had just
+ * finished. LocalModelDownloadService is now the single download owner, so two
+ * writers should not happen at all; this keeps the files safe if they ever do.
  */
 import fs from 'fs';
 import path from 'path';
 import { finished } from 'stream/promises';
 
 import { NEMOTRON_REQUIRED_FILES } from '../modelManager';
+import { cleanOrphanedPartialFiles } from '../parakeet/downloadFiles';
 
 export const NEMOTRON_REPO = 'onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4';
 // Single source of truth for the file list lives in modelManager.ts (Task 2) —
@@ -43,6 +52,9 @@ export async function downloadNemotronFiles(
   onProgress: (pct: number) => void,
 ): Promise<void> {
   fs.mkdirSync(destDir, { recursive: true });
+  // Partials left by a process that is no longer running. A live download's
+  // partial (another worker in this process, or another instance) is kept.
+  cleanOrphanedPartialFiles(destDir);
   // The reader loop below fires once per network chunk — for the 693MB
   // `encoder.onnx.data` file that's tens of thousands of callbacks. Each
   // callback becomes a `parentPort.postMessage` → LocalModelDownloadService
@@ -77,46 +89,73 @@ export async function downloadNemotronFiles(
     // would treat as a valid, complete download forever.
     const expectedBytesHeader = response.headers.get('content-length');
     const expectedBytes = expectedBytesHeader !== null ? Number(expectedBytesHeader) : null;
-    const fileStream = fs.createWriteStream(`${destPath}.partial`);
+    const partialPath = `${destPath}.partial.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
+    const fileStream = fs.createWriteStream(partialPath);
     let fileBytes = 0;
-    const reader = response.body.getReader();
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      fileBytes += value.byteLength;
-      // Honor WriteStream backpressure: write() returning false means the
-      // internal buffer is over its highWaterMark — await 'drain' before
-      // reading more, or a fast network + slow disk accumulates hundreds of
-      // MB of queued Buffers in this worker's heap on the 690MB encoder
-      // weights (the memory preflight ran BEFORE this download, and 3 real
-      // ONNX sessions get created right after it). (2026-08-14 code review.)
-      if (!fileStream.write(value)) {
-        await new Promise<void>((resolve) => fileStream.once('drain', resolve));
+    try {
+      const reader = response.body.getReader();
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        fileBytes += value.byteLength;
+        // Honor WriteStream backpressure: write() returning false means the
+        // internal buffer is over its highWaterMark — await 'drain' before
+        // reading more, or a fast network + slow disk accumulates hundreds of
+        // MB of queued Buffers in this worker's heap on the 690MB encoder
+        // weights (the memory preflight ran BEFORE this download, and 3 real
+        // ONNX sessions get created right after it). (2026-08-14 code review.)
+        if (!fileStream.write(value)) {
+          await new Promise<void>((resolve) => fileStream.once('drain', resolve));
+        }
+        const pct = Math.min(99, Math.round(((downloadedSoFar + fileBytes) / TOTAL_APPROX_BYTES) * 100));
+        report(pct);
       }
-      const pct = Math.min(99, Math.round(((downloadedSoFar + fileBytes) / TOTAL_APPROX_BYTES) * 100));
-      report(pct);
+      fileStream.end();
+      await finished(fileStream);
+      if (expectedBytes !== null && Number.isFinite(expectedBytes) && fileBytes !== expectedBytes) {
+        // A connection that ended cleanly but early. Reported as a download
+        // failure (see loadFailure.ts), which leaves the files that DID arrive
+        // whole in place for the retry.
+        throw new Error(
+          `Truncated download for ${file}: expected ${expectedBytes} bytes, received ${fileBytes}`,
+        );
+      }
+      // Another download finished this file first: keep theirs, drop ours.
+      if (fs.existsSync(destPath) && fs.statSync(destPath).size > 0) {
+        fs.rmSync(partialPath, { force: true });
+      } else {
+        fs.renameSync(partialPath, destPath);
+      }
+    } catch (downloadErr) {
+      // Never leave a partial behind: closing first matters on Windows, where
+      // an open file cannot be removed.
+      fileStream.destroy();
+      try { fs.rmSync(partialPath, { force: true }); } catch { /* still locked — cleanOrphanedPartialFiles gets it later */ }
+      throw downloadErr;
     }
-    fileStream.end();
-    await finished(fileStream);
-    if (expectedBytes !== null && Number.isFinite(expectedBytes) && fileBytes !== expectedBytes) {
-      // Clean up the partial file before throwing — an init failure surfaces
-      // this as an 'error' worker message (see whisperWorker.ts), which
-      // LocalWhisperSTT then classifies via isCorruptModelError and purges
-      // the whole model directory on retry; there is no reason to leave a
-      // known-truncated `.partial` sitting alongside it in the meantime.
-      fs.rmSync(`${destPath}.partial`, { force: true });
-      throw new Error(
-        `Truncated download for ${file}: expected ${expectedBytes} bytes, received ${fileBytes}`,
-      );
-    }
-    fs.renameSync(`${destPath}.partial`, destPath);
     downloadedSoFar += fileBytes;
   }
   report(99);
 }
 
+/**
+ * Clean up after an interrupted download: only the `.partial.*` files. A file
+ * under its real name was renamed there after its length checked out, so it is
+ * complete; deleting it turned a quit during the final load into a full 700 MB
+ * download at the next launch. The download skips files already present.
+ */
 export function deletePartialNemotronFiles(destDir: string): void {
+  let entries: string[];
+  try { entries = fs.readdirSync(destDir); } catch { return; }
+  for (const entry of entries) {
+    if (!entry.includes('.partial.')) continue;
+    try { fs.rmSync(path.join(destDir, entry), { force: true }); } catch { /* a locked file is retried next time */ }
+  }
+}
+
+/** Remove the whole model folder: its files failed to load as damaged. */
+export function discardNemotronFiles(destDir: string): void {
   if (!fs.existsSync(destDir)) return;
   fs.rmSync(destDir, { recursive: true, force: true });
 }

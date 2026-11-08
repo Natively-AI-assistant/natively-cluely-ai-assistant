@@ -1,8 +1,9 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { animate, motion, useMotionValue, useReducedMotion } from 'framer-motion';
-import { CalendarClock, CalendarX, CirclePlay, Clock3, FileText, Gauge, Heart, KeyRound, Mail, Power, Receipt, Ticket } from 'lucide-react';
+import { CalendarClock, CalendarX, CirclePlay, Clock3, FileText, Gauge, HandCoins, Heart, KeyRound, Mail, Megaphone, Power, Receipt, Ticket } from 'lucide-react';
 import { AccordionSection } from '../ui/AccordionSection';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
+import { AFFILIATE_PROGRAM_URL, CREATORS_PROGRAM_URL } from '../../lib/partnerLinks';
 import './HowItWorksRefund.css';
 
 // Extracted from NativelyApiSettings so PlansSettings can order this AFTER the
@@ -41,7 +42,7 @@ const SETTINGS_BTN =
 const PORTAL_URL = 'https://customer.dodopayments.com/';
 const POLICY_URL = 'https://natively.software/refundpolicy';
 const DEMO_URL = 'https://natively.software/pro';
-const CONTACT_EMAIL = 'natively.contact@gmail.com';
+const CONTACT_EMAIL = 'refund@heynatively.com';
 
 /** This section's indigo — theme-aware, see HowItWorksRefund.css. */
 const INDIGO = 'var(--hiw-indigo)';
@@ -467,7 +468,7 @@ export const HowItWorksRefund: React.FC = () => {
     <AccordionSection
       title="How it works & refund policy"
       description="Setup steps, refund rules and how to cancel."
-      className="bg-bg-item-surface rounded-2xl border-border-subtle !mb-0"
+      className="natively-key-card bg-bg-item-surface rounded-2xl border-border-subtle !mb-0"
       divider={false}
       hoverFill={false}
     >
@@ -486,6 +487,59 @@ export const HowItWorksRefund: React.FC = () => {
         </div>
 
         <PartPanels part={part} dir={dir} content={content} />
+      </div>
+    </AccordionSection>
+  );
+};
+
+/**
+ * The two programs on heynatively.com, above How it works in Plans & Billing.
+ * Folded behind its header like Change plan and How it works (2026-10-24, it
+ * used to stay open): the same AccordionSection, so the three cards open and
+ * close alike, and the programs wait for a click instead of selling on every
+ * visit. The rows are this file's IconRow, so text sits on the same column
+ * as the card below. Join and Open are Manage's button: Liquid Glass in the
+ * periwinkle toggle colour (--hiw-indigo). Copy stays inside what the pages promise (the affiliate page
+ * shows no rate, so neither does this), as on the launcher's program cards.
+ */
+export const PartnerPrograms: React.FC = () => {
+  const openExternal = (url: string) => {
+    (window.electronAPI as any)?.openExternal?.(url);
+  };
+
+  return (
+    <AccordionSection
+      title="Earn with Natively"
+      description="Share Natively and get paid, or get Ultra free."
+      className="natively-key-card bg-bg-item-surface rounded-2xl border-border-subtle !mb-0"
+      divider={false}
+      hoverFill={false}
+    >
+      {/* -mx-5 / -mt-5 cancel the body's p-5, so the tiles sit on the header's
+          text edge and the first row follows the header's own 16px. No more:
+          the panel clips, and a deeper -mt cut the row's top off. -mb-4 leaves
+          the last row 16px from the card's foot, the header's padding again. */}
+      <div className="-mx-5 -mt-5 -mb-4">
+        <IconRow
+          icon={<HandCoins size={20} />}
+          title="Affiliate program"
+          description="A commission on every sale you refer. Each click counts for 30 days."
+          control={(
+            <LiquidGlassButton variant="sky" className="lg-sm" style={INDIGO_BUTTON_STYLE} onClick={() => openExternal(AFFILIATE_PROGRAM_URL)}>
+              Join
+            </LiquidGlassButton>
+          )}
+        />
+        <IconRow
+          icon={<Megaphone size={20} />}
+          title="Creator program"
+          description="Post about Natively in your own words. At 5,000 views, a month of Ultra is yours."
+          control={(
+            <LiquidGlassButton variant="sky" className="lg-sm" style={INDIGO_BUTTON_STYLE} onClick={() => openExternal(CREATORS_PROGRAM_URL)}>
+              Open
+            </LiquidGlassButton>
+          )}
+        />
       </div>
     </AccordionSection>
   );

@@ -190,6 +190,15 @@ async function ensureLoaded(msg: any): Promise<void> {
 }
 
 parentPort.on('message', async (msg: any) => {
+  if (msg?.type === 'shutdown') {
+    // Cooperative stop — see electron/utils/onnxWorkerShutdown.ts. The host
+    // never calls worker.terminate() on this worker: doing that while an ONNX
+    // run() or session load is on this thread aborts the whole app. A message
+    // is only delivered when this thread is idle, so no native call is in
+    // flight here, and process.exit() in a worker thread stops this thread
+    // only.
+    process.exit(0);
+  }
   try {
     if (msg.type === 'init') {
       await ensureLoaded(msg);

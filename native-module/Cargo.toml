@@ -27,7 +27,13 @@ webrtc-vad = "0.4"
 bytemuck = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-cidre = { version = "0.11.10", features = ["ca", "cm", "av", "cat", "dispatch", "ns", "sc", "cf", "blocks", "objc"] }
+# classic-objc-retain-release: on arm64 cidre otherwise retains and releases
+# through objc_retain_x<N> / objc_release_x<N>, register variants libobjc gained
+# in macOS 13. They are strong imports, so on an Apple Silicon Mac running
+# macOS 12 dyld refused the whole module (mic, system audio and every other
+# native export). The classic objc_retain / objc_release exist on every macOS.
+# scripts/lib/native-link-checks.cjs fails the build if the variants come back.
+cidre = { version = "0.11.10", default-features = false, features = ["ca", "cm", "av", "cat", "dispatch", "ns", "sc", "cf", "blocks", "async", "objc", "core_audio", "macos_15_0", "classic-objc-retain-release"] }
 # Used by stealth_window to access NSWindow APIs Electron doesn't expose
 # (becomesKeyOnlyIfNeeded, hidesOnDeactivate, collectionBehavior). objc2 is
 # the actively-maintained Rust↔Objective-C bridge; objc2-app-kit gives strongly
@@ -62,6 +68,13 @@ wasapi = "0.13.0"
 #   Win32_System_LibraryLoader            — GetModuleHandleW (hmod for the LL hook).
 windows = { version = "0.52.0", features = [
     "Win32_Media_Audio",
+    #   Win32_Media_Audio_Endpoints       — IAudioMeterInformation: per-endpoint output
+    #                                       peak, to see which device the meeting plays on.
+    "Win32_Media_Audio_Endpoints",
+    #   Win32_System_Com_StructuredStorage + Win32_System_Variant — required by the
+    #                                       binding's gate on IMMDevice::Activate.
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
     "Win32_System_Com",
     "Win32_System_Threading",
     "Win32_UI_WindowsAndMessaging",
@@ -82,3 +95,19 @@ windows = { version = "0.52.0", features = [
     "Win32_System_Ole",
 ] }
 tracing = "0.1.44"
+
+# Release strip, set per crate. Cargo's default (strip "debuginfo" whenever
+# debug info is off) also applies to the proc macros and build scripts Cargo
+# builds for the host, and rustc strips on macOS with rust-objcopy. With
+# Xcode 27, 7 of the 10 proc-macro dylibs came out of that strip with
+# their string table off an 8-byte boundary. macOS 27's dyld refuses those, so
+# rustc could not load them and stopped with "error[E0463]: can't find crate
+# for `zerofrom_derive`" (seen 2026-11-01 on a clean target/). Those host tools
+# are never shipped, so they are left unstripped. The module we ship keeps the
+# same strip as before on every platform, and build-native.js still pads its
+# string table on macOS (scripts/lib/macho-align-strtab.cjs).
+[profile.release]
+strip = false
+
+[profile.release.package.natively-audio]
+strip = "debuginfo"

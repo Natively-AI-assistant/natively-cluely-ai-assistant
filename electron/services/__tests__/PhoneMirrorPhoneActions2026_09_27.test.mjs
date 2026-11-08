@@ -155,10 +155,18 @@ describe('the phone waits for the label the desktop actually publishes', () => {
     const start = reg.index;
     const next = ipc.indexOf('safeHandle(', start + 10);
     const block = ipc.slice(start, next < 0 ? undefined : next);
-    const m = block.match(/publishAssistantMessage\(\s*[^,]+,\s*[^,]+,\s*'([^']+)'/);
+    const m = block.match(/publishAssistantMessage\(\s*[^,]+,\s*[^,]+,\s*(?:'([^']+)'|PHONE_LABELS\.(\w+))/);
     assert.ok(m, `${channel} publishes to the phone`);
-    return m[1];
+    if (m[1]) return m[1];
+    // The shared label the streamed answer carries too (phoneMirrorLiveAnswers).
+    assert.ok(phoneLabels[m[2]], `PHONE_LABELS.${m[2]} exists`);
+    return phoneLabels[m[2]];
   }
+  const phoneLabels = (() => {
+    const src = read('electron/services/phoneMirrorLiveAnswers.ts');
+    const body = src.slice(src.indexOf('export const PHONE_LABELS = {'), src.indexOf('} as const;', src.indexOf('export const PHONE_LABELS = {')));
+    return Object.fromEntries([...body.matchAll(/(\w+): '([^']+)'/g)].map((x) => [x[1], x[2]]));
+  })();
 
   for (const [action, hop] of Object.entries(CHAIN)) {
     test(`${action}: page expects "${hop.channel}"'s label`, () => {

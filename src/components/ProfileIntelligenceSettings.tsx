@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { failureText } from '../lib/proRefusal.mjs';
 import {
     X, RefreshCw, Upload, Briefcase, Trash2, Check, Globe,
     Building2, Search, AlertCircle, AlertTriangle, Gift, Info, Star,
-    User, CheckCircle, ArrowUpRight, ChevronRight, Paperclip, FileText,
+    User, CheckCircle, ArrowUpRight, ArrowRight, ChevronRight, Paperclip, FileText,
     GraduationCap, FolderKanban, Layers, Mail, MessageSquare, Target,
 } from 'lucide-react';
 import { ThinkingOrb } from 'thinking-orbs';
@@ -13,16 +14,10 @@ import { LiquidGlassButton, useLensTracking } from '../ui-components/LiquidGlass
 import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
 import { Presence } from './settings/SettingsRow';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
-import { CHECKOUT_URLS } from '../config/urls';
+import { UnlockProPlans } from './upgrade/UnlockProPlans';
 import { useConfirmDialog } from './ui/ConfirmDialog';
-
-const openExternal = (url: string) => {
-    if ((window as any).electronAPI?.openExternal) {
-        (window as any).electronAPI.openExternal(url, { surface: 'profile_intelligence' });
-    } else {
-        window.open(url, '_blank', 'noopener,noreferrer');
-    }
-};
+import { OwnAnswersSection } from './OwnAnswersSection';
+import { copyText } from '../lib/copyText';
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const PI_CSS = `
@@ -386,11 +381,11 @@ const PI_CSS = `
     .pi-handoff-in-self,
     .pi-handoff-in > * { animation: pi-handoff-in 560ms var(--pi-ease-expo) backwards; }
     .pi-handoff-in > *:nth-child(2) { animation-delay: 110ms; }
-    .pi-spinner    { animation: pi-spin 0.8s linear infinite; }
+    .pi-spinner    { animation: pi-spin 0.8s var(--ease-linear, linear) infinite; }
     .pi-save-pulse { animation: pi-save-pulse 360ms var(--pi-ease-spring); }
     .pi-skeleton   {
         background: var(--pi-btn-bg);
-        animation: pi-shimmer-pulse 1.4s ease-in-out infinite;
+        animation: pi-shimmer-pulse 1.4s var(--ease-in-out, ease-in-out) infinite;
     }
 
     /* ── Thinking states (transitions.dev) ──────────────────────────────────
@@ -500,13 +495,13 @@ const PI_CSS = `
 
     /* ── Press feedback ── */
     .pi-press {
-        transition: background 180ms var(--pi-ease-out), color 180ms ease,
-                    border-color 180ms ease, transform 160ms var(--pi-ease-out);
+        transition: background var(--duration-quick, 150ms) var(--pi-ease-out), color var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out),
+                    border-color var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out), transform var(--duration-quick, 150ms) var(--pi-ease-out);
     }
     .pi-press:active { transform: scale(0.97); }
     .pi-press-soft {
-        transition: background 180ms var(--pi-ease-out), color 180ms ease,
-                    transform 140ms var(--pi-ease-out);
+        transition: background var(--duration-quick, 150ms) var(--pi-ease-out), color var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out),
+                    transform var(--duration-quick, 150ms) var(--pi-ease-out);
     }
     .pi-press-soft:active { transform: scale(0.92); }
 
@@ -526,11 +521,11 @@ const PI_CSS = `
            answers the click instantly and then takes its time arriving. That
            is what lets it run at 380ms without feeling laggy. */
         transition:
-            transform 380ms var(--pi-ease-expo),
-            opacity 240ms ease;
+            transform var(--duration-slow, 400ms) var(--pi-ease-expo),
+            opacity var(--duration-medium, 350ms) var(--ease-in-out, ease-in-out);
     }
     /* First paint: land on the active item, don't slide down from the top. */
-    .pi-sel-indicator[data-instant='true'] { transition: opacity 160ms ease; }
+    .pi-sel-indicator[data-instant='true'] { transition: opacity var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out); }
 
     /* ── Nav items ── */
     .pi-nav-item {
@@ -540,7 +535,7 @@ const PI_CSS = `
         color: var(--pi-nav-text); background: transparent;
         user-select: none; margin-bottom: 2px;
         position: relative; z-index: 1;
-        transition: background 180ms cubic-bezier(0.23, 1, 0.32, 1), color 180ms ease, transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+        transition: background var(--duration-quick, 150ms) cubic-bezier(0.23, 1, 0.32, 1), color var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out), transform var(--duration-quick, 150ms) cubic-bezier(0.23, 1, 0.32, 1);
         /* backwards, not both. A finished "both" animation keeps applying its
            to-state transform from the animation origin, which sits above
            declared styles in the cascade — so :active below could never take
@@ -567,7 +562,7 @@ const PI_CSS = `
     /* Nav icon */
     .pi-nav-item svg {
         color: var(--pi-nav-icon); flex-shrink: 0;
-        transition: color 180ms ease, transform 260ms var(--pi-ease-spring);
+        transition: color var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out), transform var(--duration-fast, 250ms) var(--pi-ease-spring);
     }
     /* A hair of scale on the active icon. Nobody will name it; it is the
        difference between the row looking selected and looking alive. */
@@ -578,8 +573,8 @@ const PI_CSS = `
         border: 1px solid var(--pi-input-border);
         border-radius: var(--pi-r-lg);
         overflow: hidden;
-        transition: border-color 180ms var(--pi-ease-out), background 180ms ease,
-                    box-shadow 180ms ease;
+        transition: border-color var(--duration-quick, 150ms) var(--pi-ease-out), background var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out),
+                    box-shadow var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out);
         background: var(--pi-input-bg);
     }
     .pi-content-box:focus-within {
@@ -618,7 +613,7 @@ const PI_CSS = `
         display: flex; align-items: center; justify-content: space-between; gap: 16px;
         padding: 14px 16px; border: 1px solid var(--pi-border);
         border-radius: var(--pi-r-md); background: rgba(255,255,255,0.015);
-        transition: border-color 220ms ease, background 220ms ease;
+        transition: border-color var(--duration-fast, 250ms) var(--ease-in-out, ease-in-out), background var(--duration-fast, 250ms) var(--ease-in-out, ease-in-out);
     }
     .pi-root[data-theme='light'] .pi-toggle-card { background: rgba(0,0,0,0.015); }
 
@@ -728,8 +723,8 @@ const PI_CSS = `
         */
         box-shadow: var(--pi-cta-shadow);
         transition:
-            transform 200ms var(--pi-ease-out),
-            box-shadow 200ms ease,
+            transform var(--duration-quick, 150ms) var(--pi-ease-out),
+            box-shadow var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out),
             background-color var(--pi-cta-dur) var(--pi-cta-ease);
         white-space: nowrap; position: relative; overflow: hidden;
     }
@@ -815,8 +810,8 @@ const PI_CSS = `
            delayed glow rather than as refraction. */
         transition:
             opacity var(--pi-cta-dur) var(--pi-cta-ease),
-            --pi-lens-w 150ms ease,
-            --pi-lens-h 150ms ease;
+            --pi-lens-w var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out),
+            --pi-lens-h var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out);
         pointer-events: none;
         z-index: 1;
     }
@@ -871,7 +866,7 @@ const PI_CSS = `
         flex-shrink: 0;
         background: var(--pi-cta-ring);
         display: flex; align-items: center; justify-content: center;
-        transition: transform 280ms var(--pi-ease-out);
+        transition: transform var(--duration-fast, 250ms) var(--pi-ease-out);
         position: relative; z-index: 2;
     }
     .pi-cta:hover .pi-cta-ring { transform: translateX(1px) scale(1.05); }
@@ -990,7 +985,7 @@ const PI_CSS = `
         color: var(--pi-tertiary); display: flex; align-items: center;
         justify-content: center; padding: 4px 8px;
         border-radius: var(--pi-r-sm); align-self: flex-start;
-        transition: color 180ms var(--pi-ease-out), transform 140ms var(--pi-ease-out);
+        transition: color var(--duration-quick, 150ms) var(--pi-ease-out), transform var(--duration-quick, 150ms) var(--pi-ease-out);
     }
     .pi-close-btn:hover { color: var(--pi-primary); }
     .pi-close-btn:active { transform: scale(0.92); }
@@ -1000,8 +995,9 @@ const PI_CSS = `
         padding: 6px 12px; border-radius: var(--pi-r-pill); font-size: 12px; font-weight: 500;
         cursor: pointer; border: 1px solid var(--pi-btn-border);
         background: var(--pi-btn-bg); color: var(--pi-secondary);
-        transition: background 180ms var(--pi-ease-out), color 180ms ease,
-                    transform 160ms var(--pi-ease-out);
+        transition: background var(--duration-quick, 150ms) var(--pi-ease-out), color var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out),
+                    border-color var(--duration-quick, 150ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)), filter var(--duration-quick, 150ms) var(--ease-smooth-out, cubic-bezier(0.22, 1, 0.36, 1)),
+                    transform var(--duration-quick, 150ms) var(--pi-ease-out);
     }
     .pi-pill-btn:hover:not(:disabled) { background: var(--pi-btn-bg-hover); color: var(--pi-primary); }
     .pi-pill-btn:active:not(:disabled) { transform: scale(0.97); }
@@ -1076,7 +1072,7 @@ const PI_CSS = `
         border: 1px solid var(--pi-btn-border); border-radius: 20px;
         color: var(--pi-primary); font-size: 12px; font-weight: 500;
         cursor: pointer; font-family: inherit;
-        transition: background 180ms var(--pi-ease-out), transform 160ms var(--pi-ease-out);
+        transition: background var(--duration-quick, 150ms) var(--pi-ease-out), transform var(--duration-quick, 150ms) var(--pi-ease-out);
     }
     .pi-upload-btn:hover:not(:disabled) { background: var(--pi-btn-bg-hover); }
     .pi-upload-btn:active:not(:disabled) { transform: scale(0.97); }
@@ -1097,8 +1093,8 @@ const PI_CSS = `
         padding: 3px 8px; border-radius: var(--pi-r-pill);
         border: 1px solid var(--pi-border); background: var(--pi-btn-bg);
         display: inline-block;
-        animation: pi-list-in 220ms var(--pi-ease-out) both;
-        transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 160ms ease, border-color 160ms ease, color 160ms ease;
+        animation: pi-list-in var(--duration-fast, 250ms) var(--pi-ease-out) both;
+        transition: transform var(--duration-quick, 150ms) cubic-bezier(0.23, 1, 0.32, 1), box-shadow var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out), border-color var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out), color var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out);
         cursor: default;
     }
     @media (hover: hover) and (pointer: fine) {
@@ -1574,6 +1570,9 @@ const FileUploadIndexing = ({ stages, sizer, settling }: { stages: ThinkStage[];
 const NAV_ITEMS = [
     { id: 'identity',    label: 'Identity',           Icon: User },
     { id: 'insights',    label: 'Profile',            Icon: FileText },
+    // What the résumé cannot say (a weakness, why they left, a salary range):
+    // it completes the profile, so it sits right under it.
+    { id: 'answers',     label: 'Cue Cards',          Icon: MessageSquare },
     // Role Insight reads the résumé and JD that Profile owns, so it sits
     // directly after it — ahead of the outbound artifacts (Company Intel,
     // Cover Letter) that come later in the user's actual sequence.
@@ -1692,10 +1691,10 @@ const PI_GATE_CSS = `
         from { opacity: 0; }
         to   { opacity: 1; }
     }
-    .pig-hero { animation: pig-fade-up 800ms cubic-bezier(0.16, 1, 0.3, 1) 0ms both; }
-    .pig-sub  { animation: pig-fade-up 800ms cubic-bezier(0.16, 1, 0.3, 1) 100ms both; }
-    .pig-grid { animation: pig-fade-up 900ms cubic-bezier(0.16, 1, 0.3, 1) 250ms both; }
-    .pig-foot { animation: pig-fade-in 800ms cubic-bezier(0.16, 1, 0.3, 1) 500ms both; }
+    .pig-hero { animation: pig-fade-up var(--duration-very-slow, 500ms) cubic-bezier(0.16, 1, 0.3, 1) 0ms both; }
+    .pig-sub  { animation: pig-fade-up var(--duration-very-slow, 500ms) cubic-bezier(0.16, 1, 0.3, 1) var(--duration-stagger, 40ms) both; }
+    .pig-grid { animation: pig-fade-up var(--duration-very-slow, 500ms) cubic-bezier(0.16, 1, 0.3, 1) 80ms both; }
+    .pig-foot { animation: pig-fade-in var(--duration-very-slow, 500ms) cubic-bezier(0.16, 1, 0.3, 1) 160ms both; }
 
     .pig-bento-shell {
         padding: 6px;
@@ -1703,7 +1702,7 @@ const PI_GATE_CSS = `
         border-radius: 24px;
         border: 1px solid var(--pig-shell-border);
         box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-        transition: transform 300ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 300ms cubic-bezier(0.23, 1, 0.32, 1), border 300ms ease;
+        transition: transform var(--duration-fast, 250ms) cubic-bezier(0.23, 1, 0.32, 1), box-shadow var(--duration-fast, 250ms) cubic-bezier(0.23, 1, 0.32, 1), border var(--duration-fast, 250ms) var(--ease-in-out, ease-in-out);
         cursor: default;
     }
     .pig-bento-shell:hover {
@@ -1736,7 +1735,7 @@ const PI_GATE_CSS = `
         filter: blur(40px);
         opacity: var(--pig-glow-op);
         pointer-events: none;
-        transition: opacity 300ms ease;
+        transition: opacity var(--duration-fast, 250ms) var(--ease-in-out, ease-in-out);
         z-index: 0;
     }
     .pig-bento-shell:hover .pig-glow { opacity: var(--pig-glow-hover); }
@@ -1755,7 +1754,7 @@ const PI_GATE_CSS = `
         cursor: pointer;
         display: flex; align-items: center; justify-content: center; gap: 12px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 200ms ease;
+        transition: transform var(--duration-quick, 150ms) cubic-bezier(0.23, 1, 0.32, 1), box-shadow var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out);
     }
     .pig-cta-group:hover { transform: scale(0.97); box-shadow: 0 6px 16px rgba(0,0,0,0.15); }
     .pig-cta-group:active { transform: scale(0.94); }
@@ -1764,7 +1763,7 @@ const PI_GATE_CSS = `
         border-radius: 16px;
         background: var(--pig-cta-ring);
         display: flex; align-items: center; justify-content: center;
-        transition: transform 300ms cubic-bezier(0.23, 1, 0.32, 1);
+        transition: transform var(--duration-fast, 250ms) cubic-bezier(0.23, 1, 0.32, 1);
     }
     .pig-cta-group:hover .pig-cta-icon-ring { transform: translateX(2px) scale(1.05); }
 
@@ -1773,7 +1772,7 @@ const PI_GATE_CSS = `
         width: 28px; height: 28px; border-radius: 50%; border: none;
         background: var(--pig-close-bg);
         color: var(--pig-sub);
-        cursor: pointer; transition: background 150ms ease, transform 150ms ease, color 150ms ease;
+        cursor: pointer; transition: background var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out), transform var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out), color var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out);
     }
     .pig-close-btn:hover { background: var(--pig-close-hover); color: var(--pig-hero); }
     .pig-close-btn:active { transform: scale(0.9); }
@@ -1781,12 +1780,12 @@ const PI_GATE_CSS = `
     .pig-text-btn {
         background: transparent; border: none; padding: 0; cursor: pointer;
         font-size: 12px; color: var(--pig-sub-low); text-align: left;
-        display: flex; align-items: center; gap: 4px; transition: color 200ms ease;
+        display: flex; align-items: center; gap: 4px; transition: color var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out);
     }
     .pig-text-btn:hover { color: var(--pig-sub); }
 
     @media (prefers-reduced-motion: reduce) {
-        .pig-hero, .pig-sub, .pig-grid, .pig-foot { animation-duration: 200ms; animation-timing-function: ease; }
+        .pig-hero, .pig-sub, .pig-grid, .pig-foot { animation-duration: var(--duration-quick, 150ms); animation-timing-function: var(--ease-in-out, ease-in-out); }
         .pig-bento-shell { transition-duration: 0ms; }
         .pig-bento-shell:hover { transform: none; }
     }
@@ -1801,6 +1800,28 @@ function ProfileIntelligenceProGate({ onOpenNativelyAPI, onClose }: {
     useEffect(() => {
         (window as any).electronAPI?.funnelTrack?.('paywall_hit', { feature: 'profile_intelligence' })?.catch?.(() => {});
     }, []);
+    /* "Unlock Pro" swaps this paywall for the plans page (UnlockProPlans), in
+       this same panel: the $5 Pro Pack, API Pro and Pro Yearly side by side,
+       and a link to every plan on the website. It used to open the API Max checkout straight away, a $25/month
+       page behind a button that said Pro (6–9% of those checkouts were paid,
+       against 21–25% where plans are compared first; Oct 7–Nov 5, 2026). */
+    const [showPlans, setShowPlans] = useState(false);
+    const unlockPro = () => {
+        (window as any).electronAPI?.funnelTrack?.('upgrade_prompt', { surface: 'profile_intelligence', action: 'clicked' })?.catch?.(() => {});
+        setShowPlans(true);
+    };
+
+    if (showPlans) {
+        return (
+            <UnlockProPlans
+                surface="profile_intelligence"
+                theme={theme === 'light' ? 'light' : 'dark'}
+                onBack={() => setShowPlans(false)}
+                onClose={onClose}
+                onHaveLicense={onOpenNativelyAPI}
+            />
+        );
+    }
 
     return (
         <div className="pi-pro-gate" data-theme={theme} style={{
@@ -1970,10 +1991,10 @@ function ProfileIntelligenceProGate({ onOpenNativelyAPI, onClose }: {
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <button className="pig-cta-group" onClick={() => openExternal(CHECKOUT_URLS.apiMax)}>
+                    <button className="pig-cta-group" onClick={unlockPro}>
                         Unlock Pro
                         <div className="pig-cta-icon-ring">
-                            <ArrowUpRight size={14} strokeWidth={2.5} />
+                            <ArrowRight size={14} strokeWidth={2.5} />
                         </div>
                     </button>
                 </div>
@@ -2378,7 +2399,7 @@ export function ProfileIntelligenceSettings({
                 if (data) setProfileData(data);
                 setProfileUploadStatus('ready');
             } else {
-                setProfileError(result?.error || 'Upload failed');
+                setProfileError(failureText(result, 'Upload failed'));
                 setProfileUploadStatus('failed');
             }
         } catch (e: any) {
@@ -2414,7 +2435,7 @@ export function ProfileIntelligenceSettings({
                 applyCompanyDossier(data);
                 setJdUploadStatus('ready');
             } else {
-                setJdError(result?.error || 'JD upload failed');
+                setJdError(failureText(result, 'JD upload failed'));
                 setJdUploadStatus('failed');
             }
         } catch (e: any) {
@@ -3583,7 +3604,7 @@ export function ProfileIntelligenceSettings({
             try {
                 const result = await window.electronAPI?.profileGenerateCoverLetter?.(regen);
                 if (result?.success && result.letter) setCoverLetter(result.letter);
-                else setCoverLetterError(result?.error || 'Generation failed');
+                else setCoverLetterError(failureText(result, 'Generation failed'));
             } catch { setCoverLetterError('Generation failed'); }
             finally { setCoverLetterGenerating(false); }
         };
@@ -3731,7 +3752,7 @@ export function ProfileIntelligenceSettings({
                                     <span style={{ fontSize: 11, color: 'var(--pi-tertiary)' }}>· for {profileData?.activeJD?.title ? `${profileData.activeJD.title}${profileData.activeJD.company ? ` @ ${profileData.activeJD.company}` : ''}` : 'this role'}</span>
                                 </div>
                                 <button
-                                    onClick={() => navigator.clipboard?.writeText(coverLetter.full_text || '')}
+                                    onClick={() => { copyText(coverLetter.full_text || '').catch(() => {}); }}
                                     className="pi-press-soft"
                                     style={{ fontSize: 11, color: 'var(--pi-tertiary)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, padding: '2px 6px', borderRadius: 6 }}
                                     onMouseEnter={e => (e.currentTarget.style.color = 'var(--pi-primary)')}
@@ -3791,6 +3812,7 @@ export function ProfileIntelligenceSettings({
     const SECTION_RENDERERS: Record<string, () => React.ReactNode> = {
         identity: renderIdentity,
         insights: renderInsights,
+        answers: () => <OwnAnswersSection hasResume={profileStatus.hasProfile} hasAccess={hasProfileAccess} />,
         roleinsight: renderRoleInsight,
         tavily: renderTavily,
         company: renderCompany,

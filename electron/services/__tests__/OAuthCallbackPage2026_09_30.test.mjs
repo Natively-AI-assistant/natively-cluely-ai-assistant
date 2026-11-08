@@ -13,7 +13,7 @@ async function loadPage() {
   return import(pathToFileURL(built).href);
 }
 
-const PROVIDERS = ['codex', 'antigravity', 'calendar'];
+const PROVIDERS = ['codex', 'antigravity', 'calendar', 'outlook-calendar', 'slack', 'notion', 'hubspot', 'salesforce', 'attio'];
 const OUTCOMES = [{ kind: 'returned' }, { kind: 'connected' }, { kind: 'error', reason: 'Denied.' }];
 
 test('every provider × outcome renders a locked-down page with no network subresources', async () => {
@@ -143,4 +143,12 @@ test('success offers Close tab with a keyboard fallback; errors offer Copy detai
   const details = /id="copy" data-details="([^"]*)"/.exec(err)?.[1];
   assert.equal(details, 'Natively sign-in: Antigravity\nReason: Access was declined on the consent screen.');
   assert.doesNotMatch(details, /code|state/i);
+});
+
+test('connector sign-ins say where notes can go, with the service mark on a light tile', async () => {
+  const { renderOAuthCallbackPage } = await loadPage();
+  const slack = renderOAuthCallbackPage('slack', { kind: 'connected' }, 'darwin').body;
+  assert.match(slack, /Slack connected/);
+  assert.match(slack, /Meeting notes can now go to Slack/);
+  assert.match(renderOAuthCallbackPage('notion', { kind: 'connected' }, 'win32').body, /class="badge light"/);
 });

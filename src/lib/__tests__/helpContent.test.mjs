@@ -139,19 +139,40 @@ describe('platform facts', () => {
 
   test('Windows never gets a recording with something macOS-only in it', () => {
     // ⌘ keycaps (overlay, Companion's extension row), Apple Speech, macOS disguise
-    // names, the Screen Recording permission, and Retrieval's "this Mac" cards.
-    for (const id of ['answer', 'autoanswer', 'overlay', 'permissions', 'speech', 'retrieval', 'stealth', 'sync']) {
-      assert.equal(win.clips[id], false, id);
-    }
+    // names, the Screen Recording permission, Retrieval's "this Mac" cards, and
+    // the follow-up send menu naming the Mac's Mail app, and Calendar's Apple
+    // Calendar row (Windows has no such source).
+    const macOnly = ['answer', 'autoanswer', 'overlay', 'permissions', 'speech', 'retrieval', 'stealth', 'sync', 'followup', 'calendar'];
+    for (const id of macOnly) assert.equal(win.clips[id], false, id);
     // Nothing platform-specific in these.
-    for (const id of ['model', 'verify', 'phone', 'modes', 'profile', 'notes', 'followup', 'calendar', 'search']) {
-      assert.equal(win.clips[id], true, id);
-    }
+    const both = ['model', 'verify', 'phone', 'modes', 'profile', 'notes', 'search', 'buttons', 'notepad', 'share', 'mcp'];
+    for (const id of both) assert.equal(win.clips[id], true, id);
+    // Every clip is in exactly one of the two lists, so a new one has to be decided.
+    assert.deepEqual([...macOnly, ...both].sort(), [...HELP_CLIP_IDS].sort());
   });
 
   test('meeting detection states the older-macOS condition, and nothing it cannot back on Windows', () => {
     assert.match(mac.meetingDetection, /macOS 13 and earlier/);
     assert.equal(win.meetingDetection, null);
+  });
+
+  test("the meeting app's microphone and Apple Calendar are offered on macOS only", () => {
+    assert.equal(mac.followMeetingMic, true);
+    assert.equal(win.followMeetingMic, false);
+    assert.equal(mac.appleCalendar, true);
+    assert.equal(win.appleCalendar, false);
+  });
+
+  test('reading the call app needs Accessibility on macOS only', () => {
+    assert.equal(mac.callDetailsNeedAccessibility, true);
+    assert.equal(win.callDetailsNeedAccessibility, false);
+  });
+
+  test('notepad close and word delete use each platform\'s own keys', () => {
+    assert.deepEqual(mac.closeNotepadKeys, ['⌘', 'W']);
+    assert.deepEqual(win.closeNotepadKeys, ['Alt', 'F4']);
+    assert.deepEqual(mac.wordDeleteKeys, ['⌥', 'Backspace']);
+    assert.deepEqual(win.wordDeleteKeys, ['Ctrl', 'Backspace']);
   });
 
   test('both platforms return the same shape (contract drift guard)', () => {

@@ -3,11 +3,11 @@ import { createPortal } from 'react-dom';
 import { useT } from '../i18n';
 import {
     Github, Twitter, Linkedin, Instagram, Send, Star, Bug, Mail, Heart,
-    CalendarCheck, Workflow, Smartphone, ListOrdered,
-    LayoutGrid, Search, FileText, UserRound, PlayCircle,
+    NotebookPen, Pin, Plug, Link,
+    LayoutGrid, Search, FileText, PlayCircle,
     HardDrive, Sliders, Lock, ArrowRight, Check, HandCoins,
 } from 'lucide-react';
-import { AutoAnswerIcon } from './AutoAnswerIcon';
+import { ProfileIntelligenceIcon } from './ProfileIntelligenceIcon';
 import evinProfile from '../assets/evin.png';
 // Each platform's own app icon: the Liquid Glass render macOS shows in the Dock
 // (assets/icons/mac/dock-icon.png) and the Windows icon (assets/icons/png), at
@@ -61,28 +61,28 @@ interface AboutItem { title: string; body: string; badge?: string; Icon: AboutIc
 // names where a feature lives in its line ("In Retrieval") rather than with a
 // button (the owner's call); a row that does carry a button keeps its line
 // under ~55 characters so it stays on one line beside it.
-// 2.9 official build, the owner's picks from the last 30 days of commits:
-// Auto Answer (off by default and "Beta" in General; the judge skips asks
-// named to someone else, 2cf229bd), embeddings + rerankers, Phone Mirror 2.0
-// (nav label "Companion"), Calendar sync (calendarSessionMatch + follow-up draft),
-// and Visual Answers (live diagrams and charts in answers; named and put in
-// place of "Better UI and animations" on 2026-10-06, at the owner's word; it
-// has no Settings tab to point at). Undetectable is
-// deliberately not claimed here: the owner won't promise it. Nothing here
-// needs the Companion extension.
+// 3.0, the owner's picks (2026-11-01) from the commits since v2.9.2:
+// Notepad (#649, 55933295: recipes, live transcript, Ask that reads the
+// whole meeting), your own overlay buttons (bd462875, Settings › Overlay
+// "Your buttons", written from plain sentences), Connectors (Settings ›
+// Connectors: Gmail, Slack, Notion, CRMs, Zapier, webhooks), share notes as
+// a link (#657, the meeting's Share menu), and follow-up emails in your
+// style (meeting header compose sheet; style per mode in Modes Manager).
+// Undetectable is deliberately not claimed here: the owner won't promise it.
+// Nothing here needs the Companion extension.
 const WHATS_NEW: AboutItem[] = [
-    { title: 'Auto Answer', body: 'Answers when a question ends, and skips ones meant for others. In General.', badge: 'Beta', Icon: AutoAnswerIcon },
-    { title: 'Visual Answers', body: 'System designs, flows and charts, drawn live inside the answer.', Icon: Workflow },
-    { title: 'Phone Mirror 2.0', body: 'Live transcript, streaming answers and photos from your phone. In Companion.', Icon: Smartphone },
-    { title: 'Calendar sync', body: 'Meetings link to their event, with names and a follow-up email. In Calendar.', Icon: CalendarCheck },
-    { title: 'Embeddings and rerankers', body: 'Gemini, OpenAI, Voyage AI, Jina AI or local models. In Retrieval.', Icon: ListOrdered },
+    { title: 'Notepad', body: 'Notes with recipes, a live transcript and Ask for the whole meeting.', Icon: NotebookPen },
+    { title: 'Your own overlay buttons', body: 'Describe a button in plain sentences and Natively builds it. In Overlay.', Icon: Pin },
+    { title: 'Connectors', body: 'Gmail, Slack, Notion, Zapier, CRMs and webhooks. In Connectors.', Icon: Plug },
+    { title: 'Share notes as a link', body: 'Send anyone a link to a meeting’s notes. In the Share menu.', Icon: Link },
+    { title: 'Follow-ups in your style', body: 'One click writes the follow-up email in your tone, per mode.', Icon: Mail },
 ];
 
 // Compressed 2026-09-25 at the owner's request. Not numbered: they are not a
 // pipeline ("Modes" is not step three of anything).
 const HOW_IT_WORKS: AboutItem[] = [
     { title: 'Modes', body: 'Templates like Sales or Interview, plus your own.', Icon: LayoutGrid, go: 'modes' },
-    { title: 'Profile Intelligence', body: 'Resume, job description and company intel.', Icon: UserRound, go: 'profile' },
+    { title: 'Profile Intelligence', body: 'Resume, job description and company intel.', Icon: ProfileIntelligenceIcon, go: 'profile' },
     { title: 'Searches files and meetings', body: 'Indexed locally, on-device or cloud.', Icon: Search, go: 'search' },
     { title: 'Notes after every meeting', body: 'Structured notes and open questions.', Icon: FileText, go: { meeting: DEMO_MEETING_ID, label: 'Demo meeting' } },
 ];
@@ -340,7 +340,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({ onNavigate, onOpenMo
         { title: t('LinkedIn'), body: t('Follow the climb to the top of AI note-taking assistants.'), action: actionButton(t('Follow'), 'https://www.linkedin.com/company/nativley-ai', Linkedin, 'group-hover:text-sky-600') },
         { title: t('Report an Issue'), body: t('Found a bug? Let us know so we can fix it.'), action: actionButton(t('Report'), `${REPO_URL}/issues`, Bug, 'group-hover:text-red-500', false) },
         { title: t('Affiliate Program'), body: t('Recommend Natively and earn a commission on every sale.'), action: actionButton(t('Affiliate'), AFFILIATE_URL, HandCoins, 'group-hover:text-emerald-500', false) },
-        { title: t('Get in Touch'), body: t('Open for professional collaborations and job offers.'), action: actionButton(t('Contact Me'), 'mailto:evinjohnignatious@gmail.com', Mail, 'group-hover:text-accent-primary', false) },
+        { title: t('Get in Touch'), body: t('Open for professional collaborations and job offers.'), action: actionButton(t('Contact Me'), 'mailto:evin@heynatively.com', Mail, 'group-hover:text-accent-primary', false) },
         { title: t('Support Development'), body: t('Natively is independent source-available software.'), action: actionButton(t('Support Project'), DONATE_URL, Heart, 'group-hover:text-pink-500') },
     ];
 

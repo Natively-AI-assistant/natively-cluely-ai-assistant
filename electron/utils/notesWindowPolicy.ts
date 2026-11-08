@@ -11,13 +11,13 @@
 //           like the overlay's popovers. Hidden from Mission Control.
 //   Windows skipTaskbar (no taskbar button, like every overlay window) and
 //           level 'screen-saver', the overlay's own, so it stays above a
-//           fullscreen meeting app. It is NOT put under the no-activate policy
-//           (windowsFocusPolicy.attachNoActivate) the overlay uses: that policy
-//           makes a window unfocusable and routes keys to the overlay only, so
-//           a notes field there could never be typed in. Typing in the notes
-//           window therefore takes keyboard focus on Windows, as typing in any
-//           window does; it is only ever focused by the user's own click or the
-//           overlay's Notes button, never by a meeting starting.
+//           fullscreen meeting app. Since 2026-10-20 it is under the overlay's
+//           no-activate policy too (windowsFocusPolicy.attachNoActivate, in
+//           NotesWindowHelper): a click never activates it, and typing goes
+//           through the keyboard hook, which feeds whichever of the overlay or
+//           the notes started the session (StealthKeyboardManager's target).
+//           Without a hook (none built, a CJK keyboard) the policy skips
+//           itself and the window is typed into by focus, as before.
 //
 // Content protection follows Undetectable exactly as the overlay's does
 // (setContentProtection(isUndetectable) at creation and on every show), with
@@ -46,10 +46,17 @@ export interface WorkArea {
     height: number;
 }
 
-export const NOTES_WINDOW_DEFAULT_SIZE = { width: 340, height: 420 } as const;
+// Tall like Granola's notes window (2026-10-20: theirs is 500 wide and the
+// screen's full height, flush with its right edge). The height is the work
+// area's, so only the width is fixed; `height` is the fallback with no screen.
+export const NOTES_WINDOW_DEFAULT_SIZE = { width: 460, height: 800 } as const;
+/**
+ * Saved bounds from an older layout are not reused: everyone who opened the
+ * small 340 x 420 window (before the tall one) would keep getting it. Bumped
+ * whenever the default shape changes.
+ */
+export const NOTES_WINDOW_LAYOUT = 2;
 export const NOTES_WINDOW_MIN_SIZE = { width: 260, height: 200 } as const;
-/** Gap from the work area's edge for a first open. */
-const EDGE_GAP = 24;
 
 /** Background painted before the page draws, per theme (the page's --bg-elevated). */
 export const NOTES_WINDOW_BACKGROUND = { light: '#FFFFFF', dark: '#151515' } as const;
@@ -176,17 +183,20 @@ const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFi
  * area), else the default size at the top right of the primary work area.
  */
 export function resolveNotesWindowBounds(
-    saved: Partial<NotesWindowBounds> | null | undefined,
+    saved: (Partial<NotesWindowBounds> & { layout?: number }) | null | undefined,
     workAreas: WorkArea[],
 ): NotesWindowBounds {
-    const primary = workAreas[0] ?? { x: 0, y: 0, width: 1280, height: 800 };
+    const primary = workAreas[0] ?? { x: 0, y: 0, width: 1280, height: NOTES_WINDOW_DEFAULT_SIZE.height };
+    // The full height of the work area (under the menu bar on macOS, above the
+    // taskbar on Windows), flush with its right edge.
+    const tallWidth = Math.min(NOTES_WINDOW_DEFAULT_SIZE.width, primary.width);
     const fallback: NotesWindowBounds = {
-        width: NOTES_WINDOW_DEFAULT_SIZE.width,
-        height: NOTES_WINDOW_DEFAULT_SIZE.height,
-        x: primary.x + primary.width - NOTES_WINDOW_DEFAULT_SIZE.width - EDGE_GAP,
-        y: primary.y + EDGE_GAP + 64,
+        width: tallWidth,
+        height: primary.height,
+        x: primary.x + primary.width - tallWidth,
+        y: primary.y,
     };
-    if (!saved || !finite(saved.x) || !finite(saved.y) || !finite(saved.width) || !finite(saved.height)) return fallback;
+    if (!saved || saved.layout !== NOTES_WINDOW_LAYOUT || !finite(saved.x) || !finite(saved.y) || !finite(saved.width) || !finite(saved.height)) return fallback;
     const VISIBLE = 80;
     const area = workAreas.find((a) =>
         saved.x! + saved.width! - VISIBLE >= a.x && saved.x! + VISIBLE <= a.x + a.width

@@ -3,11 +3,12 @@
 //   node astra/probe.mjs
 // 1. GET /models → model ids only (never the raw body, which may carry account metadata).
 // 2. Refuse unless the exact id gpt-6-astra is listed. No substitute model, ever.
-// 3. Minimal chat probe; if an OPTIONAL parameter is rejected, drop only that parameter and retry.
+// 3. Minimal judge-route probe (the Responses API since 2026-10-28, see client.mjs JUDGE_ROUTE); if an OPTIONAL
+//    parameter is rejected, drop only that parameter and retry.
 // Each key in the env file is tried in order (2026-10-02: there are two) and the first that answers is recorded
 // as `key_var` — the variable's NAME. The client starts on that key.
 import fs from 'node:fs';
-import { rawCall, keyVars, JUDGE_MODEL, BASE_URL, PROBE_FILE, CLIENT_HEADERS, scrub } from './client.mjs';
+import { rawCall, keyVars, JUDGE_MODEL, JUDGE_ROUTE, BASE_URL, PROBE_FILE, CLIENT_HEADERS, scrub, responsesBody, responsesText } from './client.mjs';
 
 const vars = keyVars();
 const out = { at: new Date().toISOString(), base_url: BASE_URL, client_headers: CLIENT_HEADERS, key_var: vars[0], key_vars: vars, requested_model: JUDGE_MODEL, ok: false, model_listed: false, steps: [] };
@@ -25,38 +26,40 @@ for (let keyIndex = 0; keyIndex < vars.length && !out.ok; keyIndex++) {
   out.available_models = ids;
   out.model_listed = true;
 
-  // Minimal chat probe. Optional params are tried and dropped one at a time only if rejected.
-  const base = { model: JUDGE_MODEL, messages: [{ role: 'system', content: 'You are a JSON test responder.' }, { role: 'user', content: 'Return exactly {"ok":true}.' }], stream: false };
-  let optional = { temperature: 0, max_tokens: 40 };
+  // Minimal probe on the judge's route. Optional params are tried and dropped one at a time only if rejected.
+  // 400 output tokens, not 40: the hidden reasoning counts against the cap (37-44 tokens for this probe, measured),
+  // and a cap it fills leaves no text, which would read as a broken route.
+  const messages = [{ role: 'system', content: 'You are a JSON test responder.' }, { role: 'user', content: 'Return exactly {"ok":true}.' }];
+  const base = responsesBody(messages);
+  let optional = { temperature: 0, max_output_tokens: 400 };
   const unsupported = [];
-  let tokenParam = null;
   let res = null;
-  for (let i = 0; i < 4; i++) {
-    res = await rawCall('POST', '/chat/completions', { ...base, ...optional }, { timeoutMs: 60000, keyIndex });
-    out.steps.push({ step: 'chat', key_var: keyVar, params: Object.keys(optional), status: res.status, request_id: requestId(res), latency_ms: res.latencyMs, error: res.status === 200 ? null : res.text.slice(0, 300) });
+  for (let i = 0; i < 3; i++) {
+    res = await rawCall('POST', JUDGE_ROUTE, { ...base, ...optional }, { timeoutMs: 60000, keyIndex });
+    out.steps.push({ step: 'responses', key_var: keyVar, params: Object.keys(optional), status: res.status, request_id: requestId(res), latency_ms: res.latencyMs, error: res.status === 200 ? null : res.text.slice(0, 300) });
     if (res.status === 200) break;
     const msg = res.text.toLowerCase();
     const bad = Object.keys(optional).find((k) => msg.includes(k));
-    if (bad === 'max_tokens' && !unsupported.includes('max_tokens')) { unsupported.push('max_tokens'); delete optional.max_tokens; optional.max_completion_tokens = 40; tokenParam = 'max_completion_tokens'; continue; }
     if (bad) { unsupported.push(bad); delete optional[bad]; continue; }
     break;
   }
   if (res?.status === 200 && res.json) {
-    const c = res.json.choices?.[0];
-    const shape = { top_level_keys: Object.keys(res.json), content_location: typeof c?.message?.content === 'string' ? 'choices[0].message.content (string)' : Array.isArray(c?.message?.content) ? 'choices[0].message.content (parts)' : 'unknown', has_usage: !!res.json.usage, usage_keys: res.json.usage ? Object.keys(res.json.usage) : [] };
+    const text = responsesText(res.json);
+    const shape = { top_level_keys: Object.keys(res.json), content_location: text != null ? 'output[type=message].content[type=output_text].text' : 'unknown', has_usage: !!res.json.usage, usage_keys: res.json.usage ? Object.keys(res.json.usage) : [] };
     if (shape.content_location === 'unknown') continue;
     out.key_var = keyVar;
+    out.route = JUDGE_ROUTE;
     out.unsupported_params = unsupported;
-    out.token_param = tokenParam ?? (unsupported.includes('max_tokens') ? 'max_completion_tokens' : 'max_tokens');
+    out.token_param = 'max_output_tokens';
     out.response_shape = shape;
     out.returned_model = res.json.model ?? null;
     out.model_mismatch = !!res.json.model && res.json.model !== JUDGE_MODEL;
-    out.sample_content = String(c?.message?.content ?? '').slice(0, 80);
+    out.sample_content = String(text ?? '').slice(0, 80);
     out.ok = true;
   }
 }
 out.unsupported_params ??= [];
-out.token_param ??= 'max_tokens';
+out.token_param ??= 'max_output_tokens';
 save();
 if (!out.model_listed) {
   console.log(lastModels?.status === 200 ? `${JUDGE_MODEL} unavailable for ${vars.length > 1 ? 'these AgentRouter keys' : 'this AgentRouter key'}` : `models endpoint failed: HTTP ${lastModels?.status} ${scrub(lastModels?.text).slice(0, 200)}`);

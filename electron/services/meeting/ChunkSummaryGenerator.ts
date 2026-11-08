@@ -3,7 +3,7 @@ import type { ChunkMeetingAtoms, MeetingModeSectionInput, TranscriptChunk } from
 import { MeetingSummarySchemaValidator, dropAssistantSourcedAtoms } from './MeetingSummarySchemaValidator';
 import { generateStructured } from './generateStructured';
 import { anchorAtomTimes, chunkElapsedRange } from './evidenceTimes';
-import { chunkDensityTarget, renderNotesPromptContext, type NotesPromptContext } from './meetingNotesContext';
+import { chunkDensityTarget, headingBudgetForTranscript, renderNotesPromptContext, userNoteHeadings, type NotesPromptContext } from './meetingNotesContext';
 
 export class ChunkSummaryGenerator {
   private readonly validator = new MeetingSummarySchemaValidator();
@@ -115,7 +115,14 @@ export function buildChunkPrompt(params: {
   const findingShape = `{ "text": "one-sentence finding grounded in this chunk", "evidence": [{ "speakerName": "speaker", "timestampMs": 0, "quote": "short verbatim quote" }], "confidence": "high"${userNotesField} }`;
   const sectionKeysHint = sectionList.length > 0
     ? `{\n${sectionList.map(s => `    "${s.title.replace(/"/g, "'")}": [${findingShape}]`).join(',\n')}\n  }`
-    : `{ "Section title": [${findingShape}] }`;
+    : `{ "Topic heading": [${findingShape}] }`;
+
+  // No template (no mode active, none picked in the notepad): the notes are
+  // written under topic headings the model names itself, as Granola's default
+  // notes are (2026-10-31). Before this the chunk was asked for "Section title"
+  // findings that the reducer then dropped as undeclared, so such notes had no
+  // sections at all: only the overview and a three-line Summary.
+  const autoHeadingsBlock = sectionList.length > 0 ? '' : autoHeadingsTask(params.meetingTotalChars, params.notesContext?.userNotes);
 
   // Times shown to the model are time INTO THE MEETING, the scale its lines
   // are labelled in. A hand-built chunk with no stamped lines keeps its own range.
@@ -141,13 +148,14 @@ MEETING MODE: ${params.modeTemplateType || 'general'}
 CHUNK: ${params.chunk.chunkIndex + 1} of ${params.totalChunks}
 TIME RANGE: ${formatMs(rangeStartMs, !!elapsed)} - ${formatMs(rangeEndMs, !!elapsed)}
 
-${sectionGuidance ? `YOUR PRIMARY TASK — fill these EXACT note sections faithfully. For each, follow its instruction. Put findings under "modeSpecificFindings" keyed by the EXACT section title shown. Each finding is an object with "text" and, best-effort, "evidence" (speaker + timestampMs + a short verbatim quote from this chunk) — never drop a finding merely because no clean quote is at hand. OPTIONAL: omit the entire "evidence" key from a finding if you have no clean quote for it. OMIT a section's key entirely if this chunk contains nothing for it (do not output an empty bullet, a placeholder, or "Not discussed"):
+${autoHeadingsBlock}${sectionGuidance ? `YOUR PRIMARY TASK — fill these EXACT note sections faithfully. For each, follow its instruction. Put findings under "modeSpecificFindings" keyed by the EXACT section title shown. Each finding is an object with "text" and, best-effort, "evidence" (speaker + timestampMs + a short verbatim quote from this chunk) — never drop a finding merely because no clean quote is at hand. OPTIONAL: omit the entire "evidence" key from a finding if you have no clean quote for it. OMIT a section's key entirely if this chunk contains nothing for it (do not output an empty bullet, a placeholder, or "Not discussed"):
 
 ${sectionGuidance}
 ` : ''}${densityBlock}
 - Capture substance, not only outcomes: what was explained, asked, compared, quantified, objected to, or agreed. A point does not have to be a decision to be worth a bullet.
-- Each finding is ONE specific sentence carrying its own detail — names, numbers, conditions, caveats. Never a bare topic label like "Pricing was discussed".
-- Prefer two specific findings over one that merges them.
+- Write each finding the way a sharp human note-taker writes a bullet: lead with the subject, then its specifics. "Renewal quote: $3,100/month, ~30% above today's $2,400", "Root cause: catalog feed stopped syncing on September 9". Keep every name, number, date, condition and caveat, and name the company, product or project a point is about; drop narration ("The team discussed...", "It was mentioned that...") and filler words.
+- One point per finding, carrying its own detail. Never a bare topic label like "Pricing was discussed". Prefer two specific findings over one that merges them.
+- Say a number the way it was meant, not the way speech-to-text spelled it: "seven twenty" per employee is $7.20, not $720, when the conversation's other figures show that scale.
 
 GROUNDING RULES (non-negotiable):
 - Use ONLY this transcript chunk. Never use outside knowledge, assumptions, or typical-meeting patterns.
@@ -158,7 +166,7 @@ ${chunkHasChatLines(params.chunk) ? CHAT_LINES_RULE : ''}- Do NOT invent informa
 
 ALSO extract these cross-cutting atoms (they power the follow-up draft and recall; they are NOT the displayed sections):
 - decisions: things actually decided/agreed (not merely discussed). Separate from discussion.
-- actionItems: commitments/tasks. explicitness="explicit" only when someone clearly committed; else "inferred". owner/deadline ONLY if explicitly stated.
+- actionItems: commitments/tasks. explicitness="explicit" only when someone clearly committed; else "inferred". owner/deadline ONLY if explicitly stated. Write a deadline in the words said ("November 13", "Friday", "end of next week"): never add a year nobody said and never turn it into a numeric date.
 - WHO OWES WHAT: an action item's owner is the person who will do it, named only when the transcript names them (their own labelled line, a self-introduction, or being addressed by name and answering). Set "party" to "ours" when the owner is the user or one of their colleagues, "theirs" when it is someone on the other side; leave "party" out when you cannot tell.
 - When someone on the other side asks for something, write the ask as theirs ("The client asked for a security review") and any commitment the user's side made in answer as its own action item with its owner. Never turn a request into a commitment nobody made.${hasLastTime ? `
 - carriedOver: true on an action item or open question this chunk shows is continuing from LAST TIME; say in its text what changed.` : ''}${hasUserNotes ? `
@@ -187,6 +195,27 @@ Output ONLY valid JSON. No markdown fences, comments, or prose. Never expose the
 }`;
 
   return { systemPrompt, jsonShapeHint };
+}
+
+/**
+ * The task for notes with no template: name the topics, at most the heading
+ * budget for this meeting's length (headingBudgetForTranscript, Granola's rule),
+ * the user's own "#" headings first. The headings are the notes' layout; the
+ * action items get their own section after them (MeetingSummaryReducer).
+ */
+export function autoHeadingsTask(meetingTotalChars: number | undefined, userNotes: string | undefined): string {
+  const budget = headingBudgetForTranscript(meetingTotalChars ?? 0);
+  const own = userNoteHeadings(userNotes);
+  const ownRule = own.length > 0
+    ? `\n- The user headed their own notes ${own.map(h => `"${h}"`).join(', ')}. Use those headings, in that order, for what falls under them.`
+    : '';
+  return `YOUR PRIMARY TASK — write the notes under topic headings you name yourself. Put findings under "modeSpecificFindings", keyed by heading:
+- At most ${Math.max(budget, own.length)} headings for the whole meeting, one per distinct topic actually covered, in the order the topics came up. A short meeting with one topic gets one heading.
+- A heading is a short, specific title for the topic: "Resolution rate drop", "Pricing and competitive context", "Deal agreed", "Android 15 crash fix". Never generic ("Discussion", "Notes", "Summary", "Key points", "Decisions", "Action items", "Next steps").
+- Under each heading, everything said on that topic as short findings, usually 4-8 of them, each about 6-15 words: the figures, reasons, comparisons, objections, what was agreed and what is still open. The headings are all the reader sees, so a decision, risk or open question on the topic goes in its own field AND as a finding under its heading.
+- Commitments go in "actionItems", not under a heading; they are shown after the topics.${ownRule}
+
+`;
 }
 
 // `zeroIsATime`: on the elapsed scale 0 is the meeting's first line, not "unknown".

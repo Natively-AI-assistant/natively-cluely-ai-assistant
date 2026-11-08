@@ -57,9 +57,9 @@ test('forceCard takes the empty slot and marks the showing forced', () => {
 test('forceCard never overlaps an open card', () => {
   const orch = fresh({ cardLedger: policy.emptyLedger(Date.now()) });
   mockNow += 10_000; flush();
-  assert.equal(orch.getSnapshot().activeToasterId, 'browser_extension', 'precondition: a real card is open');
+  assert.equal(orch.getSnapshot().activeToasterId, 'demo_video', 'precondition: a real card is open');
   assert.equal(orch.forceCard('profile_ad'), false);
-  assert.equal(orch.getSnapshot().activeToasterId, 'browser_extension');
+  assert.equal(orch.getSnapshot().activeToasterId, 'demo_video');
   assert.equal(orch.getSnapshot().forcedToasterId, null);
 });
 

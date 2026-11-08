@@ -110,8 +110,8 @@ Implement a token-based rewards system that provides free premium access to comm
 
 ### Short-term (Next 1-3 months)
 
-- [ ] System design visualization MVP
-- [ ] Basic persona system (3-5 personas)
+- [x] System design visualization MVP (shipped in 2.9 as Visual Answers)
+- [x] Basic persona system (shipped as 9 built-in modes plus your own)
 - [ ] Token integration research and proof-of-concept
 
 ### Medium-term (3-6 months)

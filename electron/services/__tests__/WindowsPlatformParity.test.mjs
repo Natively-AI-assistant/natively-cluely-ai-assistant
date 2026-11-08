@@ -297,21 +297,26 @@ test('security: stealth typing is stopped when the overlay hides or we leave it'
   );
 });
 
-test('security: stealth-tap:start is authorized to the overlay sender only', () => {
+test('security: stealth-tap:start is authorized to the overlay and notes senders only, each for itself', () => {
+  // 2026-10-20: the notes window is typed into through the same hook, so it may
+  // start a session too; the target comes from the sender, never the renderer.
   const main = read('electron/main.ts');
   const block = main.slice(
-    main.indexOf('const isFromOverlay'),
+    main.indexOf('const senderIs'),
     main.indexOf("registerStealthHandler('stealth-tap:start'") + 200,
   );
   assert.match(
     block,
-    /overlay\.webContents\.id === event\?\.sender\?\.id/,
-    'BUG: isFromOverlay must compare the sender to the overlay webContents id.',
+    /win\.webContents\.id === event\?\.sender\?\.id/,
+    'BUG: the gate must compare the sender to a window webContents id.',
   );
+  assert.match(block, /senderIs\(this\.windowHelper\?\.getOverlayWindow\?\.\(\), event\)\) return 'overlay'/);
+  assert.match(block, /senderIs\(this\.notesWindowHelper\?\.getWindow\?\.\(\), event\)\) return 'notes'/);
+  assert.match(block, /return null;/, 'any other sender gets no target');
   assert.match(
     block,
-    /registerStealthHandler\('stealth-tap:start', \(event: any\) =>\s*isFromOverlay\(event\) \? stealth\.start\(\) : false/,
-    'BUG: stealth-tap:start must reject senders that are not the overlay — any renderer could ' +
+    /registerStealthHandler\('stealth-tap:start', \(event: any\) => \{\s*const target = typingTargetOf\(event\);\s*return target \? stealth\.start\(target\) : false;/,
+    'BUG: stealth-tap:start must reject senders that are not the overlay or the notes window — any renderer could ' +
       'otherwise engage the system-wide keyboard hook.',
   );
 });
@@ -359,17 +364,21 @@ test('security(round2): chat:focusInput branches on pre-show state, not toggle()
   assert.doesNotMatch(block, /mgr\.toggle\(\)/, 'BUG: the broken toggle() call must be gone.');
 });
 
-test('security(round2): start() refuses on win32 when the overlay is not visible', () => {
+test('security(round2): start() refuses on win32 when the target window is not visible', () => {
+  // 2026-10-20: the session's window is the overlay or the notes window
+  // (targetWindow); either must be visible, on a fresh start and on a move.
   const mgr = read('electron/services/StealthKeyboardManager.ts');
-  const start = mgr.slice(mgr.indexOf('public start(): boolean'), mgr.indexOf('this.active = true;'));
-  assert.match(
-    start,
-    /process\.platform === 'win32' &&\s*\([\s\S]{0,160}!this\.overlayWindow\.isVisible\(\)[\s\S]{0,40}\)\s*\)\s*\{\s*return false/,
-    'BUG: start() must refuse on win32 when the overlay is hidden/destroyed — enforces ' +
-      'hook-engaged⟹overlay-visible so the hook can never swallow keystrokes with no visible UI.',
+  const start = mgr.slice(mgr.indexOf("public start(target: StealthTypingTarget = 'overlay'): boolean"), mgr.indexOf('this.active = true;'));
+  const gates = start.match(/if \(process\.platform === 'win32'\) \{\s*const win = this\.targetWindow\(target\);\s*if \(!win \|\| !win\.isVisible\(\)\) return false;/g) || [];
+  assert.equal(
+    gates.length,
+    2,
+    'BUG: start() must refuse on win32 when its window is hidden/destroyed — enforces ' +
+      'hook-engaged⟹window-visible so the hook can never swallow keystrokes with no visible UI.',
   );
-  // macOS must NOT gain a visibility gate (no regression).
-  assert.match(start, /process\.platform === 'win32' &&/, 'the gate must be win32-scoped');
+  const target = mgr.slice(mgr.indexOf('private targetWindow('), mgr.indexOf('private targetWindow(') + 300);
+  assert.match(target, /target === 'notes' \? this\.notesWindow : this\.overlayWindow/);
+  assert.match(target, /win && !win\.isDestroyed\(\) \? win : null/);
 });
 
 test('rust(round2): the catch_unwind Err arms do NOT log (eprintln can panic → abort)', () => {

@@ -194,7 +194,7 @@ export interface StoredCredentials {
     /** Voyage AI key, used for EMBEDDINGS (Voyage is embeddings-only here). */
     voyageApiKey?: string;
     // STT Provider settings
-    sttProvider?: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech';
+    sttProvider?: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech';
     nvidiaNimSttModel?: string;
     /** Model per provider where the model is only a value on the app's own
         endpoint (sttModelCatalog.ts). Absent = the provider's default. */
@@ -212,6 +212,7 @@ export interface StoredCredentials {
     ibmWatsonApiKey?: string;
     ibmWatsonRegion?: string;
     sonioxApiKey?: string;
+    qwenAsrApiKey?: string;
     sttLanguage?: string;
     aiResponseLanguage?: string;
     // Tavily Search
@@ -312,6 +313,14 @@ export interface StoredCredentials {
     trialExpiresAt?: string;   // ISO timestamp — local copy for startup check
     trialStartedAt?: string;   // ISO timestamp
     trialClaimed?: boolean;  // set true on first claim, never cleared — hides start card permanently
+    /**
+     * Set once the trial is over by the server's word or by the trial clock
+     * (services/trialClock.ts). Pro then stays off for this trial even when the
+     * computer's clock is wound back below trialExpiresAt. Cleared by a new trial.
+     */
+    trialEndedAt?: string;
+    /** The furthest time the trial clock reached (epoch ms); it never runs backwards. */
+    trialClockMs?: number;
     /**
      * Companion-extension pairing token. LOOPBACK-SCOPED — only the extension uses
      * it, over 127.0.0.1, and it never travels the wire off-box. Persisted
@@ -1039,7 +1048,7 @@ export class CredentialsManager {
         return this.credentials.customProviders || [];
     }
 
-    public getSttProvider(): 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech' {
+    public getSttProvider(): 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech' {
         const provider = this.credentials.sttProvider || 'none';
         // Self-heal: if provider is 'none' but a Natively key exists, the user is in a
         // broken state (key cleared then re-entered via a path that skipped auto-promote,
@@ -1122,6 +1131,10 @@ export class CredentialsManager {
 
     public getSonioxApiKey(): string | undefined {
         return this.credentials.sonioxApiKey;
+    }
+
+    public getQwenAsrApiKey(): string | undefined {
+        return this.credentials.qwenAsrApiKey;
     }
 
     public getTavilyApiKey(): string | undefined {
@@ -1639,7 +1652,7 @@ export class CredentialsManager {
         return persisted;
     }
 
-    public setSttProvider(provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech'): boolean {
+    public setSttProvider(provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech'): boolean {
         if (this.refuseWriteWhileDegraded('set stt provider')) return false;
         this.credentials.sttProvider = provider;
         const persisted = this.saveCredentials();
@@ -1749,6 +1762,12 @@ export class CredentialsManager {
         return persisted;
     }
 
+    public setQwenAsrApiKey(key: string): boolean {
+        if (this.refuseWriteWhileDegraded('set qwen asr api key')) return false;
+        this.credentials.qwenAsrApiKey = (key || '').trim() || undefined;
+        return this.saveCredentials();
+    }
+
     public setTavilyApiKey(key: string): void {
         if (this.refuseWriteWhileDegraded('set tavily api key')) return;
         // Store undefined (not empty string) when removing, so hasKey() checks stay consistent
@@ -1776,7 +1795,7 @@ export class CredentialsManager {
      * renderer state — the masked pre-population regression from #318 was
      * caused by exactly that pattern. This getter is test-time only.
      */
-    public getStoredSttKeyForProvider(provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim'): string | undefined {
+    public getStoredSttKeyForProvider(provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen' | 'nvidia_nim'): string | undefined {
         switch (provider) {
             case 'groq':       return this.credentials.groqSttApiKey;
             case 'openai':     return this.credentials.openAiSttApiKey;
@@ -1785,6 +1804,7 @@ export class CredentialsManager {
             case 'azure':      return this.credentials.azureApiKey;
             case 'ibmwatson':  return this.credentials.ibmWatsonApiKey;
             case 'soniox':     return this.credentials.sonioxApiKey;
+            case 'qwen':       return this.credentials.qwenAsrApiKey;
             case 'nvidia_nim': return this.credentials.nvidiaNimApiKey;
         }
     }
@@ -2089,6 +2109,57 @@ export class CredentialsManager {
         return this.credentials.trialClaimed === true;
     }
 
+    public getTrialEndedAt(): string | undefined {
+        return this.credentials.trialEndedAt;
+    }
+
+    /**
+     * The trial is over (the server said so, or the trial clock passed its
+     * expiry). Memory always, disk only on a healthy store, as setTrialToken
+     * does. A no-op without a trial, or once already marked.
+     */
+    public markTrialEnded(): void {
+        if (!this.credentials.trialToken || this.credentials.trialEndedAt) return;
+        this.credentials.trialEndedAt = new Date().toISOString();
+        console.log('[CredentialsManager] Trial marked ended');
+        this.saveSoon('persist trial ended');
+    }
+
+    public getTrialClockMs(): number | undefined {
+        const v = this.credentials.trialClockMs;
+        return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+    }
+
+    /** Memory always, disk only on a healthy store. The caller spaces the writes. */
+    public setTrialClockMs(ms: number): void {
+        if (!this.credentials.trialToken || !Number.isFinite(ms)) return;
+        this.credentials.trialClockMs = ms;
+        this.saveSoon('persist trial clock');
+    }
+
+    private saveSoonPending = false;
+    /**
+     * Save on the next turn of the event loop, not inside the caller. The trial
+     * clock and the trial-ended mark are written from proAccess.isProOrTrialActive,
+     * which sits on the live-answer and MCP request paths; a full encrypt and
+     * write there (slow under antivirus on Windows) held those up. Several
+     * calls before it runs make one write of the latest state. Memory is
+     * already updated, so every read sees the new value at once.
+     */
+    private saveSoon(op: string): void {
+        if (this.saveSoonPending) return;
+        this.saveSoonPending = true;
+        setTimeout(() => {
+            this.saveSoonPending = false;
+            try {
+                if (this.refuseWriteWhileDegraded(op)) return;
+                this.saveCredentials();
+            } catch (e: any) {
+                console.warn(`[CredentialsManager] ${op} failed:`, e?.message || e);
+            }
+        }, 0);
+    }
+
     /**
      * Store a started trial.
      *
@@ -2117,6 +2188,11 @@ export class CredentialsManager {
         this.credentials.trialExpiresAt = expiresAt;
         this.credentials.trialStartedAt = startedAt;
         this.credentials.trialClaimed = true;
+        // A new trial starts its own clock at the server's start time.
+        delete this.credentials.trialEndedAt;
+        const startedMs = Date.parse(startedAt);
+        if (Number.isFinite(startedMs)) this.credentials.trialClockMs = startedMs;
+        else delete this.credentials.trialClockMs;
 
         if (this.refuseWriteWhileDegraded('persist trial token')) {
             console.warn('[CredentialsManager] Trial token held in MEMORY ONLY — the credential store is degraded, '
@@ -2140,6 +2216,8 @@ export class CredentialsManager {
         delete this.credentials.trialToken;
         delete this.credentials.trialExpiresAt;
         delete this.credentials.trialStartedAt;
+        delete this.credentials.trialEndedAt;
+        delete this.credentials.trialClockMs;
         // trialClaimed intentionally NOT cleared — keeps start card hidden after token wipe
         this.saveCredentials();
         console.log('[CredentialsManager] Trial token cleared');
@@ -2185,6 +2263,8 @@ export class CredentialsManager {
         delete c.trialExpiresAt;
         delete c.trialStartedAt;
         delete c.trialClaimed;
+        delete c.trialEndedAt;
+        delete c.trialClockMs;
         const persisted = this.saveCredentials();
         console.log(persisted
             ? '[CredentialsManager] Trial claim reset (trial campaign)'
@@ -3020,7 +3100,7 @@ export const USE_STORED_KEY_SENTINEL = '__USE_STORED__';
  * resolution contract independently verifiable (M-1 from the pre-release review).
  */
 export function resolveSttTestKey(
-    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox',
+    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen',
     apiKey: string | undefined | null,
 ): { ok: true; apiKey: string } | { ok: false; error: string } {
     if (apiKey === USE_STORED_KEY_SENTINEL) {

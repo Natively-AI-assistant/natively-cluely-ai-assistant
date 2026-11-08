@@ -62,10 +62,10 @@ interface UpdateModalProps {
 }
 
 // ─── Tokens ────────────────────────────────────────────────────
-const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif';
+export const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif';
 
 // The family's measured ink sets (the contrast table is in SupportToaster.tsx).
-const INK_DARK = {
+export const INK_DARK = {
     strong: '#F2F2F4',
     body:   'rgba(255,255,255,0.66)',
     quiet:  'rgba(255,255,255,0.52)',
@@ -74,7 +74,7 @@ const INK_DARK = {
     well:   'rgba(255,255,255,0.05)',
     error:  '#FCA5A5',
 };
-const INK_LIGHT = {
+export const INK_LIGHT = {
     strong: '#0B1020',
     body:   'rgba(11,16,32,0.68)',
     quiet:  'rgba(11,16,32,0.66)',
@@ -85,8 +85,8 @@ const INK_LIGHT = {
 };
 
 // The panel is light in both themes, so its ink is fixed.
-const PANEL = '#EDF0F5';
-const PANEL_INK = { strong: '#0B1020', quiet: 'rgba(11,16,32,0.58)' };
+export const PANEL = '#EDF0F5';
+export const PANEL_INK = { strong: '#0B1020', quiet: 'rgba(11,16,32,0.58)' };
 const CLOSE_INK = { rest: 'rgba(11,16,32,0.34)', hover: 'rgba(11,16,32,0.92)' };
 const WAVE = { top: '#C9D3E6', bottom: '#A9B8D4' };
 
@@ -95,7 +95,7 @@ const SHADOW = {
     light: '0 30px 70px -28px rgba(16,24,40,0.40)',
     dark:  '0 40px 90px -30px rgba(0,0,0,0.85)',
 };
-const TOAST_SHADOW = {
+export const TOAST_SHADOW = {
     light: '0 20px 50px -24px rgba(16,24,40,0.45)',
     dark:  '0 24px 60px -24px rgba(0,0,0,0.85)',
 };
@@ -228,7 +228,7 @@ const CtaButton: React.FC<{ ink: Ink; isLight: boolean; reduced: boolean; onClic
     );
 };
 
-const QuietButton: React.FC<{ ink: Ink; onClick: () => void; children: React.ReactNode }> = ({ ink, onClick, children }) => (
+export const QuietButton: React.FC<{ ink: Ink; onClick: () => void; children: React.ReactNode }> = ({ ink, onClick, children }) => (
     <button
         type="button"
         onClick={onClick}

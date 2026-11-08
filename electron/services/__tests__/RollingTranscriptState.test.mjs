@@ -20,9 +20,57 @@ if (!fs.existsSync(compiledPath)) {
 const {
   mergeRollingTranscriptPartial,
   mergeRollingTranscriptFinal,
+  rollingTranscriptWithPartial,
   capRollingTranscript,
   ROLLING_TRANSCRIPT_MAX_CHARS,
 } = await import(pathToFileURL(compiledPath).href);
+
+// The overlay's use: committed finals kept apart, the partial drawn after them.
+function playBar(events) {
+  let committed = '';
+  let bar = '';
+  for (const [kind, text] of events) {
+    if (kind === 'partial') {
+      bar = rollingTranscriptWithPartial(committed, text);
+    } else {
+      committed = mergeRollingTranscriptFinal(committed, text);
+      bar = committed;
+    }
+  }
+  return bar;
+}
+
+test('a local model rewriting its partials leaves only the finals on the bar', () => {
+  // Moonshine Tiny on Windows, 2026-11-05: each partial re-decodes the whole
+  // segment, so it need not extend the last one.
+  const bar = playBar([
+    ['partial', 'Hello.'], ['final', 'Hello.'],
+    ['partial', 'This is a test'], ['final', 'This is a test of local transcription on windows.'],
+    ['partial', 'Tell me about that.'],
+    ['partial', "You're experiential about your experience"],
+    ['partial', '2.'],
+    ['partial', 'Tell me about your experience with distributed systems and how you handle the production and how you handle the production and'],
+    ['final', 'Tell me about your experience with distributed systems and how you handled a production outage.'],
+  ]);
+  assert.equal(
+    bar,
+    'Hello.  ·  This is a test of local transcription on windows.  ·  Tell me about your experience with distributed systems and how you handled a production outage.',
+  );
+});
+
+test('the live partial follows the committed finals and is replaced, not kept', () => {
+  assert.equal(rollingTranscriptWithPartial('', '  first  '), 'first');
+  assert.equal(rollingTranscriptWithPartial('done', 'live'), 'done  ·  live');
+  assert.equal(rollingTranscriptWithPartial('done', '   '), 'done');
+  assert.equal(playBar([['final', 'done'], ['partial', 'abc'], ['partial', 'xyz']]), 'done  ·  xyz');
+});
+
+test('cloud-style growing partials still read the same', () => {
+  assert.equal(playBar([
+    ['partial', 'hello'], ['partial', 'hello world'], ['final', 'Hello world, how are you?'],
+    ['partial', 'next'], ['partial', 'next segment'],
+  ]), 'Hello world, how are you?  ·  next segment');
+});
 
 test('partial updates replace in-progress tail without clearing committed segments', () => {
   let bar = mergeRollingTranscriptPartial('', 'hello');

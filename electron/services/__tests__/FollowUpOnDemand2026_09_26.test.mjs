@@ -1,8 +1,9 @@
 // The follow-up draft is written ON DEMAND (2026-09-26). It used to be written with
 // every meeting's notes — one LLM call per meeting whether or not anyone wanted a
 // follow-up. Now the notes save without one and offer Generate
-// (MeetingPersistence.regenerateFollowUpDraft); a notes Regenerate re-drafts only a
-// draft the user already asked for.
+// (MeetingPersistence.regenerateFollowUpDraft). Since 2026-10-18 nothing else writes
+// one: a notes Regenerate keeps the follow-up the meeting had instead of re-drafting
+// it, and older-format notes no longer save the post-call template draft.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -65,14 +66,14 @@ test('without deterministicOnly the Generate click still reaches the LLM', async
 
 // Drift pin: processAndSaveMeeting and regenerateSavedMeeting need a database, the
 // assembler and BrowserWindow, so they are not unit-testable here. Pin the two call
-// sites: the after-meeting assembler call must not ask for a draft (nor save the
-// PostCallWorkflow template draft on V3 notes), and the Regenerate call asks only
-// through followUpRedraftPlan.
-test('meetings save without a follow-up draft; only Regenerate of a drafted meeting re-drafts (drift pin)', () => {
+// sites: neither assembler call asks for a draft, neither notes format saves the
+// PostCallWorkflow template draft, and a Regenerate keeps the draft the meeting had.
+test('no follow-up is written unless the user asks: not at meeting end, not on a notes Regenerate (drift pin)', () => {
   const src = fs.readFileSync(path.resolve(process.cwd(), 'electron/MeetingPersistence.ts'), 'utf8');
   const asks = src.match(/generateFollowUpDraft\s*:/g) || [];
-  assert.equal(asks.length, 1, `expected exactly one generateFollowUpDraft: call-site argument, found ${asks.length}`);
-  assert.match(src, /generateFollowUpDraft:\s*followUpPlan\.redraft\s*&&/);
-  assert.match(src, /followUpRedraftPlan\(\(details\.detailedSummary as any\)\?\.followUpDraft\)/);
+  assert.equal(asks.length, 0, `expected no generateFollowUpDraft: call-site argument, found ${asks.length}`);
+  assert.doesNotMatch(src, /followUpRedraftPlan\(/);
+  assert.match(src, /\.\.\.postCallEnhancements,[\s\S]{0,300}followUpDraft: undefined,/);
+  assert.match(src, /followUpDraft: v3\.followUpDraft \?\? \(prev && typeof prev === 'object' \? prev\.followUpDraft : undefined\),/);
   assert.doesNotMatch(src, /followUpDraft:\s*summaryData\.followUpDraft\s*\|\|\s*postCallEnhancements\.followUpDraft/);
 });

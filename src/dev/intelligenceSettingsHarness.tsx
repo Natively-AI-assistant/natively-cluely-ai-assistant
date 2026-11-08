@@ -17,6 +17,7 @@
 //   restart=1                        fires the "restart the memory server" nudge
 //   off=1                            every flag off
 //   open=setup,dev                   opens those disclosures after mount
+//   skills=none                      no installed skills (the empty state)
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import '../index.css';
@@ -91,6 +92,11 @@ let restartHandler: ((d: { provider: string }) => void) | null = null;
 // Writes persist for the page's lifetime, so a level change or a Forget reads back
 // the way the main process would answer it.
 let ctxLevel = q.get('env') === '1' ? 'verbose' : 'standard';
+let skills = q.get('skills') === 'none' ? [] : [
+  { id: 'star-answer', name: 'STAR answer', description: 'Shapes a behavioural answer as Situation, Task, Action, Result, in under 90 seconds of speech.', source: 'builtin', enabled: true },
+  { id: 'follow-up', name: 'Follow-up email', description: 'Drafts a short follow-up from the meeting notes, in your own sign-off.', source: 'builtin', enabled: true },
+  { id: 'sql-review', name: 'SQL review', description: 'Reads a query on screen and points out the slow join, the missing index and the N+1.', source: 'userData', enabled: true },
+];
 const never = () => new Promise(() => {});
 const later = <T,>(v: T, ms = 400) => new Promise<T>((r) => setTimeout(() => r(v), ms));
 
@@ -136,6 +142,22 @@ const later = <T,>(v: T, ms = 400) => new Promise<T>((r) => setTimeout(() => r(v
     diagnostics.secondaryStreams = [];
   },
   providerPerformanceCalibrate: async () => later({ ok: true, result: { skippedReason: 'flag_off' } }, 600),
+  // Settings › Intelligence also holds Skills. skills=none shows the empty state.
+  skillsRefresh: async () => later(skills.map((s) => ({ ...s })), 200),
+  skillsDelete: async (id: string) => { skills = skills.filter((s) => s.id !== id); return { success: true }; },
+  skillsOpenFolder: async () => ({ success: true, path: '/Users/you/Library/Application Support/Natively/skills' }),
+  // Upload validates a sample SKILL.md; Install fails, so both the preview card
+  // and the error notice can be looked at.
+  skillsPickFile: async () => ({ canceled: false, payload: { kind: 'file', filename: 'SKILL.md', contentBase64: '' } }),
+  skillsUpload: async (_p: unknown, opts: { autoInstall?: boolean }) => later(opts?.autoInstall
+    ? { stage: 'failed', errors: [{ message: 'A skill with this id is already installed.' }] }
+    : { stage: 'validated', preview: {
+        id: 'pricing-objections', name: 'Pricing objections',
+        description: 'Answers a pushback on price with the value case, one number and a question back.',
+        instructionsPreview: 'When the other side says the price is too high, do not discount. Restate what they said, name the one outcome they care about, give one number from the case studies, then ask what budget they had in mind.',
+        referenceCount: 2, assetCount: 0, scriptCount: 0, otherCount: 0, totalBytes: 4813,
+        fileTree: ['SKILL.md', 'references/case-studies.md', 'references/pricing.md'],
+      } }),
 };
 
 // Click a disclosure open after the pane has loaded, by its visible label.

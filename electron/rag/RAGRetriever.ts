@@ -18,6 +18,8 @@ export type QueryIntent =
 
 export interface RetrievalOptions {
     meetingId?: string;           // For meeting-scoped queries
+    /** Global search limited to these meetings (a folder). Empty finds nothing. */
+    meetingIds?: string[];
     maxTokens?: number;           // Context token budget (default: 1500)
     topK?: number;                // Initial retrieval count (default: 8)
     recencyWeight?: number;       // 0-1, how much to weight recent (default: 0.3)
@@ -208,10 +210,11 @@ export class RAGRetriever {
         const chunkResults = await this.vectorStore.searchSimilar(queryEmbedding, {
             limit: topK * 2,
             minSimilarity: resolveMinSimilarity(spaceKey),
-            spaceKey
+            spaceKey,
+            ...(options.meetingIds ? { meetingIds: options.meetingIds } : {}),
         });
 
-        const summaryResults = await this.vectorStore.searchSummaries(queryEmbedding, 5, spaceKey);
+        const summaryResults = await this.vectorStore.searchSummaries(queryEmbedding, 5, spaceKey, options.meetingIds);
 
         // Get meeting IDs from top summaries
         const relevantMeetingIds = new Set(summaryResults.map(s => s.meetingId));

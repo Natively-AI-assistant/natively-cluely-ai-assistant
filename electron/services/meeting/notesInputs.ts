@@ -9,7 +9,7 @@
 // same inputs and the tests need no database.
 
 import type { CalendarEventSnapshot } from '../calendar/calendarSessionMatch';
-import { buildMeetingPeopleContext, formatMeetingPeopleBlock, titleContextHint, type MeetingPeopleContext } from './meetingNotesContext';
+import { buildMeetingPeopleContext, formatMeetingPeopleBlock, type KnownPersonInput, type MeetingPeopleContext } from './meetingNotesContext';
 import { findPreviousSeriesMeeting, formatLastTimeBlock, type SeriesCandidate } from './recurringMeetings';
 
 export interface NotesInputsSource {
@@ -24,6 +24,8 @@ export interface NotesInputsSource {
   user?: { name?: string; email?: string } | null;
   profile?: { role?: string; company?: string } | null;
   callParticipants?: string[];
+  /** Titles, companies and the user's notes from the People pages (accepted values only). */
+  knownPeople?: KnownPersonInput[];
   /** Earlier meetings to look through for the previous one of this series. */
   seriesCandidates?: SeriesCandidate[];
   userNotes?: string;
@@ -36,11 +38,12 @@ export interface NotesInputs {
   lastTimeBlock: string;
   /** Id of the previous meeting of the series the block came from, for logs. */
   previousMeetingId?: string;
-  titleHint: string;
   userNotes?: string;
   vocabulary?: string[];
   /** For MeetingModeDetector: attendee and call names (no addresses). */
   participantNames: string[];
+  /** For MeetingModeDetector: the invite's addresses (declined left out), for its domain signals. */
+  participantEmails: string[];
 }
 
 export function buildNotesInputs(src: NotesInputsSource): NotesInputs {
@@ -52,6 +55,7 @@ export function buildNotesInputs(src: NotesInputsSource): NotesInputs {
     user: src.user ?? null,
     profile: src.profile ?? null,
     callParticipants: src.callParticipants,
+    knownPeople: src.knownPeople,
   });
   const previous = src.calendarEvent && Array.isArray(src.seriesCandidates) && src.seriesCandidates.length
     ? findPreviousSeriesMeeting({
@@ -71,9 +75,12 @@ export function buildNotesInputs(src: NotesInputsSource): NotesInputs {
     meetingContextBlock: formatMeetingPeopleBlock(people),
     lastTimeBlock: formatLastTimeBlock(previous, { timeZone: src.calendarEvent?.timeZone || src.timeZone }),
     ...(previous ? { previousMeetingId: previous.id } : {}),
-    titleHint: titleContextHint(people),
     ...(typeof src.userNotes === 'string' && src.userNotes.trim() ? { userNotes: src.userNotes } : {}),
     ...(Array.isArray(src.vocabulary) && src.vocabulary.length ? { vocabulary: src.vocabulary } : {}),
     participantNames: [...new Set(participantNames)].slice(0, 50),
+    participantEmails: [...new Set((src.calendarEvent?.attendees || [])
+      .filter(a => a?.response !== 'declined')
+      .map(a => (typeof a?.email === 'string' ? a.email.trim().toLowerCase() : ''))
+      .filter(Boolean))].slice(0, 100),
   };
 }

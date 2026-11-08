@@ -7,15 +7,34 @@
  * build and leaves the actual signing to electron-builder.
  */
 const { buildForAfterPack } = require('./build-apple-speech.js');
+// Apple Silicon only (skips Windows and the Intel Mac package): the Neural
+// Engine Parakeet helper, compiled into Contents/Resources/parakeet-ane/.
+const { buildForAfterPack: buildParakeetAneForAfterPack } = require('./build-parakeet-ane.js');
 const adHocSignModule = require('./ad-hoc-sign.js');
+// Windows targets only (returns at once for macOS): the Visual C++ runtime
+// onnxruntime-node needs, copied next to its binaries. Runs before signing so
+// nothing is added to the app after it.
+const { bundleVcRuntimeForAfterPack } = require('./bundle-vc-runtime.cjs');
+// Both systems: Electron fuses (no --inspect, no run-as-Node, app.asar checked).
+// After every file is in place, before any signing.
+const { flipFusesForAfterPack } = require('./electron-fuses.cjs');
 
 const adHocSign = adHocSignModule.default || adHocSignModule;
 
 async function runAfterPack(
   context,
-  { buildHelper = buildForAfterPack, signApp = adHocSign } = {}
+  {
+    buildHelper = buildForAfterPack,
+    buildParakeetAne = buildParakeetAneForAfterPack,
+    signApp = adHocSign,
+    bundleVcRuntime = bundleVcRuntimeForAfterPack,
+    flipFuses = flipFusesForAfterPack,
+  } = {}
 ) {
   await buildHelper(context);
+  await buildParakeetAne(context);
+  await bundleVcRuntime(context);
+  await flipFuses(context);
   await signApp(context);
 }
 

@@ -1,27 +1,23 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useStreamBuffer } from '../hooks/useStreamBuffer';
+
 import { X } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { chatScrimMotion, chatSheetMotion } from './chatSheetMotion';
 import { genMessageId } from '../utils/messageId';
-import { mapLanguageForPrism, isBlockCode } from '../utils/prismLanguage';
-import { registerPrismLanguages } from '../utils/registerPrismLanguages';
-import nativelyIcon from './icon.png';
+import { NativelyWordmark } from './NativelyWordmark';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { splitGistLineStreaming } from '../lib/displayMarkup';
-// .lg-bubble (your questions), imported here so the chat does not depend on
-// MeetingDetails having loaded the stylesheet first.
+// .lg-bubble.lg-bubble-lavender (your questions), imported here so the chat
+// does not depend on MeetingDetails having loaded the stylesheet first.
 import '../ui-components/LiquidGlassButton.css';
 
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
-import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism-light';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { DiagramAwareMarkdown } from './diagram/DiagramAwareMarkdown';
+import { renderChatMarkdown } from './chatMarkdown';
 
-registerPrismLanguages();
+/** How long the chat waits for a stream's done event after its query call returns. */
+const STREAM_SETTLE_MS = 3000;
+
 
 // ============================================
 // Types 
@@ -90,11 +86,12 @@ const UserMessage: React.FC<{ content: string }> = ({ content }) => (
         transition={{ duration: 0.15 }}
         className="flex justify-end mb-6"
     >
-        {/* The same subtle Liquid Glass as the Usage tab's question bubble
-            (.lg-bubble, ui-components): fill and white text from
-            --bubble-user-*, so a question reads the same in both places. The
-            box and radius stay this chat's own. */}
-        <div className="lg-bubble px-5 py-3 rounded-2xl rounded-tr-md max-w-[70%] text-[15px] leading-relaxed">
+        {/* The Usage tab's question card, exactly (MeetingDetails.tsx): the
+            website's lavender Liquid Glass (.lg-bubble.lg-bubble-lavender,
+            ui-components) and its shape, 19px padding, corners 19/5.5/19/19,
+            semibold label. Owner request: the same colour and shape as the
+            Usage tab's question card. */}
+        <div className="lg-bubble lg-bubble-lavender px-[19px] py-[9px] rounded-[19px] rounded-tr-[5.5px] max-w-[80%] text-[15px] font-semibold leading-relaxed select-text">
             {content}
         </div>
     </motion.div>
@@ -117,74 +114,15 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean; isLat
                 {/* Markdown Content with tight line height and spacing */}
                 <div className="markdown-content">
                     {/* A ```mermaid block is drawn by the shared diagram card; everything
-                        else goes through this chat's own Markdown renderer, unchanged. */}
+                        else goes through renderChatMarkdown (chatMarkdown.tsx), shared with
+                        the search-all-meetings chat. */}
                     <DiagramAwareMarkdown
                       text={gistBody}
                       streaming={Boolean(isStreaming)}
                       // Only the answer just given may be repaired by itself (one model
                       // call); an older answer in the thread keeps its "Try to fix" button.
                       allowAutoRepair={Boolean(isLatest)}
-                      renderMarkdown={(chunk, key) => (
-                    <ReactMarkdown
-                        key={key}
-                        remarkPlugins={[remarkGfm, remarkMath]}
-                        rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false, errorColor: '#cc0000' }]]}
-                        components={{
-                            p: ({ node, ...props }: any) => <p className="mb-[6px] last:mb-0 leading-relaxed whitespace-pre-wrap text-[13.5px]" {...props} />,
-                            a: ({ node, ...props }: any) => <a className="text-accent-primary hover:underline" {...props} />,
-                            h1: ({ node, ...props }: any) => <h1 className="text-sm font-bold mt-2 mb-[4.5px] leading-relaxed uppercase tracking-wide" {...props} />,
-                            h2: ({ node, ...props }: any) => <h2 className="text-xs font-bold mt-1.5 mb-[4.5px] leading-relaxed uppercase tracking-wide" {...props} />,
-                            h3: ({ node, ...props }: any) => <h3 className="text-xs font-semibold mt-1.5 mb-[4.5px] leading-relaxed" {...props} />,
-                            ul: ({ node, ...props }: any) => <ul className="list-disc pl-4 mt-[4.5px] mb-[4.5px] space-y-0 leading-relaxed text-[13.5px]" {...props} />,
-                            ol: ({ node, ...props }: any) => <ol className="list-decimal pl-4 mt-[4.5px] mb-[4.5px] space-y-0 leading-relaxed text-[13.5px]" {...props} />,
-                            li: ({ node, ...props }: any) => <li className="pl-1 mb-[4.5px] last:mb-0 leading-relaxed text-[13.5px]" {...props} />,
-                            pre: ({ children }: any) => <div className="not-prose mb-3 mt-1.5">{children}</div>,
-                            code: ({ node, className, children, ...props }: any) => {
-                                const match = /language-([\w+#-]+)/.exec(className || '');
-                                const isBlock = isBlockCode(className, String(children));
-                                const lang = match ? match[1] : '';
-                                const resolved = mapLanguageForPrism(lang, String(children));
-
-                                return isBlock ? (
-                                    <div className="my-2 rounded-xl overflow-hidden border border-white/[0.08] shadow-lg bg-zinc-800/60 backdrop-blur-md">
-                                        <div className="bg-white/[0.04] px-3 py-1 border-b border-white/[0.08]">
-                                            <span className="text-[9px] uppercase tracking-widest font-semibold text-white/40 font-mono">
-                                                {resolved || 'CODE'}
-                                            </span>
-                                        </div>
-                                        <div className="bg-transparent">
-                                            <SyntaxHighlighter
-                                                language={resolved}
-                                                style={vscDarkPlus}
-                                                customStyle={{
-                                                    margin: 0,
-                                                    borderRadius: 0,
-                                                    fontSize: '12px',
-                                                    lineHeight: '1.45',
-                                                    background: 'transparent',
-                                                    padding: '12px',
-                                                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
-                                                }}
-                                                wrapLongLines={true}
-                                                showLineNumbers={true}
-                                                lineNumberStyle={{ minWidth: '2.5em', paddingRight: '1.2em', color: 'rgba(255,255,255,0.2)', textAlign: 'right', fontSize: '10px' }}
-                                                {...props}
-                                            >
-                                                {String(children).replace(/\n$/, '')}
-                                            </SyntaxHighlighter>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <code className="bg-bg-tertiary px-1.5 py-0.5 rounded text-[12px] font-mono text-text-primary border border-border-subtle whitespace-pre-wrap" {...props}>
-                                        {children}
-                                    </code>
-                                );
-                            },
-                        }}
-                    >
-                        {chunk}
-                    </ReactMarkdown>
-                      )}
+                      renderMarkdown={renderChatMarkdown}
                     />
                 </div>
             </div>
@@ -213,6 +151,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
     // Match the modes manager's `--mm-bg` exactly so the expanded chat
     // card looks like the same dark grey surface.
     const isLightTheme = useResolvedTheme() === 'light';
+    const reduceMotion = useReducedMotion() ?? false;
     const chatWindowBg = isLightTheme ? '#f9f9f9' : '#111111';
 
     // Submit initial query when overlay opens
@@ -326,6 +265,13 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
         // top of submitQuestion silently drops every subsequent message
         // (no user-message push, no response).
         let activeCleanups: Array<() => void> = [];
+        // Resolved by the stream's own done/error event. The ipc reply to the query can
+        // reach the page before the last chunks and the done event (they travel apart),
+        // and tearing the listeners down then left the answer cut mid-sentence ("$7.20 per
+        // employee per month on a"; Natively vs Granola benchmark 2026-10-31).
+        let settle: () => void = () => {};
+        const settled = new Promise<void>((resolve) => { settle = resolve; });
+        const awaitSettled = () => Promise.race([settled, new Promise<void>((r) => setTimeout(r, STREAM_SETTLE_MS))]);
 
         try {
             // Add typing indicator delay (200ms) - makes the AI feel "thoughtful"
@@ -373,6 +319,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
                 tokenCleanup?.();
                 doneCleanup?.();
                 errorCleanup?.();
+                settle();
             });
 
             const errorCleanup = window.electronAPI?.onRAGStreamError((data: { error: string }) => {
@@ -385,6 +332,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
                 tokenCleanup?.();
                 doneCleanup?.();
                 errorCleanup?.();
+                settle();
             });
 
             if (tokenCleanup) activeCleanups.push(tokenCleanup);
@@ -397,6 +345,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
             if (meetingId) {
                 // Use RAG-powered meeting query
                 const result = await window.electronAPI?.ragQueryMeeting(meetingId, question);
+                if (result?.success && !result?.fallback) await awaitSettled();
 
                 // If RAG not available (or failed), fall back to context-window chat
                 if (result?.fallback) {
@@ -515,6 +464,7 @@ ${contextString}`;
                     oldTokenCleanup?.();
                     oldDoneCleanup?.();
                     oldErrorCleanup?.();
+                    settle();
                 });
 
                 const oldErrorCleanup = window.electronAPI?.onGeminiStreamError((error: string, meta?: { streamId?: number | null; source?: string }) => {
@@ -528,6 +478,7 @@ ${contextString}`;
                     oldTokenCleanup?.();
                     oldDoneCleanup?.();
                     oldErrorCleanup?.();
+                    settle();
                 });
 
                 if (oldTokenCleanup) activeCleanups.push(oldTokenCleanup);
@@ -540,6 +491,7 @@ ${contextString}`;
                     systemPrompt,
                     { skipSystemPrompt: true }
                 );
+                await awaitSettled();
             }
 
         } catch (error) {
@@ -548,6 +500,15 @@ ${contextString}`;
             setErrorMessage("Something went wrong. Please try again.");
             setChatState('error');
         } finally {
+            // Text that streamed in but never got its done event: keep it, never drop it.
+            const pending = streamBuffer.getBufferedContent();
+            if (pending) {
+                setMessages(prev => prev.map(msg =>
+                    msg.id === assistantMessageId && msg.isStreaming
+                        ? { ...msg, content: pending, isStreaming: false }
+                        : msg
+                ));
+            }
             // Always remove listeners and reset chatState — even if the
             // IPC done/error callbacks never fired. Without this, a single
             // hung stream leaves chatState stuck and silently drops every
@@ -566,41 +527,43 @@ ${contextString}`;
             {isOpen && (
                 <motion.div
                     key="meeting-chat-modal"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.16 }}
                     className="fixed inset-0 z-[300] flex flex-col justify-end"
                     onClick={handleBackdropClick}
                 >
-                    {/* Backdrop — dims only; the parent's opacity fade brings it in. The
-                        same dim as Settings and the Modes Manager (GenieModal's
-                        backdropClassName in SettingsOverlay / App): 6% in light, 60%
-                        in dark, no blur. */}
-                    <div data-chat-scrim="" className={`absolute inset-0 ${isLightTheme ? 'bg-black/[0.06]' : 'bg-black/60'}`} />
+                    {/* Backdrop — dims only. It fades on its own, not via the wrapper, so
+                        closing does not hide the sheet before it slides down
+                        (chatSheetMotion.ts). The same dim as Settings and the Modes
+                        Manager (GenieModal's backdropClassName in SettingsOverlay / App):
+                        6% in light, 60% in dark, no blur. */}
+                    <motion.div {...chatScrimMotion(reduceMotion)} data-chat-scrim="" className={`absolute inset-0 ${isLightTheme ? 'bg-black/[0.06]' : 'bg-black/60'}`} />
 
                     {/* Chat Window - extends to bottom, leaves room for input */}
                     <motion.div
                         ref={chatWindowRef}
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "85vh", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{
-                            height: { type: "spring", stiffness: 300, damping: 30, mass: 0.8 },
-                            opacity: { duration: 0.2 }
-                        }}
-                        className={`relative mx-auto w-full max-w-[680px] mb-0 rounded-t-[24px] border-t border-x border-border-subtle ${isLightTheme ? 'shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_-20px_48px_-12px_rgba(0,0,0,0.16)]' : 'shadow-2xl'} overflow-hidden flex flex-col`}
+                        {...chatSheetMotion(reduceMotion)}
+                        className={`relative mx-auto w-full max-w-[680px] h-[85vh] mb-0 rounded-t-[24px] border-t border-x border-border-subtle ${isLightTheme ? 'shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_-20px_48px_-12px_rgba(0,0,0,0.16)]' : 'shadow-2xl'} overflow-hidden flex flex-col`}
                         style={{ backgroundColor: chatWindowBg }}
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* Header with close button. No divider under it, by owner request:
-                            the messages run straight up to the title. */}
-                        <div className="flex items-center justify-between px-4 py-3 shrink-0">
-                            {/* One step darker than it was (tertiary -> secondary, logo
-                                50% -> 70%), by owner request. */}
-                            <div className="flex items-center gap-2 text-text-secondary">
-                                <img src={nativelyIcon} className="w-3.5 h-3.5 force-black-icon opacity-70" alt="logo" />
-                                <span className="text-[13px] font-medium">Search this meeting</span>
+                            the messages run straight up to the title. Owner: the wordmark's
+                            position "not good" at 16px in, short of the answers' 24px column
+                            and tucked into the 24px corner. Now it starts on the messages'
+                            column (pl-6 = their px-6), as far from the top as from the
+                            side, and the X's glyph ends on the column's right edge (pr-3
+                            plus the button's p-2 and the icon's own 4px inset = 24px). */}
+                        <div className="flex items-center justify-between pl-6 pr-3 pt-4 pb-1 shrink-0">
+                            {/* The natively wordmark, as the Usage tab heads its answers
+                                (MeetingDetails.tsx), in place of the round app icon: owner
+                                request, "use the new natively branding". currentColor, so
+                                it takes text-secondary in both themes. The wordmark stands
+                                alone: the "Search this meeting" label after it was removed,
+                                owner request. Alone it is the sheet's title, so it is sized
+                                as one: 20px, whose x-height (11.1px) reads like 20px text,
+                                a step under the launcher's 27px page title and well over the
+                                14px label heading the Usage tab's answers. */}
+                            <div className="flex items-center text-text-secondary">
+                                <NativelyWordmark height={20} className="block shrink-0" />
                             </div>
                             <button
                                 onClick={handleClose}

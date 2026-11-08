@@ -33,6 +33,11 @@ pub struct MicUser {
     pub bundle_id: Option<String>,
     /// The executable: macOS proc_pidpath; Windows a NonPackaged entry's path.
     pub path: Option<String>,
+    /// The input device the process is capturing from, by its CoreAudio name
+    /// (the same name cpal lists it under, so it can be set as Natively's own
+    /// capture device). macOS 14+ only; None on older macOS and on Windows,
+    /// where per-process device is not available.
+    pub device_name: Option<String>,
 }
 
 #[napi(object)]
@@ -55,6 +60,17 @@ pub fn get_mic_users() -> Option<Vec<MicUser>> {
 #[napi]
 pub fn get_visible_windows() -> Option<Vec<WindowInfo>> {
     imp::windows()
+}
+
+/// Whether the system's default input device is being captured by any process
+/// right now, for the fallback on macOS before 14, where there is no
+/// per-process list (`get_mic_users` is None there): the detector can still
+/// tell the microphone is live and offer to start when a known meeting app has
+/// a window up. Some(true/false) when the OS can say, None otherwise (always
+/// None on Windows, which has the per-app consent store instead).
+#[napi]
+pub fn input_in_use() -> Option<bool> {
+    imp::input_in_use()
 }
 
 /// Bounds a window list (a machine with hundreds of windows gets the first 300).
@@ -104,10 +120,38 @@ mod imp {
                         pid,
                         bundle_id: p.bundle_id().ok().map(|b| b.to_string()).filter(|s| !s.is_empty()),
                         path: pid.and_then(path_of),
+                        device_name: input_device_name(p),
                     }
                 })
                 .collect(),
         )
+    }
+
+    /// The name of the first input device a mic-capturing process is using
+    /// (CoreAudio's device name, which matches what cpal lists). None when the
+    /// process reports no device or the name cannot be read.
+    fn input_device_name(p: &ca::Process) -> Option<String> {
+        let devices = p.devices().ok()?;
+        for d in devices {
+            if let Ok(name) = d.name() {
+                let name = name.to_string();
+                if !name.is_empty() {
+                    return Some(name);
+                }
+            }
+        }
+        None
+    }
+
+    pub fn input_in_use() -> Option<bool> {
+        // The default input device's "running somewhere" flag: true while any
+        // process is capturing from it. Available on macOS 13 as well as 14+,
+        // so it covers the versions where the per-process list does not exist.
+        let device = ca::System::default_input_device().ok()?;
+        let running: u32 = device
+            .prop(&ca::PropSelector::DEVICE_IS_RUNNING_SOMEWHERE.global_addr())
+            .ok()?;
+        Some(running != 0)
     }
 
     fn key(k: core_foundation::string::CFStringRef) -> CFString {
@@ -229,11 +273,11 @@ mod imp {
                 let Some(np) = open(store.0, &name) else { continue };
                 for exe in subkeys(&np) {
                     if open(np.0, &exe).is_some_and(|k| in_use(&k)) {
-                        out.push(MicUser { pid: None, bundle_id: None, path: Some(exe.replace('#', "\\")) });
+                        out.push(MicUser { pid: None, bundle_id: None, path: Some(exe.replace('#', "\\")), device_name: None });
                     }
                 }
             } else if open(store.0, &name).is_some_and(|k| in_use(&k)) {
-                out.push(MicUser { pid: None, bundle_id: Some(name), path: None });
+                out.push(MicUser { pid: None, bundle_id: Some(name), path: None, device_name: None });
             }
         }
         Some(out)
@@ -282,6 +326,13 @@ mod imp {
         BOOL(1)
     }
 
+    pub fn input_in_use() -> Option<bool> {
+        // Windows reports microphone use per app through the consent store
+        // (mic_users above), not a single device flag, so there is nothing to
+        // add here; the per-app list is always available.
+        None
+    }
+
     pub fn windows() -> Option<Vec<WindowInfo>> {
         let mut out: Vec<WindowInfo> = Vec::new();
         // SAFETY: `out` outlives the synchronous EnumWindows call and the callback
@@ -297,6 +348,9 @@ mod imp {
 mod imp {
     use super::{MicUser, WindowInfo};
     pub fn mic_users() -> Option<Vec<MicUser>> {
+        None
+    }
+    pub fn input_in_use() -> Option<bool> {
         None
     }
     pub fn windows() -> Option<Vec<WindowInfo>> {

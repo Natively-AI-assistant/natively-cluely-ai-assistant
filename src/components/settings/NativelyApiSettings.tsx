@@ -6,6 +6,7 @@ import {
   CheckCircle,
   ChevronDown,
   ChevronsRight,
+  Clock,
   Layers,
   Loader2,
   Mic,
@@ -23,15 +24,17 @@ import { useTrialRemaining } from '../trial/useTrialRemaining';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
 import { BEAT, EASE_ENTER, EASE_LEAVE, INK, SETTLE } from '../../lib/plansMotion';
 import { Presence, SettingsMotionReady, SwapLabel } from './SettingsRow';
-// Painted as a CSS mask, not rendered as an <img>: the asset is a white
-// monochrome glyph, so on the light theme's pale plaque an <img> would be
-// invisible. See `.natively-key-mark` in index.css.
-import nativelyLogo from '../../assets/logo.webp';
 import { isTrialClaimedLocally, markTrialClaimedLocally } from '../../lib/trialCampaign.mjs';
 import { trialRefusal } from '../../lib/trial/trialStart.mjs';
+import { CHECKOUT_URLS } from '../../config/urls';
+import { BillingCycleSwitch } from '../ui/BillingCycleSwitch';
+import {
+  apiPlanLabel, formatMeetingTime, isPackPlan, packStatus, PRO_PACKS, YEARLY_MONTHS_FREE,
+  type BillingCycle, type PackStatus,
+} from '../../lib/apiPlans.mjs';
 import {
   formatCompact, formatMeter, formatUsd, normalizeQuota, TRIAL_FALLBACK_LIMITS,
-  type NativelyQuota, type NativelyPlanLimits, type TrialUsage, type TrialLimits, type UsageMeter,
+  type NativelyQuota, type NativelyPlanLimits, type NativelyUsageResponse, type TrialUsage, type TrialLimits, type UsageMeter,
 } from '../../types/nativelyUsage';
 
 // ─── Types ───────────────────────────────────────────────────
@@ -46,12 +49,13 @@ interface UsageData {
   quota: NativelyQuota;
   /** The plan row the server enforced. Absent on a cache written by an older build. */
   limits?: NativelyPlanLimits;
+  /** 'monthly' | 'yearly' | 'pack'. Absent from servers and caches before 2026-11-06. */
+  billing_period?: NativelyUsageResponse['billing_period'];
+  /** A Pro pack's hours and use-by date; null on every other plan. */
+  pack?: NativelyUsageResponse['pack'];
 }
 
-const PLAN_STANDARD_URL = 'https://checkout.dodopayments.com/buy/pdt_0NbFixGmD8CSeawb5qvVl';
-const PLAN_PRO_URL = 'https://checkout.dodopayments.com/buy/pdt_0NcM6Aw0IWdspbsgUeCLA';
-const PLAN_MAX_URL = 'https://checkout.dodopayments.com/buy/pdt_0NcM7JElX4Af6LNVFS1Yf';
-const PLAN_ULTRA_URL = 'https://checkout.dodopayments.com/buy/pdt_0NcM7rC2kAb69TFKsZnUU';
+// Checkout links live in src/config/urls.ts, monthly and yearly side by side.
 const MASKED_NATIVELY_KEY = '•'.repeat(24);
 
 // Last-known usage, remembered across tab switches AND app restarts.
@@ -132,13 +136,16 @@ function setUsageCache(next: UsageData | null): void {
 // literal means the chooser still renders something sensible offline or before
 // the catalog arrives; letting it be the only value is what allowed the prices
 // and allowances in this file to drift away from the ones actually charged.
-const PLANS = [
+export const PLANS = [
   {
     id: 'natively_api_standard_monthly',
     name: 'Standard',
     planKey: 'standard',
     price: '$8',
-    url: PLAN_STANDARD_URL,
+    // 10x monthly: two months free. The allowance still refills every month.
+    yearlyPrice: '$80',
+    url: CHECKOUT_URLS.apiStandard,
+    yearlyUrl: CHECKOUT_URLS.apiStandardYearly,
     badgeText: 'Basic',
     includesPro: false,
     description: 'Essential transcription and AI requests for light, everyday use.',
@@ -164,7 +171,10 @@ const PLANS = [
     name: 'Pro',
     planKey: 'pro',
     price: '$15',
-    url: PLAN_PRO_URL,
+    // 10x monthly: two months free. The allowance still refills every month.
+    yearlyPrice: '$150',
+    url: CHECKOUT_URLS.apiPro,
+    yearlyUrl: CHECKOUT_URLS.apiProYearly,
     badgeText: 'Recommended',
     includesPro: true,
     description: 'The full Natively Pro app plus API usage for daily work.',
@@ -181,7 +191,10 @@ const PLANS = [
     name: 'Max',
     planKey: 'max',
     price: '$25',
-    url: PLAN_MAX_URL,
+    // 10x monthly: two months free. The allowance still refills every month.
+    yearlyPrice: '$250',
+    url: CHECKOUT_URLS.apiMax,
+    yearlyUrl: CHECKOUT_URLS.apiMaxYearly,
     badgeText: 'Best Value',
     includesPro: true,
     description: 'Higher volume for developers and teams doing more each month.',
@@ -198,14 +211,17 @@ const PLANS = [
     name: 'Ultra',
     planKey: 'ultra',
     price: '$35',
-    url: PLAN_ULTRA_URL,
+    // 10x monthly: two months free. The allowance still refills every month.
+    yearlyPrice: '$350',
+    url: CHECKOUT_URLS.apiUltra,
+    yearlyUrl: CHECKOUT_URLS.apiUltraYearly,
     badgeText: 'Heavy Users',
     includesPro: true,
-    description: 'For continuous recording and the heaviest daily usage.',
+    description: 'For the heaviest daily use: about 12.5 hours of meetings a month.',
     note: 'Includes a full Natively Pro desktop app license for the duration of subscription.',
     features: [
       'Maximum AI usage, all-day',
-      'Continuous recording & transcription',
+      'The most meeting transcription',
       'Maximum web searches',
       'Full Natively Pro app features included',
     ],
@@ -234,13 +250,16 @@ function pickFeatureIcon(feature: string) {
 // Odometer price: each digit is a reel of 0-9 that rolls to its value. The
 // card body is keyed by plan, so this mounts fresh on every switch; it starts
 // on the previous plan's figure and rolls to the new one on the next frame.
-// The tens reel collapses to zero width for single-digit prices ($8).
-// Two reels cover whole dollars under $100 only; any other label (cents, $100+)
-// is shown as plain text rather than a reel parked between digits.
+// The Monthly / Yearly switch keeps the card mounted, so there the reels roll
+// in place ($15 -> $150).
+// Three reels cover whole dollars up to $999 (yearly Ultra is $350). A leading
+// reel collapses to zero width when the price has fewer digits ($8, $80).
+// Any other label (cents, $1000+) is shown as plain text rather than a reel
+// parked between digits.
 const PRICE_DIGITS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 const PRICE_ROLL_EASE = 'cubic-bezier(0.23, 1, 0.32, 1)';
 const reelDollars = (label: string): number | null => {
-  const m = /^\$(\d{1,2})$/.exec(label);
+  const m = /^\$(\d{1,3})$/.exec(label);
   return m ? Number(m[1]) : null;
 };
 
@@ -254,7 +273,8 @@ function RollingPrice({ price, from }: { price: string; from: string }) {
   }, [value]);
 
   if (value === null || shown === null) return <>{price}</>;
-  const tens = Math.floor(shown / 10);
+  const hundreds = Math.floor(shown / 100);
+  const tens = Math.floor(shown / 10) % 10;
   const reel = (digit: number, delayMs: number) => (
     <span style={{ display: 'inline-block', height: '1em', overflow: 'hidden' }}>
       <span
@@ -271,22 +291,27 @@ function RollingPrice({ price, from }: { price: string; from: string }) {
       </span>
     </span>
   );
+  // A leading reel: present only while the price has that many digits.
+  const leading = (shownNow: boolean, digit: number, delayMs: number) => (
+    <span
+      aria-hidden="true"
+      style={{
+        display: 'inline-block',
+        overflow: 'hidden',
+        width: shownNow ? '1ch' : 0,
+        opacity: shownNow ? 1 : 0,
+        transition: reduceMotion ? 'none' : `width 450ms ${PRICE_ROLL_EASE}, opacity 300ms`,
+      }}
+    >
+      {reel(digit, delayMs)}
+    </span>
+  );
 
   return (
     <span role="img" aria-label={`$${value}`} style={{ display: 'inline-flex' }}>
       <span aria-hidden="true">$</span>
-      <span
-        aria-hidden="true"
-        style={{
-          display: 'inline-block',
-          overflow: 'hidden',
-          width: tens ? '1ch' : 0,
-          opacity: tens ? 1 : 0,
-          transition: reduceMotion ? 'none' : `width 450ms ${PRICE_ROLL_EASE}, opacity 300ms`,
-        }}
-      >
-        {reel(tens, 0)}
-      </span>
+      {leading(shown >= 100, hundreds, 0)}
+      {leading(shown >= 10, tens, 20)}
       <span aria-hidden="true">{reel(shown % 10, 40)}</span>
     </span>
   );
@@ -572,7 +597,7 @@ function ActiveTrialCard({ expiresAt, onOptions }: { expiresAt: string; onOption
   return (
     <div>
       <SectionLabel>Free trial active</SectionLabel>
-      <Card className="natively-key-card">
+      <Card>
         <div className="px-4 py-4">
           <div className="flex items-center gap-3">
             <div className="min-w-0 flex-1">
@@ -639,10 +664,12 @@ function CtaLabel({ id, children }: { id: string; children: React.ReactNode }) {
   );
 }
 
+// Every container in this tab wears the `natively-key-card` plaque, so none of
+// them falls back to the grey item surface in light theme.
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
     <div
-      className={`bg-bg-item-surface rounded-2xl border border-border-subtle overflow-hidden ${className}`}
+      className={`natively-key-card bg-bg-item-surface rounded-2xl border border-border-subtle overflow-hidden ${className}`}
     >
       {children}
     </div>
@@ -687,6 +714,95 @@ function trialMeter(used: number, limit: number, unit: UsageMeter['unit']): Usag
     visual_percent: Math.min(100, Math.max(0, Number(percent.toFixed(1)))),
     unit,
   };
+}
+
+// The Monthly / Yearly switch is shared with the end-of-trial card:
+// ../ui/BillingCycleSwitch.tsx.
+
+// ─── Pro packs ───────────────────────────────────────────────
+// Two one-time buys beside the subscriptions. The rule that makes a pack a
+// pack (hours OR days, whichever runs out first; any live meeting counts, even
+// on your own keys) is said once, under both, rather than on each card.
+function ProPacks({ currentPlan, onBuy }: { currentPlan?: string; onBuy: (url: string) => void }) {
+  const urls: Record<string, string> = { pack_light: CHECKOUT_URLS.packLight, pack_heavy: CHECKOUT_URLS.packHeavy };
+  const current = currentPlan?.toLowerCase();
+  return (
+    <div className="pt-3">
+      <SectionLabel>Or a one-time Pro pack</SectionLabel>
+      <div className="grid grid-cols-2 gap-3">
+        {PRO_PACKS.map((p) => {
+          // Another pack adds hours to the one running, so the owner of a pack
+          // is offered more time rather than a second identical card.
+          const owned = current === p.id;
+          return (
+            <Card key={p.id}>
+              <div className="px-4 py-3.5 flex items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[14px] font-semibold text-text-primary tracking-[-0.01em] whitespace-nowrap">
+                    {p.name}{' '}
+                    <span className="font-medium text-text-secondary tabular-nums">${p.price}</span>
+                  </p>
+                  <p className="text-[12px] text-text-secondary mt-0.5 leading-snug whitespace-nowrap">
+                    {p.hours} hours · {p.days} days
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onBuy(urls[p.id])}
+                  data-state="secondary"
+                  aria-label={`${owned ? 'Add hours with' : 'Buy'} the ${p.name}, $${p.price} once. Opens checkout`}
+                  className="natively-key-cta shrink-0 h-8 px-3.5 flex items-center justify-center gap-1 text-[12px] font-medium select-none cursor-pointer"
+                >
+                  {owned ? 'Add hours' : 'Buy'}
+                  <ArrowUpRight size={13} strokeWidth={2.2} />
+                </button>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+      <p className="text-[11px] text-text-tertiary px-1 mt-2 leading-snug">
+        Paid once, never renews. Natively Pro and the API until the hours or the days run out, whichever comes first.
+        Any live meeting uses hours, even on your own AI keys. Another pack adds hours.
+      </p>
+    </div>
+  );
+}
+
+// ─── Pack meeting time ───────────────────────────────────────
+// A pack is sold in hours of meetings, so that is its first row: time left
+// against time bought. Same markup as ResourceMeter's bar so it reads as one
+// of the card's rows.
+function PackMeetingTime({ status }: { status: PackStatus }) {
+  const left = status.secondsLeft;
+  const isHigh = status.hoursKnown && status.usedPercent >= 80;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <Clock size={12} className="text-text-tertiary" strokeWidth={1.75} />
+          <span className="text-[12px] text-text-secondary truncate">Meeting time</span>
+        </div>
+        <span className={`text-[12px] tabular-nums shrink-0 ${isHigh || status.ended ? 'text-amber-500 font-medium' : 'text-text-tertiary'}`}>
+          {status.ended
+            ? (status.endedReason === 'hours_used' ? 'Hours used up' : 'Pack ended')
+            : status.hoursKnown && left != null
+              ? `${formatMeetingTime(left)} left of ${formatMeetingTime(status.secondsTotal)}`
+              : 'Until the use-by date'}
+        </span>
+      </div>
+      {status.hoursKnown && (
+        <div className="h-[6px] natively-meter-track">
+          <div
+            className={`natively-meter-fill transition-[width] duration-700 ease-out motion-reduce:transition-none ${
+              status.ended || status.usedPercent >= 100 ? 'natively-meter-fill--over' : isHigh ? 'natively-meter-fill--high' : ''
+            }`}
+            style={{ width: `${status.usedPercent}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Price ───────────────────────────────────────────────────
@@ -769,6 +885,16 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   // page: content shifting under a user's cursor while they're trying to
   // read is disorienting, and it recreates itself every time this tab is
   // revisited (module state doesn't survive the SettingsOverlay unmount).
+
+  // Monthly / Yearly on the tier card. Monthly by default; a yearly subscriber
+  // opens on Yearly so their own plan reads as the active one.
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>(
+    () => (usageCache?.billing_period === 'yearly' ? 'yearly' : 'monthly'),
+  );
+  const keyBillingPeriod = usageData?.billing_period;
+  useEffect(() => {
+    if (keyBillingPeriod === 'yearly') setBillingCycle('yearly');
+  }, [keyBillingPeriod]);
 
   const selectPlan = useCallback((newPlanId: string) => {
     setSelectedPlanId(prev => {
@@ -1247,9 +1373,13 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   };
 
   const isDirty = apiKey.length > 0 && !apiKey.includes('•') && !isSaved;
-  const planLabel = usageData?.plan
-    ? usageData.plan.charAt(0).toUpperCase() + usageData.plan.slice(1)
+  // "Pro", "Light pack" (pack_light), and "Pro · yearly" for a yearly key.
+  const planName = apiPlanLabel(usageData?.plan);
+  const planLabel = planName && usageData?.billing_period === 'yearly' ? `${planName} · yearly` : planName;
+  const keyPack = usageData && (usageData.billing_period === 'pack' || isPackPlan(usageData.plan))
+    ? packStatus(usageData.pack)
     : null;
+  const keyIsPack = !!usageData && (usageData.billing_period === 'pack' || isPackPlan(usageData.plan));
   const fmtDate = (iso: string) => {
     try {
       return new Date(iso).toLocaleDateString(undefined, {
@@ -1262,19 +1392,38 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     }
   };
 
+  const usageRefreshButton = (
+    <button
+      onClick={() => fetchUsage({ force: true })}
+      disabled={isLoadingUsage}
+      title="Refresh"
+      aria-label="Refresh usage"
+      className="flex items-center justify-center w-5 h-5 rounded-md text-text-tertiary
+                    hover:text-text-secondary transition-colors duration-150 motion-reduce:transition-none
+                    disabled:opacity-40 cursor-pointer shrink-0"
+    >
+      <RefreshCw
+        size={11}
+        className={isLoadingUsage ? 'animate-spin' : ''}
+        strokeWidth={2}
+      />
+    </button>
+  );
+
   const PlansCard = (
     // The hover handlers that used to live here only existed to pause a
     // setInterval that auto-rotated the tier selector every 4.5s. That
     // rotation is gone (it made the panel look like it was glitching
     // mid-transition), so there is nothing left to pause.
     <div className="space-y-3">
-      {/* Header. The "Pro, Max & Ultra include Natively Pro app" note that used
-          to sit opposite this label is gone: the tab header above the whole
-          section already states it, and each qualifying tier lists "Full
-          Natively Pro app features included" in its own feature rows. */}
-      <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-widest">
-        Choose a Plan
-      </p>
+      {/* No "Choose a Plan" label above the tier bar (removed 2026-10-24 at
+          Evin's request): the tier bar says it, and inside "Change plan" the
+          accordion's own title does. */}
+
+      {/* Monthly / Yearly. The same two-way switch as Overlay's "What meetings
+          open" (.surface-switch in index.css): one thumb sliding under two
+          labels. Yearly is 10x monthly, so the note says what that buys. */}
+      <BillingCycleSwitch value={billingCycle} onChange={setBillingCycle} />
 
       {/* Segmented control selector tab bar */}
       <div
@@ -1308,10 +1457,10 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         </div>
         {(
           [
-            { id: 'natively_api_standard_monthly', name: 'Standard', price: '$8/mo' },
-            { id: 'natively_api_pro_monthly', name: 'Pro', price: '$15/mo' },
-            { id: 'natively_api_max_monthly', name: 'Max', price: '$25/mo' },
-            { id: 'natively_api_ultra_monthly', name: 'Ultra', price: '$35/mo' },
+            { id: 'natively_api_standard_monthly', name: 'Standard', price: '$8/mo', yearlyPrice: '$80/yr' },
+            { id: 'natively_api_pro_monthly', name: 'Pro', price: '$15/mo', yearlyPrice: '$150/yr' },
+            { id: 'natively_api_max_monthly', name: 'Max', price: '$25/mo', yearlyPrice: '$250/yr' },
+            { id: 'natively_api_ultra_monthly', name: 'Ultra', price: '$35/mo', yearlyPrice: '$350/yr' },
           ] as const
         ).map((tab) => {
           const isSel = selectedPlanId === tab.id;
@@ -1320,7 +1469,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           // was never built on the server — three months of a call that always
           // 404'd and a fallback that always won. /v1/plans (planCatalog) is
           // the live source that does exist, and it agrees with these figures.
-          const displayPrice = tab.price;
+          const displayPrice = billingCycle === 'yearly' ? tab.yearlyPrice : tab.price;
           return (
             <button
               key={tab.id}
@@ -1356,18 +1505,26 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
 
         const plan = PLANS.find((p) => p.id === selectedPlanId)!;
         const limits = planCatalog?.[plan.planKey];
-        const price = plan.price;
-        const prevPrice = PLANS.find((p) => p.id === prevPlanId)?.price ?? price;
+        const yearly = billingCycle === 'yearly';
+        const price = yearly ? plan.yearlyPrice : plan.price;
+        const prevPlan = PLANS.find((p) => p.id === prevPlanId);
+        const prevPrice = (prevPlan ? (yearly ? prevPlan.yearlyPrice : prevPlan.price) : null) ?? price;
         // A verified-live Dodo link (all four checked 2026-09-08). These were
         // the fallback behind getNativelyPricing; with that call removed they
         // are simply the source, and changing a checkout link is now an app
         // release. That was already the truth — it just looked otherwise.
-        const checkoutUrl = plan.url;
+        // Yearly links are the 2026-11-06 products (src/config/urls.ts).
+        const checkoutUrl = yearly ? plan.yearlyUrl : plan.url;
         const currentPlan = usageData?.plan?.toLowerCase();
         const rowPlan = plan.name.toLowerCase();
+        // The tier AND the billing: a monthly Pro key looking at Yearly Pro is
+        // being offered something it does not have. A key from a server that
+        // predates billing_period is monthly.
+        const keyCycle = usageData?.billing_period === 'yearly' ? 'yearly' : 'monthly';
         const isActive =
-          currentPlan === rowPlan ||
-          (rowPlan === 'standard' && currentPlan === 'starter');
+          (currentPlan === rowPlan ||
+            (rowPlan === 'standard' && currentPlan === 'starter')) &&
+          keyCycle === billingCycle;
 
         return (
           <div
@@ -1436,7 +1593,12 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                         >
                           <RollingPrice price={price} from={prevPrice} />
                         </span>
-                        <span className="natively-api-on-fill-dim text-[12px] font-medium">/ month</span>
+                        <span className="natively-api-on-fill-dim text-[12px] font-medium">{yearly ? '/ year' : '/ month'}</span>
+                        {yearly && (
+                          <span className="natively-api-fill-pill self-center inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap">
+                            {YEARLY_MONTHS_FREE} months free
+                          </span>
+                        )}
                       </div>
 
                       <div className="mt-auto pt-3">
@@ -1485,6 +1647,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                         })}
                       </ul>
                       <p className="natively-api-on-fill-dim mt-auto pt-3 text-[10px] leading-snug opacity-80">
+                        {yearly && 'Billed once a year. The allowance refills every month. '}
                         {plan.note}
                       </p>
                     </div>
@@ -1496,6 +1659,9 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         );
       })()}
 
+      {/* One-time Pro packs: the same Pro app and API, for a short stretch,
+          paid once. Shown under the subscriptions as the smaller option. */}
+      <ProPacks currentPlan={usageData?.plan} onBuy={openExternal} />
     </div>
   );
 
@@ -1584,7 +1750,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                shape; the two halves of one feature no longer disagree. */
             <div>
               <SectionLabel>Free trial</SectionLabel>
-              <Card className="natively-key-card">
+              <Card>
                 <div className="px-4 py-4 space-y-3">
                   {/* The ORIGINAL shape: offer on the left, one compact action
                       on the right, a single row. It reads as an offer rather
@@ -1717,30 +1883,20 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         </SectionLabel>
 
         {/* `natively-key-card` gives the flat box the same MATERIAL as the
-            rest of this tab — layered fill, specular top hairline, 24px
-            blueprint grid, raised floor shadow — without its COLOUR. The
+            rest of this tab — layered fill, specular top hairline, raised
+            floor shadow — without its COLOUR. The
             plaque and its well are achromatic; the Activate button is the only
             saturated thing in the section, and only once it has something to
             act on. See the "tactile credential plaque" block in index.css. */}
-        <Card className="natively-key-card">
+        <Card>
           <div className="px-4 py-4 space-y-3">
             {/* Says the quiet part out loud: one box, EITHER credential. The
                 placeholder alone was carrying that, and a placeholder
-                disappears the moment you type.
-
-                The mark sits ON this line rather than in a header of its own:
-                no squircle, no tinted well, no title + sub-label block. The
-                section label above is still the heading. */}
-            <div className="flex items-center gap-2.5">
-              <span
-                aria-hidden="true"
-                className="natively-key-mark"
-                style={{ ['--natively-key-mark-src' as string]: `url(${nativelyLogo})` } as React.CSSProperties}
-              />
-              <p className="natively-key-sub text-[12px] leading-snug">
-                Activate with a Natively API key or a Natively Pro license.
-              </p>
-            </div>
+                disappears the moment you type. No mark beside it: the section
+                label above is still the heading. */}
+            <p className="natively-key-sub text-[12px] leading-snug">
+              Activate with a Natively API key or a Natively Pro license.
+            </p>
 
             {/* The input is the subject of this card. It's now a pressed-in
                 well rather than a hairline box — same inset vocabulary as the
@@ -1982,35 +2138,43 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
               }
           }
         >
+          {/* A pack never resets, it ends (its quota reset date is 2100): its
+              heading and date are the pack's own, the use-by date. A yearly
+              key refills monthly like any other, and says it renews yearly. */}
+          {keyIsPack ? (
+            <SectionLabel
+              aside={
+                <span className="flex items-center gap-2 shrink-0">
+                  <span className="text-[11px] text-text-tertiary">
+                    {keyPack?.endsAt
+                      ? `${keyPack.ended ? 'Ended' : 'Use by'} ${fmtDate(keyPack.endsAt)}`
+                      : 'One-time pack'}
+                  </span>
+                  {usageRefreshButton}
+                </span>
+              }
+            >
+              Pack usage
+            </SectionLabel>
+          ) : (
           <SectionLabel
             aside={
               <span className="flex items-center gap-2 shrink-0">
                 <span className="text-[11px] text-text-tertiary">
                   Resets {fmtDate(usageData.quota.resets_at)}
+                  {usageData.billing_period === 'yearly' && ' · renews yearly'}
                 </span>
-                <button
-                  onClick={() => fetchUsage({ force: true })}
-                  disabled={isLoadingUsage}
-                  title="Refresh"
-                  aria-label="Refresh usage"
-                  className="flex items-center justify-center w-5 h-5 rounded-md text-text-tertiary
-                                hover:text-text-secondary transition-colors duration-150 motion-reduce:transition-none
-                                disabled:opacity-40 cursor-pointer shrink-0"
-                >
-                  <RefreshCw
-                    size={11}
-                    className={isLoadingUsage ? 'animate-spin' : ''}
-                    strokeWidth={2}
-                  />
-                </button>
+                {usageRefreshButton}
               </span>
             }
           >
             Usage this month
           </SectionLabel>
+          )}
 
           <Card>
             <div className="px-4 py-4 space-y-4">
+              {keyIsPack && keyPack && <PackMeetingTime status={keyPack} />}
               {/* The four product categories, in the order they cost money.
                   Names are the customer's, not the implementation's: "Voice
                   Usage" rather than STT, "Research" rather than web searches.
@@ -2066,12 +2230,16 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           >
             {/* hoverFill off, as on How it works below: the header answers the
                 pointer by brightening its chevron, not by filling the row. */}
+            {/* No divider under the header (2026-10-24), as How it works: the
+                tier bar follows the title directly; -mt-3 takes the body's
+                top padding down to How it works' spacing. */}
             <AccordionSection
               title="Change plan"
-              className="bg-bg-item-surface rounded-2xl border-border-subtle !mb-0"
+              className="natively-key-card bg-bg-item-surface rounded-2xl border-border-subtle !mb-0"
+              divider={false}
               hoverFill={false}
             >
-              {PlansCard}
+              <div className="-mt-3">{PlansCard}</div>
             </AccordionSection>
           </motion.div>
         )}

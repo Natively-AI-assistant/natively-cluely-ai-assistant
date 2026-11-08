@@ -189,7 +189,8 @@ describe('wiring', () => {
     const start = ipc.indexOf('if (!callerOwnsPrompt && isContextIntelligenceV3Enabled()) {');
     const v3 = ipc.slice(start, ipc.indexOf('} catch (v3Err: any) {', start));
     assert.match(v3, /pp\.asksAboutTheQuestion\(String\(message \|\| ''\)\) \? null : new pp\.PreambleStreamGate\(\)/);
-    assert.match(v3, /const emitV3Visible = \(visible: string\) => \{\s*if \(!visible\) return;\s*finalText \+= visible;\s*event\.sender\.send\('gemini-stream-token', visible/);
+    // (2026-11-06: the latency trace's first-token mark sits between the two.)
+    assert.match(v3, /const emitV3Visible = \(visible: string\) => \{\s*if \(!visible\) return;\s*finalText \+= visible;\s*(?:chatTrace\.markFirstUseful\(\{ path: 'v3' \}\);\s*)?event\.sender\.send\('gemini-stream-token', visible/);
     const loop = v3.slice(v3.indexOf('for await (const tok of v3Stream.stream)'), v3.indexOf("event.sender.send('gemini-stream-done'"));
     assert.doesNotMatch(loop, /finalText \+= tok/, 'raw tokens never reach finalText');
     assert.ok(loop.indexOf('v3PreambleGate.flush()') > 0, 'flushed before done');

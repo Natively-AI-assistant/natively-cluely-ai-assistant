@@ -4,7 +4,7 @@ _Last updated: October 10th 2026_
 
 This policy describes how **Natively** — the desktop application, the **Natively Pro** licensed features, and the **Natively API** managed service — handles your data. We've tried to write it like a person, not a lawyer.
 
-If anything's unclear, email **natively.contact@gmail.com**. We aim to reply within 24–72 hours on weekdays.
+If anything's unclear, email **privacy@heynatively.com**. We aim to reply within 24–72 hours on weekdays.
 
 ---
 
@@ -13,8 +13,8 @@ If anything's unclear, email **natively.contact@gmail.com**. We aim to reply wit
 Natively is built and operated by a single developer based in **Kochi, Kerala, India**. For the purposes of applicable data-protection law (including India's Digital Personal Data Protection Act, 2023, and the EU General Data Protection Regulation where it applies):
 
 - **Data fiduciary / controller:** Evin John, the developer of Natively.
-- **Contact:** natively.contact@gmail.com
-- **Grievance Officer (India IT Rules 2021):** Evin John — natively.contact@gmail.com — we acknowledge complaints within 72 hours on weekdays and aim to resolve them within 30 days.
+- **Contact:** privacy@heynatively.com
+- **Grievance Officer (India IT Rules 2021):** Evin John — privacy@heynatively.com — we acknowledge complaints within 72 hours on weekdays and aim to resolve them within 30 days.
 
 If you're using Natively on behalf of an organisation (under a bulk or team licence), that organisation is a separate data controller for the data of its own users, and you should also consult its own privacy policy.
 
@@ -26,7 +26,7 @@ We've designed Natively to keep as much of your data on your device as possible.
 
 - **Audio you capture, screen content, transcripts, notes, and meeting history are stored locally on your device** in a SQLite database. They are **not** uploaded to a Natively-operated server.
 - When **Apple Speech** is selected, microphone and system audio are transcribed by Apple's on-device speech framework. The audio is not sent to Natively or a cloud speech provider. macOS may contact Apple to download the selected language's speech asset.
-- When you use a cloud AI, speech-to-text, or search feature, **the relevant text or audio leaves your device only to be processed by the provider you've chosen** (e.g., OpenAI, Anthropic, Google, Groq, Deepgram, ElevenLabs, Azure, IBM, Soniox, Tavily). The result comes back to your device.
+- When you use a cloud AI, speech-to-text, or search feature, **the relevant text or audio leaves your device only to be processed by the provider you've chosen** (e.g., OpenAI, Anthropic, Google, Groq, Deepgram, ElevenLabs, Azure, IBM, Soniox, Alibaba Cloud (Qwen ASR), Tavily). The result comes back to your device.
 - For **paid products** (Natively Pro, Natively API), we **do** store a small amount of operational data on our servers — your license key, hardware identifier, plan, billing email, and quota counters. We need this to make billing and licensing actually work. We do not store the content you generate.
 - For the **Free Trial**, we additionally store anti-abuse signals (rate-limited IP, trial tokens, basic usage counters). The trial **starts by itself** the first time you start a meeting with no AI of your own set up, and the meeting overlay tells you when it does. It then runs for 30 minutes on the clock, across meetings. While it runs, your meetings' audio and your questions are processed through the Natively API (§4.4).
 - **Every installation**, paid or not, reports **product-usage events** to our own servers: that the app was opened on a given day, that a meeting was held, which features were used, that a trial was started, that a plan page was opened, and the like. They are **linked to your device and, if you have one, your trial or account**. They cannot contain anything you say, see or type. You can turn them off. See §3.2.1.
@@ -144,7 +144,7 @@ need to, for example to answer a support question.
 
 **Turning it off.** Open **Settings › General › Advanced** and turn off **Usage statistics**. That
 stops these events, discards any that had not been sent yet, and stops the identifier being added
-to checkout links. It is on by default. If you email **natively.contact@gmail.com**, we will also
+to checkout links. It is on by default. If you email **privacy@heynatively.com**, we will also
 delete the events already reported for your device and account.
 
 The switch does not change the records described in §3.2 for paid products and the Free Trial
@@ -213,6 +213,7 @@ If you select a cloud speech-to-text provider instead, audio chunks may be sent 
 - **Azure Speech Services** (Microsoft)
 - **IBM Watson Speech-to-Text**
 - **Soniox**
+- **Qwen ASR** (Alibaba Cloud Model Studio, Beijing region)
 
 Each of these providers has its own privacy policy and data-retention behaviour. We encourage you to review the policy of any provider whose key you configure. By default, most of these providers do **not** use API audio for model training, but check the current terms before sending sensitive content.
 
@@ -300,7 +301,7 @@ You have the following rights in respect of personal data we hold about you:
 - **Object** — you can object to processing that relies on legitimate interest (e.g., anti-abuse).
 - **Complain** — you can lodge a complaint with the relevant data-protection authority (in India, the Data Protection Board under the DPDP Act 2023; in the EU/UK, your local supervisory authority).
 
-To exercise any of these rights, email **natively.contact@gmail.com** with your order ID and a description of your request. We aim to respond within **30 days**.
+To exercise any of these rights, email **privacy@heynatively.com** with your order ID and a description of your request. We aim to respond within **30 days**.
 
 If you're in California, you may have additional rights under the California Consumer Privacy Act (CCPA) — including the right to know, the right to delete, and the right to opt out of "sale" of personal information. **We do not sell personal information.** You can exercise CCPA rights by emailing the same address.
 
@@ -340,8 +341,8 @@ We don't make adverse changes (e.g., expanding what we collect or share) without
 
 For privacy questions, data-rights requests, complaints, or anything else covered by this policy:
 
-**Email:** natively.contact@gmail.com
+**Email:** privacy@heynatively.com
 
-**Grievance Officer:** Evin John — natively.contact@gmail.com — acknowledgements within 72 hours on weekdays, resolution targets of 30 days.
+**Grievance Officer:** Evin John — privacy@heynatively.com — acknowledgements within 72 hours on weekdays, resolution targets of 30 days.
 
 We may not respond on weekends or Indian public holidays — if you write in over a weekend, please expect a reply early the following week.

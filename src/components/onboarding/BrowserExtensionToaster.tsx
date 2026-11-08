@@ -18,6 +18,7 @@ import { X, ArrowRight } from 'lucide-react';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import chromeArt from '../../assets/cards/chrome.jpg';
 import { GenieModal } from '../ui/GenieModal';
+import { copyText } from '../../lib/copyText';
 
 const MIN_VERSION = '2.8.0';
 
@@ -208,7 +209,7 @@ export const BrowserExtensionToaster: React.FC<Props> = ({ isOpen, onDismiss }) 
   };
 
   const copyStoreLink = async () => {
-    try { await navigator.clipboard?.writeText(CHROME_STORE_URL); setCopied(true); } catch { /* clipboard refused */ }
+    try { await copyText(CHROME_STORE_URL); setCopied(true); } catch { /* clipboard refused */ }
   };
 
   // ─── Auto-dismiss when the extension connects ──────────────

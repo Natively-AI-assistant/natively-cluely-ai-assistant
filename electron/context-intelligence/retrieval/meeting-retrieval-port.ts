@@ -56,6 +56,12 @@ export interface MeetingPortInput {
    * own MIN_COMBINED_SCORE exists to prevent.
    */
   minSimilarity?: number;
+  /**
+   * Chunks that started before this time are left out: the reset shortcut
+   * during a meeting makes the assistant forget what came before, and the live
+   * index keeps those chunks (2026-10-16). 0 or absent: no limit.
+   */
+  notBeforeMs?: number;
 }
 
 export const MEETING_MIN_SIMILARITY = 0.3;
@@ -103,6 +109,8 @@ export function createMeetingRetrievalPort(input: MeetingPortInput): RetrievalPo
 
         const similarity = Number((c as Record<string, unknown>).similarity ?? 0);
         if (!Number.isFinite(similarity) || similarity < floor) continue;
+        const startMs = Number((c as Record<string, unknown>).startMs);
+        if (input.notBeforeMs && Number.isFinite(startMs) && startMs < input.notBeforeMs) continue;
 
         // One source per MEETING. Declaring per chunk would make every chunk its
         // own source and defeat any future version comparison.

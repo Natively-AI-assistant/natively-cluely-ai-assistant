@@ -31,18 +31,15 @@ import nvidiaMark from '../../assets/provider-logos/nvidia.svg?raw';
 import openrouterMark from '../../assets/provider-logos/openrouter.svg?raw';
 import voyageMark from '../../assets/provider-logos/voyage.svg?raw';
 import jinaMark from '../../assets/provider-logos/jina.svg?raw';
+// Sidrune AI (Fluxion AI until Oct 2026): their own one-colour logomark, from
+// the logo pack they sent, recoloured to currentColor like the marks above.
+import sidruneMark from '../../assets/provider-logos/sidrune.svg?raw';
 // LiteLLM ships its mark only as a raster favicon (160x160 PNG), so this one is a
 // URL rather than inlined markup. No currentColor to resolve in a PNG, so <img>
 // loses nothing here. Vendored from BerriAI/litellm — MIT, and outside the
 // `enterprise/` directory that their LICENSE carves out.
 import litellmMark from '../../assets/provider-logos/litellm.png';
 import ninerouterMark from '../../assets/provider-logos/ninerouter.png';
-// Fluxion's mark is full-colour artwork, so it is a URL rendered with <img> for
-// the same reason as litellm. This is the F monogram from their wordmark, NOT
-// the orbital-galaxy brand image: the tile renders a 16px glyph, and at that
-// size the galaxy is an illegible smudge in both themes (measured). See the
-// provider-logos README.
-import fluxionMark from '../../assets/provider-logos/fluxion.png';
 // AgentRouter's own site icon (agentrouter.org/logo.png): a pink/blue
 // gradient disc with a four-point star. Full-colour, so an <img> like the
 // two above, and a simple disc, so it stays recognisable at the tile's 16px.
@@ -78,9 +75,9 @@ export const AI_PROVIDER_BRANDS: Record<string, { mono: string; brand: string }>
     // variants: OpenRouter lime, Voyage deep teal. The MARKS themselves take the
     // monochrome variant — see the README's "Colour vs monochrome".
     openrouter: { mono: 'OR', brand: '#C8FF00' },
-    // Sampled from the shipping asset. NOT #39D9E7 — that came from a stale
-    // interlocking-S logo the site still serves under the name "Sub2API".
-    fluxion:  { mono: 'FX', brand: '#0048D8' },
+    // Sidrune's brand is black and white (their logo pack has no colour), so
+    // the wash is the same neutral grey as Ollama's, another one-colour mark.
+    fluxion:  { mono: 'SR', brand: '#9CA3AF' },
     // Sampled from the shipping asset: the dominant saturated pixel of the
     // disc's pink half.
     agentrouter: { mono: 'AR', brand: '#F868B8' },
@@ -115,7 +112,6 @@ export const WHITE_ON_TRANSPARENT_MARKS = new Set(['natively', 'ninerouter']);
 export const AI_PROVIDER_MARK_IMAGES: Record<string, string> = {
     litellm: litellmMark,
     ninerouter: ninerouterMark,
-    fluxion: fluxionMark,
     agentrouter: agentrouterMark,
     natively: nativelyIcon,
 };
@@ -141,6 +137,7 @@ export const AI_PROVIDER_MARKS: Record<string, string> = {
     openrouter: openrouterMark,
     voyage: voyageMark,
     jina: jinaMark,
+    fluxion: sidruneMark,
 };
 
 /** True when this provider resolves to a real mark rather than a fallback. */

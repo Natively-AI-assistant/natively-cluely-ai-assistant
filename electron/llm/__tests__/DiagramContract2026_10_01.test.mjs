@@ -94,7 +94,7 @@ describe('the contract in the composed system prompt', () => {
   });
 
   test('actions whose output is not an answer never carry it', () => {
-    for (const action of ['title', 'summary_json', 'followup_email', 'follow_up_questions', 'clarify']) {
+    for (const action of ['summary_json', 'followup_email', 'follow_up_questions', 'clarify']) {
       assert.equal(count(buildSystemPromptV2({ mode: 'general', action, tier: 'cloud', diagram: signals }), '<diagram_contract>'), 0, action);
     }
   });

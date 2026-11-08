@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-const { followUpRecipients, recipientName, recipientSummary, gmailComposeUrl } = await import('../followUpRecipients.mjs');
+const { followUpRecipients, recipientName, recipientSummary, gmailComposeUrl, outlookComposeUrl } = await import('../followUpRecipients.mjs');
 
 test('recipients: everyone on the invite who has not declined, once each', () => {
     const got = followUpRecipients([
@@ -46,4 +46,18 @@ test('the Gmail draft carries every field, encoded, in the right account', () =>
     assert.equal(q.get('su'), 'Follow up: Q2 & next steps');
     assert.equal(q.get('body'), 'Hi Priya,\n\nThanks — 100% agreed.');
     assert.equal(new URL(gmailComposeUrl({ subject: 'x' })).searchParams.get('to'), null, 'no recipients: no to=');
+});
+
+test('Outlook on the web: the compose deeplink, addressed and filled in', () => {
+    const url = outlookComposeUrl({
+        to: ['priya@acme.com', 'rob+x@acme.com'],
+        subject: 'Follow up: Q2 & next steps',
+        body: 'Hi Priya,\n\nThanks — 100% agreed.',
+    });
+    assert.ok(url.startsWith('https://outlook.office.com/mail/deeplink/compose?'), 'https, the compose deeplink');
+    const q = new URL(url).searchParams;
+    assert.equal(q.get('to'), 'priya@acme.com,rob+x@acme.com', 'a + in an address survives');
+    assert.equal(q.get('subject'), 'Follow up: Q2 & next steps');
+    assert.equal(q.get('body'), 'Hi Priya,\n\nThanks — 100% agreed.');
+    assert.equal(outlookComposeUrl(), 'https://outlook.office.com/mail/deeplink/compose', 'nothing to fill: the bare compose window');
 });

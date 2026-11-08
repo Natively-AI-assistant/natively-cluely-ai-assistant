@@ -26,8 +26,9 @@ const IPC = fs.readFileSync(path.join(HERE, '..', '..', 'ipcHandlers.ts'), 'utf8
 describe('which turns are verified', () => {
   // ONE PASS IN TECHNICAL INTERVIEW (2026-10-10; judged 2026-10-13). The pass replaced the streamed answer on screen
   // two to three seconds after it finished. Judged on and off it changes nothing in Technical Interview (9.11 both
-  // ways), so it is off there unless the comparison switch is set; in Looking for work it is worth 0.14 and four hard
-  // fails, so it stays.
+  // ways), so it went off there first; in Looking for work it is worth 0.14 and four hard fails, and it went off there
+  // too on 2026-10-15 (owner's decision: it still replaced 9 of 11 answers in the app). The comparison switch
+  // restores both.
   const withInterviewPass = (fn) => {
     const before = process.env.NATIVELY_CLAIM_VERIFIER_INTERVIEW;
     process.env.NATIVELY_CLAIM_VERIFIER_INTERVIEW = '1';
@@ -40,10 +41,16 @@ describe('which turns are verified', () => {
       assert.equal(claimVerifierKind({ modeId: 'technical-interview', question: 'What would you say is your biggest weakness?', draft: "I've had to work on scope, and on my last project I sat on a blocker too long.", surface }), null);
     }
   });
-  test('every Looking-for-work turn is still verified, with or without the comparison switch', () => {
-    for (const surface of ['spoken', 'typed', undefined]) assert.equal(claimVerifierKind({ modeId: 'looking-for-work', question: 'Why do you want to leave?', draft: 'x', surface }), 'personal');
-    withInterviewPass(() => assert.equal(claimVerifierKind({ modeId: 'looking-for-work', question: 'Why do you want to leave?', draft: 'x' }), 'personal'));
+  test('Looking for work answers in one pass too: no turn is verified, heard or typed (2026-10-15)', () => {
+    assert.equal(process.env.NATIVELY_CLAIM_VERIFIER_INTERVIEW, undefined, 'the comparison switch must be unset for this suite');
+    for (const surface of ['spoken', 'typed', undefined]) {
+      assert.equal(claimVerifierKind({ modeId: 'looking-for-work', question: 'Why do you want to leave?', draft: 'x', surface }), null);
+      assert.equal(claimVerifierKind({ modeId: 'looking-for-work', question: 'What would you say is your biggest weakness?', draft: "I've had to work on scope, and on my last project I sat on a blocker too long.", surface }), null);
+    }
   });
+  test('comparison switch on: every Looking-for-work turn is verified again', () => withInterviewPass(() => {
+    for (const surface of ['spoken', 'typed', undefined]) assert.equal(claimVerifierKind({ modeId: 'looking-for-work', question: 'Why do you want to leave?', draft: 'x', surface }), 'personal');
+  }));
   test('the other modes are unchanged by that', () => {
     assert.equal(claimVerifierKind({ modeId: 'sales', question: 'What does it cost?', draft: 'x' }), 'product');
     assert.equal(claimVerifierKind({ modeId: 'seminar', question: 'Why a held-out set?', draft: 'x' }), 'personal');
@@ -90,7 +97,8 @@ describe('which turns are verified', () => {
     }
   });
   test('an answer carrying code is never touched', () => {
-    assert.equal(claimVerifierKind({ modeId: 'looking-for-work', question: 'Show me', draft: 'Sure:\n```js\nx()\n```' }), null);
+    withInterviewPass(() => assert.equal(claimVerifierKind({ modeId: 'looking-for-work', question: 'Show me', draft: 'Sure:\n```js\nx()\n```' }), null));
+    assert.equal(claimVerifierKind({ modeId: 'sales', question: 'Show me', draft: 'Sure:\n```js\nx()\n```' }), null);
   });
 });
 

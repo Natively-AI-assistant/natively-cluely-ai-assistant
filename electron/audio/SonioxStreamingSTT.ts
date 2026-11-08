@@ -23,6 +23,7 @@ import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { streamingStttWsOptions } from './dnsHelpers';
 import { shouldReviveExhaustedReconnect, DEFAULT_REVIVE_COOLDOWN_MS } from './sttReconnectPolicy.mjs';
 import { RealtimeSilenceTail } from './realtimeSilenceTail';
+import { nextVoiceEpoch, runsByVoice } from './sttDiarization';
 
 const SONIOX_WEBSOCKET_URL = 'wss://stt-rt.soniox.com/transcribe-websocket';
 const RECONNECT_BASE_DELAY_MS = 1000;
@@ -56,6 +57,56 @@ export const SONIOX_ENDPOINT_TUNING = {
 // hangover (>= 500) + 1200 = 1700 ms. See realtimeSilenceTail.ts.
 export const SONIOX_SILENCE_TAIL_MS = 1200;
 
+/**
+ * What the socket's 'close' does next.
+ *  - 'backoff': reconnect on the backoff ladder (unexpected close, or a 429/5xx
+ *    that may repeat on every handshake, so never retried per chunk);
+ *  - 'lazy': stay active with no socket; the next audio chunk reconnects;
+ *  - 'inactive': the session is over.
+ *
+ * Soniox sends an error frame and then closes CLEANLY (1000). Reading every
+ * 1000 as deliberate switched the channel off for the rest of the meeting:
+ * write() drops every chunk once isActive is false, and nothing else restarts
+ * it. Live 2026-10-16 (France, natively_debug 15): a 408 after 20 s of a silent
+ * call left the interviewer side deaf. Auth, config and billing errors still
+ * end the session, so a bad key cannot reconnect on every chunk; their error
+ * frame is terminal (sonioxServerError), so main shows "failed".
+ *
+ * A clean close with NO error frame (a finished session never reaches here:
+ * closeFinishedSession detaches it first) used to be 'inactive' too: the
+ * channel went silent with nothing emitted. It now backs off, bounded by
+ * RECONNECT_MAX_ATTEMPTS, whose exhaustion is reported (2026-11-01).
+ */
+export function sonioxCloseAction(
+    shouldReconnect: boolean,
+    code: number,
+    lastServerErrorCode: number | null,
+): 'backoff' | 'lazy' | 'inactive' {
+    if (!shouldReconnect) return 'inactive';
+    if (code !== 1000) return 'backoff';
+    if (lastServerErrorCode === 408) return 'lazy';   // idle timeout: no audio, nothing to transcribe
+    if (lastServerErrorCode === null) return 'backoff';
+    if (lastServerErrorCode === 429 || (lastServerErrorCode >= 500 && lastServerErrorCode < 600)) return 'backoff';
+    return 'inactive';
+}
+
+/**
+ * A Soniox error frame as an Error. Its error_code is an HTTP status (400 bad
+ * config, 401 key, 402 balance, 403, 408 idle, 429, 5xx). The ones that end
+ * the session (sonioxCloseAction 'inactive') are terminal: they used to reach
+ * main as one ordinary error, which left the overlay on "reconnecting".
+ */
+export function sonioxServerError(errorCode: unknown, errorMessage: unknown): Error {
+    const status = Number(errorCode) || 0;
+    const text = typeof errorMessage === 'string' && errorMessage.trim() ? errorMessage.trim() : 'error';
+    const terminal = status !== 0 && sonioxCloseAction(true, 1000, status) === 'inactive';
+    return Object.assign(new Error(`${status || errorCode} Soniox: ${text}`), {
+        code: `soniox_${status || 'error'}`,
+        ...(status ? { httpStatus: status } : {}),
+        terminal,
+    });
+}
+
 export class SonioxStreamingSTT extends EventEmitter {
     private apiKey: string;
     private ws: WebSocket | null = null;
@@ -65,6 +116,10 @@ export class SonioxStreamingSTT extends EventEmitter {
 
     private sampleRate = 16000;
     private numChannels = 1;
+
+    // Opt-in voice labels (sttDiarization.ts). A connect param, so a change
+    // while live restarts the stream.
+    private diarize = false;
 
     private reconnectAttempts = 0;
     private reconnectTimer: NodeJS.Timeout | null = null;
@@ -85,6 +140,10 @@ export class SonioxStreamingSTT extends EventEmitter {
 
     private buffer: Buffer[] = [];
     private isConnecting = false;
+    /** When an audio frame last went out on the socket (0 = none yet on this socket). */
+    private lastAudioSentAt = 0;
+    /** The last error frame's code on this socket, read by the close handler. */
+    private lastServerErrorCode: number | null = null;
     private readonly silenceTail = new RealtimeSilenceTail({
         tailMs: SONIOX_SILENCE_TAIL_MS,
         format: () => ({ sampleRate: this.sampleRate, channels: this.numChannels }),
@@ -120,6 +179,14 @@ export class SonioxStreamingSTT extends EventEmitter {
     public setAudioChannelCount(count: number): void {
         this.numChannels = count;
         console.log(`[SonioxStreaming] Channel count set to ${count}`);
+    }
+
+    /** Label voices on this stream (sttDiarization.ts). Restarts it if live. */
+    public setDiarization(enabled: boolean): void {
+        if (this.diarize === enabled) return;
+        this.diarize = enabled;
+        console.log(`[SonioxStreaming] Diarization ${enabled ? 'enabled' : 'disabled'}`);
+        if (this.isActive) this.scheduleRestart();
     }
 
     private languageCode?: string;
@@ -196,6 +263,9 @@ export class SonioxStreamingSTT extends EventEmitter {
             enable_endpoint_detection: true,
             ...SONIOX_ENDPOINT_TUNING,
         };
+
+        // Each token then carries a `speaker` label.
+        if (this.diarize) config.enable_speaker_diarization = true;
 
         // The user's name, so STT stops spelling it a new way each time (sttContextTerms.ts).
         const terms = getSttContextTerms();
@@ -342,6 +412,7 @@ export class SonioxStreamingSTT extends EventEmitter {
         }
 
         this.ws.send(chunk);
+        this.lastAudioSentAt = Date.now();
     }
 
     public finalize(): void {
@@ -368,6 +439,9 @@ export class SonioxStreamingSTT extends EventEmitter {
         console.log(`[SonioxStreaming] Connecting (rate=${this.sampleRate}, ch=${this.numChannels})...`);
 
         this.configSent = false;
+        // Soniox numbers voices afresh on every connection: this one's lines
+        // carry its own window number, even ones that arrive after it closes.
+        const voiceEpoch = nextVoiceEpoch();
         // streamingStttWsOptions: forces IPv4-only DNS lookup (sidesteps Node's
         // macOS dual-stack ENOTFOUND on IPv4-only CNAME chains) and caps the
         // TLS+upgrade handshake at 15s. See dnsHelpers.ts.
@@ -398,6 +472,8 @@ export class SonioxStreamingSTT extends EventEmitter {
 
             this.reconnectAttempts = 0;
             this.reconnectExhaustedAt = null; // healthy again — clear the exhaustion marker
+            this.lastAudioSentAt = 0;
+            this.lastServerErrorCode = null;
             console.log('[SonioxStreaming] Connected, sending config...');
 
             // Send initial configuration as first message
@@ -433,8 +509,9 @@ export class SonioxStreamingSTT extends EventEmitter {
 
                 // Error from server
                 if (msg.error_code) {
+                    if (ws === this.ws) this.lastServerErrorCode = Number(msg.error_code) || null;
                     console.error(`[SonioxStreaming] Server error: ${msg.error_code} - ${msg.error_message}`);
-                    this.emit('error', new Error(`Soniox: ${msg.error_code} - ${msg.error_message}`));
+                    this.emit('error', sonioxServerError(msg.error_code, msg.error_message));
                     return;
                 }
 
@@ -445,6 +522,7 @@ export class SonioxStreamingSTT extends EventEmitter {
                 let currentFinalText = '';
                 let nonFinalText = '';
                 let endpointSeen = false;
+                const finalTokens: Array<{ text: string; speaker?: unknown }> = [];
 
                 for (const token of tokens) {
                     if (!token.text) continue;
@@ -468,18 +546,33 @@ export class SonioxStreamingSTT extends EventEmitter {
 
                     if (token.is_final) {
                         currentFinalText += token.text;
+                        finalTokens.push(token);
                     } else {
                         nonFinalText += token.text;
                     }
                 }
 
-                // 1. Emit final tokens immediately
+                // 1. Emit final tokens immediately. With voice labels on, one
+                //    final per run of one voice, so two people in one message
+                //    stay two lines; without them, exactly the old single final.
                 if (currentFinalText) {
-                    this.emit('transcript', {
-                        text: currentFinalText,
-                        isFinal: true,
-                        confidence: 1.0,
-                    });
+                    const runs = this.diarize ? runsByVoice(finalTokens, (t) => t.text, (t) => t.speaker) : [];
+                    if (runs.length > 0) {
+                        for (const run of runs) {
+                            this.emit('transcript', {
+                                text: run.text,
+                                isFinal: true,
+                                confidence: 1.0,
+                                ...(run.speakerId ? { speakerId: run.speakerId, voiceEpoch } : {}),
+                            });
+                        }
+                    } else {
+                        this.emit('transcript', {
+                            text: currentFinalText,
+                            isFinal: true,
+                            confidence: 1.0,
+                        });
+                    }
                 }
 
                 // 2. Emit non-final tokens as interim (live preview)
@@ -523,9 +616,11 @@ export class SonioxStreamingSTT extends EventEmitter {
             this.clearKeepAlive();
             console.log(`[SonioxStreaming] Closed (code=${code}, reason=${reason.toString()})`);
 
-            // Auto-reconnect on unexpected close
-            if (this.shouldReconnect && code !== 1000) {
+            const action = sonioxCloseAction(this.shouldReconnect, code, this.lastServerErrorCode);
+            if (action === 'backoff') {
                 this.scheduleReconnect();
+            } else if (action === 'lazy') {
+                console.warn('[SonioxStreaming] Server closed after an idle timeout (408); reconnecting on next audio.');
             } else {
                 // If not reconnecting, mark session as truly inactive
                 this.isActive = false;
@@ -550,7 +645,9 @@ export class SonioxStreamingSTT extends EventEmitter {
             // rest of the meeting. start() also resets this for a manual restart.
             this.shouldReconnect = false;
             this.reconnectExhaustedAt = Date.now();
-            this.emit('error', new Error('SonioxStreamingSTT: max reconnect attempts exceeded'));
+            // terminal: main shows "failed" now; a revive on resumed audio
+            // that transcribes again flips it back to connected.
+            this.emit('error', Object.assign(new Error('SonioxStreamingSTT: max reconnect attempts exceeded'), { terminal: true }));
             return;
         }
 
@@ -580,6 +677,14 @@ export class SonioxStreamingSTT extends EventEmitter {
             if (this.ws?.readyState === WebSocket.OPEN) {
                 try {
                     this.ws.ping();
+                    // A WebSocket ping does not count as activity to Soniox: with
+                    // no audio frames (a call that is silent at the start, so the
+                    // capture emits nothing) the session times out with 408 after
+                    // ~20 s. Its own control message keeps it open.
+                    // soniox.com/docs/stt/rt/connection-keepalive
+                    if (this.configSent && Date.now() - this.lastAudioSentAt >= KEEPALIVE_INTERVAL_MS) {
+                        this.ws.send(JSON.stringify({ type: 'keepalive' }));
+                    }
                 } catch {
                     // Ignore errors
                 }

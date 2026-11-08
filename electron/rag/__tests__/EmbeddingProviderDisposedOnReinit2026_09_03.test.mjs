@@ -66,16 +66,33 @@ test('dispose() is safe on a provider that never loaded, and is idempotent', asy
     await provider.dispose();
 });
 
-test('dispose() terminates the worker and clears the handle', async () => {
+// A stand-in for a loaded worker, without spawning a real ONNX thread. It
+// records the cooperative stop (utils/onnxWorkerShutdown.ts) and any
+// terminate() — which since 2026-10-14 must never be called: "nothing is owed"
+// is a statement about the host's bookkeeping, not about whether the worker
+// thread is inside a native call, and terminate() there aborts the whole app.
+function fakeWorker() {
+    const w = {
+        shutdownRequests: 0,
+        terminated: 0,
+        terminate: async () => { w.terminated += 1; },
+        postMessage: (msg) => { if (msg?.type === 'shutdown') w.shutdownRequests += 1; },
+        on() {},
+        unref() {},
+    };
+    return w;
+}
+
+test('dispose() stops the worker and clears the handle', async () => {
     const provider = bareProvider();
-    let terminated = 0;
-    // Stand in for a loaded worker without spawning a real ONNX thread.
-    provider.worker = { terminate: async () => { terminated += 1; }, on() {}, unref() {} };
+    const worker = fakeWorker();
+    provider.worker = worker;
     provider.loadingPromise = Promise.resolve();
 
     await provider.dispose();
 
-    assert.equal(terminated, 1, 'dispose() must terminate the worker holding the model');
+    assert.equal(worker.shutdownRequests, 1, 'dispose() must stop the worker holding the model');
+    assert.equal(worker.terminated, 0, 'BUG: terminate() on an ONNX worker can abort the whole app');
     assert.equal(provider.worker, null, 'the worker handle must be cleared so a later load starts clean');
     assert.equal(provider.loadingPromise, null, 'a stale loadingPromise would short-circuit the next load');
 });
@@ -155,8 +172,8 @@ test('dispose() lets an IN-FLIGHT embed finish instead of failing it', async () 
     // disposed instance — but do not rely on a disposed provider accepting new
     // work.
     const provider = bareProvider();
-    let terminated = false;
-    provider.worker = { terminate: async () => { terminated = true; }, on() {}, unref() {} };
+    const worker = fakeWorker();
+    provider.worker = worker;
 
     let settled = 'pending';
     const inFlight = new Promise((resolve, reject) => {
@@ -169,7 +186,7 @@ test('dispose() lets an IN-FLIGHT embed finish instead of failing it', async () 
     // awaited by the set-config IPC, and blocking there freezes Settings.
     await disposing;
     assert.equal(settled, 'pending', 'dispose() must not reject work that is still in flight');
-    assert.equal(terminated, false, 'the worker must stay alive while it still owes a reply');
+    assert.equal(worker.shutdownRequests, 0, 'the worker must stay alive while it still owes a reply');
 
     // The reply arrives late, the way a real worker's would.
     provider.pendingRequests.get(1).resolve({ vectors: [[0.1, 0.2]] });
@@ -178,8 +195,9 @@ test('dispose() lets an IN-FLIGHT embed finish instead of failing it', async () 
     assert.equal(settled, 'resolved', 'the in-flight embed must complete normally');
 
     // Only once nothing is owed does the worker go.
-    for (let i = 0; i < 60 && !terminated; i++) await new Promise((r) => setTimeout(r, 50));
-    assert.ok(terminated, 'the worker must be terminated once it has drained');
+    for (let i = 0; i < 60 && worker.shutdownRequests === 0; i++) await new Promise((r) => setTimeout(r, 50));
+    assert.equal(worker.shutdownRequests, 1, 'the worker must be asked to exit once it has drained');
+    assert.equal(worker.terminated, 0, 'and never terminate()d');
 });
 
 test('a deliberate dispose clears the embeddings crash sentinel', () => {

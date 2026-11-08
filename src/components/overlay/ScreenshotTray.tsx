@@ -128,7 +128,7 @@ export const ScreenshotTray: React.FC<{
           </AnimatePresence>
         </div>
         <span className="text-[10px] overlay-text-muted">
-          {t('Ask a question or click Answer')}
+          {t('Type a question or click Speak')}
         </span>
       </div>
     </ChromeFold>

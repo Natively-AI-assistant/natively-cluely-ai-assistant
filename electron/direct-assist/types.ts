@@ -249,6 +249,10 @@ export const DIRECT_ASSIST_ERROR_CODES = [
   'AUTH_FAILED',
   'RATE_LIMITED',
   'QUOTA_EXHAUSTED',
+  // Natively's own trial or plan ran out (2026-11-03): not the provider's
+  // credits and not a rate limit, which is how a 429 used to read.
+  'TRIAL_ENDED',
+  'PLAN_LIMIT',
   'CONNECT_TIMEOUT',
   'STREAM_IDLE_TIMEOUT',
   'INCOMPLETE_STREAM',

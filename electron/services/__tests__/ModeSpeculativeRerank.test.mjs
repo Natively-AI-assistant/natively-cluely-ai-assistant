@@ -171,7 +171,9 @@ describe('Phase 3: live-path speculative rerank', () => {
     test('prewarmModeReferenceIndex prewarms the reranker only when enabled', () => {
       const src = fs.readFileSync(path.resolve(__dirname, '../ModesManager.ts'), 'utf8');
       const fn = src.slice(src.indexOf('prewarmModeReferenceIndex'));
-      const body = fn.slice(0, 2200);
+      // The method's own body: up to the next public method, not a fixed size.
+      const end = fn.indexOf('\n    public ', 1);
+      const body = end > 0 ? fn.slice(0, end) : fn;
       assert.match(body, /isRagLocalRerankEnabled/, 'prewarm must check the reranker flag');
       assert.match(body, /reranker\.prewarm/, 'prewarm must call reranker.prewarm()');
     });

@@ -25,6 +25,12 @@ export const CHECKOUT_PRODUCT_BY_DODO_ID = Object.freeze({
   pdt_0NcM7rC2kAb69TFKsZnUU: 'api_ultra',
   pdt_0NbHo6EnXlNPqNcZ14OTi: 'pro_lifetime',
   pdt_0NcM4QBwy0CDcPV9CXaNP: 'pro_yearly',
+  pdt_0NrMWrUcsLyeGzOKbTBvg: 'api_standard_yearly',
+  pdt_0NrMWybuENVytnwJcQqPi: 'api_pro_yearly',
+  pdt_0NrMWz1alVbZKPXvGjxz2: 'api_max_yearly',
+  pdt_0NrMWzLKdFcSU6HozUl55: 'api_ultra_yearly',
+  pdt_0NrMWztmLVYzyt4L9SQJd: 'pack_light',
+  pdt_0NrMX0EGK6xaJYhsWRIla: 'pack_heavy',
 });
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

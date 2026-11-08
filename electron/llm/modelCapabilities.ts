@@ -38,6 +38,33 @@ const KNOWN_OLLAMA_NATIVE_CTX: Array<[RegExp, number]> = [
   [/^deepseek-coder/i, 16_000],
 ];
 
+// The context window Natively asks Ollama for, per request (options.num_ctx),
+// and trims prompts to. Without num_ctx Ollama runs every model at its own
+// default, 4096 tokens on any machine with under 24 GiB of VRAM (docs.ollama.com
+// /context-length), while the app trimmed to 32k-128k: the ~6k-token system
+// prompt alone overflowed, and Ollama dropped the start of the prompt without
+// an error. Capped below the model's native window because the KV cache grows
+// with it (an 8B model needs ~2 GB at 16k), which a 16 GB laptop has to hold
+// next to the weights.
+const OLLAMA_NUM_CTX_CAP: Record<'local-large' | 'local-small', number> = {
+  'local-large': 16_384,
+  'local-small': 8_192,
+};
+
+/**
+ * The context window to request from Ollama for `modelId` and to trim the
+ * prompt to. `OLLAMA_NUM_CTX` (a positive integer) replaces the cap for users
+ * with the memory for more; it never exceeds the model's native window.
+ */
+export function ollamaRequestContext(modelId: string, env: NodeJS.ProcessEnv = process.env): number {
+  const caps = getModelCapabilities(modelId, true);
+  const override = Number(env.OLLAMA_NUM_CTX);
+  const cap = Number.isInteger(override) && override > 0
+    ? override
+    : OLLAMA_NUM_CTX_CAP[caps.tier === 'local-large' ? 'local-large' : 'local-small'];
+  return Math.min(caps.maxContextTokens, cap);
+}
+
 /**
  * Strip Natively's own routing prefix, and then the upstream segment a gateway
  * puts in front of the real model name.

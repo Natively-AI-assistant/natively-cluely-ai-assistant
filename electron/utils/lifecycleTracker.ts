@@ -40,6 +40,9 @@ export type QuitReason =
   | 'updater-quit-install'    // autoUpdater.quitAndInstall (we ONLY land here for real upgrades)
   | 'manual-relaunch'         // app.relaunch() from a self-update path
   | 'fatal-main-error'        // uncaughtException or unhandledRejection forced exit
+  // The next three are kept for markers written by older builds. A process
+  // dying no longer sets the quit reason (see `noteIncident`); it is kept in
+  // `lastIncident` instead.
   | 'renderer-gone'           // render-process-gone (renderer crashed)
   | 'child-process-gone'      // child-process-gone (utility process died)
   | 'gpu-process-crashed'     // gpu-process-crashed
@@ -54,7 +57,29 @@ interface LifecycleMarker {
   lastEventAt: string;        // ISO of last event
   quitReason: QuitReason | null;
   quitMeta?: Record<string, unknown>;
+  /**
+   * The last renderer / child / GPU process that died while the app kept
+   * running. Diagnostic only: it never decides whether the session crashed.
+   */
+  lastIncident?: { event: string; at: string; meta?: Record<string, unknown> };
 }
+
+/**
+ * Process deaths the app survives. A renderer, utility or GPU process dying
+ * does not end the session: main.ts reloads the window or Chromium respawns
+ * the process. If one of these set the quit reason, the label stuck for the
+ * rest of the session, so a later normal Cmd+Q was logged as
+ * "before-quit reason=renderer-gone" and the next launch reported that the
+ * previous session "ended unexpectedly" (seen 2026-10-31). Windows closing
+ * their renderers during a quit could also overwrite 'user-quit' the same way.
+ * These events now go to `lastIncident`. A session that really dies after one
+ * still reads as a crash: its marker never reaches 'clean-exit'.
+ */
+export const SURVIVABLE_PROCESS_EVENTS: ReadonlySet<string> = new Set([
+  'render-process-gone',
+  'child-process-gone',
+  'gpu-process-crashed',
+]);
 
 export class LifecycleTracker {
   private static instance: LifecycleTracker | null = null;
@@ -106,6 +131,18 @@ export class LifecycleTracker {
       consoleLog?.(`[Lifecycle] ${event}${reason ? ` reason=${reason}` : ''}`, safeMeta);
     };
 
+    // A process the app survives: log it and keep it as the last incident,
+    // but leave the quit reason alone (see SURVIVABLE_PROCESS_EVENTS).
+    const noteIncident = (event: string, meta?: Record<string, unknown>) => {
+      const at = new Date().toISOString();
+      const safeMeta = meta ? sanitizeMeta(meta) as Record<string, unknown> : undefined;
+      this.marker.lastEvent = event;
+      this.marker.lastEventAt = at;
+      this.marker.lastIncident = { event, at, meta: safeMeta };
+      try { this.writeMarker(); } catch { /* best-effort */ }
+      consoleLog?.(`[Lifecycle] ${event} (app keeps running; quit reason unchanged)`, safeMeta);
+    };
+
     // MISSING HANDLERS that this module adds (PHASE-2E):
     app.on('will-quit', (event) => {
       // F-709: do NOT clobber a more specific reason. Electron fires
@@ -136,9 +173,8 @@ export class LifecycleTracker {
     });
 
     app.on('render-process-gone', (event, webContents: WebContents, details: Electron.RenderProcessGoneDetails) => {
-      record(
+      noteIncident(
         'render-process-gone',
-        'renderer-gone',
         {
           reason: details.reason,
           exitCode: details.exitCode,
@@ -149,8 +185,7 @@ export class LifecycleTracker {
     });
 
     app.on('child-process-gone', (event, details: Electron.Details) => {
-      record(
-        'child-process-gone',
+      noteIncident(
         'child-process-gone',
         {
           type: details.type,
@@ -166,7 +201,7 @@ export class LifecycleTracker {
     // typings, so no overload matches. The listener is deliberately KEPT registered
     // (removing it would be a behaviour change).
     app.on('gpu-process-crashed' as any, (event: Electron.Event, killed: boolean) => {
-      record('gpu-process-crashed', 'gpu-process-crashed', { killed });
+      noteIncident('gpu-process-crashed', { killed });
     });
 
     // NOTE: OS-level signals (SIGTERM/SIGINT/SIGHUP), uncaughtException, and

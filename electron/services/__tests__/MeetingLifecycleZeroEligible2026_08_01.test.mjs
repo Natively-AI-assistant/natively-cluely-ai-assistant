@@ -69,11 +69,12 @@ describe('zero-eligible finalization wiring', () => {
     const exitIdx = body.indexOf('ZERO-ELIGIBLE EARLY EXIT');
     assert.ok(exitIdx !== -1, 'early exit block missing');
 
-    // Any route to the title model: the helper, or a direct summary call.
-    const titleIdx = body.search(/generateTitleFromSummary(?:WithSource)?\(|generateMeetingSummary\(titlePrompt/);
-    assert.notEqual(titleIdx, -1, 'no title call reachable from processAndSaveMeeting — re-verify ordering');
-    assert.ok(exitIdx < titleIdx,
-      'the exit must run BEFORE the title LLM call, in the order the method executes them');
+    // 2026-10-18: the title rides in the notes reply, so the first model route is a
+    // notes call: the short-session call, the V3 assembler or the V2 fallback.
+    const llmIdx = body.search(/generateMeetingSummary\(|assembleSummary\(|vetProposedTitle\(/);
+    assert.notEqual(llmIdx, -1, 'no notes call reachable from processAndSaveMeeting — re-verify ordering');
+    assert.ok(exitIdx < llmIdx,
+      'the exit must run BEFORE the first notes/title LLM call, in the order the method executes them');
 
     assert.match(src, /NO_MEMORY_ELIGIBLE_TRANSCRIPT/);
     assert.match(src, /summaryStatus: 'completed'/,

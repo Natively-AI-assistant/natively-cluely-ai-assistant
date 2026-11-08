@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { Check, ChevronRight, Copy, Pause, Play } from 'lucide-react';
+import { Check, ChevronRight, Copy, Pause, Play, Search, X } from 'lucide-react';
 import { useResolvedTheme } from '../../../hooks/useResolvedTheme';
 import { DisclosureChevron } from '../../ui/AccordionSection';
 import {
@@ -8,9 +8,11 @@ import {
   SETTINGS_BTN_BASE,
   SETTINGS_BTN_NEUTRAL,
   SETTINGS_CARD,
+  SettingsMotionReady,
   SettingsRow,
   useSettingsTones,
 } from '../SettingsRow';
+import { copyText } from '../../../lib/copyText';
 
 // The pieces Setup & Help is written in. Every row is the shared SettingsRow —
 // General, Audio, Sync, Intelligence and About are built from the same one —
@@ -194,7 +196,7 @@ export const HelpCommand: React.FC<{ command: string }> = ({ command }) => {
   useEffect(() => () => clearTimeout(timer.current), []);
   const handleCopy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(command);
+      await copyText(command);
       setCopied(true);
       clearTimeout(timer.current);
       timer.current = setTimeout(() => setCopied(false), 1400);
@@ -492,4 +494,137 @@ export const HelpLink: React.FC<{ href: string; children: React.ReactNode }> = (
   >
     {children}
   </button>
+);
+
+
+// ── Setup meter ──────────────────────────────────────────────────────────
+// Get started's summary: the steps a meeting cannot run without, as the same
+// 3px tracks a recording's steps use, so the pane has one picture for
+// "how far along". A done step fills in the text colour; colour is kept for
+// state the app reports, never decoration. The fill slides only once the pane
+// is ready (SettingsMotionReady): a step done long ago is drawn done, not
+// animated to done every time the pane opens.
+
+export interface HelpMeterStep {
+  label: string;
+  /** null while the step is still being read. */
+  done: boolean | null;
+}
+
+export const HelpSetupMeter: React.FC<{
+  steps: HelpMeterStep[];
+  /** Headline once every step is done, and while some are left. */
+  readyText: string;
+  leftText: (left: number) => string;
+  checkingText: string;
+}> = ({ steps, readyText, leftText, checkingText }) => {
+  const ready = React.useContext(SettingsMotionReady);
+  const reduce = usePrefersReducedMotion();
+  const tones = useSettingsTones();
+  const checking = steps.some((s) => s.done === null);
+  const doneCount = steps.filter((s) => s.done).length;
+  const left = steps.length - doneCount;
+  const headline = checking ? checkingText : left === 0 ? readyText : leftText(left);
+  return (
+    <div className={`${SETTINGS_CARD} px-4 py-3.5 mb-1`} role="group" aria-label={headline}>
+      <div className="flex items-baseline justify-between gap-3">
+        <Presence kind="text" id={checking ? 'checking' : `left-${left}`}>
+          <span className={`text-[13px] font-semibold ${!checking && left === 0 ? tones.text.ok : 'text-text-primary'}`}>
+            {headline}
+          </span>
+        </Presence>
+        <span className="text-[11.5px] tabular-nums text-text-secondary shrink-0">
+          {checking ? '' : `${doneCount} of ${steps.length}`}
+        </span>
+      </div>
+      <ol className="mt-3 grid gap-3" style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}>
+        {steps.map((step, i) => (
+          <li key={step.label} className="min-w-0">
+            <span
+              aria-hidden
+              className="block h-[3px] rounded-full overflow-hidden"
+              style={{ background: 'color-mix(in srgb, var(--text-primary) 14%, transparent)' }}
+            >
+              <span
+                className="block h-full w-full rounded-full bg-text-primary origin-left"
+                style={{
+                  transform: `scaleX(${step.done ? 1 : 0})`,
+                  transition: ready && !reduce ? `transform 520ms cubic-bezier(0.22, 1, 0.36, 1) ${i * 60}ms` : 'none',
+                }}
+              />
+            </span>
+            <span className="mt-2 flex items-center gap-1.5 text-[11.5px] leading-snug whitespace-nowrap">
+              <span className={`shrink-0 tabular-nums font-semibold ${step.done ? 'text-text-primary' : 'text-text-secondary'}`}>{i + 1}</span>
+              <span className={`min-w-0 overflow-hidden text-ellipsis ${step.done ? 'text-text-primary font-medium' : 'text-text-secondary'}`}>
+                {step.label}
+              </span>
+              <span className="sr-only">{step.done === null ? '' : step.done ? ', done' : ', to do'}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+};
+
+// ── Guide search ─────────────────────────────────────────────────────────
+// Twenty-odd guides are past what a person scans; the field narrows them by
+// title, description and the words people actually type ("pdf", "slack",
+// "mute"). Escape clears it; the count says what is left.
+
+/** Every word of the query appears somewhere in the haystack (case-insensitive). */
+export function matchesHelpQuery(query: string, haystack: string): boolean {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  const hay = haystack.toLowerCase();
+  return words.every((w) => hay.includes(w));
+}
+
+export const HelpGuideSearch: React.FC<{
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  /** Shown at the right while a query is typed, e.g. "3 guides". */
+  resultLabel?: string;
+  clearLabel: string;
+}> = ({ value, onChange, placeholder, resultLabel, clearLabel }) => (
+  <div className="relative mt-3 mb-2">
+    <Search size={14} aria-hidden className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none" />
+    <input
+      type="search"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && value) {
+          e.stopPropagation();
+          onChange('');
+        }
+      }}
+      placeholder={placeholder}
+      aria-label={placeholder}
+      spellCheck={false}
+      className="w-full h-9 rounded-lg border border-border-subtle bg-bg-input pl-9 pr-24 text-xs text-text-primary placeholder:text-text-secondary transition-colors focus:outline-none focus:border-accent-primary [&::-webkit-search-cancel-button]:hidden"
+    />
+    <span className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+      {value && resultLabel && <span className="text-[11px] tabular-nums text-text-secondary" aria-live="polite">{resultLabel}</span>}
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          aria-label={clearLabel}
+          className="w-6 h-6 rounded-full flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-bg-item-surface transition-colors"
+        >
+          <X size={12} />
+        </button>
+      )}
+    </span>
+  </div>
+);
+
+/** A guide group's label: Settings' group label, with how many guides it holds. */
+export const HelpGroupLabel: React.FC<{ title: string; count: number }> = ({ title, count }) => (
+  <div className="flex items-baseline gap-2 px-[17px] pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+    <span>{title}</span>
+    <span className="font-medium tabular-nums normal-case tracking-normal opacity-80">{count}</span>
+  </div>
 );

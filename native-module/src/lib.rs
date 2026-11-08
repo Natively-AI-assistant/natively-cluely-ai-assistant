@@ -56,8 +56,16 @@ pub mod keyboard_tap;
 // though only keyboard_hook_windows uses it.
 pub mod app_chord;
 
+// Paste / select all / copy / cut inside the overlay's text box while stealth
+// typing is engaged (both hooks). Pure, so it unit-tests on every platform.
+pub mod edit_shortcut;
+
 #[cfg(target_os = "windows")]
 pub mod keyboard_hook_windows;
+
+// Windows: a no-activate window's clicks are delivered, not eaten (MA_NOACTIVATE).
+#[cfg(target_os = "windows")]
+pub mod no_activate_window;
 
 use crate::audio_config::{CHUNK_BATCH_COUNT, CHUNK_BATCH_TIMEOUT_MS, DSP_POLL_MS};
 use crate::resampler::Resampler;
@@ -530,6 +538,8 @@ pub struct MicrophoneCapture {
     sample_rate: Arc<AtomicU32>,
     /// Shared atomic NATIVE hardware rate — diagnostics / HFP detection only.
     native_sample_rate: Arc<AtomicU32>,
+    /// Channels the device delivers (one is kept) — diagnostics only.
+    channel_count: Arc<AtomicU32>,
     /// Stores the requested device ID for recreation on restart.
     device_id: Option<String>,
     /// Holds the live CPAL stream. Recreated on each start().
@@ -561,6 +571,7 @@ impl MicrophoneCapture {
             capture_thread: None,
             sample_rate: Arc::new(AtomicU32::new(emitted_rate)),
             native_sample_rate: Arc::new(AtomicU32::new(native_rate)),
+            channel_count: Arc::new(AtomicU32::new(input.channels() as u32)),
             device_id,
             input: Some(input),
         })
@@ -578,6 +589,13 @@ impl MicrophoneCapture {
     #[napi]
     pub fn get_native_sample_rate(&self) -> u32 {
         self.native_sample_rate.load(Ordering::Acquire)
+    }
+
+    /// Channels the device delivers before one is kept (2-4 on many laptop
+    /// mic arrays) — diagnostics only; the emitted PCM is always mono.
+    #[napi]
+    pub fn get_channel_count(&self) -> u32 {
+        self.channel_count.load(Ordering::Acquire)
     }
 
     #[napi]
@@ -603,6 +621,7 @@ impl MicrophoneCapture {
                 Ok(i) => {
                     let rate = i.sample_rate();
                     self.native_sample_rate.store(rate, Ordering::Release);
+                    self.channel_count.store(i.channels() as u32, Ordering::Release);
                     let emitted = if rate == CANONICAL_STT_RATE { rate } else { CANONICAL_STT_RATE };
                     self.sample_rate.store(emitted, Ordering::Release);
                     self.input = Some(i);
@@ -627,6 +646,8 @@ impl MicrophoneCapture {
 
         let native_rate = input_ref.sample_rate();
         self.native_sample_rate.store(native_rate, Ordering::Release);
+        // The DSP thread publishes the rate it really emits (see below).
+        let sample_rate_shared = self.sample_rate.clone();
 
         let mut consumer = input_ref
             .take_consumer()
@@ -654,6 +675,13 @@ impl MicrophoneCapture {
                 }
             };
             let emitted_rate = if resampler.is_some() { CANONICAL_STT_RATE } else { native_rate };
+            // Declare what is really emitted, as SystemAudioCapture does. A
+            // failed resampler passed native-rate PCM while get_sample_rate()
+            // still said 16000: STT then heard 48 kHz audio as 16 kHz — three
+            // times slow — and ElevenLabs returned Cyrillic nonsense for
+            // English (measured 2026-11-03: "Ага." for an English sentence).
+            // Stored before the first chunk, so JS reads it on chunk one.
+            sample_rate_shared.store(emitted_rate, Ordering::Release);
 
             let mut suppressor = SilenceSuppressor::new(SilenceSuppressionConfig {
                 native_sample_rate: emitted_rate,
@@ -851,4 +879,93 @@ pub fn screen_capture_displays_available() -> bool {
 #[napi]
 pub fn get_default_output_device_id() -> String {
     speaker::default_output_device_uid()
+}
+
+/// Name of the current default input device (cpal), the id get_input_devices
+/// uses for it. Empty string when there is none. JS polls it during a meeting
+/// that captures from the default mic, and reopens the mic when it changes:
+/// cpal binds a stream to the device it opened, so without this a new default
+/// (USB headset plugged in, mic changed in system settings) went unheard while
+/// the old one stayed open. Call only while the mic is already capturing: on
+/// macOS cpal::default_host() registers the process with the CoreAudio HAL.
+#[napi]
+pub fn get_default_input_device_id() -> String {
+    microphone::default_input_device_name()
+}
+
+/// macOS: the "System Audio Recording" grant the Core Audio tap needs:
+/// "granted", "denied", or "unknown" (not asked yet, or unreadable). Read
+/// through a private TCC call loaded at run time (see
+/// speaker/audio_capture_permission.rs); only ever used to explain silence,
+/// never to refuse capture. "unknown" on other platforms.
+#[napi]
+pub fn get_system_audio_recording_permission() -> String {
+    #[cfg(target_os = "macos")]
+    {
+        speaker::audio_capture_permission::audio_capture_permission()
+            .as_str()
+            .to_string()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        "unknown".to_string()
+    }
+}
+
+#[napi(object)]
+pub struct OutputDevicePeak {
+    pub id: String,
+    pub peak: f64,
+}
+
+#[napi(object)]
+pub struct OutputRouteProbe {
+    /// Live output peak (0.0–1.0) of every active render endpoint.
+    pub peaks: Vec<OutputDevicePeak>,
+    /// eConsole default render endpoint.
+    pub default_id: String,
+    /// eCommunications default render endpoint — where Teams/Zoom/Discord play.
+    pub comms_id: String,
+}
+
+/// Runs the probe on a libuv worker: activating every endpoint's meter is a
+/// handful of COM calls that can stall while audiosrv reconfigures (a
+/// Bluetooth headset connecting), and main.ts polls it every second — on the
+/// Electron main thread that would freeze IPC and the overlay.
+pub struct OutputRouteProbeTask;
+
+impl napi::Task for OutputRouteProbeTask {
+    type Output = OutputRouteProbe;
+    type JsValue = OutputRouteProbe;
+
+    fn compute(&mut self) -> napi::Result<Self::Output> {
+        #[cfg(target_os = "windows")]
+        {
+            Ok(OutputRouteProbe {
+                peaks: speaker::windows::output_device_peaks()
+                    .into_iter()
+                    .map(|(id, peak)| OutputDevicePeak { id, peak: peak as f64 })
+                    .collect(),
+                default_id: speaker::default_output_device_uid(),
+                comms_id: speaker::windows::default_communications_device_uid().unwrap_or_default(),
+            })
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            Ok(OutputRouteProbe { peaks: Vec::new(), default_id: String::new(), comms_id: String::new() })
+        }
+    }
+
+    fn resolve(&mut self, _env: napi::Env, output: Self::Output) -> napi::Result<Self::JsValue> {
+        Ok(output)
+    }
+}
+
+/// Windows: where audio is actually playing right now (see
+/// speaker::windows::output_device_peaks) plus both role defaults. Empty
+/// elsewhere — macOS has no per-device output meter, and JS treats an empty
+/// probe as "no evidence".
+#[napi]
+pub fn probe_output_routes() -> napi::bindgen_prelude::AsyncTask<OutputRouteProbeTask> {
+    napi::bindgen_prelude::AsyncTask::new(OutputRouteProbeTask)
 }

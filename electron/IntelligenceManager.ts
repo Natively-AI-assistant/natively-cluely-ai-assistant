@@ -83,6 +83,10 @@ export class IntelligenceManager extends EventEmitter {
             'refined_answer', 'refined_answer_token',
             'recap', 'recap_token', 'clarify', 'clarify_token',
             'follow_up_questions_update', 'follow_up_questions_token',
+            // The live helpers: What did I miss?, Define, Sound smart.
+            'live_helper', 'live_helper_token',
+            // The user's own buttons (llm/customButtons.ts).
+            'custom_button', 'custom_button_token',
             'manual_answer_started', 'manual_answer_result',
             'mode_changed', 'error',
             // Sprint 7: dedicated channel for negotiation coaching payloads.
@@ -195,12 +199,29 @@ export class IntelligenceManager extends EventEmitter {
         return this.session.getLastInterviewerTurn();
     }
 
-    /** Current meeting's full finalized transcript (for in-meeting search, Phase 10). */
-    getCurrentMeetingTranscript(): Array<{ speaker: string; text: string; timestamp: number; origin?: string }> {
+    /** Date.now() of the last mid-meeting reset, else 0 (SessionTracker.getAssistantViewStartedAt). */
+    getAssistantViewStartedAt(): number {
+        return this.session.getAssistantViewStartedAt();
+    }
+
+    /** The rolling recap of the meeting so far (SessionTracker.getMeetingRecaps). */
+    getMeetingRecaps(): ReadonlyArray<{ fromTs: number; toTs: number; lines: number; text: string }> {
+        return this.session.getMeetingRecaps();
+    }
+
+    /** Current meeting's finalized transcript as the assistant reads it (retrieval). */
+    // `tailLines`: only the newest that many (a caller that reads the last few seconds).
+    getCurrentMeetingTranscript(tailLines?: number): Array<{ speaker: string; text: string; timestamp: number; origin?: string }> {
         // `origin` rides along so the live-transcript evidence can tell a line
         // the user SAID from one they TYPED into the overlay (typed chat is
         // echoed into the transcript as speaker 'user', origin 'manual_chat').
-        return this.session.getFullTranscript().map(s => ({ speaker: s.speaker, text: s.text, timestamp: s.timestamp, ...(s.origin ? { origin: s.origin } : {}) }));
+        const lines = this.session.getRetrievalTranscript();
+        return (tailLines !== undefined && lines.length > tailLines ? lines.slice(-tailLines) : lines).map(s => ({ speaker: s.speaker, text: s.text, timestamp: s.timestamp, ...(s.origin ? { origin: s.origin } : {}) }));
+    }
+
+    /** The running meeting's whole transcript (kept across the reset shortcut), for in-meeting search. */
+    getCurrentMeetingFullTranscript(): Array<{ speaker: string; text: string; timestamp: number; origin?: string }> {
+        return this.session.getPersistableTranscript().map(s => ({ speaker: s.speaker, text: s.text, timestamp: s.timestamp, origin: s.origin }));
     }
 
     /** `imagePaths`: the screenshots the answer used; the Usage tab shows previews of them. */
@@ -325,7 +346,7 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.runAssistMode();
     }
 
-    async runWhatShouldISay(question?: string, confidence?: number, imagePaths?: string[], options?: { skipCooldown?: boolean; forceFresh?: boolean; screenContext?: ScreenContext; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string }): Promise<string | null> {
+    async runWhatShouldISay(question?: string, confidence?: number, imagePaths?: string[], options?: { skipCooldown?: boolean; forceFresh?: boolean; screenContext?: ScreenContext; screenFromImage?: boolean; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string; pressedAt?: number }): Promise<string | null> {
         return this.engine.runWhatShouldISay(question, confidence, imagePaths, options);
     }
 
@@ -343,6 +364,25 @@ export class IntelligenceManager extends EventEmitter {
 
     async runFollowUpQuestions(): Promise<string | null> {
         return this.engine.runFollowUpQuestions();
+    }
+
+    /** What did I miss?, Define, Sound smart (llm/liveHelpers.ts). */
+    async runLiveHelper(action: import('./llm/liveHelpers').LiveHelperAction, opts?: { sinceMs?: number }): Promise<string | null> {
+        return this.engine.runLiveHelper(action, opts);
+    }
+
+    async runCustomButton(button: import('./llm/promptSystemV2').CustomButtonActionV2, imagePaths?: string[], readSeconds?: number): Promise<string | null> {
+        return this.engine.runCustomButton(button, imagePaths, readSeconds);
+    }
+
+    /** The conversation so far, screenshots included, as a prompt block. See IntelligenceEngine.conversationHistoryBlock. */
+    conversationHistoryBlock(alreadyIn?: string): string {
+        return this.engine.conversationHistoryBlock(alreadyIn);
+    }
+
+    /** A question asked on the phone, into the conversation. See IntelligenceEngine.recordPhoneTurn. */
+    recordPhoneTurn(answer: string, question: string, imagePaths?: readonly string[], startedUnder?: string): void {
+        this.engine.recordPhoneTurn(answer, question, imagePaths, startedUnder);
     }
 
     async runManualAnswer(question: string): Promise<string | null> {
@@ -407,9 +447,28 @@ export class IntelligenceManager extends EventEmitter {
         this.persistence.setLiveUserNotes(text);
     }
 
+    /** The note template for the running (or next) meeting's notes; null clears. False for an unknown id. */
+    setLiveNoteTemplate(id: string | null): boolean {
+        return this.persistence.setLiveNoteTemplate(id);
+    }
+
+    getLiveNoteTemplate(): string | null {
+        return this.persistence.getLiveNoteTemplate();
+    }
+
     /** A meeting started: its transcript is kept on disk as it grows (LiveMeetingJournal). */
-    beginLiveMeeting(startedAt?: number): string {
-        return this.persistence.beginLiveMeeting(startedAt);
+    beginLiveMeeting(startedAt?: number, opts?: Parameters<MeetingPersistence['beginLiveMeeting']>[1]): string {
+        return this.persistence.beginLiveMeeting(startedAt, opts);
+    }
+
+    /** A saved meeting, read for a resume (MeetingPersistence.loadResumeBase). */
+    loadResumeBase(meetingId: string): ReturnType<MeetingPersistence['loadResumeBase']> {
+        return this.persistence.loadResumeBase(meetingId);
+    }
+
+    /** The saved meeting the running session continues, or null. */
+    get resumedMeetingId(): string | null {
+        return this.persistence.resumedMeetingId;
     }
 
     /**
@@ -426,12 +485,12 @@ export class IntelligenceManager extends EventEmitter {
     }
 
     /** Regenerate V3 notes for a saved meeting (optionally with a different mode/tone). */
-    async regenerateMeetingSummary(meetingId: string, opts?: { templateType?: string; modeId?: string; tone?: 'professional' | 'warm' | 'concise' | 'friendly' }): Promise<boolean> {
+    async regenerateMeetingSummary(meetingId: string, opts?: { templateType?: string; modeId?: string; noteTemplateId?: string | null; tone?: 'professional' | 'warm' | 'concise' | 'friendly' | 'your_style' }): Promise<boolean> {
         return this.persistence.regenerateSavedMeeting(meetingId, opts);
     }
 
-    /** Regenerate only the follow-up draft for a saved V3 meeting. */
-    async regenerateMeetingFollowUp(meetingId: string, tone?: 'professional' | 'warm' | 'concise' | 'friendly'): Promise<boolean> {
+    /** Regenerate only the follow-up draft for a saved meeting (V3 notes or older ones). */
+    async regenerateMeetingFollowUp(meetingId: string, tone?: 'professional' | 'warm' | 'concise' | 'friendly' | 'your_style'): Promise<boolean> {
         return this.persistence.regenerateFollowUpDraft(meetingId, tone);
     }
 
@@ -504,7 +563,7 @@ export class IntelligenceManager extends EventEmitter {
     }
 
     reset(): void {
-        this.session.reset();
+        this.session.reset({ keepMeetingRecord: this.persistence.liveMeetingId !== null });
         this.engine.reset();
         this.engine.clearWtaDiversityHistory();
         // V3 conversation state (referents, active topic, previous source ids)

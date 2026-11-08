@@ -183,6 +183,8 @@ const onFailure = (err) => {
 // the build.
 const ASSETS = [
   { from: 'electron/audio/riva_asr.proto', to: 'electron/audio/riva_asr.proto' },
+  // Page of the Chromium audio capture fallback (electron/audio/fallback/captureHost.ts).
+  { from: 'electron/audio/fallback/capture.html', to: 'electron/audio/fallback/capture.html' },
 ];
 
 const copyAssets = () => {

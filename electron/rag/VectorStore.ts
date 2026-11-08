@@ -301,12 +301,20 @@ export class VectorStore {
         queryEmbedding: number[],
         options: {
             meetingId?: string;
+            /**
+             * Only these meetings (a folder). Searched from the stored vectors,
+             * not the vec0 index: a global top-k filtered afterwards would miss
+             * a folder's matches that rank below other meetings'.
+             */
+            meetingIds?: string[];
             limit?: number;
             minSimilarity?: number;
             spaceKey?: string;
         } = {}
     ): Promise<ScoredChunk[]> {
         const { meetingId, limit = 8, minSimilarity = 0.25, spaceKey } = options;
+        const scope = Array.isArray(options.meetingIds) ? options.meetingIds.filter((id) => typeof id === 'string' && id) : null;
+        if (scope && scope.length === 0) return [];
 
         // Hard invariant: without an active space we return NOTHING rather than
         // leaking every space. The downstream filter is `if (spaceKey)`, so omitting
@@ -325,6 +333,8 @@ export class VectorStore {
             console.warn(`[VectorStore] searchSimilar: the query embedding cannot be searched (${unusableQuery}) — returning empty.`);
             return [];
         }
+
+        if (scope) return this.searchSimilarJS(queryEmbedding, meetingId, limit, minSimilarity, spaceKey, scope);
 
         // A table that is waiting to be rebuilt (wrong metric, missing vectors,
         // or only part refilled) answers a native query with a confident wrong
@@ -408,7 +418,8 @@ export class VectorStore {
         meetingId: string | undefined,
         limit: number,
         minSimilarity: number,
-        spaceKey?: string
+        spaceKey?: string,
+        meetingIds?: string[] | null
     ): ScoredChunk[] {
         let query = `
             SELECT c.*
@@ -417,6 +428,11 @@ export class VectorStore {
             WHERE c.embedding IS NOT NULL
         `;
         const params: any[] = [];
+        if (meetingIds && meetingIds.length > 0) {
+            const ids = meetingIds.slice(0, 5000);
+            query += ` AND c.meeting_id IN (${ids.map(() => '?').join(',')})`;
+            params.push(...ids);
+        }
 
         if (meetingId) {
             query += ' AND c.meeting_id = ?';
@@ -695,7 +711,9 @@ export class VectorStore {
     async searchSummaries(
         queryEmbedding: number[],
         limit: number = 5,
-        spaceKey?: string
+        spaceKey?: string,
+        /** Only these meetings (a folder); read from the stored vectors, as searchSimilar does. */
+        meetingIds?: string[]
     ): Promise<{ meetingId: string; summaryText: string; similarity: number }[]> {
         // Same hard invariant as searchSimilar: no active space → return nothing
         // rather than leaking every space (see searchSimilar for rationale).
@@ -707,6 +725,10 @@ export class VectorStore {
         if (unusableQuery) {
             console.warn(`[VectorStore] searchSummaries: the query embedding cannot be searched (${unusableQuery}) — returning empty.`);
             return [];
+        }
+        if (Array.isArray(meetingIds)) {
+            const scope = meetingIds.filter((id) => typeof id === 'string' && id);
+            return scope.length === 0 ? [] : this.searchSummariesJS(queryEmbedding, limit, spaceKey, scope);
         }
         // Same rule as searchSimilar: not while the table is waiting to be rebuilt.
         if (this.useNativeVec && !isVecTableRebuildPending(this.db, `vec_summaries_${queryEmbedding.length}`)) {
@@ -771,7 +793,8 @@ export class VectorStore {
     private searchSummariesJS(
         queryEmbedding: number[],
         limit: number,
-        spaceKey?: string
+        spaceKey?: string,
+        meetingIds?: string[]
     ): { meetingId: string; summaryText: string; similarity: number }[] {
         // Filter by composite embedding SPACE, not provider name (see searchSimilarJS).
         // The byte-length dimension check below cannot distinguish v1 768d from v2 768d.
@@ -783,6 +806,11 @@ export class VectorStore {
             WHERE s.embedding IS NOT NULL
         `;
         const params: any[] = [];
+        if (meetingIds && meetingIds.length > 0) {
+            const ids = meetingIds.slice(0, 5000);
+            query += ` AND s.meeting_id IN (${ids.map(() => '?').join(',')})`;
+            params.push(...ids);
+        }
         if (spaceKey) {
             query += ' AND m.embedding_space = ?';
             params.push(spaceKey);

@@ -72,6 +72,11 @@ export const ROUTE_STREAM_IDLE_PRIOR_MS: Record<RouteKind, number> = {
  * not: the user sits watching a half-written answer that will never finish. If
  * a provider genuinely needs more than 8s between chunks, that is a finding to
  * surface in diagnostics, not a deadline to quietly grant.
+ *
+ * LIVE_HELD_OUTPUT_MAX_MS (liveDeadlines.ts) is not this knob. It lets one
+ * stream run past the stall budget only while its transport keeps receiving
+ * bytes (Codex holding the rest of an answer, #680), and every such turn is
+ * logged as "held past the stall budget".
  */
 export const STREAM_IDLE_MIN_MS = 2_500;
 export const STREAM_IDLE_MAX_MS = LIVE_INTER_TOKEN_STALL_MS;

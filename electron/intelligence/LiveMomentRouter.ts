@@ -95,7 +95,7 @@ function actionForAnswerType(answerType: AnswerType, isRefinement: boolean): Liv
   if (answerType === 'lecture_answer') return 'LECTURE_OR_NOTES';
   if (answerType === 'follow_up_answer') return isRefinement ? 'FOLLOW_UP_OR_REFINEMENT' : 'DIRECT_ANSWER';
   if (answerType === 'general_meeting_answer') return 'MEETING_MEMORY_OR_RECAP';
-  if (answerType === 'project_link_answer' || answerType === 'source_code_evidence_answer' || answerType === 'ethical_usage_answer') return 'DIRECT_ANSWER';
+  if (answerType === 'project_link_answer' || answerType === 'source_code_evidence_answer') return 'DIRECT_ANSWER';
   if (answerType === 'unknown_answer') return 'PASSIVE_OR_UNCLEAR';
   return 'DIRECT_ANSWER';
 }

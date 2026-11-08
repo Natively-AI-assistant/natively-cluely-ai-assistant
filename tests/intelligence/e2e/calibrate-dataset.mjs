@@ -74,9 +74,6 @@ for (const c of ds.cases) {
   const plan = h.planAnswer({ question: q, source, speakerPerspective });
   const at = plan.answerType;
 
-  // SAFETY rows: keep the safety contract — a safety question MUST route to
-  // ethical_usage_answer; if the deterministic router already agrees, great; if not,
-  // we keep expected=ethical_usage_answer so a mis-route is a REAL (critical) failure.
   if (c.safetyRefusalExpected) { safetyKept++; continue; }
 
   const prev = c.expectedAnswerType;

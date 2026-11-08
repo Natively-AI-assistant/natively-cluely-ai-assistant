@@ -30,6 +30,23 @@ export function isArchivableNotes(detailed: unknown): boolean {
         || (Array.isArray(d.sectionsV3) && d.sectionsV3.some((s: any) => has(s?.bullets)));
 }
 
+/**
+ * Notes worth keeping when a resumed meeting's notes are rewritten
+ * (2026-11-02): written V3 notes as above, and also the older short notes
+ * (overview, key points, action items) a short meeting or an older version of
+ * the app wrote. Regenerate keeps its V3-only rule. The placeholder Stop saves
+ * and notes that failed are empty, so they are never kept.
+ */
+export function isArchivableEarlierNotes(detailed: unknown): boolean {
+    if (isArchivableNotes(detailed)) return true;
+    const d = detailed as any;
+    if (!d || typeof d !== 'object' || d.schemaVersion === 3) return false;
+    const has = (v: unknown) => Array.isArray(v) && v.some((x: any) => (typeof x === 'string' ? x : String(x?.text ?? '')).trim().length > 0);
+    return (typeof d.overview === 'string' && d.overview.trim().length > 0)
+        || has(d.keyPoints) || has(d.actionItems)
+        || (Array.isArray(d.sections) && d.sections.some((s: any) => has(s?.bullets)));
+}
+
 /** The tab name for a version: the mode the notes were written in. */
 export function notesVersionLabel(detailed: unknown): string {
     const mode = (detailed as any)?.mode;

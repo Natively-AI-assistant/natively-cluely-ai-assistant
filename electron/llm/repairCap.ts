@@ -97,3 +97,24 @@ export function repairCapReached(text: string, proseCap: number): boolean {
 export function endsInsideFence(text: string): boolean {
   return proseOutsideFences(text).insideFence;
 }
+
+/**
+ * Whether a streamed answer that stopped before its provider finished reads as
+ * cut off (issue #644): it ends inside a block it never closed, on a heading
+ * with nothing under it, or partway through a prose sentence. A finished
+ * sentence, a closed block, a list item, a table row or the [[GIST]] line
+ * reads as finished, because a provider can hold the stream open after a
+ * complete answer (liveDeadlines.ts, isCompleteShortAnswer) and that answer is
+ * not cut off.
+ */
+export function looksCutOff(text: string): boolean {
+  const value = String(text ?? '').replace(/\r\n?/g, '\n').trimEnd();
+  if (!value.trim()) return false;
+  if (endsInsideFence(value)) return true;
+  const last = value.slice(value.lastIndexOf('\n') + 1).trim();
+  if (/^#{1,6}\s/.test(last)) return true;
+  if (/^(?:`{3,}|~{3,}|\[\[GIST\]\]|\||(?:[-*+]|\d{1,9}[.)])\s)/.test(last)) return false;
+  // Mid-sentence: a word, a number, or a comma, colon, dash or opening bracket
+  // that something was meant to follow.
+  return /[\p{L}\p{N},:;([{\-–—]$/u.test(last);
+}

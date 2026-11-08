@@ -115,8 +115,10 @@ export const STT_PROVIDERS: Record<SttProviderId, SttProviderConfig> = {
     },
     natively: {
         id: 'natively',
-        name: 'Natively Pro (Managed)',
-        description: 'All-in-one managed STT via Natively API',
+        // Comes with a Natively API plan, not the Pro licence: a Pro licence
+        // alone has no managed transcription.
+        name: 'Natively API',
+        description: 'Managed transcription with a Natively API plan',
         endpoint: '', 
         model: '',
         uploadType: 'websocket',

@@ -65,10 +65,18 @@ class FakeWorker extends EventEmitter {
     FakeWorker.last = this;
     FakeWorker.instances.push(this);
     this.terminated = false;
+    this.retired = false;
     this.postedMessages = [];
   }
-  postMessage(msg) { this.postedMessages.push(msg); }
-  terminate() { this.terminated = true; this.emit('exit', 0); }
+  // A real worker answers `shutdown` by exiting itself with code 0 at its next
+  // idle point (whisperWorker.ts). The service must stop a worker ONLY this
+  // way: terminate() on a worker inside a native ONNX call aborts the app.
+  postMessage(msg) {
+    this.postedMessages.push(msg);
+    if (msg?.type === 'shutdown' && !this.holdExit) { this.retired = true; this.emit('exit', 0); }
+    else if (msg?.type === 'shutdown') { this.retired = true; }
+  }
+  terminate() { this.terminated = true; this.emit('exit', 1); }
   // Test helpers
   emitProgress(p) { this.emit('message', { type: 'progress', modelId: 'm1', progress: p }); }
   emitReady() { this.emit('message', { type: 'ready' }); }
@@ -174,7 +182,8 @@ test('ready + isModelCached=true → status complete (100), worker terminated', 
     const e = svc.getState('whisper', 'm1');
     assert.equal(e.status, 'complete');
     assert.equal(e.progress, 100);
-    assert.equal(w.terminated, true);
+    assert.equal(w.retired, true, 'the worker must be asked to shut down');
+    assert.equal(w.terminated, false, 'BUG: terminate() on an ONNX worker can abort the whole app');
     resolve();
   }));
 });
@@ -193,7 +202,8 @@ test('ready + isModelCached=false → status error (THE KEY FIX)', () => {
     assert.equal(e.status, 'error');
     assert.notEqual(e.progress, 100);
     assert.match(e.error, /incomplete/i);
-    assert.equal(w.terminated, true);
+    assert.equal(w.retired, true, 'the worker must be asked to shut down');
+    assert.equal(w.terminated, false, 'BUG: terminate() on an ONNX worker can abort the whole app');
     assert.deepEqual(FakeProvider._deleted, ['m1']);
     resolve();
   }));
@@ -245,7 +255,8 @@ test('cancel terminates worker and marks entry cancelled', () => {
   const w = FakeWorker.last;
   const r = svc.cancel('whisper', 'm1');
   assert.equal(r.success, true);
-  assert.equal(w.terminated, true);
+  assert.equal(w.retired, true, 'the worker must be asked to shut down');
+  assert.equal(w.terminated, false, 'BUG: terminate() on an ONNX worker can abort the whole app');
   return new Promise(resolve => setImmediate(() => {
     const e = svc.getState('whisper', 'm1');
     assert.equal(e.status, 'cancelled');
@@ -337,7 +348,8 @@ test('persistence: pauseForShutdown flushes synchronously and marks in-flight as
   assert.ok(fs.existsSync(statePath));
   const parsed = JSON.parse(fs.readFileSync(statePath, 'utf8'));
   assert.equal(parsed.entries[0].status, 'interrupted');
-  assert.equal(w.terminated, true);
+  assert.equal(w.retired, true, 'the worker must be asked to shut down');
+  assert.equal(w.terminated, false, 'BUG: terminate() on an ONNX worker can abort the whole app');
 });
 
 test('rehydrate: downloading → interrupted (no live worker after restart)', () => {
@@ -575,4 +587,276 @@ test('REGRESSION: resolveLocalModelProviderName routes every non-Nemotron catalo
 
 test('REGRESSION: an unknown modelId falls back to "whisper" (fail into the existing generic path, not a crash)', () => {
   assert.equal(resolveLocalModelProviderName('not-a-real-model-id'), 'whisper');
+});
+
+
+// ── 2026-10-14: one download owner, an on-disk "in progress" mark, a
+//    cooperative stop, and errors worded by cause ─────────────────────────────
+
+function trackingProvider(overrides = {}) {
+  const calls = [];
+  return {
+    calls,
+    provider: {
+      ...FakeProvider.create(),
+      prepareDownload: (id) => calls.push(`prepare:${id}`),
+      finishDownload: (id) => calls.push(`finish:${id}`),
+      ...overrides,
+    },
+  };
+}
+const settle = () => new Promise((r) => setImmediate(r));
+
+test('the download is marked in progress BEFORE the worker is spawned, and cleared only after it loaded', () => {
+  let onDisk = false;
+  const { calls, provider } = trackingProvider({
+    spawnWorker: () => { calls.push('spawn'); return new FakeWorker(); },
+    isModelCached: (id) => { calls.push(`verify:${id}`); return onDisk; },
+  });
+  const svc = new LocalModelDownloadService({ disablePersistence: true, providers: new Map([['whisper', provider]]) });
+  svc.start('whisper', 'm1');
+  assert.deepEqual(calls, ['verify:m1', 'prepare:m1', 'spawn'], 'a quit or crash from the first byte on must leave the mark behind');
+  onDisk = true;
+  FakeWorker.last.emitReady();
+  assert.deepEqual(calls.slice(3), ['finish:m1', 'verify:m1'], 'the mark is lifted before the cache check, or the check could never pass');
+  assert.equal(svc.getState('whisper', 'm1').status, 'complete');
+});
+
+test('re-verifying a model that is already whole never marks it as a download in progress', () => {
+  // start() on an installed model only loads it to check it. Marking it would
+  // turn a quit during that check into a full re-download of good files.
+  const { calls, provider } = trackingProvider({ isModelCached: () => true });
+  const svc = new LocalModelDownloadService({ disablePersistence: true, providers: new Map([['whisper', provider]]) });
+  assert.equal(svc.start('whisper', 'm1').success, true);
+  assert.equal(calls.includes('prepare:m1'), false);
+});
+
+test('a worker error leaves the in-progress mark in place', () => {
+  const { calls, provider } = trackingProvider();
+  const svc = new LocalModelDownloadService({ disablePersistence: true, providers: new Map([['whisper', provider]]) });
+  svc.start('whisper', 'm1');
+  FakeWorker.last.emitWorkerError('Failed to load model: fetch failed');
+  assert.equal(calls.includes('finish:m1'), false, 'BUG: a failed download would count as installed');
+  assert.equal(svc.getState('whisper', 'm1').status, 'error');
+});
+
+test('a worker error is shown as the provider words it; the raw text is not what the user sees', () => {
+  const { provider } = trackingProvider({ describeError: (raw) => `Worded: ${raw.includes('fetch failed') ? 'no connection' : 'other'}` });
+  const svc = new LocalModelDownloadService({ disablePersistence: true, providers: new Map([['whisper', provider]]) });
+  svc.start('whisper', 'm1');
+  FakeWorker.last.emitWorkerError('Failed to load model: fetch failed');
+  assert.equal(svc.getState('whisper', 'm1').error, 'Worded: no connection');
+});
+
+test('a describeError that throws falls back to the raw message instead of losing the error', () => {
+  const { provider } = trackingProvider({ describeError: () => { throw new Error('boom'); } });
+  const svc = new LocalModelDownloadService({ disablePersistence: true, providers: new Map([['whisper', provider]]) });
+  svc.start('whisper', 'm1');
+  FakeWorker.last.emitWorkerError('raw reason');
+  assert.equal(svc.getState('whisper', 'm1').error, 'raw reason');
+});
+
+test('ensureDownloaded resolves at once for a model that is already on disk and starts nothing', async () => {
+  FakeProvider._cached = { m1: true };
+  const svc = new LocalModelDownloadService({ disablePersistence: true, providers: new Map([['whisper', FakeProvider.create()]]) });
+  await svc.ensureDownloaded('whisper', 'm1');
+  assert.equal(FakeWorker.instances.length, 0);
+});
+
+test('ensureDownloaded JOINS a download already in flight — one worker, not two', async () => {
+  const svc = new LocalModelDownloadService({ disablePersistence: true, providers: new Map([['whisper', FakeProvider.create()]]) });
+  svc.start('whisper', 'm1'); // the launch-time auto-download
+  const progress = [];
+  let done = false;
+  const waiting = svc.ensureDownloaded('whisper', 'm1', { onProgress: (p) => progress.push(p) }).then(() => { done = true; });
+  await settle();
+  assert.equal(FakeWorker.instances.length, 1, 'BUG: two workers writing the same model files');
+  FakeWorker.last.emitProgress(40);
+  await settle();
+  assert.equal(done, false);
+  assert.ok(progress.includes(40), 'the waiter sees progress, so it can tell "slow" from "stalled"');
+  FakeProvider._cached = { m1: true };
+  FakeWorker.last.emitReady();
+  await waiting;
+  assert.equal(done, true);
+});
+
+test('ensureDownloaded starts the download when nothing has, and rejects with the worded error when it fails', async () => {
+  const { provider } = trackingProvider({ describeError: () => 'The local model could not be downloaded.' });
+  const svc = new LocalModelDownloadService({ disablePersistence: true, providers: new Map([['whisper', provider]]) });
+  const waiting = svc.ensureDownloaded('whisper', 'm1');
+  await settle();
+  assert.equal(FakeWorker.instances.length, 1);
+  FakeWorker.last.emitWorkerError('Failed to load model: fetch failed');
+  await assert.rejects(waiting, /could not be downloaded/);
+});
+
+test('ensureDownloaded rejects when the download is cancelled, and for an unknown provider', async () => {
+  const svc = new LocalModelDownloadService({ disablePersistence: true, providers: new Map([['whisper', FakeProvider.create()]]) });
+  const waiting = svc.ensureDownloaded('whisper', 'm1');
+  await settle();
+  svc.cancel('whisper', 'm1');
+  await assert.rejects(waiting, /cancelled/);
+  await assert.rejects(svc.ensureDownloaded('nope', 'm1'), /unknown-provider/);
+});
+
+test('a waiter that has moved on is dropped without cancelling the download for everyone else', async () => {
+  const svc = new LocalModelDownloadService({ disablePersistence: true, providers: new Map([['whisper', FakeProvider.create()]]) });
+  let abandon = false;
+  const waiting = svc.ensureDownloaded('whisper', 'm1', { shouldAbandon: () => abandon });
+  await settle();
+  abandon = true;
+  FakeWorker.last.emitProgress(10);
+  await assert.rejects(waiting, /abandoned/);
+  assert.equal(svc.getState('whisper', 'm1').status, 'downloading', 'the download carries on');
+  assert.equal(FakeWorker.last.retired, false);
+});
+
+test('start() refuses while the cancelled download\'s worker is still on its way out', () => {
+  const svc = new LocalModelDownloadService({ disablePersistence: true, providers: new Map([['whisper', FakeProvider.create()]]) });
+  svc.start('whisper', 'm1');
+  const first = FakeWorker.last;
+  first.holdExit = true; // inside a native model load: it cannot exit yet
+  svc.cancel('whisper', 'm1');
+  const again = svc.start('whisper', 'm1');
+  assert.equal(again.success, false, 'BUG: deleting and rewriting files the old worker may still hold open');
+  assert.match(again.error, /still stopping/);
+  assert.equal(FakeWorker.instances.length, 1);
+  first.emit('exit', 0);
+  assert.equal(svc.start('whisper', 'm1').success, true, 'once it has gone the download starts normally');
+});
+
+test('startWhenReady waits for that worker instead of refusing the click, and runs the provider\'s preparation first', async () => {
+  const order = [];
+  const { provider } = trackingProvider({
+    beforeSpawn: async () => { order.push('beforeSpawn'); },
+    spawnWorker: () => { order.push('spawn'); return new FakeWorker(); },
+  });
+  const svc = new LocalModelDownloadService({ disablePersistence: true, providers: new Map([['whisper', provider]]) });
+  svc.start('whisper', 'm1');
+  const first = FakeWorker.last;
+  first.holdExit = true;
+  svc.cancel('whisper', 'm1');
+  order.length = 0;
+  const restarting = svc.startWhenReady('whisper', 'm1');
+  await settle();
+  assert.deepEqual(order, ['beforeSpawn'], 'not spawned while the old worker is alive');
+  first.emit('exit', 0);
+  const r = await restarting;
+  assert.equal(r.success, true);
+  assert.deepEqual(order, ['beforeSpawn', 'spawn']);
+});
+
+test('a beforeSpawn that rejects never blocks the download', async () => {
+  const { provider } = trackingProvider({ beforeSpawn: async () => { throw new Error('proxy lookup failed'); } });
+  const svc = new LocalModelDownloadService({ disablePersistence: true, providers: new Map([['whisper', provider]]) });
+  assert.equal((await svc.startWhenReady('whisper', 'm1')).success, true);
+});
+
+test('every bundle reaches the same service instance (globalThis, not a static field)', () => {
+  const a = LocalModelDownloadService.getInstance();
+  assert.strictEqual(globalThis.__nativelyLocalModelDownloadServiceV1__, a);
+  assert.strictEqual(LocalModelDownloadService.getInstance(), a);
+  LocalModelDownloadService.__resetForTests();
+  assert.notStrictEqual(LocalModelDownloadService.getInstance(), a);
+});
+
+test('the real whisper and nemotron providers carry the new hooks', () => {
+  for (const p of [createWhisperDownloadProvider(), createNemotronDownloadProvider()]) {
+    for (const hook of ['prepareDownload', 'finishDownload', 'describeError', 'beforeSpawn']) {
+      assert.equal(typeof p[hook], 'function', `${p.name}.${hook}`);
+    }
+  }
+});
+
+// -- Updating a model that works from an older copy (2026-10-15) ------------
+//
+// A Whisper model downloaded before its catalog repoId existed is usable but
+// heavier. "Download" on it must fetch the current copy (isDownloadComplete
+// false) while a meeting must NOT wait for or trigger that download
+// (isModelReady stays "usable").
+
+function upgradeProvider(state) {
+  const prepared = [];
+  return {
+    prepared,
+    provider: {
+      ...FakeProvider.create(),
+      isModelCached: () => true,                       // the older copy works
+      isDownloadComplete: () => state.currentCopyDone, // the current copy
+      prepareDownload: (id) => prepared.push(id),
+    },
+  };
+}
+
+test('update: download runs (and marks in progress) although the model is usable', () => {
+  const state = { currentCopyDone: false };
+  const { provider, prepared } = upgradeProvider(state);
+  const svc = new LocalModelDownloadService({ disablePersistence: true, providers: new Map([['whisper', provider]]) });
+  assert.equal(svc.isModelReady('whisper', 'm1'), true, 'a meeting starts on the older copy without waiting');
+  assert.equal(svc.start('whisper', 'm1').success, true);
+  assert.deepEqual(prepared, ['m1'], 'BUG: an installed-looking model skips the download and never updates');
+});
+
+test('update: verified against the current copy, not the usable older one', () => {
+  const state = { currentCopyDone: false };
+  const { provider } = upgradeProvider(state);
+  const svc = new LocalModelDownloadService({ disablePersistence: true, providers: new Map([['whisper', provider]]) });
+  svc.start('whisper', 'm1');
+  FakeWorker.last.emitReady();
+  assert.equal(svc.getState('whisper', 'm1').status, 'error',
+    'the older copy must not make an unfinished update look complete');
+
+  state.currentCopyDone = true;
+  svc.start('whisper', 'm2');
+  FakeWorker.last.emitReady();
+  assert.equal(svc.getState('whisper', 'm2').status, 'complete');
+});
+
+// -- Damaged downloads and kept files (2026-10-15 review) --------------------
+
+test('a download that fails as damaged files is discarded on the next start; other failures keep their resume points', () => {
+  const discarded = [];
+  const provider = {
+    ...FakeProvider.create(),
+    isDamagedError: (m) => /Protobuf parsing failed/.test(m),
+    discardDamaged: (id) => discarded.push(id),
+  };
+  const svc = new LocalModelDownloadService({ disablePersistence: true, providers: new Map([['whisper', provider]]) });
+
+  svc.start('whisper', 'm1');
+  FakeWorker.last.emitWorkerError('Failed to load model: Load model from /x/encoder_model.onnx failed:Protobuf parsing failed.');
+  assert.equal(svc.getState('whisper', 'm1').damaged, true);
+  svc.start('whisper', 'm1');
+  assert.deepEqual(discarded, ['m1'], 'BUG: Retry kept the damaged file of the right size and failed the same way forever');
+  assert.deepEqual(FakeProvider._deleted, []);
+
+  svc.start('whisper', 'm2');
+  FakeWorker.last.emitWorkerError('Failed to load model: fetch failed');
+  assert.equal(svc.getState('whisper', 'm2').damaged, undefined);
+  svc.start('whisper', 'm2');
+  assert.deepEqual(FakeProvider._deleted, ['m2'], 'a network failure keeps what a resume can use');
+  assert.deepEqual(discarded, ['m1']);
+});
+
+test('the download path words damaged files as "install again", not a Delete button the failed row lacks', async () => {
+  const lf = await import(pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/audio/whisper/loadFailure.js')).href);
+  const msg = 'Failed to load model: Load model from /x/encoder_model.onnx failed:Protobuf parsing failed.';
+  assert.match(lf.describeLocalModelLoadFailure(msg, { reinstallReplacesDamaged: true }), /Install the model again/);
+  assert.doesNotMatch(lf.describeLocalModelLoadFailure(msg, { reinstallReplacesDamaged: true }), /Delete/);
+  assert.match(lf.describeLocalModelLoadFailure(msg, {}), /Delete the model/, 'a meeting (installed row, Delete shown) keeps its wording');
+});
+
+test('Nemotron: cleanup after an interruption keeps complete files and removes only partials', async () => {
+  const nd = await import(pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/audio/whisper/nemotron/downloadFiles.js')).href);
+  const dir = path.join(tmpUserData, 'nemotron model');
+  fs.mkdirSync(dir, { recursive: true });
+  for (const f of ['encoder.onnx', 'encoder.onnx.data', 'decoder.onnx.partial.123.456.abc', '.natively-download-incomplete']) {
+    fs.writeFileSync(path.join(dir, f), 'x');
+  }
+  nd.deletePartialNemotronFiles(dir);
+  assert.deepEqual(fs.readdirSync(dir).sort(), ['.natively-download-incomplete', 'encoder.onnx', 'encoder.onnx.data'],
+    'BUG: a quit during the final load deleted 700 MB of finished files');
+  nd.discardNemotronFiles(dir);
+  assert.equal(fs.existsSync(dir), false);
 });

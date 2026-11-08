@@ -11,3 +11,5 @@ export function recipientName(a: Attendee): string;
 export function recipientSummary(recipients: Attendee[], shown?: number): string;
 
 export function gmailComposeUrl(draft?: { to?: string[]; subject?: string; body?: string; account?: string }): string;
+
+export function outlookComposeUrl(draft?: { to?: string[]; subject?: string; body?: string }): string;

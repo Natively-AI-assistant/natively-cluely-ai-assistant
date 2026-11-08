@@ -89,8 +89,21 @@ const PAIRINGS = [
   { label: 'PI dark: --pi-on-accent on --pi-accent fill',                   fg: '#14102A', bg: '#95AFF6', min: AA_TEXT },
   { label: 'PI light: --pi-on-accent on --pi-accent fill',                  fg: '#FFFFFF', bg: '#4967D3', min: AA_TEXT },
 
-  // Meeting notes → Usage tab question bubble (MeetingDetails.tsx, .lg-bubble
-  // in src/ui-components/LiquidGlassButton.css, fed by the --bubble-user-bg /
+  // Meeting notes → Usage tab question (MeetingDetails.tsx,
+  // .lg-bubble.lg-bubble-lavender in src/ui-components/LiquidGlassButton.css):
+  // the website's lavender glass. The fill is the tint composited over the
+  // MeetingDetails pane: rgba(156,111,243,.24) over #EBEBF0 in light (the
+  // website's value), rgba(156,111,243,.30) over #151515 in dark.
+  { label: 'Usage question light: #3F2593 on the .24 lavender tint over #EBEBF0', fg: '#3F2593', bg: '#D8CDF1', min: AA_TEXT },
+  { label: 'Usage question dark: #E6DDFD on the .30 lavender tint over #151515',  fg: '#E6DDFD', bg: '#3E3058', min: AA_TEXT },
+  // The meeting chat ("ask about this meeting", MeetingChatOverlay.tsx) draws
+  // its questions with the same card since 2026-10-30, on its own panes:
+  // #f9f9f9 light, #111111 dark (chatWindowBg).
+  { label: 'Chat question light: #3F2593 on the .24 lavender tint over #F9F9F9',  fg: '#3F2593', bg: '#E3D8F8', min: AA_TEXT },
+  { label: 'Chat question dark: #E6DDFD on the .30 lavender tint over #111111',   fg: '#E6DDFD', bg: '#3B2D55', min: AA_TEXT },
+
+  // Plain .lg-bubble (HowItWorksRefund's tab pill; the meeting chat's questions
+  // until 2026-10-30) in src/ui-components/LiquidGlassButton.css, fed by the --bubble-user-bg /
   // --bubble-user-fg pair in index.css). The fill is --toggle-on (#6688F5, the
   // Settings toggle's ON colour) in dark mode and that colour mixed 75/25 with
   // white (#8CA6F8) in light mode. The Liquid Glass rim, sheens and cap

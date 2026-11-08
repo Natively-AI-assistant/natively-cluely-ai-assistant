@@ -25,6 +25,8 @@ export interface SystemAudioHealthClassifierOptions {
 
 export class SystemAudioHealthClassifier {
   static supportedEventKinds: readonly string[];
+  /** Last chunk carrying real signal (null: none yet this capture). */
+  lastMeaningfulSignalAtMs: number | null;
   constructor(options?: SystemAudioHealthClassifierOptions);
   reset(): void;
   handle(event: SystemAudioHealthEvent): SystemAudioHealthDecision;

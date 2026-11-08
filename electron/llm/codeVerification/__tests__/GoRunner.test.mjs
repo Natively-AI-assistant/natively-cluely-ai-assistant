@@ -74,7 +74,7 @@ describe('buildGoProgram (pure)', () => {
   });
 });
 
-describe('Go real execution (go run) — gated', async () => {
+describe('Go real execution (go build + run) — gated', async () => {
   const have = await localLanguageAvailable('go');
   const maybe = (n, f) => test(n, { skip: have ? false : 'go unavailable' }, f);
 

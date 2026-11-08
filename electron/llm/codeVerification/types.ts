@@ -83,6 +83,10 @@ export interface RunResult {
   actual?: unknown;
   /** Error/compile/timeout detail for `error` (redaction-safe, truncated). */
   error?: string;
+  /** Set on an `error` that says nothing about the code: the compiler or
+   * toolchain timed out or failed on its own, or the signature cannot be
+   * driven. Never grounds for a correction; the answer counts as unverified. */
+  unverifiable?: boolean;
   /** Wall-clock ms for this run (for telemetry). */
   ms: number;
 }
@@ -93,7 +97,7 @@ export interface Verdict {
   passed: boolean;
   /** true when nothing could be executed (unsupported lang, no runtime, no spec). */
   skipped: boolean;
-  skipReason?: 'no_spec' | 'no_code' | 'unsupported_language' | 'runtime_unavailable' | 'scope_denied';
+  skipReason?: 'no_spec' | 'no_code' | 'unsupported_language' | 'runtime_unavailable' | 'scope_denied' | 'unverifiable';
   language?: VerifyLanguage;
   backend?: ExecutionBackend;
   results: RunResult[];

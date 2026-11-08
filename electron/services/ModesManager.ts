@@ -68,6 +68,36 @@ export const PROFILE_OKF_RESERVED_MODE_ID = '__profile_okf__';
  */
 export const ACTIVE_MODE_CACHE_KEY = '__nativelyActiveModeInfoCacheV1__';
 
+/**
+ * Pro modes are checked when an answer READS the active mode, not only when it
+ * is switched on (modes:set-active). Before 2026-11-07 a Pro mode set while
+ * licensed, or written straight into natively.db, kept shaping every answer
+ * after the licence or trial ended. Only the 'general' template (General and
+ * the user's own modes built from it) is free, the same line modes:set-active
+ * draws. The check is injected (ipcHandlers wires proAccess.isProOrTrialActive)
+ * so this module stays free of licence code; until it is wired nothing is
+ * withheld. On globalThis because esbuild inlines this module into several
+ * bundles (see _cache below). The stored choice is kept: Pro back, mode back.
+ */
+const PRO_ACCESS_KEY = '__nativelyModesProAccessV1__';
+export function setModesProAccessCheck(check: (() => boolean) | null): void {
+    (globalThis as unknown as Record<string, unknown>)[PRO_ACCESS_KEY] = check;
+}
+export function modeNeedsPro(mode: Pick<Mode, 'templateType'> | null | undefined): boolean {
+    return !!mode && mode.templateType !== 'general';
+}
+/** True when this mode needs Pro and the user has neither Pro nor a trial. */
+export function modeLockedWithoutPro(mode: Pick<Mode, 'templateType'> | null | undefined): boolean {
+    if (!modeNeedsPro(mode)) return false;
+    const check = (globalThis as unknown as Record<string, unknown>)[PRO_ACCESS_KEY] as (() => boolean) | null | undefined;
+    if (typeof check !== 'function') return false;
+    try {
+        return check() !== true;
+    } catch {
+        return true;
+    }
+}
+
 export type ModeTemplateType =
     | 'general'
     | 'looking-for-work'
@@ -394,6 +424,13 @@ function rowToSection(row: any): ModeNoteSection {
     };
 }
 
+/** One background re-index step, in the shape of the 'mode-file-index-status' push. */
+export interface ReferenceIndexStatusEvent {
+    modeId: string;
+    fileId: string;
+    phase: 'indexing' | 'done';
+}
+
 export class ModesManager {
     private static instance: ModesManager;
     private readonly modeContextRetriever = new ModeContextRetriever();
@@ -486,6 +523,15 @@ export class ModesManager {
 
     public getActiveMode(): Mode | null {
         const row = DatabaseManager.getInstance().getActiveMode();
+        if (!row) return null;
+        const mode = rowToMode(row);
+        // Without Pro or a trial a Pro mode answers as General (no mode).
+        return modeLockedWithoutPro(mode) ? null : mode;
+    }
+
+    /** The stored active mode with no Pro check. Only for standing it down. */
+    public getStoredActiveMode(): Mode | null {
+        const row = DatabaseManager.getInstance().getActiveMode();
         return row ? rowToMode(row) : null;
     }
 
@@ -501,7 +547,7 @@ export class ModesManager {
             const pinned = this.getModes().find(m => m.id === pinnedModeId);
             // Fall back to the active mode only if the pinned mode was deleted
             // mid-request (rare); otherwise the pinned mode wins.
-            if (pinned) return pinned;
+            if (pinned) return modeLockedWithoutPro(pinned) ? null : pinned;
         }
         return this.getActiveMode();
     }
@@ -535,9 +581,9 @@ export class ModesManager {
     // rejection, plus a raw db.setActiveMode bypass in the license-loss path;
     // both fixed the same day. This slot keeps the harness runtimes truthful
     // and makes the class impossible if multi-bundle loading ever arrives.)
-    private static get _cache(): { info: ActiveModeInfo | null; valid: boolean } {
+    private static get _cache(): { info: ActiveModeInfo | null; valid: boolean; filledLocked?: boolean } {
         const g = globalThis as unknown as Record<string, unknown>;
-        let store = g[ACTIVE_MODE_CACHE_KEY] as { info: ActiveModeInfo | null; valid: boolean } | undefined;
+        let store = g[ACTIVE_MODE_CACHE_KEY] as { info: ActiveModeInfo | null; valid: boolean; filledLocked?: boolean } | undefined;
         if (!store) {
             store = { info: null, valid: false };
             g[ACTIVE_MODE_CACHE_KEY] = store;
@@ -559,8 +605,12 @@ export class ModesManager {
      */
     public getActiveModeInfo(): ActiveModeInfo | null {
         const store = ModesManager._cache;
-        if (store.valid) return store.info;
-        const mode = this.getActiveMode();
+        // The cache holds the stored mode; Pro is asked on every read. Filled while
+        // locked, its grounding was read without the mode: refilled once Pro is back.
+        if (store.valid && store.filledLocked && !modeLockedWithoutPro(store.info)) store.valid = false;
+        if (store.valid) return modeLockedWithoutPro(store.info) ? null : store.info;
+        const mode = this.getStoredActiveMode();
+        store.filledLocked = modeLockedWithoutPro(mode);
         if (mode) {
             const grounding = this.getActiveModeDocumentGroundingInfo(mode.id);
             store.info = {
@@ -579,7 +629,7 @@ export class ModesManager {
             store.info = null;
         }
         store.valid = true;
-        return store.info;
+        return modeLockedWithoutPro(store.info) ? null : store.info;
     }
 
     // Modes where the premium knowledge intercept (negotiation coaching, intro
@@ -1050,6 +1100,10 @@ export class ModesManager {
             }
         } catch { /* non-fatal — orphans are disk bloat, not correctness */ }
         DatabaseManager.getInstance().deleteMode(id);
+        // Its follow-up writing samples go with it (styles are per mode).
+        try {
+            require('./outputs/outputsIpc').forgetWritingStyleForMode(id);
+        } catch { /* non-fatal: an orphan file is never read */ }
         this.invalidateActiveModeCache();
     }
 
@@ -1250,16 +1304,37 @@ export class ModesManager {
             const files = this.getReferenceFiles(mode.id);
             if (files.length === 0) continue;
             // Cheap status read (no embedding work) gates the expensive retry.
-            const hasEligible = files.some(f => {
+            const eligible = files.filter(f => {
                 try {
                     return RETRY_ELIGIBLE_INDEX_STATUSES.has(this.modeContextRetriever.getReferenceFileIndexStatus(f.id).status);
                 } catch {
                     return true; // status lookup failed → let the retry decide
                 }
             });
-            if (!hasEligible) continue;
-            await this.modeContextRetriever.retryLexicalOnlyFiles(files).catch(() => { /* logged inside */ });
+            // One file at a time, so each badge changes when its own file does.
+            for (const f of eligible) {
+                this.reportReferenceIndexStatus({ modeId: mode.id, fileId: f.id, phase: 'indexing' });
+                await this.modeContextRetriever.retryLexicalOnlyFiles([f]).catch(() => { /* logged inside */ });
+                this.reportReferenceIndexStatus({ modeId: mode.id, fileId: f.id, phase: 'done' });
+            }
         }
+    }
+
+    private referenceIndexStatusListener: ((event: ReferenceIndexStatusEvent) => void) | null = null;
+
+    /**
+     * Where background re-indexing (boot retry, mode-activation prewarm) reports
+     * progress. main broadcasts it as 'mode-file-index-status', the push an
+     * upload already sends and the Modes Manager badges already follow. Without
+     * it a file re-indexed in the background changed badge only when the user
+     * happened to re-open the mode, which read as statuses flipping on their own.
+     */
+    public setReferenceIndexStatusListener(listener: ((event: ReferenceIndexStatusEvent) => void) | null): void {
+        this.referenceIndexStatusListener = listener;
+    }
+
+    private reportReferenceIndexStatus(event: ReferenceIndexStatusEvent): void {
+        try { this.referenceIndexStatusListener?.(event); } catch { /* a status push never breaks indexing */ }
     }
 
     /** Modes that have at least one retry-eligible reference file. Used by the
@@ -1290,7 +1365,9 @@ export class ModesManager {
             // `status` cannot see the content; the hash check can (chunker bump →
             // lazy per-mode re-index, see referenceFileNeedsReindex).
             if (status !== 'ready' || this.modeContextRetriever.referenceFileNeedsReindex(file)) {
+                this.reportReferenceIndexStatus({ modeId, fileId: file.id, phase: 'indexing' });
                 await this.modeContextRetriever.indexReferenceFile(file).catch(() => { /* logged inside */ });
+                this.reportReferenceIndexStatus({ modeId, fileId: file.id, phase: 'done' });
             }
         }
         // Phase 3: warm the local cross-encoder reranker at activation so the
@@ -1477,6 +1554,25 @@ export class ModesManager {
 
     public removeAllNoteSections(modeId: string): void {
         DatabaseManager.getInstance().deleteAllNoteSections(modeId);
+    }
+
+    /** The sections the mode's type starts with (a new mode's seed); [] for an unknown mode. */
+    public defaultNoteSectionsFor(modeId: string): Array<{ title: string; description: string }> {
+        const mode = this.getModes().find(m => m.id === modeId);
+        return mode ? [...(TEMPLATE_NOTE_SECTIONS[mode.templateType] ?? [])] : [];
+    }
+
+    /**
+     * The mode's notes sections become a note template's (2026-10-21, "Use a
+     * template" in the Modes Manager): the mode's default notes layout, which
+     * a template picked in the notepad still overrides for one meeting. The
+     * sections compile like a new mode's. Null when the write failed.
+     */
+    public replaceNoteSectionsWith(modeId: string, sections: ReadonlyArray<{ title: string; description: string }>): ModeNoteSection[] | null {
+        const rows = sections.map(s => ({ id: `ns_${crypto.randomUUID()}`, title: s.title, description: s.description }));
+        if (!DatabaseManager.getInstance().replaceNoteSections(modeId, rows)) return null;
+        this.compileAllSectionsAsync(modeId);
+        return this.getNoteSections(modeId);
     }
 
     // ── LLM Context ───────────────────────────────────────────────

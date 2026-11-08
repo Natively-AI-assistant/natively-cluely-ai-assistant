@@ -14,8 +14,8 @@
 // never "no answer".
 
 import { isContextIntelligenceV3Enabled } from '../contracts/flag';
-import { MAX_TURN_SCREEN_CHARS, type HistoryTurn } from '../question/conversation-state';
-import { renderHistory } from '../question/history-render';
+import type { HistoryTurn } from '../question/conversation-state';
+import { renderHistory, speechWindowContains, HISTORY_SCREEN_BUDGET_CHARS } from '../question/history-render';
 
 /** Allowance for the history RECALL tier: up to three older exchanges the
  *  question is about, with their screen text (history-render.ts). */
@@ -56,19 +56,9 @@ function redactTracePayload<T>(payload: T): unknown {
  */
 const COMPLETED_EXCHANGE_RE = /^(?:Assistant:|Previous answer)/m;
 
-/**
- * Whether a live speech window already carries this answer. SessionTracker
- * renders an assistant turn as "[ASSISTANT (PREVIOUS SUGGESTION)]: <text>", so
- * the answer's opening words — whitespace-collapsed, gist line dropped — are
- * the stable thing to look for. Too short an opening is not evidence either
- * way and is treated as absent (a duplicated line costs less than a lost one).
- */
-export function speechWindowContains(speech: string, answer: string): boolean {
-  const norm = (x: string) => x.replace(/\[\[GIST\]\][^\n]*/g, '').replace(/\s+/g, ' ').trim();
-  const probe = norm(answer).slice(0, 60);
-  if (probe.length < 24) return false;
-  return norm(speech).includes(probe);
-}
+// speechWindowContains moved to history-render (quick actions dedupe with it
+// too); re-exported here for existing importers.
+export { speechWindowContains };
 
 export interface BridgeInput {
   surface: AnswerSurface;
@@ -92,7 +82,7 @@ export interface BridgeInput {
    *  null when a file has no text yet. Lets a small corpus be read whole. */
   attachedCorpusTokens?: number | null;
   /** profileWholeInfo(collected docs): the résumé / JD are handed over whole this turn; null = retrieval as before. */
-  profileWhole?: { tokens: number; docs: number } | null;
+  profileWhole?: { tokens: number; docs: number; answersTokens?: number } | null;
   /**
    * Bounded fast-model query rewrite for low-confidence retrieval — see
    * retrieval/llm-query-rewrite.ts. The CALLER binds the model (this module has
@@ -168,6 +158,13 @@ export interface BridgeInput {
   deferDebugCompletion?: boolean;
   /** The USER's standing instructions only — binding on presentation, cannot widen authorization (§19.2). */
   realtimeInstruction?: string;
+  /**
+   * "About you" (Profile Intelligence › Cue Cards, Pro): a few lines the user
+   * wrote about themselves. Read by the caller (services/proAccess.ts
+   * userBioForAnswers, which applies the Pro gate); dropped here when the
+   * "Profile and history" provider scope is off. See ComposeInput.userBio.
+   */
+  userBio?: string;
   /** The APP's per-turn length default — see ComposeInput.defaultLengthDirective. Never concatenate it onto realtimeInstruction. */
   defaultLengthDirective?: string;
   /**
@@ -430,7 +427,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
             // Screen text gets its OWN allowance: sharing one budget meant a
             // single screenshot consumed the whole conversation allowance and
             // evicted every older turn.
-            screenBudgetChars: MAX_TURN_SCREEN_CHARS * 2,
+            screenBudgetChars: HISTORY_SCREEN_BUDGET_CHARS,
             screensDenied,
             // Text read off a kept-on-device screenshot: shown only when this
             // turn stays on this device. Asked live, like the scope above.
@@ -492,7 +489,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
             // BUDGETED like the ring branch. Unbudgeted, 10 screen turns once
             // put 80,000 characters of screen text into an 83,072-character
             // prompt on every what-to-answer and assist turn.
-            screenBudgetChars: MAX_TURN_SCREEN_CHARS * 2,
+            screenBudgetChars: HISTORY_SCREEN_BUDGET_CHARS,
             screensDenied: isScopeDenied('screenshots', readProviderScopePolicy()),
             onDeviceScreens: readSelectionStaysOnDevice(),
             // Dedupe against the ACTUAL window text, not "was it recent": the
@@ -571,6 +568,14 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
     const auditWithheldScopes = new Set<ProviderDataScope>(withheldScopes);
     if (historyScreenWithheld && convoSummary) auditWithheldScopes.add('screenshots');
 
+    // "About you" is profile data: it leaves with the profile_history scope or
+    // not at all, the same scope the meeting notes check before reading it.
+    // Audit-only when withheld: it is not evidence, so the composer's
+    // withheld-evidence notices must not describe it.
+    const userBioText = input.userBio?.trim() ?? '';
+    const userBio = userBioText && !isScopeDenied('profile_history', scopePolicy) ? userBioText : undefined;
+    if (userBioText && !userBio) auditWithheldScopes.add('profile_history');
+
     // Persona resolution must never break a turn: a throwing factory or a null
     // return simply composes without one (today's behaviour).
     let personaBase: string | undefined;
@@ -601,6 +606,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       withheldScopes: [...withheldScopes],
       realtimeInstruction: input.realtimeInstruction,
       defaultLengthDirective: input.defaultLengthDirective,
+      userBio,
       diagramTurn,
       conversationSummary: convoSummary,
       // What-to-answer answers the OTHER person's question: their "I" is theirs.
@@ -629,6 +635,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
     );
     if (convoSummary) packedDataScopes.add('transcript');
     if (diagramDesignAllowed) packedDataScopes.add('transcript');
+    if (userBio) packedDataScopes.add('profile_history');
     // Declared separately from `transcript`: an audit that asks "did screen
     // content leave the device this turn?" must not have to know that screen
     // text is smuggled inside the conversation summary.

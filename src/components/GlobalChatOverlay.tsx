@@ -2,11 +2,18 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useStreamBuffer } from '../hooks/useStreamBuffer';
 import { X, Copy, Check, Globe, ArrowUp } from 'lucide-react';
 import { DiagramAwareMarkdown } from './diagram/DiagramAwareMarkdown';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { chatScrimMotion, chatSheetMotion } from './chatSheetMotion';
 import { genMessageId } from '../utils/messageId';
-import nativelyIcon from './icon.png';
+import { NativelyWordmark } from './NativelyWordmark';
+// .lg-bubble.lg-bubble-lavender (your questions) and the send button's
+// .lg-button material; .mn-ask-send's own rules are in index.css.
+import '../ui-components/LiquidGlassButton.css';
+import { LiquidGlassButton } from '../ui-components/LiquidGlassButton';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
-import { stripGistTrailer } from '../lib/displayMarkup';
+import { stripGistTrailer, splitGistLineStreaming } from '../lib/displayMarkup';
+import { renderChatMarkdown } from './chatMarkdown';
+import { copyText } from '../lib/copyText';
 
 // ============================================
 // Types
@@ -60,7 +67,11 @@ const UserMessage: React.FC<{ content: string }> = ({ content }) => (
         transition={{ duration: 0.15 }}
         className="flex justify-end mb-6"
     >
-        <div className="bg-[#2C2C2E] text-white px-5 py-3 rounded-2xl rounded-tr-md max-w-[70%] text-[15px] leading-relaxed">
+        {/* The Usage tab's question card, as in the meeting chat
+            (MeetingChatOverlay.tsx): lavender Liquid Glass, 19px padding,
+            corners 19/5.5/19/19, semibold. Owner request, 2026-10-30: this
+            search gets the same changes as the meeting one. */}
+        <div className="lg-bubble lg-bubble-lavender px-[19px] py-[9px] rounded-[19px] rounded-tr-[5.5px] max-w-[80%] text-[15px] font-semibold leading-relaxed select-text">
             {content}
         </div>
     </motion.div>
@@ -71,7 +82,7 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean; isLat
 
     const handleCopy = async () => {
         try {
-            await navigator.clipboard.writeText(stripGistTrailer(content));
+            await copyText(stripGistTrailer(content));
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         } catch (err) {
@@ -87,18 +98,23 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean; isLat
             className="flex flex-col items-start mb-6"
         >
             <div className="text-text-primary text-[15px] leading-relaxed max-w-[85%]">
-                {/* This chat shows answers as plain text. Its standard-chat fallback
-                    can answer a design question, so a ```mermaid block is still
-                    drawn by the shared diagram card; everything else is exactly
-                    the plain text it was. */}
-                <DiagramAwareMarkdown
-                    text={content}
-                    streaming={Boolean(isStreaming)}
-                    // Only the answer just given may be repaired by itself (one model
-                    // call); an older answer in the thread keeps its "Try to fix" button.
-                    allowAutoRepair={Boolean(isLatest)}
-                    renderMarkdown={(chunk, key) => <React.Fragment key={key}>{chunk}</React.Fragment>}
-                />
+                {/* Rendered as the meeting chat renders its answers (renderChatMarkdown,
+                    chatMarkdown.tsx): this chat showed plain text, so **bold** and
+                    "* " bullets came through as raw asterisks and paragraph breaks
+                    were lost. Owner, 2026-10-30: "the response structure is so bad
+                    for both". A ```mermaid block is still drawn by the shared
+                    diagram card. The [[GIST]] marker line is split off unshown, as
+                    the meeting chat does; Copy already strips it. */}
+                <div className="markdown-content">
+                    <DiagramAwareMarkdown
+                        text={splitGistLineStreaming(content).body}
+                        streaming={Boolean(isStreaming)}
+                        // Only the answer just given may be repaired by itself (one model
+                        // call); an older answer in the thread keeps its "Try to fix" button.
+                        allowAutoRepair={Boolean(isLatest)}
+                        renderMarkdown={renderChatMarkdown}
+                    />
+                </div>
             </div>
             {!isStreaming && content && (
                 <button
@@ -146,7 +162,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
     isOpen,
     onClose,
-    initialQuery = ''
+    initialQuery = '',
 }) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [chatState, setChatState] = useState<ChatState>('idle');
@@ -156,6 +172,7 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
     // Match the meeting chat overlay / modes manager --mm-bg exactly so
     // the expanded card looks like the same dark grey surface.
     const isLightTheme = useResolvedTheme() === 'light';
+    const reduceMotion = useReducedMotion() ?? false;
     const chatWindowBg = isLightTheme ? '#f9f9f9' : '#111111';
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -466,34 +483,28 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
         >
             {isOpen && (
                 <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.16 }}
                     className="fixed inset-0 z-[300] flex flex-col justify-end"
                     onClick={handleBackdropClick}
                 >
-                    {/* Backdrop — dims only; the parent's opacity fade brings it in */}
-                    <div className={`absolute inset-0 ${isLightTheme ? 'bg-black/[0.06]' : 'bg-black/40'}`} />
+                    {/* Backdrop — dims only. It fades on its own, not via the wrapper, so
+                        closing does not hide the sheet before it slides down (chatSheetMotion.ts). */}
+                    <motion.div {...chatScrimMotion(reduceMotion)} className={`absolute inset-0 ${isLightTheme ? 'bg-black/[0.06]' : 'bg-black/40'}`} />
 
                     {/* Chat Window */}
                     <motion.div
                         ref={chatWindowRef}
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "85vh", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{
-                            height: { type: "spring", stiffness: 300, damping: 30, mass: 0.8 },
-                            opacity: { duration: 0.2 }
-                        }}
-                        className={`relative mx-auto w-full max-w-[680px] mb-0 rounded-t-[24px] border-t border-x border-border-subtle ${isLightTheme ? 'shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_-20px_48px_-12px_rgba(0,0,0,0.16)]' : 'shadow-2xl'} overflow-hidden flex flex-col`}
+                        {...chatSheetMotion(reduceMotion)}
+                        className={`relative mx-auto w-full max-w-[680px] h-[85vh] mb-0 rounded-t-[24px] border-t border-x border-border-subtle ${isLightTheme ? 'shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_-20px_48px_-12px_rgba(0,0,0,0.16)]' : 'shadow-2xl'} overflow-hidden flex flex-col`}
                         style={{ backgroundColor: chatWindowBg }}
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle shrink-0">
-                            <div className="flex items-center gap-2 text-text-tertiary">
-                                <img src={nativelyIcon} className="w-3.5 h-3.5 force-black-icon opacity-50" alt="logo" />
-                                <span className="text-[13px] font-medium">Search all meetings</span>
+                        {/* The meeting chat's header (MeetingChatOverlay.tsx): the natively
+                            wordmark alone at 20px in place of the app icon and "Search all
+                            meetings", starting on the messages' 24px column, the X's glyph
+                            ending on it, no divider. */}
+                        <div className="flex items-center justify-between pl-6 pr-3 pt-4 pb-1 shrink-0">
+                            <div className="flex items-center text-text-secondary">
+                                <NativelyWordmark height={20} className="block shrink-0" />
                             </div>
                             <button
                                 onClick={onClose}
@@ -529,27 +540,40 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                         {/* Floating Footer (Ask Bar) */}
                         <div className="absolute bottom-0 left-0 right-0 p-6 flex justify-center z-50 pointer-events-none">
                             <div className="w-full max-w-[440px] relative group pointer-events-auto">
-                                {/* Dark Glass Effect Input */}
+                                {/* Dark Glass Effect Input. outline-none at rest, not only on
+                                    focus, and no transition-all: with both, clicking in animated
+                                    the outline from the text colour (white in dark) to transparent,
+                                    a white ring flashing round the pill. Owner: remove it. */}
                                 <input
                                     type="text"
                                     value={query}
                                     onChange={(e) => setQuery(e.target.value)}
                                     onKeyDown={handleInputKeyDown}
                                     placeholder="Ask me anything..."
-                                    className="w-full pl-5 pr-12 py-3 bg-bg-elevated shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-border-muted rounded-full text-sm text-text-primary placeholder-text-tertiary/70 focus:outline-none transition-all"
+                                    className="w-full h-12 pl-5 pr-14 bg-bg-elevated shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-border-muted rounded-full text-sm text-text-primary placeholder-text-tertiary/70 outline-none"
                                 />
-                                <button
-                                    onClick={() => {
-                                        if (query.trim()) {
-                                            submitQuestion(query);
-                                            setQuery('');
-                                        }
-                                    }}
-                                    className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full transition-all duration-200 border border-white/5 ${query.trim() ? 'bg-text-primary text-bg-primary hover:scale-105' : 'bg-bg-item-active text-text-primary hover:bg-bg-item-hover'
-                                        }`}
-                                >
-                                    <ArrowUp size={16} className="transform rotate-45" />
-                                </button>
+                                {/* The meeting notes' send (MeetingDetails.tsx): 36px in the
+                                    48px bar at a 6px inset, grey and disabled while the box is
+                                    empty, the website's lavender glass once something is typed.
+                                    Material, states and motion are .mn-ask-send (index.css). The
+                                    span holds the position, since .lg-button sets its own. */}
+                                <span className="absolute top-[6px] right-[6px] flex">
+                                    <LiquidGlassButton
+                                        variant="lavender"
+                                        onClick={() => {
+                                            if (query.trim()) {
+                                                submitQuestion(query);
+                                                setQuery('');
+                                            }
+                                        }}
+                                        disabled={!query.trim()}
+                                        aria-label="Send"
+                                        className="lg-sm lg-lav-tinted mn-ask-send"
+                                        style={{ '--lg-pill-h': '36px' } as React.CSSProperties}
+                                    >
+                                        <ArrowUp size={18} strokeWidth={2.5} className="rotate-45" />
+                                    </LiquidGlassButton>
+                                </span>
                             </div>
                         </div>
                     </motion.div>

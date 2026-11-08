@@ -52,14 +52,14 @@ The client ID is not a secret. It ships inside every installer, like Google's cl
 | `MICROSOFT_CALENDAR_CLIENT_ID` | yes | empty: the Outlook row is disabled | The Application (client) ID from step 1 |
 | `MICROSOFT_CALENDAR_TENANT` | no | `common` | Leave unset. Use `organizations` (work and school only) or one tenant's ID only if the registration in step 1 was made for that |
 
-**Local builds (macOS and Windows):** add the variable to `.env` at the repo root, or set it in the shell before `npm run build:electron`:
+**Local builds (macOS and Windows), the normal way Natively is released:** add the variable to `.env` at the repo root, or set it in the shell. `npm run dist` (and `dist:signed`) runs `build:electron`, which reads it:
 
 - macOS: `export MICROSOFT_CALENDAR_CLIENT_ID=00001111-aaaa-2222-bbbb-3333cccc4444`
 - Windows PowerShell: `$env:MICROSOFT_CALENDAR_CLIENT_ID = "00001111-aaaa-2222-bbbb-3333cccc4444"`
 
-The build log says `MICROSOFT_CALENDAR_CLIENT_ID is not set` when it is missing. The build still succeeds.
+The build log says `MICROSOFT_CALENDAR_CLIENT_ID is not set` when it is missing. The build still succeeds, but Outlook is disabled in that installer, so check the log before shipping. A Windows build made on another machine needs the same `.env` line there.
 
-**CI:** add a repository **variable** (not a secret), `MICROSOFT_CALENDAR_CLIENT_ID`, under GitHub › Settings › Secrets and variables › Actions › Variables. `.github/workflows/release-macos.yml` passes `vars.MICROSOFT_CALENDAR_CLIENT_ID` (and the optional `vars.MICROSOFT_CALENDAR_TENANT`) to the build step. A Windows release workflow, when there is one, needs the same two lines in its build step's `env`.
+**CI (only if a release is ever built on GitHub Actions):** add a repository **variable** (not a secret), `MICROSOFT_CALENDAR_CLIENT_ID`, under GitHub › Settings › Secrets and variables › Actions › Variables. `.github/workflows/release-macos.yml` passes `vars.MICROSOFT_CALENDAR_CLIENT_ID` (and the optional `vars.MICROSOFT_CALENDAR_TENANT`) to the build step. A Windows release workflow, when there is one, needs the same two lines in its build step's `env`.
 
 **Development override:** an unpackaged run also reads `MICROSOFT_CALENDAR_CLIENT_ID` from the environment at runtime, so a dev build can try another registration without rebuilding.
 

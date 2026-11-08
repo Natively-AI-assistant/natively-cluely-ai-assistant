@@ -15,9 +15,12 @@ export const DAY_MS = 24 * 60 * 60 * 1000;
  * Promotional cards share the budget; lower priority numbers win.
  */
 export const CARDS = Object.freeze({
+  plans: Object.freeze({ cls: 'onboarding', priority: null }),
   browser_extension: Object.freeze({ cls: 'onboarding', priority: null, followUpAfterActedMs: 7 * DAY_MS }),
   trial_promo: Object.freeze({ cls: 'onboarding', priority: null }),
   natively_api_new: Object.freeze({ cls: 'onboarding', priority: null }),
+  // The full setup & demo film (src/components/onboarding/DemoVideoToaster.tsx).
+  demo_video: Object.freeze({ cls: 'onboarding', priority: null }),
   max_ultra: Object.freeze({ cls: 'promo', priority: 1, actedRetiresUntilCycleEnd: true }),
   natively_api_existing: Object.freeze({ cls: 'promo', priority: 2 }),
   profile_ad: Object.freeze({ cls: 'promo', priority: 3 }),

@@ -19,6 +19,7 @@ const dist = (p) => path.join(repoRoot, 'dist-electron/electron', p);
 
 const policy = require(dist('utils/notesWindowPolicy.js'));
 const { LiveNotesSession } = require(dist('services/meeting/liveNotesSession.js'));
+const surface = require(dist('utils/meetingSurface.js'));
 
 const BOUNDS = { x: 100, y: 120, width: 340, height: 420 };
 
@@ -140,34 +141,38 @@ describe('where it opens', () => {
     const primary = { x: 0, y: 25, width: 1440, height: 875 };
     const second = { x: 1440, y: 0, width: 1920, height: 1040 };
 
-    test('first open: default size at the top right of the primary screen', () => {
+    test('first open: tall like Granola, the full work-area height, flush with the right edge', () => {
         const b = policy.resolveNotesWindowBounds(null, [primary, second]);
-        assert.equal(b.width, 340);
-        assert.equal(b.height, 420);
-        assert.ok(b.x + b.width <= primary.x + primary.width);
-        assert.ok(b.y >= primary.y);
+        assert.deepEqual(b, { x: 1440 - 460, y: 25, width: 460, height: 875 });
+    });
+
+    test('saved bounds from the old small layout are not reused', () => {
+        const old = { x: 1076, y: 113, width: 340, height: 420 };
+        assert.deepEqual(policy.resolveNotesWindowBounds(old, [primary]), { x: 980, y: 25, width: 460, height: 875 });
+        assert.deepEqual(policy.resolveNotesWindowBounds({ ...old, layout: 1 }, [primary]).height, 875);
     });
 
     test('saved bounds come back as they were, on the screen they were on', () => {
-        const saved = { x: 2000, y: 300, width: 400, height: 500 };
-        assert.deepEqual(policy.resolveNotesWindowBounds(saved, [primary, second]), saved);
+        const saved = { x: 2000, y: 300, width: 400, height: 500, layout: policy.NOTES_WINDOW_LAYOUT };
+        const { layout, ...bounds } = saved;
+        assert.deepEqual(policy.resolveNotesWindowBounds(saved, [primary, second]), bounds);
     });
 
     test('a screen that is gone: back to the default place', () => {
-        const b = policy.resolveNotesWindowBounds({ x: 4000, y: 300, width: 400, height: 500 }, [primary]);
-        assert.equal(b.width, 340);
+        const b = policy.resolveNotesWindowBounds({ x: 4000, y: 300, width: 400, height: 500, layout: policy.NOTES_WINDOW_LAYOUT }, [primary]);
+        assert.equal(b.width, 460);
         assert.ok(b.x < primary.width);
     });
 
     test('too big or hanging off the edge: clamped into the screen; too small: the minimum', () => {
-        const big = policy.resolveNotesWindowBounds({ x: 1300, y: 100, width: 5000, height: 5000 }, [primary]);
+        const big = policy.resolveNotesWindowBounds({ x: 1300, y: 100, width: 5000, height: 5000, layout: policy.NOTES_WINDOW_LAYOUT }, [primary]);
         assert.deepEqual(big, { x: 0, y: 25, width: 1440, height: 875 });
-        const tiny = policy.resolveNotesWindowBounds({ x: 100, y: 100, width: 10, height: 10 }, [primary]);
+        const tiny = policy.resolveNotesWindowBounds({ x: 100, y: 100, width: 10, height: 10, layout: policy.NOTES_WINDOW_LAYOUT }, [primary]);
         assert.deepEqual([tiny.width, tiny.height], [policy.NOTES_WINDOW_MIN_SIZE.width, policy.NOTES_WINDOW_MIN_SIZE.height]);
     });
 
     test('garbage in settings: the default', () => {
-        assert.equal(policy.resolveNotesWindowBounds({ x: 'a', y: 1, width: 1, height: 1 }, [primary]).width, 340);
+        assert.equal(policy.resolveNotesWindowBounds({ x: 'a', y: 1, width: 1, height: 1 }, [primary]).width, 460);
     });
 });
 
@@ -278,16 +283,77 @@ describe('wiring (source contracts)', () => {
     });
 
     test('a meeting start reopens it inactive; Stop hands the text over', () => {
-        assert.match(main, /this\.liveNotes\.meetingStarted\(\);\s*this\.notesWindowHelper\.reopenForMeeting\(\);/);
+        assert.match(main, /this\.liveNotes\.meetingStarted\(resumeBase \? \{ meetingId: resumeBase\.meetingId, text: resumeBase\.userNotes \?\? '' \} : undefined\);\s*this\.notesWindowHelper\.reopenForMeeting\(startPlan\.openNotes\);/);
         assert.match(main, /this\.liveNotes\.meetingEnded\(meetingId\)/);
-        assert.match(helper, /reopenForMeeting\(\): void \{[\s\S]*?this\.open\(\{ activate: false \}\)/);
+        assert.match(helper, /reopenForMeeting\(open: boolean\): void \{\s*if \(this\.isVisible\(\) \|\| !open\) return\s*this\.open\(\{ activate: false \}\)/);
+    });
+
+    // Closing the notepad (2026-10-31): a notepad meeting closed by its X left no window at all.
+    test('closing the notepad goes home mid-meeting (as the overlay logo), the owed launcher after Stop', () => {
+        assert.equal(surface.planNotesClosed(false, false), 'owed-launcher');
+        assert.equal(surface.planNotesClosed(false, true), 'owed-launcher');
+        assert.equal(surface.planNotesClosed(true, true), 'launcher', 'a notepad meeting: home, the meeting goes on');
+        assert.equal(surface.planNotesClosed(true, false), 'none', 'the overlay is up, or the user hid it with Cmd/Ctrl+B');
+        assert.match(main, /planNotesClosed\(this\.isMeetingActive, this\.windowHelper\.isOverlayHeldHidden\(\)\)/);
+        assert.match(main, /action === 'owed-launcher'\) this\.windowHelper\.showOwedLauncher\(inactive\);/);
+        assert.match(main, /action === 'launcher'\) this\.windowHelper\.setWindowMode\('launcher', inactive\);/);
+        // Every user close goes through hide(true), which tells main; a screenshot's hide(false) does not.
+        assert.match(helper, /if \(byUser\) \{\s*this\.saveState\(\{ open: false \}\)\s*this\.closedByUserListener\?\.\(\)/);
+        assert.match(helper, /win\.on\('close', \(e\) => \{\s*if \(this\.quitting\) return\s*e\.preventDefault\(\)\s*this\.hide\(true\)/);
+    });
+
+    test('"Meeting ongoing" goes back to the surface the meeting started on', () => {
+        assert.deepEqual(surface.planMeetingResume('notepad'), { overlayHidden: true, openNotes: true });
+        assert.deepEqual(surface.planMeetingResume('overlay'), { overlayHidden: false, openNotes: false });
+        assert.deepEqual(surface.planMeetingResume(undefined), { overlayHidden: false, openNotes: false });
+        assert.match(main, /this\.meetingSurface = startPlan\.overlayHidden \? 'notepad' : 'overlay';/);
+        assert.match(main, /const plan = planMeetingResume\(this\.meetingSurface\);\s*this\.windowHelper\.setWindowMode\('overlay', inactive, \{ hidden: plan\.overlayHidden \}\);\s*if \(plan\.openNotes\) this\.notesWindowHelper\.open\(\{ activate: false \}\);/);
+        const ipc = fs.readFileSync(path.join(repoRoot, 'electron/ipcHandlers.ts'), 'utf8');
+        assert.match(ipc, /if \(mode === 'overlay' && appState\.getIsMeetingActive\(\)\) \{\s*appState\.resumeMeetingSurface\(inactive\);/);
+        const launcher = fs.readFileSync(path.join(repoRoot, 'src/components/Launcher.tsx'), 'utf8');
+        assert.match(launcher, /if \(isMeetingActive\) \{[\s\S]{0,900}window\.electronAPI\?\.setWindowMode\?\.\('overlay', true\);/);
+    });
+
+    // Settings › Overlay's switcher: what a meeting opens (2026-10-20, utils/meetingSurface.ts).
+    test('the overlay or the notepad: a notepad meeting hides the overlay and opens the notepad', () => {
+        assert.deepEqual(surface.planMeetingStart('overlay', false), { overlayHidden: false, openNotes: false });
+        assert.deepEqual(surface.planMeetingStart('overlay', true), { overlayHidden: false, openNotes: true });
+        assert.deepEqual(surface.planMeetingStart('notepad', false), { overlayHidden: true, openNotes: true });
+        // Unset or garbage: the overlay, as before the switcher existed.
+        for (const v of [undefined, null, '', 'both', 1]) {
+            assert.deepEqual(surface.planMeetingStart(v, false), { overlayHidden: false, openNotes: false });
+        }
+        assert.match(main, /planMeetingStart\(resumeBase \? resumeBase\.surface : SettingsManager\.getInstance\(\)\.get\('meetingSurface'\), this\.notesWindowHelper\.wasLeftOpen\(\)\)/);
+        assert.match(main, /this\.windowHelper\.setWindowMode\('overlay', undefined, \{ hidden: startPlan\.overlayHidden \}\);/);
+        // Hidden: overlay mode set up as a shown switch, nothing shown (Cmd/Ctrl+B's state), launcher still hidden.
+        const wh = fs.readFileSync(path.join(repoRoot, 'electron/WindowHelper.ts'), 'utf8');
+        const sw = wh.slice(wh.indexOf('public switchToOverlay('), wh.indexOf('public switchToLauncher('));
+        assert.match(sw, /this\.currentWindowMode = 'overlay';/);
+        assert.match(sw, /if \(opts\?\.hidden\) \{\s*this\.applyOverlayAuxVisibility\(false\);\s*if \(this\.overlayWindow\.isVisible\(\)\) this\.overlayWindow\.hide\(\);\s*this\.isWindowVisible = false;\s*\} else/);
+        assert.match(sw, /this\.launcherWindow\.hide\(\);/);
+        // Held down against the overlay renderer's own show requests until the user shows it.
+        assert.match(sw, /this\.overlayHeldHidden = !!opts\?\.hidden;/);
+        assert.match(sw, /if \(!opts\?\.hidden\) \{\s*this\.appState\.recordNativeOomOutboundIpc\(this\.overlayWindow\.webContents\.id, 'ensure-expanded', \[\]\);\s*this\.overlayWindow\.webContents\.send\('ensure-expanded'\);/);
+        assert.match(wh, /public switchToLauncher\(inactive\?: boolean, opts\?: \{ hidden\?: boolean \}\): void \{\s*this\.overlayHeldHidden = false;/);
+        assert.match(wh, /public showMainWindow\(inactive\?: boolean\): void \{[\s\S]{0,160}this\.switchToOverlay\(inactive\);/, 'Cmd/Ctrl+B shows through a plain switch, which releases it');
+        const ipc = fs.readFileSync(path.join(repoRoot, 'electron/ipcHandlers.ts'), 'utf8');
+        assert.match(ipc, /safeHandle\('show-window', async \(event, inactive\?: boolean\) => \{[\s\S]{0,260}if \(wh\.isOverlayHeldHidden\(\) && wh\.getOverlayWindow\(\)\?\.webContents\.id === event\.sender\.id\) return;/);
+        assert.match(ipc, /safeHandle\('meeting-surface:get', async \(\) => normalizeMeetingSurface\(/);
+        assert.match(ipc, /safeHandle\('meeting-surface:set', async \(_, surface: unknown\) => \{\s*if \(surface !== 'overlay' && surface !== 'notepad'\) return \{ success: false \};/);
+        const preload = fs.readFileSync(path.join(repoRoot, 'electron/preload.ts'), 'utf8');
+        assert.match(preload, /getMeetingSurface: \(\) => ipcRenderer\.invoke\('meeting-surface:get'\)/);
+        assert.match(preload, /setMeetingSurface: \(surface: 'overlay' \| 'notepad'\) => ipcRenderer\.invoke\('meeting-surface:set', surface\)/);
+        assert.doesNotMatch(ipc + preload, /open-on-meeting-start|notes-window:ask/, 'the replaced routes are gone');
     });
 
     test('closing hides (the text lives in main); the macOS panel attributes are applied before the first show', () => {
         assert.match(helper, /win\.on\('close', \(e\) => \{\s*if \(this\.quitting\) return\s*e\.preventDefault\(\)\s*this\.hide\(true\)/);
         assert.match(helper, /applyStealthToWindow/);
         assert.match(helper, /else win\.once\('ready-to-show', show\)/);
-        assert.doesNotMatch(helper, /attachNoActivate/, 'the no-activate policy would make the notes untypeable on Windows');
+        // 2026-10-20: typed into through the keyboard hook, as the overlay, so
+        // it is under the no-activate policy too (never steals focus). The
+        // policy skips itself when there is no hook to type through.
+        assert.match(helper, /if \(attachNoActivate\(win\)\) applied\.push\('noActivate'\)/);
     });
 
     test('hidden for screenshots like the other Natively windows, back without focus', () => {

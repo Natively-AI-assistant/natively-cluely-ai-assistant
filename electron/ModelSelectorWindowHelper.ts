@@ -304,6 +304,7 @@ export class ModelSelectorWindowHelper {
         if (this.window) this.disposeWindow(this.window)
 
         const win = new BrowserWindow(windowSettings)
+        require('./preloadBridgeGuard').attachPreloadBridgeGuard(win, 'model-selector')
         this.window = win
         onRendererGone(win, () => this.discardDeadWindow(win))
         // Windows counterpart of the NSPanel stealth attributes applied below

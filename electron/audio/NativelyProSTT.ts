@@ -5,6 +5,7 @@ import { RECOGNITION_LANGUAGES, EnglishVariant } from '../config/languages';
 import { TRIAL_SENTINEL_KEY } from '../config/constants';
 import { streamingStttWsOptions } from './dnsHelpers';
 import { RealtimeSilenceTail } from './realtimeSilenceTail';
+import { nextVoiceEpoch, voiceIdFromLabel } from './sttDiarization';
 
 /**
  * Real-time silence guaranteed after the local VAD says speech ended.
@@ -76,6 +77,20 @@ interface ResolvedTarget {
 }
 
 /**
+ * A relay error frame as an Error. `code` is the relay's error code, which the
+ * overlay maps to its copy (src/lib/sttErrorMapper.ts); the relay's human text
+ * ("Renew at ...") follows it. `terminal` tells main the provider has stopped
+ * reconnecting: trial_expired, subscription_inactive, account_suspended and
+ * auth_required used to reach main as bare codes it did not recognise, so the
+ * overlay sat on "reconnecting" for the rest of the meeting.
+ */
+export function nativelyProServerError(msg: any, terminal: boolean): Error {
+    const code = String(msg?.error ?? 'error');
+    const detail = typeof msg?.message === 'string' && msg.message.trim() ? `: ${msg.message.trim()}` : '';
+    return Object.assign(new Error(`${code}${detail}`), { code, terminal });
+}
+
+/**
  * NativelyProSTT
  *
  * Connects to the Natively API WebSocket transcription endpoint.
@@ -99,6 +114,10 @@ export class NativelyProSTT extends EventEmitter {
     private apiKey: string;
     private channel: string;  // 'system' | 'mic' — disambiguates concurrent streams per key
     private ws: WebSocket | null = null;
+    // Voice labels (sttDiarization.ts): `speaker_labels: true` in the legacy
+    // auth frame; natively-api then asks Soniox for them and sends `speaker`
+    // and `speaker_epoch` (its upstream connection count) on each final.
+    private diarize = false;
     private isActive           = false;
     private isConnected        = false;
     private isConnecting       = false;
@@ -173,6 +192,36 @@ export class NativelyProSTT extends EventEmitter {
     private connectStartedAtMs = 0;
     private firstTranscriptEmitted = false;
     private loggedFlagOffOnce = false;
+
+    // Which upstream provider the relay chose for THIS connection (from the
+    // `status: 'connected'` frame). Soniox follows language switches per token in
+    // auto mode, so a `language_detected` frame is informational there and must not
+    // tear the stream down: before 2026-10-16 every auto-mode Soniox session paid a
+    // reconnect ~3 s in, and a wrong early guess then stayed pinned for the session.
+    private connectedProvider: string | null = null;
+    // Dead-link detection. The relay pings every 25 s and the ws library answers the
+    // pongs itself, but nothing here noticed when the pings STOPPED: a laptop that
+    // changed networks kept "listening" into a half-open socket until TCP gave up
+    // minutes later (15% of relay sessions ended without a close frame, 36% in
+    // India). Any server frame or ping refreshes the stamp; LIVENESS_STALE_MS
+    // without one means the link is dead and we reconnect ourselves.
+    private lastServerActivityAt = 0;
+    private livenessTimer: NodeJS.Timeout | null = null;
+    private static readonly LIVENESS_STALE_MS = 75_000;
+    private static readonly LIVENESS_CHECK_MS = 15_000;
+    // Server verdicts about the CREDENTIAL, not the network. Reconnecting cannot
+    // change them. The relay logged 1,141 account_suspended and 146
+    // subscription_inactive rejections in 33 h, all from clients retrying every
+    // 15-30 s on both channels for days.
+    private static readonly FATAL_SERVER_ERRORS: ReadonlySet<string> = new Set([
+        'auth_timeout',
+        'invalid_key_format',
+        'trial_expired',
+        'transcription_quota_exceeded',
+        'account_suspended',
+        'subscription_inactive',
+        'auth_required',
+    ]);
 
     constructor(
         apiKey: string,
@@ -295,6 +344,29 @@ export class NativelyProSTT extends EventEmitter {
             this.closeUpstream();
             // Same 250ms gap pattern as setRecognitionLanguage to avoid the
             // server's concurrent_session_blocked race.
+            if (this.pendingConnectTimer) clearTimeout(this.pendingConnectTimer);
+            this.pendingConnectTimer = setTimeout(() => {
+                this.pendingConnectTimer = null;
+                if (this.isActive) this.connect();
+            }, 250);
+        }
+    }
+
+    /**
+     * Label voices on this stream (sttDiarization.ts). The flag rides in the
+     * auth frame, so a change once that frame is out reconnects, the same way
+     * and for the same reason as setSampleRate; before it, the frame picks it up.
+     */
+    public setDiarization(enabled: boolean): void {
+        if (this.diarize === enabled) return;
+        this.diarize = enabled;
+        console.log(`[NativelyProSTT:${this.channel}] Diarization ${enabled ? 'enabled' : 'disabled'}`);
+        const socket = this.ws;
+        const preHandshake = !socket || socket.readyState === WebSocket.CONNECTING;
+        if (this.isActive && !preHandshake) {
+            this.reconnectAttempts = 0;
+            this.intentionalClose  = true;
+            this.closeUpstream();
             if (this.pendingConnectTimer) clearTimeout(this.pendingConnectTimer);
             this.pendingConnectTimer = setTimeout(() => {
                 this.pendingConnectTimer = null;
@@ -538,6 +610,9 @@ export class NativelyProSTT extends EventEmitter {
         // IPv4-only CNAME chains and caps the TLS+upgrade handshake at 15s.
         // See dnsHelpers.ts for the full why.
         const ws = new WebSocket(connectUrl, streamingStttWsOptions() as any);
+        // Voice numbers restart on a new socket, as on the relay's own upstream
+        // reconnects: this socket's lines carry its own window number.
+        const socketEpoch = nextVoiceEpoch();
         this.ws = ws;
 
         // CRITICAL: every handler below captures `ws` locally and gates on
@@ -568,10 +643,13 @@ export class NativelyProSTT extends EventEmitter {
             ws.send(JSON.stringify(baseFrame));
         }));
 
+        ws.on('ping', () => guard(() => { this.lastServerActivityAt = Date.now(); }));
+
         ws.on('message', (data: WebSocket.Data) => guard(() => {
+            this.lastServerActivityAt = Date.now();
             try {
                 const msg = JSON.parse(data.toString());
-                if (!msg.text || msg.is_final) {
+                if ((!msg.text && msg.utterance_end !== true) || msg.is_final) {
                     console.log(`[NativelyProSTT:${this.channel}] Server msg`, {
                         type: msg.type,
                         final: Boolean(msg.is_final),
@@ -582,7 +660,11 @@ export class NativelyProSTT extends EventEmitter {
 
                 if (msg.error) {
                     console.error('[NativelyProSTT] Server error:', msg.error, msg.message || '');
-                    this.emit('error', new Error(msg.error));
+                    // A relay token rejection is not a verdict on the user's key
+                    // (carve-out below), so it is never terminal.
+                    const relayTokenRejected = msg.error === 'invalid_key_format' && this.isOnRelayTarget(connectUrl);
+                    const fatal = NativelyProSTT.FATAL_SERVER_ERRORS.has(String(msg.error)) && !relayTokenRejected;
+                    this.emit('error', nativelyProServerError(msg, fatal));
 
                     // RELAY token-fatal carve-out (Phase 7/8): on a RELAY url an
                     // `invalid_key_format` means a bad/expired SESSION TOKEN, not
@@ -592,7 +674,7 @@ export class NativelyProSTT extends EventEmitter {
                     // the next rung (alternate relay → Railway), where legacy auth
                     // re-validates the real key. We let the socket close naturally
                     // and the close handler walk the ladder.
-                    if (msg.error === 'invalid_key_format' && this.isOnRelayTarget(connectUrl)) {
+                    if (relayTokenRejected) {
                         console.warn(`[NativelyProSTT:${this.channel}] Relay token rejected (invalid_key_format on relay) — advancing to next fallback rung.`);
                         clearCachedSession(this.channel);
                         this.forceAdvanceTarget(connectUrl, 'token_fatal');
@@ -605,10 +687,8 @@ export class NativelyProSTT extends EventEmitter {
                     // trial_expired must be here: without it the client retries every 1.5-30s
                     // forever, hammering auth DB calls while the server rejects every attempt.
                     // (On the Railway url, invalid_key_format remains fatal exactly as today.)
-                if (msg.error === 'auth_timeout' ||
-                        msg.error === 'invalid_key_format' ||
-                        msg.error === 'trial_expired' ||
-                        msg.error === 'transcription_quota_exceeded') {
+                if (fatal) {
+                    console.warn(`[NativelyProSTT:${this.channel}] ${msg.error} is a verdict on the credential — not reconnecting`);
                     this.isActive = false;
                 }
                 // concurrent_session_blocked is NOT fatal — it means the intentional
@@ -627,6 +707,8 @@ export class NativelyProSTT extends EventEmitter {
                 if (msg.status === 'connected') {
                     this.isConnecting = false;
                     this.isConnected  = true;
+                    this.connectedProvider = typeof msg.provider === 'string' ? msg.provider : null;
+                    this.startLivenessWatch(ws);
                     console.log(`[NativelyProSTT] Connected via ${msg.provider}`);
                     // Relay telemetry: a successful auth on the current rung. We
                     // reset the per-url failure counter so a later blip starts the
@@ -656,10 +738,14 @@ export class NativelyProSTT extends EventEmitter {
                 if (msg.language_detected) {
                     const detected: string = msg.language_detected;
                     console.log(`[NativelyProSTT] Auto-detected language: ${detected}`);
+                    this.emit('languageDetected', detected);
+                    if (!this.shouldReconnectForDetectedLanguage()) {
+                        console.log(`[NativelyProSTT:${this.channel}] auto mode follows the speaker — ${detected} shown, not pinned (${this.connectedProvider})`);
+                        return;
+                    }
                     this.languageBcp47      = detected;
                     this.languageAlternates = [];
                     this.reconnectAttempts  = 0;  // fresh session — reset backoff counter
-                    this.emit('languageDetected', detected);
                     if (this.isActive && this.ws) {
                         this.intentionalClose = true;
                         this.closeUpstream();
@@ -669,6 +755,28 @@ export class NativelyProSTT extends EventEmitter {
                             if (this.isActive) this.connect();
                         }, 250);
                     }
+                    return;
+                }
+
+                // natively-api 2026-10-29: in auto mode the relay reports each change of
+                // the language it hears as `language_heard` and keeps every provider
+                // multilingual, so a speaker who switches language is followed. Display
+                // only: reconnecting would pin it, which is what `language_detected` did
+                // to every auto session (the relay no longer sends that in auto mode).
+                if (typeof msg.language_heard === 'string' && msg.language_heard) {
+                    this.emit('languageDetected', msg.language_heard);
+                    return;
+                }
+
+                // End of an utterance (natively-api, 2026-10-29): one frame after
+                // each utterance's final text, from Deepgram's UtteranceEnd and
+                // speech_final, Soniox's <end> and ElevenLabs' commits. The same
+                // event the direct providers emit, so Auto Answer closes a
+                // question at the speaker's real stop instead of waiting out the
+                // quiet window, which merged back-to-back questions. A server
+                // that predates the frame never sends it.
+                if (msg.utterance_end === true) {
+                    try { this.emit('endpoint', { type: 'utterance_end' }); } catch { /* listeners never break the socket */ }
                     return;
                 }
 
@@ -683,26 +791,25 @@ export class NativelyProSTT extends EventEmitter {
                             kind: this.target ? this.kindForUrl(connectUrl) : 'railway',
                         });
                     }
-                    // Speaker label, when the relay sends one. The app's PRIMARY
-                    // speaker separation is physical — mic and system audio are
-                    // two devices and two sessions — and nothing here changes
-                    // that. This is the second-order case that separation cannot
-                    // reach: several voices INSIDE the meeting-audio channel (a
-                    // panel, a colleague answering a colleague, a two-speaker
-                    // video). Soniox stt-rt-v5 can label them per token, so if
-                    // the relay ever forwards the tag — the same way it already
-                    // forwards per-token `language` — Auto Answer's judge picks
-                    // it up with no further client work. Absent field → absent
-                    // label → today's behaviour exactly.
-                    const speakerId = typeof msg.speaker === 'string' ? msg.speaker
-                        : typeof msg.speaker === 'number' ? `speaker_${msg.speaker}`
-                        : typeof msg.speaker_id === 'string' ? msg.speaker_id
-                        : undefined;
+                    // Voice label, when the relay sends one: natively-api asks
+                    // Soniox for labels when this socket's auth frame said
+                    // `speaker_labels: true` (setDiarization), and sends
+                    // `speaker` ("1", "2") with `speaker_epoch`, its upstream
+                    // connection count. Both counts go into voiceEpoch, so a
+                    // reconnect on either side starts a new window
+                    // (sttDiarization.withVoiceEpoch). The PRIMARY speaker
+                    // separation stays physical (mic and system audio are two
+                    // sessions); this is the case it cannot reach, several
+                    // voices on one channel. Absent field, absent label:
+                    // today's behaviour exactly.
+                    const speakerId = voiceIdFromLabel(msg.speaker)
+                        ?? (typeof msg.speaker_id === 'string' && msg.speaker_id ? msg.speaker_id : undefined);
+                    const upstream = Number.isInteger(msg.speaker_epoch) && msg.speaker_epoch >= 0 && msg.speaker_epoch < 1000 ? msg.speaker_epoch : 0;
                     this.emit('transcript', {
                         text:       msg.text,
                         isFinal:    msg.is_final    ?? false,
                         confidence: msg.confidence  ?? 1.0,
-                        ...(speakerId ? { speakerId } : {}),
+                        ...(speakerId ? { speakerId, voiceEpoch: socketEpoch * 1000 + upstream } : {}),
                     });
                 }
             } catch (err) {
@@ -731,6 +838,8 @@ export class NativelyProSTT extends EventEmitter {
         ws.on('close', (code: number) => guard(() => {
             this.isConnecting = false;
             this.isConnected  = false;
+            this.connectedProvider = null;
+            this.stopLivenessWatch();
             if (this.ws === ws) this.ws = null;
             console.log(`[NativelyProSTT] Connection closed (code ${code})`);
 
@@ -1028,6 +1137,10 @@ export class NativelyProSTT extends EventEmitter {
             // boolean false opts out; a server that predates the flag ignores it.
             full_text:           false,
             ...this.contextTermsField(),
+            // Voice labels (setDiarization): only when asked. A server that
+            // predates the field ignores it, and the mic is then written as
+            // the user, as before.
+            ...(this.diarize ? { speaker_labels: true } : {}),
         };
         if (this.apiKey === TRIAL_SENTINEL_KEY) {
             try {
@@ -1096,9 +1209,60 @@ export class NativelyProSTT extends EventEmitter {
         }
     }
 
+    /**
+     * Never: a `language_detected` frame is shown, not obeyed. Reconnecting with
+     * the detected code pinned froze Auto on the first verdict for the rest of
+     * the meeting, on every provider — Deepgram `multi`, Soniox per token,
+     * ElevenLabs, Google — all follow a speaker who switches only while left
+     * unpinned (Deepgram: "a specific language… will only attempt to transcribe
+     * speech in that specified language", developers.deepgram.com/docs/language).
+     * natively-api's server.js stopped sending it in auto mode (2026-10-29), but
+     * the regional relay (services/stt-relay session.js onLanguageDetected) still
+     * sends it once per session; a user log 2026-11-01 showed a Windows mic
+     * session that stayed Russian after "hello" was heard as "Алло".
+     *
+     * A pinned language never gets here as a change: the relay echoes the pin.
+     * Kept for that case (configured key not 'auto'), which reconnects as before.
+     */
+    private shouldReconnectForDetectedLanguage(): boolean {
+        return this.configuredLanguageKey !== 'auto';
+    }
+
+    private startLivenessWatch(ws: WebSocket): void {
+        this.stopLivenessWatch();
+        this.lastServerActivityAt = Date.now();
+        this.livenessTimer = setInterval(
+            () => { this.checkLiveness(ws, Date.now()); },
+            NativelyProSTT.LIVENESS_CHECK_MS,
+        );
+    }
+
+    private stopLivenessWatch(): void {
+        if (this.livenessTimer) {
+            clearInterval(this.livenessTimer);
+            this.livenessTimer = null;
+        }
+    }
+
+    /**
+     * Returns true when it tore the socket down. `ws.terminate()` fires the
+     * 'close' handler, which schedules the normal backed-off reconnect.
+     */
+    private checkLiveness(ws: WebSocket, now: number): boolean {
+        if (ws !== this.ws || !this.isActive) { this.stopLivenessWatch(); return false; }
+        const silentMs = now - this.lastServerActivityAt;
+        if (silentMs < NativelyProSTT.LIVENESS_STALE_MS) return false;
+        console.warn(`[NativelyProSTT:${this.channel}] No server frame or ping for ${Math.round(silentMs / 1000)}s — link is dead, reconnecting`);
+        this.stopLivenessWatch();
+        try { ws.terminate(); } catch { /* close handler still runs */ }
+        return true;
+    }
+
     private closeUpstream(): void {
         this.isConnected  = false;
         this.isConnecting = false;
+        this.connectedProvider = null;
+        this.stopLivenessWatch();
 
         // Clear every owned timer here, not just at stop()/start() boundaries.
         // Any path that tears down the upstream connection (intentional close,

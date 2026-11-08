@@ -14,6 +14,11 @@
  *     answer with no error. The adapters must therefore always stream; the
  *     server below answers non-streaming requests exactly that way, so any
  *     path that stops streaming produces an empty answer and fails here.
+ *
+ * GPT moved to the Responses API on 2026-10-28 (AgentRouter now refuses
+ * /v1/chat/completions for every gpt-* id); RESPONSES_SSE below is trimmed
+ * from a live gpt-5.6-sol stream captured that day, and the rate-limit body
+ * from a live gpt-6.1-sol refusal.
  */
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -79,6 +84,31 @@ const CLAUDE_SSE = [
   antEvent('message_stop', { content_block: null, delta: null, error: null, index: 0, message: null, type: 'message_stop' }),
 ].join('');
 
+// Responses API, as AgentRouter streamed it for gpt-5.6-sol (2026-10-28): a
+// reasoning item even at effort `none`, then the message's text deltas.
+const respEvent = (data) => `event: ${data.type}\ndata: ${JSON.stringify(data)}\n\n`;
+const RESP_ID = 'resp_0e77068f8a221147006ae1cd2f9cf88195a1e4b0b0c3b5f5d1';
+const RESPONSES_SSE = [
+  respEvent({ type: 'response.created', sequence_number: 0, response: { id: RESP_ID, object: 'response', status: 'in_progress', model: 'gpt-5.6-sol', output: [] } }),
+  respEvent({ type: 'response.in_progress', sequence_number: 1, response: { id: RESP_ID, object: 'response', status: 'in_progress', model: 'gpt-5.6-sol', output: [] } }),
+  respEvent({ type: 'response.output_item.added', sequence_number: 2, output_index: 0, item: { id: 'rs_1', type: 'reasoning', summary: [] } }),
+  respEvent({ type: 'response.output_item.done', sequence_number: 3, output_index: 0, item: { id: 'rs_1', type: 'reasoning', summary: [] } }),
+  respEvent({ type: 'response.output_item.added', sequence_number: 4, output_index: 1, item: { id: 'msg_1', type: 'message', status: 'in_progress', role: 'assistant', content: [] } }),
+  respEvent({ type: 'response.content_part.added', sequence_number: 5, item_id: 'msg_1', output_index: 1, content_index: 0, part: { type: 'output_text', text: '', annotations: [] } }),
+  respEvent({ type: 'response.output_text.delta', sequence_number: 6, item_id: 'msg_1', output_index: 1, content_index: 0, delta: 'Use', logprobs: [], obfuscation: 'Fxyem0ZukYZJU' }),
+  respEvent({ type: 'response.output_text.delta', sequence_number: 7, item_id: 'msg_1', output_index: 1, content_index: 0, delta: ' a token bucket', logprobs: [], obfuscation: 'a' }),
+  respEvent({ type: 'response.output_text.delta', sequence_number: 8, item_id: 'msg_1', output_index: 1, content_index: 0, delta: ' per API key.', logprobs: [], obfuscation: 'b' }),
+  respEvent({ type: 'response.output_text.done', sequence_number: 9, item_id: 'msg_1', output_index: 1, content_index: 0, text: 'Use a token bucket per API key.', logprobs: [] }),
+  respEvent({ type: 'response.completed', sequence_number: 10, response: { id: RESP_ID, object: 'response', status: 'completed', model: 'gpt-5.6-sol' } }),
+].join('');
+// A rate limit arrives INSIDE the 200 stream (gpt-6.1-sol, 2026-10-28).
+const RESPONSES_RATE_LIMITED_SSE = [
+  respEvent({ type: 'response.created', sequence_number: 0, response: { id: RESP_ID, object: 'response', status: 'in_progress', model: 'gpt-6.1-sol', output: [] } }),
+  respEvent({ type: 'response.failed', sequence_number: 1, response: { id: RESP_ID, object: 'response', status: 'failed', model: 'gpt-6.1-sol',
+    error: { code: 'rate_limit_exceeded', message: 'Your requests to *** for *** in *** have exceeded token rate limit for your current AIServices S0 pricing tier.' } } }),
+].join('');
+const RESPONSES_ONLY = { error: { message: '模型 gpt-6-astra 不支持 /v1/chat/completions 接口，请改用 /v1/responses（OpenAI Responses API）。Model gpt-6-astra does not support /v1/chat/completions, please use /v1/responses instead. (request id: 202610281810086577664716p9sd29UnkGM5)', type: 'new_api_error' } };
+
 const BUDGET_OAI = { error: { message: 'Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool.', type: 'bad_response_status_code', param: '', code: 'bad_response_status_code' } };
 const BUDGET_ANT = { error: { message: 'Budget pool quota has been exhausted. Please ask an administrator to increase the limit or select another budget pool. (request id: 202609301454324292002395k8kcKa4SFXXZ)', type: 'bad_response_status_code' }, type: 'error' };
 const UNAUTHORIZED_CLIENT = { error: { message: 'unauthorized client detected, contact support for assistance at https://discord.gg/HgekCyHJqB' }, message: 'UNAUTHENTICATED', success: false, type: 'unauthorized_client_error' };
@@ -102,8 +132,15 @@ before(async () => {
       try { body = JSON.parse(raw); } catch { /* not JSON */ }
       requests.push({ method: req.method, path: req.url, headers: req.headers, body });
       const model = body?.model;
+      if (req.url === '/v1/responses') {
+        if (model === 'gpt-6-astra') return reply(res, 402, 'application/json; charset=utf-8', JSON.stringify(BUDGET_OAI));
+        if (model === 'gpt-6.1-sol') return reply(res, 200, 'text/event-stream', RESPONSES_RATE_LIMITED_SSE);
+        if (body?.stream !== true) return reply(res, 200, 'application/json', JSON.stringify({ output_text: 'NON-STREAMING PATH TAKEN' }));
+        return reply(res, 200, 'text/event-stream', RESPONSES_SSE);
+      }
       if (req.url === '/v1/chat/completions') {
-        if (model === 'gpt-6-astra') return reply(res, 402, 'text/event-stream', JSON.stringify(BUDGET_OAI));
+        // What AgentRouter now says to every GPT id on this route.
+        if (/^gpt-/.test(model || '')) return reply(res, 500, 'application/json; charset=utf-8', JSON.stringify(RESPONSES_ONLY));
         if (model === 'unauthorized-probe') return reply(res, 401, 'application/json; charset=utf-8', JSON.stringify(UNAUTHORIZED_CLIENT));
         if (body?.stream !== true) return reply(res, 200, 'application/json', JSON.stringify({ choices: [{ message: { content: 'NON-STREAMING PATH TAKEN' } }] }));
         // Direct DeepSeek (the parity test's other half) never sends `data: null`;
@@ -150,54 +187,55 @@ const lastRequest = () => requests[requests.length - 1];
 const prompts = require(dist('llm/prompts.js'));
 const OpenAI = require('openai').default ?? require('openai');
 
-describe('Chat Completions (GPT and anything not Claude or DeepSeek)', () => {
-  test('`data: null` events are skipped, reasoning is not shown, the answer arrives whole', async () => {
-    // AgentRouter's Chat Completions stream carries literal `data: null`
-    // events (measured). DeepSeek no longer takes this route, GPT still does,
-    // so the regression lives on a GPT id.
-    const h = makeHelper('agentrouter/gpt-6-sol');
+describe('Responses API (GPT)', () => {
+  test('GPT streams over /v1/responses; only output text reaches the user', async () => {
+    const h = makeHelper('agentrouter/gpt-5.6-sol');
     const text = await collect(h.streamWithAgentRouter('How would you rate-limit an API?', 'SYS'));
-    assert.equal(text, 'A token bucket per API key.');
+    assert.equal(text, 'Use a token bucket per API key.');
   });
 
-  test('what goes on the wire: path, key, identity header, stripped id, streamed', async () => {
-    const h = makeHelper('agentrouter/gpt-6-sol');
+  test('what goes on the wire: path, key, identity header, stripped id, instructions, input, streamed, not stored', async () => {
+    const h = makeHelper('agentrouter/gpt-5.6-sol');
     await collect(h.streamWithAgentRouter('q', 'SYS'));
     const r = lastRequest();
     assert.equal(r.method, 'POST');
-    assert.equal(r.path, '/v1/chat/completions');
+    assert.equal(r.path, '/v1/responses');
     assert.equal(r.headers.authorization, `Bearer ${KEY}`);
     assert.equal(r.headers.originator, 'codex_cli_rs', 'the client-identity header must be on every request');
     assert.match(r.headers['user-agent'], /^OpenAI\/JS /, 'the User-Agent stays the SDK\'s own');
-    assert.equal(r.body.model, 'gpt-6-sol', 'the agentrouter/ prefix must never reach the wire');
+    assert.equal(r.body.model, 'gpt-5.6-sol', 'the agentrouter/ prefix must never reach the wire');
     assert.equal(r.body.stream, true);
-    assert.equal(r.body.messages[0].role, 'system');
+    assert.equal(r.body.store, false);
+    assert.equal(r.body.instructions, 'SYS');
+    assert.deepEqual(r.body.input, [{ role: 'user', content: 'q' }]);
+    assert.equal(r.body.messages, undefined, 'no Chat Completions body on this route');
   });
 
-  test('GPT gets the native OpenAI parameters: output cap and no sampling params', async () => {
+  test('GPT gets the native OpenAI parameters: output cap, reasoning off, no sampling params', async () => {
     const h = makeHelper('agentrouter/gpt-6-astra');
     await collect(h.streamWithAgentRouter('q', 'SYS')).catch(() => {}); // the replay 402s; the body is what matters
     const r = lastRequest();
     assert.equal(r.body.model, 'gpt-6-astra');
-    assert.equal(r.body.max_completion_tokens, 65536, 'getOpenAiMaxOutput: gpt-6 caps at 128000, the app requests its shared 65,536 ceiling');
-    assert.equal(r.body.max_tokens, undefined);
+    assert.equal(r.body.max_output_tokens, 65536, 'getOpenAiMaxOutput: gpt-6 caps at 128000, the app requests its shared 65,536 ceiling');
+    assert.deepEqual(r.body.reasoning, { effort: 'none' }, 'accepted live on 2026-10-28; the first word is the product');
+    assert.equal(r.body.max_completion_tokens, undefined);
     assert.equal(r.body.temperature, undefined, 'reasoning models 400 on non-default sampling');
     assert.equal(r.body.seed, undefined);
-    assert.equal(r.body.thinking, undefined);
   });
 
   test('the fast-model seam gives a GPT model room for its reasoning (512, as native)', async () => {
-    const h = makeHelper('agentrouter/deepseek-v4-flash');
-    await h.callFastModel('judge', { modelId: 'agentrouter/gpt-6-sol', timeoutMs: 5000 });
+    const h = makeHelper('agentrouter/gpt-6-astra');
+    const out = await h.callFastModel('judge', { modelId: 'agentrouter/gpt-5.6-sol', timeoutMs: 5000 });
+    assert.equal(out, 'Use a token bucket per API key.');
     const r = lastRequest();
-    assert.equal(r.path, '/v1/chat/completions');
-    assert.equal(r.body.max_completion_tokens, 512);
+    assert.equal(r.path, '/v1/responses');
+    assert.equal(r.body.max_output_tokens, 512);
     assert.equal(r.body.temperature, undefined);
   });
 
   test('the blocking adapter drains the stream too', async () => {
-    const h = makeHelper('agentrouter/gpt-6-sol');
-    assert.equal(await h.generateWithAgentRouter('q', 'SYS'), 'A token bucket per API key.');
+    const h = makeHelper('agentrouter/gpt-5.6-sol');
+    assert.equal(await h.generateWithAgentRouter('q', 'SYS'), 'Use a token bucket per API key.');
     assert.equal(lastRequest().body.stream, true);
   });
 
@@ -206,9 +244,106 @@ describe('Chat Completions (GPT and anything not Claude or DeepSeek)', () => {
     await assert.rejects(collect(h.streamWithAgentRouter('q', 'SYS')), (e) => {
       assert.equal(e.status, 402);
       assert.match(e.message, /gpt-6-astra/);
-      assert.match(e.message, /02:00 and 11:00 UTC/);
+      assert.match(e.message, /02:00 and\s+11:00 UTC/);
       return true;
     });
+  });
+
+  test('a rate limit inside a 200 stream (response.failed) fails the answer with the reason', async () => {
+    const h = makeHelper('agentrouter/gpt-6.1-sol');
+    await assert.rejects(collect(h.streamWithAgentRouter('q', 'SYS')), (e) => {
+      assert.match(e.message, /rate-limiting/);
+      assert.equal(e.agentRouter, true);
+      return true;
+    });
+  });
+
+  test('no GPT request goes to /v1/chat/completions any more', async () => {
+    const before = requests.length;
+    for (const id of ['gpt-5.6-sol', 'gpt-6-astra', 'gpt-6.1-sol']) {
+      await collect(makeHelper(`agentrouter/${id}`).streamWithAgentRouter('q', 'SYS')).catch(() => {});
+    }
+    assert.deepEqual(requests.slice(before).map((r) => r.path), ['/v1/responses', '/v1/responses', '/v1/responses']);
+  });
+});
+
+describe('automatic picks follow the fetched catalogue', () => {
+  // The judge and the structured ladder use a fixed fast model; when the key's
+  // fetched catalogue no longer lists it, the gateway has retired it and a
+  // listed model is used instead (pickAgentRouterModel), read live from
+  // CredentialsManager like the disabled-provider list.
+  const CM = '__nativelyCredentialsManagerV1__';
+  const withCatalogue = async (ids, fn) => {
+    const saved = globalThis[CM];
+    globalThis[CM] = { getCloudFetchedModels: (p) => p === 'agentrouter' ? ids.map((id) => ({ id, label: id })) : [], getDisabledProviders: () => [] };
+    try { return await fn(); } finally { if (saved === undefined) delete globalThis[CM]; else globalThis[CM] = saved; }
+  };
+  /** makeHelper plus what the structured ladder reads: no other provider configured. */
+  const ladderHelper = (model) => {
+    const h = makeHelper(model);
+    Object.assign(h, { rateLimitCircuit: new Map(), client: null, openaiClient: null, claudeClient: null, deepseekClient: null, nativelyKey: null, deepseekPermanentlyDead: false });
+    h.isCodexAvailable = () => false; h.isProviderDisabled = () => false; h.delay = async () => {};
+    return h;
+  };
+
+  test('the default is listed: the structured ladder uses it', async () => {
+    await withCatalogue(['agentrouter/gpt-5.6-sol', 'agentrouter/gpt-6-astra'], async () => {
+      const h = ladderHelper('agentrouter/gpt-6-astra');
+      await h.generateContentStructured('extract this résumé');
+      assert.equal(lastRequest().body.model, 'gpt-5.6-sol');
+    });
+  });
+
+  test('the default was dropped: the structured ladder uses a listed model instead', async () => {
+    await withCatalogue(['agentrouter/gpt-6.1-sol'], async () => {
+      const h = ladderHelper('agentrouter/gpt-6.1-sol');
+      await h.generateContentStructured('extract this résumé').catch(() => {}); // the replay rate-limits gpt-6.1-sol
+      assert.equal(lastRequest().body.model, 'gpt-6.1-sol');
+    });
+  });
+
+  test('the judge model follows the same rule', async () => {
+    await withCatalogue(['agentrouter/gpt-6-astra'], async () => {
+      const h = makeHelper('agentrouter/gpt-6-astra');
+      h.resolveFastModelFamily = () => 'agentrouter';
+      assert.equal(h.judgeGatewayModel(), 'agentrouter/gpt-6-astra');
+    });
+    await withCatalogue([], async () => {
+      const h = makeHelper('agentrouter/gpt-6-astra');
+      h.resolveFastModelFamily = () => 'agentrouter';
+      assert.equal(h.judgeGatewayModel(), 'agentrouter/gpt-5.6-sol', 'no catalogue: the fixed default');
+    });
+  });
+});
+
+describe('Chat Completions (anything not GPT, Claude or DeepSeek)', () => {
+  test('`data: null` events are skipped, reasoning is not shown, the answer arrives whole', async () => {
+    // AgentRouter's Chat Completions stream carries literal `data: null`
+    // events (measured). Only unmeasured families (glm-*) still take this
+    // route, so the regression lives on such an id.
+    const h = makeHelper('agentrouter/glm-5.3');
+    const text = await collect(h.streamWithAgentRouter('How would you rate-limit an API?', 'SYS'));
+    assert.equal(text, 'A token bucket per API key.');
+  });
+
+  test('what goes on the wire: path, key, identity header, stripped id, streamed', async () => {
+    const h = makeHelper('agentrouter/glm-5.3');
+    await collect(h.streamWithAgentRouter('q', 'SYS'));
+    const r = lastRequest();
+    assert.equal(r.method, 'POST');
+    assert.equal(r.path, '/v1/chat/completions');
+    assert.equal(r.headers.authorization, `Bearer ${KEY}`);
+    assert.equal(r.headers.originator, 'codex_cli_rs', 'the client-identity header must be on every request');
+    assert.match(r.headers['user-agent'], /^OpenAI\/JS /, 'the User-Agent stays the SDK\'s own');
+    assert.equal(r.body.model, 'glm-5.3', 'the agentrouter/ prefix must never reach the wire');
+    assert.equal(r.body.stream, true);
+    assert.equal(r.body.messages[0].role, 'system');
+  });
+
+  test('the blocking adapter drains the stream too', async () => {
+    const h = makeHelper('agentrouter/glm-5.3');
+    assert.equal(await h.generateWithAgentRouter('q', 'SYS'), 'A token bucket per API key.');
+    assert.equal(lastRequest().body.stream, true);
   });
 
   test('an unrecognised-client 401 is named as that, not as a bad key', async () => {

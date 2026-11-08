@@ -9,11 +9,9 @@
 // the bypass in production and without an explicit token, so this is inert in a
 // shipped app. The header goes ONLY to the natively API — never a third party.
 
-const DEFAULT_NATIVELY_API_URL = 'https://api.natively.software';
-
-export function nativelyApiBase(): string {
-  return (process.env.NATIVELY_API_URL || DEFAULT_NATIVELY_API_URL).replace(/\/+$/, '');
-}
+// One definition for the whole app (services/nativelyApiBase).
+import { nativelyApiBase } from '../services/nativelyApiBase';
+export { nativelyApiBase };
 
 /** `{ 'x-natively-local-test': token }` under the E2E gate, else `{}`. */
 export function e2eLocalTestHeader(): Record<string, string> {

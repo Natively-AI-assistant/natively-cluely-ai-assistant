@@ -50,6 +50,7 @@ const SPEECH_PROVIDERS = {
   azure: { label: 'Azure Speech', key: 'hasAzureKey' },
   ibmwatson: { label: 'IBM Watson', key: 'hasIbmWatsonKey' },
   soniox: { label: 'Soniox', key: 'hasSonioxKey' },
+  qwen: { label: 'Qwen ASR', key: 'hasQwenAsrKey' },
   'local-whisper': { label: 'Local Models', onDevice: true },
 };
 

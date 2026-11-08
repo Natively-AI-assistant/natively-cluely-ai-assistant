@@ -342,12 +342,16 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     // what the mode may READ beyond what claim authority already permits.
     // MEETING_TRANSCRIPT added 2026-09-11 (same reasoning as looking-for-work):
     // the interview conversation is a source for what was said in it.
-    allowedSourceTypes: ['RESUME', 'JOB_DESCRIPTION', 'PROJECT_FILE', 'CODING_SAMPLE', 'REFERENCE_FILE', 'MEETING_TRANSCRIPT', 'SCREEN_CONTEXT', 'CONVERSATION_STATE'],
-    sourcePriorities: { RESUME: 1, PROJECT_FILE: 2, CODING_SAMPLE: 3, REFERENCE_FILE: 4, JOB_DESCRIPTION: 5, MEETING_TRANSCRIPT: 6 },
+    // PROFILE_FACT added 2026-10-14: a technical interview asks "what is your
+    // biggest weakness?" and "why did you leave?" too, and the user's own
+    // answers (services/knowledge/ownAnswers.ts) are the only source for them.
+    // Until then the type had no store, so leaving it out here cost nothing.
+    allowedSourceTypes: ['RESUME', 'JOB_DESCRIPTION', 'PROFILE_FACT', 'PROJECT_FILE', 'CODING_SAMPLE', 'REFERENCE_FILE', 'MEETING_TRANSCRIPT', 'SCREEN_CONTEXT', 'CONVERSATION_STATE'],
+    sourcePriorities: { RESUME: 1, PROFILE_FACT: 2, PROJECT_FILE: 3, CODING_SAMPLE: 4, REFERENCE_FILE: 5, JOB_DESCRIPTION: 6, MEETING_TRANSCRIPT: 7 },
     // Same latent defect as looking-for-work: RESUME was planned but had no
-    // pool without duplicate attachments. JD/résumé hydrate; PROFILE_FACT is
-    // not in this mode's allowlist so it is not opted in.
-    profileSources: ['RESUME', 'JOB_DESCRIPTION'],
+    // pool without duplicate attachments. The résumé, the job description and
+    // the user's own answers hydrate.
+    profileSources: ['RESUME', 'JOB_DESCRIPTION', 'PROFILE_FACT'],
     groundingPolicy: 'SOURCE_FIRST', capabilityPolicy: OPEN_CAPS,
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,

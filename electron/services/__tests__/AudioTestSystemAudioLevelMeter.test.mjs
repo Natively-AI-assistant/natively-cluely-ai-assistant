@@ -6,7 +6,7 @@
 //
 // Fix: extend _startAudioTestImpl to also construct a parallel
 // SystemAudioCapture (after first probing screen-recording capability via
-// resolveMacScreenCaptureCapability), wire it to emit
+// resolveMacSystemAudioCapability), wire it to emit
 // `audio-test-system-level` IPC events for the renderer's level meter,
 // and emit `audio-test-system-error` on permission denial or construction
 // failure so the renderer can render an inline notice next to the level
@@ -150,20 +150,20 @@ describe('UX4: audio test probes system audio in parallel with the mic', () => {
     );
   });
 
-  it('4. _startAudioTestImpl calls resolveMacScreenCaptureCapability BEFORE constructing the system probe', () => {
+  it('4. _startAudioTestImpl calls resolveMacSystemAudioCapability BEFORE constructing the system probe', () => {
     assert.ok(
-      /resolveMacScreenCaptureCapability\s*\(/.test(startBody),
-      'BUG (UX4 REGRESSION): _startAudioTestImpl no longer calls resolveMacScreenCaptureCapability. Without the permission probe, constructing SystemAudioCapture on a TCC-denied system either throws or zero-fills forever with no actionable signal. The fix REQUIRES the capability check to gate the probe construction.',
+      /resolveMacSystemAudioCapability\s*\(/.test(startBody),
+      'BUG (UX4 REGRESSION): _startAudioTestImpl no longer calls resolveMacSystemAudioCapability. Without the permission probe, constructing SystemAudioCapture on a TCC-denied system either throws or zero-fills forever with no actionable signal. The fix REQUIRES the capability check to gate the probe construction.',
     );
 
-    // Structural ordering: the resolveMacScreenCaptureCapability call MUST
+    // Structural ordering: the resolveMacSystemAudioCapability call MUST
     // appear before the `new SystemAudioCapture(` call. Otherwise we'd be
     // constructing the probe and only checking permission afterwards.
-    const resolveIdx = startBody.search(/resolveMacScreenCaptureCapability\s*\(/);
+    const resolveIdx = startBody.search(/resolveMacSystemAudioCapability\s*\(/);
     const ctorIdx = startBody.search(/new\s+SystemAudioCapture\s*\(/);
     assert.ok(
       resolveIdx !== -1 && ctorIdx !== -1 && resolveIdx < ctorIdx,
-      `BUG (UX4 REGRESSION): resolveMacScreenCaptureCapability (idx ${resolveIdx}) must appear BEFORE \`new SystemAudioCapture(\` (idx ${ctorIdx}) in _startAudioTestImpl. The current ordering attempts to construct the probe before verifying permission, which races TCC and silently emits a zero-fill meter.`,
+      `BUG (UX4 REGRESSION): resolveMacSystemAudioCapability (idx ${resolveIdx}) must appear BEFORE \`new SystemAudioCapture(\` (idx ${ctorIdx}) in _startAudioTestImpl. The current ordering attempts to construct the probe before verifying permission, which races TCC and silently emits a zero-fill meter.`,
     );
   });
 

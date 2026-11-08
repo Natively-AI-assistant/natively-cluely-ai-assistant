@@ -107,8 +107,7 @@ async function driveOne(h, mmClient, q, surface, transcript) {
     } else {
       plan = h.planAnswer({ question, source, speakerPerspective });
       const isCoding = h.isCodingAnswerType(plan.answerType);
-      const isContract = new Set(['ethical_usage_answer', 'project_link_answer', 'source_code_evidence_answer', 'project_about_answer']).has(plan.answerType);
-      const isSafety = plan.answerType === 'ethical_usage_answer';
+      const isContract = new Set(['project_link_answer', 'source_code_evidence_answer', 'project_about_answer']).has(plan.answerType);
       if (!isCoding && h.isBareFollowUp && h.isBareFollowUp(question)) { answer = h.buildContextFreeClarification('manual'); usedFastPath = true; }
       if (!usedFastPath && !isCoding && !isContract && !h.isAssistantIdentityQuestion(question)) {
         try { const fp = h.buildManualProfileBackendAnswer({ question, orchestrator: h.orchestrator, source: 'manual_input' }); if (fp?.route?.answer) { answer = String(fp.route.answer); usedFastPath = true; } } catch {}

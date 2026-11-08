@@ -117,8 +117,9 @@ describe('registration and authorization', () => {
     const { MODE_POLICIES } = await import(pathToFileURL(path.join(base, 'policies/mode-policy-registry.js')).href);
     assert.deepEqual([...MODE_POLICIES['looking-for-work'].profileSources].sort(),
       ['JOB_DESCRIPTION', 'PROFILE_FACT', 'RESUME']);
+    // PROFILE_FACT since 2026-10-14: the user's own answers ("Cue Cards") are read in both interview modes.
     assert.deepEqual([...MODE_POLICIES['technical-interview'].profileSources].sort(),
-      ['JOB_DESCRIPTION', 'RESUME']);
+      ['JOB_DESCRIPTION', 'PROFILE_FACT', 'RESUME']);
     for (const id of ['general', 'sales', 'recruiting', 'team-meet', 'lecture', 'seminar']) {
       assert.deepEqual(MODE_POLICIES[id].profileSources, [], `${id} must not hydrate the profile`);
     }
@@ -358,7 +359,7 @@ describe('identity & contact lookups (2026-08-02)', () => {
     assert.match(id.content, /Name: Evin John/);
   });
 
-  test('Technical Interview (plans RESUME only) resolves it too — the second mode reported', async () => {
+  test('Technical Interview resolves it too — the second mode reported', async () => {
     const ti = resolveModePolicy('technical-interview');
     const port = createProfileRetrievalPort({
       docs: [{ ...RESUME_DOC, structured: CONTACT_RESUME }],
@@ -370,8 +371,8 @@ describe('identity & contact lookups (2026-08-02)', () => {
       modeId: 'technical-interview', scope: { userId: 'local' }, sessionId: 'pt-ti',
       manualQuestion: 'whats my name',
     });
-    assert.deepEqual([...decision.retrievalPlan.sourceTypes], ['RESUME'],
-      'matches the production log for technical-interview');
+    // The plan was ['RESUME'] until 2026-10-14, when the mode began to read the user's own answers (PROFILE_FACT).
+    assert.deepEqual([...decision.retrievalPlan.sourceTypes], ['RESUME', 'PROFILE_FACT']);
     const r = await port.retrieve({ decision });
     const id = r.evidence.find((e) => e.section === 'Identity & summary');
     assert.ok(id, 'Technical Interview logged evidence:0 for this exact question');
@@ -468,14 +469,23 @@ describe('the salary estimate is never PROFILE_FACT evidence (2026-09-30)', () =
   });
 
   test('a mode that does not opt into PROFILE_FACT gets no fact source', () => {
+    const OWN_DOC = { ...FACT_DOC, structured: { ownAnswers: [{ key: 'weakness', label: 'Biggest weakness', text: 'I ask for help late.' }] } };
+    for (const id of ['recruiting', 'sales', 'general']) {
+      const policy = resolveModePolicy(id);
+      assert.ok(!policy.profileSources.includes('PROFILE_FACT'), id);
+      const port = createProfileRetrievalPort({
+        docs: [OWN_DOC], allowedSourceTypes: policy.allowedSourceTypes,
+        profileSources: policy.profileSources, userId: 'local',
+      });
+      assert.equal(port, null, `${id}: fail closed, an unauthorized type is never registered`);
+    }
+  });
+
+  test('Technical Interview reads the user\'s own answers (2026-10-14) and still no estimate', () => {
     const ti = resolveModePolicy('technical-interview');
-    assert.ok(!ti.profileSources.includes('PROFILE_FACT'),
-      'Technical Interview deliberately does not hydrate derived facts');
-    const port = createProfileRetrievalPort({
-      docs: [FACT_DOC], allowedSourceTypes: ti.allowedSourceTypes,
-      profileSources: ti.profileSources, userId: 'local',
-    });
-    assert.equal(port, null, 'fail closed: an unauthorized type is never registered');
+    assert.ok(ti.profileSources.includes('PROFILE_FACT'));
+    const mk = (doc) => createProfileRetrievalPort({ docs: [doc], allowedSourceTypes: ti.allowedSourceTypes, profileSources: ti.profileSources, userId: 'local' });
+    assert.equal(mk(FACT_DOC), null, 'an estimate-only fact document renders nothing, in any mode');
   });
 
   test('a malformed or absent estimate yields no source, never a throw', () => {

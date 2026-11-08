@@ -72,7 +72,11 @@ use std::thread;
 
 use napi::bindgen_prelude::*;
 
-use crate::app_chord::AppChordInput;
+use crate::app_chord::{app_chords_from_inputs, AppChord, AppChordInput};
+use crate::edit_shortcut::{
+    mac_edit_letter, mac_edit_letter_is_app_chord, mac_is_edit_chord, mac_is_word_delete_chord,
+    FLAG_CMD as EDIT_FLAG_CMD, FLAG_OPT as EDIT_FLAG_OPT,
+};
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 
 use core_foundation::base::CFRelease;
@@ -186,6 +190,9 @@ struct TapState {
     /// Latest overlay bounds in global display coordinates. Mouse-down events
     /// outside this rect stop stealth typing while passing the click through.
     overlay_bounds: Mutex<Option<OverlayBounds>>,
+    /// The app's own Cmd+A/C/V/X global shortcuts, set on start(). The tap
+    /// passes these on to the hot key instead of taking them as edits.
+    app_chords: Mutex<Vec<AppChord>>,
     /// Threadsafe callback into V8. Set on start(), cleared on stop(). The
     /// option indirection lets stop() drop the tsfn handle so JS can GC the
     /// closure without keeping the worker thread's strong ref alive past
@@ -380,16 +387,63 @@ fn tap_callback_inner(
     // the foreground app while non-modified character keys still get routed
     // into Natively's input.
     //
-    // Trade-off: Cmd+Backspace / Cmd+A / Cmd+Enter no longer reach the
-    // renderer's switch statement. Plain Enter still submits (case 36),
-    // plain Backspace still deletes (case 51), so the typing UX is intact.
-    // Cmd+Enter as alternate submit is dropped in favor of system-shortcut
-    // sanity — net win.
+    // Trade-off: Cmd+Backspace / Cmd+Enter no longer reach the renderer.
+    // Plain Enter still submits (case 36), plain Backspace still deletes
+    // (case 51), so the typing UX is intact. The exceptions, taken below
+    // ahead of the filter: Cmd+V/A/C/X (tagged CMD) and Option+Backspace (tagged OPT).
     const CMD: u32 = 1 << 20;
     const OPT: u32 = 1 << 19;
     const CTRL: u32 = 1 << 18;
     const FN: u32 = 1 << 23;
     const SYSTEM_MODIFIER_MASK: u32 = CMD | OPT | CTRL | FN;
+
+    // ── EDITING SHORTCUTS (Cmd+V/A/C/X) ──
+    // The filter below sends every Cmd combo to the foreground app, which made
+    // Cmd+V paste into the meeting app instead of the overlay being typed in.
+    // Keep just these four: deliver them tagged with the Cmd flag (the renderer
+    // runs paste/select-all/copy/cut) and swallow the down and its up. Matched
+    // on the character the layout produces, so it follows AZERTY, Dvorak and
+    // the like (the ANSI position when that character is not Latin). Cmd alone:
+    // with Option, Control or Shift it is another shortcut (Zoom's Cmd+Shift+A
+    // mute, Cmd+Shift+V video). Not when the user bound that chord as a
+    // Natively shortcut: the hot key runs after this tap, so the key is passed
+    // on (down and up alike) for the hot key to fire.
+    if mac_is_edit_chord(flags) && (event_type == 10 || event_type == 11) {
+        let letter = mac_edit_letter(&event_unicode_string(event), key_code as u16).filter(|l| {
+            let chords = state.app_chords.lock().unwrap_or_else(|p| p.into_inner());
+            !mac_edit_letter_is_app_chord(chords.as_slice(), l)
+        });
+        if let Some(letter) = letter {
+            send_payload_to_js(&state, CapturedKey {
+                key_code,
+                chars: letter.to_string(),
+                flags: EDIT_FLAG_CMD,
+                is_key_down: event_type == 10,
+                is_outside_mouse_down: false,
+                app_chord_id: String::new(),
+            });
+            return ptr::null_mut();
+        }
+    }
+
+    // ── WORD DELETE (Option+Backspace) ──
+    // Option+Backspace deletes the previous word in the overlay box — the macOS
+    // idiom (Cmd+Backspace is delete-to-line-start, a different action). Deliver
+    // the Backspace keycode (51 = kVK_Delete) tagged with the Option flag so the
+    // renderer runs deleteWord() instead of a one-char backspace. Option alone,
+    // never with Cmd/Ctrl/Shift, so it cannot shadow another shortcut. Swallow down and up
+    // (return null) so the foreground app never sees it, like the Cmd edit keys.
+    if key_code == 51 && mac_is_word_delete_chord(flags) && (event_type == 10 || event_type == 11) {
+        send_payload_to_js(&state, CapturedKey {
+            key_code: 51,
+            chars: String::new(),
+            flags: EDIT_FLAG_OPT,
+            is_key_down: event_type == 10,
+            is_outside_mouse_down: false,
+            app_chord_id: String::new(),
+        });
+        return ptr::null_mut();
+    }
 
     if (flags & SYSTEM_MODIFIER_MASK) != 0 {
         return event;
@@ -425,29 +479,8 @@ fn tap_callback_inner(
         return event;
     }
 
-    // Pull unicode chars (handles layout, dead keys, IME). 8 UniChars is
-    // enough for any single keystroke including surrogate pairs and IME
-    // composition fragments; longer compositions would be unusual.
-    let mut buf: [UniChar; 8] = [UniChar(0); 8];
-    let mut actual_len: usize = 0;
-    unsafe {
-        CGEventKeyboardGetUnicodeString(event, buf.len(), &mut actual_len, buf.as_mut_ptr());
-    }
-    let chars: String = if actual_len == 0 {
-        String::new()
-    } else {
-        // CGEventKeyboardGetUnicodeString returns the FULL composition length
-        // in actual_len even when the buffer was truncated to max_string_length.
-        // Long IME compositions (Korean Hangul, Japanese kanji) can exceed our
-        // 8-UniChar buffer; without clamping, slice::from_raw_parts reads past
-        // the stack frame — UB / crash / garbage chars. Truncating to buf.len()
-        // loses the tail of the composition (rare, acceptable trade-off for
-        // safety on a short fixed-size buffer).
-        let n = actual_len.min(buf.len());
-        let u16_slice: &[u16] =
-            unsafe { std::slice::from_raw_parts(buf.as_ptr() as *const u16, n) };
-        String::from_utf16_lossy(u16_slice)
-    };
+    // Pull unicode chars (handles layout, dead keys, IME).
+    let chars = event_unicode_string(event);
 
     // flagsChanged (event_type == 12) is filtered out by the pass-through
     // above, so it cannot reach this point. keyDown=10, keyUp=11 are the
@@ -491,6 +524,30 @@ fn tap_callback_inner(
     // `state` (the local Arc clone) drops here, decrementing the refcount
     // we bumped above. The worker-thread-owned Arc lives until cleanup.
     ptr::null_mut()
+}
+
+/// The characters a keystroke produces (layout, dead keys, IME). 8 UniChars is
+/// enough for any single keystroke including surrogate pairs and IME
+/// composition fragments; longer compositions would be unusual.
+fn event_unicode_string(event: *mut c_void) -> String {
+    let mut buf: [UniChar; 8] = [UniChar(0); 8];
+    let mut actual_len: usize = 0;
+    unsafe {
+        CGEventKeyboardGetUnicodeString(event, buf.len(), &mut actual_len, buf.as_mut_ptr());
+    }
+    if actual_len == 0 {
+        return String::new();
+    }
+    // CGEventKeyboardGetUnicodeString returns the FULL composition length
+    // in actual_len even when the buffer was truncated to max_string_length.
+    // Long IME compositions (Korean Hangul, Japanese kanji) can exceed our
+    // 8-UniChar buffer; without clamping, slice::from_raw_parts reads past
+    // the stack frame — UB / crash / garbage chars. Truncating to buf.len()
+    // loses the tail of the composition (rare, acceptable trade-off for
+    // safety on a short fixed-size buffer).
+    let n = actual_len.min(buf.len());
+    let u16_slice: &[u16] = unsafe { std::slice::from_raw_parts(buf.as_ptr() as *const u16, n) };
+    String::from_utf16_lossy(u16_slice)
 }
 
 fn send_payload_to_js(state: &TapState, payload: CapturedKey) {
@@ -653,6 +710,7 @@ impl StealthKeyboardTap {
                 runloop: Mutex::new(None),
                 port: AtomicU64::new(0),
                 overlay_bounds: Mutex::new(None),
+                app_chords: Mutex::new(Vec::new()),
                 callback: Mutex::new(None),
             }),
             worker: Mutex::new(None),
@@ -673,13 +731,14 @@ impl StealthKeyboardTap {
     pub fn start(
         &self,
         callback: ThreadsafeFunction<CapturedKey>,
-        // Accepted for napi-surface parity with the Windows hook, which swallows
-        // and self-dispatches the app's own shortcuts. Unused on macOS: Carbon/
-        // IOKit hotkey processing runs BEFORE the session tap, so the app's
-        // shortcuts are already consumed and never reach this tap.
-        _app_chords: Vec<AppChordInput>,
-        // Shortcut-guard mode flag — parity with the Windows hook. No macOS
-        // analogue (shortcuts never reach this tap), so it is ignored here.
+        // The app's own Cmd+A/C/V/X global shortcuts (macEditChord.ts). The
+        // session tap sees keys BEFORE Carbon's hot keys, so the edit-key
+        // branch must leave these to the hot key. Other app shortcuts need no
+        // table: the tap passes every other Cmd combination through.
+        app_chords: Vec<AppChordInput>,
+        // Shortcut-guard mode flag — parity with the Windows hook, whose guard
+        // covers the RegisterHotKey registrations Windows drops. No macOS
+        // analogue, so it is ignored here.
         _shortcut_only: bool,
         overlay_bounds: Option<OverlayBoundsInput>,
     ) -> Result<bool> {
@@ -723,6 +782,8 @@ impl StealthKeyboardTap {
             }
         });
         *self.state.overlay_bounds.lock().unwrap_or_else(|p| p.into_inner()) = overlay_bounds;
+        *self.state.app_chords.lock().unwrap_or_else(|p| p.into_inner()) =
+            app_chords_from_inputs(app_chords);
 
         // Now safely publish the active state.
         self.state.active.store(true, Ordering::Release);

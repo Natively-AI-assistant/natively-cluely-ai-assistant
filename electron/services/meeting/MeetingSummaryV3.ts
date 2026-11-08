@@ -109,7 +109,10 @@ export type FollowUpDraftType =
   | 'study_notes'
   | 'interview_feedback';
 
-export type FollowUpTone = 'professional' | 'warm' | 'concise' | 'friendly';
+// 'your_style': the user's own voice, from the writing samples of the mode the
+// meeting ran under (Modes Manager). The default when that mode has samples; a
+// preset tone drafts in that tone alone, so the two never pull against each other.
+export type FollowUpTone = 'professional' | 'warm' | 'concise' | 'friendly' | 'your_style';
 
 export interface FollowUpDraft {
   type: FollowUpDraftType;
@@ -118,6 +121,8 @@ export interface FollowUpDraft {
   tone: FollowUpTone;
   basedOnActionItemIds?: string[];
   basedOnDecisionIds?: string[];
+  /** Written in the user's own voice, from their saved writing (outputs/writingStyle.ts). */
+  styled?: boolean;
 }
 
 export type TimelineItemType = 'topic_shift' | 'decision' | 'action_item' | 'risk' | 'question';
@@ -160,6 +165,9 @@ export interface MeetingSummaryModeMeta {
   detectedModeName?: string;
   detectedConfidence?: number;
   summaryModeUsed?: string;
+  /** The note template the notes were written in (noteTemplates.ts), when one was picked. */
+  noteTemplateId?: string;
+  noteTemplateName?: string;
 }
 
 export interface MeetingSummaryGenerationMeta {
@@ -228,7 +236,7 @@ const VALID_ACTION_STATUS = new Set(['open', 'done', 'deferred']);
 const VALID_RISK_SEVERITY = new Set(['low', 'medium', 'high']);
 const VALID_TIMELINE_TYPE = new Set<TimelineItemType>(['topic_shift', 'decision', 'action_item', 'risk', 'question']);
 const VALID_FOLLOWUP_TYPE = new Set<FollowUpDraftType>(['email', 'slack', 'project_update', 'crm_note', 'study_notes', 'interview_feedback']);
-const VALID_FOLLOWUP_TONE = new Set<FollowUpTone>(['professional', 'warm', 'concise', 'friendly']);
+const VALID_FOLLOWUP_TONE = new Set<FollowUpTone>(['professional', 'warm', 'concise', 'friendly', 'your_style']);
 
 // Realistic density is 5-12 findings per section per chunk; a well-covered section across
 // 4-10 chunks can legitimately reach ~120 bullets. This cap exists only to bound pathological
@@ -270,8 +278,28 @@ export function cleanNoteText(value: unknown, max = 240): string {
 //
 // Applied to GENERATED titles only. Calendar- and user-supplied titles are the
 // user's own words and keep whatever length they have.
+//
+// 50 characters, spaces included (owner decision 2026-10-18): a title fits one
+// line in the meeting list and on the notes page. The prompt asks for the same
+// bound (MEETING_TITLE_RULE), so this clamp only fires when a model ignores it.
 export const MEETING_TITLE_MAX_WORDS = 8;
-export const MEETING_TITLE_MAX_CHARS = 70;
+export const MEETING_TITLE_MAX_CHARS = 50;
+
+/**
+ * The "title" field's instruction, shared by every notes call that names the
+ * meeting (the whole-meeting overview, the short-session call, the V2 fallback).
+ * The title rides along in the notes reply: naming a meeting never costs a
+ * request of its own (2026-10-18).
+ *
+ * "Understandable" is the bar (owner, 2026-10-18). Real titles that missed it:
+ * narration ("User asked the assistant to resume; the assistant answered"),
+ * sentences cut mid-thought ("Evin said circular tide was not"), questions
+ * ("Which Number Is Odd Or Even") and descriptions of an empty session ("No
+ * Source Text Provided"). Ones that met it: "API Basics and REST vs GraphQL
+ * Questions", "Competitiveness of a 7 LPA Offer". Examples are in single
+ * quotes so the rule can sit inside a JSON-shaped prompt.
+ */
+export const MEETING_TITLE_RULE = `"title": the meeting's name, the way a well-named calendar event reads, so someone who missed it knows at a glance what it was about. At most ${MEETING_TITLE_MAX_CHARS} characters including spaces, on one line. A short noun phrase for the main subject or two, then who it was with when one or two named people from outside the user's side led it, by first name: 'Hotel scheduling pricing with Grace', 'Chatbot renewal and recovery with Ifeoma', 'Release 4.12 planning: deletion, crash fix', 'Backend engineer interview with Tomasz', 'Price elasticity lecture and quiz prep'. Use the meeting's own names: the company, product or project it was about and the person, spelled as the user's notes spell them when they wrote them; never a category label that fits any meeting ('Engineering candidate interview', 'Marketing budget and launch planning', 'Fundraising and strategy review'). Not a sentence and not a question; no narration ('User asked...', 'Evin said...', 'Discussion of...') and nothing about how much was said. When little was said, name that little ('Quick greeting'). It names the whole meeting, not its opening. Plain words in the meeting's language; no quotation marks, no ending punctuation, no date`;
 
 // Spoken-answer furniture the composer can append to any output. A [[GIST]]
 // line renders as a summary chip on screen; glued onto a title it is noise.
@@ -288,7 +316,108 @@ const WRAPPING_SINGLE_QUOTES_RE = /^['‘’]+|['‘’]+$/g;
 // A title that ends on a connective was cut mid-thought; the stub reads worse
 // than dropping it. Only ever applied to text this function truncated — an
 // author who genuinely named a meeting "Sync On" keeps it.
+// After a cut on a bare word boundary, auxiliaries, determiners and question
+// words dangle too: "Evin said circular tide was not" and "what the other
+// person's" were real cut titles. A cut at a phrase break keeps its whole
+// phrase ("Evin asked what an API is"), so only the connectives apply there.
 const DANGLING_WORD_RE = /[\s,]+(?:and|or|but|with|for|to|of|in|on|at|by|from|as|the|a|an)$/i;
+const DANGLING_WORD_AFTER_WORD_CUT_RE = /[\s,]+(?:and|or|but|with|for|to|of|in|on|at|by|from|as|the|a|an|vs|via|into|than|then|if|when|while|because|so|during|about|after|before|over|under|through|between|is|was|are|were|be|been|not|that|which|what|who|whose|how|this|these|those|his|her|their|its|our|my|your|[\p{L}]+['’]s)$/iu;
+// A negation never ends a thought, wherever the cut fell: "Evin said circular
+// tide was not" is cut before "about" as readily as on a bare word.
+const NEGATION_TAIL_RE = /[\s,]+(?:(?:is|was|are|were|do|does|did|has|have|had|can|could|will|would|should)\s+)?(?:not|never)$|[\s,]+\p{L}+n['’]t$/iu;
+
+/** Where a too-long title may be cut and still read as a whole phrase: before
+ *  punctuation, a spaced dash, an opening bracket, or a joining word. */
+const PHRASE_BREAK_RE = /\s*(?:[:;,(]|\s[—–-]\s|\s(?:and|or|but|with|for|via|vs\.?|including|while|because|so|after|before|about|during|in|on|at|to|from|by|over|under|through|without|within|across|between|against)\s)/giu;
+
+/** A meeting-shaped opener that names nothing: "Discussion of", "Meeting about"… */
+const GENERIC_TITLE_PREFIX_RE = /^(?:(?:a|the)\s+)?(?:meeting|discussion|call|conversation|chat|session|talk)\s+(?:about|on|of|regarding|around)\s+(?:the\s+)?/i;
+
+/**
+ * Fit a title into `maxChars` (and `maxWords`) so it ends on a whole phrase:
+ * the last phrase break that leaves at least two words, else the last whole
+ * word, then any dangling connective dropped. Text already within both caps
+ * is returned as it is. Shared by cleanMeetingTitle and the note-derived
+ * fallback title (MeetingPersistence), so the two cut the same way.
+ */
+export function fitTitleLength(text: string, maxChars: number = MEETING_TITLE_MAX_CHARS, maxWords: number = MEETING_TITLE_MAX_WORDS): string {
+  const full = String(text || '').replace(/\s+/g, ' ').trim();
+  const words = full.split(' ').filter(Boolean);
+  if (words.length <= maxWords && full.length <= maxChars) return full;
+
+  const limit = Math.min(maxChars, words.slice(0, maxWords).join(' ').length);
+  // Punctuation marks the writer's own phrase ends, so it wins over a joining
+  // word ("…the onboarding funnel, agreed to cut" is cut at the comma, not
+  // before "to"), as long as what it keeps still says something.
+  // A joining word that leaves only a short stub after the last punctuation
+  // ("…funnel, agreed") is that exception; one that keeps more of a list
+  // ("Kickoff: scope, timeline, owners") is the better cut.
+  let atPunctuation = '';
+  let atWord = '';
+  for (const m of full.matchAll(PHRASE_BREAK_RE)) {
+    const at = m.index ?? 0;
+    if (at > limit) break;
+    const head = full.slice(0, at).trim();
+    if (head.split(' ').length < 2 || head.length < 8) continue;
+    if (/^\s*(?:[:;,(]|\s[—–-]\s)/.test(m[0])) atPunctuation = head;
+    else atWord = head;
+  }
+  let out = atWord || atPunctuation;
+  if (atPunctuation.length >= 15 && atWord.length > atPunctuation.length) {
+    const stub = atWord.slice(atPunctuation.length).replace(/^[\s:;,(—–-]+/, '');
+    if (isVerbStub(stub)) out = atPunctuation;
+  } else if (atPunctuation.length >= 15) {
+    out = atPunctuation;
+  }
+  const dangling = out ? DANGLING_WORD_RE : DANGLING_WORD_AFTER_WORD_CUT_RE;
+  if (!out) {
+    // No phrase break: cut on the last whole word inside the window. A single
+    // unbroken over-long token is cut hard instead.
+    const endsOnWord = limit >= full.length || full[limit] === ' ';
+    out = full.slice(0, limit);
+    if (!endsOnWord) {
+      const lastSpace = out.lastIndexOf(' ');
+      if (lastSpace > maxChars / 2) out = out.slice(0, lastSpace);
+    }
+  }
+  out = out.replace(/[\s.,;:!?\-–—(]+$/g, '').trim();
+  const trimTail = (re: RegExp) => {
+    while (re.test(out) && out.split(' ').length > 2) out = out.replace(re, '').replace(/[\s.,;:!?\-–—(]+$/g, '').trim();
+  };
+  trimTail(NEGATION_TAIL_RE);
+  trimTail(dangling);
+  return out.replace(/[\s.,;:!?\-–—(]+$/g, '').trim();
+}
+
+/** The words a joining-word cut leaves after the last punctuation read as the
+ *  start of a clause ("agreed to cut steps", "was"), not as a list item. */
+function isVerbStub(stub: string): boolean {
+  const words = stub.split(' ').filter(Boolean);
+  if (words.length === 0) return true;
+  return /^(?:\p{L}+ed|is|was|are|were|has|had|have|will|would|should|can|could|did|does|do)$/iu.test(words[0]);
+}
+
+// Abbreviations whose full stop does not end a sentence: "Dr. Patel",
+// "St. Jude", "Q3 vs. Q4", "Acme Inc. renewal". Single letters are initials.
+const ABBREVIATION_RE = /^(?:[\p{L}]|mr|mrs|ms|dr|st|sr|jr|prof|inc|ltd|co|corp|vs|etc|approx|dept|no|vol|fig|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec|e\.g|i\.e|a\.m|p\.m|u\.s|u\.k)$/iu;
+
+/**
+ * The first sentence of a text: up to the first `.`, `!` or `?` that is followed
+ * by a space and does not close an abbreviation or an initial. A full stop
+ * inside a token ("v2.5", "heynatively.com") never ends a sentence.
+ */
+export function firstSentenceOf(text: string): string {
+  const s = String(text || '').trim();
+  for (const m of s.matchAll(/[.!?]+(?=\s+\S)/g)) {
+    const at = m.index ?? 0;
+    if (m[0] === '.') {
+      const before = s.slice(0, at).split(/\s+/).pop() || '';
+      if (ABBREVIATION_RE.test(before)) continue;
+    }
+    return s.slice(0, at + m[0].length).trim();
+  }
+  return s;
+}
 
 /** A hyphen / en dash / em dash / bullet followed by a space, at the start of a title. */
 const LEADING_LIST_MARKER_RE = /^[-–—•]+\s+/;
@@ -326,43 +455,23 @@ export function cleanMeetingTitle(
   text = text.replace(LEADING_LIST_MARKER_RE, '');
   if (!text) return '';
 
-  let words = text.split(' ');
-  let truncated = false;
+  // "Discussion of the Q3 roadmap" names the Q3 roadmap; the opener adds nothing.
+  const withoutOpener = text.replace(GENERIC_TITLE_PREFIX_RE, '');
+  if (withoutOpener !== text && withoutOpener.split(' ').length >= 2) {
+    text = withoutOpener.charAt(0).toUpperCase() + withoutOpener.slice(1);
+  }
 
+  const words = text.split(' ');
   // Prose rather than a title: keep the first sentence before clamping, so the
   // cut lands on a thought boundary instead of mid-clause. Gated on already
   // being over budget so "Sync with Dr. Patel" is never cut at "Dr.".
-  if (words.length > maxWords) {
-    const firstSentence = text.split(/(?<=[.!?])\s+/)[0]?.trim() ?? '';
+  if (words.length > maxWords || text.length > maxChars) {
+    const firstSentence = firstSentenceOf(text);
     const sentenceWords = firstSentence ? firstSentence.split(' ') : [];
-    if (sentenceWords.length >= 2 && sentenceWords.length < words.length) {
-      words = sentenceWords;
-      truncated = true;
-    }
+    if (sentenceWords.length >= 2 && sentenceWords.length < words.length) text = firstSentence;
   }
 
-  if (words.length > maxWords) {
-    words = words.slice(0, maxWords);
-    truncated = true;
-  }
-  let out = words.join(' ');
-
-  if (out.length > maxChars) {
-    out = out.slice(0, maxChars);
-    const lastSpace = out.lastIndexOf(' ');
-    // Only break on a word boundary when one exists late enough to leave a
-    // readable title; a single over-long token is cut hard instead.
-    if (lastSpace > maxChars / 2) out = out.slice(0, lastSpace);
-    truncated = true;
-  }
-
-  out = out.replace(/[\s.,;:!?\-–—]+$/g, '').trim();
-  if (truncated) {
-    while (DANGLING_WORD_RE.test(out)) out = out.replace(DANGLING_WORD_RE, '').trim();
-    out = out.replace(/[\s.,;:!?\-–—]+$/g, '').trim();
-  }
-
-  return out;
+  return fitTitleLength(text, maxChars, maxWords).replace(/[\s.,;:!?\-–—]+$/g, '').trim();
 }
 
 // ── Answer-fragment title rejection (RC-7 adjacent, live session C 2026-08-21) ──
@@ -406,6 +515,39 @@ const ANSWER_FRAGMENT_TITLE_RES: RegExp[] = [
   /ഞാൻ|ഞങ്ങൾ|നിങ്ങൾ|എനിക്ക്/u,
 ];
 
+// ── Narration instead of a name (2026-10-18, real saved titles) ─────────────
+// Judged on model titles (isAnswerFragmentTitle) and on the note-built backup
+// title alike (MeetingPersistence), since a note sentence narrates as readily.
+// Each pattern needs the narrating verb, so a subject that merely starts with
+// the same word stays a name: "User research synthesis", "Release notes
+// review", "Team shares Q3 results", "Frequently asked questions".
+const SPEECH_COMPLEMENT = `(?:that|to|about|how|what|why|whether|if|when|where|who|which|the|a|an|his|her|their|its|our|my|your|he|she|they|we|it|i|you|them|him)\\b`;
+const NARRATION_TITLE_RES: RegExp[] = [
+  // The exchange with the assistant: "User asked the assistant to resume",
+  // "The assistant answered…", "User mentions the deadline".
+  new RegExp(`^(?:the\\s+)?(?:user|assistant|ai)\\s+(?:asked|asks|said|says|answered|answers|replied|replies|requested|requests|wanted|wants|mentioned|mentions|explained|explains|shared|shares|told|tells|greeted|greets|noted|notes|provided|provides|gave|gives|wrote|writes|responded|responds|confirmed|confirms|did|does|was|is|had|has)\\b`, 'i'),
+  // A description of the session instead of its subject:
+  // "A very short session in which…", "This call was about…".
+  /^(?:a|an|this|the)\s+(?:(?:very|short|brief|quick)\s+)*(?:session|meeting|call|conversation|chat)\s+(?:in which|where|that|was|is|about|with no)\b/i,
+  // Reported speech: "Evin said circular tide was not". Said/says/told/tells
+  // after a leading name are always narration…
+  /^[\p{Lu}][\p{L}'’-]*\s+(?:said|says|told|tells)(?![\p{L}\p{N}])/u,
+  // …the verbs that are also nouns or adjectives only when the speech follows:
+  // "Evin asked what an API is", "Priya wants to cancel".
+  new RegExp(`^[\\p{Lu}][\\p{L}'’-]*\\s+(?:asked|asks|mentioned|mentions|explained|explains|wanted|wants|shared|shares|noted|notes)\\s+${SPEECH_COMPLEMENT}`, 'iu'),
+  // A speaker label and a clause: "Evin: HackerRank was not flagging anything".
+  /^[\p{L}'’-]+:\s+\S+(?:\s+\S+)?\s+(?:was|were|is|are|did|does|has|had|didn['’]t|doesn['’]t|isn['’]t|wasn['’]t)\b/iu,
+  // "Autofocus was mentioned", "Pricing got briefly discussed".
+  /\b(?:was|were|is|are|got)\s+(?:briefly\s+)?(?:mentioned|discussed|asked|explained|covered|raised|brought up|talked about)$/i,
+];
+
+/** True when a title narrates the exchange (who said or asked what) or
+ *  describes the session, instead of naming what it was about. */
+export function isNarrationTitle(title: string): boolean {
+  const t = String(title || '').trim();
+  return !!t && NARRATION_TITLE_RES.some((re) => re.test(t));
+}
+
 // ── Complexity notation: answer vs. name (2026-08-26) ────────────────────────
 // "O(n)" in a generated title is TWO different failures wearing one shape.
 //
@@ -424,13 +566,15 @@ const ANSWER_FRAGMENT_TITLE_RES: RegExp[] = [
 //      i.e. it is the answer. Covers the "<language> code uses/is/…" verbs
 //      above plus the ones a complexity claim actually uses (gives/takes/
 //      costs/…), which land inside the 3-6-word window rule 3 can't see.
-//   3. more than 6 words — the naming prompt asks for 3-6, so anything longer
-//      quoting complexity is a sentence, not a name.
+//   3. more than MEETING_TITLE_MAX_WORDS words — longer than any title the
+//      clamp keeps, so anything that long quoting complexity is a sentence.
+//      (It was 6 while the naming prompt asked for 3-6 words; titles are now
+//      bounded by 50 characters, and "Two Sum in O(n) with a hash map" is 8.)
 //
 // Detection is the unchanged pattern; only the decision narrowed.
 const COMPLEXITY_NOTATION_RE = /\bO\([^)]{1,12}\)/g;
 const ASSERTION_VERB_RE = /\b(?:uses|is|does|works|runs|solves?|looks|gives?|takes|costs|achieves?|yields|requires?|reduces?|needs)\b/i;
-const TITLE_WORD_WINDOW_MAX = 6;
+const TITLE_WORD_WINDOW_MAX = MEETING_TITLE_MAX_WORDS;
 
 function isComplexityAnswerTitle(t: string): boolean {
   const stripped = t.replace(COMPLEXITY_NOTATION_RE, ' ');
@@ -441,11 +585,189 @@ function isComplexityAnswerTitle(t: string): boolean {
   return t.split(/\s+/).filter(Boolean).length > TITLE_WORD_WINDOW_MAX;
 }
 
+// ── Not a name, in any language the notes are written in (2026-10-18) ──────
+// Two shapes a model writes instead of naming the meeting, judged per language
+// because the notes follow the meeting's language: the app's own (English,
+// Spanish, Japanese, Russian, Chinese) plus the speech languages seen in real
+// meetings (French, Hindi, Malayalam) and the nearest neighbours (German,
+// Portuguese, Italian). A real one: "Session très courte sans contenu
+// substantiel". JS \b only knows ASCII letters, so word edges are lookarounds.
+const WORD_START = '(?<![\\p{L}\\p{N}])';
+const WORD_END = '(?![\\p{L}\\p{N}])';
+const titleRe = (body: string) => new RegExp(body, 'iu');
+
+/** A description of the session's emptiness or brevity rather than its subject. */
+const EMPTY_SESSION_TITLE_RES: RegExp[] = [
+  // English: "No Source Text Provided", "No substantive content", "Nothing was
+  // discussed", "A very short session", "Empty transcript".
+  // "no"/"without" only before a word that can only mean emptiness, or at the
+  // title's end: "Launch without data migration" and "No data loss strategy"
+  // name a subject.
+  titleRe(`^no\\s+(?:real\\s+|meaningful\\s+)?(?:source|content|text|transcript|substance|substantive|discussion|topics?)${WORD_END}`),
+  titleRe(`${WORD_START}(?:with\\s+no|without(?:\\s+any)?)\\s+(?:real\\s+|meaningful\\s+|substantive\\s+)?(?:content|substance|discussion|transcript|topics?)${WORD_END}`),
+  titleRe(`${WORD_START}(?:no|without)\\s+(?:source|content|text|transcript|context|information|data)(?:\\s+(?:provided|available|given|shared|recorded))?$`),
+  titleRe(`${WORD_START}not provided$|${WORD_START}nothing (?:of (?:substance|note|importance|interest) )?(?:was |got )?(?:said|discussed|covered|decided|to (?:name|summari[sz]e))${WORD_END}`),
+  titleRe(`^(?:(?:a|an|this|the)\\s+)?(?:very\\s+)?(?:short|brief|empty)\\s+(?:session|meeting|call|conversation|chat|transcript)$`),
+  titleRe(`${WORD_START}empty\\s+(?:session|meeting|call|conversation|transcript)${WORD_END}`),
+  // French
+  titleRe(`${WORD_START}(?:sans|aucun|aucune|pas de)\\s+(?:contenu|sujet|échange|discussion|information|texte|transcription)${WORD_END}`),
+  titleRe(`${WORD_START}(?:session|réunion|conversation|appel)\\s+(?:très\\s+)?(?:courte?|brève|vide)${WORD_END}`),
+  titleRe(`${WORD_START}rien (?:n['’]a été |de )(?:dit|discuté|substantiel)${WORD_END}`),
+  // Spanish
+  titleRe(`${WORD_START}(?:sin|ningún|ninguna|no hay)\\s+(?:contenido|tema|información|texto|transcripción)${WORD_END}`),
+  titleRe(`${WORD_START}(?:sesión|reunión|conversación|llamada)\\s+(?:muy\\s+)?(?:corta|breve|vacía)${WORD_END}`),
+  // Portuguese
+  titleRe(`${WORD_START}(?:sem|nenhum|nenhuma)\\s+(?:conteúdo|assunto|informação|texto|transcrição)${WORD_END}`),
+  titleRe(`${WORD_START}(?:sessão|reunião|conversa|chamada)\\s+(?:muito\\s+)?(?:curta|breve|vazia)${WORD_END}`),
+  // German
+  titleRe(`${WORD_START}(?:kein|keine|keinen|ohne)\\s+(?:inhalt|inhalte|thema|informationen|text|transkript)${WORD_END}`),
+  titleRe(`${WORD_START}(?:sehr\\s+)?(?:kurze|leere)\\s+(?:sitzung|besprechung|unterhaltung|session)${WORD_END}`),
+  // Italian
+  titleRe(`${WORD_START}(?:senza|nessun|nessuna)\\s+(?:contenuto|argomento|informazione|testo|trascrizione)${WORD_END}`),
+  titleRe(`${WORD_START}(?:sessione|riunione|conversazione|chiamata)\\s+(?:molto\\s+)?(?:breve|corta|vuota)${WORD_END}`),
+  // Russian
+  titleRe(`${WORD_START}(?:без|нет)\\s+(?:содержания|содержимого|темы|информации|текста)${WORD_END}`),
+  titleRe(`${WORD_START}(?:очень\\s+)?(?:короткая|короткий|пустая|пустой)\\s+(?:сессия|встреча|беседа|разговор|звонок)${WORD_END}`),
+  // Japanese and Chinese (no spaces between words)
+  titleRe(`内容(?:が|は)?(?:なし|ない|ありません)|発言(?:なし|がない)|(?:短い|空の)(?:セッション|会議|会話|通話)`),
+  titleRe(`(?:没有|无)(?:实质)?(?:内容|讨论)|(?:很短|简短|空)的?(?:会话|会议|对话|通话)`),
+  // Hindi and Malayalam
+  titleRe(`कोई\\s+(?:सामग्री|विषय|जानकारी)\\s+नहीं|(?:बहुत\\s+)?(?:छोटा|छोटी|खाली)\\s+(?:सत्र|बैठक|बातचीत)`),
+  titleRe(`ഉള്ളടക്കം\\s*ഇല്ല|ഉള്ളടക്കമില്ല|ചെറിയ\\s+(?:സെഷൻ|മീറ്റിംഗ്|സംഭാഷണം)`),
+];
+
+/** A question instead of a name: "Which Number Is Odd Or Even". A how-to
+ *  ("How to scale Postgres", "Comment faire un CV", "如何部署") is a name. */
+const QUESTION_TITLE_RES: RegExp[] = [
+  // Question marks in any script, and Spanish's opening one.
+  /[?？؟]\s*$/u,
+  /^[¿]/u,
+  // English: a question word then an auxiliary ("What Is An API", "Which
+  // Number Is Odd"), or an auxiliary then its subject ("Is It Worth It").
+  /^(?:which|what|who|whose|whom|when|where|why|how)\s+(?:is|are|was|were|do|does|did|can|could|should|would|will|has|have|had)\b/i,
+  /^(?:which|what|whose)\s+\S+\s+(?:is|are|was|were|do|does|did|can|could|should|would|will|has|have)\b/i,
+  /^(?:is|are|was|were|do|does|did|can|could|should|would|will|has|have|shall)\s+(?:i|we|you|they|he|she|it|this|that|these|those|there|the|a|an|our|my|your|their)\b/i,
+  // French, Portuguese, German
+  titleRe(`^(?:est-ce qu|qu['’]est-ce qu|pourquoi${WORD_END}|quel(?:le)?s?\\s+(?:est|sont)${WORD_END})`),
+  titleRe(`^(?:por que|o que é|qual é|quais são)${WORD_END}`),
+  titleRe(`^(?:was|wie|warum|wer|wo|welche[rsmn]?)\\s+(?:ist|sind|war|kann|können|soll|sollte|wird|hat|haben)${WORD_END}`),
+  // Russian "why", Hindi "what/why" openers, Japanese and Chinese question endings.
+  titleRe(`^(?:почему|зачем)${WORD_END}`),
+  titleRe(`^(?:क्या|क्यों)\\s`),
+  titleRe(`(?:ですか|ますか|でしょうか|のか)$`),
+  titleRe(`(?:吗|呢)$|^(?:为什么|什么是|是否)`),
+];
+
+/** True when a title describes the session's emptiness instead of naming it. */
+export function isEmptySessionTitle(title: string): boolean {
+  const t = String(title || '').trim();
+  return !!t && (EMPTY_SESSION_TITLE_RES.some((re) => re.test(t)) || isEmptyPlaceholder(t) || EMPTY_TITLE_RE.test(placeholderKey(t)));
+}
+
+// ── A reply that says "this is empty" ────────────────────────────────────────
+// The notes prompts say what to send when there is nothing ('return an empty
+// "summary" array'). Some models write that back as text, and "empty summary
+// array." was saved as a meeting's Summary (GitHub #662). The check is narrow on
+// purpose: notes hold real short lines that look alike. "Empty array", "Empty
+// string" and "Value is null" are edge cases from a coding interview, "No resume
+// provided" is a hiring note. A placeholder is one of:
+//   - punctuation alone: "—", "[]", '""'
+//   - a "nothing" word alone: "None", "N/A", "Nothing found", "Rien", "なし"
+//   - an "empty" word naming the notes' own field: "empty summary array",
+//     "No summary available", "Tableau « summary » vide", "摘要为空"
+//   - the prompts' own condition: "The notes contain no concrete outcome."
+// "Empty array" / "Empty string" is a placeholder only where the prompt asked for
+// an empty array (isEmptyListPlaceholder), and "Untitled" / "No title" only as a
+// title (isEmptySessionTitle).
+
+function placeholderKey(text: string): string {
+  return String(text || '').normalize('NFC').toLowerCase().replace(/[\p{P}\p{S}]+/gu, ' ').replace(/\s+/g, ' ').trim()
+    .replace(/(^| )n a(?= |$)/g, '$1na'); // "N/A", "N.A."
+}
+
+const PLACEHOLDER_NOTHING_RE = new RegExp(`^(?:${[
+  'none', 'nothing', 'null', 'nil', 'undefined', 'empty', 'blank', 'not applicable',
+  'ninguno', 'ninguna', 'nada', 'aucun', 'aucune', 'rien', 'néant', 'nenhum', 'nenhuma',
+  'keine', 'keiner', 'nichts', 'nessuno', 'nessuna', 'niente', 'нет', 'ничего', 'пусто',
+  'कुछ नहीं', 'कोई नहीं', 'ഒന്നുമില്ല', 'ഇല്ല',
+].join('|')})(?: (?:found|given|provided|noted|identified|available|yet))?$`, 'u');
+
+const PLACEHOLDER_EMPTY_WORDS = new Set([
+  'empty', 'blank', 'no', 'none', 'null', 'nothing', 'unavailable', 'missing', 'na',
+  'sin', 'ningún', 'ninguna', 'aucun', 'aucune', 'sem', 'nenhum', 'nenhuma', 'kein', 'keine', 'senza', 'nessun', 'без',
+  'vacío', 'vacía', 'vacio', 'vacia', 'vide', 'vazio', 'vazia', 'leer', 'leere', 'leeres', 'vuoto', 'vuota',
+  'пусто', 'пустой', 'пустая', 'пустое', 'пустые', 'खाली', 'ശൂന്യം', 'ശൂന്യമാണ്',
+]);
+// The notes' own fields, in the languages the notes are written in. Not French
+// "résumé", which is also the English word for a CV.
+const PLACEHOLDER_FIELD_WORDS = new Set([
+  'summary', 'overview', 'resumen', 'resumo', 'zusammenfassung', 'riepilogo', 'резюме', 'сводка',
+  'सारांश', 'अवलोकन', 'സംഗ്രഹം', 'അവലോകനം',
+]);
+const PLACEHOLDER_CONTAINER_WORDS = new Set([
+  'array', 'list', 'string', 'tableau', 'liste', 'chaîne', 'chaine', 'lista', 'arreglo', 'matriz', 'cadena', 'elenco', 'stringa',
+  'zeichenkette', 'массив', 'список', 'строка', 'सूची', 'सरणी', 'പട്ടിക',
+]);
+const PLACEHOLDER_FILL_WORDS = new Set([
+  'a', 'an', 'the', 'is', 'are', 'was', 'here', 'available', 'provided', 'given', 'found',
+  'field', 'value', 'json', 'output', 'response', 'text',
+  'el', 'la', 'un', 'una', 'es', 'está', 'esta', 'le', 'les', 'une', 'est',
+  'die', 'der', 'das', 'ist', 'il', 'lo', 'è', 'o', 'um', 'uma', 'है', 'ആണ്',
+]);
+const NOTHING_TO_SUMMARIZE_RE = /^(?:there is )?nothing (?:to (?:summari[sz]e|report)|was said)$/;
+// The polish prompts' condition, written back. Pinned to the prompts' wording by
+// EmptyPlaceholderReply2026_10_24.test.mjs.
+const NO_OUTCOME_RE = /^(?:(?:the )?notes (?:contain|contained|have|had|include|included|hold|show) )?no (?:concrete |clear |real |meaningful )?(?:outcomes?|substance)(?: to (?:summari[sz]e|report))?$/;
+// Chinese and Japanese, without spaces: "摘要为空", "空的摘要", "无", "なし".
+const CJK_FIELD = '(?:摘要|总结|總結|概要|要約)';
+const CJK_EMPTY = '(?:空白|空|无|無|没有|沒有|なし)';
+const CJK_PLACEHOLDER_RE = new RegExp(`^(?:${CJK_FIELD}(?:は|が|の|为|為|是|的)*${CJK_EMPTY}(?:的|です)?|${CJK_EMPTY}(?:的|の)?${CJK_FIELD}|无|無|なし|没有|沒有)$`, 'u');
+const CJK_EMPTY_LIST_RE = /^(?:空|空的|空の)(?:数组|數組|配列|列表|リスト)$/u;
+const EMPTY_TITLE_RE = /^(?:(?:an? |the )?(?:empty|blank|no|untitled)(?: (?:title|meeting|name))?|untitled (?:call|session)|sans titre|titre vide|sin título|sin titulo|título vacío|sem título|sem titulo|kein titel|ohne titel|leerer titel|senza titolo|titolo vuoto|без названия|без заголовка|пустой заголовок|शीर्षक नहीं|无标题|無標題|タイトルなし)$/u;
+
+function isFieldEcho(words: string[], nouns: Set<string>): boolean {
+  return words.length <= 8
+    && words.some((w) => PLACEHOLDER_EMPTY_WORDS.has(w))
+    && words.some((w) => nouns.has(w))
+    && words.every((w) => PLACEHOLDER_EMPTY_WORDS.has(w) || PLACEHOLDER_FIELD_WORDS.has(w) || PLACEHOLDER_CONTAINER_WORDS.has(w) || PLACEHOLDER_FILL_WORDS.has(w));
+}
+
+/** True when the text says "this is empty" instead of being a note, overview or summary line. */
+export function isEmptyPlaceholder(text: string): boolean {
+  const raw = String(text || '');
+  if (/^[\p{P}\s]*$/u.test(raw)) return true;
+  if (/^\s*n\s*[/.]\s*a\s*\.?\s*$/i.test(raw)) return true;
+  const t = placeholderKey(raw);
+  if (!t) return false; // symbols only ("✅", "$") are not empty
+  return PLACEHOLDER_NOTHING_RE.test(t)
+    || NOTHING_TO_SUMMARIZE_RE.test(t)
+    || NO_OUTCOME_RE.test(t)
+    || CJK_PLACEHOLDER_RE.test(t.replace(/\s+/g, ''))
+    || isFieldEcho(t.split(' '), PLACEHOLDER_FIELD_WORDS);
+}
+
+/** isEmptyPlaceholder, plus "Empty array" / "Empty string": for a list the prompt
+ *  said to return empty (the polished summary, action items, decisions, risks,
+ *  open questions), where such a line is the instruction, never a note. */
+export function isEmptyListPlaceholder(text: string): boolean {
+  if (isEmptyPlaceholder(text)) return true;
+  const t = placeholderKey(text);
+  return isFieldEcho(t.split(' '), PLACEHOLDER_CONTAINER_WORDS) || CJK_EMPTY_LIST_RE.test(t.replace(/\s+/g, ''));
+}
+
+/** True when a title is a question rather than a name. Judge the text as the
+ *  model wrote it: cleanMeetingTitle drops the trailing question mark. */
+export function isQuestionTitle(title: string): boolean {
+  const t = String(title || '').trim();
+  return !!t && QUESTION_TITLE_RES.some((re) => re.test(t));
+}
+
 /** True when a GENERATED title reads as an answer fragment, not a name. */
 export function isAnswerFragmentTitle(title: string): boolean {
   const t = String(title || '').trim();
   if (!t) return false;
   if (ANSWER_FRAGMENT_TITLE_RES.some((re) => re.test(t))) return true;
+  if (isNarrationTitle(t) || isEmptySessionTitle(t) || isQuestionTitle(t)) return true;
   if (isComplexityAnswerTitle(t)) return true;
   // A single all-lowercase token ("cpp") is an answer artifact — the 3-6-word
   // title prompt never legitimately produces one, and user/calendar titles do
@@ -547,7 +869,7 @@ export function sanitizeStringArray(value: unknown, max: number): string[] {
   const out: string[] = [];
   for (const item of arr(value)) {
     const cleaned = cleanNoteText(item);
-    if (!cleaned || FILLER_RE.test(cleaned)) continue;
+    if (!cleaned || FILLER_RE.test(cleaned) || isEmptyPlaceholder(cleaned)) continue;
     const key = normalizedKey(cleaned);
     if (seen.has(key)) continue;
     seen.add(key);
@@ -581,7 +903,7 @@ export function sanitizeDecisions(value: unknown, max: number, t?: Track): Decis
       confidence: normalizeConfidence(item?.confidence),
       ...(item?.fromUserNotes === true ? { fromUserNotes: true } : {}),
     } as DecisionItem;
-  }).filter((d: DecisionItem) => d.text), max);
+  }).filter((d: DecisionItem) => d.text && !isEmptyListPlaceholder(d.text)), max);
 }
 
 export function sanitizeActions(value: unknown, max: number, t?: Track): ActionItem[] {
@@ -600,7 +922,7 @@ export function sanitizeActions(value: unknown, max: number, t?: Track): ActionI
       ...(item?.party === 'ours' || item?.party === 'theirs' ? { party: item.party } : {}),
       ...(item?.fromUserNotes === true ? { fromUserNotes: true } : {}),
     } as ActionItem;
-  }).filter((a: ActionItem) => a.text), max);
+  }).filter((a: ActionItem) => a.text && !isEmptyListPlaceholder(a.text)), max);
 }
 
 export function sanitizeQuestions(value: unknown, max: number): QuestionItem[] {
@@ -612,7 +934,7 @@ export function sanitizeQuestions(value: unknown, max: number): QuestionItem[] {
     ...(item?.confidence ? { confidence: normalizeConfidence(item.confidence) } : {}),
     ...(item?.carriedOver === true ? { carriedOver: true } : {}),
     ...(item?.fromUserNotes === true ? { fromUserNotes: true } : {}),
-  } as QuestionItem)).filter((q: QuestionItem) => q.text), max);
+  } as QuestionItem)).filter((q: QuestionItem) => q.text && !isEmptyListPlaceholder(q.text)), max);
 }
 
 export function sanitizeRisks(value: unknown, max: number): RiskItem[] {
@@ -621,7 +943,7 @@ export function sanitizeRisks(value: unknown, max: number): RiskItem[] {
     severity: VALID_RISK_SEVERITY.has(item?.severity) ? item.severity : inferSeverity(item?.text),
     evidence: sanitizeEvidenceArray(item?.evidence, 3),
     ...(item?.confidence ? { confidence: normalizeConfidence(item.confidence) } : {}),
-  } as RiskItem)).filter((r: RiskItem) => r.text), max);
+  } as RiskItem)).filter((r: RiskItem) => r.text && !isEmptyListPlaceholder(r.text)), max);
 }
 
 function sanitizeBullets(value: unknown, max: number): NoteBullet[] {
@@ -634,7 +956,7 @@ function sanitizeBullets(value: unknown, max: number): NoteBullet[] {
       ...(item?.confidence ? { confidence: normalizeConfidence(item.confidence) } : {}),
       ...(item?.fromUserNotes === true ? { fromUserNotes: true } : {}),
     } as NoteBullet;
-  }).filter((b: NoteBullet) => b.text).slice(0, max);
+  }).filter((b: NoteBullet) => b.text && !isEmptyPlaceholder(b.text)).slice(0, max);
 }
 
 function sanitizeSections(value: unknown, max: number): MeetingNoteSection[] {
@@ -706,6 +1028,8 @@ function sanitizeMode(value: unknown): MeetingSummaryModeMeta {
     ...(raw.detectedModeName ? { detectedModeName: cleanString(raw.detectedModeName).slice(0, 80) } : {}),
     ...(conf !== undefined ? { detectedConfidence: clamp(conf, 0, 1) } : {}),
     ...(raw.summaryModeUsed ? { summaryModeUsed: cleanString(raw.summaryModeUsed).slice(0, 80) } : {}),
+    ...(raw.noteTemplateId ? { noteTemplateId: cleanString(raw.noteTemplateId).slice(0, 64) } : {}),
+    ...(raw.noteTemplateName ? { noteTemplateName: cleanString(raw.noteTemplateName).slice(0, 80) } : {}),
   };
 }
 

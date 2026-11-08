@@ -24,8 +24,11 @@ const preload = read('../../preload.ts');
 const capture = read('../SystemAudioCapture.ts');
 const whisper = read('../LocalWhisperSTT.ts');
 
-test('main classifies local_stt_unavailable as terminal (failed), not reconnecting', () => {
-  assert.match(main, /const isLocalSttUnavailable = \(err as any\)\?\.code === 'local_stt_unavailable';/);
+test('main classifies local_stt_unavailable as terminal (failed), not reconnecting', async () => {
+  // Classification moved to sttErrorClassifier.mjs (2026-11-01).
+  const { classifySttError } = await import(new URL('../sttErrorClassifier.mjs', import.meta.url).href);
+  assert.equal(classifySttError(Object.assign(new Error('x'), { code: 'local_stt_unavailable' })).kind, 'local_unavailable');
+  assert.match(main, /const isLocalSttUnavailable = verdict\.kind === 'local_unavailable';/);
   assert.match(main, /if \(isAuthError \|\| isLocalSttUnavailable\) \{/);
   assert.match(whisper, /export const LOCAL_STT_UNAVAILABLE_CODE = 'local_stt_unavailable';/);
 });
@@ -52,13 +55,21 @@ test('a callback error retires the finished native monitor and publishes the tea
 // main filed it under "retryable" (1 of 5 errors, forever). The helper that
 // exists for exactly this case was simply not applied there.
 test('a model that is missing / was purged / is unsupported fails TERMINALLY, not "reconnecting"', () => {
-  const at = whisper.indexOf("'The local model files were incomplete and have been removed.");
-  assert.ok(at > 0, 'fixture: the purge message moved');
-  const emit = whisper.lastIndexOf("this.emit('error',", at);
-  const stmt = whisper.slice(emit, whisper.indexOf('));', at) + 3);
-  assert.match(stmt, /^this\.emit\('error', markLocalSttUnavailable\(new Error\(/, 'BUG: the pill reads "STT reconnecting" forever instead of "STT needs attention" + the message');
-  for (const msg of ['not supported on macOS 12', 'incomplete and have been removed', 'Local Whisper model not found']) {
-    assert.ok(stmt.includes(msg), `the terminal emit must still carry: ${msg}`);
+  // The three hand-written messages became one classifier (whisper/loadFailure.ts)
+  // on 2026-10-14. What must not regress is unchanged: EVERY load failure leaves
+  // LocalWhisperSTT through markLocalSttUnavailable, on both paths that can see one.
+  const helper = whisper.slice(whisper.indexOf('private modelLoadFailure(message: string): Error {'));
+  assert.ok(helper.length > 0 && helper.length < whisper.length, 'fixture: modelLoadFailure moved');
+  const body = helper.slice(0, helper.indexOf('\n    }\n'));
+  assert.match(body, /return markLocalSttUnavailable\(new Error\(describeLocalModelLoadFailure\(/, 'BUG: the pill reads "STT reconnecting" forever instead of "STT needs attention" + the message');
+  // The worker-message path (every model) and the shared-worker path (Nemotron).
+  assert.match(whisper, /this\.emit\('error', this\.modelLoadFailure\(msg\.message\)\);/);
+  assert.match(whisper, /throw this\.modelLoadFailure\(message\);/);
+  const loadFailure = read('../whisper/loadFailure.ts');
+  // The macOS sentence moved to onnxMacSupport.ts (one copy for every gate, 2026-10-21).
+  assert.match(loadFailure, /return ONNX_MAC_UNSUPPORTED_MESSAGE;/);
+  for (const msg of ['incomplete and have been removed', 'could not be loaded']) {
+    assert.ok(loadFailure.includes(msg), `the terminal message must still exist: ${msg}`);
   }
 });
 

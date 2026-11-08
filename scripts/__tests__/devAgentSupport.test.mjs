@@ -2,7 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  electronArgs, isReservedPort, killPlan, resolveDevPort, RESERVED_PORTS,
+  childExitReport, electronArgs, isLiveDevToolsReply, isReservedPort, killPlan, previousCdpPort, resolveDevPort, RESERVED_PORTS,
 } from '../devAgentSupport.mjs';
 
 describe('reserved ports', () => {
@@ -99,5 +99,44 @@ describe('electronArgs', () => {
     for (const bad of ['', undefined, null]) {
       assert.throws(() => electronArgs('/repo', 51234, bad), /own userData dir/);
     }
+  });
+});
+
+describe('a second launch in the same worktree', () => {
+  test('reads the previous CDP port from agent-browser.json, string or number', () => {
+    assert.equal(previousCdpPort('{"cdp":"57119","session":"natively-x"}'), 57119);
+    assert.equal(previousCdpPort('{"cdp":60907}'), 60907);
+  });
+
+  test('no file, bad JSON, no port or a reserved port means there is nothing to check', () => {
+    for (const text of [undefined, '', '   ', '{', '{"session":"x"}', '{"cdp":"abc"}', '{"cdp":"0"}', '{"cdp":"70000"}', '{"cdp":"9222"}']) {
+      assert.equal(previousCdpPort(text), null, String(text));
+    }
+  });
+
+  test('only a DevTools reply counts as a live instance, not a program that reused the port', () => {
+    assert.equal(isLiveDevToolsReply(200, { Browser: 'Chrome/150', webSocketDebuggerUrl: 'ws://127.0.0.1:57119/devtools/browser/abc-123' }), true);
+    assert.equal(isLiveDevToolsReply(404, { webSocketDebuggerUrl: 'ws://127.0.0.1:57119/devtools/browser/abc' }), false);
+    assert.equal(isLiveDevToolsReply(200, { hello: 'world' }), false);
+    assert.equal(isLiveDevToolsReply(200, null), false);
+    assert.equal(isLiveDevToolsReply(200, { webSocketDebuggerUrl: 'ws://10.0.0.5:57119/devtools/browser/abc' }), false);
+  });
+});
+
+describe('how the app ended (childExitReport)', () => {
+  test('macOS: ended from outside by a signal is reported, never as a clean exit', () => {
+    // The 2026-11-02 run: the app was killed (no quit ran) and the launcher said exit 0.
+    for (const signal of ['SIGKILL', 'SIGTERM']) {
+      const r = childExitReport('the app', null, signal);
+      assert.equal(r.exitCode, 1);
+      assert.match(r.message, new RegExp(signal));
+    }
+  });
+  test('Windows: taskkill shows up as exit code 1 and no signal, a failure', () => {
+    assert.deepEqual(childExitReport('the app', 1, null), { exitCode: 1, message: '[dev:agent] the app exited (1)' });
+  });
+  test('both: a clean quit stays quiet; a missing code is not clean', () => {
+    assert.deepEqual(childExitReport('the app', 0, null), { exitCode: 0, message: null });
+    assert.equal(childExitReport('the app', null, null).exitCode, 1);
   });
 });

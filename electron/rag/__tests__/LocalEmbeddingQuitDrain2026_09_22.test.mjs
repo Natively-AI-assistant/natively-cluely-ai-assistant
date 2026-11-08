@@ -7,6 +7,11 @@
 // deferring until the in-flight batch finishes: 0/4, exit code 0, drained in
 // 1.1-3.5s. These tests pin the provider half of that contract without ONNX;
 // the main.ts half is pinned by source.
+//
+// 2026-10-14: the worker is no longer terminate()d at the end of the drain — on
+// a timed-out drain that IS a terminate() inside run(). It is asked to exit
+// (utils/onnxWorkerShutdown.ts) and the drain waits until it has. And the quit
+// is deferred for every live ONNX worker, not only an embedder mid-batch.
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -15,6 +20,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
+import { EventEmitter } from 'node:events';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../..');
@@ -24,11 +30,23 @@ require.cache[electronId] = { id: electronId, filename: electronId, loaded: true
 const { LocalEmbeddingProvider } = await import(pathToFileURL(
   path.resolve(root, 'dist-electron/electron/rag/providers/LocalEmbeddingProvider.js')).href);
 
-/** A provider whose worker is a fake that records terminate() and when it happened. */
-function providerWithFakeWorker() {
+/**
+ * A provider whose worker is a fake that records when it was asked to exit,
+ * and any terminate() (which must never happen). Like a real worker it exits
+ * with code 0 shortly after being asked — unless `busy`, i.e. still inside a
+ * native call.
+ */
+function providerWithFakeWorker({ busy = false } = {}) {
   const p = new LocalEmbeddingProvider();
   const events = [];
-  p.worker = { terminate: async () => { events.push({ ev: 'terminate', pending: p.pendingRequests.size }); }, postMessage: () => {} };
+  const w = new EventEmitter();
+  w.terminate = async () => { events.push({ ev: 'terminate', pending: p.pendingRequests.size }); };
+  w.postMessage = (msg) => {
+    if (msg?.type !== 'shutdown') return;
+    events.push({ ev: 'shutdown', pending: p.pendingRequests.size });
+    if (!busy) setTimeout(() => w.emit('exit', 0), 5);
+  };
+  p.worker = w;
   globalThis.__nativelyLiveLocalEmbeddingProviders?.add(p) ?? (globalThis.__nativelyLiveLocalEmbeddingProviders = new Set([p]));
   return { p, events };
 }
@@ -41,7 +59,7 @@ describe('LocalEmbeddingProvider.shutdownForQuit', () => {
     setTimeout(() => p.pendingRequests.delete(1), 120);   // the batch finishes
     const outcome = await p.shutdownForQuit(2000);
     assert.equal(outcome, 'drained');
-    assert.deepEqual(events, [{ ev: 'terminate', pending: 0 }], 'terminate() only once nothing is in flight');
+    assert.deepEqual(events, [{ ev: 'shutdown', pending: 0 }], 'asked to exit only once nothing is in flight, and never terminate()d');
   });
 
   test('refuses new requests once closing, so the drain cannot be refilled', async () => {
@@ -50,21 +68,27 @@ describe('LocalEmbeddingProvider.shutdownForQuit', () => {
     await assert.rejects(p.postToWorker({ type: 'embed', texts: ['x'] }, 1000), /quitting/);
   });
 
-  test('is bounded: a wedged worker is terminated at the deadline', async () => {
-    const { p, events } = providerWithFakeWorker();
+  test('is bounded: a wedged worker does not hold the quit hostage, and is NOT killed', async () => {
+    const { p, events } = providerWithFakeWorker({ busy: true });
     owe(p, 7);                                   // never answers
     const t0 = Date.now();
     const outcome = await p.shutdownForQuit(150);
     assert.equal(outcome, 'timed-out');
-    assert.ok(Date.now() - t0 < 1000);
-    assert.equal(events.length, 1);
+    assert.ok(Date.now() - t0 < 1500);
+    assert.deepEqual(events.map((e) => e.ev), ['shutdown'],
+      'BUG: terminate() at the deadline is terminate() inside the native call that would not finish — the abort itself');
     p.pendingRequests.clear();
+  });
+
+  test('a drained worker that is slow to leave is reported timed-out, not idle', async () => {
+    const { p } = providerWithFakeWorker({ busy: true });
+    assert.equal(await p.shutdownForQuit(100), 'timed-out', 'the caller must know a worker thread is still alive');
   });
 
   test('an idle provider reports idle and needs no wait', async () => {
     const { p, events } = providerWithFakeWorker();
     assert.equal(await p.shutdownForQuit(5000), 'idle');
-    assert.equal(events.length, 1);
+    assert.deepEqual(events.map((e) => e.ev), ['shutdown']);
   });
 
   test('hasInFlightWorkForQuit sees only providers that still owe a reply', async () => {
@@ -84,9 +108,14 @@ describe('main.ts defers the quit for the drain (source pin)', () => {
   test('before-quit consults the drain FIRST and returns while it runs', () => {
     assert.match(handler, /^app\.on\("before-quit", \(event\) => \{\s*if \(deferQuitForLocalEmbeddingDrain\(event\)\) return;/);
   });
-  test('the helper runs once, only with work in flight, and re-quits when done', () => {
+  test('the helper runs once, only when a local model worker is alive, and re-quits when done', () => {
     assert.match(helper, /if \(localEmbeddingQuitDrainStarted\) return false;\s*localEmbeddingQuitDrainStarted = true;/, 'marked before deferring, so the second quit is not deferred again');
-    assert.match(helper, /if \(!LocalEmbeddingProvider\.hasInFlightWorkForQuit\(\)\) return false;/);
+    assert.match(helper, /if \(!LocalEmbeddingProvider\.hasInFlightWorkForQuit\(\) && liveOnnxWorkerCount\(\) === 0\) return false;/,
+      'a quit with nothing loaded is never delayed');
+    const drain = helper.indexOf('shutdownAllForQuit(LOCAL_EMBEDDING_QUIT_DRAIN_MS)');
+    const retireAll = helper.indexOf('retireAllOnnxWorkers(ONNX_WORKER_QUIT_WAIT_MS)');
+    assert.ok(drain > 0 && retireAll > drain, 'the embedder finishes the batch it owes BEFORE every worker is asked to exit');
+    assert.doesNotMatch(helper, /\.terminate\(/);
     assert.match(helper, /event\.preventDefault\(\)/);
     assert.match(helper, /shutdownAllForQuit\(LOCAL_EMBEDDING_QUIT_DRAIN_MS\)/);
     assert.match(helper, /\.finally\(\(\) => app\.quit\(\)\)/);

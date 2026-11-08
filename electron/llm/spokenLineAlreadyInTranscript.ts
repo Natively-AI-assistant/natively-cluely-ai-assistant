@@ -16,6 +16,12 @@ export interface TranscriptLineForDedupe {
 
 /** How far back a spoken line still counts as "the one just sent". */
 export const SPOKEN_DUPLICATE_WINDOW_MS = 2 * 60 * 1000;
+/**
+ * How many of the newest transcript lines a caller needs to hand over: two
+ * minutes of speech is well under this, and the transcript of a long meeting
+ * can hold thousands of lines.
+ */
+export const SPOKEN_DEDUPE_TAIL_LINES = 400;
 
 function normalize(text: string): string {
   return String(text || '')

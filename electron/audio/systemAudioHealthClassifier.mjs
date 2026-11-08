@@ -41,6 +41,8 @@ export class SystemAudioHealthClassifier {
     this.firstChunkAtMs = null;
     this.lastChunkAtMs = null;
     this.hasMeaningfulSignal = false;
+    /** Last chunk carrying real signal (null: none yet this capture). */
+    this.lastMeaningfulSignalAtMs = null;
     this.sameDeviceWarningEmitted = false;
     this.noChunkLogEmitted = false;
     this.zeroValuedLogEmitted = false;
@@ -103,6 +105,7 @@ export class SystemAudioHealthClassifier {
     const peakToPeak = peakToPeakInt16LE(event.chunk);
     if (peakToPeak > this.meaningfulPeakToPeak) {
       this.hasMeaningfulSignal = true;
+      this.lastMeaningfulSignalAtMs = event.nowMs;
       return this.maybeInterChunkGapLog(previousChunkAtMs, event.nowMs);
     }
 

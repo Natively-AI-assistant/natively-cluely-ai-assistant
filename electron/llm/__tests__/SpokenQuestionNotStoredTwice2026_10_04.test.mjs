@@ -73,10 +73,19 @@ describe('wiring', () => {
   const src = fs.readFileSync(path.resolve(root, 'electron/ipcHandlers.ts'), 'utf8');
 
   test('the chat handler checks before re-adding, at both of its record sites', () => {
-    const checks = src.match(/questionOnRecordAsSpeech = options\?\.liveQuestion === true\s*&& spokenLineAlreadyInTranscript\(/g) || [];
+    const checks = src.match(/questionOnRecordAsSpeech = options\?\.liveQuestion === true\s*&& spokenLineAlreadyInTranscript\(intelligenceManager\./g) || [];
     assert.equal(checks.length, 2, 'the main record site and the legacy identity reply');
     const guarded = src.match(/if \(!questionOnRecordAsSpeech\) \{\s*intelligenceManager\.addTranscript\(/g) || [];
     assert.equal(guarded.length, 2);
+  });
+
+  test('the V3 record site has the same guard: voice follow-ups reach V3 (issue #552)', () => {
+    const v3 = src.slice(src.indexOf('if (!callerOwnsPrompt && isContextIntelligenceV3Enabled())'));
+    assert.match(v3, /questionOnRecordAsSpeech = options\?\.liveQuestion === true\s*&& spokenLineAlreadyInTranscript\(appState\.getIntelligenceManager\(\)\?\.getCurrentMeetingTranscript\(SPOKEN_DEDUPE_TAIL_LINES\), message, Date\.now\(\)\);/);
+    const ask = v3.indexOf('questionOnRecordAsSpeech = options?.liveQuestion');
+    const record = v3.indexOf("if (!questionOnRecordAsSpeech) {\n                  im?.addTranscript?.({ text: String(message || ''), speaker: 'user'");
+    assert.ok(ask > 0 && record > ask, 'checked at the ask, before the record site');
+    assert.match(v3, /im\?\.addAssistantMessage\?\.\(finalText, forThisTurn\(undefined\), 'manual_chat'\)/);
   });
 
   test("the Answer button's first route (live search) has the same guard", () => {

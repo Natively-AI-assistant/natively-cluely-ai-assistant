@@ -315,14 +315,17 @@ test('a failed check disables the channel until setCredentials(), which revives 
 // main.ts matches the code as a string literal (as it does for
 // local_stt_unavailable), so the two can drift apart silently. If they do, the
 // channel sits on "reconnecting" forever instead of showing the failure.
-test('main.ts treats the credentials-unavailable code as a terminal auth failure', () => {
-  const mainSource = fs.readFileSync(path.resolve(__dirname, '../../main.ts'), 'utf8');
-  const start = mainSource.indexOf('const isAuthError =');
-  assert.notEqual(start, -1, 'precondition: main.ts still has the isAuthError classification');
-  const expression = mainSource.slice(start, mainSource.indexOf(';', start));
-  assert.ok(
-    expression.includes(`=== '${GoogleSTT.CREDENTIALS_UNAVAILABLE_CODE}'`),
-    `BUG: main.ts's isAuthError no longer checks for '${GoogleSTT.CREDENTIALS_UNAVAILABLE_CODE}'. ` +
+test('main.ts treats the credentials-unavailable code as a terminal auth failure', async () => {
+  // Classification moved to sttErrorClassifier.mjs (2026-11-01); main routes
+  // its 'auth' kind to the terminal "failed" branch.
+  const { classifySttError } = await import(new URL('../sttErrorClassifier.mjs', import.meta.url).href);
+  const err = Object.assign(new Error('no usable key'), { code: GoogleSTT.CREDENTIALS_UNAVAILABLE_CODE });
+  assert.equal(
+    classifySttError(err).kind, 'auth',
+    `BUG: '${GoogleSTT.CREDENTIALS_UNAVAILABLE_CODE}' is no longer terminal. ` +
     'A Google STT credential failure is then counted as a retryable blip and never shown as failed.',
   );
+  const mainSource = fs.readFileSync(path.resolve(__dirname, '../../main.ts'), 'utf8');
+  assert.match(mainSource, /const isAuthError = verdict\.kind === 'auth';/);
+  assert.match(mainSource, /if \(isAuthError \|\| isLocalSttUnavailable\) \{/);
 });

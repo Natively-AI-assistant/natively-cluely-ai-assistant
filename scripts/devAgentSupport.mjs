@@ -44,6 +44,27 @@ export function killPlan(platform, pid) {
 }
 
 /**
+ * How a child the launcher started ended, as the launcher reports it
+ * (2026-11-02). A process ended from outside (macOS freeing memory, a kill,
+ * the shell that started it closing) has no exit code, only a signal; the
+ * launcher used to turn that into exit 0 and print nothing, so a killed app
+ * looked like a clean quit. Windows: a process ended by taskkill reports an
+ * exit code (1) and no signal, so it reads as a failure, never as clean.
+ *
+ * @param {string} name
+ * @param {number|null} code
+ * @param {string|null} signal
+ * @returns {{ exitCode: number, message: string|null }}
+ */
+export function childExitReport(name, code, signal) {
+  if (signal) {
+    return { exitCode: 1, message: `[dev:agent] ${name} was ended from outside by ${signal} (no quit ran: likely the OS freeing memory, or a kill)` };
+  }
+  const exitCode = Number.isInteger(code) ? code : 1;
+  return { exitCode, message: exitCode === 0 ? null : `[dev:agent] ${name} exited (${exitCode})` };
+}
+
+/**
  * The renderer dev-server port the main process should use. Mirrors
  * electron/devServerUrl.ts, which is the consumer — both must agree that a
  * junk value falls back rather than pointing every window at port 0.
@@ -80,4 +101,30 @@ export function resolveDevPort(raw, fallback = 5180) {
 export function electronArgs(root, cdpPort, userDataDir) {
   if (!userDataDir) throw new Error('electronArgs: an agent instance needs its own userData dir');
   return [root, `--remote-debugging-port=${cdpPort}`, `--user-data-dir=${userDataDir}`];
+}
+
+/**
+ * The CDP port a previous launch wrote to agent-browser.json, or null when the
+ * file is missing, unreadable, or holds no usable port. The launcher then asks
+ * that port whether an instance is still running there (isLiveDevToolsReply):
+ * two launches in one worktree share agent-browser.json and the userData
+ * profile, so a second launch silently took the file over and the first
+ * session's agent-browser commands went to the wrong app (2026-10-31).
+ */
+export function previousCdpPort(configText) {
+  if (typeof configText !== 'string' || !configText.trim()) return null;
+  let parsed;
+  try { parsed = JSON.parse(configText); } catch { return null; }
+  const port = Number(parsed?.cdp);
+  return Number.isInteger(port) && port > 0 && port < 65536 && !isReservedPort(port) ? port : null;
+}
+
+/**
+ * Whether a /json/version reply comes from a running DevTools endpoint (an
+ * Electron or Chromium browser), not from an unrelated program that happens
+ * to have reused the port after the old instance exited.
+ */
+export function isLiveDevToolsReply(status, body) {
+  if (status !== 200 || !body || typeof body !== 'object') return false;
+  return typeof body.webSocketDebuggerUrl === 'string' && /^ws:\/\/127\.0\.0\.1:\d+\/devtools\/browser\//.test(body.webSocketDebuggerUrl);
 }

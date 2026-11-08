@@ -88,4 +88,17 @@ for (const [label, modelId] of [
     // "Service Unavailable ... Trying to reconnect" — the exact lie this fixes.
     assert.doesNotMatch(msg, /unavailable/i);
   });
+
+  // Issue #707: a 16 GB Windows PC logged only "under 2GB free", so neither the
+  // reporter nor we could tell how far short it was. The refusal must carry the
+  // reading it refused on (forced to 0.1 GB above) next to the floor it missed.
+  test(`${label}: the message reports the measured available memory and the floor`, async () => {
+    const { errors } = await refuse(modelId);
+    const msg = String(errors[0].message);
+    assert.match(msg, /0\.10GB available/);
+    assert.match(msg, /this model needs \d+(\.\d+)?GB/);
+    // The main-process heap and the probe name are triage detail for the log,
+    // not for the user (the #707 reporter quoted "app heap 0.0GB" back).
+    assert.doesNotMatch(msg, /heap|vm_stat|freemem|meminfo|override/i);
+  });
 }

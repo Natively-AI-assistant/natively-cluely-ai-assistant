@@ -12,7 +12,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -24,7 +24,7 @@ let policy;
 let dir;
 before(async () => {
   ({ CardLedger } = require(path.join(ROOT, 'dist-electron/electron/services/cards/CardLedger.js')));
-  policy = await import(path.join(ROOT, 'src/lib/cards/cardPolicy.mjs'));
+  policy = await import(pathToFileURL(path.join(ROOT, 'src/lib/cards/cardPolicy.mjs')).href);
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'trial-reopen-'));
 });
 const fileFor = (name) => path.join(dir, name, 'card-ledger.json');

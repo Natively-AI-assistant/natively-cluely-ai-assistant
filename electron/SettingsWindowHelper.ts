@@ -252,6 +252,7 @@ export class SettingsWindowHelper {
         }
 
         this.settingsWindow = new BrowserWindow(windowSettings)
+        require('./preloadBridgeGuard').attachPreloadBridgeGuard(this.settingsWindow, 'settings')
         // Windows counterpart of the NSPanel stealth attributes applied below
         // on macOS: WS_EX_NOACTIVATE so opening/clicking the settings popover
         // mid-meeting never steals foreground focus from the meeting app.

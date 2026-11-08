@@ -114,7 +114,9 @@ describe('the live path wires the port (source pins)', () => {
     const fs = await import('node:fs');
     const src = fs.readFileSync(path.resolve(process.cwd(), 'electron/IntelligenceEngine.ts'), 'utf8');
     assert.match(src, /resolveMeetingEvidence\(\{/);
-    assert.match(src, /segments: \(this\.session as any\)\?\.getFullTranscript\?\.\(\) \?\? \[\]/);
+    // getRetrievalTranscript, not getFullTranscript: compaction drops a long
+    // meeting's oldest lines from the latter (2026-10-15).
+    assert.match(src, /segments: \(this\.session as any\)\?\.getRetrievalTranscript\?\.\(\) \?\? \[\]/);
     assert.match(src, /sessionId: this\.conversationSessionId\(\)/);
   });
 });

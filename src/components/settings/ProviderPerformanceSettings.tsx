@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, Gauge, History, Loader2, Play, RefreshCw, RotateCcw, Timer, Wifi } from 'lucide-react';
+import { Activity, AlertTriangle, History, Loader2, Play, Radar, RefreshCw, RotateCcw, Timer, Wifi } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useT } from '../../i18n';
@@ -215,13 +215,12 @@ const ProviderPerformanceSettings: React.FC<{
                 title={t('Provider performance')}
                 subtitle={t('Learns each provider’s speed from normal use. Only calibration costs extra.')}
             />
-
             {settings}
 
             {/* The one action here that costs money, so its row says so before the
                 button, not after. Phase 21's rule is that nothing is spent silently. */}
             <SettingsRow
-                icon={<Gauge size={20} />}
+                icon={<Radar size={20} />}
                 title={t('Run calibration')}
                 description={t('Sends small test requests to measure speed. Uses your API key.')}
                 control={

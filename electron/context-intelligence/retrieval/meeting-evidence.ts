@@ -63,6 +63,10 @@ export interface MeetingEvidenceInput {
   sessionId: string;
   tokenBudget: number;
   roleOf?: (speaker: string) => 'interviewer' | 'user' | 'assistant';
+  /** SessionTracker.getAssistantViewStartedAt(): semantic chunks older than a mid-meeting reset are left out. */
+  notBeforeMs?: number;
+  /** The rolling meeting recap (SessionTracker.getMeetingRecaps()), served for whole-meeting questions. */
+  recaps?: ReadonlyArray<{ lines: number; text: string }>;
 }
 
 export interface MeetingEvidence {
@@ -89,17 +93,19 @@ export function resolveMeetingEvidence(input: MeetingEvidenceInput): MeetingEvid
 
   const ports: RetrievalPort[] = [];
   let scopeMeetingId: string | null = null;
+  let semanticPort: RetrievalPort | null = null;
 
   // Semantic port over the JIT-embedded chunks, scoped to the live index id.
   // Additive: a closed vector store must not cost the turn the raw transcript.
   try {
     const liveId = input.rag?.getLiveMeetingId() ?? null;
     if (liveId && input.rag) {
-      ports.push(createMeetingRetrievalPort({
+      semanticPort = (createMeetingRetrievalPort({
         retriever: input.rag.getRetriever(),
         currentMeetingId: liveId,
         userId: input.userId,
         tokenBudget: input.tokenBudget,
+        ...(input.notBeforeMs ? { notBeforeMs: input.notBeforeMs } : {}),
       }));
       scopeMeetingId = liveId;
     }
@@ -115,11 +121,73 @@ export function resolveMeetingEvidence(input: MeetingEvidenceInput): MeetingEvid
       userId: input.userId,
       sessionId: input.sessionId,
       ...(input.roleOf ? { roleOf: input.roleOf } : {}),
+      ...(input.recaps?.length ? { recaps: input.recaps } : {}),
     });
-    if (livePort) ports.push(livePort);
+    if (livePort && semanticPort) ports.push(fuseMeetingPorts(semanticPort, livePort));
+    else if (livePort) ports.push(livePort);
+    else if (semanticPort) ports.push(semanticPort);
   } catch (e) {
     console.warn('[meeting-evidence] live transcript port unavailable:', (e as Error)?.message ?? e);
+    if (semanticPort) ports.push(semanticPort);
   }
 
   return { ports, scopeMeetingId, inLiveMeeting: ports.length > 0 };
+}
+
+/** Reciprocal rank fusion constant (the usual 60: rank 1 and rank 5 differ little). */
+const RRF_K = 60;
+/** A semantic chunk this share of whose words is already in a chosen keyword window adds nothing new. */
+export const MEETING_OVERLAP_CONTAINMENT = 0.7;
+
+const wordsOf = (text: string): Set<string> => new Set(
+  text.toLowerCase().replace(/^[^:\n]{1,40}:\s*/gm, ' ').replace(/[^\p{L}\p{N}]+/gu, ' ').split(' ').filter((w) => w.length > 2),
+);
+
+/**
+ * One ranked list of meeting evidence from the semantic (JIT) and keyword
+ * (live transcript) ports (2026-10-16).
+ *
+ * As two separate ports, combineRetrievalPorts interleaved them by rank and the
+ * packer then re-sorted everything by score, comparing a cosine similarity
+ * with a normalised BM25 score. Measured in the real app on a 3-hour meeting:
+ * weak semantic matches (the meeting's opening lines, a run of earlier
+ * questions) outscored the 2nd and 3rd keyword windows and used up the
+ * evidence budget, so "what's the code name?" lost the window that said it.
+ *
+ * Here the two rankings are fused by reciprocal rank (scales never compared),
+ * a semantic chunk that mostly repeats a keyword window already chosen is
+ * dropped and counts as agreement for that window, and the fused order is
+ * written into finalScore so the packer keeps it.
+ */
+export function fuseMeetingPorts(semantic: RetrievalPort, keyword: RetrievalPort): RetrievalPort {
+  return {
+    probeAnchors: (q) => Boolean(semantic.probeAnchors?.(q) || keyword.probeAnchors?.(q)),
+    probeAnchorSources: (q) => [...new Set([...(semantic.probeAnchorSources?.(q) ?? []), ...(keyword.probeAnchorSources?.(q) ?? [])])],
+    async retrieve(args) {
+      const [sem, kw] = await Promise.all([
+        semantic.retrieve(args).catch((e) => ({ evidence: [], attempts: [{ attempt: 1 as const, strategy: 'meeting_semantic_failure', queries: [], candidateCount: 0, admittedAfterScopeFilter: 0, rejectedByScopeFilter: 0, durationMs: 0, failed: e instanceof Error ? e.message : String(e) }] })),
+        keyword.retrieve(args),
+      ]);
+      type Entry = { item: (typeof kw.evidence)[number]; rrf: number; words: Set<string> };
+      const entries: Entry[] = kw.evidence.map((item, rank) => ({ item, rrf: 1 / (RRF_K + rank + 1), words: wordsOf(item.content) }));
+      sem.evidence.forEach((item, rank) => {
+        const words = wordsOf(item.content);
+        const contribution = 1 / (RRF_K + rank + 1);
+        let best: Entry | null = null; let bestShare = 0;
+        for (const e of entries) {
+          if (e.item.sourceId === item.sourceId) continue;
+          let shared = 0;
+          for (const w of words) if (e.words.has(w)) shared++;
+          const share = words.size ? shared / words.size : 0;
+          if (share > bestShare) { bestShare = share; best = e; }
+        }
+        if (best && bestShare >= MEETING_OVERLAP_CONTAINMENT) best.rrf += contribution;
+        else entries.push({ item, rrf: contribution, words });
+      });
+      entries.sort((a, b) => b.rrf - a.rrf);
+      const top = Math.max(0, ...entries.map((e) => e.item.finalScore));
+      const evidence = entries.map((e, i) => ({ ...e.item, finalScore: Math.max(0, top * (1 - 0.01 * i)) }));
+      return { evidence, attempts: [...sem.attempts, ...kw.attempts] };
+    },
+  };
 }

@@ -29,15 +29,22 @@ export interface SttModelOption {
     description: string;
     /** The model transcribes English only; the Language picker narrows to it. */
     englishOnly?: boolean;
+    /** ISO-639-1 codes the model refuses with HTTP 400 on connect. Measured
+     *  live against wss://api.deepgram.com/v1/listen on 2026-10-16: Nova-3 has
+     *  no Malayalam; Nova-2 has none of the Indian languages but Hindi. */
+    unsupportedLanguages?: readonly string[];
 }
 
 export const STT_MODEL_CATALOG: Record<SttModelProvider, { defaultId: string; models: SttModelOption[] }> = {
     deepgram: {
         defaultId: 'nova-3',
         models: [
-            { id: 'nova-3', label: 'Nova-3', description: 'Most accurate, multilingual' },
+            { id: 'nova-3', label: 'Nova-3', description: 'Most accurate, multilingual', unsupportedLanguages: ['ml'] },
             { id: 'nova-3-medical', label: 'Nova-3 Medical', description: 'Medical vocabulary, English only', englishOnly: true },
-            { id: 'nova-2', label: 'Nova-2', description: 'Previous generation' },
+            {
+                id: 'nova-2', label: 'Nova-2', description: 'Previous generation',
+                unsupportedLanguages: ['mr', 'ta', 'te', 'bn', 'gu', 'kn', 'ml', 'pa', 'ur'],
+            },
             { id: 'nova-2-meeting', label: 'Nova-2 Meeting', description: 'Tuned for meetings, English only', englishOnly: true },
         ],
     },
@@ -66,4 +73,10 @@ export function resolveSttModel(provider: SttModelProvider, id: unknown): string
 
 export function isEnglishOnlySttModel(provider: SttModelProvider, id: string): boolean {
     return !!STT_MODEL_CATALOG[provider].models.find((m) => m.id === id)?.englishOnly;
+}
+
+/** The model answers this ISO-639-1 language with a 400 (see unsupportedLanguages). */
+export function sttModelRejectsLanguage(provider: SttModelProvider, id: string, iso639: string): boolean {
+    const code = String(iso639 || '').split('-')[0].toLowerCase();
+    return !!code && !!STT_MODEL_CATALOG[provider].models.find((m) => m.id === id)?.unsupportedLanguages?.includes(code);
 }

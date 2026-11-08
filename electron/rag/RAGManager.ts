@@ -12,10 +12,12 @@ import { EmbeddingPipeline } from './EmbeddingPipeline';
 import { RAGRetriever } from './RAGRetriever';
 import { LiveRAGIndexer } from './LiveRAGIndexer';
 import { buildRAGPrompt, NO_CONTEXT_FALLBACK, NO_GLOBAL_CONTEXT_FALLBACK } from './prompts';
+import { loadWholeMeetingContext } from './wholeMeetingContext';
 import type { ProviderDataScopePolicy } from '../llm/ProviderRouter';
 import { isSpokenSavedLine } from '../intelligence/savedTranscriptOrigin';
 import { buildSummaryTextForSearch } from './summaryTextForSearch';
 import { CHUNK_BACKFILL_KEYS, SUMMARY_BACKFILL_KEYS, finishBackfillWalk, hasBackfillRearm, takeBackfillRearm } from './backfillRearm';
+import { runObservedMeetingDelete } from '../db/meetingDeleteObservers';
 
 /**
  * A bare `for await` over an LLM stream blocks forever if the provider hangs
@@ -340,6 +342,16 @@ export class RAGManager {
             throw new Error('LLM helper not initialized');
         }
 
+        // A finished meeting that fits goes to the model whole: its notes (which name the
+        // people) and the full transcript, not only the chunks that matched (wholeMeetingContext.ts).
+        if (this.liveIndexer.getActiveMeetingId() !== meetingId) {
+            const whole = loadWholeMeetingContext(this.db, meetingId);
+            if (whole) {
+                yield* this.streamMeetingAnswer(buildRAGPrompt(query, whole, 'meeting', this.retriever.detectIntent(query)), abortSignal);
+                return;
+            }
+        }
+
         // Check if meeting has embeddings (post-meeting RAG)
         const hasEmbeddings = this.vectorStore.hasEmbeddings(meetingId);
 
@@ -365,7 +377,11 @@ export class RAGManager {
 
         // Build prompt with intent hint
         const prompt = buildRAGPrompt(query, context.formattedContext, 'meeting', context.intent);
+        yield* this.streamMeetingAnswer(prompt, abortSignal);
+    }
 
+    private async *streamMeetingAnswer(prompt: string, abortSignal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+        if (!this.llmHelper) throw new Error('LLM helper not initialized');
         // Stream response
         const streamOutcome: { incomplete?: boolean } = {};
         const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true, undefined, streamOutcome);
@@ -386,19 +402,31 @@ export class RAGManager {
         }
     }
 
+    /** Whether queryMeeting reads this meeting whole: finished, short enough, chunked, with a model to ask. No embeddings needed. */
+    canReadWholeMeeting(meetingId: string): boolean {
+        return !!this.llmHelper && this.liveIndexer.getActiveMeetingId() !== meetingId && loadWholeMeetingContext(this.db, meetingId) !== null;
+    }
+
+    /** A finished meeting for a notepad recipe: notes and transcript, the transcript cut at `budget` tokens when longer. */
+    getMeetingRecipeContext(meetingId: string, budget: number): string | null {
+        return loadWholeMeetingContext(this.db, meetingId, budget, 'cut');
+    }
+
     /**
      * Query across all meetings (global search)
      */
     async *queryGlobal(
         query: string,
-        abortSignal?: AbortSignal
+        abortSignal?: AbortSignal,
+        /** Only these meetings (a folder the user is looking at). */
+        scope?: { meetingIds: string[] }
     ): AsyncGenerator<string, void, unknown> {
         if (!this.llmHelper) {
             throw new Error('LLM helper not initialized');
         }
 
-        // Retrieve from all meetings
-        const context = await this.retriever.retrieveGlobal(query);
+        // Retrieve from all meetings, or from the folder's
+        const context = await this.retriever.retrieveGlobal(query, scope ? { meetingIds: scope.meetingIds } : {});
 
         // ALWAYS ANSWER (2026-09-07, owner's direction): an empty global search
         // used to yield NO_GLOBAL_CONTEXT_FALLBACK with no model call — the
@@ -480,6 +508,13 @@ export class RAGManager {
         // Set before the readiness check: a meeting is live whether or not it
         // can be indexed as it goes (see isMeetingLive).
         this._meetingLive = true;
+        // The bundled local model counts as not ready until its first embed, so
+        // a user on it gets no live semantic index, keywords only. Starting it
+        // anyway was measured on 2026-10-15 (3-hour meeting, 15 questions, real
+        // app): it fixed one answer and broke three, because its weak matches
+        // outscore the 2nd and 3rd keyword windows in the packer and use up the
+        // evidence budget, for ~51 MB more memory. Not until the meeting ports
+        // are merged so that cannot happen.
         if (!this.embeddingPipeline.isReady()) {
             console.log('[RAGManager] Embedding pipeline not ready, skipping live indexing');
             return;
@@ -666,7 +701,9 @@ export class RAGManager {
         // 3. Clean up transient meeting row if it was a live session
         try {
             if (meetingId === 'live-meeting-current') {
-                this.db.prepare('DELETE FROM meetings WHERE id = ?').run(meetingId);
+                // Through meetingDeleteObservers like every other meetings delete,
+                // so nothing that follows a meeting out is skipped here.
+                runObservedMeetingDelete({ ids: [meetingId] }, () => this.db.prepare('DELETE FROM meetings WHERE id = ?').run(meetingId), (r) => r.changes > 0);
             }
         } catch (e) {
             console.warn('[RAGManager] Failed to delete transient meeting row', e);

@@ -153,6 +153,25 @@ export function readOllamaRecordTarget(): { model: string; url: string } | null 
   }
 }
 
+/**
+ * The signed-in Codex or Antigravity model that may write the screen record
+ * (LLMHelper.getOAuthRecordReader), or null. Never throws.
+ */
+export function readOAuthRecordReader(): { family: 'codex-cli' | 'antigravity'; model: string } | null {
+  try {
+    const g = globalThis as any;
+    if (typeof g.__nativelyGetLLMHelper !== 'function') return null;
+    const helper = g.__nativelyGetLLMHelper();
+    if (!helper || typeof helper.getOAuthRecordReader !== 'function') return null;
+    const reader = helper.getOAuthRecordReader();
+    return reader && (reader.family === 'codex-cli' || reader.family === 'antigravity') && typeof reader.model === 'string' && reader.model
+      ? { family: reader.family, model: reader.model }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Ask the live helper to resolve it (bounded and cached there). Never throws. */
 export async function resolveOllamaRecordTarget(): Promise<void> {
   try {

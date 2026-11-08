@@ -40,7 +40,8 @@ const CACHE = JSON.stringify({
     { slug: 'gpt-5.4-mini', display_name: 'GPT-5.4-Mini', visibility: 'list', priority: 23 },
     { slug: 'codex-auto-review', display_name: 'Codex Auto Review', visibility: 'hide', priority: 43 },
     { slug: 'gpt-5.6-terra', display_name: 'GPT-5.6-Terra', visibility: 'list', priority: 2 },
-    { slug: 'gpt-5.5', display_name: 'GPT-5.5', visibility: 'list', priority: 7 },
+    { slug: 'gpt-5.6-luna', display_name: 'GPT-5.6-Luna', visibility: 'list', priority: 7 },
+    { slug: 'gpt-5.5', display_name: 'GPT-5.5', visibility: 'list', priority: 5 },
   ],
 });
 
@@ -67,7 +68,7 @@ describe('parseCodexModelsCache', () => {
   test('keeps only models the CLI itself lists, in the CLI\'s priority order', () => {
     assert.deepEqual(parseCodexModelsCache(CACHE).models, [
       { id: 'gpt-5.6-terra', name: 'GPT-5.6-Terra' },
-      { id: 'gpt-5.5', name: 'GPT-5.5' },
+      { id: 'gpt-5.6-luna', name: 'GPT-5.6-Luna' },
     ]);
   });
 
@@ -77,7 +78,10 @@ describe('parseCodexModelsCache', () => {
     const ids = parseCodexModelsCache(CACHE).models.map((m) => m.id);
     assert.ok(!ids.includes('gpt-5.4-mini'));
     assert.ok(isChatGptUnsupportedCodexModel(' GPT-5.4-Mini '));
-    assert.ok(!isChatGptUnsupportedCodexModel('gpt-5.5'));
+    // gpt-5.5 answered on 2026-09-11 and was refused on 2026-10-25.
+    assert.ok(!ids.includes('gpt-5.5'));
+    assert.ok(isChatGptUnsupportedCodexModel('gpt-5.5'));
+    assert.ok(!isChatGptUnsupportedCodexModel('gpt-5.6-luna'));
   });
 
   test('carries fetched_at / client_version so the UI can say how old the list is', () => {
@@ -189,11 +193,19 @@ describe('persisted ChatGPT-incompatible models', () => {
     }
   });
 
+  test('a saved gpt-5.5, the default before 2026-10-25, loads as gpt-5.6-luna', () => {
+    // Every Codex call with it was refused: "The 'gpt-5.5' model is not
+    // supported when using Codex with a ChatGPT account." (live, 2026-10-25).
+    assert.equal(CodexCliService.normalizeConfig({ enabled: true, model: 'gpt-5.5' }).model, 'gpt-5.6-luna');
+    assert.equal(DEFAULT_CODEX_CLI_CONFIG.model, 'gpt-5.6-luna');
+  });
+
   test('a picked codex-cli:<rejected> runs the configured model instead (LLMHelper.getSelectedCodexCliModel)', () => {
-    assert.equal(chatGptCompatibleModel('gpt-5.3-codex-spark', 'gpt-5.5'), 'gpt-5.5');
-    assert.equal(chatGptCompatibleModel('GPT-5.4', 'gpt-5.5'), 'gpt-5.5');
-    assert.equal(chatGptCompatibleModel('', 'gpt-5.5'), 'gpt-5.5');
-    assert.equal(chatGptCompatibleModel(' gpt-5.6-luna ', 'gpt-5.5'), 'gpt-5.6-luna');
+    assert.equal(chatGptCompatibleModel('gpt-5.3-codex-spark', 'gpt-5.6-luna'), 'gpt-5.6-luna');
+    assert.equal(chatGptCompatibleModel('GPT-5.4', 'gpt-5.6-luna'), 'gpt-5.6-luna');
+    assert.equal(chatGptCompatibleModel('gpt-5.5', 'gpt-5.6-luna'), 'gpt-5.6-luna');
+    assert.equal(chatGptCompatibleModel('', 'gpt-5.6-luna'), 'gpt-5.6-luna');
+    assert.equal(chatGptCompatibleModel(' gpt-5.6-terra ', 'gpt-5.6-luna'), 'gpt-5.6-terra');
   });
 
   test('any other persisted model is kept as chosen, listed or not', () => {

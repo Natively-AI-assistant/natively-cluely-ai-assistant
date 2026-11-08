@@ -131,6 +131,8 @@ export interface PerformanceTurnRecord {
   streamIdleMs: number;
   streamIdleSource: DeadlineDecision['source'];
   firstUsefulBudgetMs: number;
+  /** Wait past streamIdleMs that a live transport bought (#680). 0 when none. */
+  heldPastStallMs: number;
 }
 
 export interface PerformanceHooks {
@@ -276,6 +278,7 @@ export function performanceHooks(opts: PerformanceHookOptions): PerformanceHooks
         streamIdleMs: effectiveStallMs,
         streamIdleSource: streamIdle.source,
         firstUsefulBudgetMs: observation.firstUsefulBudgetMs,
+        heldPastStallMs: observation.heldPastStallMs ?? 0,
       });
     } catch { /* diagnostics must never break a turn */ }
   };

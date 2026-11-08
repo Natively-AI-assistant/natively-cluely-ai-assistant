@@ -33,15 +33,24 @@ export const CODEX_MODELS_CACHE_FILE = 'models_cache.json';
  * Models the ChatGPT Codex backend rejects for a ChatGPT account — the only
  * auth Natively has — each with the backend's own answer, "The '<id>' model is
  * not supported when using Codex with a ChatGPT account." spark from a captured
- * CLI error (CodexCliService.test.mjs); the other three from live requests on
+ * CLI error (CodexCliService.test.mjs); the next three from live requests on
  * 2026-09-11 (issue #558). gpt-5.4 / gpt-5.3-codex were the shipped defaults and
  * sit in real settings files, so they are remapped on load, not just hidden.
+ * The last five from live requests on 2026-10-25: gpt-5.5 was the shipped
+ * default until then and sits in real settings files the same way. The same
+ * probe found gpt-6-astra, gpt-6-sol, gpt-6-luna, gpt-6.1-sol and the three
+ * gpt-5.6 models answering.
  */
 export const CHATGPT_UNSUPPORTED_CODEX_MODELS: ReadonlySet<string> = new Set([
   'gpt-5.3-codex-spark',
   'gpt-5.3-codex',
   'gpt-5.4',
   'gpt-5.4-mini',
+  'gpt-5.5',
+  'gpt-5.5-codex',
+  'gpt-6-terra',
+  'gpt-6.1-luna',
+  'gpt-6.1-terra',
 ]);
 
 export function isChatGptUnsupportedCodexModel(modelId: string): boolean {

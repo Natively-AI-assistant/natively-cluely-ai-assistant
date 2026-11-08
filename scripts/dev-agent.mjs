@@ -25,12 +25,12 @@
 import { createServer } from 'node:net';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import electronPath from 'electron';
-import { electronArgs, isReservedPort, killPlan } from './devAgentSupport.mjs';
+import { childExitReport, electronArgs, isLiveDevToolsReply, isReservedPort, killPlan, previousCdpPort } from './devAgentSupport.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const AGENT_DIR = path.join(ROOT, '.agent');
@@ -112,7 +112,33 @@ function shutdown(code = 0) {
 
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => shutdown(0));
 
+/**
+ * Refuse to start over a live instance in this worktree: it would rewrite
+ * agent-browser.json under the other session and share its userData. A stale
+ * file (the app has exited) is fine and is simply overwritten.
+ */
+async function assertNoLiveInstance() {
+  let text = '';
+  try { text = readFileSync(CONFIG, 'utf8'); } catch { return; }
+  const port = previousCdpPort(text);
+  if (!port) return;
+  let status = 0;
+  let body = null;
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(1500) });
+    status = res.status;
+    body = await res.json().catch(() => null);
+  } catch { return; } // nothing listening: the old instance is gone
+  if (isLiveDevToolsReply(status, body)) {
+    throw new Error(
+      `another dev:agent instance is already running in this worktree (CDP ${port}). `
+      + 'Use it, or stop it first with window.electronAPI.quitApp() from its launcher tab.',
+    );
+  }
+}
+
 async function main() {
+  await assertNoLiveInstance();
   const cdpPort = await reservePort();
   const rendererPort = await reservePort();
   const session = sessionId();
@@ -148,7 +174,12 @@ async function main() {
     '--strictPort',
   ], { cwd: ROOT, stdio: 'inherit', shell: false });
   children.push(vite);
-  vite.on('exit', (code) => { if (!shuttingDown) { console.error(`[dev:agent] vite exited (${code})`); shutdown(code ?? 1); } });
+  vite.on('exit', (code, signal) => {
+    if (shuttingDown) return;
+    const r = childExitReport('the renderer dev server', code, signal);
+    console.error(r.message ?? '[dev:agent] the renderer dev server stopped');
+    shutdown(r.exitCode);
+  });
 
   await waitForPort(rendererPort);
 
@@ -168,7 +199,12 @@ async function main() {
   children.push(app);
 
   console.log(`[dev:agent] ready — agent-browser tab`);
-  app.on('exit', (code) => { if (!shuttingDown) shutdown(code ?? 0); });
+  app.on('exit', (code, signal) => {
+    if (shuttingDown) return;
+    const r = childExitReport('the app', code, signal);
+    if (r.message) console.error(r.message);
+    shutdown(r.exitCode);
+  });
 }
 
 main().catch((err) => {

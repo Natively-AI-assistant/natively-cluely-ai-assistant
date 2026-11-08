@@ -23,8 +23,12 @@
  * imports this source file directly, with no build step.
  */
 
-/** Mirrors natively-api lib/plans.js PRO_PLANS. The test pins the two together. */
-export const PRO_CAPABLE_PLANS: ReadonlySet<string> = new Set(['pro', 'max', 'ultra']);
+/**
+ * Mirrors natively-api lib/plans.js PRO_PLANS. The test pins the two together.
+ * The two one-time Pro packs (2026-11-06) unlock Pro until their hours or days
+ * run out; PackMeetingClock reports the hours and re-checks Pro when they end.
+ */
+export const PRO_CAPABLE_PLANS: ReadonlySet<string> = new Set(['pro', 'max', 'ultra', 'pack_light', 'pack_heavy']);
 
 export type ReconcileOutcome =
   | 'not_needed'      // no key, trial sentinel, or Pro already active

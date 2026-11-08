@@ -14,7 +14,7 @@ import { assemblePromptV2 } from "../intelligence/PromptAssemblerV2";
 import { beginTrace, commitTrace } from "../intelligence/IntelligenceTrace";
 import { DOM_CONTEXT_MAX_CHARS } from "../config/constants";
 import { checkAnswerForCodeBugs } from "./CodeSanityCheck";
-import { providerRejectionUserMessage } from "./providerErrorClassifier";
+import { accountOrSetupUserMessage, providerRejectionUserMessage } from "./providerErrorClassifier";
 import { formatAnswerPlanForPrompt, isCodingAnswerType } from "./AnswerPlanner";
 import { resolveCodingPromptSignals, isDeicticAsk, isPromotedScreenCodingTurn, screenPromotedCodingSignals } from "./codingPromptSignals";
 import type { AnswerPlan, AnswerType } from "./AnswerPlanner";
@@ -26,6 +26,7 @@ import type { ModeRetrievalOptions } from "../services/ModeContextRetriever";
 import { isCodeVerificationEnabled } from "./codeVerification/verificationEnabled";
 import type { WhatToAnswerRequestSnapshot } from "./whatToAnswerRequestSnapshot";
 import { withDiagramContract, withDiagramTurnBlock } from "./diagramPromptSignals";
+import { looksCutOff } from "./repairCap";
 
 // Wall-clock budget for the pre-stream mode-context HYBRID retrieval await.
 // The hybrid retriever embeds the live query, and the embedder's own hard
@@ -213,6 +214,8 @@ export class WhatToAnswerLLM {
         const interTokenLatencies: number[] = [];
         let tPrevToken = 0;
         let tFirstToken = 0;
+        // Outside the try so the catch can tell a break-off from a failed start.
+        let yieldedText = '';
 
         try {
             if (MEASURE) tStart = performance.now();
@@ -1235,6 +1238,7 @@ The user triggered this action with a coding problem on screen and NO new questi
                     tPrevToken = now;
                 }
                 tokenCount++;
+                yieldedText += token;
                 streamedBuffer.push(token);
                 yield token;
             }
@@ -1302,19 +1306,35 @@ The user triggered this action with a coding problem on screen and NO new questi
 
         } catch (error: any) {
             console.error("[WhatToAnswerLLM] Stream failed:", error);
+            // The provider broke off partway through the answer already
+            // yielded: what the user has is incomplete (#644). Not when the
+            // abort is the caller's own (a deadline, a cancel, a newer
+            // question), which the caller accounts for itself and which lands
+            // here only after it has moved on; nor when the text reads finished.
+            if (truncationSink && !abortSignal?.aborted && looksCutOff(yieldedText)) {
+                truncationSink.truncated = true;
+                truncationSink.reason = 'provider_failed_after_first_token';
+            }
             // Distinguish a provider/transport failure (expired key, 429 rate
             // limit, billing) from a genuinely empty completion. Masking the
             // former as "Could you repeat that?" made a dead API key look like the
             // app simply didn't hear the question — undiagnosable for users and
             // support. Surface an actionable message for provider failures.
             const msg = String(error?.message ?? error ?? '').toLowerCase();
+            // The trial ended, the plan's limit was reached, or nothing is set
+            // up (2026-11-03): no provider failed, so "check your API keys"
+            // below would name the wrong cause. Checked first: "quota" and
+            // "API key" in these would otherwise match the provider test.
+            const ownLine = accountOrSetupUserMessage(error);
             const isProviderFailure = /\b(401|403|429)\b|api key|unauthor|forbidden|quota|rate.?limit|billing|exhausted|permission/.test(msg);
             // A permanent rejection ("The '<model>' model is not supported when
             // using Codex with a ChatGPT account", issue #543) is not retryable:
             // the engine's regeneration would replay the same refused call and
             // then say "press again". The provider's explanation is the answer.
             const rejection = isProviderFailure ? null : providerRejectionUserMessage(error);
-            if (rejection) {
+            if (ownLine) {
+                yield ownLine;
+            } else if (rejection) {
                 yield rejection;
             } else if (isProviderFailure) {
                 yield "I couldn't reach the AI provider — this looks like an API key or rate-limit issue. Check your API keys / plan in Settings and try again.";

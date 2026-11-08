@@ -21,6 +21,26 @@ export type { NvidiaNimSttModel } from './nvidiaNimSttModels';
 const RECONNECT_BASE_DELAY_MS = 1000;
 const RECONNECT_MAX_DELAY_MS = 30000;
 const RECONNECT_MAX_ATTEMPTS = 10;
+/**
+ * A stream that lived this long before ending cleanly was working (Riva's
+ * idle end), so its end resets the backoff. The counter used to reset only on
+ * transcript data, so ten idle ends across a quiet stretch gave up for good.
+ */
+export const NVIDIA_NIM_HEALTHY_STREAM_MS = 5000;
+
+/**
+ * gRPC statuses that are a verdict on the key or the function, not the
+ * network: 16 UNAUTHENTICATED, 7 PERMISSION_DENIED. Retrying cannot help.
+ */
+const NVIDIA_NIM_TERMINAL_GRPC_CODES = new Set([7, 16]);
+
+/** A stream error as an Error main can act on (terminal for the codes above). */
+export function nvidiaNimStreamError(error: unknown): Error {
+  const err = error instanceof Error ? error : new Error(String((error as any)?.message ?? error ?? 'NVIDIA NIM stream error'));
+  const code = (err as any).code;
+  if (typeof code === 'number' && NVIDIA_NIM_TERMINAL_GRPC_CODES.has(code)) (err as any).terminal = true;
+  return err;
+}
 // Audio buffered while no stream is up. 16 kHz mono 16-bit is ~32 KB/s, so this
 // is ~5s of speech. A gRPC stream that dies mid-meeting used to leave `active`
 // true with no stream and no reconnect, so every subsequent write() appended
@@ -208,7 +228,9 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
     this.dropBuffer();
     if (this.reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
       console.error('[NvidiaNimSTT] Max reconnect attempts reached — giving up');
-      this.emit('error', new Error('NvidiaNimStreamingSTT: max reconnect attempts exceeded'));
+      // terminal: this class never retries again, so main must show "failed"
+      // rather than the "reconnecting" its one earlier error left up.
+      this.emit('error', Object.assign(new Error('NvidiaNimStreamingSTT: max reconnect attempts exceeded'), { terminal: true }));
       return;
     }
     const delay = Math.min(RECONNECT_BASE_DELAY_MS * Math.pow(2, this.reconnectAttempts), RECONNECT_MAX_DELAY_MS);
@@ -222,6 +244,7 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
 
   private connect() {
     const gen = ++this.generation;
+    const startedAt = Date.now();
     try {
       const cfg = NVIDIA_NIM_STT_MODEL_CONFIG[this.model];
       this.stream = this.streamFactory(this.apiKey, cfg.functionId);
@@ -244,11 +267,25 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
       this.stream.on('error', (error: Error) => {
         if (gen !== this.generation) return;
         this.stream = null;
-        if (this.active) { this.emit('error', error); this.scheduleReconnect(); }
+        if (!this.active) return;
+        const err = nvidiaNimStreamError(error);
+        if ((err as any).terminal) {
+          // Bad key or no access to this model: stop here instead of ten
+          // reconnects of "reconnecting". start() re-arms it.
+          console.error(`[NvidiaNimSTT] ${err.message} — not reconnecting`);
+          this.active = false;
+          this.clearReconnectTimer();
+          this.dropBuffer();
+          this.emit('error', err);
+          return;
+        }
+        this.emit('error', err);
+        this.scheduleReconnect();
       });
       this.stream.on('end', () => {
         if (gen !== this.generation) return;
         this.stream = null;
+        if (Date.now() - startedAt >= NVIDIA_NIM_HEALTHY_STREAM_MS) this.reconnectAttempts = 0;
         if (this.active) this.scheduleReconnect();
       });
       // Field names are camelCase because the proto loads with keepCase:false.
@@ -262,7 +299,7 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
     } catch (error) {
       if (gen !== this.generation) return;
       this.stream = null;
-      this.emit('error', error);
+      this.emit('error', nvidiaNimStreamError(error));
       this.scheduleReconnect();
     }
   }

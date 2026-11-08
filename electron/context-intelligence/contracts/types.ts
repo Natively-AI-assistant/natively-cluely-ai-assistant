@@ -262,6 +262,11 @@ export interface RetrievalPlan {
    * profileWhole). The profile port obeys it; absent, it retrieves passages as before.
    */
   wholeProfile?: boolean;
+  /**
+   * The user's own answers (Cue Cards) are handed over as one whole item this
+   * turn, whether or not the résumé is, and the caps above hold their room.
+   */
+  wholeOwnAnswers?: boolean;
 }
 
 // ── The turn decision ───────────────────────────────────────────────────────

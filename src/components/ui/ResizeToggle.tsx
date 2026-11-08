@@ -104,6 +104,12 @@ const ResizeToggle = forwardRef<HTMLButtonElement, ResizeToggleProps>(
           // was silently doing double duty (color AND the only source of
           // width) before this change split them apart.
           ...appearance.shellStyle,
+          // Inline, so no theme can take it away: Lavender gives every
+          // .overlay-resize-toggle-surface `position: relative` (the top
+          // pill's wrapper needs it for its gloss), which beat the `fixed`
+          // class. top/right then nudged the button 4px left of its spot,
+          // and the 36px window cut its left side off.
+          position: 'fixed',
           top: topOffset ?? 12,
           right: rightOffset ?? 12,
           borderWidth: '1px',

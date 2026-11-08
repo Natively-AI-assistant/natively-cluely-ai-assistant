@@ -74,7 +74,8 @@ module.exports = {
       fontFamily: {
         sans: ["Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "Helvetica", "Arial", "sans-serif"],
         celeb: ["CelebMF", "sans-serif"],
-        "celeb-light": ["CelebMFLight", "sans-serif"]
+        "celeb-light": ["CelebMFLight", "sans-serif"],
+        "plex-serif": ['"IBM Plex Serif"', "ui-serif", "Georgia", "Cambria", '"Times New Roman"', "serif"]
       },
       transitionTimingFunction: {
         "apple-ease": "cubic-bezier(0.25, 1, 0.5, 1)",

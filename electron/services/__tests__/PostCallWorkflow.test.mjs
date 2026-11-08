@@ -177,3 +177,43 @@ test('the producer is never invoked while the flag is off', () => {
   assert.equal(/coach_/.test(serialized), false, `a coaching insight id was minted: ${serialized}`);
   assert.equal(/Uncertainty appeared in answers/.test(serialized), false, `coaching copy leaked: ${serialized}`);
 });
+
+// 2026-10-17: the launcher's Loose Ends listed "that information" and "go into
+// the details that matter most to you. Which part would you like to hear first"
+// as the user's tasks. Both came from this fallback.
+test('extractStructuredActionItems: "I" is the user only on the user\'s side', () => {
+  const items = extractStructuredActionItems([
+    { speaker: 'interviewer', text: 'I will send the contract by Monday.', timestamp: 1 },
+    { speaker: 'user', text: 'I will send the security docs by Friday.', timestamp: 2 },
+  ]);
+  const contract = items.find((i) => /contract/.test(i.text));
+  const docs = items.find((i) => /security docs/.test(i.text));
+  assert.equal(contract.owner, undefined, 'the other side\'s "I" is not the user');
+  assert.equal(docs.owner, 'Me');
+});
+
+test('extractStructuredActionItems: "you" is the user only when the other side says it', () => {
+  const items = extractStructuredActionItems([
+    { speaker: 'interviewer', text: 'You will share the pilot plan.', timestamp: 1 },
+    { speaker: 'user', text: 'You should review the draft.', timestamp: 2 },
+  ]);
+  assert.equal(items.find((i) => /pilot plan/.test(i.text)).owner, 'You');
+  assert.equal(items.find((i) => /review the draft/.test(i.text)).owner, undefined);
+});
+
+test('extractStructuredActionItems: offers ("can", "could") are not promises', () => {
+  const items = extractStructuredActionItems([
+    { speaker: 'interviewer', text: 'I can go into the details that matter most to you. Which part would you like to hear first', timestamp: 1 },
+    { speaker: 'user', text: 'I could review it later.', timestamp: 2 },
+  ]);
+  assert.deepEqual(items, []);
+});
+
+test('extractStructuredActionItems: a verb pattern needs the line to start with it, and keeps the verb', () => {
+  const items = extractStructuredActionItems([
+    { speaker: 'interviewer', text: "I'm sorry, but I can't share that information.", timestamp: 1 },
+    { speaker: 'user', text: 'Send me the deck by Friday.', timestamp: 2 },
+  ]);
+  assert.deepEqual(items.map((i) => i.text), ['Send me the deck']);
+  assert.equal(items[0].deadline, 'Friday');
+});
