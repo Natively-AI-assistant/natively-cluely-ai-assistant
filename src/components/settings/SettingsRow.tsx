@@ -368,7 +368,7 @@ export const capPickerLabel = (label: string, max: number = PICKER_LABEL_MAX_CHA
 // Audio's section heading.
 export const SettingsSectionHeading: React.FC<{ title: string; subtitle?: React.ReactNode }> = ({ title, subtitle }) => (
   <>
-    <h3 className="text-lg font-bold text-text-primary mb-1">{title}</h3>
+    <h3 className="settings-heading text-text-primary mb-1">{title}</h3>
     {subtitle ? <p className="text-xs text-text-secondary mb-2">{subtitle}</p> : null}
   </>
 );
@@ -401,7 +401,7 @@ export const SettingsRow: React.FC<{
         </div>
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h4 className={`text-sm font-bold text-text-primary ${truncateTitle ? 'truncate max-w-full' : ''}`}>{title}</h4>
+            <h4 className={`settings-title text-text-primary ${truncateTitle ? 'truncate max-w-full' : ''}`}>{title}</h4>
             {badge}
           </div>
           {description && (

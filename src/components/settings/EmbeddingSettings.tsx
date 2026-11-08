@@ -1570,7 +1570,7 @@ export const EmbeddingSettings: React.FC<EmbeddingSettingsProps> = ({ renderPart
             <div className="aip-card p-5">
                 <div className="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
                     <div className="min-w-0 flex-1">
-                        <label className="block text-sm font-bold mb-0 aip-hero">
+                        <label className="block mb-0 aip-row-title">
                             {t('Active Embedding Model')}
                         </label>
                         <p className="text-xs aip-muted mt-0.5">

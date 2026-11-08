@@ -112,11 +112,11 @@ test("Connectors: built from Settings' own cards and rows, no display serif", ()
     assert.match(pane, /<GroupLabel>\{t\(g\.label\)\}<\/GroupLabel>\s*<Group>\s*\{CONNECTOR_CATALOG\.filter\(\(e\) => e\.group === g\.id\)\.map\(\(e\) => \(\s*<NavRow/);
     assert.match(pane, /value=\{rowStatus\(e\.key\)\}/);
     assert.match(pane, /description=\{t\(e\.description\)\}/);
-    assert.match(parts, /export const NavRow[\s\S]*?<Tile>\{icon\}<\/Tile>[\s\S]*?text-sm font-bold text-text-primary[\s\S]*?<ChevronRight/);
+    assert.match(parts, /export const NavRow[\s\S]*?<Tile>\{icon\}<\/Tile>[\s\S]*?settings-title text-text-primary[\s\S]*?<ChevronRight/);
     // Settings' own material: Audio's card, General's tile, no System Settings group.
     assert.match(parts, /export const Group[\s\S]*?\$\{SETTINGS_CARD\} divide-y divide-border-subtle/);
     assert.match(parts, /export const Tile[\s\S]*?'h-10 w-10'[\s\S]*?rounded-lg border border-border-subtle bg-bg-item-surface/);
-    assert.match(parts, /export const SectionHeading[\s\S]*?text-lg font-bold text-text-primary/);
+    assert.match(parts, /export const SectionHeading[\s\S]*?settings-heading text-text-primary/);
     assert.doesNotMatch(css, /\.cx-group|\.cx-app-icon|\.cx-glyph-icon/);
     assert.match(css, /\.cx-row \{ transition: background-color 150ms ease-out; \}/);
     assert.match(parts, /export const LiveDot[^\n]*rounded-full bg-emerald-500/);

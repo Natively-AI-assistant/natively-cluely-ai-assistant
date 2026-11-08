@@ -39,7 +39,7 @@ export const GroupLabel: React.FC<{ children: React.ReactNode }> = ({ children }
 /** Audio's section heading: bold 18px over one grey line, then the card. */
 export const SectionHeading: React.FC<{ title: React.ReactNode; subtitle?: React.ReactNode }> = ({ title, subtitle }) => (
     <div className="mb-3">
-        <h3 className="text-lg font-bold text-text-primary">{title}</h3>
+        <h3 className="settings-heading text-text-primary">{title}</h3>
         {subtitle ? <p className="mt-1 text-xs text-text-secondary">{subtitle}</p> : null}
     </div>
 );
@@ -63,7 +63,7 @@ export const NavRow: React.FC<{ icon: React.ReactNode; title: React.ReactNode; d
     <button type="button" onClick={onOpen} className={`cx-row ${ROW} w-full text-left first:rounded-t-xl last:rounded-b-xl`}>
         <Tile>{icon}</Tile>
         <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-bold text-text-primary">{title}</span>
+            <span className="block truncate settings-title text-text-primary">{title}</span>
             {value ? (
                 <span className="mt-0.5 flex items-center gap-1.5 text-xs text-text-secondary">
                     <LiveDot />
@@ -212,7 +212,7 @@ export const ActionArea: React.FC<{
                     <div className="flex min-w-[200px] flex-1 items-center gap-4">
                         {page && <Tile>{page.mark}</Tile>}
                         <div className="min-w-0">
-                            <h4 className="flex items-center gap-2 text-sm font-bold text-text-primary">
+                            <h4 className="flex items-center gap-2 settings-title text-text-primary">
                                 {state === 'on' ? <LiveDot /> : state === 'busy' ? <Loader2 size={12} className="shrink-0 animate-spin text-text-secondary" /> : null}
                                 <Presence kind="text" id={titleKey}>{title}</Presence>
                             </h4>

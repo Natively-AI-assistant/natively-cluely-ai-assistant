@@ -18,7 +18,7 @@ export const ConnectorsProCard: React.FC<{ className?: string }> = ({ className 
         <div className={`${SETTINGS_CARD} ${className} flex items-center gap-4 px-4 py-3`} data-connectors-pro-card>
             <Tile><Lock size={18} className="text-text-secondary" /></Tile>
             <span className="min-w-0 flex-1">
-                <span className="block text-sm font-bold text-text-primary">{t('Connectors are part of Natively Pro')}</span>
+                <span className="block settings-title text-text-primary">{t('Connectors are part of Natively Pro')}</span>
                 <span className="mt-0.5 block text-xs text-text-secondary">
                     {t('Upgrade to connect your tools and send notes to them. Anything already connected is kept, and nothing is sent until then.')}
                 </span>

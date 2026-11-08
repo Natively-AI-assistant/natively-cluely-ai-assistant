@@ -216,7 +216,7 @@ const IconRow: React.FC<{
       <div className="flex items-center gap-4 min-w-0 flex-1">
         <div className={`${TILE} text-text-primary`}>{icon}</div>
         <div className="min-w-0">
-          <h4 className="text-sm font-bold text-text-primary">{title}</h4>
+          <h4 className="settings-title text-text-primary">{title}</h4>
           <div className="text-xs text-text-secondary mt-0.5">{description}</div>
         </div>
       </div>
@@ -238,7 +238,7 @@ const StepRow: React.FC<{ n: number; title: string; body: string }> = ({ n, titl
         {n}
       </span>
       <div className="min-w-0">
-        <h4 className="text-sm font-bold text-text-primary">{title}</h4>
+        <h4 className="settings-title text-text-primary">{title}</h4>
         <div className="text-xs text-text-secondary mt-0.5">{body}</div>
       </div>
     </div>

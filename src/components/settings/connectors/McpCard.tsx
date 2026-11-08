@@ -275,7 +275,7 @@ export const McpCard: React.FC<{ mcp: McpServerStatus; onStatus: (s: McpServerSt
                 </span>
             </div>
 
-            <h4 className="text-base font-bold text-text-primary">{t('Bring your meeting notes to your AI tools')}</h4>
+            <h4 className="settings-title text-base text-text-primary">{t('Bring your meeting notes to your AI tools')}</h4>
             <p className="mt-0.5 text-xs text-text-secondary">{t('AI apps on this computer can read and search your meetings. Nothing leaves it.')}</p>
 
             <div className="mt-5">

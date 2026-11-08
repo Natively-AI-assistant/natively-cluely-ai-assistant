@@ -147,7 +147,7 @@ const CommunityActionRow: React.FC<{
     <div className="border-x border-transparent">
         <div className="flex items-center justify-between gap-4 px-4 py-3">
             <div className="min-w-0 flex-1">
-                <h4 className="text-sm font-bold text-text-primary">{title}</h4>
+                <h4 className="settings-title text-text-primary">{title}</h4>
                 <div className="text-xs text-text-secondary mt-0.5">{body}</div>
             </div>
             <div className="shrink-0 flex items-center gap-2">{control}</div>

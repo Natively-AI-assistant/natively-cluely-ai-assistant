@@ -558,7 +558,7 @@ export const SkillsSettings: React.FC = () => {
                         <div className={`${SETTINGS_CARD} p-4 space-y-3`}>
                             <div className="min-w-0">
                                 <div className="flex items-center gap-2 min-w-0">
-                                    <h4 className="text-sm font-bold text-text-primary truncate">{preview.preview.name}</h4>
+                                    <h4 className="settings-title text-text-primary truncate">{preview.preview.name}</h4>
                                     <span className="text-[11px] font-mono text-text-tertiary shrink-0">/{preview.preview.id}</span>
                                 </div>
                                 {preview.preview.description && (

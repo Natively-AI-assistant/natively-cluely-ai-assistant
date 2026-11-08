@@ -59,7 +59,7 @@ export const AutoSendSection: React.FC<{
                         {mine.map((r) => (
                             <div key={r.id} className="flex items-center gap-4 px-4 py-3">
                                 <div className="min-w-0 flex-1">
-                                    <div className="truncate text-sm font-bold text-text-primary">
+                                    <div className="truncate settings-title text-text-primary">
                                         {folderName(folders, r.folderId, all)}
                                         {destinations.length > 1 ? <span className="text-text-secondary"> {t('to')} {labelOf(r)}</span> : null}
                                     </div>
@@ -77,7 +77,7 @@ export const AutoSendSection: React.FC<{
             )}
             {connected ? (
                 <div className="flex flex-wrap items-center gap-2 px-4 py-3">
-                    <span className="mr-auto text-sm font-bold text-text-primary">{t('Add a rule')}</span>
+                    <span className="mr-auto settings-title text-text-primary">{t('Add a rule')}</span>
                     <div className="w-44"><FolderSelect folders={folders} value={folderId} onChange={setFolderId} /></div>
                     {destinations.length > 1 && (
                         <div className="w-44">

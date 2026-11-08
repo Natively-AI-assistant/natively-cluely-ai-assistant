@@ -506,7 +506,7 @@ const PairingCountdown: React.FC<{ deadline: number; total: number; onExpired: (
     >
       <PairingCountdownRing seconds={remaining} deadline={deadline} total={total} textInk={textInk} />
       <div className="min-w-0">
-        <p className="text-sm font-bold text-text-primary">{t('Waiting for extension')}</p>
+        <p className="settings-title text-text-primary">{t('Waiting for extension')}</p>
         <p className="text-xs text-text-secondary mt-0.5">
           {t('Click')}{' '}
           <span className="font-medium" style={{ color: textInk }}>
@@ -522,7 +522,7 @@ const PairingCountdown: React.FC<{ deadline: number; total: number; onExpired: (
 // Audio's section heading.
 const SectionHeading: React.FC<{ title: string; subtitle: string }> = ({ title, subtitle }) => (
   <>
-    <h3 className="text-lg font-bold text-text-primary mb-1">{title}</h3>
+    <h3 className="settings-heading text-text-primary mb-1">{title}</h3>
     <p className="text-xs text-text-secondary mb-2">{subtitle}</p>
   </>
 );
@@ -558,7 +558,7 @@ const CompanionRow: React.FC<{
         </div>
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h4 className="text-sm font-bold text-text-primary">{title}</h4>
+            <h4 className="settings-title text-text-primary">{title}</h4>
             <Presence kind={badge?.quiet ? 'control' : 'badge'} id={badge?.key ?? null} className="inline-flex">
               {badge?.node}
             </Presence>

@@ -1419,7 +1419,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
             <div className="aip-card p-5">
                 <div className="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
                     <div className="min-w-0 flex-1">
-                        <label className="block text-sm font-bold mb-0 aip-hero">
+                        <label className="block mb-0 aip-row-title">
                             {t('Active Reranker Model')}
                         </label>
                         <p className="text-xs aip-muted mt-0.5">
@@ -1467,7 +1467,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
             <div className="aip-card p-5">
                 <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1 space-y-1">
-                        <span className="block text-sm font-bold aip-hero">
+                        <span className="block aip-row-title">
                             {t('Fall back to the local reranker')}
                         </span>
                         {/* One line (404px of 472 in the 574px column). The switch
@@ -2363,7 +2363,7 @@ export const RerankerSettings: React.FC<RerankerSettingsProps> = ({ renderParts 
             <div className="aip-card p-5 space-y-3">
                 <div className="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
                     <div>
-                        <label className="block text-sm font-bold aip-hero">
+                        <label className="block aip-row-title">
                             {t('Candidates to rerank')}
                         </label>
                         <p className="text-xs aip-muted mt-0.5">

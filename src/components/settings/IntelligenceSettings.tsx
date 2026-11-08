@@ -1033,7 +1033,7 @@ export const IntelligenceSettings: React.FC = () => {
 
                   <div className="flex items-center justify-between gap-4">
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-text-primary">{t('Start memory server automatically at launch')}</p>
+                      <p className="settings-title text-text-primary">{t('Start memory server automatically at launch')}</p>
                       <p className="text-xs text-text-secondary mt-0.5">
                         {t('Starts the companion with Natively and passes it your AI provider key.')}
                       </p>

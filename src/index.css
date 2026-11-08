@@ -36,13 +36,54 @@
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
+/* Inter (SIL OFL 1.1, src/font/Inter-4.1/LICENSE.txt): Inter's variable
+   file (wght 100–900, opsz 14–32, optical size on auto), drawn to sit beside
+   SF Pro / Segoe UI, for Settings card titles. Registered under its own name so
+   it never changes the app's body font. Bundled, not linked: the packaged app
+   must render it offline. Scripts the face lacks (CJK, Arabic, Hindi…) fall
+   back through --font-title. */
+@font-face {
+  font-family: 'Natively Title';
+  src: url('./font/Inter-4.1/web/InterVariable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* Settings title roles (2026-11-09, owner pick: Inter Semibold 600 from a
+   5-font × 3-weight comparison). Every Settings tab's row/card titles and
+   section headings use these, so one change restyles them all. In the
+   components layer so a utility on the same element (a size, a colour) still
+   wins. Stylesheet-scoped equivalents: .aip-row-title / .aip-title
+   (AIProvidersSettings), .cp-card-label / .cp-label (CalendarSettings.css).
+   Settings only: Profile Intelligence and other launcher panels keep the
+   system font. */
+@layer components {
+  .settings-title {
+    font-family: var(--font-title);
+    font-size: 15px;
+    line-height: 1.3;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+  }
+  .settings-heading {
+    font-family: var(--font-title);
+    font-size: 18px;
+    line-height: 28px;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+}
+
 :root {
   /* System Fonts - SF Pro */
   --font-system: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  /* Settings card titles: Inter (bundled), then the system stack for scripts it lacks. */
+  --font-title: "Natively Title", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 
   /* ─── PERIWINKLE PALETTE — single canonical source of truth ──────────────
      The 10-step scale, defined ONCE here at :root so it's available to any

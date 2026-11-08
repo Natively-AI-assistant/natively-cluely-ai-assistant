@@ -2501,7 +2501,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                 <div className="space-y-6 animated fadeIn">
                                     <div className="space-y-3.5">
                                         <div data-settings-stagger>
-                                            <h3 className="text-lg font-bold text-text-primary mb-1">{t('General settings')}</h3>
+                                            <h3 className="settings-heading text-text-primary mb-1">{t('General settings')}</h3>
                                             <p className="text-xs text-text-secondary mb-2">{t('Customize how Natively works for you')}</p>
 
                                             <div className="rounded-xl border bg-transparent border-transparent divide-y divide-border-subtle/20">
@@ -2534,7 +2534,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             </Presence>
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">
+                                                            <h3 className="settings-title text-text-primary">
                                                                 <Presence kind="text" id={isUndetectable ? 'undetectable' : 'detectable'}>
                                                                     {isUndetectable ? t('Undetectable') : t('Detectable')}
                                                                 </Presence>
@@ -2569,7 +2569,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <Power size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{t('Open Natively when you log in')}</h3>
+                                                            <h3 className="settings-title text-text-primary">{t('Open Natively when you log in')}</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">{t('Natively will open automatically when you log in to your computer')}</p>
                                                         </div>
                                                     </div>
@@ -2596,7 +2596,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <Keyboard size={20} />
                                                             </div>
                                                             <div>
-                                                                <h3 className="text-sm font-bold text-text-primary">{t('Protect Natively shortcuts')}</h3>
+                                                                <h3 className="settings-title text-text-primary">{t('Protect Natively shortcuts')}</h3>
                                                                 <p className="text-xs text-text-secondary mt-0.5">{t('Keeps shortcuts from typing into the app below. Turn off if antivirus flags it.')}</p>
                                                             </div>
                                                         </div>
@@ -2631,7 +2631,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         </div>
                                                         <div>
                                                             <div className="flex items-center gap-2">
-                                                                <h3 className="text-sm font-bold text-text-primary">{t('Auto Answer')}</h3>
+                                                                <h3 className="settings-title text-text-primary">{t('Auto Answer')}</h3>
                                                                 {/* The same Liquid Glass tag as Direct Assist's, so the two
                                                                     Beta features read as one decision rather than two. It
                                                                     replaces a bespoke solid-yellow span whose --badge-beta-*
@@ -2671,7 +2671,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <MicOff size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{t('Ambient AI Chat')}</h3>
+                                                            <h3 className="settings-title text-text-primary">{t('Ambient AI Chat')}</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">{t('Meetings start without capturing mic or system audio')}</p>
                                                         </div>
                                                     </div>
@@ -2694,7 +2694,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <Palette size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{t('Theme')}</h3>
+                                                            <h3 className="settings-title text-text-primary">{t('Theme')}</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">{t('Customize how Natively looks on your device')}</p>
                                                         </div>
                                                     </div>
@@ -2756,7 +2756,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <Globe size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{t('Language')}</h3>
+                                                            <h3 className="settings-title text-text-primary">{t('Language')}</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">{t('Interface language for Natively')}</p>
                                                         </div>
                                                     </div>
@@ -2822,7 +2822,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <BadgeCheck size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{t('Version')}</h3>
+                                                            <h3 className="settings-title text-text-primary">{t('Version')}</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">
                                                                 {t('You are currently using Natively version')} {packageJson.version}
                                                             </p>
@@ -2899,7 +2899,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <Shield size={20} />
                                                             </div>
                                                             <div className="flex-1">
-                                                                <h3 className="text-sm font-bold text-text-primary">{t('Do not save meetings')}</h3>
+                                                                <h3 className="settings-title text-text-primary">{t('Do not save meetings')}</h3>
                                                                 <p className="text-xs text-text-secondary mt-0.5 leading-normal">{t('Nothing is saved after the meeting ends')}</p>
                                                             </div>
                                                         </div>
@@ -2922,7 +2922,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <PointerOff size={20} />
                                                             </div>
                                                             <div>
-                                                                <h3 className="text-sm font-bold text-text-primary">{t('Mouse Passthrough')}</h3>
+                                                                <h3 className="settings-title text-text-primary">{t('Mouse Passthrough')}</h3>
                                                                 <p className="text-xs text-text-secondary mt-0.5">
                                                                     {t('Pass all mouse clicks through to the app beneath.')}
                                                                 </p>
@@ -2947,7 +2947,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <PanelBottomClose size={20} />
                                                             </div>
                                                             <div>
-                                                                <h3 className="text-sm font-bold text-text-primary">{t('Genie animation')}</h3>
+                                                                <h3 className="settings-title text-text-primary">{t('Genie animation')}</h3>
                                                                 <p className="text-xs text-text-secondary mt-0.5">
                                                                     {t('Popups pour in and out. Turn off for a simple fade and lower memory use.')}
                                                                 </p>
@@ -2968,7 +2968,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <Maximize2 size={20} />
                                                             </div>
                                                             <div>
-                                                                <h3 className="text-sm font-bold text-text-primary">{t('Keep overlay size')}</h3>
+                                                                <h3 className="settings-title text-text-primary">{t('Keep overlay size')}</h3>
                                                                 <p className="text-xs text-text-secondary mt-0.5">
                                                                     {t('The overlay stays as wide and tall as it got or you set it. Turn off to shrink it back after each answer.')}
                                                                 </p>
@@ -2989,7 +2989,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <Code2 size={20} />
                                                             </div>
                                                             <div>
-                                                                <h3 className="text-sm font-bold text-text-primary">{t('Verify coding answers')}</h3>
+                                                                <h3 className="settings-title text-text-primary">{t('Verify coding answers')}</h3>
                                                                 <p className="text-xs text-text-secondary mt-0.5">{t('Run generated code against test cases and self-correct')}</p>
                                                             </div>
                                                         </div>
@@ -3015,7 +3015,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <MessageSquare size={20} />
                                                             </div>
                                                             <div>
-                                                                <h3 className="text-sm font-bold text-text-primary">{t('Interviewer Transcript')}</h3>
+                                                                <h3 className="settings-title text-text-primary">{t('Interviewer Transcript')}</h3>
                                                                 <p className="text-xs text-text-secondary mt-0.5">{t('Show real-time transcription of the interviewer')}</p>
                                                             </div>
                                                         </div>
@@ -3039,7 +3039,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <Activity size={20} />
                                                             </div>
                                                             <div>
-                                                                <h3 className="text-sm font-bold text-text-primary">{t('Usage statistics')}</h3>
+                                                                <h3 className="settings-title text-text-primary">{t('Usage statistics')}</h3>
                                                                 <p className="text-xs text-text-secondary mt-0.5">
                                                                     {t('Sends which features are used and how often. Never what you say, see or type.')}
                                                                 </p>
@@ -3070,7 +3070,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <Terminal size={20} />
                                                             </div>
                                                             <div>
-                                                                <h3 className="text-sm font-bold text-text-primary">{t('Debug logging')}</h3>
+                                                                <h3 className="settings-title text-text-primary">{t('Debug logging')}</h3>
                                                                 <p className="text-xs text-text-secondary mt-0.5">
                                                                     {t('Logs audio, STT, routing, questions and answers. API keys removed.')}
                                                                 </p>
@@ -3137,7 +3137,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <Download size={20} />
                                                             </div>
                                                             <div>
-                                                                <h3 className="text-sm font-bold text-text-primary">{t('Export debug logs')}</h3>
+                                                                <h3 className="settings-title text-text-primary">{t('Export debug logs')}</h3>
                                                                 <p className="text-xs text-text-secondary mt-0.5">
                                                                     <Presence kind="text" id={exportResult ?? 'idle'}>
                                                                         {exportResult ?? t('Collect this session\u2019s logs into one folder to share')}
@@ -3184,7 +3184,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                     <div className={`${isLight ? 'bg-bg-card' : 'bg-bg-item-surface'} rounded-xl p-5 border border-border-subtle`}>
                                         <div className="flex flex-col gap-1 mb-3">
                                             <div className="flex items-center gap-2">
-                                                <h3 className="text-lg font-bold text-text-primary">{t('Process Disguise')}</h3>
+                                                <h3 className="settings-heading text-text-primary">{t('Process Disguise')}</h3>
                                             </div>
                                             <p className="text-xs text-text-secondary">
                                                 {t('Disguise Natively as another application to prevent detection during screen sharing.')}
@@ -3278,7 +3278,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                 <div className="space-y-5 animated fadeIn select-text pb-4">
                                     <div className="flex items-start justify-between">
                                         <div>
-                                            <h3 className="text-lg font-bold text-text-primary mb-1">{t('Keyboard shortcuts')}</h3>
+                                            <h3 className="settings-heading text-text-primary mb-1">{t('Keyboard shortcuts')}</h3>
                                             <p className="text-xs text-text-secondary">{t('Natively works with these easy to remember commands.')}</p>
                                         </div>
                                         <button
@@ -3295,7 +3295,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         --border-subtle is transparent. */}
                                     <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-xl border border-border-subtle bg-bg-card">
                                         <div>
-                                            <h4 className="text-sm font-bold text-text-primary">{t('Global shortcuts')}</h4>
+                                            <h4 className="settings-title text-text-primary">{t('Global shortcuts')}</h4>
                                             <p className="text-xs text-text-secondary mt-0.5">
                                                 <DescriptionSwap id={globalShortcutsEnabled ? 'global' : 'focused'}>
                                                     {globalShortcutsEnabled
@@ -3328,7 +3328,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                     <div className="grid gap-6" data-settings-stagger>
                                         {/* General Category */}
                                         <div>
-                                            <h4 className="text-sm font-bold text-text-primary mb-3">{t('General')}</h4>
+                                            <h4 className="settings-title text-text-primary mb-3">{t('General')}</h4>
                                             <div className="space-y-1">
                                                 <div className="flex items-center justify-between py-1.5 group">
                                                     <div className="flex items-center gap-3">
@@ -3454,7 +3454,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         {/* Chat Category */}
                                         <div>
                                             <div className="mb-3">
-                                                <h4 className="text-sm font-bold text-text-primary">{t('Chat')}</h4>
+                                                <h4 className="settings-title text-text-primary">{t('Chat')}</h4>
                                             </div>
                                             <div className="space-y-1">
                                                 {[
@@ -3491,7 +3491,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
                                         {/* Window Category */}
                                         <div>
-                                            <h4 className="text-sm font-bold text-text-primary mb-3">{t('Window')}</h4>
+                                            <h4 className="settings-title text-text-primary mb-3">{t('Window')}</h4>
                                             <div className="space-y-1">
                                                 {[
                                                     { id: 'moveWindowUp', label: 'Move Window Up', icon: <ArrowUp size={14} /> },
@@ -3523,7 +3523,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                 <div className="space-y-6 animated fadeIn" data-settings-stagger>
                                     {/* ── Speech Provider Section ── */}
                                     <div>
-                                        <h3 className="text-lg font-bold text-text-primary mb-1">{t('Speech Provider')}</h3>
+                                        <h3 className="settings-heading text-text-primary mb-1">{t('Speech Provider')}</h3>
                                         <p className="text-xs text-text-secondary mb-4">{t('Choose the engine that transcribes audio to text.')}</p>
 
                                         <div className="space-y-4">
@@ -4229,7 +4229,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             and Check use): the selects' bg-input vanishes on this background. */}
                                         <div className="flex items-start justify-between gap-4 mb-4">
                                             <div>
-                                                <h3 className="text-lg font-bold text-text-primary mb-1">{t('Audio Configuration')}</h3>
+                                                <h3 className="settings-heading text-text-primary mb-1">{t('Audio Configuration')}</h3>
                                                 <p className="text-xs text-text-secondary">{t('Manage input and output devices.')}</p>
                                             </div>
                                             <button
@@ -4405,7 +4405,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <MicOff size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{t("Follow the meeting app's mute")}</h3>
+                                                            <h3 className="settings-title text-text-primary">{t("Follow the meeting app's mute")}</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">{t("While you're muted in Zoom, Teams or Meet, Natively doesn't transcribe your microphone.")}</p>
                                                         </div>
                                                     </div>
@@ -4435,7 +4435,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             <Mic size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{t('Dictation')}</h3>
+                                                            <h3 className="settings-title text-text-primary">{t('Dictation')}</h3>
                                                             <p className="text-xs text-text-secondary mt-0.5">
                                                                 {t('Press {keys}, speak, then press it again. Natively tidies what you said and copies it, ready to paste with {paste}. Not during a meeting.')
                                                                     .replace('{keys}', (shortcuts.dictation ?? []).join(isMac ? '' : '+') || t('the dictation shortcut'))

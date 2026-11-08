@@ -306,7 +306,7 @@ const NotionParentPicker: React.FC<{ current?: { title: string; type: string }; 
             <div className="flex items-center gap-4">
                 <Tile><ConnectorMark id="notion" size={20} /></Tile>
                 <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-bold text-text-primary">{current ? current.title : t('Nothing picked yet')}</span>
+                    <span className="block truncate settings-title text-text-primary">{current ? current.title : t('Nothing picked yet')}</span>
                     <span className="mt-0.5 block text-xs text-text-secondary">
                         {current ? (current.type === 'database' ? t('Database') : t('Page')) : t('Pick where new pages go.')}
                     </span>
@@ -471,7 +471,7 @@ const SlackPanel: React.FC<{ webhooks: ConnectionsStatus['slack']['webhooks']; b
                         {webhooks.map((w) => (
                             <div key={w.id} className={ROW}>
                                 <Tile><ConnectorMark id="slack" size={20} /></Tile>
-                                <span className="min-w-0 flex-1 truncate text-sm font-bold text-text-primary">{w.label}</span>
+                                <span className="min-w-0 flex-1 truncate settings-title text-text-primary">{w.label}</span>
                                 <GlassPill onClick={() => void test(w.id)} disabled={!!busy} icon={<BusyIcon busy={busy === w.id} icon={<RefreshCw size={14} />} />}>
                                     {t('Test')}
                                 </GlassPill>

@@ -43,7 +43,7 @@ const EndpointRow: React.FC<{ endpoint: WebhookEndpointInfo; folders: FolderOpti
         <div className="px-4 py-3">
             <div className="flex items-center gap-4">
                 <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-bold text-text-primary">{endpoint.label || endpoint.urlHost}</div>
+                    <div className="truncate settings-title text-text-primary">{endpoint.label || endpoint.urlHost}</div>
                     <div className="truncate text-xs text-text-secondary">
                         {endpoint.urlHost} · {folderName(folders, endpoint.folderId, t('All meetings'))}{endpoint.kind === 'webhook' ? ` · ${events}` : ''}
                     </div>
