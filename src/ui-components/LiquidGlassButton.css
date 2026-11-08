@@ -883,7 +883,7 @@
 */
 .lg-slider {
     --lg-knob: 18px;
-    --lg-knob-bg: var(--accent-primary, #95aff6);
+    --lg-knob-bg: var(--accent-primary, #c4b3fb);
 }
 
 .lg-slider::-webkit-slider-thumb {
@@ -1019,7 +1019,7 @@
         linear-gradient(180deg,
             rgba(255, 255, 255, .090) 0, rgba(255, 255, 255, 0) 8px,
             rgba(255, 255, 255, 0) calc(100% - 8px), rgba(255, 255, 255, .090) 100%),
-        var(--bubble-user-bg, #6688f5);
+        var(--bubble-user-bg, #7c5cff);
 }
 
 /* The original ::before: the rings, aimed by two masks — vertical keeps the
@@ -1083,11 +1083,11 @@
 
 /* The original's high-contrast move: the rim — the thing the material is built
    on — gives way to a defined border, and the body darkens, holding the
-   toggle's hue, to where white text clears AA (#2C5BF1, 5.42:1). */
+   toggle's hue, to where white text clears AA (#5B3FD0, 6.85:1). */
 @media (prefers-contrast: more) {
     .lg-bubble,
     [data-theme='light'] .lg-bubble {
-        background: #2c5bf1;
+        background: #5b3fd0;
         box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .92);
     }
     .lg-bubble::before,

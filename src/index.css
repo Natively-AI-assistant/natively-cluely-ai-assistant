@@ -53,7 +53,14 @@
      values via var()/color-mix() rather than duplicating hex. If the hue
      ever needs adjusting, this is the only place to change it.
      --------------------------------------------------------------------- */
-  /* TOGGLE BLUE (2026-09), replacing the blue-violet periwinkle (H≈296) of
+  /* LAVENDER (2026-11-09), by owner request: the accent is the Lavender
+     overlay's violet scale (overlayLavenderTheme.css --lavender-50…900),
+     step for step, so -300 #C4B3FB is the dark-mode accent, the dark hover
+     is -200 #DED4FD, -500 #7C5CFF is --toggle-on, and -600 #6D4AE8 is the
+     light-mode accent (4.95:1 on --bg-main #F2F2F7; white on it 5.53:1).
+     The name is kept again, as in 2026-09 below.
+
+     TOGGLE BLUE (2026-09), replacing the blue-violet periwinkle (H≈296) of
      2026-08, which itself replaced Soft Orchid (2026-07). By owner request the
      whole accent now takes the hue of the Settings toggle's ON colour,
      --toggle-on #6688F5 (H≈268.5, between Tailwind blue and indigo).
@@ -75,16 +82,16 @@
      ONE HAND NUDGE: -600 came out #4A68D4, which as accent text on the real
      light canvas (--bg-main #F2F2F7) is 4.46:1, a hair under AA. It is taken
      0.003 darker in OKLCH lightness to #4967D3 (4.52:1; white on it 5.04:1). */
-  --periwinkle-50:  #F6F8FF;
-  --periwinkle-100: #E6EDFF;
-  --periwinkle-200: #CCDAFF;
-  --periwinkle-300: #95AFF6; /* dark-mode accent (light bg, needs dark foreground) */
-  --periwinkle-400: #7F9FFE;
-  --periwinkle-500: #6688F5; /* = --toggle-on, the anchor */
-  --periwinkle-600: #4967D3; /* light-mode accent (contrast-corrected — see PeriwinkleContrastGuard.test.mjs) */
-  --periwinkle-700: #3951A6;
-  --periwinkle-800: #293C7A;
-  --periwinkle-900: #1B2852;
+  --periwinkle-50:  #F7F4FF;
+  --periwinkle-100: #EFEAFE;
+  --periwinkle-200: #DED4FD; /* dark-mode hover */
+  --periwinkle-300: #C4B3FB; /* dark-mode accent (light bg, needs dark foreground) */
+  --periwinkle-400: #9C6FF3;
+  --periwinkle-500: #7C5CFF; /* = --toggle-on, the anchor */
+  --periwinkle-600: #6D4AE8; /* light-mode accent (see PeriwinkleContrastGuard.test.mjs) */
+  --periwinkle-700: #5B3FD0;
+  --periwinkle-800: #3F2593;
+  --periwinkle-900: #261A57;
   --periwinkle-on-accent-dark: #14102A;  /* foreground for solid periwinkle-300 fills */
   --periwinkle-on-accent-light: #FFFFFF; /* foreground for solid periwinkle-600 fills */
 
@@ -226,7 +233,7 @@
 
   /* Primary Action Button Defaults (Dark) — promoted to the accent (Phase 2) */
   --btn-primary-bg: var(--periwinkle-300);
-  --btn-primary-hover: #B9CCFC; /* not a canonical scale step — dedicated lighter dark-mode hover tint (the old #E4BCEF re-hued to 268.5°) */
+  --btn-primary-hover: #DED4FD; /* not a canonical scale step — dedicated lighter dark-mode hover tint (the old #E4BCEF re-hued to 268.5°) */
   --btn-primary-disabled-bg: color-mix(in srgb, var(--periwinkle-300) 12%, transparent);
   --btn-primary-disabled-border: color-mix(in srgb, var(--periwinkle-300) 20%, transparent);
   --btn-primary-disabled-text: color-mix(in srgb, var(--periwinkle-300) 45%, transparent);
@@ -237,7 +244,7 @@
      ="periwinkle"] scoped block below, which is now a redundant no-op override
      kept only so a future Settings-specific divergence has somewhere to go. */
   --accent-subtle: color-mix(in srgb, var(--periwinkle-300) 10%, transparent);
-  --accent-hover: #B9CCFC;
+  --accent-hover: #DED4FD;
   --accent-pressed: var(--periwinkle-400);
   --accent-strong: var(--periwinkle-500);
   --accent-border: color-mix(in srgb, var(--periwinkle-300) 28%, transparent);
@@ -270,7 +277,7 @@
    data-settings-theme so the rest of the app keeps the blue brand accent. */
 [data-settings-theme="periwinkle"] {
   --accent-primary: var(--periwinkle-300);
-  --accent-hover: #B9CCFC; /* not a canonical scale step — a dedicated lighter dark-mode hover tint */
+  --accent-hover: #DED4FD; /* not a canonical scale step — a dedicated lighter dark-mode hover tint */
   --accent-pressed: var(--periwinkle-400);
   --accent-strong: var(--periwinkle-500);
   --accent-subtle: color-mix(in srgb, var(--periwinkle-300) 10%, transparent);
@@ -282,7 +289,7 @@
   --on-accent-surface: color-mix(in srgb, var(--periwinkle-on-accent-dark) 12%, transparent);
 
   --btn-primary-bg: var(--periwinkle-300);
-  --btn-primary-hover: #B9CCFC; /* not a canonical scale step — a dedicated lighter dark-mode hover tint */
+  --btn-primary-hover: #DED4FD; /* not a canonical scale step — a dedicated lighter dark-mode hover tint */
   --btn-primary-disabled-bg: color-mix(in srgb, var(--periwinkle-300) 12%, transparent);
   --btn-primary-disabled-border: color-mix(in srgb, var(--periwinkle-300) 20%, transparent);
   --btn-primary-disabled-text: color-mix(in srgb, var(--periwinkle-300) 45%, transparent);
@@ -9560,9 +9567,15 @@ html[data-platform="linux"][data-window="launcher"] body {
        repaints that bubble too. The one exception is inside the Lavender
        overlay's own panel, which takes its violet (overlayLavenderTheme.css). */
     --toggle-off: #474949;
-    --toggle-on: #6688F5;
-    --toggle-thumb: #e1ebfe;
-    --toggle-focus-ring: rgba(102, 136, 245, 0.22);
+    --toggle-on: #7C5CFF;
+    /* The switches' ON track only (2026-11-09, owner request): the pale
+       periwinkle #6F7CF0, picked by the owner from a side-by-side (tried #D8CFF2, #C4B3FB, #B091F7, #9C6FF3, #7673EE). Everything
+       else that reads --toggle-on (Usage bubble, meters, toggle-blue inks)
+       keeps the stronger #7C5CFF. The ON knob goes white with a lift shadow
+       in both themes so it stays visible on this light track. */
+    --toggle-on-track: #6F7CF0;
+    --toggle-thumb: #EFEAFE;
+    --toggle-focus-ring: rgba(124, 92, 255, 0.22);
 }
 /* Light theme only (2026-10-24): the near-black #474949 off track read as a
    heavy dark pill on the white plaques, louder than the ON switches beside
@@ -9599,7 +9612,7 @@ html[data-platform="linux"][data-window="launcher"] body {
         filter 150ms ease-out;
 }
 .t-toggle:disabled { cursor: not-allowed; opacity: 0.5; }
-.t-toggle[data-on="true"] { background: var(--toggle-on); }
+.t-toggle[data-on="true"] { background: var(--toggle-on-track); }
 /* `hover:` guard so a tap on touch/trackpad doesn't leave a stuck brighten. */
 @media (hover: hover) {
     .t-toggle:not(:disabled):hover { filter: brightness(1.03); }
@@ -9714,6 +9727,14 @@ html[data-platform="linux"][data-window="launcher"] body {
    to sit inside. Tabs sit on z-index: 1, the pill on z-index: 0,
    so labels read above the pill background. */
 .t-tabs {
+/* White knob + lift on the pale --toggle-on-track, in both themes. */
+.t-toggle[data-on="true"] .t-toggle-thumb,
+.t-toggle[aria-checked="true"] .t-toggle-thumb {
+    background: #FFFFFF;
+    box-shadow:
+        0 1px 2.5px rgba(0, 0, 0, 0.18),
+        0 0 0 0.5px rgba(0, 0, 0, 0.04);
+}
   position: relative;
   display: inline-flex;
   align-items: center;

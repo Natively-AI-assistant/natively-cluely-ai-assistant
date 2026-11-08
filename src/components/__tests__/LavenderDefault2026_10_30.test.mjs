@@ -327,9 +327,9 @@ describe('Lavender in the dark', () => {
       const qInk = hexToRgb(darkToken('lv-q-ink'));
       const card = hexToRgb(darkToken('lv-q-bg'));
       assert.ok(contrast(qInk, card) >= AA_TEXT, `ink on the question card: ${contrast(qInk, card).toFixed(2)}`);
-      // Send's white arrow on the switch periwinkle #6688F5 (3.3:1, a
+      // Send's white arrow on the switch lavender #7C5CFF (4.35:1, a
       // glyph: the 3:1 UI floor).
-      assert.ok(contrast(hexToRgb(darkToken('lv-send-ink')), hexToRgb('#6688F5')) >= AA_UI, 'send arrow');
+      assert.ok(contrast(hexToRgb(darkToken('lv-send-ink')), hexToRgb('#7C5CFF')) >= AA_UI, 'send arrow');
     });
 
     test(`a switch on ${where}`, () => {

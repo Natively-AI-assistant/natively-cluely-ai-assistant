@@ -1171,7 +1171,7 @@
 
    Colour goes where it goes in light, and only there: your question, the
    gist are a deep "Midnight indigo" card (see --lv-q-bg); the send button and the open click-through pill wear
-   the Settings switch periwinkle #6688F5 with white ink; the five buttons, the
+   the Settings switch periwinkle #7C5CFF with white ink; the five buttons, the
    model chip and the icons are neutral white glass. */
 
 [data-theme='dark'] [data-interface-theme="lavender"] {
@@ -1187,7 +1187,7 @@
   --lv-accent: #B8C6FF;
   --lv-accent-solid: var(--lavender-500);
   /* Send and the open click-through pill (2026-10-31): the Settings
-     switch's ON periwinkle (--periwinkle-500 = --toggle-on, #6688F5), so they
+     switch's ON periwinkle (--periwinkle-500 = --toggle-on, #7C5CFF), so they
      sit with the Midnight indigo question card instead of Apple's #007AFF.
      Solid, a slightly deeper hover, white glyph (3.3:1, a glyph: the 3:1 UI
      floor). --toggle-on itself is violet inside this panel, so this reads the
@@ -1339,7 +1339,7 @@
 [data-theme='dark'] [data-interface-theme="lavender"] .overlay-shell-surface .hlg-button.hlg-lavender.hero-send {
   --glass-inner-tint: var(--lv-send);
   background: linear-gradient(var(--glass-inner-tint), var(--glass-inner-tint));
-  box-shadow: 0 4px 12px -2px rgba(102, 136, 245, 0.20);
+  box-shadow: 0 4px 12px -2px rgba(124, 92, 255, 0.20);
 }
 [data-theme='dark'] [data-interface-theme="lavender"] .hlg-button.hlg-lavender.hero-send .hlg-content {
   color: var(--lv-send-ink);

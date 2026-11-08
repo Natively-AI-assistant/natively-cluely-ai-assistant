@@ -604,7 +604,7 @@ export const AIP_CSS = `
 }
 /* Repointed to --toggle-on (not --aip-accent) so only the switch changes —
    --aip-accent still drives buttons, links, and chips elsewhere in this panel. */
-.aip-switch[aria-checked='true'] { background: var(--toggle-on); }
+.aip-switch[aria-checked='true'] { background: var(--toggle-on-track); }
 .aip-switch[aria-disabled='true'] { cursor:not-allowed; }
 .aip-switch:disabled { cursor:not-allowed; opacity:0.5; }
 /* Thumb dimensions, position, and bounce are owned by .t-toggle-thumb in

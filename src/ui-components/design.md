@@ -689,7 +689,7 @@ fails it if it ever comes back.
   which the owner had removed from this card as "the water-like effect"; and the
   bubble is not a control, so it has no hover or press either.
 - **High contrast** does what the original does — the rim gives way to a
-  defined border — and darkens the body to `#2C5BF1`, where white clears AA.
+  defined border — and darkens the body to `#5B3FD0`, where white clears AA.
 
 The fill is `--bubble-user-bg`, which points at `--toggle-on` (`#6688F5`, the
 Settings toggle's ON colour); the light theme lifts it 25% toward white

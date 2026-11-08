@@ -127,10 +127,10 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
            nothing scrolls past sharply in the gutters beside it. */
         --chrome-top-h: calc(var(--bar-h) + var(--tx-collapsed) + 8px);
 
-        /* Colour: dark. Accent = the desktop's toggle blue (#6688F5) and its
+        /* Colour: dark. Accent = the desktop's toggle blue (#7C5CFF) and its
            dark-mode text step (periwinkle-300). */
         --bg: #09090b;
-        --bg-glow: rgba(102, 136, 245, 0.07);
+        --bg-glow: rgba(124, 92, 255, 0.07);
         --card: #151518;
         --card-hair: rgba(255, 255, 255, 0.07);
         --fill-1: rgba(255, 255, 255, 0.06);
@@ -140,15 +140,15 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         --label: #f5f5f7;
         --label-2: rgba(235, 235, 245, 0.68);
         --label-3: rgba(235, 235, 245, 0.52);
-        --accent: #95aff6;
-        --accent-fill: #6688f5;
+        --accent: #c4b3fb;
+        --accent-fill: #7c5cff;
         --hotword: #a9c0fb;            /* the overlay's bold words and gist (index.css --hotword-color) */
-        --accent-tint: rgba(102, 136, 245, 0.16);
-        --accent-tint-2: rgba(102, 136, 245, 0.26);
+        --accent-tint: rgba(124, 92, 255, 0.16);
+        --accent-tint-2: rgba(124, 92, 255, 0.26);
         --on-accent: #ffffff;
-        --bubble: rgba(102, 136, 245, 0.22);
-        --bubble-edge: rgba(102, 136, 245, 0.34);
-        --bubble-ink: #eef2ff;
+        --bubble: rgba(124, 92, 255, 0.22);
+        --bubble-edge: rgba(124, 92, 255, 0.34);
+        --bubble-ink: #f3efff;
         --live: #30d158;
         --warn: #ff9f0a;
         --danger: #ff6961;
@@ -164,7 +164,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         :root {
           color-scheme: light;
           --bg: #f2f2f7;
-          --bg-glow: rgba(102, 136, 245, 0.09);
+          --bg-glow: rgba(124, 92, 255, 0.09);
           --card: #ffffff;
           --card-hair: rgba(60, 60, 67, 0.1);
           --fill-1: rgba(118, 118, 128, 0.1);
@@ -176,13 +176,13 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
              #f2f2f7 without collapsing into one step. */
           --label-2: #48484a;
           --label-3: #6e6e73;
-          --accent: #4967d3;
+          --accent: #6d4ae8;
           --hotword: #4b65be;
-          --accent-tint: rgba(102, 136, 245, 0.13);
-          --accent-tint-2: rgba(102, 136, 245, 0.22);
-          --bubble: rgba(102, 136, 245, 0.16);
-          --bubble-edge: rgba(102, 136, 245, 0.24);
-          --bubble-ink: #1b2852;
+          --accent-tint: rgba(124, 92, 255, 0.13);
+          --accent-tint-2: rgba(124, 92, 255, 0.22);
+          --bubble: rgba(124, 92, 255, 0.16);
+          --bubble-edge: rgba(124, 92, 255, 0.24);
+          --bubble-ink: #261a57;
           --live: #248a3d;
           --warn: #c93400;
           --danger: #d70015;
@@ -776,7 +776,7 @@ export const PHONE_MIRROR_HTML = `<!doctype html>
         scrollbar-width: none;
       }
       .content .codeblock pre::-webkit-scrollbar { display: none; }
-      .content .codeblock.streaming .codeblock-head { color: #95aff6; }
+      .content .codeblock.streaming .codeblock-head { color: #c4b3fb; }
       /* A diagram: the desktop's drawing as an image, on a light card in both
          themes (it is drawn with a light palette), with its source underneath. */
       .content .diagram { margin: 10px 0 12px; }

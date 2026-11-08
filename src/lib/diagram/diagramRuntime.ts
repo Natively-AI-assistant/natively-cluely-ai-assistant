@@ -198,7 +198,7 @@ export function diagramColorsFor(element: Element | null): DiagramThemeColors {
     stroke: mix(text, surface, 0.5),
     groupFill: mix(lift, surface, dark ? 0.04 : 0.3),
     // The app's accent (periwinkle 300 on dark, 600 on light), not a borrowed blue.
-    accent: dark ? '#95aff6' : '#4967d3',
+    accent: dark ? '#c4b3fb' : '#6d4ae8',
     surface: toHex(surface[0], surface[1], surface[2]),
     dark,
   };

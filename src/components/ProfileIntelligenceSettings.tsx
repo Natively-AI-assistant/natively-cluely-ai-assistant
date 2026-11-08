@@ -605,7 +605,7 @@ const PI_CSS = `
        (--toggle-off/--toggle-on) rather than the panel's own accent, so this
        block only needs to beat the shared rule's specificity, not repaint it. */
     .pi-root .t-toggle { background: var(--toggle-off); }
-    .pi-root .t-toggle[aria-checked='true'] { background: var(--toggle-on); }
+    .pi-root .t-toggle[aria-checked='true'] { background: var(--toggle-on-track); }
     .pi-root .t-toggle[aria-disabled='true'] { opacity: 0.4; cursor: not-allowed; }
 
     /* ── Toggle card (neutral — no accent tint when on; the toggle itself signals state) ── */
@@ -940,27 +940,27 @@ const PI_CSS = `
     .lg-button.lg-sm.pi-action-lg {
         --lg-pill-h: 32px;
         padding: 0 21px;
-        --lg-lav-bg: #6688F5;
-        --lg-lav-hover: #7594F7;
+        --lg-lav-bg: #7C5CFF;
+        --lg-lav-hover: #8B6EFF;
         --lg-lav-fg: #FFFFFF;
         --lg-lav-rim: rgba(255,255,255,0.30);
-        --lg-lav-glow: rgba(102,136,245,0.55);
+        --lg-lav-glow: rgba(124,92,255,0.55);
         box-shadow:
             inset 0 -1px 0 var(--lg-lav-under, rgba(90,43,176,0.14)),
             0 1px 2px var(--lg-lav-drop, rgba(78,46,150,0.10)),
             0 9px 20px -9px var(--lg-lav-glow);
     }
     .pi-root[data-theme='light'] .lg-button.lg-sm.pi-action-lg {
-        --lg-lav-bg: rgba(102,136,245,0.28);
-        --lg-lav-hover: rgba(102,136,245,0.40);
-        --lg-lav-fg: #2A44A6;
+        --lg-lav-bg: rgba(124,92,255,0.28);
+        --lg-lav-hover: rgba(124,92,255,0.40);
+        --lg-lav-fg: #3F2593;
         --lg-lav-rim: rgba(255,255,255,0.78);
-        --lg-rim-2: rgba(102,136,245,0.32);
-        --lg-rim-3: rgba(102,136,245,0.14);
-        --lg-lens-rim-soft: rgba(102,136,245,0.28);
-        --lg-lav-glow: rgba(102,136,245,0.42);
-        --lg-lav-under: rgba(40,70,180,0.14);
-        --lg-lav-drop: rgba(40,60,150,0.10);
+        --lg-rim-2: rgba(124,92,255,0.32);
+        --lg-rim-3: rgba(124,92,255,0.14);
+        --lg-lens-rim-soft: rgba(124,92,255,0.28);
+        --lg-lav-glow: rgba(124,92,255,0.42);
+        --lg-lav-under: rgba(63,37,147,0.14);
+        --lg-lav-drop: rgba(63,37,147,0.10);
     }
 
     /*

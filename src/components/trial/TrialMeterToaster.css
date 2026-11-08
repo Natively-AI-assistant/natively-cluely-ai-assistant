@@ -92,7 +92,7 @@
 @property --trial-meter-hue {
     syntax: '<color>';
     inherits: false;
-    initial-value: #6688f5;
+    initial-value: #7c5cff;
 }
 
 /* #04 text states swap, for the two values. The rules are index.css's

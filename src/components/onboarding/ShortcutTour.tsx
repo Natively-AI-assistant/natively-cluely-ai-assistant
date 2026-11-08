@@ -275,7 +275,7 @@ export const TourLeft: React.FC<LeftProps> = ({ tour, onDone }) => {
               height: 7, width: i === lesson ? 20 : 7, borderRadius: i === lesson ? 4 : 999,
               // the toggle's ON blue for where you are, the check's green for a step you
               // have tried (the dots then read as progress), the quiet dot for the rest
-              background: i === lesson ? '#6688F5' : done[l.action] ? 'rgba(52,211,153,0.75)' : t.dot,
+              background: i === lesson ? '#7C5CFF' : done[l.action] ? 'rgba(52,211,153,0.75)' : t.dot,
               // --duration-fast, --ease-smooth-out (transitions-polish: was a bare 250ms ease).
               transition: 'width 250ms cubic-bezier(0.22, 1, 0.36, 1), background-color 250ms cubic-bezier(0.22, 1, 0.36, 1)',
             }} />

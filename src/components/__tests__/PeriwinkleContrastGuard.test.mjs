@@ -26,7 +26,9 @@
  * after a :root-only retune). When you change the palette, change both.
  *
  * 2026-09: the scale was re-hued to the Settings toggle's blue (--toggle-on
- * #6688F5 = -500); the tokens kept the periwinkle name.
+ * #7C5CFF = -500); the tokens kept the periwinkle name.
+ * 2026-11-09: re-hued again to the Lavender overlay scale (-300 #C4B3FB,
+ * -500 = --toggle-on #7C5CFF, -600 #6D4AE8); names kept again.
  *
  * Thresholds: WCAG 2.x AA — 4.5:1 for normal text, 3:1 for large text/icons
  * and other non-text UI components (SC 1.4.3, 1.4.11).
@@ -72,22 +74,22 @@ const AA_ICON = 3.0;
 // `.modes-manager-root` block in premium/src/ModesSettings.tsx.
 const PAIRINGS = [
   // Main Settings modal (src/index.css)
-  { label: 'Settings dark: --on-accent text on --accent-primary fill',      fg: '#14102A', bg: '#95AFF6', min: AA_TEXT },
-  { label: 'Settings light: --on-accent text on --accent-primary fill',     fg: '#FFFFFF', bg: '#4967D3', min: AA_TEXT },
-  { label: 'Settings light: --accent-primary as text/icon on white card',   fg: '#4967D3', bg: '#FFFFFF', min: AA_TEXT },
-  { label: 'Settings light: --accent-primary as text/icon on canvas',      fg: '#4967D3', bg: '#FAFAFA', min: AA_TEXT },
+  { label: 'Settings dark: --on-accent text on --accent-primary fill',      fg: '#14102A', bg: '#C4B3FB', min: AA_TEXT },
+  { label: 'Settings light: --on-accent text on --accent-primary fill',     fg: '#FFFFFF', bg: '#6D4AE8', min: AA_TEXT },
+  { label: 'Settings light: --accent-primary as text/icon on white card',   fg: '#6D4AE8', bg: '#FFFFFF', min: AA_TEXT },
+  { label: 'Settings light: --accent-primary as text/icon on canvas',      fg: '#6D4AE8', bg: '#FAFAFA', min: AA_TEXT },
   // #FAFAFA above predates the Apple-style light theme; the real light canvas
   // is --bg-main #F2F2F7 and cards are --bg-card #FBFBFD. The canvas is the
   // binding one: the unnudged -600 (#4A68D4) measured 4.46:1 on it.
-  { label: 'Settings light: --accent-primary as text/icon on --bg-main',   fg: '#4967D3', bg: '#F2F2F7', min: AA_TEXT },
-  { label: 'Settings light: --accent-primary as text/icon on --bg-card',   fg: '#4967D3', bg: '#FBFBFD', min: AA_TEXT },
-  { label: 'Settings dark: --on-accent text on --accent-hover fill',       fg: '#14102A', bg: '#B9CCFC', min: AA_TEXT },
-  { label: 'Settings dark: --accent-primary as text/icon on main bg',      fg: '#95AFF6', bg: '#1E1E21', min: AA_TEXT },
-  { label: 'Settings dark: --accent-primary as text/icon on card bg',      fg: '#95AFF6', bg: '#242429', min: AA_TEXT },
+  { label: 'Settings light: --accent-primary as text/icon on --bg-main',   fg: '#6D4AE8', bg: '#F2F2F7', min: AA_TEXT },
+  { label: 'Settings light: --accent-primary as text/icon on --bg-card',   fg: '#6D4AE8', bg: '#FBFBFD', min: AA_TEXT },
+  { label: 'Settings dark: --on-accent text on --accent-hover fill',       fg: '#14102A', bg: '#DED4FD', min: AA_TEXT },
+  { label: 'Settings dark: --accent-primary as text/icon on main bg',      fg: '#C4B3FB', bg: '#1E1E21', min: AA_TEXT },
+  { label: 'Settings dark: --accent-primary as text/icon on card bg',      fg: '#C4B3FB', bg: '#242429', min: AA_TEXT },
 
   // Profile Intelligence (--pi-* — ProfileIntelligenceSettings.tsx)
-  { label: 'PI dark: --pi-on-accent on --pi-accent fill',                   fg: '#14102A', bg: '#95AFF6', min: AA_TEXT },
-  { label: 'PI light: --pi-on-accent on --pi-accent fill',                  fg: '#FFFFFF', bg: '#4967D3', min: AA_TEXT },
+  { label: 'PI dark: --pi-on-accent on --pi-accent fill',                   fg: '#14102A', bg: '#C4B3FB', min: AA_TEXT },
+  { label: 'PI light: --pi-on-accent on --pi-accent fill',                  fg: '#FFFFFF', bg: '#6D4AE8', min: AA_TEXT },
 
   // Meeting notes → Usage tab question (MeetingDetails.tsx,
   // .lg-bubble.lg-bubble-lavender in src/ui-components/LiquidGlassButton.css):
@@ -104,20 +106,20 @@ const PAIRINGS = [
 
   // Plain .lg-bubble (HowItWorksRefund's tab pill; the meeting chat's questions
   // until 2026-10-30) in src/ui-components/LiquidGlassButton.css, fed by the --bubble-user-bg /
-  // --bubble-user-fg pair in index.css). The fill is --toggle-on (#6688F5, the
+  // --bubble-user-fg pair in index.css). The fill is --toggle-on (#7C5CFF, the
   // Settings toggle's ON colour) in dark mode and that colour mixed 75/25 with
-  // white (#8CA6F8) in light mode. The Liquid Glass rim, sheens and cap
+  // white (#9D85FF) in light mode. The Liquid Glass rim, sheens and cap
   // shadow all stay in the host's padding, so the token value is the only fill
   // pixel under the glyphs (the ink band is asserted flat in
   // tests/css/bubble-liquid-glass.check.mjs). White on it sits below AA in both
   // themes and lives in KNOWN_DEVIATIONS below, as does the fill against the
   // light pane.
-  { label: 'Bubble dark: --bubble-user-bg fill on the #151515 pane',        fg: '#6688F5', bg: '#151515', min: AA_ICON },
+  { label: 'Bubble dark: --bubble-user-bg fill on the #151515 pane',        fg: '#7C5CFF', bg: '#151515', min: AA_ICON },
 
   // Modes Manager (--mm-* — premium/src/ModesSettings.tsx). The checkmark
   // dot is a non-text icon, so the 3:1 (not 4.5:1) threshold applies.
-  { label: 'MM dark: checkmark (--mm-bg) on --mm-active-blue fill',         fg: '#111111', bg: '#95AFF6', min: AA_ICON },
-  { label: 'MM light: checkmark (--mm-bg) on --mm-active-blue fill',        fg: '#FFFFFF', bg: '#4967D3', min: AA_ICON },
+  { label: 'MM dark: checkmark (--mm-bg) on --mm-active-blue fill',         fg: '#111111', bg: '#C4B3FB', min: AA_ICON },
+  { label: 'MM light: checkmark (--mm-bg) on --mm-active-blue fill',        fg: '#FFFFFF', bg: '#6D4AE8', min: AA_ICON },
 
   // Teleprompter hot words (--hotword-color, src/index.css): bold words in
   // answers and the gist chip. Lavender until 2026-09, now the toggle blue's
@@ -146,27 +148,27 @@ const PAIRINGS = [
 const KNOWN_DEVIATIONS = [
   {
     label: 'Bubble dark: white on the flat --toggle-on fill',
-    fg: '#FFFFFF', bg: '#6688F5', expected: 3.28, shortfallOf: AA_TEXT,
+    fg: '#FFFFFF', bg: '#7C5CFF', expected: 4.35, shortfallOf: AA_TEXT,
     why:
-      '3.28:1 is under the 4.5:1 AA floor for body text (15px regular, so the ' +
+      '4.35:1 is under the 4.5:1 AA floor for body text (15px regular, so the ' +
       'large-text allowance does not apply). The fill is the Settings toggle\'s ON ' +
       'colour and the foreground is white, both by explicit owner instruction. ' +
       '--periwinkle-on-accent-dark measures 5.63:1 on this exact fill, and swapping ' +
       '--bubble-user-fg to it is the one-token fix. prefers-contrast: more darkens ' +
-      'the body to #2C5BF1 (5.42:1).',
+      'the body to #5B3FD0 (6.85:1).',
   },
   {
     label: 'Bubble light: white on the lifted --toggle-on fill (75% toggle, 25% white)',
-    fg: '#FFFFFF', bg: '#8CA6F8', expected: 2.35, shortfallOf: AA_TEXT,
+    fg: '#FFFFFF', bg: '#9D85FF', expected: 2.9, shortfallOf: AA_TEXT,
     why:
       'The owner asked for a lighter bubble on the light pane, which costs white text ' +
-      'contrast: 2.35:1 here (2.68:1 at the first, 15% lift) against 3.28:1 in dark mode, ' +
+      'contrast: 2.9:1 here against 4.35:1 in dark mode, ' +
       'and light mode used to clear AA at 5.23:1 on periwinkle-600. --periwinkle-on-accent-dark measures 7.85:1 on ' +
-      'this fill; prefers-contrast: more darkens the body to #2C5BF1 (5.42:1).',
+      'this fill; prefers-contrast: more darkens the body to #5B3FD0 (6.85:1).',
   },
   {
     label: 'Bubble light: --bubble-user-bg fill on the --bg-secondary #EBEBF0 pane',
-    fg: '#8CA6F8', bg: '#EBEBF0', expected: 1.98, shortfallOf: AA_ICON,
+    fg: '#9D85FF', bg: '#EBEBF0', expected: 2.44, shortfallOf: AA_ICON,
     why:
       'A lifted body on a light pane. The fill alone does not separate the bubble from ' +
       'the pane; the colour step, the specular rim and the shaded side faces carry the ' +
@@ -223,11 +225,11 @@ const INDEX_CSS = readFileSync(resolve(__dirname, '../../index.css'), 'utf8')
   .replace(/\/\*[\s\S]*?\*\//g, '');
 
 const SCALE_AS_TESTED = {
-  '--periwinkle-300': '#95AFF6',            // dark accent-primary fill/text
-  '--periwinkle-600': '#4967D3',            // light accent-primary fill/text
+  '--periwinkle-300': '#C4B3FB',            // dark accent-primary fill/text
+  '--periwinkle-600': '#6D4AE8',            // light accent-primary fill/text
   '--periwinkle-on-accent-dark': '#14102A', // dark on-accent
 };
-const DARK_HOVER_AS_TESTED = '#B9CCFC';
+const DARK_HOVER_AS_TESTED = '#DED4FD';
 
 function declarations(name) {
   const re = new RegExp(`(?:^|[;{\\s])${name}\\s*:\\s*([^;]+);`, 'g');
