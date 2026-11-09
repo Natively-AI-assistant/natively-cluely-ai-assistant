@@ -1,0 +1,15 @@
+# Auto Answer decider workspace (campaign Phase 0+). Python 3.12.
+# Pinned to the versions measured on the M4 Air on 2026-11-09. This never ships in the app.
+laya==0.4.30
+torch==2.15.0
+transformers==5.22.2
+tokenizers==0.23.3
+safetensors==0.8.0
+huggingface_hub==2.4.0
+onnx==1.23.2
+onnxruntime==1.31.1
+numpy==2.5.4
+scikit-learn==1.9.1
+scipy==1.18.1
+# optimum is not used: export/export_onnx.py traces laya's DecisionModel directly,
+# because the model is a ModernBERT encoder plus laya's own head, not a stock HF task model.

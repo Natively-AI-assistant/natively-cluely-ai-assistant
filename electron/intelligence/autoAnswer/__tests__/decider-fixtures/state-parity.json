@@ -1,0 +1,267 @@
+{
+ "generated_by": "ml/auto-answer-decider/decider/make_state_fixtures.py",
+ "question": {
+  "respond": {
+   "type": "choice",
+   "instructions": "An assistant drafts answers for the USER in a live meeting. OTHERS is the meeting audio and may hold several voices. Does the latest speech in `candidate` contain a finished question or task aimed at the USER that they must answer or start now and that is not already in `last_answered`?",
+   "criteria": {
+    "answer": "a finished question or task for the USER, including short or yes/no ones and declarative tasks",
+    "silent": "not an ask, aimed at someone else, rhetorical or self-answered, logistics, permission, deferral, or already answered",
+    "wait": "an unfinished fragment, or a structure announced but not yet delivered"
+   }
+  }
+ },
+ "serialize": [
+  {
+   "fields": {
+    "mode": "technical-interview",
+    "addressed_to": "none",
+    "transcript_lagging": false,
+    "context": [],
+    "last_answered": null,
+    "candidate": "can you walk me through it"
+   },
+   "serialized": "{\"mode\": \"technical-interview\", \"addressed_to\": \"none\", \"transcript_lagging\": false, \"context\": [], \"last_answered\": null, \"candidate\": \"can you walk me through it\"}"
+  },
+  {
+   "fields": {
+    "mode": "technical-interview",
+    "addressed_to": "user",
+    "transcript_lagging": true,
+    "context": [],
+    "last_answered": "design a rate limiter",
+    "candidate": "can you walk me through it"
+   },
+   "serialized": "{\"mode\": \"technical-interview\", \"addressed_to\": \"user\", \"transcript_lagging\": true, \"context\": [], \"last_answered\": \"design a rate limiter\", \"candidate\": \"can you walk me through it\"}"
+  },
+  {
+   "fields": {
+    "mode": "technical-interview",
+    "addressed_to": "none",
+    "transcript_lagging": false,
+    "context": [
+     "OTHERS: tab\there",
+     "USER: line\nbreak"
+    ],
+    "last_answered": null,
+    "candidate": "she said \"fine\" \\ then left"
+   },
+   "serialized": "{\"mode\": \"technical-interview\", \"addressed_to\": \"none\", \"transcript_lagging\": false, \"context\": [\"OTHERS: tab\\there\", \"USER: line\\nbreak\"], \"last_answered\": null, \"candidate\": \"she said \\\"fine\\\" \\\\ then left\"}"
+  },
+  {
+   "fields": {
+    "mode": "team-meet",
+    "addressed_to": "none",
+    "transcript_lagging": false,
+    "context": [],
+    "last_answered": null,
+    "candidate": "café — naïve résumé über 你好 😀"
+   },
+   "serialized": "{\"mode\": \"team-meet\", \"addressed_to\": \"none\", \"transcript_lagging\": false, \"context\": [], \"last_answered\": null, \"candidate\": \"café — naïve résumé über 你好 😀\"}"
+  },
+  {
+   "fields": {
+    "mode": "technical-interview",
+    "addressed_to": "none",
+    "transcript_lagging": false,
+    "context": [
+     "OTHERS/speaker_2:   sep  "
+    ],
+    "last_answered": null,
+    "candidate": "ctrl \u0001 \u001f  end"
+   },
+   "serialized": "{\"mode\": \"technical-interview\", \"addressed_to\": \"none\", \"transcript_lagging\": false, \"context\": [\"OTHERS/speaker_2:   sep  \"], \"last_answered\": null, \"candidate\": \"ctrl \\u0001 \\u001f  end\"}"
+  },
+  {
+   "fields": {
+    "mode": "technical-interview",
+    "addressed_to": "none",
+    "transcript_lagging": false,
+    "context": [],
+    "last_answered": "…earlier ask",
+    "candidate": "…tail kept"
+   },
+   "serialized": "{\"mode\": \"technical-interview\", \"addressed_to\": \"none\", \"transcript_lagging\": false, \"context\": [], \"last_answered\": \"…earlier ask\", \"candidate\": \"…tail kept\"}"
+  },
+  {
+   "fields": {
+    "mode": "lecture",
+    "addressed_to": "other",
+    "transcript_lagging": false,
+    "context": [
+     "OTHERS: a",
+     "USER: b",
+     "OTHERS/speaker_1: c"
+    ],
+    "last_answered": null,
+    "candidate": "can you walk me through it"
+   },
+   "serialized": "{\"mode\": \"lecture\", \"addressed_to\": \"other\", \"transcript_lagging\": false, \"context\": [\"OTHERS: a\", \"USER: b\", \"OTHERS/speaker_1: c\"], \"last_answered\": null, \"candidate\": \"can you walk me through it\"}"
+  }
+ ],
+ "fit": [
+  {
+   "fields": {
+    "mode": "technical-interview",
+    "addressed_to": "none",
+    "transcript_lagging": false,
+    "context": [
+     "OTHERS: w0_0 w0_1 w0_2 w0_3 w0_4 w0_5 w0_6 w0_7 w0_8 w0_9 w0_10 w0_11",
+     "OTHERS: w1_0 w1_1 w1_2 w1_3 w1_4 w1_5 w1_6 w1_7 w1_8 w1_9 w1_10 w1_11",
+     "OTHERS: w2_0 w2_1 w2_2 w2_3 w2_4 w2_5 w2_6 w2_7 w2_8 w2_9 w2_10 w2_11",
+     "OTHERS: w3_0 w3_1 w3_2 w3_3 w3_4 w3_5 w3_6 w3_7 w3_8 w3_9 w3_10 w3_11",
+     "OTHERS: w4_0 w4_1 w4_2 w4_3 w4_4 w4_5 w4_6 w4_7 w4_8 w4_9 w4_10 w4_11",
+     "OTHERS: w5_0 w5_1 w5_2 w5_3 w5_4 w5_5 w5_6 w5_7 w5_8 w5_9 w5_10 w5_11"
+    ],
+    "last_answered": null,
+    "candidate": "can you walk me through it"
+   },
+   "room": 40,
+   "counter": "whitespace-words",
+   "result": {
+    "serialized": "{\"mode\": \"technical-interview\", \"addressed_to\": \"none\", \"transcript_lagging\": false, \"context\": [\"OTHERS: w5_0 w5_1 w5_2 w5_3 w5_4 w5_5 w5_6 w5_7 w5_8 w5_9 w5_10 w5_11\"], \"last_answered\": null, \"candidate\": \"can you walk me through it\"}",
+    "fields": {
+     "mode": "technical-interview",
+     "addressed_to": "none",
+     "transcript_lagging": false,
+     "context": [
+      "OTHERS: w5_0 w5_1 w5_2 w5_3 w5_4 w5_5 w5_6 w5_7 w5_8 w5_9 w5_10 w5_11"
+     ],
+     "last_answered": null,
+     "candidate": "can you walk me through it"
+    },
+    "droppedTurns": 5,
+    "answeredShrunk": false,
+    "droppedCandidateWords": 0
+   }
+  },
+  {
+   "fields": {
+    "mode": "technical-interview",
+    "addressed_to": "none",
+    "transcript_lagging": false,
+    "context": [
+     "OTHERS: w0_0 w0_1 w0_2 w0_3 w0_4 w0_5 w0_6 w0_7 w0_8 w0_9 w0_10 w0_11",
+     "OTHERS: w1_0 w1_1 w1_2 w1_3 w1_4 w1_5 w1_6 w1_7 w1_8 w1_9 w1_10 w1_11",
+     "OTHERS: w2_0 w2_1 w2_2 w2_3 w2_4 w2_5 w2_6 w2_7 w2_8 w2_9 w2_10 w2_11",
+     "OTHERS: w3_0 w3_1 w3_2 w3_3 w3_4 w3_5 w3_6 w3_7 w3_8 w3_9 w3_10 w3_11",
+     "OTHERS: w4_0 w4_1 w4_2 w4_3 w4_4 w4_5 w4_6 w4_7 w4_8 w4_9 w4_10 w4_11",
+     "OTHERS: w5_0 w5_1 w5_2 w5_3 w5_4 w5_5 w5_6 w5_7 w5_8 w5_9 w5_10 w5_11"
+    ],
+    "last_answered": "a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20 a21 a22 a23 a24 a25 a26 a27 a28 a29 a30 a31 a32 a33 a34 a35 a36 a37 a38 a39 a40 a41 a42 a43 a44 a45 a46 a47 a48 a49 a50 a51 a52 a53 a54 a55 a56 a57 a58 a59",
+    "candidate": "can you walk me through it"
+   },
+   "room": 30,
+   "counter": "whitespace-words",
+   "result": {
+    "serialized": "{\"mode\": \"technical-interview\", \"addressed_to\": \"none\", \"transcript_lagging\": false, \"context\": [], \"last_answered\": \"… a30 a31 a32 a33 a34 a35 a36 a37 a38 a39 a40 a41 a42 a43 a44 a45 a46 a47 a48 a49 a50 a51 a52 a53 a54 a55 a56 a57 a58 a59\", \"candidate\": \"…it\"}",
+    "fields": {
+     "mode": "technical-interview",
+     "addressed_to": "none",
+     "transcript_lagging": false,
+     "context": [],
+     "last_answered": "… a30 a31 a32 a33 a34 a35 a36 a37 a38 a39 a40 a41 a42 a43 a44 a45 a46 a47 a48 a49 a50 a51 a52 a53 a54 a55 a56 a57 a58 a59",
+     "candidate": "…it"
+    },
+    "droppedTurns": 6,
+    "answeredShrunk": true,
+    "droppedCandidateWords": 5
+   }
+  },
+  {
+   "fields": {
+    "mode": "technical-interview",
+    "addressed_to": "none",
+    "transcript_lagging": false,
+    "context": [
+     "OTHERS: w0_0 w0_1 w0_2 w0_3 w0_4 w0_5 w0_6 w0_7 w0_8 w0_9 w0_10 w0_11",
+     "OTHERS: w1_0 w1_1 w1_2 w1_3 w1_4 w1_5 w1_6 w1_7 w1_8 w1_9 w1_10 w1_11"
+    ],
+    "last_answered": null,
+    "candidate": "c0 c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14 c15 c16 c17 c18 c19 c20 c21 c22 c23 c24 c25 c26 c27 c28 c29 c30 c31 c32 c33 c34 c35 c36 c37 c38 c39 c40 c41 c42 c43 c44 c45 c46 c47 c48 c49 c50 c51 c52 c53 c54 c55 c56 c57 c58 c59 c60 c61 c62 c63 c64 c65 c66 c67 c68 c69 c70 c71 c72 c73 c74 c75 c76 c77 c78 c79"
+   },
+   "room": 25,
+   "counter": "whitespace-words",
+   "result": {
+    "serialized": "{\"mode\": \"technical-interview\", \"addressed_to\": \"none\", \"transcript_lagging\": false, \"context\": [], \"last_answered\": null, \"candidate\": \"…c66 c67 c68 c69 c70 c71 c72 c73 c74 c75 c76 c77 c78 c79\"}",
+    "fields": {
+     "mode": "technical-interview",
+     "addressed_to": "none",
+     "transcript_lagging": false,
+     "context": [],
+     "last_answered": null,
+     "candidate": "…c66 c67 c68 c69 c70 c71 c72 c73 c74 c75 c76 c77 c78 c79"
+    },
+    "droppedTurns": 2,
+    "answeredShrunk": false,
+    "droppedCandidateWords": 66
+   }
+  },
+  {
+   "fields": {
+    "mode": "technical-interview",
+    "addressed_to": "none",
+    "transcript_lagging": false,
+    "context": [
+     "OTHERS: w0_0 w0_1 w0_2 w0_3 w0_4 w0_5 w0_6 w0_7 w0_8 w0_9 w0_10 w0_11",
+     "OTHERS: w1_0 w1_1 w1_2 w1_3 w1_4 w1_5 w1_6 w1_7 w1_8 w1_9 w1_10 w1_11",
+     "OTHERS: w2_0 w2_1 w2_2 w2_3 w2_4 w2_5 w2_6 w2_7 w2_8 w2_9 w2_10 w2_11",
+     "OTHERS: w3_0 w3_1 w3_2 w3_3 w3_4 w3_5 w3_6 w3_7 w3_8 w3_9 w3_10 w3_11",
+     "OTHERS: w4_0 w4_1 w4_2 w4_3 w4_4 w4_5 w4_6 w4_7 w4_8 w4_9 w4_10 w4_11",
+     "OTHERS: w5_0 w5_1 w5_2 w5_3 w5_4 w5_5 w5_6 w5_7 w5_8 w5_9 w5_10 w5_11"
+    ],
+    "last_answered": null,
+    "candidate": "can you walk me through it"
+   },
+   "room": 500,
+   "counter": "whitespace-words",
+   "result": {
+    "serialized": "{\"mode\": \"technical-interview\", \"addressed_to\": \"none\", \"transcript_lagging\": false, \"context\": [\"OTHERS: w0_0 w0_1 w0_2 w0_3 w0_4 w0_5 w0_6 w0_7 w0_8 w0_9 w0_10 w0_11\", \"OTHERS: w1_0 w1_1 w1_2 w1_3 w1_4 w1_5 w1_6 w1_7 w1_8 w1_9 w1_10 w1_11\", \"OTHERS: w2_0 w2_1 w2_2 w2_3 w2_4 w2_5 w2_6 w2_7 w2_8 w2_9 w2_10 w2_11\", \"OTHERS: w3_0 w3_1 w3_2 w3_3 w3_4 w3_5 w3_6 w3_7 w3_8 w3_9 w3_10 w3_11\", \"OTHERS: w4_0 w4_1 w4_2 w4_3 w4_4 w4_5 w4_6 w4_7 w4_8 w4_9 w4_10 w4_11\", \"OTHERS: w5_0 w5_1 w5_2 w5_3 w5_4 w5_5 w5_6 w5_7 w5_8 w5_9 w5_10 w5_11\"], \"last_answered\": null, \"candidate\": \"can you walk me through it\"}",
+    "fields": {
+     "mode": "technical-interview",
+     "addressed_to": "none",
+     "transcript_lagging": false,
+     "context": [
+      "OTHERS: w0_0 w0_1 w0_2 w0_3 w0_4 w0_5 w0_6 w0_7 w0_8 w0_9 w0_10 w0_11",
+      "OTHERS: w1_0 w1_1 w1_2 w1_3 w1_4 w1_5 w1_6 w1_7 w1_8 w1_9 w1_10 w1_11",
+      "OTHERS: w2_0 w2_1 w2_2 w2_3 w2_4 w2_5 w2_6 w2_7 w2_8 w2_9 w2_10 w2_11",
+      "OTHERS: w3_0 w3_1 w3_2 w3_3 w3_4 w3_5 w3_6 w3_7 w3_8 w3_9 w3_10 w3_11",
+      "OTHERS: w4_0 w4_1 w4_2 w4_3 w4_4 w4_5 w4_6 w4_7 w4_8 w4_9 w4_10 w4_11",
+      "OTHERS: w5_0 w5_1 w5_2 w5_3 w5_4 w5_5 w5_6 w5_7 w5_8 w5_9 w5_10 w5_11"
+     ],
+     "last_answered": null,
+     "candidate": "can you walk me through it"
+    },
+    "droppedTurns": 0,
+    "answeredShrunk": false,
+    "droppedCandidateWords": 0
+   }
+  },
+  {
+   "fields": {
+    "mode": "technical-interview",
+    "addressed_to": "none",
+    "transcript_lagging": false,
+    "context": [],
+    "last_answered": null,
+    "candidate": "one"
+   },
+   "room": 1,
+   "counter": "whitespace-words",
+   "result": {
+    "serialized": "{\"mode\": \"technical-interview\", \"addressed_to\": \"none\", \"transcript_lagging\": false, \"context\": [], \"last_answered\": null, \"candidate\": \"one\"}",
+    "fields": {
+     "mode": "technical-interview",
+     "addressed_to": "none",
+     "transcript_lagging": false,
+     "context": [],
+     "last_answered": null,
+     "candidate": "one"
+    },
+    "droppedTurns": 0,
+    "answeredShrunk": false,
+    "droppedCandidateWords": 0
+   }
+  }
+ ]
+}

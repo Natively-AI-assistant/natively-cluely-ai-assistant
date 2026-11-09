@@ -158,7 +158,8 @@
       "!**/*.pdf",
       "!**/.git",
       "!**/node_modules/@typescript/**",
-      "!**/*.map"
+      "!**/*.map",
+      "!ml/**"
     ],
     "asarUnpack": [
       "**/*.node",
