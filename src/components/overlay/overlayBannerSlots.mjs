@@ -45,6 +45,7 @@ export const OVERLAY_BANNER_PRIORITY = Object.freeze([
   'audio-stuck',
   'stt-warning',
   'ambient-mic',
+  'guide',
   'trial',
   'last-time',
   'capture-fallback',

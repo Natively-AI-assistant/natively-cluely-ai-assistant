@@ -63,6 +63,7 @@ test('every banner fold in the overlay goes through the picker', () => {
     'fold-capture-fallback': /bannerSlots\.has\('capture-fallback'\)/,
     'fold-refusal-retry': /bannerSlots\.has\('refusal-retry'\)/,
     'fold-hotkey-conflict': /bannerSlots\.has\('hotkey-conflict'\)/,
+    'fold-guide': /bannerSlots\.has\('guide'\)/,
     'fold-accessibility': /isMac && stealthPermissionMissing && bannerSlots\.has\('stealth-permission'\)/,
     'fold-stealth-hook-blocked': /isWindows && stealthPermissionMissing && bannerSlots\.has\('stealth-permission'\)/,
   };
@@ -77,4 +78,14 @@ test('every banner fold in the overlay goes through the picker', () => {
   assert.match(overlay, /\[audioBannerSlotId\]: !!systemAudioWarning,/);
   // Both stealth banners want the same slot, whichever platform draws one.
   assert.match(overlay, /'stealth-permission': \(isMac \|\| isWindows\) && stealthPermissionMissing,/);
+});
+
+// The first-run guide's strip (components/guide/OverlayGuide.tsx): after the
+// faults, before the trial notice, so an error is never held back for it.
+test('the first-run guide ranks right after ambient-mic, before the trial notice', () => {
+  const rank = (id) => OVERLAY_BANNER_PRIORITY.indexOf(id);
+  assert.equal(rank('guide'), rank('ambient-mic') + 1);
+  assert.ok(rank('guide') < rank('trial'));
+  assert.deepEqual([...pickOverlayBanners({ 'auto-stop': true, 'stt-error': true, guide: true })].sort(), ['auto-stop', 'stt-error']);
+  assert.deepEqual([...pickOverlayBanners({ guide: true, trial: true, 'last-time': true })].sort(), ['guide', 'trial']);
 });

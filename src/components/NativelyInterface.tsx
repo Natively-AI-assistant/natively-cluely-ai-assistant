@@ -427,6 +427,7 @@ import { interfaceThemeSurface, isCssOwnedInterfaceTheme, type MeetingInterfaceT
 import { isBuiltinOverlayButtonId, overlayRowOf, useOverlayButtonOrder, type BuiltinOverlayButtonId, type OverlayButtonId } from '../lib/overlayButtonOrder';
 import { getOverlayCustomButton, overlayCustomReadMinutes, useOverlayCustomButtons, type OverlayCustomButtonId } from '../lib/overlayCustomButtons';
 import { OVERLAY_BUTTONS, overlayButtonFace } from './overlay/overlayButtons';
+import { useOverlayGuide } from './guide/OverlayGuide';
 import {
   getGlassOverlayAppearance,
   getOverlayAppearance,
@@ -1473,6 +1474,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const shellRef = React.useRef<HTMLDivElement>(null);
   const t = useT();
   const [isExpanded, setIsExpanded] = useState(true);
+  // The first-run guide's overlay steps (guide/OverlayGuide.tsx): a banner fold below.
+  const overlayGuide = useOverlayGuide();
   // The free trial that starts by itself with a meeting: what to say about it.
   const trial = useOverlayTrial();
   // The automatic stop's "stops in 1 minute" notice, and typing reported to main.
@@ -11748,6 +11751,7 @@ Provide only the answer, nothing else.`;
     'stt-not-configured': sttNotConfigured && !trialExplainsNoStt,
     'stt-warning': sttStatusBannerOpen && sttStatusBanner?.tone === 'warning',
     'ambient-mic': showAmbientMicNotice,
+    guide: overlayGuide.wants,
     trial: !!trial.banner,
     'auto-stop': autoStop.stopsAt !== null,
     'last-time': !!lastTime.recap,
@@ -12226,6 +12230,12 @@ Provide only the answer, nothing else.`;
                   (overlay/LastTimeRecapNotice.tsx; main: AssistService). */}
               <ChromeFold show={!!lastTime.recap && bannerSlots.has('last-time')} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-last-time">
               {lastTime.recap && <LastTimeRecapBanner state={lastTime} />}
+              </ChromeFold>
+
+              {/* The first-run guide: What to answer, screenshots, the notepad
+                  hand-off and the stop prompt (guide/OverlayGuide.tsx). */}
+              <ChromeFold show={overlayGuide.wants && bannerSlots.has('guide')} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-guide">
+              {overlayGuide.wants && overlayGuide.node}
               </ChromeFold>
 
               {/* The free trial that starts by itself with a meeting: it began,
@@ -13031,7 +13041,7 @@ Provide only the answer, nothing else.`;
                       }
                       const { Icon, label } = overlayButtonFace(id, t, overlayCustomButtons);
                       return (
-                        <HeroGlassButton key={id} variant="lavender" onClick={onChip(id)} className={heroChipClass} icon={heroIcon(Icon)}>
+                        <HeroGlassButton key={id} variant="lavender" onClick={onChip(id)} className={heroChipClass} icon={heroIcon(Icon)} data-guide={id === 'what_to_answer' ? 'what-to-answer' : undefined}>
                           {label}
                         </HeroGlassButton>
                       );
@@ -13057,7 +13067,7 @@ Provide only the answer, nothing else.`;
                     }
                     const { Icon, label } = overlayButtonFace(id, t, overlayCustomButtons);
                     return (
-                      <button key={id} onClick={onChip(id)} className={chipClass} style={appearance.chipStyle}>
+                      <button key={id} onClick={onChip(id)} className={chipClass} style={appearance.chipStyle} data-guide={id === 'what_to_answer' ? 'what-to-answer' : undefined}>
                         <Icon className="w-3 h-3 opacity-70" /> {label}
                       </button>
                     );
