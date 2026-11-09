@@ -152,8 +152,8 @@ test('a dismissal survives the reload too, and a new app run starts afresh', () 
   assert.equal(active(first), 'permissions');
   first.markDismissed('permissions');
   first.stop();
-  const reloaded = boot([PERMS], { permissionsNeedAttention: true, permsShown: true, permissionsRecoveryRequested: true });
-  assert.equal(wait(reloaded, 5 * 60_000), null, 'closed this launch: not raised again, recovery or not');
+  const reloaded = boot([PERMS], { permissionsNeedAttention: true, permsShown: true });
+  assert.equal(wait(reloaded, 5 * 60_000), null, 'closed this launch: not raised again');
   reloaded.stop();
   session.clear(); // the app quit
   const nextRun = boot([PERMS], { permissionsNeedAttention: true, permsShown: true });
@@ -198,13 +198,79 @@ test('the update card is refused while a card is open, and holds the slot once g
   orch.stop();
 });
 
-test('no card opens while the update card holds the slot; the update card is the launch\'s card', () => {
+// Review fixes (2026-11-09 b): the update card does not count against one
+// card per launch, never opens by itself on the Welcome launch, and a toast
+// expand takes the slot past the spacing but never over an open card.
+test('no card opens while the update card holds the slot; it does not spend the launch\'s card', () => {
   const orch = boot([EXT], { cardLedger: null });
   assert.equal(orch.claimExternalCard('update'), true, 'nothing open yet');
   orch.setUserState({ cardLedger: ledger() });
   assert.equal(wait(orch, 5 * 60_000), null, 'nothing opens over it');
   orch.releaseExternalCard('update');
-  assert.equal(wait(orch, 30 * 60_000), null, 'the update card was the launch\'s one card');
+  assert.equal(wait(orch, 30_000), null, 'the usual spacing after it closes');
+  assert.equal(wait(orch, 31_000), 'browser_extension', 'the launch still has its one card');
+  orch.stop();
+});
+
+test('first run: an update arriving under Welcome does not take the slot from permissions and Plans', () => {
+  // App pushes welcomeThisLaunch while Welcome is up; when it closes, the
+  // UpdateBanner effect runs before OrchestratorProvider attaches the
+  // Launcher's launcher:mounted, so the update claim comes first.
+  timerQueue = [];
+  mockNow = 0;
+  const orch = new OnboardingOrchestrator();
+  orch.start([PERMS, EXT]);
+  orch.setUserState({ cardLedger: ledger(), welcomeThisLaunch: true });
+  assert.equal(orch.claimExternalCard('update'), false, 'no update card by itself on the Welcome launch');
+  orch.emit({ type: 'launcher:mounted' });
+  orch.emit({ type: 'foreground:change', isForeground: true });
+  assert.equal(wait(orch, 2_000), 'permissions');
+  orch.markDismissed('permissions');
+  assert.equal(wait(orch, 61_000), 'browser_extension', 'and the one card after it');
+  orch.markDismissed('browser_extension');
+  mockNow += 61_000;
+  assert.equal(orch.claimExternalCard('update'), false, 'still not by itself, all launch long');
+  orch.stop();
+});
+
+test('on the Welcome launch a user expand still opens the update card', () => {
+  const orch = boot([EXT], { cardLedger: null, welcomeThisLaunch: true });
+  assert.equal(orch.claimExternalCard('update', { force: true }), true);
+  assert.equal(orch.getExternalCard(), 'update');
+  orch.stop();
+});
+
+test('a user expand takes the slot inside the spacing, holds it, and its release sets the spacing', () => {
+  const orch = boot([EXT, PROFILE]);
+  assert.equal(active(orch), 'browser_extension');
+  orch.markDismissed('browser_extension');
+  mockNow += 5_000;
+  assert.equal(orch.claimExternalCard('update'), false, 'not by itself inside the spacing');
+  assert.equal(orch.claimExternalCard('update', { force: true }), true, 'the user asked for it');
+  assert.equal(orch.getExternalCard(), 'update', 'the slot is really held');
+  orch.releaseExternalCard('update');
+  assert.equal(orch.getExternalCard(), null);
+  orch.stop();
+});
+
+test('a user expand never stacks the update card over an open card', () => {
+  const orch = boot([EXT]);
+  assert.equal(active(orch), 'browser_extension');
+  assert.equal(orch.claimExternalCard('update', { force: true }), false);
+  orch.stop();
+});
+
+test('a meeting that fails for a missing permission reopens a card closed earlier this launch', () => {
+  const orch = boot([PERMS], { permissionsNeedAttention: true, permsShown: true });
+  assert.equal(active(orch), 'permissions');
+  orch.markDismissed('permissions');
+  assert.equal(wait(orch, 61_000), null, 'closed: not raised again by itself');
+  orch.setUserState({ permissionsRecoveryRequested: true });
+  assert.equal(wait(orch, 61_000), 'permissions', 'the failed meeting brings it back');
+  orch.markDismissed('permissions');
+  assert.equal(wait(orch, 61_000), null);
+  orch.setUserState({ permissionsRecoveryRequested: true });
+  assert.equal(wait(orch, 61_000), 'permissions', 'and again for the next failed meeting');
   orch.stop();
 });
 

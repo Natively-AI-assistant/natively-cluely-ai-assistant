@@ -31,9 +31,11 @@ interface UpdateBannerProps {
     /**
      * Take the one full-window card slot from the launcher's card scheduler
      * (OnboardingOrchestrator.claimExternalCard); false while a card holds it.
-     * While held, no onboarding card opens.
+     * While held, no onboarding card opens. `force`: the user expanded the
+     * corner toast, so the spacing and the Welcome launch do not hold it back
+     * (an open card still does).
      */
-    claimSlot?: () => boolean;
+    claimSlot?: (force?: boolean) => boolean;
     /** Give the slot back once the card is closed or shrunk to its corner toast. */
     releaseSlot?: () => void;
 }
@@ -261,7 +263,8 @@ const UpdateBanner: React.FC<UpdateBannerProps> = ({ canOpen = true, claimSlot, 
     // One full-window card at a time (2026-11-09): the card opens only when
     // nothing else holds the screen, and holds the scheduler's slot while
     // open, so no onboarding card opens over it. It waits, it is not lost.
-    // A user expanding the corner toast is let through: they asked for it.
+    // A user expanding the corner toast takes the slot past the spacing (they
+    // asked for it), but never over an open card: then it waits like any claim.
     const wantsCard = isVisible && !minimized;
     const [holdsSlot, setHoldsSlot] = useState(false);
     const expandRequestedRef = useRef(false);
@@ -272,7 +275,7 @@ const UpdateBanner: React.FC<UpdateBannerProps> = ({ canOpen = true, claimSlot, 
         if (wantsCard && !holdsSlot) {
             const asked = expandRequestedRef.current;
             if (!asked && !canOpen) return;
-            if ((claimSlot?.() ?? true) || asked) {
+            if (claimSlot?.(asked) ?? true) {
                 expandRequestedRef.current = false;
                 setHoldsSlot(true);
                 return;

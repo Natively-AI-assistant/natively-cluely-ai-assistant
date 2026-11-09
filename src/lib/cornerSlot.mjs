@@ -9,14 +9,19 @@
 // asking is shown, and the others wait (still asking), so each comes back when
 // the corner frees. Nothing is dropped. Pure; no DOM, no platform branches.
 
-/** Highest priority first. */
+/**
+ * Highest priority first. The trial meter is last: it is a status that stays
+ * up on Home for the whole trial, not a passing notice, so anywhere above the
+ * others it would hide them (the provider notice's Reindex included) for the
+ * whole trial. It comes back whenever the corner clears.
+ */
 export const CORNER_PRIORITY = Object.freeze([
   'meeting_offer',
   'update',
   'quota',
-  'trial_meter',
   'hindsight',
   'provider_notice',
+  'trial_meter',
 ]);
 
 export function createCornerSlot(order = CORNER_PRIORITY) {

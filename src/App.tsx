@@ -529,7 +529,7 @@ const App: React.FC = () => {
   // scheduler's one slot, so no onboarding card opens over it.
   const updateCardMayOpen = !showStartup && showWelcome === false && !isSettingsOpen && !isManagerOpen
     && !showTrialExpiredModal && !trialEndedDue && !orchState?.activeToasterId;
-  const claimUpdateSlot = useCallback(() => (orch ? orch.claimExternalCard('update') : true), [orch]);
+  const claimUpdateSlot = useCallback((force?: boolean) => (orch ? orch.claimExternalCard('update', { force }) : true), [orch]);
   const releaseUpdateSlot = useCallback(() => { orch?.releaseExternalCard('update'); }, [orch]);
   // ── Card scheduler inputs (toaster policy) ──────────────────────────────
   // What decides which card is relevant (keys, plan, profile, JD, trial,
