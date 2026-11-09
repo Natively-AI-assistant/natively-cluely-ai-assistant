@@ -4,28 +4,11 @@
 // (src/lib/onboarding/firstRunGuide.mjs decides what each purchase means).
 import React, { useCallback, useEffect, useState } from 'react';
 import { useT } from '../../i18n';
-import type { GuideFacts } from '../../lib/onboarding/firstRunGuide.mjs';
+import { planStepTitle } from '../../lib/onboarding/firstRunGuide.mjs';
 import { GuideCard, type GuideListRow } from './GuideCard';
 import { guideOn, useGuide } from './useGuide';
 
-/** Below this much trial time the trial reads as "almost used up". */
-const ALMOST_GONE_MS = 15 * 60 * 1000;
-
 type TrialLeft = { ms: number | null; over: boolean };
-
-async function readFacts(): Promise<GuideFacts> {
-  const api = window.electronAPI;
-  const [creds, licence] = await Promise.all([
-    api?.getStoredCredentials?.().catch(() => undefined),
-    api?.licenseGetDetails?.().catch(() => undefined),
-  ]);
-  return {
-    hasOwnAiKey: !!creds?.hasOwnAiKey,
-    hasNativelyKey: !!(creds as { hasNativelyKey?: boolean } | undefined)?.hasNativelyKey,
-    isPremium: !!licence?.isPremium,
-    launchCount: 0,
-  };
-}
 
 export const SettingsGuide: React.FC = () => {
   const tr = useT();
@@ -34,9 +17,10 @@ export const SettingsGuide: React.FC = () => {
   const onKeys = guideOn(state, 'keys');
   const finishedBought = state?.status === 'finished' && state.outcome === 'bought';
 
-  // Step 6: a plan bought here, or keys added, is reported with fresh facts.
+  // Step 6: a plan bought here, or keys added. Main judges what changed from
+  // its own sources (a running trial's placeholder key is not a purchase).
   const report = useCallback(() => {
-    void readFacts().then((facts) => dispatch({ type: 'plan_changed', facts }));
+    dispatch({ type: 'plan_changed' });
   }, [dispatch]);
   useEffect(() => {
     if (!onPlans) return;
@@ -118,13 +102,7 @@ export const SettingsGuide: React.FC = () => {
     const minutes = trial?.ms != null ? Math.max(1, Math.round(trial.ms / 60000)) : null;
     const variant = state!.variant;
     const over = variant === 'trial_out' || !!trial?.over;
-    const title = variant === 'no_trial'
-      ? tr('Your free trial isn’t available on this device.')
-      : over
-        ? tr('Your free trial is used up.')
-        : trial?.ms != null && trial.ms > ALMOST_GONE_MS
-          ? tr('Keep Natively Pro after your trial.')
-          : tr('Your free trial is almost used up.');
+    const title = tr(planStepTitle({ variant, remainingMs: trial?.ms ?? null, expired: !!trial?.over }));
     const left = !over && variant !== 'no_trial' && minutes != null
       ? `${tr('About {n} min left.').replace('{n}', String(minutes))} `
       : '';

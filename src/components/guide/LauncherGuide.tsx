@@ -2,11 +2,22 @@
 // finished meeting), the meeting and trial events the guide moves on, and the
 // hand-off to Settings for steps 6 and 7. The overlay, notes window and Settings
 // draw their own steps (src/components/guide/*).
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useT } from '../../i18n';
-import { getOrchestrator } from '../../lib/onboarding/orchestrator.ts';
+import { trialEventFromLocal } from '../../lib/onboarding/firstRunGuide.mjs';
+import { LavenderButton, useWelcomeTheme } from '../onboarding/welcomeShared';
 import { GuideCard } from './GuideCard';
-import { guideOn, useGuide } from './useGuide';
+import { guideOn, useAnchorRect, useGuide } from './useGuide';
+
+/** The control each launcher-side step points at (steps 6 and 7 live in Settings, in this window). */
+const STEP_ANCHOR: Partial<Record<string, string>> = {
+  notes: '[data-guide="meeting-tabs"]',
+  plans: '[data-guide="nav-plans"]',
+  keys: '[data-guide="nav-ai-providers"]',
+};
+/** How long a step's control may be off screen before the way back shows. */
+const OFF_SCREEN_MS = 1200;
 
 interface Props {
   onOpenSettings: (tab: string) => void;
@@ -28,12 +39,19 @@ export const LauncherGuide: React.FC<Props> = ({ onOpenSettings, onOpenMeeting }
     return () => { off?.(); };
   }, [active, dispatch]);
 
-  // No trial to cover the meeting: one already used on this device, or the
-  // automatic start failed. Step 1 must not promise one; go to the plans step.
+  // No trial to cover the meeting: used up, already claimed on this device, or
+  // the automatic start failed. Step 1 must not promise one; go to the plans
+  // step. Asked of main each time, not read from a cache that may not be filled yet.
   useEffect(() => {
     if (step !== 'start') return;
-    const us = getOrchestrator().getUserState();
-    if (us.trialClaimed && !us.hasTrialToken) dispatch({ type: 'trial_unavailable' });
+    let alive = true;
+    window.electronAPI?.getLocalTrial?.()
+      .then((local) => {
+        const ev = trialEventFromLocal(local);
+        if (alive && ev) dispatch({ type: ev });
+      })
+      .catch(() => {});
+    return () => { alive = false; };
   }, [step, dispatch]);
   useEffect(() => {
     if (!active) return;
@@ -43,28 +61,15 @@ export const LauncherGuide: React.FC<Props> = ({ onOpenSettings, onOpenMeeting }
     return () => { off?.(); };
   }, [active, dispatch]);
 
-  // Step 5: open the meeting that just ended. It is saved a moment after the
-  // stop, so try again each time the meeting list changes, once it is opened stop.
-  const openedFor = useRef<number | null>(null);
+  // Step 5: open the meeting main saved when the first meeting ended
+  // (meeting_saved), once per meeting.
+  const endedMeetingId = state?.endedMeetingId ?? null;
+  const openedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (step !== 'notes' || justDone) return;
-    const key = state?.updatedAt ?? 0;
-    if (openedFor.current === key) return;
-    let alive = true;
-    const tryOpen = () => {
-      window.electronAPI?.getRecentMeetings?.()
-        .then((list) => {
-          const id = list?.[0]?.id;
-          if (!alive || !id || openedFor.current === key) return;
-          openedFor.current = key;
-          onOpenMeeting(id);
-        })
-        .catch(() => {});
-    };
-    tryOpen();
-    const off = window.electronAPI?.onMeetingsUpdated?.(tryOpen);
-    return () => { alive = false; off?.(); };
-  }, [step, justDone, state?.updatedAt, onOpenMeeting]);
+    if (step !== 'notes' || justDone || !endedMeetingId || openedFor.current === endedMeetingId) return;
+    openedFor.current = endedMeetingId;
+    onOpenMeeting(endedMeetingId);
+  }, [step, justDone, endedMeetingId, onOpenMeeting]);
 
   // Steps 6 and 7 live in Settings: open the right tab once per step.
   const openedSettings = useRef<string | null>(null);
@@ -77,6 +82,24 @@ export const LauncherGuide: React.FC<Props> = ({ onOpenSettings, onOpenMeeting }
   }, [step, justDone, state?.updatedAt, onOpenSettings]);
 
   const skip = () => dispatch({ type: 'skip' });
+
+  // The way back: a step whose control is not on screen (Settings closed, or
+  // the user left the meeting) shows one small button instead of nothing,
+  // since the guide holds the card slot while it runs.
+  const anchor = step && !justDone ? STEP_ANCHOR[step] ?? null : null;
+  const anchorRect = useAnchorRect(anchor);
+  const [offScreen, setOffScreen] = useState(false);
+  useEffect(() => {
+    setOffScreen(false);
+    if (!anchor || anchorRect || (step === 'notes' && !endedMeetingId)) return;
+    const timer = setTimeout(() => setOffScreen(true), OFF_SCREEN_MS);
+    return () => clearTimeout(timer);
+  }, [anchor, anchorRect, step, endedMeetingId]);
+  const resume = () => {
+    if (step === 'notes' && endedMeetingId) onOpenMeeting(endedMeetingId);
+    else if (step === 'plans') onOpenSettings('plans');
+    else if (step === 'keys') onOpenSettings('ai-providers');
+  };
 
   if (guideOn(state, 'start')) {
     return (
@@ -112,5 +135,24 @@ export const LauncherGuide: React.FC<Props> = ({ onOpenSettings, onOpenMeeting }
     );
   }
 
+  if (offScreen && anchor) return <ContinueGuide label={tr('Continue the guide')} skipLabel={tr('Skip guide')} onContinue={resume} onSkip={skip} />;
+
   return null;
+};
+
+const ContinueGuide: React.FC<{ label: string; skipLabel: string; onContinue: () => void; onSkip: () => void }> = ({
+  label, skipLabel, onContinue, onSkip,
+}) => {
+  const t = useWelcomeTheme();
+  return createPortal(
+    <div
+      className="guide-enter"
+      data-guide-card="continue"
+      style={{ position: 'fixed', left: '50%', bottom: 20, transform: 'translateX(-50%)', zIndex: 2147483001, display: 'flex', alignItems: 'center', gap: 12 }}
+    >
+      <LavenderButton t={t} height={34} labelSize={13} onClick={onContinue}>{label}</LavenderButton>
+      <button type="button" className="guide-skip" style={{ fontSize: 12, color: t.faint }} onClick={onSkip}>{skipLabel}</button>
+    </div>,
+    document.body,
+  );
 };

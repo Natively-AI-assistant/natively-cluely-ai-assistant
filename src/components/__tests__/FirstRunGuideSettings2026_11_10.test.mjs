@@ -19,9 +19,10 @@ test('Settings marks its Plans and AI Providers nav items and draws the guide', 
 
 test('SettingsGuide: honest trial copy, purchases and keys move the guide, AI provider first', () => {
   const g = read('src/components/guide/SettingsGuide.tsx');
-  for (const s of ["type: 'own_keys'", "type: 'keys_done'", "type: 'plan_changed'", 'getTrialStatus', 'licenseGetDetails',
+  // The step 6 titles are planStepTitle's (firstRunGuideReview.test.mjs); main
+  // judges plan_changed from its own sources (FirstRunGuideReview2026_11_10).
+  for (const s of ["type: 'own_keys'", "type: 'keys_done'", "type: 'plan_changed'", 'getTrialStatus', 'planStepTitle(',
     'getStoredCredentials', 'getSttProvider', 'getEmbeddingStatus', 'onCredentialsChanged', 'onLicenseStatusChanged',
-    "'Your free trial is almost used up.'", "'Your free trial is used up.'", "'Your free trial isn’t available on this device.'",
     "'Use my own keys'", "'Set up Natively your way.'", '[data-guide="nav-plans"]', '[data-guide="nav-ai-providers"]']) {
     assert.ok(g.includes(s), s);
   }

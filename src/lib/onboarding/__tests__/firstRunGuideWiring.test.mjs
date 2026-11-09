@@ -15,9 +15,11 @@ test('main handles guide:get and guide:dispatch and broadcasts guide:changed', (
   const ipc = read('electron/ipcHandlers.ts');
   assert.ok(ipc.includes("safeHandle('guide:get'"));
   assert.ok(ipc.includes("safeHandle('guide:dispatch'"));
-  assert.ok(ipc.includes("'guide:changed'"));
-  assert.ok(ipc.includes('GUIDE_EVENT_TYPES'), 'events are validated against the reducer list');
-  assert.ok(/sm\.set\('firstRunGuide'/.test(ipc), 'state is saved with the other onboarding state');
+  // The store (services/firstRunGuideStore.ts) validates, saves and broadcasts.
+  const store = read('electron/services/firstRunGuideStore.ts');
+  assert.ok(store.includes("'guide:changed'"));
+  assert.ok(store.includes('GUIDE_EVENT_TYPES'), 'events are validated against the reducer list');
+  assert.ok(/set\('firstRunGuide'/.test(store), 'state is saved with the other onboarding state');
 });
 
 test('preload exposes guideGet, guideDispatch and onGuideChanged (types and implementation)', () => {

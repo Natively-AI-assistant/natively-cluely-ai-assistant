@@ -47,9 +47,11 @@ export const GUIDE_EVENT_TYPES = Object.freeze([
   'plans_closed', 'meeting_started', 'answer_shown', 'screenshot_taken', 'note_typed', 'meeting_stopped',
   'notes_next', 'trial_out', 'trial_unavailable', 'plan_changed', 'own_keys', 'keys_done', 'skip', 'restart',
 ]);
+// 'meeting_saved' is main's own (electron/services/firstRunGuideStore.ts): a
+// window may not claim which meeting was saved, so it is not listed above.
 
 export function emptyGuideState() {
-  return { status: 'idle', step: 'start', variant: 'normal', outcome: null, startedAt: null, updatedAt: null };
+  return { status: 'idle', step: 'start', variant: 'normal', outcome: null, startedAt: null, updatedAt: null, endedMeetingId: null };
 }
 
 const isTime = (v) => v === null || (typeof v === 'number' && Number.isFinite(v));
@@ -57,11 +59,14 @@ const isTime = (v) => v === null || (typeof v === 'number' && Number.isFinite(v)
 export function normalizeGuideState(raw, now) {
   if (!raw || typeof raw !== 'object') return emptyGuideState();
   const { status, step, variant, outcome, startedAt, updatedAt } = raw;
+  // Saved before the field existed: no meeting recorded.
+  const endedMeetingId = raw.endedMeetingId === undefined ? null : raw.endedMeetingId;
   if (!STATUSES.includes(status) || !STEPS.includes(step) || !VARIANTS.includes(variant)
-    || !OUTCOMES.includes(outcome) || !isTime(startedAt) || !isTime(updatedAt)) {
+    || !OUTCOMES.includes(outcome) || !isTime(startedAt) || !isTime(updatedAt)
+    || !(endedMeetingId === null || (typeof endedMeetingId === 'string' && endedMeetingId.length > 0))) {
     return emptyGuideState();
   }
-  const state = { status, step, variant, outcome, startedAt, updatedAt };
+  const state = { status, step, variant, outcome, startedAt, updatedAt, endedMeetingId };
   if (status === 'active' && typeof updatedAt === 'number' && now - updatedAt > GUIDE_RESUME_MS) {
     return { ...state, status: 'expired' };
   }
@@ -108,6 +113,15 @@ export function reduceGuide(state, event, now) {
       return move(state, { status: 'skipped' }, now);
     case 'meeting_stopped':
       return IN_MEETING.includes(state.step) ? move(state, { step: 'notes' }, now) : state;
+    case 'meeting_saved': {
+      // Main saved the meeting that just ended (main.ts endMeeting). Step 5
+      // opens exactly that one; with nothing saved there are no notes to show.
+      if (!IN_MEETING.includes(state.step) && state.step !== 'notes') return state;
+      const id = typeof event.meetingId === 'string' && event.meetingId ? event.meetingId : null;
+      return id
+        ? (state.step === 'notes' && state.endedMeetingId === id ? state : move(state, { step: 'notes', endedMeetingId: id }, now))
+        : move(state, { step: 'plans' }, now);
+    }
     case 'trial_out':
       return BEFORE_PLANS.includes(state.step) ? move(state, { step: 'plans', variant: 'trial_out' }, now) : state;
     case 'trial_unavailable':
@@ -125,4 +139,51 @@ export function reduceGuide(state, event, now) {
       return edge && state.step === edge[0] ? move(state, { step: edge[1] }, now) : state;
     }
   }
+}
+
+/**
+ * The facts plan_changed is judged on, from main's own sources. A running
+ * trial stores a placeholder Natively key (TRIAL_SENTINEL_KEY): that is not a
+ * purchase, so it never counts as one.
+ */
+export function guideFactsFromSources({ nativelyKey, trialSentinel, licensed, hasOwnAiKey, launchCount = 0 } = {}) {
+  return {
+    hasOwnAiKey: !!hasOwnAiKey,
+    hasNativelyKey: typeof nativelyKey === 'string' && nativelyKey.length > 0 && nativelyKey !== trialSentinel,
+    isPremium: !!licensed,
+    launchCount: Number(launchCount) || 0,
+  };
+}
+
+/**
+ * Line the guide up with whether a meeting is running (main knows; a window
+ * may not). A guide on step 1 while a meeting runs (restarted mid-meeting)
+ * moves to step 2. At launch, an in-meeting step with no meeting (the app quit
+ * or crashed mid-meeting) moves to the notes step, since no stop will come.
+ * Returns the same object when nothing changes.
+ */
+export function reconcileGuide(state, { meetingActive, atLaunch }, now) {
+  if (!state || state.status !== 'active') return state;
+  if (meetingActive && state.step === 'start') return reduceGuide(state, { type: 'meeting_started' }, now);
+  if (atLaunch && !meetingActive && IN_MEETING.includes(state.step)) return reduceGuide(state, { type: 'meeting_stopped' }, now);
+  return state;
+}
+
+/** Below this much trial time the trial reads as "almost used up". */
+const ALMOST_GONE_MS = 15 * 60 * 1000;
+
+/** Step 6's title: never more than the trial status shows (English; callers translate). */
+export function planStepTitle({ variant, remainingMs, expired }) {
+  if (variant === 'no_trial') return 'Your free trial isn’t available on this device.';
+  if (variant === 'trial_out' || expired || remainingMs === 0) return 'Your free trial is used up.';
+  if (typeof remainingMs !== 'number') return 'Keep Natively Pro.';
+  return remainingMs > ALMOST_GONE_MS ? 'Keep Natively Pro after your trial.' : 'Your free trial is almost used up.';
+}
+
+/** What step 1 learns from main's local trial record (get-local-trial). */
+export function trialEventFromLocal(local) {
+  if (!local || typeof local !== 'object') return null;
+  if (local.expired) return 'trial_out';
+  if (local.trialClaimed && !local.hasToken) return 'trial_unavailable';
+  return null;
 }

@@ -10,6 +10,8 @@ export interface GuideState {
   outcome: 'bought' | 'own_keys' | null;
   startedAt: number | null;
   updatedAt: number | null;
+  /** The meeting main saved when the first meeting ended (step 5 opens it). */
+  endedMeetingId: string | null;
 }
 
 export interface GuideFacts {
@@ -29,11 +31,13 @@ export type GuideEvent =
   | { type: 'notes_next' }
   | { type: 'trial_out' }
   | { type: 'trial_unavailable' }
-  | { type: 'plan_changed'; facts: GuideFacts }
+  /** Main replaces the facts with its own (services/firstRunGuideStore.ts). */
+  | { type: 'plan_changed'; facts?: GuideFacts }
   | { type: 'own_keys' }
   | { type: 'keys_done' }
   | { type: 'skip' }
-  | { type: 'restart' };
+  | { type: 'restart' }
+  | { type: 'meeting_saved'; meetingId: string | null };
 
 export const GUIDE_EVENT_TYPES: readonly GuideEvent['type'][];
 export const GUIDE_RESUME_MS: number;
@@ -45,3 +49,13 @@ export function normalizeGuideState(raw: unknown, now: number): GuideState;
 export function isGuideEligible(facts: GuideFacts): boolean;
 export function reduceGuide(state: GuideState, event: GuideEvent, now: number): GuideState;
 export function windowForStep(step: GuideStepId): GuideWindow;
+export function guideFactsFromSources(sources: {
+  nativelyKey?: string | null;
+  trialSentinel: string;
+  licensed?: boolean;
+  hasOwnAiKey?: boolean;
+  launchCount?: number;
+}): GuideFacts;
+export function reconcileGuide(state: GuideState, ctx: { meetingActive: boolean; atLaunch: boolean }, now: number): GuideState;
+export function planStepTitle(input: { variant: GuideVariant; remainingMs: number | null; expired: boolean }): string;
+export function trialEventFromLocal(local: { hasToken?: boolean; trialClaimed?: boolean; expired?: boolean } | null | undefined): 'trial_out' | 'trial_unavailable' | null;

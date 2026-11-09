@@ -542,8 +542,13 @@ const App: React.FC = () => {
   const guideHoldsScreen = (isLauncherWindow || isDefault) && guide.state?.status === 'active';
   useEffect(() => {
     if (!orch || !guideHoldsScreen) return;
-    orch.claimExternalCard('first_run_guide', { force: true });
-    return () => { orch.releaseExternalCard('first_run_guide'); };
+    // The slot may be taken (an update card, or the trial-ended flag not yet
+    // cleared): keep asking each time the orchestrator changes until it is ours.
+    let held = orch.claimExternalCard('first_run_guide', { force: true });
+    const off = held ? undefined : orch.subscribe(() => {
+      if (!held) held = orch.claimExternalCard('first_run_guide', { force: true });
+    });
+    return () => { off?.(); orch.releaseExternalCard('first_run_guide'); };
   }, [orch, guideHoldsScreen]);
   useEffect(() => {
     if (guideHoldsScreen && (showTrialExpiredModal || trialEndedDue)) dispatchGuide({ type: 'trial_out' });

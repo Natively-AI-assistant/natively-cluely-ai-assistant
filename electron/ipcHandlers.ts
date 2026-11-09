@@ -13,8 +13,8 @@ import { openInNotepadBlockReason, resumeBlockReason } from './services/meeting/
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import { resolveMacScreenStatus } from '../src/lib/permissionAttentionPolicy.mjs';
 import { applyPermissionsCardEvent, normalizePermissionsCardRecord } from '../src/lib/permissionsCardPolicy.mjs';
-import { GUIDE_EVENT_TYPES, normalizeGuideState, reduceGuide } from '../src/lib/onboarding/firstRunGuide.mjs';
-import type { GuideEvent } from '../src/lib/onboarding/firstRunGuide.mjs';
+import { guideFactsFromSources } from '../src/lib/onboarding/firstRunGuide.mjs';
+import { configureGuideStore, dispatchGuideFromWindow, getGuideState } from './services/firstRunGuideStore';
 import { hasOwnAiKey, resolveExpiredTrial } from '../src/lib/trialPolicy.mjs';
 import { CARDS, OUTCOMES } from '../src/lib/cards/cardPolicy.mjs';
 import { TRIAL_CAMPAIGN, TRIAL_PROMO_ID, runTrialCampaignReset } from '../src/lib/trialCampaign.mjs';
@@ -9331,28 +9331,26 @@ export function initializeIpcHandlers(appState: AppState): void {
   // on one step; each window reports what it saw and the reducer decides. An
   // event that changes nothing (two windows seeing the same meeting stop) is
   // neither saved nor broadcast.
-  safeHandle('guide:get', async () => {
-    const sm = SettingsManager.getInstance();
-    const raw = sm.get('firstRunGuide');
-    const state = normalizeGuideState(raw, Date.now());
-    if (raw && state.status !== (raw as { status?: unknown }).status) sm.set('firstRunGuide', state);
-    return state;
+  // First-run guide (services/firstRunGuideStore.ts): main supplies what a
+  // window cannot know. A running trial's placeholder Natively key is not a
+  // purchase, and whether a meeting runs comes from AppState.
+  configureGuideStore({
+    meetingActive: () => appState.getIsMeetingActive(),
+    factsProvider: () => {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      return guideFactsFromSources({
+        nativelyKey: cm.getNativelyApiKey(),
+        trialSentinel: TRIAL_SENTINEL_KEY,
+        licensed: isLicensed(),
+        hasOwnAiKey: hasOwnAiKey(cm.getAllCredentials(), { codexReady: codexRouteReady() }),
+      });
+    },
   });
-
-  safeHandle('guide:dispatch', async (_, event: unknown) => {
-    const sm = SettingsManager.getInstance();
-    const now = Date.now();
-    const current = normalizeGuideState(sm.get('firstRunGuide'), now);
-    const type = (event as { type?: unknown } | null)?.type;
-    if (typeof type !== 'string' || !(GUIDE_EVENT_TYPES as readonly string[]).includes(type)) return current;
-    const next = reduceGuide(current, event as GuideEvent, now);
-    if (next === current) return current;
-    if (!sm.set('firstRunGuide', next)) return current;
-    BrowserWindow.getAllWindows().forEach((win) => {
-      if (!win.isDestroyed()) win.webContents.send('guide:changed', next);
-    });
-    return next;
-  });
+  safeHandle('guide:get', async () => getGuideState());
+  // Validated against GUIDE_EVENT_TYPES; then reduced, saved and broadcast
+  // ('guide:changed') to every window.
+  safeHandle('guide:dispatch', async (_, event: unknown) => dispatchGuideFromWindow(event));
 
   // First-launch shortcut tour: route the shortcuts it teaches to the calling
   // renderer as practice presses (AppState.setShortcutTour). Bound to the

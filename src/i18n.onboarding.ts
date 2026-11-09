@@ -175,6 +175,8 @@ const ROWS: Record<string, Row> = {
   'Pick one': ['Выберите', '选择一个', '1つ選択', 'Elige uno'],
   'Retrieval': ['Поиск по документам', '检索', '検索', 'Búsqueda'],
   'Optional': ['Необязательно', '可选', '任意', 'Opcional'],
+  'Keep Natively Pro.': ['Сохраните Natively Pro.', '继续使用 Natively Pro。', 'Natively Pro を使い続けましょう。', 'Conserva Natively Pro.'],
+  'Continue the guide': ['Продолжить гид', '继续引导', 'ガイドを続ける', 'Continuar la guía'],
   'Show the guide again': ['Показать гид снова', '再次显示引导', 'ガイドをもう一度表示', 'Mostrar la guía otra vez'],
   'Walks you through your first meeting, one step at a time.': ['Проведёт вас через первую встречу шаг за шагом.', '一步步带你完成第一场会议。', 'はじめての会議を一歩ずつ案内します。', 'Te acompaña en tu primera reunión, paso a paso.'],
 };

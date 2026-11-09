@@ -21,6 +21,10 @@ const GENERATED = { ru: RU_GENERATED, zh: ZH_GENERATED, ja: JA_GENERATED, es: ES
 
 function guideStrings() {
   const out = new Set(['Show the guide again', 'Walks you through your first meeting, one step at a time.']);
+  // Step 6's titles come from planStepTitle (firstRunGuide.mjs), translated by the caller.
+  const lib = fs.readFileSync(path.join(ROOT, 'src/lib/onboarding/firstRunGuide.mjs'), 'utf8');
+  const fn = lib.slice(lib.indexOf('export function planStepTitle'), lib.indexOf('export function trialEventFromLocal'));
+  for (const m of fn.matchAll(/return '((?:[^'\\]|\\.)*)'/g)) out.add(m[1]);
   for (const f of fs.readdirSync(GUIDE).filter((n) => n.endsWith('.tsx'))) {
     const src = fs.readFileSync(path.join(GUIDE, f), 'utf8');
     for (const m of src.matchAll(/\btr\('((?:[^'\\]|\\.)*)'\)/g)) out.add(m[1].replace(/\\'/g, "'"));
