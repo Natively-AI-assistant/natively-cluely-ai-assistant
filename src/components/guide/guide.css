@@ -47,3 +47,38 @@
     to { opacity: 1; }
   }
 }
+
+/* The overlay's guide banner (OverlayGuide.tsx): ui/OverlayBanner in a
+   lavender tone. The repeated class outranks every theme scope in
+   OverlayBanner.css (the liquid-glass + light one is (0,3,0)). */
+.ov-banner.ov-banner.ov-banner[data-tone='guide'] {
+  --ovb-cta-tone: 124, 92, 255;
+  --ovb-cta-fg: #ece6ff;
+  --ovb-cta-fill: 0.3;
+  --ovb-cta-fill-hover: 0.44;
+}
+.ov-banner.ov-banner.ov-banner[data-tone='guide'] .lg-button.lg-badge.ov-banner-mark {
+  --lg-lav-fg: #b9a6ff;
+}
+[data-theme='light'] .ov-banner.ov-banner.ov-banner[data-tone='guide'] {
+  --ovb-cta-tone: 124, 92, 255;
+  --ovb-cta-fg: #3d2a9e;
+  --ovb-cta-fill: 0.22;
+  --ovb-cta-fill-hover: 0.34;
+}
+[data-theme='light'] .ov-banner.ov-banner.ov-banner[data-tone='guide'] .lg-button.lg-badge.ov-banner-mark {
+  --lg-lav-fg: #6a4fe0;
+}
+.ov-banner .guide-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--overlay-text-primary) 55%, transparent);
+  padding: 0 2px;
+  white-space: nowrap;
+}
+.ov-banner .guide-key-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  column-gap: 14px;
+  row-gap: 4px;
+}

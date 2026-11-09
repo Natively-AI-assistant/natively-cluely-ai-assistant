@@ -41,3 +41,13 @@ test('App mounts LauncherGuide, holds the card slot, and holds back the trial-en
   assert.ok(/showTrialExpiredModal && !guideHoldsScreen/.test(app), 'the trial-ended card waits for the guide');
   assert.ok(/trialEndedOpen: \(showTrialExpiredModal \|\| trialEndedDue\) && !guideHoldsScreen/.test(app));
 });
+
+// Found in the live walk (2026-11-10): Settings opened over the launcher and
+// the step 1 card stayed on top of it, pointing at a Start button it covered.
+// A card's anchor counts only while it is the thing actually on screen there.
+test('a guide card hides while something covers its anchor', () => {
+  const u = read('src/components/guide/useGuide.ts');
+  const fn = u.slice(u.indexOf('export function useAnchorRect'), u.indexOf('return rect;', u.indexOf('export function useAnchorRect')));
+  assert.ok(fn.includes('elementFromPoint'), 'checks what is really at the anchor');
+  assert.ok(fn.includes('[data-guide-card]'), 'the card itself does not count as covering');
+});

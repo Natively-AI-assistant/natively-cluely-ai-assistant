@@ -28,3 +28,23 @@ test('OverlayGuide reports answers and screenshots and teaches the real keys', (
   }
   assert.ok(!/\.focus\(|autoFocus/.test(g), 'the strip never takes focus from the call');
 });
+
+// Evin, 2026-11-10, on the first strip: "ui is messy". The overlay's steps are
+// the overlay's own banner (ui/OverlayBanner.tsx: neutral body, glass mark,
+// title + one line, trailing actions, plain ✕), in a lavender guide tone, not a
+// hand-drawn purple block with a stacked right-hand column.
+test('the overlay steps are OverlayBanners in the guide tone, one line under the title', () => {
+  const g = read('src/components/guide/OverlayGuide.tsx');
+  assert.ok(g.includes('<OverlayBanner'), 'built from the overlay banner');
+  assert.ok(!g.includes('<GuideStrip'), 'not the hand-drawn strip');
+  assert.ok(g.includes("tone={done ? 'ok' : 'guide'}"));
+  assert.ok(g.includes('className="ov-banner-keys"'), 'keycaps in the banner style');
+  assert.ok(g.includes("dismissLabel={tr('Skip guide')}"), 'the ✕ skips the guide');
+  assert.ok(!g.includes("tr('Waiting for you')"), 'no waiting dot: the lit chip says it');
+  assert.ok(g.includes('useGuideLit('), 'still lights What to answer');
+  const b = read('src/components/ui/OverlayBanner.tsx');
+  assert.ok(/OverlayBannerTone = 'warning' \| 'error' \| 'ok' \| 'guide'/.test(b));
+  const css = read('src/components/guide/guide.css');
+  assert.ok(/\[data-tone='guide'\]/.test(css) && /124, 92, 255/.test(css), 'the guide tone is lavender');
+  assert.ok(/\[data-theme='light'\][^{]*\[data-tone='guide'\]/.test(css), 'and has a light-theme mark');
+});

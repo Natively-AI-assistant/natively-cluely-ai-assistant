@@ -119,7 +119,13 @@ export function useAnchorRect(selector: string | null): DOMRect | null {
         const r = e.getBoundingClientRect();
         return r.width > 0 && r.height > 0;
       });
-      const r = el ? el.getBoundingClientRect() : null;
+      let r = el ? el.getBoundingClientRect() : null;
+      // Covered (Settings or a dialog over it): no anchor, so no card pointing
+      // at something the user cannot see. The guide's own card does not count.
+      if (el && r) {
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        if (hit && !el.contains(hit) && !hit.closest('[data-guide-card]')) r = null;
+      }
       const key = r ? `${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.width)},${Math.round(r.height)}` : '';
       if (key !== last) { last = key; setRect(r); }
       raf = requestAnimationFrame(tick);

@@ -1,12 +1,21 @@
 // First-run guide, overlay window: step 2 (What to answer), step 3 (screenshots),
-// the hand-off to the notepad when it is closed, and the stop prompt. Drawn as
-// an inline strip in a banner fold of the overlay (NativelyInterface.tsx), so
-// the overlay grows to hold it and the banner picker can hold it back for a
-// fault. It never takes focus: the user's call stays in front.
+// the hand-off to the notepad when it is closed, and the stop prompt. Each is the
+// overlay's own banner (ui/OverlayBanner.tsx) in a lavender guide tone, in a
+// banner fold of NativelyInterface.tsx: the overlay grows to hold it and the
+// banner picker can hold it back for a fault. It never takes focus: the user's
+// call stays in front.
 import React, { useEffect, useState } from 'react';
+import { Camera, Check, CircleStop, NotebookPen, Pencil } from 'lucide-react';
 import { useT } from '../../i18n';
-import { GuideStrip } from './GuideStrip';
-import { guideOn, useGuide, useGuideKeys } from './useGuide';
+import { GUIDE_STEP_COUNT, GUIDE_STEP_NUMBER } from '../../lib/onboarding/firstRunGuide.mjs';
+import type { GuideStepId } from '../../lib/onboarding/firstRunGuide.mjs';
+import { OverlayBanner, OverlayBannerButton } from '../ui/OverlayBanner';
+import { guideOn, useGuide, useGuideKeys, useGuideLit } from './useGuide';
+import './guide.css';
+
+const Keys: React.FC<{ keys: string[] }> = ({ keys }) => (
+  <span className="ov-banner-keys">{keys.map((k, i) => <kbd key={i}>{k}</kbd>)}</span>
+);
 
 export function useOverlayGuide(): { wants: boolean; node: React.ReactNode } {
   const tr = useT();
@@ -14,6 +23,7 @@ export function useOverlayGuide(): { wants: boolean; node: React.ReactNode } {
   const active = state?.status === 'active';
   const step = active ? state!.step : null;
   const keysFor = useGuideKeys(step === 'answer' || step === 'screenshot');
+  useGuideLit(step === 'answer' && !justDone ? '[data-guide="what-to-answer"]' : null);
 
   // Whether the notes window is open: step 4 is drawn there when it is.
   const [notesOpen, setNotesOpen] = useState(false);
@@ -57,24 +67,48 @@ export function useOverlayGuide(): { wants: boolean; node: React.ReactNode } {
     return () => { offs.forEach((off) => off?.()); };
   }, [step, justDone, dispatch]);
 
-  const skip = () => dispatch({ type: 'skip' });
+  const banner = (
+    stepId: GuideStepId,
+    icon: React.ReactNode,
+    title: string,
+    message: React.ReactNode,
+    extra?: React.ReactNode,
+  ) => {
+    const done = !!justDone;
+    const count = tr('{n} of {total}')
+      .replace('{n}', String(GUIDE_STEP_NUMBER[stepId]))
+      .replace('{total}', String(GUIDE_STEP_COUNT));
+    return (
+      <OverlayBanner
+        className="mx-4"
+        data-guide-strip={stepId}
+        tone={done ? 'ok' : 'guide'}
+        icon={done ? <Check strokeWidth={2.4} /> : icon}
+        title={title}
+        message={message}
+        actions={
+          <>
+            {!done && extra}
+            <span className="guide-count" aria-label={count}>{count}</span>
+          </>
+        }
+        onDismiss={done ? undefined : () => dispatch({ type: 'skip' })}
+        dismissLabel={tr('Skip guide')}
+      />
+    );
+  };
 
   if (guideOn(state, 'answer')) {
     return {
       wants: true,
-      node: (
-        <GuideStrip
-          stepId="answer"
-          eyebrow={tr('What to answer')}
-          title={tr('They just asked you something.')}
-          body={tr('Press the keys. Natively writes your reply from the conversation.')}
-          note={heard ? undefined : tr('Not on a call? Play any interview video, or ask a question out loud.')}
-          keys={[keysFor('chat:whatToAnswer')]}
-          waiting={tr('Waiting for you')}
-          lit='[data-guide="what-to-answer"]'
-          done={justDone}
-          onSkip={skip}
-        />
+      node: banner(
+        'answer',
+        <Pencil strokeWidth={2.2} />,
+        tr('They just asked you something.'),
+        heard
+          ? tr('Press the keys. Natively writes your reply from the conversation.')
+          : tr('Not on a call? Play any interview video, or ask a question out loud.'),
+        <Keys keys={keysFor('chat:whatToAnswer')} />,
       ),
     };
   }
@@ -82,18 +116,14 @@ export function useOverlayGuide(): { wants: boolean; node: React.ReactNode } {
   if (guideOn(state, 'screenshot')) {
     return {
       wants: true,
-      node: (
-        <GuideStrip
-          stepId="screenshot"
-          eyebrow={tr('Screenshots')}
-          title={tr('Show Natively your screen.')}
-          body={tr('A coding question, a slide, a doc.')}
-          keys={[keysFor('general:take-screenshot'), keysFor('general:selective-screenshot')]}
-          keyLabels={[tr('Whole screen'), tr('Drag an area')]}
-          waiting={tr('Try either one')}
-          done={justDone}
-          onSkip={skip}
-        />
+      node: banner(
+        'screenshot',
+        <Camera strokeWidth={2.2} />,
+        tr('Show Natively your screen.'),
+        <span className="guide-key-row">
+          <span><Keys keys={keysFor('general:take-screenshot')} /> {tr('Whole screen')}</span>
+          <span><Keys keys={keysFor('general:selective-screenshot')} /> {tr('Drag an area')}</span>
+        </span>,
       ),
     };
   }
@@ -101,16 +131,14 @@ export function useOverlayGuide(): { wants: boolean; node: React.ReactNode } {
   if (guideOn(state, 'notepad') && !notesOpen) {
     return {
       wants: true,
-      node: (
-        <GuideStrip
-          stepId="notepad"
-          eyebrow={tr('Notepad')}
-          title={tr('Write while you talk.')}
-          body={tr('Open the notepad and jot a line. It goes into your meeting notes.')}
-          action={{ label: tr('Open notepad'), onClick: () => { void window.electronAPI?.notesWindowToggle?.(); } }}
-          done={justDone}
-          onSkip={skip}
-        />
+      node: banner(
+        'notepad',
+        <NotebookPen strokeWidth={2.2} />,
+        tr('Write while you talk.'),
+        tr('Jot a line. It goes into your meeting notes.'),
+        <OverlayBannerButton variant="primary" onClick={() => { void window.electronAPI?.notesWindowToggle?.(); }}>
+          {tr('Open notepad')}
+        </OverlayBannerButton>,
       ),
     };
   }
@@ -118,14 +146,11 @@ export function useOverlayGuide(): { wants: boolean; node: React.ReactNode } {
   if (guideOn(state, 'stop')) {
     return {
       wants: true,
-      node: (
-        <GuideStrip
-          stepId="stop"
-          eyebrow={tr('Notepad')}
-          title={tr('Stop the meeting when you’re ready.')}
-          body={tr('Natively writes up your notes as soon as it stops.')}
-          onSkip={skip}
-        />
+      node: banner(
+        'stop',
+        <CircleStop strokeWidth={2.2} />,
+        tr('Stop the meeting when you’re ready.'),
+        tr('Natively writes up your notes as soon as it stops.'),
       ),
     };
   }
