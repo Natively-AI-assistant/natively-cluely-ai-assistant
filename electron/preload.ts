@@ -1383,6 +1383,10 @@ interface ElectronAPI {
   /** The permissions card's closes while a permission is missing (src/lib/permissionsCardPolicy.mjs). */
   permissionsCardGet: () => Promise<{ dismissals: number; lastDismissedAt: number | null }>;
   permissionsCardRecord: (event: 'dismissed' | 'granted') => Promise<{ success: boolean; error?: string; record?: { dismissals: number; lastDismissedAt: number | null } }>;
+  /** First-run guide (src/lib/onboarding/firstRunGuide.mjs): state lives in main, every window follows it. */
+  guideGet: () => Promise<import('../src/lib/onboarding/firstRunGuide.mjs').GuideState>;
+  guideDispatch: (event: import('../src/lib/onboarding/firstRunGuide.mjs').GuideEvent) => Promise<import('../src/lib/onboarding/firstRunGuide.mjs').GuideState>;
+  onGuideChanged: (cb: (state: import('../src/lib/onboarding/firstRunGuide.mjs').GuideState) => void) => () => void;
   /** First-launch shortcut tour: taught shortcuts become practice presses. */
   onboardingSetShortcutTour: (active: boolean) => Promise<{ success: boolean }>;
   onOnboardingTourShortcut: (callback: (actionId: string) => void) => () => void;
@@ -3674,6 +3678,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ) => ipcRenderer.invoke('onboarding:set-flag', key, value),
   permissionsCardGet: () => ipcRenderer.invoke('permissions-card:get'),
   permissionsCardRecord: (event: 'dismissed' | 'granted') => ipcRenderer.invoke('permissions-card:record', event),
+  guideGet: () => ipcRenderer.invoke('guide:get'),
+  guideDispatch: (event: import('../src/lib/onboarding/firstRunGuide.mjs').GuideEvent) => ipcRenderer.invoke('guide:dispatch', event),
+  onGuideChanged: (cb: (state: import('../src/lib/onboarding/firstRunGuide.mjs').GuideState) => void) => {
+    const sub = (_: unknown, state: import('../src/lib/onboarding/firstRunGuide.mjs').GuideState) => cb(state);
+    ipcRenderer.on('guide:changed', sub);
+    return () => ipcRenderer.removeListener('guide:changed', sub);
+  },
   onboardingSetShortcutTour: (active: boolean) => ipcRenderer.invoke('onboarding:set-shortcut-tour', active),
   onOnboardingTourShortcut: (callback: (actionId: string) => void) => {
     const subscription = (_: any, actionId: string) => callback(actionId);

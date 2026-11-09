@@ -325,6 +325,9 @@ export interface AppSettings {
     // still missing, and when last; it stops returning at launch after that
     // (src/lib/permissionsCardPolicy.mjs). Cleared once everything is granted.
     permissionsCard?: { dismissals: number; lastDismissedAt: number | null };
+    // The first-run guide (src/lib/onboarding/firstRunGuide.mjs): which step a
+    // new user is on, across the launcher, overlay, notes window and Settings.
+    firstRunGuide?: import('../../src/lib/onboarding/firstRunGuide.mjs').GuideState;
     // The trialStartedAt of the free trial whose profile data the expiry wipe
     // already removed, so the wipe runs once per trial however many windows or
     // launches notice the expiry (ipcHandlers.ts settleExpiredTrial).

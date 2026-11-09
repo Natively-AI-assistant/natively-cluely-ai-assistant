@@ -13,6 +13,8 @@ import { openInNotepadBlockReason, resumeBlockReason } from './services/meeting/
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import { resolveMacScreenStatus } from '../src/lib/permissionAttentionPolicy.mjs';
 import { applyPermissionsCardEvent, normalizePermissionsCardRecord } from '../src/lib/permissionsCardPolicy.mjs';
+import { GUIDE_EVENT_TYPES, normalizeGuideState, reduceGuide } from '../src/lib/onboarding/firstRunGuide.mjs';
+import type { GuideEvent } from '../src/lib/onboarding/firstRunGuide.mjs';
 import { hasOwnAiKey, resolveExpiredTrial } from '../src/lib/trialPolicy.mjs';
 import { CARDS, OUTCOMES } from '../src/lib/cards/cardPolicy.mjs';
 import { TRIAL_CAMPAIGN, TRIAL_PROMO_ID, runTrialCampaignReset } from '../src/lib/trialCampaign.mjs';
@@ -9322,6 +9324,34 @@ export function initializeIpcHandlers(appState: AppState): void {
     const record = applyPermissionsCardEvent(sm.get('permissionsCard'), event, Date.now());
     if (!sm.set('permissionsCard', record)) return { success: false, error: 'settings_store_degraded' };
     return { success: true, record };
+  });
+
+  // First-run guide (docs/superpowers/specs/2026-11-10-first-run-guide-design.md).
+  // Main owns the state so the launcher, overlay, notes window and Settings stay
+  // on one step; each window reports what it saw and the reducer decides. An
+  // event that changes nothing (two windows seeing the same meeting stop) is
+  // neither saved nor broadcast.
+  safeHandle('guide:get', async () => {
+    const sm = SettingsManager.getInstance();
+    const raw = sm.get('firstRunGuide');
+    const state = normalizeGuideState(raw, Date.now());
+    if (raw && state.status !== (raw as { status?: unknown }).status) sm.set('firstRunGuide', state);
+    return state;
+  });
+
+  safeHandle('guide:dispatch', async (_, event: unknown) => {
+    const sm = SettingsManager.getInstance();
+    const now = Date.now();
+    const current = normalizeGuideState(sm.get('firstRunGuide'), now);
+    const type = (event as { type?: unknown } | null)?.type;
+    if (typeof type !== 'string' || !(GUIDE_EVENT_TYPES as readonly string[]).includes(type)) return current;
+    const next = reduceGuide(current, event as GuideEvent, now);
+    if (next === current) return current;
+    if (!sm.set('firstRunGuide', next)) return current;
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) win.webContents.send('guide:changed', next);
+    });
+    return next;
   });
 
   // First-launch shortcut tour: route the shortcuts it teaches to the calling
