@@ -70,8 +70,7 @@ test('the overlay mounts the trial state once and folds its notice like every ot
 });
 
 test('"Transcription Not Configured" stands down while the trial explains it', () => {
-  // A closed "ended" still explains it (2026-11-09: ended has a close now).
-  assert.ok(overlay.includes("const trialExplainsNoStt = trial.pending || trial.banner === 'ended' || trial.closed === 'ended' || trial.banner === 'failed';"));
+  assert.ok(overlay.includes("const trialExplainsNoStt = trial.pending || trial.banner === 'ended' || trial.banner === 'failed';"));
   assert.ok(overlay.includes("<ChromeFold show={sttNotConfigured && !trialExplainsNoStt && bannerSlots.has('stt-not-configured')} "));
   assert.ok(overlay.includes('{sttNotConfigured && !trialExplainsNoStt && ('));
 });
@@ -99,18 +98,16 @@ test('the buttons: own keys opens AI Providers and keeps the trial; plans opens 
   assert.ok(failed.includes("t('Start free trial')") && failed.includes('trial.startManually'));
 });
 
-test('started, ending and ended can be closed for the meeting; the failed banner cannot', () => {
+test('only the started banner can be closed; the warning, ended and failed banners cannot', () => {
   const part = (from, to) => notice.slice(notice.indexOf(from), notice.indexOf(to));
-  // 2026-11-09: the warning (up to five minutes) and the end (the rest of the
-  // meeting) sat over a live call with no close. They have the banner's ✕ now;
-  // the close holds for this meeting (the hook resets `dismissed` per meeting).
-  assert.ok(part("case 'ended':", "case 'failed':").includes('onDismiss={trial.dismiss}'));
-  assert.ok(part("case 'ending':", "case 'ended':").includes('onDismiss={trial.dismiss}'));
-  // Closing the failed one would uncover "Transcription Not Configured" (see trialExplainsNoStt).
+  assert.ok(!part("case 'ended':", "case 'failed':").includes('onDismiss'));
+  // Nothing transcribes or answers in either, and closing the failed one
+  // would uncover "Transcription Not Configured" (see trialExplainsNoStt).
   assert.ok(!part("case 'failed':", 'default:').includes('onDismiss'));
   assert.ok(part("case 'started':", "case 'ending':").includes('onDismiss={trial.dismiss}'));
-  assert.ok(hook.includes("if (banner !== 'started' && banner !== 'ending' && banner !== 'ended') return;"));
-  assert.ok(hook.includes('facts.current.dismissed[banner] = true;'));
+  // The warning stays for the last five minutes (owner's decision, 2026-10-10).
+  assert.ok(!part("case 'ending':", "case 'ended':").includes('onDismiss'));
+  assert.ok(hook.includes("if (banner !== 'started') return;"));
   // Good news is green, a warning amber, an end red: tone is never decoration.
   assert.ok(part("case 'started':", "case 'ending':").includes('tone="ok"'));
   assert.ok(part("case 'ended':", "case 'failed':").includes('tone="error"'));

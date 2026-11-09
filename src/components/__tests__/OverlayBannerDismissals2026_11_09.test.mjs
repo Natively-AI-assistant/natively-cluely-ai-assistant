@@ -2,9 +2,9 @@
 // (2026-11-09). Renderer-only; the same on macOS and Windows.
 //
 //  O6  the transcription banner (pack ended, stopped, reconnecting, backup,
-//      falling behind) had no ✕; nor did trial "ending" (up to five minutes)
-//      and "ended" (the rest of the meeting). A close holds for this meeting,
-//      and a banner that says something new shows again.
+//      falling behind) had no ✕. A close holds for this meeting, and a
+//      banner that says something new shows again. Trial ending/ended/failed
+//      keep no close (owner decision, 2026-10-10).
 //  O4  a local model that is behind has its own notice, translated.
 //  O9  "Answer was retried without the browser border" never expired and
 //      leaked into the next meeting.
@@ -46,21 +46,15 @@ test('O6: closes and once-per-meeting notices reset with the meeting', () => {
   assert.match(body, /setRefusalRetryNotice\(null\);/, 'O9: the retry note does not leak into the next meeting');
 });
 
-test('O6: trial ending and ended close for the meeting; the next state still shows', () => {
+test('O6: trial ending, ended and failed keep no close (owner decision 2026-10-10)', () => {
+  // Ending and ended: nothing answers until a plan or own keys is chosen.
+  // Failed: closed, it would uncover "Transcription Not Configured" and its
+  // wrong advice. Only "started" closes.
   const t0 = 1_800_000_000_000;
   const base = { now: t0 + 27 * 60_000, expiresAt: t0 + 30 * 60_000, announcedAt: t0, liveThisMeeting: true };
-  assert.equal(overlayTrialNotice(base).banner, 'ending');
-  assert.equal(overlayTrialNotice({ ...base, dismissed: { ending: true } }).banner, null);
-  assert.equal(overlayTrialNotice({ ...base, dismissed: { ending: true } }).chip?.tone, 'warning', 'the countdown still says it');
-  const ended = { ...base, now: t0 + 31 * 60_000 };
-  assert.equal(overlayTrialNotice({ ...ended, dismissed: { ending: true } }).banner, 'ended', 'the end is new news');
-  const closed = overlayTrialNotice({ ...ended, dismissed: { ended: true } });
-  assert.equal(closed.banner, null);
-  assert.equal(closed.closed, 'ended');
-  // Closed, it still keeps "Transcription Not Configured" away.
-  assert.match(overlay, /trial\.closed === 'ended'/);
-  // The failed banner stays without a close.
-  assert.equal(overlayTrialNotice({ now: t0, startFailed: 'unreachable', dismissed: { ended: true, ending: true } }).banner, 'failed');
+  assert.equal(overlayTrialNotice({ ...base, dismissed: { started: true, ending: true } }).banner, 'ending');
+  assert.equal(overlayTrialNotice({ ...base, now: t0 + 31 * 60_000, dismissed: { started: true, ended: true } }).banner, 'ended');
+  assert.equal(overlayTrialNotice({ now: t0, startFailed: 'unreachable', dismissed: { started: true } }).banner, 'failed');
 });
 
 test('O4: the falling-behind notice and its advice are translated, and the mapper reads it', async () => {

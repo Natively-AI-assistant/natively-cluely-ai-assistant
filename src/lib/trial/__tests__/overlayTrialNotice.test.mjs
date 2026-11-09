@@ -47,14 +47,10 @@ test('the warning starts at exactly five minutes left', () => {
   assert.deepEqual(at(30 * MIN - TRIAL_ENDING_MS), { banner: 'ending', chip: { minutesLeft: 5, tone: 'warning' }, minutesLeft: 5, reason: 'clock' });
 });
 
-test('the warning can be closed (2026-11-09): the amber countdown stays, and the end still shows', () => {
-  const closed = (minutesLeft) => ({ banner: null, chip: { minutesLeft, tone: 'warning' }, minutesLeft, reason: 'clock', closed: 'ending' });
-  assert.deepEqual(at(27 * MIN, { dismissed: { started: true, ending: true } }), closed(3));
-  assert.deepEqual(at(30 * MIN - 1, { dismissed: { started: true, ending: true } }), closed(1));
-  // A different state is new news: closing the warning does not close the end.
-  assert.deepEqual(at(30 * MIN, { dismissed: { started: true, ending: true } }), ENDED);
-  // Not closed: as before.
-  assert.equal(at(27 * MIN, { dismissed: { started: true } }).banner, 'ending');
+test('the warning has no close: it stays, with the amber countdown, until the trial ends', () => {
+  const warning = (minutesLeft) => ({ banner: 'ending', chip: { minutesLeft, tone: 'warning' }, minutesLeft, reason: 'clock' });
+  assert.deepEqual(at(27 * MIN, { dismissed: { started: true, ending: true } }), warning(3));
+  assert.deepEqual(at(30 * MIN - 1, { dismissed: { started: true, ending: true } }), warning(1));
 });
 
 test('a trial that starts with under five minutes left warns instead of announcing', () => {
@@ -67,10 +63,8 @@ test('at the expiry instant the trial has ended: banner, no countdown', () => {
   assert.deepEqual(at(45 * MIN), ENDED);
 });
 
-test('the ended banner stays until it is closed, and closed it still says the trial explains the silence', () => {
+test('the ended banner cannot be closed away', () => {
   assert.equal(at(30 * MIN, { dismissed: { started: true } }).banner, 'ended');
-  assert.deepEqual(at(30 * MIN, { dismissed: { ended: true } }), { banner: null, chip: null, minutesLeft: null, reason: 'clock', closed: 'ended' });
-  assert.equal(at(30 * MIN, { dismissed: { ended: true }, endedBy: 'allowance' }).reason, 'allowance');
 });
 
 test('a trial that ran out before this meeting is not announced as ended in it', () => {

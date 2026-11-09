@@ -17,9 +17,9 @@ import './TrialNotice.css';
  *  - started: it began, how long it lasts, and where the audio goes. One way
  *    out, and a close. Folds into the countdown by itself.
  *  - ending:  five minutes left, or about two AI answers (its allowance), both
- *    ways to keep going, and a close (the amber countdown still says it).
- *  - ended:   it ran out in this meeting, both ways to keep going, and a close
- *    for the rest of this meeting.
+ *    ways to keep going. No close: it stays until the trial ends.
+ *  - ended:   it ran out in this meeting. No close: nothing answers until one
+ *    of the two is chosen.
  *  - failed:  the automatic start could not reach Natively. The only place a
  *    "Start free trial" button is left. No close, as for ended: closed, it
  *    would uncover "Transcription Not Configured" and its wrong advice.
@@ -58,8 +58,6 @@ export const TrialNoticeBanner: React.FC<{ trial: OverlayTrial }> = ({ trial }) 
           icon={<Timer strokeWidth={2.2} />}
           title={t('Free trial is almost over')}
           message={byAllowance ? t("The trial's AI answers are nearly used. Pick a plan or add your own keys to keep getting answers.") : keepGoing}
-          onDismiss={trial.dismiss}
-          dismissLabel={t('Dismiss')}
           actions={<>{plans}{ownKeys}</>}
         />
       );
@@ -71,8 +69,6 @@ export const TrialNoticeBanner: React.FC<{ trial: OverlayTrial }> = ({ trial }) 
           icon={<TimerOff strokeWidth={2.2} />}
           title={t('Free trial ended')}
           message={byAllowance ? t("The trial's AI answers are used up. Pick a plan or add your own keys to keep getting answers.") : keepGoing}
-          onDismiss={trial.dismiss}
-          dismissLabel={t('Dismiss')}
           actions={<>{plans}{ownKeys}</>}
         />
       );

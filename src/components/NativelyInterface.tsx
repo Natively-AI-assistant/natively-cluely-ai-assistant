@@ -11612,7 +11612,7 @@ Provide only the answer, nothing else.`;
   // start. In the last two the trial banner already says what happened and
   // what to do, and "open Settings → Audio" beside it is the wrong advice.
   // An "ended" the user closed still explains it (useOverlayTrial `closed`).
-  const trialExplainsNoStt = trial.pending || trial.banner === 'ended' || trial.closed === 'ended' || trial.banner === 'failed';
+  const trialExplainsNoStt = trial.pending || trial.banner === 'ended' || trial.banner === 'failed';
   const sttFailed = sttUserStatus === 'failed' || sttInterviewerStatus === 'failed';
   const sttReconnecting = sttUserStatus === 'reconnecting' || sttInterviewerStatus === 'reconnecting';
   const shouldShowSttSummaryPill =
