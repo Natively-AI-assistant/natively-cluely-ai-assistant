@@ -133,8 +133,8 @@ export function wireMeetingDetection(deps: MeetingDetectionDeps): MeetingDetecto
         isMeetingActive: deps.isMeetingActive,
         // The call ended before anyone answered: its offer and countdown go.
         onGone: (id) => offers.callGone(id),
-        // Back within the minute: an offer it lost unanswered is shown again,
-        // unless Undetectable or a disguise was turned on in between.
+        // Back within the minute: the same call, already offered; nothing is
+        // shown again (meetingOffer.ts callBack).
         onBack: (id) => {
             if (deps.promptsBlocked()) return;
             offers.callBack(id);
@@ -158,8 +158,10 @@ export function wireMeetingDetection(deps: MeetingDetectionDeps): MeetingDetecto
 /**
  * The OS notification, as Electron shows it on macOS and Windows: one button
  * and a click both start; silent, since it lands as a call begins. The last
- * one is kept referenced (Electron drops an unreferenced Notification) and is
- * closed when the next arrives.
+ * one is kept referenced (Electron drops an unreferenced Notification) until
+ * the app closes it (the offer cleared, expired or replaced) or the user
+ * does: a Windows toast that timed out into the Action Center is still there
+ * and still clickable, so it stays referenced and closable (2026-11-09).
  */
 let current: { close(): void } | null = null;
 // Notifications this app closed itself: their close event (which may come
@@ -175,7 +177,7 @@ export function closeDetectedNotification(): void {
     try { n.close(); } catch { /* already gone */ }
 }
 
-export function electronNotify(n: OsNotification): boolean {
+export function electronNotify(n: OsNotification, platform: string = process.platform): boolean {
     const { Notification } = require('electron');
     if (!Notification.isSupported()) return false;
     closeDetectedNotification();
@@ -197,15 +199,18 @@ export function electronNotify(n: OsNotification): boolean {
     // toast that timed out into the Action Center is not a no.
     notif.on('close', (details: any) => {
         if (started || closedByApp.has(notif)) return;
-        if (closeMeansNotNow(process.platform, details?.reason)) n.onDismiss?.();
+        if (closeMeansNotNow(platform, details?.reason)) n.onDismiss?.();
     });
     // Electron 43: the index is `details.actionIndex`; the positional one is deprecated.
     notif.on('action', (details: any, legacyIndex?: number) => {
         const index = typeof details?.actionIndex === 'number' ? details.actionIndex : legacyIndex;
         if (index === 0) start();
     });
-    notif.on('close', () => {
-        if (current === notif) current = null;
+    // Gone from the screen: forgotten only when the user removed it. A
+    // timed-out Windows toast keeps its reference, so the offer's clear or
+    // expiry can still close it out of the Action Center.
+    notif.on('close', (details: any) => {
+        if (current === notif && closeMeansNotNow(platform, details?.reason)) current = null;
     });
     // macOS refuses an app that isn't allowed to notify (UNErrorDomain 1): an
     // unsigned or ad-hoc-signed build, or the user switched Natively off in

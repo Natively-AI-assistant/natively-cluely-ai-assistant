@@ -134,9 +134,12 @@ for (const [platform, zoom] of [['darwin', { pid: 7, bundleId: 'us.zoom.xos' }],
         d.tick(); t += 4000; d.tick();
         assert.equal(panel.length, 1, 'offered');
         assert.ok(panel[0].autoStartAt);
-        // The call ends 4 s into the countdown: the next poll clears the offer.
-        t += 2000; mic = []; d.tick();
-        assert.equal(panel.at(-1), null, 'offer withdrawn');
+        // The call ends 2 s into the countdown. Since 2026-11-09 an app's call
+        // gets a 10 s grace before it counts as gone (a mute can release the
+        // mic for a poll); the countdown, finding it unseen, waits meanwhile.
+        mic = [];
+        for (let i = 0; i < 6; i++) { t += 2000; run(); d.tick(); assert.deepEqual(starts, [], `nothing starts at ${t} ms`); }
+        assert.equal(panel.at(-1), null, 'offer withdrawn after the grace');
         t += 10_000; run();
         assert.deepEqual(starts, []);
     });
@@ -157,6 +160,11 @@ test('right before the automatic start, a call the detector no longer sees is no
     on = false;
     t = 10_000; timers[0].fn();
     assert.deepEqual(starts, []);
+    // 2026-11-09: the offer stays up and is looked at again next poll; the
+    // detector's gone report (after its grace) is what withdraws it.
+    assert.ok(offers.view(), 'still up, waiting for the call to be heard or reported gone');
+    assert.equal(timers.at(-1).at, 12_000, 'looked at again in 2 s');
+    offers.callGone('app:Zoom');
     assert.equal(offers.view(), null);
     // Still on: it starts. A Gone for another call leaves this one.
     on = true;

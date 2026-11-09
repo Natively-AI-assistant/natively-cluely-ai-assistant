@@ -183,8 +183,10 @@ test('never shown while prompts are blocked (that call stays unannounced); its S
     assert.equal(notes[0].body, 'A Zoom call started.');
     active = true; notes[0].onStart();
     assert.equal(starts.length, 0);
+    // 2026-11-09: that press answered the offer; the same notification pressed
+    // again later (a Windows toast left in the Action Center) starts nothing.
     active = false; notes[0].onStart();
-    assert.deepEqual(starts, [{ via: 'detected' }]);
+    assert.deepEqual(starts, []);
 });
 
 // The real native module on this machine (skipped where no binary is built):
