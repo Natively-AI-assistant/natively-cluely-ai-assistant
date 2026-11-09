@@ -21,7 +21,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const app = readFileSync(join(here, '..', '..', 'App.tsx'), 'utf8');
 
 test('the orchestrator hears Trial ended while it is due, not only once it paints', () => {
-  assert.ok(app.includes('setOrchestratorUserState({ trialEndedOpen: showTrialExpiredModal || trialEndedDue });'));
+  // The first-run guide defers the card while it runs (its plans step says the same thing).
+  assert.ok(app.includes('setOrchestratorUserState({ trialEndedOpen: (showTrialExpiredModal || trialEndedDue) && !guideHoldsScreen });'));
 });
 
 test('the launch path marks the card due before its 10 s delay', () => {

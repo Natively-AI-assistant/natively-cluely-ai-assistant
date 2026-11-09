@@ -1124,6 +1124,7 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                                     analytics.trackCommandExecuted('start_natively_cta');
                                                 }
                                             }}
+                                            data-guide="start"
                                             className="launcher-cta relative overflow-hidden text-white px-6 py-3 rounded-full font-celeb font-medium tracking-normal flex items-center justify-center gap-3 backdrop-blur-xl shrink-0"
                                             // Hover, press and the shadow all live in LauncherCta.css. Only the
                                             // bloom colour is set here: no inline `transition`, which would

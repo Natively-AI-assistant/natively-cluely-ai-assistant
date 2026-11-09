@@ -24,7 +24,7 @@ const app = read('../App.tsx');
 const settings = read('settings/NativelyApiSettings.tsx');
 const modal = read('trial/FreeTrialModal.tsx');
 
-const appCard = app.slice(app.indexOf('showTrialExpiredModal && ('), app.indexOf('{/* Ad toasters */}'));
+const appCard = app.slice(app.indexOf('showTrialExpiredModal && !guideHoldsScreen && ('), app.indexOf('{/* Ad toasters */}'));
 
 test('App: a failed BYOK wipe throws, so the card cannot say "All set"', () => {
   assert.ok(appCard.includes("const res = await window.electronAPI?.endTrialByok?.(opts);"));
