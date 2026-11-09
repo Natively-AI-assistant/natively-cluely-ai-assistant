@@ -13,6 +13,9 @@ import { CONCEPTS, FRAGMENT_SHADER, VERTEX_SHADER, conceptById, fallbackStyle, h
  * blocklisted one) the shader would take the renderer's main thread, so null
  * there and the CSS stand-in shows instead.
  */
+/** Contexts waiting to be released after an effect cleanup, per canvas. */
+const pendingRelease = new WeakMap<HTMLCanvasElement, ReturnType<typeof setTimeout>>();
+
 function hardwareContext(canvas: HTMLCanvasElement, type: "webgl", attributes: WebGLContextAttributes = {}): WebGLRenderingContext | null {
   let gl: WebGLRenderingContext | null = null;
   try {
@@ -96,6 +99,13 @@ const LenticularGlass = forwardRef<LenticularGlassHandle, Props>(function Lentic
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    // A remount of the same canvas (React StrictMode runs every effect twice in
+    // dev) keeps its context: the release the last cleanup scheduled is cancelled.
+    const pending = pendingRelease.get(canvas);
+    if (pending !== undefined) {
+      clearTimeout(pending);
+      pendingRelease.delete(canvas);
+    }
     const gl = hardwareContext(canvas, "webgl", { alpha: false, antialias: false, preserveDrawingBuffer: true });
     if (!gl) {
       setFallback(true);
@@ -267,7 +277,13 @@ const LenticularGlass = forwardRef<LenticularGlassHandle, Props>(function Lentic
       io.disconnect();
       if (raf) cancelAnimationFrame(raf);
       draw.current = null;
-      gl.getExtension("WEBGL_lose_context")?.loseContext();
+      // Released a tick later, not here: losing it at once left a StrictMode
+      // remount a dead context, createShader returned null, and the page fell
+      // back to the CSS comb (the "lines" in place of glass, 2026-11-09).
+      pendingRelease.set(canvas, setTimeout(() => {
+        pendingRelease.delete(canvas);
+        gl.getExtension("WEBGL_lose_context")?.loseContext();
+      }, 0));
     };
   }, []);
 

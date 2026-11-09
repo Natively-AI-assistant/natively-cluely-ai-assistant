@@ -1,4 +1,5 @@
-// Copied unchanged from natively-website src/components/glass/lenticular.ts (2026-11-07).
+// Copied from natively-website src/components/glass/lenticular.ts (2026-11-07); since then the
+// rib highlight dims over dark grounds (catchLight, 2026-11-09). Pale grounds are unchanged.
 /**
  * Lenticular glass backdrops: eight abstract scenes seen through a sheet of
  * vertical glass ribs, drawn by one fragment shader.
@@ -442,8 +443,13 @@ void main() {
   float spec = exp(-pow((ph + 0.3) / 0.04, 2.0)) * 0.1;
   float sheen = pow(lens, 3.0) * 0.035;
   vec3 lightCol = dark ? vec3(0.72, 0.76, 0.9) : vec3(1.0, 0.99, 1.0);
+  /* Glass over a dark ground catches little light: the highlight follows what is
+     behind it, so flat black under the ribs stays glass and not a row of grey
+     pinstripes. Pale grounds (lum above ~0.45) keep the full highlight. */
+  float lum = dot(col, vec3(0.3, 0.55, 0.15));
+  float catchLight = 0.12 + 0.88 * smoothstep(0.04, 0.45, lum);
   col *= 1.0 - roll * uLight * vec3(1.0, 1.06, 0.8);
-  col += lightCol * (hi + spec + sheen) * uLight * (dark ? 0.55 : 1.0) * (1.0 - 0.35 * dot(col, vec3(0.33)));
+  col += lightCol * (hi + spec + sheen) * uLight * (dark ? 0.55 : 1.0) * catchLight * (1.0 - 0.35 * dot(col, vec3(0.33)));
   col += spec * uLight * uDisp * vec3(0.05, 0.0, -0.04);
   gl_FragColor = vec4(col, 1.0);
 }

@@ -53,13 +53,18 @@ const NOISE_URL =
   "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")";
 
 // The backdrop: the website pricing page's Frosted Aurora (PricingBackdrop),
-// waves under heavy frost seen through vertical glass ribs. Light is the
-// concept's own Violet palette; dark is the same scene in deep violet. Drawn
+// violet and blue waves seen through wide vertical glass flutes, the same
+// glass in both themes (light on a pale ground, dark on a deep one). Drawn
 // on demand only (the pointer moving over the panel), never on a clock.
-const AURORA_LIGHT: Palette = ['#F1EEF9', '#E7E1F7', '#CDBDF3', '#B9C9F3', '#EBE4F8'];
-const AURORA_DARK: Palette = ['#1E1A2A', '#141414', '#3A2E66', '#283865', '#2A2340'];
-// Softer ribs on dark: at the light theme's lighting the grooves read as black bars.
-const DARK_GLASS = { lighting: 0.32 } as const;
+// Light wears the dark theme's glass: the same waves, lifted onto a pale ground.
+const AURORA_LIGHT: Palette = ['#ECE6FB', '#F6F3FD', '#A58BF6', '#8EA5F0', '#C9B7FA'];
+// Dark needs lit waves behind the glass: over a near-black ground the ribs have
+// nothing to bend, so all that shows is their highlights, as pinstripes.
+const AURORA_DARK: Palette = ['#2A2242', '#17141F', '#7B5CF0', '#4766D6', '#A68AF7'];
+// Wider, stronger flutes on dark so each one reads as a lens over the aurora.
+const DARK_GLASS = { rib: 24, distortion: 1.1, blur: 0.55, lighting: 0.5, dispersion: 0.4 } as const;
+// The same flutes on light; a little more light, since highlights barely show on a pale ground.
+const LIGHT_GLASS = { rib: 24, distortion: 1.1, blur: 0.55, lighting: 0.7, dispersion: 0.4 } as const;
 
 type Mesh = 'standard' | 'pro' | 'ultra';
 type Pattern = 'dots' | 'rings' | 'grid';
@@ -382,7 +387,7 @@ export function UnlockProPlans({
         maskImage: 'linear-gradient(to bottom, #000 180px, transparent 440px)',
         WebkitMaskImage: 'linear-gradient(to bottom, #000 180px, transparent 440px)',
       }}>
-        <LenticularGlass concept="aurora" palette={theme === 'light' ? AURORA_LIGHT : AURORA_DARK} params={theme === 'light' ? undefined : DARK_GLASS} pointerTarget={rootRef} />
+        <LenticularGlass concept="aurora" palette={theme === 'light' ? AURORA_LIGHT : AURORA_DARK} params={theme === 'light' ? LIGHT_GLASS : DARK_GLASS} pointerTarget={rootRef} />
         <div style={{
           position: 'absolute', left: '50%', top: 40, width: 620, height: 230, transform: 'translateX(-50%)',
           background: theme === 'light'
