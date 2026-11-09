@@ -1784,23 +1784,12 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                           30 is a literal: the real duration is
                           TrialLimits.duration_ms, which only arrives from
                           /v1/trial/status once a trial EXISTS — there is
-                          nothing to read before you start one. Same reason the
-                          allowances come from TRIAL_FALLBACK_LIMITS. */}
+                          nothing to read before you start one. The allowance
+                          line (tokens · voice · research) was removed on
+                          request; the trial's meters still show them once
+                          a trial is running. */}
                       <p className="text-[15px] font-medium text-text-primary tracking-[-0.01em]">
                         Try the Natively API free for 30 minutes
-                      </p>
-                      {/* Allowances at the description weight the rest of this
-                          tab uses for a card's second line, not the 11px
-                          tertiary of a footnote — they are what the reader
-                          compares against the plans below. Tabular figures so
-                          the digits line up with the usage and price rows. */}
-                      <p className="text-[12px] text-text-secondary mt-1 leading-snug tabular-nums">
-                        {formatCompact(TRIAL_FALLBACK_LIMITS.ai_tokens)} AI tokens
-                        {' · '}{TRIAL_FALLBACK_LIMITS.stt_minutes} min voice
-                        {/* "research", not "searches": that is what the usage
-                            pill, the usage table and the plan copy all call
-                            this meter. One name per meter. */}
-                        {' · '}{TRIAL_FALLBACK_LIMITS.search_requests} research
                       </p>
                     </div>
 
