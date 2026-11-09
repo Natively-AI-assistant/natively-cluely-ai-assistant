@@ -74,19 +74,19 @@ for (const platform of ['darwin', 'win32']) {
         assert.equal(r.panel.filter(Boolean).length, 1, 'offered once');
     });
 
-    test(`${platform}: a tab-only call that stays quiet past the grace is withdrawn, and not offered again when it plays within the minute`, () => {
+    test(`${platform}: a tab-only call that stays quiet past the grace is withdrawn, and comes back when it plays again`, () => {
         const r = quietTabRig(platform);
         r.d.tick(); r.step(4000);
         r.setAudible(false); r.step(22_000);
         assert.equal(r.panel.at(-1), null, 'gone after the grace');
         const offersBefore = r.panel.filter(Boolean).length;
-        // 2026-11-09: back within the minute is the same call, already offered.
         r.setAudible(true); r.step(2000);
-        assert.equal(r.panel.filter(Boolean).length, offersBefore, 'back: not offered again');
+        // On the panel; since 2026-11-09 without a second notification (MeetingOfferReview2026_11_09).
+        assert.equal(r.panel.filter(Boolean).length, offersBefore + 1, 'back: offered again');
     });
 }
 
-test('Not now, Start, a running meeting and a withdrawal are final answers: no re-offer when the call comes back', () => {
+test('Not now, Start and a running meeting are final answers: no re-offer when the call comes back', () => {
     let t = 0;
     let active = false;
     const shown = [];
@@ -116,8 +116,7 @@ test('Not now, Start, a running meeting and a withdrawal are final answers: no r
     offers.callBack('tab:meet:other');
     assert.equal(offers.view(), null, 'another call is not this one');
     offers.callBack('tab:meet:c');
-    // 2026-11-09: a withdrawn offer no longer comes back (one call raised it several times).
-    assert.equal(offers.view(), null, 'the same call: already offered, not again');
+    assert.ok(offers.view(), 'the same call: back');
 });
 
 // ── 2. Dictation waits for work still on its way ──────────────────────────

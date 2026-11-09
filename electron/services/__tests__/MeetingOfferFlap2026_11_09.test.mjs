@@ -79,17 +79,20 @@ for (const platform of ['darwin', 'win32']) {
         r.setMic('free'); r.poll(35);
         assert.equal(r.panel.at(-1), null, 'gone past the 10 s grace: withdrawn');
         r.setMic('held'); r.poll(4);
-        // Gone over a minute: a new call by the detector's rule, offered once more (was the 3rd).
-        assert.equal(r.notes.length, 2);
+        // Gone over a minute but under SAME_CALL_GAP_MS: the same call, its offer
+        // back on the panel without another notification (was the 3rd).
+        assert.equal(r.notes.length, 1);
+        assert.notEqual(r.panel.at(-1), null, 'the offer is back on the panel');
     });
 
-    test(`${platform}: a 30 s mute withdraws the offer, and the call coming back within the minute is not offered again`, () => {
+    test(`${platform}: a 30 s mute withdraws the offer; the call back within the minute gets it back on the panel, no second notification`, () => {
         const r = rig(platform);
         r.poll(5);
         r.setMic('free'); r.poll(15);
         assert.equal(r.panel.at(-1), null, 'withdrawn');
         r.setMic('held'); r.poll(10);
-        assert.equal(r.notes.length, 1, 'the same call: not raised again');
+        assert.equal(r.notes.length, 1, 'the same call: no second notification');
+        assert.notEqual(r.panel.at(-1), null, 'its offer is back on the panel');
     });
 
     test(`${platform}: Not now holds for that app's calls for 10 minutes, even across a new call`, () => {
@@ -159,7 +162,7 @@ test('a read failing for good is taken as the OS\'s answer after maxSkippedReads
 });
 
 test('Not now is per call id and expires', () => {
-    const m = new Map([['app:Zoom', 1000]]);
+    const m = new Map([['app:Zoom', { until: 1000, goneAt: null }]]);
     assert.equal(notNowHolds(m, 'app:Zoom', 999), true);
     assert.equal(notNowHolds(m, 'app:Teams', 999), false);
     assert.equal(notNowHolds(m, undefined, 999), false);

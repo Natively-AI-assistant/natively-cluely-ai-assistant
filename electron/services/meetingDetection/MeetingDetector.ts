@@ -136,10 +136,14 @@ export class MeetingDetector {
                 this.skippedReads++;
                 return;
             }
-            // Failing for good: take it as the OS's answer from here on.
+            // Failing for good: every poll from here on is taken as it comes
+            // (no call), until a read succeeds; skippedReads stays at the
+            // limit so this does not cycle back to skipping. A null list is
+            // the OS's answer from now on.
             this.hadMicList = false;
+        } else {
+            this.skippedReads = 0;
         }
-        this.skippedReads = 0;
         if (detection) {
             const known = this.calls.get(detection.id);
             // Missed at least one poll (or reported gone) and back: a withdrawn
