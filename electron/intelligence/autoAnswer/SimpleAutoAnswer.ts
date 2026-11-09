@@ -162,6 +162,56 @@ export function isReportShaped(candidate: string): boolean {
     return REPORT_SHAPED.test(t) && !HANGING_END.test(t);
 }
 /**
+ * Supersede economy (2026-11-10). Live TI run, 104 judge calls in 5.4 min, 67
+ * thrown away: 33 asked on a final that ended mid-sentence (22 on a dash, all
+ * superseded), and stray speech after a FINISHED question ("Put that down.",
+ * "Okay.") cancelled a verdict that was still right and paid for a new one,
+ * each time ~1 s while the prefetched answer sat ready (T08: 3.3 s).
+ *
+ * An utterance is INERT when it cannot change what is being asked: a
+ * backchannel or filler, or a short finished sentence that is not a question,
+ * a task, a constraint or a continuation. Growth made only of inert speech
+ * after a finished sentence carries the verdict over: the call is not
+ * cancelled, the stoppage does not ask again, and a positive verdict is still
+ * only ever applied at a quiet point. Anything else re-judges exactly as before.
+ * Punctuation-less transcripts never end a final with a full stop, so they are
+ * never inert: those providers keep the old behaviour.
+ */
+export const INERT_MAX_WORDS = 6;
+/** Total inert words a verdict may be carried across. */
+export const INERT_MAX_TOTAL_WORDS = 12;
+const FILLER = /^(?:u+h+|u+m+|e+r+m*|a+h+|h+m+|m+)(?:[\s,.!-]+(?:u+h+|u+m+|e+r+m*|a+h+|h+m+|m+))*[\s,.!-]*$/i;
+/** Opens a clause that extends the ask ("and how you resolved it", "in O(1) time"). */
+const CONTINUATION_LEAD = /^(?:and|or|but|also|plus|then|so|because|cause|which|where|when|while|including|with|without|in|on|for|using|like|especially|except|unless|if|whether|that(?!['’])|to|as|how|what|why|who)\b/i;
+/** Opens a task or a constraint ("now implement it", "show me", "use three threads"). */
+const TASK_LEAD = /^(?:(?:ok(?:ay)?|now|alright|so|well|please|just)[,.!\s]+)*(?:write|implement|code|design|build|create|make|explain|describe|tell|walk|show|give|list|name|compare|contrast|solve|calculate|compute|draw|sketch|share|summari[sz]e|define|optimi[sz]e|refactor|debug|fix|prove|estimate|talk|elaborate|expand|clarify|try|start|continue|go|use|assume|imagine|suppose|consider|think|let['’]?s|now|answer|pick|choose)\b/i;
+
+/** Whether `text` cannot change the ask (see INERT_MAX_WORDS). A final must end its sentence; an interim is still being spoken. */
+export function isInertUtterance(text: string, final: boolean): boolean {
+    const t = (text ?? '').trim();
+    if (!t) return false;
+    if (USER_BACKCHANNEL.test(t) || FILLER.test(t)) return true;
+    if (t.includes('?') || /\d/.test(t)) return false;
+    if (t.split(/\s+/).filter(Boolean).length > INERT_MAX_WORDS) return false;
+    if (CONTINUATION_LEAD.test(t) || TASK_LEAD.test(t) || FALLBACK_INTERROGATIVE.test(t) || REPORT_SHAPED.test(t)) return false;
+    if (final && !/[.!]["'”’)\]]*$/.test(t)) return false;
+    return true;
+}
+
+/** The transcript stops mid-sentence: a dash or ellipsis, a comma, or a dangling function word with no full stop. */
+export function isCutOffEnding(text: string): boolean {
+    const t = (text ?? '').trim();
+    if (/(?:—|–|-|\.\.\.|…|,)\s*$/.test(t)) return true;
+    return !/[.?!]["'”’)\]]*$/.test(t) && HANGING_END.test(t);
+}
+
+/** A finished sentence a verdict can stand on: terminal mark, not cut off, no dangling word. */
+function endsFinishedSentence(text: string): boolean {
+    const t = (text ?? '').trim();
+    return /[.?!]["'”’)\]]*$/.test(t) && !isCutOffEnding(t) && !HANGING_END.test(t);
+}
+
+/**
  * How long after an automatic answer a manual press still counts as "that
  * answer was not good enough". Long enough for the user to read it and
  * decide, short enough that an unrelated later press is not blamed on it.
@@ -311,9 +361,11 @@ export interface SimpleAutoAnswerHost {
 /** Share of a picked ask's words that must come from ruled-out finals for it to count as resurfaced. */
 export const RULED_OUT_CONTAINMENT = 0.9;
 
+type PendingPart = { text: string; at: number; speaker?: string; glueNext?: boolean; provisional?: boolean };
+
 export class SimpleAutoAnswerEngine {
     /** `provisional`: a stalled interim standing in for its final (STALL_PROMOTE_MS); only ever the LAST part. */
-    private pending: Array<{ text: string; at: number; speaker?: string; glueNext?: boolean; provisional?: boolean }> = [];
+    private pending: PendingPart[] = [];
     /**
      * How many leading `pending` finals a verdict has already ruled NOT an ask
      * (a statement, a rhetorical question, logistics). They stay in the
@@ -367,7 +419,15 @@ export class SimpleAutoAnswerEngine {
     private held: {
         id: string; key: string; text: string;
         answerability: number; act: AutoAnswerQuestion['dialogueAct']; at: number;
+        /** The exact finals it judged: it still applies across inert growth after them. */
+        parts?: PendingPart[];
     } | null = null;
+    /** The judge call in flight and the finals it is ruling on (see INERT_MAX_WORDS). */
+    private inFlight: { id: string; parts: PendingPart[]; askShaped: boolean } | null = null;
+    /** A stoppage skipped its own call because this in-flight one covers the grown text. */
+    private coveredBy: string | null = null;
+    /** The finals the latest verdict ruled NOT an ask: inert growth after them is not re-judged. */
+    private settledNegative: PendingPart[] | null = null;
     /** Punctuation provenance of the latest interviewer final ('provider' family = a missing '?' means something). */
     private punctuationGuaranteed = false;
     /** What last bumped judgeSeq, so a discarded verdict can say what killed it. */
@@ -385,11 +445,45 @@ export class SimpleAutoAnswerEngine {
     setThresholds(t: AutoAnswerThresholds): void { this.thresholds = t; }
 
     /** Every supersede goes through here so the telemetry can name the cause. */
-    private bumpJudgeSeq(cause: NonNullable<AutoAnswerTelemetryEvent['supersededBy']>): void {
+    private bumpJudgeSeq(cause: NonNullable<AutoAnswerTelemetryEvent['supersededBy']>, keepCall = false): void {
         this.judgeSeq++;
         this.judgeSeqCause = cause;
-        // The in-flight verdict is superseded — stop paying for it.
+        // The in-flight verdict is superseded — stop paying for it, unless the
+        // new speech is inert: then that verdict is still about the current
+        // ask, and it is deferred (held) rather than thrown away and re-bought.
+        if (keepCall) return;
         if (this.judgeAbort) { try { this.judgeAbort.abort(); } catch { /* never break ingest */ } this.judgeAbort = null; }
+    }
+
+    /** The pending finals are exactly `parts` plus inert finals after a finished sentence. */
+    private isInertExtension(parts: PendingPart[] | null | undefined): boolean {
+        if (!parts || parts.length === 0 || this.pending.length <= parts.length) return false;
+        for (let i = 0; i < parts.length; i++) if (this.pending[i] !== parts[i]) return false;
+        if (parts[parts.length - 1].glueNext || !endsFinishedSentence(joinTranscriptParts(parts))) return false;
+        const growth = this.pending.slice(parts.length);
+        let words = 0;
+        for (const g of growth) {
+            if (g.provisional || !isInertUtterance(g.text, true)) return false;
+            words += g.text.split(/\s+/).filter(Boolean).length;
+        }
+        return words <= INERT_MAX_TOTAL_WORDS;
+    }
+
+    /** An interim that cannot change the ask the call in flight is ruling on. */
+    private interimKeepsCall(interim: string): boolean {
+        const f = this.inFlight;
+        // Only a likely ASK is worth finishing through an interim: a verdict on a
+        // statement is rarely reused, and finishing it is a paid call the abort saved.
+        if (!f || !f.askShaped || !this.isInertExtensionOrSame(f.parts)) return false;
+        return isInertUtterance(interim, false);
+    }
+
+    private isInertExtensionOrSame(parts: PendingPart[]): boolean {
+        if (this.pending.length === parts.length) {
+            for (let i = 0; i < parts.length; i++) if (this.pending[i] !== parts[i]) return false;
+            return !parts[parts.length - 1].glueNext && endsFinishedSentence(joinTranscriptParts(parts));
+        }
+        return this.isInertExtension(parts);
     }
 
     onMeetingStart(): void { this.reset(); }
@@ -462,7 +556,7 @@ export class SimpleAutoAnswerEngine {
                         // The transcript moved again: a promoted stand-in is stale.
                         this.dropProvisional();
                         this.promotedInterim = null;
-                        this.bumpJudgeSeq('interim');
+                        this.bumpJudgeSeq('interim', this.interimKeepsCall(text));
                         if (!this.lastInterviewerInterim) this.utteranceStartAt = now;
                         this.lastInterviewerAt = now;
                         this.lastInterviewerInterim = text;
@@ -491,7 +585,9 @@ export class SimpleAutoAnswerEngine {
             const glueNext = isMidWordCut(text, this.lastInterviewerInterim);
             this.lastInterviewerInterim = '';
             this.pending.push({ text, at: now, speaker, glueNext });
-            this.bumpJudgeSeq('final');  // supersede any in-flight verdict: it judged less than this
+            // Supersede any in-flight verdict: it judged less than this. Inert
+            // growth keeps the call alive — its verdict is held for the quiet point.
+            this.bumpJudgeSeq('final', !!this.inFlight && this.isInertExtension(this.inFlight.parts));
             this.lastInterviewerAt = now;
             this.arm(STABILITY_MS);
             return;
@@ -552,6 +648,28 @@ export class SimpleAutoAnswerEngine {
 
         // Zero-cost prefilter — the ONLY heuristics left in the hot path.
         if (key === this.lastJudgedKey) return;                     // verdict already stands
+        // The call in flight rules on these finals minus inert growth: wait for
+        // it rather than buy a second verdict on the same ask.
+        if (this.inFlight && this.isInertExtension(this.inFlight.parts)) {
+            this.lastJudgedKey = key;
+            this.coveredBy = this.inFlight.id;
+            this.host.log?.(`[AutoAnswer:simple] inert growth: waiting on the verdict in flight for ${this.inFlight.id}`);
+            return;
+        }
+        // Ruled not an ask, and nothing since could make it one.
+        if (this.isInertExtension(this.settledNegative)) {
+            this.lastJudgedKey = key;
+            this.host.log?.('[AutoAnswer:simple] inert growth after a silent verdict: not re-judged');
+            return;
+        }
+        // The EARLY ask on a final that stops mid-sentence is always superseded
+        // (live: 22 of 22 on a dash). The commit window still judges it if the
+        // speaker really stopped there.
+        const last = this.pending[this.pending.length - 1];
+        if (early && (last.glueNext || isCutOffEnding(last.text))) {
+            this.host.log?.('[AutoAnswer:simple] early ask skipped: the final stops mid-sentence');
+            return;
+        }
         // A short candidate waits for more speech unless it already looks
         // like a question: a literal '?' (always positive evidence) or an
         // interrogative lead (which needs no punctuation, per the
@@ -601,7 +719,9 @@ export class SimpleAutoAnswerEngine {
         const h = this.held;
         if (!h) return null;
         if (now - h.at > HELD_MAX_AGE_MS) { this.held = null; return null; }
-        if (key !== h.key) { this.held = null; return null; }   // see the note on HELD_MAX_AGE_MS
+        // Same text, or the same finals plus inert growth (INERT_MAX_WORDS):
+        // anything that could change the ask re-judges (see the note on HELD_MAX_AGE_MS).
+        if (key !== h.key && !this.isInertExtension(h.parts)) { this.held = null; return null; }
         return h;
     }
 
@@ -634,6 +754,7 @@ export class SimpleAutoAnswerEngine {
         const turns = this.turnsBefore(committedAt);
         const parts = this.pending.map(p => ({ speaker: p.speaker, text: p.text }));
         const partsAtConsult = this.pending.length;
+        const snapshot = this.pending.slice();
         const unjudged = this.unjudgedText();
         const ruledOut = joinTranscriptParts(this.pending.slice(0, Math.min(this.judgedParts, this.pending.length)));
         // Judged on a promoted interim. If its real final replaces it while
@@ -651,6 +772,8 @@ export class SimpleAutoAnswerEngine {
             // controller has stopped waiting, so the provider may stop working.
             const abort = new AbortController();
             this.judgeAbort = abort;
+            this.inFlight = { id, parts: snapshot, askShaped: isQuestionShaped(unjudged) || isReportShaped(unjudged) };
+            this.settledNegative = null;
             try {
                 raw = await Promise.race([
                     this.host.judgeCandidate({
@@ -674,6 +797,7 @@ export class SimpleAutoAnswerEngine {
             } finally {
                 if (timer !== null) this.clock.clearTimeout(timer);
                 if (this.judgeAbort === abort) this.judgeAbort = null;
+                if (this.inFlight?.id === id) this.inFlight = null;
             }
         }
         const judgeMs = this.clock.now() - committedAt;
@@ -700,7 +824,10 @@ export class SimpleAutoAnswerEngine {
                 candidate);
             // Defer, don't discard. Only a POSITIVE verdict is held: a silent
             // one must not veto the grown candidate, because the ask may be in
-            // the very words that superseded it.
+            // the very words that superseded it — unless those words are inert.
+            const covered = this.coveredBy === id;
+            if (covered) this.coveredBy = null;
+            let settled = false;
             if (verdict && this.host.isMeetingActive() && this.host.meetingGeneration() === generation) {
                 const superseded = routeForVerdict(verdict);
                 if (superseded.route === 'evaluate' && superseded.action === 'answer'
@@ -709,8 +836,24 @@ export class SimpleAutoAnswerEngine {
                         id, key: normalizeForCompare(candidate),
                         text: superseded.questionText ?? candidate,
                         answerability: superseded.answerability, act: superseded.act, at: this.clock.now(),
+                        parts: snapshot,
                     };
+                    settled = true;
+                } else if (superseded.route !== 'wait_incomplete' && this.isInertExtension(snapshot)) {
+                    this.settledNegative = snapshot;
+                    this.judgedParts = partsAtConsult;
+                    settled = true;
                 }
+            }
+            if (!this.host.isMeetingActive() || this.host.meetingGeneration() !== generation) return;
+            const quiet = this.timer === null && this.earlyTimer === null;
+            if (covered && !settled) {
+                // The stoppage relied on this call and it gave nothing usable: judge the grown text.
+                this.lastJudgedKey = '';
+                if (quiet) this.arm(ENDPOINT_CONFIRM_MS);
+            } else if (this.held?.id === id && quiet) {
+                // The stoppage already passed (it waited on this call): apply at once.
+                this.onStoppage(false);
             }
             return;
         }
@@ -753,7 +896,7 @@ export class SimpleAutoAnswerEngine {
             }
             // Ruled not an ask: these finals stay as context, but a later
             // ask's shape is read after them. An INCOMPLETE ask stays open.
-            else this.judgedParts = partsAtConsult;
+            else { this.judgedParts = partsAtConsult; this.settledNegative = snapshot; }
             return;
         }
         // The ask the judge picked lies wholly in finals an EARLIER verdict
@@ -793,13 +936,14 @@ export class SimpleAutoAnswerEngine {
             // 0.66 s) an 'answer, a=0.9' verdict sat unapplied until the next
             // interviewer speech replaced the question.
             if (early && this.timer !== null && this.clock.now() - this.lastInterviewerAt < STABILITY_MS) {
-                this.held = { id, key: normalizeForCompare(candidate), text, answerability: route.answerability, act: route.act, at: this.clock.now() };
+                this.held = { id, key: normalizeForCompare(candidate), text, answerability: route.answerability, act: route.act, at: this.clock.now(), parts: snapshot };
                 return;
             }
             this.deliver(id, text, route.answerability, route.act, committedAt);
         } else {
             this.emit({ name: 'auto_answer_ignored', questionId: id, skipReason: 'low_answerability', answerability: route.answerability });
             this.judgedParts = partsAtConsult;
+            this.settledNegative = snapshot;
         }
     }
 
@@ -1033,6 +1177,9 @@ export class SimpleAutoAnswerEngine {
         this.lastAnsweredText = null;
         this.lastPrefetchAt = null;
         this.held = null;
+        this.inFlight = null;
+        this.coveredBy = null;
+        this.settledNegative = null;
         this.bumpJudgeSeq('meeting_reset');
         this.sequence = 0;
     }
