@@ -14,6 +14,7 @@ import { mergeCalendarEvents } from './calendar/providers/mergeEvents';
 import {
     CALENDAR_BACKGROUND_REFRESH_MS,
     backgroundRefreshDecision,
+    lastGoodCalendarItems,
     reminderSourceLists,
     type BackgroundRefreshReason,
 } from './calendar/calendarReminderPlan';
@@ -385,6 +386,7 @@ export class CalendarManager extends EventEmitter {
         this.accountEmail = null;
         this.accountName = null;
         this.forgetSource('google');
+        this.googleItemsByCalendar.clear();
         this.lastCalendars = null;
 
         if (fs.existsSync(TOKEN_PATH)) {
@@ -471,20 +473,18 @@ export class CalendarManager extends EventEmitter {
     public async refreshState(): Promise<boolean> {
         console.log('[CalendarManager] Refreshing state (Reality Reconciliation)...');
 
-        // 1. Reset Soft Heuristics
-        // Clear existing reminder timeouts to prevent double scheduling or stale alerts
-        this.clearReminderTimers();
-
-        // 2. Calendar Re-sync & Temporal Re-evaluation
+        // 1. Calendar Re-sync & Temporal Re-evaluation. The fetch re-plans the
+        // reminders itself (scheduleReminders clears the old timers); they are
+        // not cleared before it, or one due during the fetch (up to 15 s) was lost.
         const landedBefore = this.fetchesLanded;
         if (this.anyConnected()) {
-            // Force fetch will also re-schedule reminders based on NEW time
             await this.getUpcomingEvents(true);
         } else {
             console.log('[CalendarManager] Calendar not connected, skipping fetch.');
+            this.clearReminderTimers();
         }
 
-        // 3. Emit update to UI
+        // 2. Emit update to UI
         // We emit 'updated' so the frontend knows to re-fetch via getUpcomingEvents
         // or we could push the data. usually ipcHandlers just call getUpcomingEvents.
         this.emit('events-updated');
@@ -879,6 +879,14 @@ export class CalendarManager extends EventEmitter {
     private lastGoodAt = new Map<CalendarSourceId, number>();
     /** Fetches a source answered; refreshState compares it (two can share a Date.now()). */
     private fetchesLanded = 0;
+    /** When the last applied upcoming fetch started. */
+    private lastAppliedFetchAt = 0;
+    /**
+     * Each synced Google calendar's last good items (upcoming fetches only):
+     * one calendar failing among several keeps its last list instead of
+     * counting as an empty one (lastGoodCalendarItems).
+     */
+    private googleItemsByCalendar = new Map<string, { items: any[]; at: number }>();
 
     public async getUpcomingEvents(force: boolean = false): Promise<CalendarEvent[]> {
         if (!this.anyConnected()) {
@@ -891,10 +899,17 @@ export class CalendarManager extends EventEmitter {
         this.fetchesInFlight++;
         let results: Map<CalendarSourceId, CalendarEvent[] | null>;
         try {
-            results = await this.fetchFromSources(now, now + 7 * 24 * 60 * 60 * 1000);
+            results = await this.fetchFromSources(now, now + 7 * 24 * 60 * 60 * 1000, true);
         } finally {
             this.fetchesInFlight--;
         }
+        // The Launcher's fetch and main's can overlap: one started before the
+        // last one applied is older news, and is not applied over it.
+        if (now < this.lastAppliedFetchAt) {
+            console.log('[CalendarManager] A calendar fetch finished after a newer one: not applied');
+            return this.lastEvents.filter((ev) => new Date(ev.endTime).getTime() > Date.now());
+        }
+        this.lastAppliedFetchAt = now;
         let landed = false;
         for (const [source, events] of results) {
             this.lastRefresh.set(source, { at: now, ok: !!events });
@@ -938,19 +953,19 @@ export class CalendarManager extends EventEmitter {
     }
 
     /** Google's events overlapping [fromMs, toMs]; null when the fetch failed outright. */
-    private async fetchGoogle(fromMs: number, toMs: number): Promise<CalendarEvent[] | null> {
+    private async fetchGoogle(fromMs: number, toMs: number, upcoming: boolean = false): Promise<CalendarEvent[] | null> {
         if (!this.isConnected || !this.accessToken) return [];
         // Check expiry
         if (this.expiryDate && Date.now() >= this.expiryDate - 60000) {
             await this.refreshAccessToken();
         }
-        return this.fetchEventsInternal(fromMs, toMs);
+        return this.fetchEventsInternal(fromMs, toMs, upcoming);
     }
 
-    /** Each connected source's events (null for one that failed), in parallel. */
-    private async fetchFromSources(fromMs: number, toMs: number): Promise<Map<CalendarSourceId, CalendarEvent[] | null>> {
+    /** Each connected source's events (null for one that failed), in parallel. `upcoming`: the upcoming list (getUpcomingEvents). */
+    private async fetchFromSources(fromMs: number, toMs: number, upcoming: boolean = false): Promise<Map<CalendarSourceId, CalendarEvent[] | null>> {
         const jobs: Array<Promise<[CalendarSourceId, CalendarEvent[] | null]>> = [];
-        if (this.isConnected) jobs.push(this.fetchGoogle(fromMs, toMs).then((events) => ['google', events]));
+        if (this.isConnected) jobs.push(this.fetchGoogle(fromMs, toMs, upcoming).then((events) => ['google', events]));
         for (const provider of this.providers) {
             if (!provider.isConnected()) continue;
             jobs.push(provider.fetchEvents(fromMs, toMs)
@@ -969,7 +984,7 @@ export class CalendarManager extends EventEmitter {
     }
 
     /** Events overlapping [fromMs, toMs]; null when the fetch failed outright. */
-    private async fetchEventsInternal(fromMs: number, toMs: number): Promise<CalendarEvent[] | null> {
+    private async fetchEventsInternal(fromMs: number, toMs: number, upcoming: boolean = false): Promise<CalendarEvent[] | null> {
         if (!this.accessToken) return [];
 
         try {
@@ -997,10 +1012,15 @@ export class CalendarManager extends EventEmitter {
                 if (!response?.ok) {
                     if (response) console.error(`[CalendarManager] Google Calendar fetch failed: HTTP ${response.status} ${await googleErrorReason(response)}`);
                     failed++;
-                    return [];
+                    // One calendar failing is not that calendar emptied: its
+                    // last good items (up to a day old) stand in, so its
+                    // reminders and the list keep them.
+                    return upcoming ? lastGoodCalendarItems(this.googleItemsByCalendar.get(calendarId), Date.now(), fromMs) : [];
                 }
                 const data = await response.json() as any;
-                return (data.items || []) as any[];
+                const items = (data.items || []) as any[];
+                if (upcoming) this.googleItemsByCalendar.set(calendarId, { items, at: Date.now() });
+                return items;
             }));
             // Nothing came back at all (offline, say): that is a failed fetch,
             // not an empty week, so callers keep what they had.

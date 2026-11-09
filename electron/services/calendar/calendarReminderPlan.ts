@@ -73,3 +73,22 @@ export function backgroundRefreshDecision(input: {
     if (input.reason === 'interval' && input.lastLandedAt > 0 && input.nowMs - input.lastLandedAt < (input.freshMs ?? CALENDAR_BACKGROUND_FRESH_MS)) return 'fresh';
     return 'fetch';
 }
+
+/**
+ * A Google calendar that failed in a fetch where others answered: its last
+ * good items, if fetched within `maxAgeMs`, less those that ended before
+ * `fromMs`; else none. Without it one failing calendar among several counted
+ * as an empty one, which cancelled its reminders and overwrote its list.
+ */
+export function lastGoodCalendarItems(
+    entry: { items: readonly any[]; at: number } | undefined,
+    nowMs: number,
+    fromMs: number,
+    maxAgeMs: number = REMINDER_LAST_GOOD_MAX_AGE_MS,
+): any[] {
+    if (!entry || nowMs - entry.at > maxAgeMs) return [];
+    return entry.items.filter((item) => {
+        const end = new Date(item?.end?.dateTime ?? item?.end?.date ?? '').getTime();
+        return !Number.isFinite(end) || end > fromMs;
+    });
+}

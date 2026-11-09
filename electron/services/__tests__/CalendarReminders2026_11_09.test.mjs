@@ -86,7 +86,8 @@ test('no "Start Natively?" during a Natively meeting: Running late only, or noth
     assert.deepEqual(reminderContent({ ...base, hasAttendees: false, meetingActive: false }).actions.map((a) => a.kind), ['start', 'dismiss']);
     const during = reminderContent({ ...base, hasAttendees: true, meetingActive: true });
     assert.equal(during.body, '"Acme weekly" starts in 2 minutes.');
-    assert.deepEqual(during.actions.map((a) => a.kind), ['dismiss', 'late'], 'back to back: the running-late draft stays');
+    // macOS shows only the first action as a button: Running late is the only one.
+    assert.deepEqual(during.actions.map((a) => [a.kind, a.text]), [['late', 'Running late']], 'back to back: the running-late draft stays');
     assert.equal(reminderContent({ ...base, hasAttendees: false, meetingActive: true }), null, 'nothing to offer: not shown');
     assert.equal(reminderContent({ ...base, lastTime: 'Last time: x', hasAttendees: false, meetingActive: false }).body, '"Acme weekly" starts in 2 minutes.\nLast time: x');
 });
