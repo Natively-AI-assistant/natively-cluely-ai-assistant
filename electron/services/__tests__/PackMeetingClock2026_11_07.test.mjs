@@ -25,6 +25,8 @@ function world(over = {}) {
   const sent = [];
   const ended = [];
   const states = [];
+  const renewed = [];
+  const probes = [];
   // Each answer is { status, body } or 'throw'; the last one repeats.
   const answers = [...(over.answers ?? [{ status: 200, body: { ok: true, metered: true, pack: { ended: false } } }])];
   const clock = createPackMeetingClock({
@@ -40,11 +42,13 @@ function world(over = {}) {
     newMeetingId: () => `mtg_test${String(++ids).padStart(4, '0')}`,
     onPackEnded: (info) => ended.push(info),
     onPackState: (p) => states.push(p),
+    ...(over.isKeyLive ? { isKeyLive: async (k) => { probes.push(k); return over.isKeyLive(k); } } : {}),
+    onPackRenewed: () => renewed.push(now),
     log: { log() {}, warn() {} },
   });
   const settle = () => new Promise((r) => setImmediate(r));
   return {
-    clock, sent, ended, states, timers,
+    clock, sent, ended, states, timers, renewed, probes,
     advance: (ms) => { now += ms; },
     setKey: (k) => { key = k; },
     /** Let `ms` pass and fire the live timer once. */
@@ -179,17 +183,23 @@ test('the queue is bounded through a long outage', async () => {
   assert.equal(w.clock.snapshot().pending[0].seq, 5, 'the oldest are dropped');
 });
 
-test('hours used up: the counted tick says ended → Pro is re-checked once and the clock stops', async () => {
+test('hours used up: the counted tick says ended → Pro is re-checked once and the meeting pauses', async () => {
   const w = world({ answers: [
     { status: 200, body: { ok: true, metered: true, pack: { ended: false, seconds_left: 30 } } },
     { status: 200, body: { ok: true, metered: true, pack: { ended: true, ended_reason: 'hours_used' } } },
   ] });
   w.clock.meetingStarted();
-  await w.tick(); await w.tick(); await w.tick();
+  await w.tick(); await w.tick(); await w.tick(); await w.tick();
   assert.deepEqual(w.ended, [{ reason: 'hours_used' }]);
+  assert.equal(w.sent.length, 2, 'nothing is billed while paused');
+  assert.equal(w.states.length, 2);
+  assert.equal(w.clock.snapshot().paused, true);
+  assert.equal(w.clock.snapshot().pending.length, 0);
+  // With nothing to ask whether hours came back, the end of the meeting bills nothing more.
+  w.advance(30_000);
+  await w.clock.meetingEnded();
   assert.equal(w.sent.length, 2);
   assert.equal(w.timers[0].live, false);
-  assert.equal(w.states.length, 2);
 });
 
 test('a finished pack refused by the server (403 pack_ended) re-checks Pro', async () => {
@@ -197,7 +207,7 @@ test('a finished pack refused by the server (403 pack_ended) re-checks Pro', asy
   w.clock.meetingStarted();
   await w.tick();
   assert.deepEqual(w.ended, [{ reason: 'window_closed' }]);
-  assert.equal(w.clock.snapshot().live, false);
+  assert.equal(w.clock.snapshot().paused, true);
   assert.equal(w.clock.snapshot().pending.length, 0);
 });
 
@@ -222,4 +232,90 @@ test('meeting ids are valid for the server (8-80 chars of [A-Za-z0-9_-])', () =>
   const w = world();
   w.clock.meetingStarted();
   assert.match(w.clock.snapshot().meetingId, /^[A-Za-z0-9_-]{8,80}$/);
+});
+
+// 2026-11-09: a top-up during a meeting. The webhook adds the hours to the same
+// key, so the meeting is metered again from the minute the clock sees them. The
+// minutes in between (no pack, no Pro) are never billed.
+const ENDED = { status: 200, body: { ok: true, metered: true, pack: { ended: true, ended_reason: 'hours_used' } } };
+const LIVE = { status: 200, body: { ok: true, metered: true, pack: { ended: false, seconds_left: 3600 } } };
+
+test('TOP-UP mid-meeting: metering resumes from the minute the hours are seen, same meeting, next seq', async () => {
+  let live = false;
+  const w = world({ answers: [ENDED, LIVE], isKeyLive: () => live });
+  w.clock.meetingStarted();
+  await w.tick();                       // seq 0 → ended
+  assert.equal(w.clock.snapshot().paused, true);
+  await w.tick(); await w.tick();       // paused: asks, not yet
+  assert.equal(w.probes.length, 2);
+  assert.equal(w.sent.length, 1);
+  live = true;                          // the top-up lands
+  await w.tick();                       // asks → live, metering from now
+  assert.equal(w.renewed.length, 1);
+  assert.equal(w.clock.snapshot().paused, false);
+  assert.equal(w.sent.length, 1, 'the paused minutes are not billed');
+  await w.tick();                       // the first metered minute after the top-up
+  assert.equal(w.sent.length, 2);
+  assert.equal(w.sent[1].meeting_id, w.sent[0].meeting_id);
+  assert.equal(w.sent[1].seq, 1);
+  assert.equal(w.sent[1].seconds, 60);
+});
+
+test('TOP-UP: a pack that ends again in the same meeting is reported again', async () => {
+  let live = false;
+  const w = world({ answers: [ENDED, ENDED], isKeyLive: () => live });
+  w.clock.meetingStarted();
+  await w.tick();
+  live = true;
+  await w.tick();                       // renewed
+  live = false;
+  await w.tick();                       // that minute's tick: ended again
+  assert.deepEqual(w.ended, [{ reason: 'hours_used' }, { reason: 'hours_used' }]);
+  assert.equal(w.clock.snapshot().paused, true);
+});
+
+test('TOP-UP: waking from sleep while paused does not start billing', async () => {
+  const w = world({ answers: [ENDED], isKeyLive: () => false });
+  w.clock.meetingStarted();
+  await w.tick();
+  w.clock.suspend();
+  w.advance(600_000);
+  w.clock.resume();
+  await w.tick(); await w.tick();
+  assert.equal(w.sent.length, 1);
+  assert.equal(w.clock.snapshot().paused, true);
+  await w.clock.meetingEnded();
+  assert.equal(w.sent.length, 1);
+});
+
+test('TOP-UP: a new pack key pasted mid-meeting is metered under its own meeting id from seq 0', async () => {
+  const OTHER = 'natively_sk_' + 'b'.repeat(40);
+  const w = world({ answers: [ENDED, LIVE], isKeyLive: (k) => k === OTHER });
+  w.clock.meetingStarted();
+  await w.tick();
+  await w.tick();                       // old key still ended
+  assert.equal(w.renewed.length, 0);
+  w.setKey(OTHER);
+  await w.tick();                       // new key live
+  await w.tick();
+  assert.equal(w.renewed.length, 1);
+  assert.equal(w.sent[1].key, OTHER);
+  assert.equal(w.sent[1].seq, 0);
+  assert.notEqual(w.sent[1].meeting_id, w.sent[0].meeting_id);
+});
+
+test('TOP-UP: a failed check counts as not yet, and checks never overlap', async () => {
+  let calls = 0;
+  let release;
+  const w = world({ answers: [ENDED], isKeyLive: () => { calls++; if (calls === 1) throw new Error('offline'); return new Promise((r) => { release = r; }); } });
+  w.clock.meetingStarted();
+  await w.tick();
+  await w.tick();                       // throws → still paused
+  assert.equal(w.clock.snapshot().paused, true);
+  await w.tick();                       // hangs
+  await w.tick();                       // must not start a second check
+  assert.equal(calls, 2);
+  release(false);
+  await w.settle();
+  assert.equal(w.clock.snapshot().paused, true);
 });

@@ -93,6 +93,38 @@ const ROWS: Record<string, Row> = {
     'ローカルの音声モデルが停止しました。会議をやり直すか、「設定」→「オーディオ」で別のローカルモデルかクラウドのサービスを選んでください。',
     'El modelo de voz local se detuvo. Reinicia la reunión o elige otro modelo local o un proveedor en la nube en Ajustes → Audio.',
   ],
+  // A Pro pack ran out mid-meeting (2026-11-09). "Plans & Billing" stays in
+  // English: it is the Settings tab's name, which is not translated.
+  'Your pack hours are used up': [
+    'Часы вашего пакета израсходованы',
+    '您的套餐时长已用完',
+    'パックの時間を使い切りました',
+    'Has agotado las horas de tu paquete',
+  ],
+  'Your pack has ended': [
+    'Срок действия вашего пакета истёк',
+    '您的套餐已结束',
+    'パックの期間が終了しました',
+    'Tu paquete ha terminado',
+  ],
+  'Natively transcription has stopped. Add hours or choose a plan in Plans & Billing.': [
+    'Расшифровка Natively остановлена. Добавьте часы или выберите тариф в «Plans & Billing».',
+    'Natively 转录已停止。请在“Plans & Billing”中添加时长或选择套餐。',
+    'Natively の文字起こしが停止しました。「Plans & Billing」で時間を追加するか、プランを選んでください。',
+    'La transcripción de Natively se ha detenido. Añade horas o elige un plan en Plans & Billing.',
+  ],
+  'What the pack included has stopped. Add hours or choose a plan in Plans & Billing.': [
+    'То, что входило в пакет, больше не работает. Добавьте часы или выберите тариф в «Plans & Billing».',
+    '套餐包含的功能已停止。请在“Plans & Billing”中添加时长或选择套餐。',
+    'パックに含まれていた機能は停止しました。「Plans & Billing」で時間を追加するか、プランを選んでください。',
+    'Lo que incluía el paquete se ha detenido. Añade horas o elige un plan en Plans & Billing.',
+  ],
+  'Add hours': [
+    'Добавить часы',
+    '添加时长',
+    '時間を追加',
+    'Añadir horas',
+  ],
 };
 
 function column(i: 0 | 1 | 2 | 3): Record<string, string> {

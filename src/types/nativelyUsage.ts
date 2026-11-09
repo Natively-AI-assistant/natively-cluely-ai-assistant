@@ -146,6 +146,10 @@ export interface NativelyUsageResponse {
   stale?: boolean;
   error?: string;
   status?: number;
+  /** On a refusal: 'pack_ended' when the key is a Pro pack that has run out (servers from 2026-11-09). */
+  reason?: string;
+  /** On a 'pack_ended' refusal: why it ended. */
+  pack_ended_reason?: 'hours_used' | 'window_closed' | null;
 }
 
 export interface NativelyPlansResponse {

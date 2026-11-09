@@ -9,7 +9,7 @@ import { GenieModal } from './ui/GenieModal';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import '../ui-components/LiquidGlassButton.css';
 import { CHECKOUT_URLS } from '../config/urls';
-import { isPackPlan } from '../lib/apiPlans.mjs';
+import { endedPackFromRefusal, isPackPlan, packMeetingBucket } from '../lib/apiPlans.mjs';
 
 interface NearLimitBucket {
     label: string;
@@ -50,6 +50,8 @@ export const NativelyQuotaBanner: React.FC = () => {
     const [nearLimitBuckets, setNearLimitBuckets] = useState<NearLimitBucket[]>([]);
     const [visible, setVisible] = useState(false);
     const [offer, setOffer] = useState<Offer>({ kind: 'plans' });
+    // A pack whose hours or days are gone: the card says so instead of "almost full".
+    const [packEnded, setPackEnded] = useState(false);
     // The card is the Liquid Glass kit's clear pane (.lg-notice), shared with
     // the provider-change notice, so its text follows the theme: amber and red
     // step down a shade on light glass to stay legible.
@@ -67,7 +69,24 @@ export const NativelyQuotaBanner: React.FC = () => {
                 const result = await window.electronAPI?.getNativelyUsage?.();
                 console.log('[NativelyQuotaBanner] usage:', JSON.stringify(result));
 
-                if (cancelled || !result?.ok || !result.quota) {
+                if (cancelled) return;
+
+                // A pack that has run out is refused (403 subscription_inactive,
+                // reason 'pack_ended'), so it has no quota to read. It is the one
+                // refusal this card speaks to: the fix is more hours.
+                const ended = endedPackFromRefusal(result, null);
+                if (ended) {
+                    const bucket = packMeetingBucket(ended.pack, THRESHOLD_PCT);
+                    if (!bucket) return;
+                    setOffer(quotaBannerOffer(ended.plan ?? undefined, 'pack'));
+                    setPackEnded(true);
+                    setNearLimitBuckets([bucket]);
+                    setVisible(true);
+                    window.electronAPI?.funnelTrack?.('upgrade_prompt', { surface: 'quota_banner', action: 'shown' })?.catch?.(() => {});
+                    return;
+                }
+
+                if (!result?.ok || !result.quota) {
                     console.log('[NativelyQuotaBanner] no quota data — skipping');
                     return;
                 }
@@ -101,6 +120,11 @@ export const NativelyQuotaBanner: React.FC = () => {
                     { label: 'Research',   meter: quota.research },
                 ];
 
+                // A pack is sold in meeting hours, so those usually run out first.
+                const meeting = result.billing_period === 'pack' || isPackPlan(result.plan)
+                    ? packMeetingBucket(result.pack, THRESHOLD_PCT)
+                    : null;
+
                 const near: NearLimitBucket[] = candidates
                     // `limit == null` is UNMETERED, not exhausted — warning on
                     // it would nag every customer whose plan does not yet meter
@@ -112,6 +136,7 @@ export const NativelyQuotaBanner: React.FC = () => {
                         detail: formatMeter(meter),
                         pct: Math.round(meter.percent),
                     }));
+                if (meeting) near.unshift(meeting);
 
                 console.log('[NativelyQuotaBanner] near-limit:', near);
 
@@ -152,7 +177,7 @@ export const NativelyQuotaBanner: React.FC = () => {
             <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                     <AlertTriangle size={14} className={`${amber} shrink-0`} strokeWidth={2} />
-                    <span className="text-[13px] font-semibold text-text-primary">Natively quota almost full</span>
+                    <span className="text-[13px] font-semibold text-text-primary">{packEnded ? 'Your pack has ended' : 'Natively quota almost full'}</span>
                 </div>
                 <button
                     onClick={() => setVisible(false)}

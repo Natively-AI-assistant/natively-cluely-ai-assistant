@@ -12725,7 +12725,21 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as any;
         askLicenceIf({ ok: false, error: body?.error });
-        return { ok: false, error: body.error || 'request_failed', status: res.status };
+        // The key is refused: the last good answer no longer describes it. Left
+        // cached, the catch below would serve it on the next network error and
+        // put back an ended pack's "4 h 57 min left".
+        if (res.status === 401 || res.status === 403) _usageCache.delete(key);
+        // A finished pack is refused like any switched-off key, and the server
+        // says which (reason 'pack_ended', its pack block, why it ended) so the
+        // Plans card can show "Hours used up" instead of its last numbers.
+        return {
+          ok: false,
+          error: body.error || 'request_failed',
+          status: res.status,
+          ...(typeof body?.reason === 'string' ? { reason: body.reason } : {}),
+          ...(body?.pack_ended_reason !== undefined ? { pack_ended_reason: body.pack_ended_reason } : {}),
+          ...(body?.pack && typeof body.pack === 'object' ? { pack: body.pack } : {}),
+        };
       }
       const data = (await res.json()) as any;
       askLicenceIf({ ok: true, plan: data?.plan });

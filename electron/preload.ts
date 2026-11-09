@@ -360,6 +360,10 @@ interface ElectronAPI {
   convertTrial: (choice: string) => Promise<{ ok: boolean }>;
   endTrialByok: (opts?: { force?: boolean }) => Promise<{ success: boolean; wipeIncomplete?: boolean; error?: string }>;
   onTrialEnded: (cb: (data: { choice: string; expiresAt?: string; showEndedCard?: boolean }) => void) => () => void;
+  /** A Pro pack ran out during a meeting (main: PackMeetingClock). `reason` is 'hours_used', 'window_closed' or null. */
+  onPackEnded: (cb: (data: { reason: string | null }) => void) => () => void;
+  /** Hours were added to a pack that ended mid-meeting; it is metered again. */
+  onPackRenewed: (cb: () => void) => () => void;
   /** The trial's AI allowance is in its last quarter (main: trial:status poll). */
   onTrialAllowanceLow: (cb: (data: { expiresAt?: string | null }) => void) => () => void;
   // Card ledger (toaster policy): shows, strikes and retirements per card.
@@ -1999,6 +2003,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const sub = (_: any, data: any) => cb(data);
     ipcRenderer.on('trial-ended', sub);
     return () => ipcRenderer.removeListener('trial-ended', sub);
+  },
+  onPackEnded: (cb: (data: { reason: string | null }) => void) => {
+    const sub = (_: any, data: any) => cb({ reason: typeof data?.reason === 'string' ? data.reason : null });
+    ipcRenderer.on('pack-ended', sub);
+    return () => ipcRenderer.removeListener('pack-ended', sub);
+  },
+  onPackRenewed: (cb: () => void) => {
+    const sub = () => cb();
+    ipcRenderer.on('pack-renewed', sub);
+    return () => ipcRenderer.removeListener('pack-renewed', sub);
   },
   onTrialAllowanceLow: (cb: (data: { expiresAt?: string | null }) => void) => {
     const sub = (_: any, data: any) => cb(data);

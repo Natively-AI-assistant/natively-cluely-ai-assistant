@@ -70,6 +70,14 @@ export interface PackMeetingClockDeps {
   newMeetingId(): string;
   /** The pack has ended (hours used or window closed). Re-check Pro. */
   onPackEnded(info: PackEndedInfo): void;
+  /**
+   * Is this key metered again? Asked once a minute while a meeting is paused on
+   * an ended pack (GET /v1/usage answering 200). Never bills. Absent → the
+   * meeting stays paused until it ends.
+   */
+  isKeyLive?(key: string): Promise<boolean>;
+  /** A paused meeting found its pack live again (hours added) and is metered from now. */
+  onPackRenewed?(): void;
   /** Latest pack view the server sent with a counted tick. */
   onPackState?(pack: any): void;
   log?: { log(...a: unknown[]): void; warn(...a: unknown[]): void };
@@ -92,8 +100,14 @@ export function createPackMeetingClock(deps: PackMeetingClockDeps) {
     since: number | null;
     /** Sub-second remainder carried to the next tick. */
     carryMs: number;
+    /**
+     * The pack ended mid-meeting. Nothing accrues (since is null) and the timer
+     * only asks whether hours were added; the time in between is never billed.
+     */
+    paused: boolean;
     cancelTimer: () => void;
   } | null = null;
+  let probing = false;
 
   // Ticks not yet confirmed by the server, oldest first. They outlive their
   // meeting: a tick that failed at the end of one meeting is sent during the next.
@@ -120,11 +134,16 @@ export function createPackMeetingClock(deps: PackMeetingClockDeps) {
     if (meeting) { try { meeting.cancelTimer(); } catch { /* already gone */ } }
   }
 
-  function packEnded(info: PackEndedInfo): void {
-    // Nothing more to meter on this key; whatever is queued for it is moot.
-    const key = meeting?.key;
-    if (meeting) { stopTimer(); meeting = null; }
-    if (key) pending = pending.filter((t) => t.key !== key);
+  function packEnded(info: PackEndedInfo, key: string): void {
+    // Whatever is queued for this key is moot. A meeting on it pauses rather
+    // than stops: hours added during it (a top-up lands on the same key) are
+    // metered from the minute the clock sees them, not from the next meeting.
+    pending = pending.filter((t) => t.key !== key);
+    if (meeting && meeting.key === key && !meeting.paused) {
+      meeting.paused = true;
+      meeting.since = null;
+      meeting.carryMs = 0;
+    }
     if (endedReported) return;
     endedReported = true;
     log.log(`[PackClock] the pack has ended (${info.reason ?? 'no reason given'}) — re-checking Pro`);
@@ -153,7 +172,7 @@ export function createPackMeetingClock(deps: PackMeetingClockDeps) {
           continue;
         }
         if (body?.pack) { try { deps.onPackState?.(body.pack); } catch { /* a listener never stops the clock */ } }
-        if (body?.pack?.ended) { packEnded({ reason: body.pack.ended_reason ?? undefined }); }
+        if (body?.pack?.ended) { packEnded({ reason: body.pack.ended_reason ?? undefined }, tick.key); }
         continue;
       }
       if (status === 400) {
@@ -167,7 +186,7 @@ export function createPackMeetingClock(deps: PackMeetingClockDeps) {
         // nothing left to meter on it either way.
         const ended = body?.reason === 'pack_ended' || body?.error === 'subscription_inactive';
         pending = pending.filter((t) => t.key !== tick.key);
-        if (ended) { packEnded({ reason: body?.pack_ended_reason ?? undefined }); continue; }
+        if (ended) { packEnded({ reason: body?.pack_ended_reason ?? undefined }, tick.key); continue; }
         log.warn(`[PackClock] key refused (${status} ${body?.error ?? ''}) — clock off for this key`);
         notPackKey = tick.key;
         if (meeting?.key === tick.key) { stopTimer(); meeting = null; }
@@ -185,8 +204,34 @@ export function createPackMeetingClock(deps: PackMeetingClockDeps) {
     return sending;
   }
 
+  /** A paused meeting: is the pack live again? Meter from now if so. */
+  async function probe(): Promise<void> {
+    if (!meeting?.paused || probing || !deps.isKeyLive) return;
+    // The saved key, which may be a new one pasted mid-meeting.
+    const key = deps.getApiKey();
+    if (!key) return;
+    probing = true;
+    let live = false;
+    try { live = await deps.isKeyLive(key); } catch { live = false; } finally { probing = false; }
+    if (!live || !meeting?.paused) return;
+    if (key !== meeting.key) {
+      // A different key: its own meeting id and sequence.
+      meeting.key = key;
+      meeting.id = deps.newMeetingId();
+      meeting.seq = 0;
+      if (notPackKey !== null && notPackKey !== key) notPackKey = null;
+    }
+    meeting.paused = false;
+    meeting.since = deps.now();
+    meeting.carryMs = 0;
+    endedReported = false;
+    log.log('[PackClock] the pack is live again — metering the rest of this meeting');
+    try { deps.onPackRenewed?.(); } catch { /* a listener never stops the clock */ }
+  }
+
   function onTimer(): void {
     if (!meeting) return;
+    if (meeting.paused) { void probe(); return; }
     accrue(deps.now());
     void flush();
   }
@@ -206,6 +251,7 @@ export function createPackMeetingClock(deps: PackMeetingClockDeps) {
         seq: 0,
         since: deps.now(),
         carryMs: 0,
+        paused: false,
         cancelTimer: () => {},
       };
       meeting.cancelTimer = deps.every(onTimer, TICK_INTERVAL_MS);
@@ -231,7 +277,8 @@ export function createPackMeetingClock(deps: PackMeetingClockDeps) {
 
     /** The system woke: accrue again from now. Sleep time is never billed. */
     resume(): void {
-      if (!meeting || meeting.since !== null) return;
+      // A paused meeting (pack ended) does not start accruing on wake.
+      if (!meeting || meeting.paused || meeting.since !== null) return;
       meeting.since = deps.now();
     },
 
@@ -239,7 +286,8 @@ export function createPackMeetingClock(deps: PackMeetingClockDeps) {
     snapshot() {
       return {
         live: meeting !== null,
-        suspended: meeting !== null && meeting.since === null,
+        suspended: meeting !== null && !meeting.paused && meeting.since === null,
+        paused: meeting?.paused ?? false,
         meetingId: meeting?.id ?? null,
         nextSeq: meeting?.seq ?? null,
         pending: pending.map((t) => ({ ...t.body })),

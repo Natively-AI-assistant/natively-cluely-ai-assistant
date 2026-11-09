@@ -104,3 +104,58 @@ export function packStatus(pack, now = Date.now()) {
     endedReason: ended ? endedReason : null,
   };
 }
+
+/**
+ * The pack a refused GET /v1/usage describes, or null.
+ *
+ * WHY (2026-11-09). When a pack's hours run out the server switches the key
+ * off, so every read of it, the usage read included, is refused with 403
+ * subscription_inactive. The usage card kept the last answer it had and went on
+ * saying "4 h 57 min left" under a green "Heavy pack" after Pro had locked.
+ *
+ * The server (natively-api d8de36a, 2026-11-09) says so outright: reason
+ * 'pack_ended', the pack's own block and why it ended. Only that counts. A bare
+ * subscription_inactive is a pack that was refunded or revoked, or a lapsed
+ * plan, not one whose hours or days ran out, and "Add hours" would not fix it.
+ * `lastKnown` only fills in the pack's block when the refusal has none. Anything
+ * else (no key, network) is null and the caller keeps what it shows.
+ *
+ * @param {{ ok?: boolean, error?: string, reason?: string, pack_ended_reason?: string|null, pack?: object|null } | null | undefined} answer
+ * @param {{ plan?: string, billing_period?: string, pack?: object|null } | null | undefined} lastKnown
+ * @returns {{ plan: string|null, pack: object } | null}
+ */
+export function endedPackFromRefusal(answer, lastKnown) {
+  if (!answer || answer.ok) return null;
+  if (answer.reason !== 'pack_ended') return null;
+  const lastWasPack = !!lastKnown && (lastKnown.billing_period === 'pack' || isPackPlan(lastKnown.plan));
+  const fresh = answer.pack && typeof answer.pack === 'object' ? answer.pack : null;
+  const base = fresh ?? (lastWasPack && lastKnown.pack && typeof lastKnown.pack === 'object' ? lastKnown.pack : {});
+  const plan = (typeof base.plan === 'string' && base.plan) || (lastWasPack ? lastKnown.plan : null) || null;
+  return {
+    plan,
+    pack: { ...base, ended: true, ended_reason: answer.pack_ended_reason ?? base.ended_reason ?? null },
+  };
+}
+
+/**
+ * The meeting-time line for the start-up quota banner, or null.
+ *
+ * A pack is sold in meeting hours, so they are what runs out first; the banner
+ * only watched the AI, knowledge, voice and research meters and never warned a
+ * pack holder at all. Shown from `thresholdPct` used, and always once ended.
+ *
+ * @returns {{ label: string, detail: string, pct: number } | null}
+ */
+export function packMeetingBucket(pack, thresholdPct = 90, now = Date.now()) {
+  const s = packStatus(pack, now);
+  if (!s) return null;
+  if (s.ended) {
+    return { label: 'Meeting time', detail: s.endedReason === 'hours_used' ? 'Hours used up' : 'Pack ended', pct: 100 };
+  }
+  if (!s.hoursKnown || s.usedPercent < thresholdPct) return null;
+  return {
+    label: 'Meeting time',
+    detail: `${formatMeetingTime(s.secondsLeft)} left of ${formatMeetingTime(s.secondsTotal)}`,
+    pct: Math.round(s.usedPercent),
+  };
+}

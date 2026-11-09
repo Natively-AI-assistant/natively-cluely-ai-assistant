@@ -7,6 +7,7 @@ import {
   Code,
   Copy,
   Check,
+  Clock,
   Crop,
   Globe,
   HelpCircle,
@@ -1506,6 +1507,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const [sttUserFallback, setSttUserFallback] = useState<string>('');
   const [sttInterviewerFallback, setSttInterviewerFallback] = useState<string>('');
   const [sttInterviewerProvider, setSttInterviewerProvider] = useState<string>('');
+  // A Pro pack ran out mid-meeting (main: PackMeetingClock → 'pack-ended').
+  // Its key is switched off, so Natively transcription and Pro stop together;
+  // without this the overlay only said "check your transcription provider and
+  // its key", which sends a pack holder to the wrong place. Cleared when a new
+  // meeting starts: the clock re-sends it on that meeting's first tick if the
+  // pack is still empty. 'hours_used' | 'window_closed' | 'ended'.
+  const [packEndedReason, setPackEndedReason] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   // The notes window (`?window=notes`) is open: the Notes button shows it.
@@ -5554,6 +5562,20 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       setIsExpanded(true);
     });
     return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    // Main sends this only with the server's reason ('hours_used' |
+    // 'window_closed'); a reasonless one is not a pack and is ignored.
+    const offEnded = window.electronAPI?.onPackEnded?.(({ reason }) => { if (reason) setPackEndedReason(reason); });
+    const offReset = window.electronAPI?.onSessionReset?.(() => setPackEndedReason(null));
+    // Hours added mid-meeting (a top-up adds them to the same key) bring Pro
+    // back; the notice goes with it rather than staying until the next meeting.
+    const offLicence = window.electronAPI?.onLicenseStatusChanged?.(({ isPremium }) => { if (isPremium) setPackEndedReason(null); });
+    // The clock saw the hours come back (also when a lifetime licence kept Pro
+    // on, so no licence change arrives).
+    const offRenewed = window.electronAPI?.onPackRenewed?.(() => setPackEndedReason(null));
+    return () => { offEnded?.(); offReset?.(); offLicence?.(); offRenewed?.(); };
   }, []);
 
   // Session Reset Listener - Clears UI when a NEW meeting starts
@@ -11509,8 +11531,23 @@ Provide only the answer, nothing else.`;
   // kind picks the icon: only a live reconnect spins. The backup-provider
   // banner used the same spinning arrows, and a user whose key was stopped for
   // quota reported it as "transcription reconnecting" (user log 2026-11-03).
-  const sttStatusBanner: { tone: 'warning' | 'error'; kind: 'stopped' | 'reconnecting' | 'backup'; title: string; message: string } | null =
-    sttNotConfigured
+  const sttStatusBanner: { tone: 'warning' | 'error'; kind: 'stopped' | 'reconnecting' | 'backup' | 'pack'; title: string; message: string; settingsTab?: string; action?: string } | null =
+    packEndedReason
+      ? {
+          // Before every transcription case: when the pack is the cause, the
+          // provider advice below is wrong. Says what the pack covered, not
+          // that Pro stopped: a lifetime or Pro licence the user also owns
+          // keeps Pro on (packClockWiring re-checks it after this is sent).
+          tone: 'error',
+          kind: 'pack',
+          title: packEndedReason === 'hours_used' ? t('Your pack hours are used up') : t('Your pack has ended'),
+          message: sttFailed
+            ? t('Natively transcription has stopped. Add hours or choose a plan in Plans & Billing.')
+            : t('What the pack included has stopped. Add hours or choose a plan in Plans & Billing.'),
+          settingsTab: 'plans',
+          action: t('Add hours'),
+        }
+      : sttNotConfigured
       ? null
       : sttFailed && !audioFailureBannerActive
         ? {
@@ -12095,7 +12132,9 @@ Provide only the answer, nothing else.`;
                 <OverlayBanner
                   className="mx-4"
                   tone={sttStatusBanner.tone}
-                  icon={sttStatusBanner.kind === 'stopped'
+                  icon={sttStatusBanner.kind === 'pack'
+                    ? <Clock strokeWidth={2.2} />
+                    : sttStatusBanner.kind === 'stopped'
                     ? <MicOff strokeWidth={2.2} />
                     : sttStatusBanner.kind === 'backup'
                       ? <Repeat2 strokeWidth={2.2} />
@@ -12105,9 +12144,9 @@ Provide only the answer, nothing else.`;
                   actions={sttStatusBanner.tone === 'error' ? (
                     <OverlayBannerButton
                       variant="primary"
-                      onClick={() => window.electronAPI?.openSettingsTab?.('audio')}
+                      onClick={() => window.electronAPI?.openSettingsTab?.(sttStatusBanner.settingsTab ?? 'audio')}
                     >
-                      {t('Open Settings')}
+                      {sttStatusBanner.action ?? t('Open Settings')}
                     </OverlayBannerButton>
                   ) : undefined}
                 />

@@ -32,7 +32,7 @@ import './apiTier.css';
 import { plansVisit } from '../../lib/funnel/plansVisit.mjs';
 import { usePlansSeen } from '../../lib/funnel/usePlansSeen';
 import {
-  apiPlanLabel, formatMeetingTime, isPackPlan, packStatus, PRO_PACKS, YEARLY_MONTHS_FREE,
+  apiPlanLabel, endedPackFromRefusal, formatMeetingTime, isPackPlan, packStatus, PRO_PACKS, YEARLY_MONTHS_FREE,
   type BillingCycle, type PackStatus,
 } from '../../lib/apiPlans.mjs';
 import {
@@ -1234,6 +1234,31 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         const next = { ...r, quota } as UsageData;
         setUsageCache(next);
         setUsageData(next);
+      } else {
+        // A pack that has run out is refused like a switched-off key. Show it
+        // as ended ("Hours used up", Add hours on its card) over the last
+        // numbers, never the last numbers alone under a live-looking badge.
+        const ended = endedPackFromRefusal(r, usageCache);
+        if (ended) {
+          // No earlier answer this session (the app started after the pack
+          // ended): no meters to show, only the pack. Not normalizeQuota of an
+          // empty object, which is null for a quota with no meters; the card reads
+          // `quota.ai`. Every meter renders nothing when absent. readUsageCache
+          // drops this meter-less entry on the next launch, so it is refetched.
+          const base: UsageData = usageCache ?? {
+            plan: ended.plan ?? 'pack_light',
+            member_since: '',
+            quota: { resets_at: '' } as unknown as NativelyQuota,
+          };
+          const next: UsageData = {
+            ...base,
+            plan: ended.plan ?? base.plan,
+            billing_period: 'pack',
+            pack: ended.pack as UsageData['pack'],
+          };
+          setUsageCache(next);
+          setUsageData(next);
+        }
       }
     } catch {
       // no-op — see comment above
@@ -1241,6 +1266,16 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
       if (!silent) setIsLoadingUsage(false);
     }
   }, []);
+
+  // The meeting clock found the pack used up, or its hours back: re-read it now
+  // rather than when this tab is next opened.
+  useEffect(() => {
+    const refresh = () => { void fetchUsage({ force: true, silent: true }); };
+    const off = window.electronAPI?.onPackEnded?.(refresh);
+    // Hours added mid-meeting: the ended card goes back to the live pack.
+    const offRenewed = window.electronAPI?.onPackRenewed?.(refresh);
+    return () => { off?.(); offRenewed?.(); };
+  }, [fetchUsage]);
 
   useEffect(() => {
     if (!isSaved || isLoading) return;
@@ -1930,9 +1965,11 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         {!isLoading && isSaved && (
           <div className="flex items-center justify-end px-1 mb-2">
               <div className="flex items-center gap-3 shrink-0">
-                <span className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-500">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  {planLabel ?? 'Connected'}
+                {/* An ended pack is still the saved key, but nothing it unlocks
+                    works: amber and "ended", not the green of a live plan. */}
+                <span className={`flex items-center gap-1.5 text-[11px] font-medium ${keyPack?.ended ? 'text-amber-500' : 'text-emerald-500'}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${keyPack?.ended ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                  {keyPack?.ended ? `${planLabel ?? 'Pack'} ended` : (planLabel ?? 'Connected')}
                 </span>
                 <button
                   onClick={handleClear}
@@ -2209,9 +2246,13 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
               aside={
                 <span className="flex items-center gap-2 shrink-0">
                   <span className="text-[11px] text-text-tertiary">
-                    {keyPack?.endsAt
-                      ? `${keyPack.ended ? 'Ended' : 'Use by'} ${fmtDate(keyPack.endsAt)}`
-                      : 'One-time pack'}
+                    {/* ends_at is the use-by date. A pack whose hours ran out
+                        ended before it, so that date is not when it ended. */}
+                    {keyPack?.ended && keyPack.endedReason !== 'window_closed'
+                      ? 'Ended'
+                      : keyPack?.endsAt
+                        ? `${keyPack.ended ? 'Ended' : 'Use by'} ${fmtDate(keyPack.endsAt)}`
+                        : 'One-time pack'}
                   </span>
                   {usageRefreshButton}
                 </span>
@@ -2296,7 +2337,12 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             {/* No divider under the header (2026-10-24), as How it works: the
                 tier bar follows the title directly; -mt-3 takes the body's
                 top padding down to How it works' spacing. */}
+            {/* Open for an ended pack: the overlay's "Add hours" lands here,
+                and the pack cards are the next step. Keyed so it opens when
+                the pack ends while this tab is on screen, not just on mount. */}
             <AccordionSection
+              key={keyPack?.ended ? 'pack-ended' : 'plan-live'}
+              defaultOpen={!!keyPack?.ended}
               title="Change plan"
               className="natively-key-card bg-bg-item-surface rounded-2xl border-border-subtle !mb-0"
               divider={false}

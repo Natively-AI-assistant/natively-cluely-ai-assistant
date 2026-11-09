@@ -38,13 +38,48 @@ async function postTick(key: string, body: TickBody): Promise<TickAnswer> {
 }
 
 /**
+ * Is the key metered again? A plain usage read: 200 means the server accepts
+ * it (the top-up webhook adds hours to the same key and drops its cache), a
+ * refusal or any failure means not yet. Bills nothing.
+ */
+async function isKeyLive(key: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/v1/usage`, {
+      headers: { 'x-natively-key': key },
+      signal: AbortSignal.timeout(10_000),
+    });
+    return res.status === 200;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A paused meeting's pack is live again. Pro comes back through the usual
+ * reconciler (it re-activates a natively_api licence when /v1/usage names a
+ * Pro plan), and the windows drop their "pack ended" notices.
+ */
+function packRenewed(): void {
+  broadcast('pack-renewed', {});
+  try {
+    const { getProEntitlementReconciler } = require('../proEntitlementWiring');
+    void getProEntitlementReconciler().run('pack-renewed').catch(() => { /* re-checked on its own schedule */ });
+  } catch { /* open-source build: no Pro to restore */ }
+}
+
+/**
  * The pack has ended. Ask the server whether Pro still holds: isPremiumAsync
  * revokes a natively_api licence only on a confirmed loss (403
  * subscription_inactive), keeps it on anything transient, and never touches a
  * lifetime or Dodo licence the user also owns.
  */
 async function recheckPro(reason: string | undefined, onProLost: () => void): Promise<void> {
-  broadcast('pack-ended', { reason: reason ?? null });
+  // Windows hear only a pack that the server says has ended (its
+  // pack_ended_reason: 'hours_used' | 'window_closed'). The clock also lands
+  // here for any key refused as subscription_inactive, such as a lapsed monthly
+  // plan, which must still get the Pro re-check below but is not a pack: the
+  // overlay would tell its owner "Your pack has ended" every meeting.
+  if (reason) broadcast('pack-ended', { reason });
   let lm: any = null;
   try {
     const { LicenseManager } = require('../../../premium/electron/services/LicenseManager');
@@ -90,6 +125,8 @@ export function getPackMeetingClock(onProLost: () => void = () => {}): Clock {
     },
     newMeetingId: () => `mtg_${randomBytes(12).toString('hex')}`,
     onPackEnded: (info) => { void recheckPro(info.reason, onProLost); },
+    isKeyLive,
+    onPackRenewed: packRenewed,
     onPackState: (pack) => broadcast('pack-state', pack),
   });
   return instance;
