@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef, useId, useCallback } from 'react';
 import { useT } from '../../i18n';
 import { AnimatePresence, motion, useReducedMotion, type Variants, useMotionValue, useTransform, useSpring } from 'framer-motion';
-import { CheckCircle, AlertCircle, X, ChevronDown } from 'lucide-react';
+import { CheckCircle, AlertCircle, X, ChevronDown, Check, ArrowUpRight } from 'lucide-react';
+import { TierBand } from './NativelyApiSettings';
+import './apiTier.css';
 import { InteractiveCard } from '../ui/InteractiveCard';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
 import { AccordionPanel } from '../ui/AccordionSection';
@@ -9,6 +11,7 @@ import { getLicenseSnapshot, setLicenseSnapshot } from '../../lib/licenseCache';
 import { BEAT, EASE_ENTER, EASE_LEAVE, INK, SETTLE } from '../../lib/plansMotion';
 import { SwapLabel } from './SettingsRow';
 import { LIFETIME_LIST, LIFETIME_SALE, YEARLY_LIST, YEARLY_SALE, lifetimeSaleLabel, yearlySaleLabel } from '../../lib/lifetimeSale.mjs';
+import { CHECKOUT_URLS } from '../../config/urls';
 
 // ─── Strong cubic-bezier easings (per emil-design-eng) ───────
 // Never use the weak default `ease` / `ease-in` for UI motion.
@@ -416,7 +419,8 @@ interface NativelyProSettingsProps {
 
 export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
     initialIsPremium = null,
-    collapsePricing = false,
+    // collapsePricing is still accepted but no longer used: the two Pro
+    // cards always show (2026-11-09).
     justActivated = false,
     onExitComplete,
     parentIsPremium = false,
@@ -634,8 +638,9 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
     // finished on the server — so the `||` right side won every render for
     // three months. Both links verified live on 2026-09-08. Changing a price
     // or a checkout link is an app release; that was already the case.
-    const lifetimeUrl = 'https://checkout.dodopayments.com/buy/pdt_0NbHo6EnXlNPqNcZ14OTi';
-    const yearlyUrl = 'https://checkout.dodopayments.com/buy/pdt_0NcM4QBwy0CDcPV9CXaNP';
+    // Shared with the paywalls' in-panel plans page (config/urls.ts).
+    const lifetimeUrl = CHECKOUT_URLS.proLifetime;
+    const yearlyUrl = CHECKOUT_URLS.proYearly;
     // Yearly $30 from 2026-11-06, lifetime $60 from 2026-11-01, each shown
     // against a struck list price ($39, $79) only during a named sale
     // (lib/lifetimeSale.mjs, same windows as the website's /pricing).
@@ -956,337 +961,84 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                     animate="visible"
                     className="space-y-4"
                 >
-                    {/* ── Teaser row ───────────────────────────────────────────
-                        The only part of this section a non-Pro visitor sees
-                        before interacting, so it has to carry the whole offer:
-                        what it is, what it costs, and one thing to press. The
-                        generic accordion header it replaces carried a title, a
-                        60-word grey paragraph and a chevron, which rendered
-                        identically to the "How it works & refund policy" row
-                        beneath it. A purchase path that looks like an FAQ entry
-                        does not get opened.
-
-                        It is one <button>, not a button containing a button:
-                        the CTA-looking pill is a <span>, because nesting
-                        interactive elements is invalid and because the pill and
-                        the row do the same thing. Pressing it reveals pricing,
-                        it never navigates. Checkout stays where the owner put
-                        it, on the two card CTAs only. */}
-                    {collapsePricing && (
-                        <button
-                            ref={teaserRef}
-                            type="button"
-                            onClick={() => setPricingOpen((o) => !o)}
-                            aria-expanded={pricingOpen}
-                            aria-controls="natively-pro-pricing"
-                            className="pro-teaser group relative w-full overflow-hidden text-left flex items-center gap-4 px-5 py-4 cursor-pointer focus-visible:outline-none"
-                        >
-                            <span className="relative z-[3] min-w-0 flex-1 block">
-                                <span className="pro-teaser-eyebrow inline-flex items-center px-2 py-0.5 rounded-full text-[9.5px] font-bold" style={{ letterSpacing: '0.09em' }}>
-                                    NATIVELY PRO
-                                </span>
-                                <span className="pro-teaser-title block mt-2 text-[14.5px] font-semibold tracking-[-0.012em]">
-                                    Own the app. Use your own AI keys.
-                                </span>
-                                {/* The live prices are the hook. This is the number
-                                    the old collapsed header never showed. */}
-                                <span className="pro-teaser-sub block mt-1 text-[11.5px] leading-snug">
-                                    {yearlyPriceText} per year, or {lifetimePriceText} once. No monthly API plan, no usage quota.
-                                </span>
-                            </span>
-                            <span className="pro-teaser-cta relative z-[3] shrink-0 inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-[12.5px] font-semibold" style={{ letterSpacing: '-0.005em' }}>
-                                {/* Both words share one grid cell: the pill keeps the
-                                    wider one's width, so it no longer shrinks ~45px
-                                    out from under the pointer that just pressed it,
-                                    and the word swaps (Settings' text swap). */}
-                                <SwapLabel id={pricingOpen ? 'hide' : 'show'} sizers={['See pricing', 'Hide']}>
-                                    {pricingOpen ? 'Hide' : 'See pricing'}
-                                </SwapLabel>
-                                {/* Turns on the grid's own spring and clock
-                                    (acc-spring-turn), so the two land together. */}
-                                <ChevronDown
-                                    size={14}
-                                    className={`acc-spring-turn shrink-0 ${pricingOpen ? 'rotate-0' : '-rotate-90'}`}
-                                />
-                            </span>
-                        </button>
-                    )}
-
-                    {/* ── Choose-your-plan hero ────────────────────────────── */}
-                    {/* The Plans accordions' motion (AccordionPanel): the grid
-                        grows on the Apple spring, its cards settle in, and the
-                        page glides it into view. The panel stays in the DOM
-                        while collapsed, so it takes no `space-y-4` gap (!mt-0);
-                        the gap is padding inside the moving body instead, and
-                        opens with it. Without a teaser the grid leads the
-                        section and needs no gap at all. */}
-                    <AccordionPanel
-                        open={collapsePricing ? pricingOpen : true}
-                        anchorRef={teaserRef}
-                        className="!mt-0"
-                        bodyClassName={collapsePricing ? 'pt-4' : ''}
-                    >
-                    <div className="space-y-3" id="natively-pro-pricing">
-
-                        {/* Two-card pricing grid. Lifetime is the recommended
-                            option: it carries the "Best value" pill, the price
-                            anchor, and the concrete savings line. */}
-                        <div className="grid grid-cols-2 gap-3 items-stretch">
-                            {/* ── Left: Pro · Yearly (pale ice-blue jelly) ───── */}
-                            <InteractiveCard
-                                className="pricing-card-yearly group relative overflow-hidden px-6 py-5 flex flex-col"
-                                data-active="false"
-                                style={{ minHeight: 200, transformStyle: 'preserve-3d' }}
-                                glowColor="rgba(59, 130, 246, 0.28)"
-                            >
-                                {/* Same one-row label as Lifetime's: the season's
-                                    pill only while a sale runs, nothing after. */}
-                                <div className="relative flex items-center justify-between gap-2" style={{ transformStyle: 'preserve-3d', transform: 'translateZ(12px)' }}>
-                                    <span className="badge-tier-label inline-flex items-center px-2 py-0.5 rounded-full text-text-primary text-[10px] font-semibold whitespace-nowrap" style={{ letterSpacing: '0.02em' }}>
-                                        Pro · Yearly
-                                    </span>
-                                    {yearlySale !== null && (
-                                        <span className="badge-best-value badge-sale min-w-0 px-2 py-0.5 rounded-full text-[9.5px] font-bold whitespace-nowrap overflow-hidden text-ellipsis" style={{ letterSpacing: '0.06em' }} title={yearlySale}>
-                                            {yearlySale.toUpperCase()}
-                                        </span>
-                                    )}
-                                </div>
-
-                                {/* Price block: the struck $39 list price while a
-                                    named sale runs (lib/lifetimeSale.mjs), then
-                                    $30. That is Dodo's real list price and
-                                    discount, unlike the INSIDER20 anchor below.
-                                    History: `yearlyOriginalText` is synthesized by
-                                    dividing the real price by 0.8, which only ever
-                                    meant anything while the INSIDER20 coupon chip
-                                    was on screen; that chip was removed at the
-                                    owner's request, so the crossed-out figure was
-                                    left standing with nothing to explain it, and the
-                                    percentage it produced (round(30/0.8) = 38, so
-                                    21%) did not even match the 20% coupon it came
-                                    from. The computation is left in the useMemo
-                                    untouched, it is simply not rendered. The one
-                                    surviving anchor is Lifetime's, where 3 x yearly
-                                    is honest arithmetic and the line under the CTA
-                                    says so. */}
-                                <div className="relative mt-4 flex items-baseline gap-2 flex-wrap" style={{ transformStyle: 'preserve-3d', transform: 'translateZ(20px)' }}>
-                                    {yearlySale !== null && (
-                                        <span
-                                            className="pricing-card-original-price text-[17px] font-normal"
-                                            style={{
-                                                textDecoration: 'line-through',
-                                                textDecorationThickness: '1px',
-                                                fontVariantNumeric: 'tabular-nums',
-                                                fontFeatureSettings: '"tnum"',
-                                                letterSpacing: '-0.02em',
-                                            }}
-                                        >
-                                            {yearlyListText}
-                                        </span>
-                                    )}
-                                    <span
-                                        className="pricing-card-price text-[44px] font-bold leading-none text-text-primary"
-                                        style={{
-                                            display: 'inline-block',
-                                            fontVariantNumeric: 'tabular-nums',
-                                            fontFeatureSettings: '"tnum"',
-                                            letterSpacing: '-0.035em',
-                                        }}
-                                    >
-                                        {yearlyPriceText}
-                                    </span>
-                                </div>
-                                <p className="relative mt-1 text-[11px] font-medium text-text-secondary" style={{ transform: 'translateZ(10px)' }}>
-                                    per year · billed annually
-                                </p>
-
-                                {/* Crisp gradient hairline divider */}
-                                <div className="relative h-px my-2 pricing-card-divider" style={{ transform: 'translateZ(8px)' }} />
-
-                                {/* The `live` scene: the overlay hearing a
-                                    question and answering it. The `translateZ(18px)`
-                                    is load-bearing, not decoration — it is the
-                                    1.0183 magnification that makes the 236-unit
-                                    viewBox draw at exactly 1 unit per pixel in
-                                    a 232px inner column, and the Lifetime card
-                                    carries the identical wrapper so both scenes
-                                    render at the same scale. `flex-1` keeps the
-                                    two CTAs on one line if the cards ever
-                                    differ in height. */}
-                                <div className="relative flex-1 min-h-0 flex items-center" style={{ transformStyle: 'preserve-3d', transform: 'translateZ(18px)' }}>
-                                    <ProOverlayPoster variant="yearly" scene="live" animate={!prefersReducedMotion} />
-                                </div>
-
-                                {/* CTA — neutral-bright jelly, dark text */}
-                                <button
-                                    onClick={() => openExternal(yearlyUrl)}
-                                    className="pricing-cta-yearly relative mt-4 h-11 rounded-full text-[13px] font-semibold flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-none"
-                                    style={{ letterSpacing: '-0.005em', transform: 'translateZ(28px)' }}
-                                >
-                                    Get Pro
-                                </button>
-                                <p className="relative mt-2 text-center text-[10px] leading-snug text-text-secondary" style={{ transform: 'translateZ(6px)' }}>
-                                    {/* No renewal amount: whether Dodo keeps the
-                                        product discount on renewal is unchecked
-                                        (no purchase since it was set, 2026-11-05). */}
-                                    Cancels anytime. Renews yearly.
-                                </p>
-                            </InteractiveCard>
-
-                            {/* ── Right: Pro · Lifetime (toggle-blue jelly; violet until 2026-09) ── */}
-                            <InteractiveCard
-                                className="pricing-card-lifetime group relative overflow-hidden px-6 py-5 flex flex-col"
-                                data-active="true"
-                                style={{ minHeight: 200, transformStyle: 'preserve-3d' }}
-                                glowColor="rgba(79, 113, 238, 0.32)"
-                            >
-                                {/* Label row: Pro · Lifetime + the recommendation.
-                                    Without this the two cards read as equally
-                                    weighted alternatives, which pushes the choice
-                                    back onto the visitor. `.badge-best-value` was
-                                    already defined in index.css and unused. */}
-                                {/* One row, always: the card must not grow for the
-                                    sale. The label never wraps; in a very narrow
-                                    window the pill truncates instead. */}
-                                <div className="relative flex items-center justify-between gap-2" style={{ transformStyle: 'preserve-3d', transform: 'translateZ(12px)' }}>
-                                    <span className="badge-tier-label inline-flex items-center px-2 py-0.5 rounded-full text-text-primary text-[10px] font-semibold whitespace-nowrap" style={{ letterSpacing: '0.02em' }}>
-                                        Pro · Lifetime
-                                    </span>
-                                    {/* The season's sale while one runs, else the
-                                        recommendation. Uppercased here so the
-                                        label stays readable in the source. */}
-                                    <span className={`badge-best-value${lifetimeSale !== null ? ' badge-sale' : ''} min-w-0 px-2 py-0.5 rounded-full text-[9.5px] font-bold whitespace-nowrap overflow-hidden text-ellipsis`} style={{ letterSpacing: '0.06em' }} title={lifetimeSale ?? undefined}>
-                                        {(lifetimeSale ?? 'Best value').toUpperCase()}
-                                    </span>
-                                </div>
-
-                                {/* Price block: the struck list price + the sale
-                                    price. The 3-year comparison lives in the
-                                    line under the CTA. */}
-                                <div className="relative mt-4 flex items-baseline gap-2 flex-wrap" style={{ transformStyle: 'preserve-3d', transform: 'translateZ(20px)' }}>
-                                    {/* Struck only while a named sale runs. */}
-                                    {lifetimeSale !== null && (
-                                        <span
-                                            className="pricing-card-original-price text-[17px] font-normal"
-                                            style={{
-                                                textDecoration: 'line-through',
-                                                textDecorationThickness: '1px',
-                                                fontVariantNumeric: 'tabular-nums',
-                                                fontFeatureSettings: '"tnum"',
-                                                letterSpacing: '-0.02em',
-                                            }}
-                                        >
-                                            {lifetimeListText}
-                                        </span>
-                                    )}
-                                    <span
-                                        className="pricing-card-price text-[44px] font-bold leading-none text-text-primary"
-                                        style={{
-                                            display: 'inline-block',
-                                            fontVariantNumeric: 'tabular-nums',
-                                            fontFeatureSettings: '"tnum"',
-                                            letterSpacing: '-0.035em',
-                                        }}
-                                    >
-                                        {lifetimePriceText}
-                                    </span>
-                                    {/* No "Save N%" chip alongside. The strikethrough
-                                        anchor, the chip and the line under the CTA
-                                        were three renderings of one fact. The
-                                        anchor plus the concrete dollar line survive,
-                                        because dollars anchor harder than a percent
-                                        and the line is what explains where the
-                                        crossed-out figure comes from. */}
-                                </div>
-                                <p className="relative mt-1 text-[11px] font-medium text-text-secondary" style={{ transform: 'translateZ(10px)' }}>
-                                    One-time payment. Yours forever.
-                                </p>
-
-                                {/* Crisp divider */}
-                                <div className="relative h-px my-2 pricing-card-divider" style={{ transform: 'translateZ(8px)' }} />
-
-                                {/* The `grounded` scene: the SAME overlay, the
-                                    same meter, the same heard question, the
-                                    same answer and the same caret as the Yearly
-                                    card (the runs are shorter only because the
-                                    source gutter takes 48 units of panel width
-                                    — see ProOverlayPoster's header), plus the
-                                    column of sources that answer is drawn from.
-                                    Additive, never a substitution
-                                    — both plans ship the identical feature set,
-                                    and the caption under the grid says so out
-                                    loud. What actually separates these two cards
-                                    is billing (the BEST VALUE pill, the 3-year
-                                    anchor, "Yours forever"), and that is the only
-                                    place it should live. Same wrapper transform
-                                    as Yearly, so both scenes draw at 1:1. */}
-                                <div className="relative flex-1 min-h-0 flex items-center" style={{ transformStyle: 'preserve-3d', transform: 'translateZ(18px)' }}>
-                                    <ProOverlayPoster variant="lifetime" scene="grounded" animate={!prefersReducedMotion} />
-                                </div>
-
-                                {/* CTA — tinted jelly, light text, brighter specular crown */}
-                                <button
-                                    onClick={() => openExternal(lifetimeUrl)}
-                                    className="pricing-cta-lifetime relative mt-4 h-11 rounded-full text-[13px] font-semibold flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-none"
-                                    style={{ letterSpacing: '-0.005em', transform: 'translateZ(28px)' }}
-                                >
-                                    Lock in lifetime
-                                </button>
-                                {lifetimeSavingsAbs !== null ? (
-                                    <p className="relative mt-2 text-center text-[10px] leading-snug text-text-secondary" style={{ transform: 'translateZ(6px)' }}>
-                                        Save ${lifetimeSavingsAbs} vs 3 years of yearly.
-                                    </p>
-                                ) : (
-                                    <p className="relative mt-2 text-center text-[10px] leading-snug text-text-secondary" style={{ transform: 'translateZ(6px)' }}>
-                                        Pay once. Never renew.
-                                    </p>
-                                )}
-                            </InteractiveCard>
+                    {/* ── Natively Pro on its own: two cards ──────────────────
+                        Drawn like the API plans and the Pro packs above (website
+                        tier cards), so the whole tab reads as one set. The old
+                        teaser plaque, its show/hide accordion and the card art
+                        were removed at the owner's request (2026-11-09). The
+                        struck list price still appears only while a named sale
+                        runs (lib/lifetimeSale.mjs). */}
+                    <div className="pt-3" id="natively-pro-pricing">
+                        <div className="flex items-baseline justify-between gap-3 px-1 mb-2">
+                            <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.07em]">Natively Pro</p>
+                            <span className="text-[11px] text-text-tertiary whitespace-nowrap">Use your own AI keys</span>
                         </div>
-
-                        {/* The detail that used to sit in the collapsed accordion
-                            header, where it was unreadable weight above the fold.
-                            It belongs here: past the point where someone has
-                            already asked to see pricing, and reading as a caption
-                            to the cards rather than a wall in front of them.
-
-                            Feature bento grid, coupon/demo footer row and the
-                            upgrade T&C line were removed at the product owner's
-                            request. The two pricing cards plus this line are the
-                            whole purchase surface for the app-only license.
-
-                            TWO LINES. The first is the only place in this whole
-                            surface that names what Pro actually is, now that the
-                            cards carry illustrations rather than a written list.
-                            It leads with "Both plans include" for a reason: the
-                            two cards draw two scenes (see ProOverlayPoster's
-                            header), and a person comparing two pictures will ask
-                            whether they are being shown two capability sets. No
-                            picture can answer that; this sentence can, and it is
-                            the load-bearing half of the pair's defense. The
-                            older wording ("Full Pro feature set: ...") never
-                            said it out loud, which was its one weak point.
-
-                            THOSE FOUR ARE THE WHOLE LIST. Expert persona modes,
-                            the Profile Engine, job description intelligence,
-                            company research. Nothing else may be added here
-                            without shipping in the product first, and no counts
-                            or percentages at all — a "94% MATCH" badge was
-                            deleted from the card art for exactly that.
-
-                            The second line is the bring-your-own-key
-                            compatibility fact: the reason an app-only license is
-                            usable at all without a Natively API plan. */}
-                        <div className="px-1 pt-1 space-y-1">
-                            <p className="text-[11px] leading-relaxed text-text-tertiary">
-                                {t('Both plans include the full Pro feature set: expert persona modes, the Profile Engine, job description intelligence, and company research.')}
-                            </p>
-                            <p className="text-[11px] leading-relaxed text-text-tertiary">
-                                {t('Works with OpenAI, Gemini, Claude, Groq, DeepSeek, or a local model.')}
-                            </p>
+                        <div className="grid grid-cols-2 gap-3">
+                            {[
+                                {
+                                    id: 'yearly',
+                                    name: 'Pro Yearly',
+                                    mesh: 'pro' as const,
+                                    pattern: 'rings' as const,
+                                    badge: undefined as string | undefined,
+                                    blurb: 'Billed annually. Cancels anytime.',
+                                    list: yearlySale !== null ? yearlyListText : null,
+                                    price: yearlyPriceText,
+                                    per: '/ year',
+                                    save: 'Renews yearly',
+                                    saveOn: false,
+                                    cta: 'Get Pro',
+                                    url: yearlyUrl,
+                                },
+                                {
+                                    id: 'lifetime',
+                                    name: 'Pro Lifetime',
+                                    mesh: 'ultra' as const,
+                                    pattern: 'grid' as const,
+                                    badge: lifetimeSale ?? 'Best value',
+                                    blurb: 'One-time payment. Yours forever.',
+                                    list: lifetimeSale !== null ? lifetimeListText : null,
+                                    price: lifetimePriceText,
+                                    per: 'once',
+                                    save: lifetimeSavingsAbs !== null ? `Save $${lifetimeSavingsAbs} vs 3 years of yearly` : 'Pay once, never renew',
+                                    saveOn: lifetimeSavingsAbs !== null,
+                                    cta: 'Lock in lifetime',
+                                    url: lifetimeUrl,
+                                },
+                            ].map((c) => (
+                                <section key={c.id} data-pro={c.id} aria-label={c.name} className="api-tier api-tier-card" data-tier={c.id === 'yearly' ? 'pro' : undefined}>
+                                    <TierBand mesh={c.mesh} pattern={c.pattern} name={c.name} badge={c.badge} />
+                                    <div className="api-tier-well">
+                                        <p className="api-tier-blurb">{c.blurb}</p>
+                                        <p className="api-tier-price">
+                                            {c.list && <s className="api-tier-was">{c.list}</s>}
+                                            <span className="api-tier-amount">{c.price}</span>
+                                            <span className="api-tier-per">{c.per}</span>
+                                        </p>
+                                        {/* One line on both cards, so the two wells and lists line up. */}
+                                        <p className="api-tier-save" data-on={c.saveOn ? 'true' : 'false'}>{c.save}</p>
+                                        <button
+                                            type="button"
+                                            onClick={() => openExternal(c.url)}
+                                            aria-label={`${c.cta}, ${c.price} ${c.per === 'once' ? 'once' : 'per year'}. Opens checkout`}
+                                            className="api-tier-cta"
+                                        >
+                                            {c.cta} <ArrowUpRight size={14} strokeWidth={1.75} aria-hidden="true" />
+                                        </button>
+                                    </div>
+                                    {/* Both plans ship the same Pro features, named as the app names them. */}
+                                    <ul className="api-tier-tray">
+                                        {['Persona Modes Manager', 'Connectors', 'Profile Intelligence'].map((f) => (
+                                            <li key={f}><Check size={14} strokeWidth={2} aria-hidden="true" /><span>{t(f)}</span></li>
+                                        ))}
+                                    </ul>
+                                </section>
+                            ))}
                         </div>
+                        <p className="text-[11px] text-text-tertiary px-1 mt-2 leading-snug">
+                            {t('Pro runs on your own keys (BYOK) with any provider. Set up an AI model, speech-to-text and retrieval, and the whole app works as expected.')}
+                        </p>
                     </div>
-                    </AccordionPanel>
 
                     {/* "Already purchased? Enter your license key" card intentionally
                         removed — the Natively key card (NativelyApiSettings.tsx,

@@ -21,9 +21,12 @@ interface Props {
   onChange: (next: BillingCycle) => void;
   /** Row alignment: centred in Settings, left-aligned in a card's text column. */
   align?: 'center' | 'start';
+  /** "Yearly: 2 months free" beside the switch. Settings hides it (its price
+   *  card already shows the months-free pill), so the switch sits centred. */
+  showNote?: boolean;
 }
 
-export function BillingCycleSwitch({ value, onChange, align = 'center' }: Props) {
+export function BillingCycleSwitch({ value, onChange, align = 'center', showNote = true }: Props) {
   const reduceMotion = useReducedMotion();
   const index = Math.max(0, BILLING_CYCLES.findIndex((c) => c.id === value));
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -64,9 +67,11 @@ export function BillingCycleSwitch({ value, onChange, align = 'center' }: Props)
           </button>
         ))}
       </div>
-      <span className="text-[11px] text-text-tertiary whitespace-nowrap">
-        Yearly: {YEARLY_MONTHS_FREE} months free
-      </span>
+      {showNote && (
+        <span className="text-[11px] text-text-tertiary whitespace-nowrap">
+          Yearly: {YEARLY_MONTHS_FREE} months free
+        </span>
+      )}
     </div>
   );
 }

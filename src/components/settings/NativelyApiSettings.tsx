@@ -12,8 +12,8 @@ import {
   Mic,
   RefreshCw,
   Search,
-  Sparkles,
   Trash2,
+  X,
 } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../../i18n';
@@ -28,6 +28,7 @@ import { isTrialClaimedLocally, markTrialClaimedLocally } from '../../lib/trialC
 import { trialRefusal } from '../../lib/trial/trialStart.mjs';
 import { CHECKOUT_URLS } from '../../config/urls';
 import { BillingCycleSwitch } from '../ui/BillingCycleSwitch';
+import './apiTier.css';
 import {
   apiPlanLabel, formatMeetingTime, isPackPlan, packStatus, PRO_PACKS, YEARLY_MONTHS_FREE,
   type BillingCycle, type PackStatus,
@@ -149,7 +150,7 @@ export const PLANS = [
     badgeText: 'Basic',
     includesPro: false,
     description: 'Essential transcription and AI requests for light, everyday use.',
-    note: 'Does not include Natively Pro desktop app license. Custom API key usage is supported.',
+    note: 'Does not include the Natively Pro desktop app license. Your own API keys still work.',
     // The qualitative ladder (light -> regular -> high -> continuous) stays: it
     // is what a buyer skims. The EXACT allowances now render underneath it from
     // GET /v1/plans — see PlanAllowances.
@@ -178,12 +179,12 @@ export const PLANS = [
     badgeText: 'Recommended',
     includesPro: true,
     description: 'The full Natively Pro app plus API usage for daily work.',
-    note: 'Includes a full Natively Pro desktop app license for the duration of subscription.',
+    note: 'Includes the full Natively Pro desktop app license while you are subscribed.',
     features: [
       'Daily professional AI usage',
       'Regular meeting transcription',
       'Frequent web searches',
-      'Full Natively Pro app features included',
+      'Natively Pro features',
     ],
   },
   {
@@ -195,15 +196,15 @@ export const PLANS = [
     yearlyPrice: '$250',
     url: CHECKOUT_URLS.apiMax,
     yearlyUrl: CHECKOUT_URLS.apiMaxYearly,
-    badgeText: 'Best Value',
+    badgeText: 'Best value',
     includesPro: true,
     description: 'Higher volume for developers and teams doing more each month.',
-    note: 'Includes a full Natively Pro desktop app license for the duration of subscription.',
+    note: 'Includes the full Natively Pro desktop app license while you are subscribed.',
     features: [
       'High-volume AI usage',
       'Heavy meeting transcription',
       'High-volume web searches',
-      'Full Natively Pro app features included',
+      'Natively Pro features',
     ],
   },
   {
@@ -215,30 +216,86 @@ export const PLANS = [
     yearlyPrice: '$350',
     url: CHECKOUT_URLS.apiUltra,
     yearlyUrl: CHECKOUT_URLS.apiUltraYearly,
-    badgeText: 'Heavy Users',
+    badgeText: 'For heavy users',
     includesPro: true,
     description: 'For the heaviest daily use: about 12.5 hours of meetings a month.',
-    note: 'Includes a full Natively Pro desktop app license for the duration of subscription.',
+    note: 'Includes the full Natively Pro desktop app license while you are subscribed.',
     features: [
-      'Maximum AI usage, all-day',
+      'Maximum AI usage, all day',
       'The most meeting transcription',
       'Maximum web searches',
-      'Full Natively Pro app features included',
+      'Natively Pro features',
     ],
   },
 ] as const;
 
-// Picks a glyph for a feature row from the feature's OWN wording. The
-// references all use characterful, varied icons rather than one repeated
-// tick, and a per-row icon is what stops a feature list reading as a generic
-// bulleted list. This is presentation only — it classifies the existing
-// PLANS[].features strings and asserts nothing they do not already say.
-function pickFeatureIcon(feature: string) {
-    const f = feature.toLowerCase();
-    if (f.includes('transcription') || f.includes('recording')) return Mic;
-    if (f.includes('search')) return Search;
-    if (f.includes('pro app')) return Layers;
-    return Sparkles; // the AI-usage rows
+// ─── Website tier look ───────────────────────────────────────
+// The plan card and the two packs are drawn as the website's pricing tiers
+// (natively-website src/components/PricingSection.tsx `Tier`, the anatomy
+// Unlock Pro already uses in upgrade/UnlockProPlans.tsx): a mesh band with the
+// tier's motif, a price card floating back up over it, and a tray of what is
+// included. The colours, meshes and both themes live in index.css under
+// `.api-tier`; this only says which mesh and motif each tier wears.
+//
+// One lavender family, deepening with the tier, replaced the four-hue fill
+// ladder (teal / azure / amethyst / cherry) on 2026-11-09. Pro keeps the one
+// saturated band and the lavender button, because it is the recommended plan.
+export type TierMesh = 'standard' | 'pro' | 'max' | 'ultra';
+export type TierPattern = 'dots' | 'rings' | 'grid';
+
+const TIER_LOOK: Record<string, { mesh: TierMesh; pattern: TierPattern }> = {
+  standard: { mesh: 'standard', pattern: 'dots' },
+  pro: { mesh: 'pro', pattern: 'rings' },
+  max: { mesh: 'max', pattern: 'rings' },
+  ultra: { mesh: 'ultra', pattern: 'grid' },
+};
+
+// The website's per-tier motifs, copied from UnlockProPlans.tsx `motif` and
+// held still (no hover drift). Strokes read --tier-line / --tier-dot /
+// --tier-accent, so the CSS re-tints them per theme and for the Pro band.
+const motifFade = (angle: string, stop: string): React.CSSProperties => ({
+  maskImage: `linear-gradient(${angle}, #000 0%, transparent ${stop})`,
+  WebkitMaskImage: `linear-gradient(${angle}, #000 0%, transparent ${stop})`,
+});
+const TIER_MOTIF: Record<TierPattern, React.CSSProperties[]> = {
+  dots: [
+    { inset: -24, backgroundImage: 'radial-gradient(var(--tier-dot) 1px, transparent 1px)', backgroundSize: '11px 11px', ...motifFade('115deg', '62%') },
+    { right: -40, top: -48, width: 140, height: 140, borderRadius: '50%', border: '1px solid var(--tier-line)' },
+    { right: -14, top: -22, width: 88, height: 88, borderRadius: '50%', border: '1px dashed var(--tier-line)' },
+  ],
+  rings: [
+    { right: -30, top: -50, width: 120, height: 120, borderRadius: '50%', background: 'radial-gradient(closest-side, rgba(255,255,255,0.38), rgba(255,255,255,0))' },
+    { right: -64, top: -80, width: 210, height: 210, borderRadius: '50%', border: '1px solid var(--tier-line)' },
+    { right: -40, top: -56, width: 150, height: 150, borderRadius: '50%', border: '1px solid var(--tier-line)' },
+    { right: -16, top: -36, width: 92, height: 92, borderRadius: '50%', border: '1px solid var(--tier-line)' },
+  ],
+  grid: [
+    {
+      inset: -24,
+      backgroundImage: 'linear-gradient(var(--tier-line) 1px, transparent 1px), linear-gradient(90deg, var(--tier-line) 1px, transparent 1px)',
+      backgroundSize: '20px 20px', ...motifFade('125deg', '66%'),
+    },
+    // Two cells of the grid, filled, like days marked on a calendar.
+    { left: 137, top: 17, width: 19, height: 19, background: 'var(--tier-accent)' },
+    { left: 157, top: 37, width: 19, height: 19, background: 'var(--tier-accent)', opacity: 0.55 },
+    { right: -32, top: -40, width: 104, height: 104, borderRadius: 18, transform: 'rotate(38deg)', border: '1px solid var(--tier-dot)' },
+    { right: -8, top: -16, width: 56, height: 56, borderRadius: 11, transform: 'rotate(38deg)', border: '1px solid var(--tier-dot)' },
+  ],
+};
+
+/** The band at the top of a tier card: its mesh, its motif, name and badge. */
+export function TierBand({ mesh, pattern, name, badge }: { mesh: TierMesh; pattern: TierPattern; name: string; badge?: string }) {
+  return (
+    <div className="api-tier-band" data-mesh={mesh} data-pattern={pattern}>
+      {TIER_MOTIF[pattern].map((style, i) => (
+        <span key={i} aria-hidden="true" className="api-tier-motif" style={style} />
+      ))}
+      <div className="api-tier-band-row">
+        <span className="api-tier-name">{name}</span>
+        {badge && <span className="api-tier-badge">{badge}</span>}
+      </div>
+    </div>
+  );
 }
 
 // cardSlideLeftVariants / cardSlideRightVariants / cardCtaVariants were removed
@@ -719,51 +776,141 @@ function trialMeter(used: number, limit: number, unit: UsageMeter['unit']): Usag
 // The Monthly / Yearly switch is shared with the end-of-trial card:
 // ../ui/BillingCycleSwitch.tsx.
 
+// ─── Plan rail ───────────────────────────────────────────────
+// The four plans in one row that scrolls sideways, about two cards wide with
+// the next one peeking in. It advances one card every few seconds and wraps
+// back to the first. It holds still only while someone is using it: the
+// pointer over a card, a scroll of their own (for a few seconds after), or
+// keyboard focus inside it. It also skips turns nobody can see (window
+// hidden) and never moves under reduced motion.
+const RAIL_STEP_MS = 3500;
+const RAIL_RESUME_AFTER_MS = 6000;
+
+function PlanRail({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const reduceMotion = useReducedMotion();
+  const [edge, setEdge] = useState<'start' | 'middle' | 'end'>('start');
+
+  useEffect(() => {
+    const rail = ref.current;
+    if (!rail) return;
+    let hovered = false;
+    let focused = false;
+    let heldUntil = 0;
+
+    const updateEdge = () => {
+      const max = rail.scrollWidth - rail.clientWidth;
+      setEdge(rail.scrollLeft <= 2 ? 'start' : rail.scrollLeft >= max - 2 ? 'end' : 'middle');
+    };
+    // The person's own scrolling is read from their input (wheel and
+    // trackpad, a drag, arrow keys), never from scroll events, so the
+    // rail's own smooth scroll can never be mistaken for it.
+    const hold = () => { heldUntil = Date.now() + RAIL_RESUME_AFTER_MS; };
+    const onEnter = () => { hovered = true; };
+    const onLeave = () => { hovered = false; };
+    // Keyboard focus only: a mouse click on a Get button leaves focus inside
+    // the rail, and that alone must not stop the rotation for good.
+    const onFocusIn = (e: FocusEvent) => { focused = (e.target as Element | null)?.matches?.(':focus-visible') ?? false; };
+    const onFocusOut = (e: FocusEvent) => { if (!rail.contains(e.relatedTarget as Node | null)) focused = false; };
+
+    rail.addEventListener('scroll', updateEdge, { passive: true });
+    rail.addEventListener('wheel', hold, { passive: true });
+    rail.addEventListener('pointerdown', hold);
+    rail.addEventListener('touchstart', hold, { passive: true });
+    rail.addEventListener('keydown', hold);
+    rail.addEventListener('pointerenter', onEnter);
+    rail.addEventListener('pointerleave', onLeave);
+    rail.addEventListener('focusin', onFocusIn);
+    rail.addEventListener('focusout', onFocusOut);
+    updateEdge();
+
+    const timer = reduceMotion ? null : window.setInterval(() => {
+      if (hovered || focused || document.hidden || Date.now() < heldUntil) return;
+      const card = rail.firstElementChild as HTMLElement | null;
+      if (!card) return;
+      const gap = parseFloat(getComputedStyle(rail).columnGap) || 0;
+      const step = card.offsetWidth + gap;
+      const max = rail.scrollWidth - rail.clientWidth;
+      if (max <= 0) return;
+      rail.scrollTo({ left: rail.scrollLeft >= max - 2 ? 0 : Math.min(rail.scrollLeft + step, max), behavior: 'smooth' });
+    }, RAIL_STEP_MS);
+
+    return () => {
+      if (timer !== null) window.clearInterval(timer);
+      rail.removeEventListener('scroll', updateEdge);
+      rail.removeEventListener('wheel', hold);
+      rail.removeEventListener('pointerdown', hold);
+      rail.removeEventListener('touchstart', hold);
+      rail.removeEventListener('keydown', hold);
+      rail.removeEventListener('pointerenter', onEnter);
+      rail.removeEventListener('pointerleave', onLeave);
+      rail.removeEventListener('focusin', onFocusIn);
+      rail.removeEventListener('focusout', onFocusOut);
+    };
+  }, [reduceMotion]);
+
+  return (
+    <div ref={ref} className="api-tier-rail" data-edge={edge} role="list" aria-label="Natively API plans">
+      {children}
+    </div>
+  );
+}
+
 // ─── Pro packs ───────────────────────────────────────────────
-// Two one-time buys beside the subscriptions. The rule that makes a pack a
-// pack (hours OR days, whichever runs out first; any live meeting counts, even
-// on your own keys) is said once, under both, rather than on each card.
+// Two one-time buys beside the subscriptions, drawn as small website tiers
+// like the plan card above: Light on the Max band, Heavy on the Ultra band.
+// The allowance is the product, so it gets the two rows; the rule that makes
+// a pack a pack (hours OR days, whichever first; any live meeting counts, even
+// on your own keys) is said once, under both.
+const PACK_LOOK: Record<string, { mesh: TierMesh; pattern: TierPattern; blurb: string }> = {
+  pack_light: { mesh: 'max', pattern: 'dots', blurb: 'For an interview or two' },
+  pack_heavy: { mesh: 'ultra', pattern: 'grid', blurb: 'For two busy weeks' },
+};
+
 function ProPacks({ currentPlan, onBuy }: { currentPlan?: string; onBuy: (url: string) => void }) {
   const urls: Record<string, string> = { pack_light: CHECKOUT_URLS.packLight, pack_heavy: CHECKOUT_URLS.packHeavy };
   const current = currentPlan?.toLowerCase();
   return (
     <div className="pt-3">
-      <SectionLabel>Or a one-time Pro pack</SectionLabel>
+      <SectionLabel aside={<span className="text-[11px] text-text-tertiary whitespace-nowrap">Pay once, nothing renews</span>}>
+        Pro packs
+      </SectionLabel>
       <div className="grid grid-cols-2 gap-3">
         {PRO_PACKS.map((p) => {
           // Another pack adds hours to the one running, so the owner of a pack
           // is offered more time rather than a second identical card.
           const owned = current === p.id;
+          const look = PACK_LOOK[p.id] ?? PACK_LOOK.pack_light;
           return (
-            <Card key={p.id}>
-              <div className="px-4 py-3.5 flex items-center gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-[14px] font-semibold text-text-primary tracking-[-0.01em] whitespace-nowrap">
-                    {p.name}{' '}
-                    <span className="font-medium text-text-secondary tabular-nums">${p.price}</span>
-                  </p>
-                  <p className="text-[12px] text-text-secondary mt-0.5 leading-snug whitespace-nowrap">
-                    {p.hours} hours · {p.days} days
-                  </p>
-                </div>
+            <section key={p.id} data-pack={p.id} aria-label={p.name} className="api-tier api-tier-card">
+              <TierBand mesh={look.mesh} pattern={look.pattern} name={p.name} badge={owned ? 'Your pack' : undefined} />
+              <div className="api-tier-well">
+                <p className="api-tier-blurb">{look.blurb}</p>
+                <p className="api-tier-price">
+                  <span className="api-tier-amount">${p.price}</span>
+                  <span className="api-tier-per">once</span>
+                </p>
                 <button
                   type="button"
                   onClick={() => onBuy(urls[p.id])}
-                  data-state="secondary"
                   aria-label={`${owned ? 'Add hours with' : 'Buy'} the ${p.name}, $${p.price} once. Opens checkout`}
-                  className="natively-key-cta shrink-0 h-8 px-3.5 flex items-center justify-center gap-1 text-[12px] font-medium select-none cursor-pointer"
+                  className="api-tier-cta"
                 >
-                  {owned ? 'Add hours' : 'Buy'}
-                  <ArrowUpRight size={13} strokeWidth={2.2} />
+                  {owned ? 'Add hours' : `Buy ${p.name}`} <ArrowUpRight size={14} strokeWidth={1.75} aria-hidden="true" />
                 </button>
               </div>
-            </Card>
+              <ul className="api-tier-tray">
+                <li><Check size={14} strokeWidth={2} aria-hidden="true" /><span><b>{p.hours} hours</b> of live meetings</span></li>
+                <li><Check size={14} strokeWidth={2} aria-hidden="true" /><span>Use within <b>{p.days} days</b></span></li>
+                <li><Check size={14} strokeWidth={2} aria-hidden="true" /><span>Natively Pro features</span></li>
+              </ul>
+            </section>
           );
         })}
       </div>
       <p className="text-[11px] text-text-tertiary px-1 mt-2 leading-snug">
-        Paid once, never renews. Natively Pro and the API until the hours or the days run out, whichever comes first.
-        Any live meeting uses hours, even on your own AI keys. Another pack adds hours.
+        A pack ends when its hours or its days run out, whichever comes first. Every live meeting counts toward
+        the hours, even on your own AI keys. Buying another pack adds more hours.
       </p>
     </div>
   );
@@ -1422,242 +1569,110 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
 
       {/* Monthly / Yearly. The same two-way switch as Overlay's "What meetings
           open" (.surface-switch in index.css): one thumb sliding under two
-          labels. Yearly is 10x monthly, so the note says what that buys. */}
-      <BillingCycleSwitch value={billingCycle} onChange={setBillingCycle} />
-
-      {/* Segmented control selector tab bar */}
-      <div
-        role="tablist"
-        aria-label="Natively API plan tier"
-        className="natively-api-selector-bar grid grid-cols-4 relative p-1 bg-black/10 dark:bg-white/5 border border-white/5 rounded-2xl overflow-hidden"
-      >
-        {/* Active sliding pill */}
-        <div
-          aria-hidden="true"
-          className="natively-api-selector-pill-track absolute top-0 bottom-0 left-0 w-1/4 p-1 transition-transform duration-[250ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform"
-          style={{
-            transform: `translate3d(${
-              selectedPlanId === 'natively_api_standard_monthly' ? '0%' :
-              selectedPlanId === 'natively_api_pro_monthly' ? '100%' :
-              selectedPlanId === 'natively_api_max_monthly' ? '200%' :
-              '300%'
-            }, 0, 0)`
-          }}
-        >
-          {/* No `transition-all` here: the fill/shadow crossfade is declared
-              in index.css against the exact properties that change, so a
-              tier switch never animates layout-affecting ones. The slide is
-              on the track wrapper above and is untouched. */}
-          <div className={`w-full h-full natively-api-selector-pill rounded-xl ${
-            selectedPlanId === 'natively_api_standard_monthly' ? 'natively-api-selector-pill-standard' :
-            selectedPlanId === 'natively_api_pro_monthly' ? 'natively-api-selector-pill-pro' :
-            selectedPlanId === 'natively_api_max_monthly' ? 'natively-api-selector-pill-max' :
-            'natively-api-selector-pill-ultra'
-          }`} />
-        </div>
-        {(
-          [
-            { id: 'natively_api_standard_monthly', name: 'Standard', price: '$8/mo', yearlyPrice: '$80/yr' },
-            { id: 'natively_api_pro_monthly', name: 'Pro', price: '$15/mo', yearlyPrice: '$150/yr' },
-            { id: 'natively_api_max_monthly', name: 'Max', price: '$25/mo', yearlyPrice: '$250/yr' },
-            { id: 'natively_api_ultra_monthly', name: 'Ultra', price: '$35/mo', yearlyPrice: '$350/yr' },
-          ] as const
-        ).map((tab) => {
-          const isSel = selectedPlanId === tab.id;
-          // The price is the literal above, full stop. It used to prefer a
-          // `formattedPrice` from getNativelyPricing, whose /v1/pricing route
-          // was never built on the server — three months of a call that always
-          // 404'd and a fallback that always won. /v1/plans (planCatalog) is
-          // the live source that does exist, and it agrees with these figures.
-          const displayPrice = billingCycle === 'yearly' ? tab.yearlyPrice : tab.price;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              id={`natively-api-tab-${tab.id}`}
-              aria-selected={isSel}
-              aria-controls="natively-api-tabpanel"
-              tabIndex={isSel ? 0 : -1}
-              onClick={() => {
-                selectPlan(tab.id);
-              }}
-              className={`natively-api-selector-tab ${isSel ? 'active' : ''}`}
-            >
-              <span className="tab-name">{tab.name}</span>
-              <span className="tab-price">{displayPrice}</span>
-            </button>
-          );
-        })}
+          labels. Centred with no note beside it: the price card's pill says
+          "2 months free" once Yearly is picked. */}
+      {/* Titled like the "Pro packs" and "Natively Pro" rows
+          below, so each group of cards on the tab has a name. */}
+      <div className="flex items-center justify-between gap-3 px-1">
+        <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.07em]">Natively API plans</p>
+        <BillingCycleSwitch value={billingCycle} onChange={setBillingCycle} showNote={false} align="start" />
       </div>
 
-      {/* Selected Plan Details Container (Double-Bezel Architecture) */}
-      {(() => {
-        const planOrder = [
-          'natively_api_standard_monthly',
-          'natively_api_pro_monthly',
-          'natively_api_max_monthly',
-          'natively_api_ultra_monthly',
-        ];
-        const prevIndex = planOrder.indexOf(prevPlanId);
-        const currentIndex = planOrder.indexOf(selectedPlanId);
-        const direction = currentIndex >= prevIndex ? 1 : -1;
-
-        const plan = PLANS.find((p) => p.id === selectedPlanId)!;
-        const limits = planCatalog?.[plan.planKey];
-        const yearly = billingCycle === 'yearly';
-        const price = yearly ? plan.yearlyPrice : plan.price;
-        const prevPlan = PLANS.find((p) => p.id === prevPlanId);
-        const prevPrice = (prevPlan ? (yearly ? prevPlan.yearlyPrice : prevPlan.price) : null) ?? price;
-        // A verified-live Dodo link (all four checked 2026-09-08). These were
-        // the fallback behind getNativelyPricing; with that call removed they
-        // are simply the source, and changing a checkout link is now an app
-        // release. That was already the truth — it just looked otherwise.
-        // Yearly links are the 2026-11-06 products (src/config/urls.ts).
-        const checkoutUrl = yearly ? plan.yearlyUrl : plan.url;
-        const currentPlan = usageData?.plan?.toLowerCase();
-        const rowPlan = plan.name.toLowerCase();
-        // The tier AND the billing: a monthly Pro key looking at Yearly Pro is
-        // being offered something it does not have. A key from a server that
-        // predates billing_period is monthly.
-        const keyCycle = usageData?.billing_period === 'yearly' ? 'yearly' : 'monthly';
-        const isActive =
-          (currentPlan === rowPlan ||
-            (rowPlan === 'standard' && currentPlan === 'starter')) &&
-          keyCycle === billingCycle;
-
-        return (
-          <div
-            className="natively-api-details-wrapper relative w-full"
-            role="tabpanel"
-            id="natively-api-tabpanel"
-            aria-labelledby={`natively-api-tab-${plan.id}`}
-          >
-            {/* A plain surface, deliberately: no cursor spotlight, press scale or
-                hover bloom. The blueprint grid (::before) is always shown. */}
-            <div
-              className={`natively-api-detail-card h-full w-full relative overflow-hidden natively-api-detail-card-${plan.name.toLowerCase()}`}
-              data-active={isActive ? "true" : "false"}
-              // No inline `transition` here on purpose. index.css already
-              // declares `transition: transform/box-shadow/border-color 180ms`
-              // with `!important` on `.natively-api-detail-card`, and an author
-              // !important declaration outranks a style-attribute one, so any
-              // inline transition string on this element is dead weight. It
-              // silently was for a long time: a 280ms value sat here doing
-              // nothing while the 180ms from CSS is what actually ran.
-              // `background-color` is in that list (250ms smooth-out), so the
-              // tier fill cross-fades on the tab pill's clock; the text
-              // crossfade is the AnimatePresence child below, a different element.
+      {/* All four plans as website pricing tiers, the same card and anatomy
+          as the two Pro packs below, in one sideways row that scrolls and
+          advances on its own (PlanRail). The price rolls in place when
+          Monthly / Yearly changes. */}
+      <PlanRail>
+        {PLANS.map((plan) => {
+          const yearly = billingCycle === 'yearly';
+          const price = yearly ? plan.yearlyPrice : plan.price;
+          // A verified-live Dodo link (all four checked 2026-09-08); changing
+          // one is an app release. Yearly links are the 2026-11-06 products
+          // (src/config/urls.ts).
+          const checkoutUrl = yearly ? plan.yearlyUrl : plan.url;
+          const currentPlan = usageData?.plan?.toLowerCase();
+          const rowPlan = plan.name.toLowerCase();
+          // The tier AND the billing: a monthly Pro key looking at Yearly Pro is
+          // being offered something it does not have. A key from a server that
+          // predates billing_period is monthly.
+          const keyCycle = usageData?.billing_period === 'yearly' ? 'yearly' : 'monthly';
+          const isActive =
+            (currentPlan === rowPlan ||
+              (rowPlan === 'standard' && currentPlan === 'starter')) &&
+            keyCycle === billingCycle;
+          const look = TIER_LOOK[plan.planKey] ?? TIER_LOOK.standard;
+          return (
+            <section
+              key={plan.id}
+              role="listitem"
+              aria-label={plan.name}
+              className="api-tier api-tier-card"
+              data-tier={plan.planKey}
+              data-active={isActive ? 'true' : 'false'}
             >
-              <AnimatePresence custom={direction} initial={false}>
-                <motion.div
-                  key={selectedPlanId}
-                  custom={direction}
-                  variants={cardContainerVariants}
-                  initial="enter"
-                  animate="center"
-                  exit="exit"
-                  className="w-full h-full absolute top-0 left-0 px-5 pt-4 pb-4"
-                >
-                  {/* Two columns. The reference cards are single-column because
-                      they are ~300px wide; this one is 640px, and stacking
-                      name → description → price → features → CTA vertically
-                      there both wastes the width and forces the card ~80px
-                      taller. The reference's LOOK (quiet surface, one muted
-                      corner glow, saturation only on the CTA, low-contrast
-                      supporting text) is what matters and is preserved. */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 h-full">
-                    {/* Left: identity, price, action */}
-                    <div className="flex flex-col">
-                      <div className="flex items-center gap-1.5 h-5">
-                        {plan.badgeText && (
-                          <span className="natively-api-fill-pill inline-flex items-center px-2 py-0.5 rounded-full text-[9.5px] font-semibold uppercase tracking-wider">
-                            {plan.badgeText}
-                          </span>
-                        )}
-                      </div>
-
-                      <h4 className="natively-api-on-fill mt-2.5 text-[17px] font-bold tracking-tight leading-none">
-                        {plan.name}
-                      </h4>
-                      <p className="natively-api-on-fill-dim text-[11px] mt-1.5 leading-snug">
-                        {plan.description}
-                      </p>
-
-                      {/* The one piece of high-contrast type. No per-tier
-                          colour — that lives in the corner glow and the CTA. */}
-                      <div className="mt-3 flex items-baseline gap-1.5">
-                        <span
-                          className="natively-api-on-fill text-[38px] font-bold leading-none"
-                          style={{ fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.04em' }}
-                        >
-                          <RollingPrice price={price} from={prevPrice} />
-                        </span>
-                        <span className="natively-api-on-fill-dim text-[12px] font-medium">{yearly ? '/ year' : '/ month'}</span>
-                        {yearly && (
-                          <span className="natively-api-fill-pill self-center inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap">
-                            {YEARLY_MONTHS_FREE} months free
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="mt-auto pt-3">
-                        {isActive ? (
-                          <div className="w-full natively-api-active-tag text-center rounded-full text-[12.5px] font-semibold select-none flex items-center justify-center">
-                            Active Plan
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              openExternal(checkoutUrl);
-                            }}
-                            className={`natively-api-pricing-cta ${
-                              plan.name === 'Pro'
-                                ? 'natively-api-pricing-cta-pro'
-                                : plan.name === 'Max'
-                                  ? 'natively-api-pricing-cta-max'
-                                  : plan.name === 'Ultra'
-                                    ? 'natively-api-pricing-cta-ultra'
-                                    : 'natively-api-pricing-cta-neutral'
-                            }`}
-                          >
-                            Get Started with {plan.name} <ArrowUpRight size={14} strokeWidth={2.5} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Right: what you get, all in low-contrast gray */}
-                    <div className="flex flex-col min-w-0">
-                      <p className="natively-api-on-fill-dim text-[9px] font-semibold uppercase tracking-[0.14em]">
-                        What's included
-                      </p>
-                      <div className="natively-api-body-rule h-px mt-2 mb-2.5" />
-                      <ul className="space-y-2">
-                        {plan.features.map((feature, i) => {
-                          const FeatureIcon = pickFeatureIcon(feature);
-                          return (
-                            <li key={i} className="natively-api-on-fill-dim flex items-center gap-2 text-[11px] leading-snug">
-                              <span className="natively-api-feature-badge shrink-0 w-[18px] h-[18px] rounded-full flex items-center justify-center">
-                                <FeatureIcon size={10} strokeWidth={2.2} />
-                              </span>
-                              <span className="min-w-0">{feature}</span>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                      <p className="natively-api-on-fill-dim mt-auto pt-3 text-[10px] leading-snug opacity-80">
-                        {yearly && 'Billed once a year. The allowance refills every month. '}
-                        {plan.note}
-                      </p>
-                    </div>
-                  </div>
-                </motion.div>
-              </AnimatePresence>
-            </div>
-          </div>
-        );
-      })()}
+              {/* One badge on the row: Recommended on Pro, or Your plan on the
+                  one you have. The other three tags only restated the blurb. */}
+              <TierBand
+                mesh={look.mesh}
+                pattern={look.pattern}
+                name={plan.name}
+                badge={isActive ? 'Your plan' : plan.planKey === 'pro' ? plan.badgeText : undefined}
+              />
+              <div className="api-tier-well">
+                <p className="api-tier-blurb">{plan.description}</p>
+                <p className="api-tier-price">
+                  <span className="api-tier-amount">
+                    <RollingPrice price={price} from={price} />
+                  </span>
+                  <span className="api-tier-per">{yearly ? '/ year' : '/ month'}</span>
+                </p>
+                {/* "/ month" already says it; only Yearly has news to add. */}
+                {yearly && (
+                  <p className="api-tier-save" data-on="true">{`${YEARLY_MONTHS_FREE} months free`}</p>
+                )}
+                {isActive ? (
+                  <div className="api-tier-cta" data-state="active">Your current plan</div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      openExternal(checkoutUrl);
+                    }}
+                    aria-label={`Get ${plan.name}, ${price} ${yearly ? 'a year' : 'a month'}. Opens checkout`}
+                    className="api-tier-cta"
+                  >
+                    Get {plan.name} <ArrowUpRight size={14} strokeWidth={1.75} aria-hidden="true" />
+                  </button>
+                )}
+              </div>
+              <ul className="api-tier-tray">
+                {plan.features.map((feature) => (
+                  <li key={feature}>
+                    <Check size={14} strokeWidth={2} aria-hidden="true" />
+                    <span>{feature}</span>
+                  </li>
+                ))}
+                {/* The one line the other three have and Standard does not,
+                    marked as missing so the cards compare at a glance. */}
+                {!plan.includesPro && (
+                  <li data-missing="true">
+                    <X size={14} strokeWidth={2} aria-hidden="true" />
+                    <span>
+                      <span className="sr-only">Not included: </span>Natively Pro features
+                    </span>
+                  </li>
+                )}
+              </ul>
+            </section>
+          );
+        })}
+      </PlanRail>
+      {/* How a plan works, said once under the row, like the packs' note. */}
+      <p className="text-[11px] text-text-tertiary px-1 -mt-1 leading-snug">
+        A plan covers AI, voice, retrieval and research, with no keys of your own. Its allowance refills every
+        month{billingCycle === 'yearly' ? ', even when billed yearly' : ''}. Pro, Max and Ultra include Natively Pro.
+        Cancel anytime.
+      </p>
 
       {/* One-time Pro packs: the same Pro app and API, for a short stretch,
           paid once. Shown under the subscriptions as the smaller option. */}
@@ -1849,9 +1864,10 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
 
       {/* ── Natively key card — one box for either credential type ────── */}
       <div>
-        <SectionLabel
-          aside={
-            !isLoading && isSaved ? (
+        {/* No "Natively key" heading: the card's first line already says what
+            goes in the box. The Connected / Remove row stays once a key is saved. */}
+        {!isLoading && isSaved && (
+          <div className="flex items-center justify-end px-1 mb-2">
               <div className="flex items-center gap-3 shrink-0">
                 <span className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-500">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -1865,11 +1881,8 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                   Remove
                 </button>
               </div>
-            ) : undefined
-          }
-        >
-          Natively key
-        </SectionLabel>
+          </div>
+        )}
 
         {/* `natively-key-card` gives the flat box the same MATERIAL as the
             rest of this tab — layered fill, specular top hairline, raised
@@ -1881,8 +1894,8 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           <div className="px-4 py-4 space-y-3">
             {/* Says the quiet part out loud: one box, EITHER credential. The
                 placeholder alone was carrying that, and a placeholder
-                disappears the moment you type. No mark beside it: the section
-                label above is still the heading. */}
+                disappears the moment you type. It is also the card's heading now
+                that the "Natively key" label is gone. */}
             <p className="natively-key-sub text-[12px] leading-snug">
               Activate with a Natively API key or a Natively Pro license.
             </p>

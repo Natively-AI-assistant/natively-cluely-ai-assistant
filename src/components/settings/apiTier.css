@@ -1,0 +1,406 @@
+/* ═════════════════════════════════════════════════════════════════════════
+   Plans & Billing: the plan card and the Pro packs as website pricing tiers
+   (NativelyApiSettings.tsx: TierBand, the plan card, ProPacks).
+
+   The anatomy and every value come from the website's PricingSection `Tier`
+   (natively-website src/components/PricingSection.tsx), by way of Unlock Pro
+   (src/components/upgrade/UnlockProPlans.tsx, LIGHT / DARK / MESH), which is
+   the accepted in-app version of it: a mesh band with the tier's motif, a
+   price card floating back up over the band, a tray of what is included.
+   The website is light only; dark is Unlock Pro's re-lit version.
+
+   Replaced on 2026-11-09: the four-hue tier fills (teal / azure / amethyst /
+   cherry), the blueprint grid, the noise film, the uppercase pill badges and
+   the ringed icon chips (.natively-api-detail-card and friends in index.css).
+   Those rules are no longer emitted by any component; they stay in index.css
+   only because two CSS checks still render them
+   (ApiDetailCardShadowContract.test.mjs, tests/css/pricing-liquid-glass).
+
+   Own class names on purpose: nothing in index.css's many override layers
+   matches .api-tier, so this file is the whole treatment.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+.api-tier {
+  /* dark (the app default); light is restated below */
+  --tier-ink: #F4F1FA;
+  --tier-muted: rgba(236, 230, 253, 0.68);
+  --tier-faint: rgba(236, 230, 253, 0.52);
+  --tier-rule: rgba(222, 212, 235, 0.10);
+  --tier-card: #1A1822;
+  --tier-card-shadow: 0 18px 40px -28px rgba(0, 0, 0, 0.70);
+  --tier-well: #25222F;
+  --tier-well-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 16px 32px -20px rgba(0, 0, 0, 0.75);
+  --tier-badge: #2B2738;
+  --tier-badge-ink: rgba(236, 230, 253, 0.72);
+  --tier-badge-shadow: 0 2px 7px -2px rgba(0, 0, 0, 0.5);
+  --tier-mid: #AF8CFE;
+  --tier-deep: #9C6FF3;
+  --tier-save: #C4B3FB;
+  --tier-line: rgba(196, 179, 251, 0.16);
+  --tier-dot: rgba(196, 179, 251, 0.24);
+  --tier-accent: rgba(175, 140, 254, 0.22);
+  /* .lg-paper / .lg-lavender from the website, flat */
+  --tier-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 18%, rgba(255, 255, 255, 0) 100%);
+  --tier-paper: rgba(255, 255, 255, 0.07);
+  --tier-paper-on: rgba(255, 255, 255, 0.12);
+  --tier-paper-ink: #EDE7FA;
+  --tier-lav: rgba(156, 111, 243, 0.40);
+  --tier-lav-on: rgba(156, 111, 243, 0.52);
+  --tier-lav-ink: #F1EBFE;
+  --tier-rim: inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 0 0 1px rgba(185, 161, 246, 0.16), 0 6px 14px -8px rgba(0, 0, 0, 0.6);
+
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+  background: var(--tier-card);
+  border: 1px solid var(--tier-rule);
+  box-shadow: var(--tier-card-shadow);
+  color: var(--tier-ink);
+}
+
+[data-theme='light'] .api-tier {
+  --tier-ink: #2E2A38;
+  --tier-muted: #6B5F7D;
+  --tier-faint: #857A97;
+  --tier-rule: #DED4EB;
+  --tier-card: #F7F4FD;
+  --tier-card-shadow: 0 18px 40px -28px rgba(76, 46, 122, 0.26);
+  --tier-well: #FFFFFF;
+  --tier-well-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 16px 32px -20px rgba(76, 46, 122, 0.5);
+  --tier-badge: #FFFFFF;
+  --tier-badge-ink: #6B5F7D;
+  --tier-badge-shadow: 0 2px 7px -2px rgba(76, 46, 122, 0.34);
+  --tier-save: #7B4EE4;
+  --tier-line: rgba(139, 107, 224, 0.26);
+  --tier-dot: rgba(139, 107, 224, 0.34);
+  --tier-accent: rgba(156, 111, 243, 0.20);
+  --tier-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.10) 18%, rgba(255, 255, 255, 0) 100%);
+  --tier-paper: rgba(156, 111, 243, 0.14);
+  --tier-paper-on: rgba(156, 111, 243, 0.22);
+  --tier-paper-ink: #2E2A38;
+  --tier-lav: rgba(156, 111, 243, 0.24);
+  --tier-lav-on: rgba(156, 111, 243, 0.36);
+  --tier-lav-ink: #3F2593;
+  --tier-rim: inset 0 1px 0 rgba(255, 255, 255, 0.78), inset 0 0 0 1px rgba(156, 111, 243, 0.22), 0 6px 14px -8px rgba(76, 46, 122, 0.40);
+}
+
+/* ── One tier card: band, the price card floating over it, the tray ──
+   The four plans and the two packs all use it, two to a row. */
+.api-tier-card {
+  display: flex;
+  flex-direction: column;
+  /* No drop shadow: the scrolling row clips everything below its edge, so a
+     shadow there ends in a hard grey line. The hairline border carries it. */
+  box-shadow: none;
+}
+
+/* ── The plan rail: one sideways row, about two cards and a peek wide ──
+   Snaps a card to the left edge. The scrollbar is hidden (trackpad swipe,
+   shift-wheel and Tab still move it); the soft fade on a side says more
+   cards wait there. */
+.api-tier-rail {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.api-tier-rail::-webkit-scrollbar { display: none; }
+.api-tier-rail > .api-tier-card {
+  flex: 0 0 calc((100% - 12px) * 0.46);
+  scroll-snap-align: start;
+}
+.api-tier-rail[data-edge='start'] {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent);
+          mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent);
+}
+.api-tier-rail[data-edge='middle'] {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 40px), transparent);
+          mask-image: linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 40px), transparent);
+}
+.api-tier-rail[data-edge='end'] {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 24px);
+          mask-image: linear-gradient(90deg, transparent, #000 24px);
+}
+
+/* ── Band ────────────────────────────────────────────────────────────── */
+.api-tier-band {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  height: 100px;
+  padding: 16px;
+  /* fades out over its lower part, so the colour melts into the card
+     behind the price card instead of stopping on a hard line */
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 45%, transparent 100%);
+          mask-image: linear-gradient(180deg, #000 0%, #000 45%, transparent 100%);
+}
+
+.api-tier-motif { position: absolute; pointer-events: none; }
+
+/* ── The band, alive (2026-11-09) ──────────────────────────────────────
+   The same abstract band as before, moving very slowly: the colour field
+   drifts, the rings breathe, the dashed ring turns, the dot and grid fields
+   creep one cell, the two marked calendar days glow in turn. A fine grain
+   sits over it so the gradient reads as material, not as a screen fill.
+   Loops run 3.5-14 s (made more visible twice on request, 2026-11-09), and it
+   all stops under reduced motion. */
+.api-tier-band { isolation: isolate; }
+.api-tier-band::before {
+  content: '';
+  position: absolute;
+  inset: -35%;
+  z-index: -1;
+  background: inherit;
+  animation: api-tier-field 12s ease-in-out infinite alternate;
+}
+@keyframes api-tier-field {
+  from { transform: translate3d(-14%, -10%, 0) scale(1) rotate(-6deg); }
+  to   { transform: translate3d(15%, 12%, 0) scale(1.32) rotate(14deg); }
+}
+.api-tier-band::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.16;
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.api-tier-band-row { z-index: 2; }
+
+/* rings: each circle breathes, out of step with the next */
+.api-tier-band[data-pattern='rings'] .api-tier-motif { animation: api-tier-breathe 8s ease-in-out infinite alternate; }
+.api-tier-band[data-pattern='rings'] .api-tier-motif:nth-of-type(2) { animation-duration: 10s; }
+.api-tier-band[data-pattern='rings'] .api-tier-motif:nth-of-type(3) { animation-duration: 9s; animation-delay: -3s; }
+.api-tier-band[data-pattern='rings'] .api-tier-motif:nth-of-type(4) { animation-duration: 8.5s; animation-delay: -6s; }
+@keyframes api-tier-breathe { from { scale: 0.8; opacity: 0.3; } to { scale: 1.26; opacity: 1; } }
+
+/* dots: the field creeps one dot, the dashed ring turns, the solid ring breathes */
+.api-tier-band[data-pattern='dots'] .api-tier-motif:nth-of-type(1) { animation: api-tier-creep-11 4s linear infinite; }
+.api-tier-band[data-pattern='dots'] .api-tier-motif:nth-of-type(2) { animation: api-tier-breathe 9s ease-in-out infinite alternate; }
+.api-tier-band[data-pattern='dots'] .api-tier-motif:nth-of-type(3) { animation: api-tier-turn 14s linear infinite; }
+@keyframes api-tier-creep-11 { to { background-position: 11px 11px; } }
+@keyframes api-tier-turn { to { rotate: 360deg; } }
+
+/* grid: the field creeps one cell, the marked days glow in turn, the squares sway */
+.api-tier-band[data-pattern='grid'] .api-tier-motif:nth-of-type(1) { animation: api-tier-creep-20 6s linear infinite; }
+.api-tier-band[data-pattern='grid'] .api-tier-motif:nth-of-type(2) { animation: api-tier-glow 3.5s ease-in-out infinite alternate; }
+.api-tier-band[data-pattern='grid'] .api-tier-motif:nth-of-type(3) { animation: api-tier-glow 3.5s ease-in-out infinite alternate-reverse; }
+.api-tier-band[data-pattern='grid'] .api-tier-motif:nth-of-type(4) { animation: api-tier-sway 10s ease-in-out infinite alternate; }
+.api-tier-band[data-pattern='grid'] .api-tier-motif:nth-of-type(5) { animation: api-tier-sway 8s ease-in-out infinite alternate-reverse; }
+@keyframes api-tier-creep-20 { to { background-position: 20px 20px; } }
+@keyframes api-tier-glow { from { opacity: 0; } to { opacity: 1; } }
+@keyframes api-tier-sway { from { rotate: -26deg; } to { rotate: 28deg; } }
+
+.api-tier-band-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.api-tier-name {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 24px;
+  white-space: nowrap;
+  color: var(--tier-ink);
+}
+.api-tier-badge {
+  flex: none;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 14px;
+  white-space: nowrap;
+  color: var(--tier-badge-ink);
+  background: var(--tier-badge);
+  box-shadow: var(--tier-badge-shadow);
+}
+
+/* The website's MESH, one gradient field per tier. Pro is the one saturated
+   band, the same in both themes; Max sits between Standard and Ultra. */
+.api-tier-band[data-mesh='standard'] {
+  background:
+    radial-gradient(120% 150% at 16% 6%, #2C2639 0%, rgba(44, 38, 57, 0) 62%),
+    radial-gradient(95% 125% at 84% 4%, #2A2340 0%, rgba(42, 35, 64, 0) 64%),
+    radial-gradient(115% 145% at 50% 106%, #30264C 0%, rgba(48, 38, 76, 0) 66%),
+    linear-gradient(150deg, #221E2C 0%, #1E1A28 100%);
+}
+.api-tier-band[data-mesh='pro'] {
+  background:
+    radial-gradient(120% 150% at 16% 6%, #AF8CFE 0%, rgba(175, 140, 254, 0) 62%),
+    radial-gradient(95% 125% at 84% 4%, #CBB0FF 0%, rgba(203, 176, 255, 0) 64%),
+    radial-gradient(115% 145% at 50% 106%, #5B3FCF 0%, rgba(91, 63, 207, 0) 66%),
+    linear-gradient(150deg, #AF8CFE 0%, #9C6FF3 52%, #7B4EE4 100%);
+}
+.api-tier-band[data-mesh='max'] {
+  background:
+    radial-gradient(120% 150% at 16% 6%, #332947 0%, rgba(51, 41, 71, 0) 62%),
+    radial-gradient(95% 125% at 84% 4%, #3B2E5E 0%, rgba(59, 46, 94, 0) 64%),
+    radial-gradient(115% 145% at 50% 106%, #312653 0%, rgba(49, 38, 83, 0) 66%),
+    linear-gradient(150deg, #262035 0%, #221B32 100%);
+}
+.api-tier-band[data-mesh='ultra'] {
+  background:
+    radial-gradient(120% 150% at 16% 6%, #3A2D5C 0%, rgba(58, 45, 92, 0) 62%),
+    radial-gradient(95% 125% at 84% 4%, #4A3878 0%, rgba(74, 56, 120, 0) 64%),
+    radial-gradient(115% 145% at 50% 106%, #33275A 0%, rgba(51, 39, 90, 0) 66%),
+    linear-gradient(150deg, #2B2242 0%, #251D3A 100%);
+}
+[data-theme='light'] .api-tier-band[data-mesh='standard'] {
+  background:
+    radial-gradient(120% 150% at 16% 6%, #FFFFFF 0%, rgba(255, 255, 255, 0) 62%),
+    radial-gradient(95% 125% at 84% 4%, #F5F0FF 0%, rgba(245, 240, 255, 0) 64%),
+    radial-gradient(115% 145% at 50% 106%, #ECE3FD 0%, rgba(236, 227, 253, 0) 66%),
+    linear-gradient(150deg, #FCFAFF 0%, #F3EDFE 100%);
+}
+[data-theme='light'] .api-tier-band[data-mesh='max'] {
+  background:
+    radial-gradient(120% 150% at 16% 6%, #F6F1FF 0%, rgba(246, 241, 255, 0) 62%),
+    radial-gradient(95% 125% at 84% 4%, #D2C0FA 0%, rgba(210, 192, 250, 0) 64%),
+    radial-gradient(115% 145% at 50% 106%, #D9CAF9 0%, rgba(217, 202, 249, 0) 66%),
+    linear-gradient(150deg, #F1EAFE 0%, #E2D5FA 100%);
+}
+[data-theme='light'] .api-tier-band[data-mesh='ultra'] {
+  background:
+    radial-gradient(120% 150% at 16% 6%, #F0E9FE 0%, rgba(240, 233, 254, 0) 62%),
+    radial-gradient(95% 125% at 84% 4%, #B9A1F6 0%, rgba(185, 161, 246, 0) 64%),
+    radial-gradient(115% 145% at 50% 106%, #BEA6F5 0%, rgba(190, 166, 245, 0) 66%),
+    linear-gradient(150deg, #E9DFFC 0%, #D5C3F7 100%);
+}
+
+/* Pro: white name and white motif strokes on its saturated band, and the
+   one featured badge (white chip, lavender ink) in both themes. */
+.api-tier[data-tier='pro'] .api-tier-band { --tier-line: rgba(255, 255, 255, 0.30); --tier-dot: rgba(255, 255, 255, 0.36); }
+.api-tier[data-tier='pro'] .api-tier-name { color: #FFFFFF; }
+.api-tier[data-tier='pro'] .api-tier-badge { background: #FFFFFF; color: #7B4EE4; }
+
+/* ── The price card, floating back up over the band ─────────────────── */
+.api-tier-well {
+  position: relative;
+  z-index: 1;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--tier-well);
+  box-shadow: var(--tier-well-shadow);
+  margin: -52px 10px 0;
+}
+
+.api-tier-blurb {
+  margin: 0;
+  min-height: 36px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--tier-muted);
+}
+/* A pack's blurb is one short line. */
+.api-tier-card[data-pack] .api-tier-blurb { min-height: 18px; }
+.api-tier-card[data-pro] .api-tier-blurb { min-height: 18px; }
+
+.api-tier-price {
+  margin: 12px 0 0;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--tier-ink);
+}
+.api-tier-amount {
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 32px;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.api-tier-per { font-size: 12px; font-weight: 500; color: var(--tier-faint); }
+/* A list price struck through, shown only while a named sale runs. */
+.api-tier-was { font-size: 15px; font-weight: 400; color: var(--tier-faint); text-decoration-thickness: 1px; font-variant-numeric: tabular-nums; margin-right: 2px; }
+
+.api-tier-save {
+  margin: 6px 0 0;
+  height: 16px;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--tier-faint);
+}
+.api-tier-save[data-on='true'] { color: var(--tier-save); }
+
+/* The button: .lg-paper on every tier, .lg-lavender on Pro. */
+.api-tier-cta {
+  margin-top: 12px;
+  width: 100%;
+  height: 38px;
+  border: 0;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--tier-paper-ink);
+  background: var(--tier-sheen), var(--tier-paper);
+  box-shadow: var(--tier-rim);
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  transition:
+    background-color 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.api-tier-cta:active { transform: scale(0.98); }
+.api-tier-cta:focus-visible { box-shadow: var(--tier-rim), 0 0 0 2px var(--tier-card), 0 0 0 4px var(--tier-deep); }
+@media (hover: hover) and (pointer: fine) {
+  .api-tier-cta:hover { background: var(--tier-sheen), var(--tier-paper-on); }
+  .api-tier[data-tier='pro'] .api-tier-cta:hover { background: var(--tier-sheen), var(--tier-lav-on); }
+}
+.api-tier[data-tier='pro'] .api-tier-cta { color: var(--tier-lav-ink); background: var(--tier-sheen), var(--tier-lav); }
+
+/* Your current plan: the button's place, flat and inert. */
+.api-tier-cta[data-state='active'] {
+  cursor: default;
+  font-weight: 500;
+  color: var(--tier-muted);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--tier-rule);
+}
+
+/* ── Tray ─────────────────────────────────────────────────────────────── */
+.api-tier-tray {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px 18px;
+}
+.api-tier-tray li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--tier-muted);
+}
+.api-tier-tray li svg { flex: none; margin-top: 2px; color: var(--tier-mid); }
+/* What a plan does not include: a quiet cross, the text struck through. */
+.api-tier-tray li[data-missing='true'] { color: var(--tier-faint); }
+.api-tier-tray li[data-missing='true'] svg { color: var(--tier-faint); }
+.api-tier-tray li[data-missing='true'] > span { text-decoration: line-through; text-decoration-color: var(--tier-faint); }
+.api-tier-tray b { font-weight: 600; color: var(--tier-ink); font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  .api-tier-rail { scroll-behavior: auto; }
+  .api-tier-cta { transition: none; }
+  .api-tier-band::before, .api-tier-motif { animation: none !important; }
+}
