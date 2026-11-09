@@ -7,6 +7,8 @@ export class SttReconnectNotice<P = any> {
     delayMs?: number;
     setTimer?: (fn: () => void, ms: number) => any;
     clearTimer?: (handle: any) => void;
+    /** Which meeting it is: a wait or a shown notice from an earlier one never carries over. */
+    epoch?: () => unknown;
   });
   /** The notice has been sent and not settled since. */
   showing: boolean;

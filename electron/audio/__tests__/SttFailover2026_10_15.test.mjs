@@ -239,7 +239,7 @@ test('main wires it on both channels, never on an auth error, and keeps gap reco
     assert.match(onSegment, /this\.sttGap\.onTranscript\(gapSource, segment\.text, segment\.isFinal\)/);
     assert.match(onSegment, /sttProvider: sttId/);
     // Every teardown of the provider ends its stand-in.
-    assert.match(main, /\(stt as any\)\.stop = \(\) => \{\s*failover\.stop\(\);\s*return rawStop\(\);/);
+    assert.match(main, /\(stt as any\)\.stop = \(\) => \{\s*failover\.stop\(\);[\s\S]{0,400}?return rawStop\(\);/);
 });
 
 // User log 2026-11-03 (Windows 3.0.0): an ElevenLabs key cut off for quota ~16 s

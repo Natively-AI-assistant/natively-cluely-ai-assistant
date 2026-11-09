@@ -28,8 +28,8 @@ test('O6: every transcription banner has the ✕, keyed so a new one shows again
   const start = overlay.indexOf('const sttStatusBanner:');
   const chain = overlay.slice(start, overlay.indexOf('const sttStatusBannerOpen', start));
   assert.match(chain, /key: `pack:\$\{packEndedReason\}`/);
-  assert.match(chain, /key: 'stopped'/);
-  assert.match(chain, /key: 'reconnecting'/);
+  assert.match(chain, /key: sttStoppedKey\(sttUserStatus, sttInterviewerStatus\)/);
+  assert.match(chain, /key: sttReconnectingKey\(sttUserStatus, sttInterviewerStatus\)/);
   assert.match(chain, /key: `backup:\$\{sttInterviewerFallback \|\| sttUserFallback\}`/);
   assert.match(chain, /key: 'behind'/);
   assert.match(overlay, /const sttStatusBannerOpen = !!sttStatusBanner && !sttBannerDismissed\.includes\(sttStatusBanner\.key\);/);
