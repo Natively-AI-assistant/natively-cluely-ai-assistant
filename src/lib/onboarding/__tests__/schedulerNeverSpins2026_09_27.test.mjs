@@ -36,6 +36,9 @@ let timers = [];
 let timerSeq = 0;
 const store = new Map();
 function install() {
+  // Each orchestrator built here is a new launch: no sessionStorage (Node has
+  // one per process), so this launch's card record starts empty (launchSession.mjs).
+  globalThis.sessionStorage = undefined;
   globalThis.localStorage = {
     getItem: (k) => (store.has(k) ? store.get(k) : null),
     setItem: (k, v) => store.set(k, String(v)),

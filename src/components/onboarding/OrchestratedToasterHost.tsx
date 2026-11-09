@@ -29,6 +29,7 @@ import {
 } from '../../premium';
 import { CARDS, DAY_MS } from '../../lib/cards/cardPolicy.mjs';
 import { createShowingRecorder } from '../../lib/cards/outcomeLatch.mjs';
+import { createOrchestratorEventChannel } from '../../lib/onboarding/orchestratorEventChannel.mjs';
 
 /** Why a card closed, as the card reports it: its primary action, an explicit "never", or a plain close. */
 // 'after_error': the trial promo closed after our own error (network, server);
@@ -51,10 +52,13 @@ interface HostProps {
 
 // ─── Event channel ────────────────────────────────────────────────
 
-let emitFn: ((e: OrchestratorEvent) => void) | null = null;
+// Events sent before the provider mounts are kept and handed over when it
+// does: the Launcher's 'launcher:mounted' arrives first in the commit that
+// mounts both after Welcome (orchestratorEventChannel.mjs).
+const channel = createOrchestratorEventChannel<OrchestratorEvent>();
 
 export function emitOrchestratorEvent(e: OrchestratorEvent): void {
-  emitFn?.(e);
+  channel.emit(e);
 }
 
 export function setUserState(patch: Partial<UserState>): void {
@@ -73,14 +77,14 @@ export const OrchestratorProvider: React.FC<ProviderProps> = ({ children }) => {
   const [activeId, setActiveId] = useState<ToasterId | null>(null);
 
   useEffect(() => {
-    emitFn = orch.emit.bind(orch);
+    const detach = channel.attach(orch.emit.bind(orch));
     // Subscribe to state changes for the host
     const unsubscribe = orch.subscribe((state) => {
       setActiveId(state.activeToasterId);
     });
 
     return () => {
-      emitFn = null;
+      detach();
       unsubscribe();
     };
   }, [orch]);
@@ -166,6 +170,10 @@ export const OrchestratedToasterHost: React.FC<HostProps> = ({ onOpenSettings, o
             // becomes true and the RAF drain loop re-raises this toaster on the
             // very next frame — making the X button appear to do nothing.
             orch.setUserState({ permsShown: true });
+            // Counted in main: after a close the card waits 7 days to come
+            // back at launch, and after the third it stops (permissionsCardPolicy.mjs).
+            // Granting everything clears it at the next launch check (App.tsx).
+            if (!forced) window.electronAPI?.permissionsCardRecord?.('dismissed')?.catch?.(() => {});
             if (!forced) window.electronAPI?.funnelTrack?.('onboarding_stage', { stage: 'permissions', action: 'completed' })?.catch?.(() => {});
             onDismiss('permissions')();
           }}

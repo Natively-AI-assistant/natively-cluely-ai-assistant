@@ -1370,6 +1370,9 @@ interface ElectronAPI {
     key: 'seenStartup' | 'seenProfileOnboarding' | 'seenModesOnboarding' | 'permsShown',
     value: boolean,
   ) => Promise<{ success: boolean; error?: string }>;
+  /** The permissions card's closes while a permission is missing (src/lib/permissionsCardPolicy.mjs). */
+  permissionsCardGet: () => Promise<{ dismissals: number; lastDismissedAt: number | null }>;
+  permissionsCardRecord: (event: 'dismissed' | 'granted') => Promise<{ success: boolean; error?: string; record?: { dismissals: number; lastDismissedAt: number | null } }>;
   /** First-launch shortcut tour: taught shortcuts become practice presses. */
   onboardingSetShortcutTour: (active: boolean) => Promise<{ success: boolean }>;
   onOnboardingTourShortcut: (callback: (actionId: string) => void) => () => void;
@@ -2169,6 +2172,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('hindsight-status', subscription);
     };
   },
+  // Hindsight: the last lifecycle status broadcast (null before the first), for a
+  // window that subscribes after it went out.
+  getHindsightStatus: () => ipcRenderer.invoke('hindsight:get-status'),
   // Hindsight: open the server's log file in the OS default viewer. Restricted to the
   // Hindsight log path (under app userData); renderer cannot pass arbitrary paths.
   openHindsightLog: () => ipcRenderer.invoke('open-hindsight-log'),
@@ -3648,6 +3654,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     key: 'seenStartup' | 'seenProfileOnboarding' | 'seenModesOnboarding' | 'permsShown',
     value: boolean
   ) => ipcRenderer.invoke('onboarding:set-flag', key, value),
+  permissionsCardGet: () => ipcRenderer.invoke('permissions-card:get'),
+  permissionsCardRecord: (event: 'dismissed' | 'granted') => ipcRenderer.invoke('permissions-card:record', event),
   onboardingSetShortcutTour: (active: boolean) => ipcRenderer.invoke('onboarding:set-shortcut-tour', active),
   onOnboardingTourShortcut: (callback: (actionId: string) => void) => {
     const subscription = (_: any, actionId: string) => callback(actionId);

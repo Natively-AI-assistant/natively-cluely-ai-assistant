@@ -58,6 +58,9 @@ const realClearTimeout = globalThis.clearTimeout;
 
 function installPolyfills() {
   const store = new Map();
+  // Each orchestrator built here is a new launch: no sessionStorage (Node has
+  // one per process), so this launch's card record starts empty (launchSession.mjs).
+  globalThis.sessionStorage = undefined;
   globalThis.localStorage = {
     getItem: (k) => (store.has(k) ? store.get(k) : null),
     setItem: (k, v) => store.set(k, String(v)),
@@ -397,6 +400,9 @@ test('dismissing permissions does NOT wedge other toaster stages', () => {
       extensionSupported: true,
       extensionConnected: false,
       isV2_8_OrNewer: true,
+      // One full-window card per launch; only the Welcome launch lets a
+      // second follow the permissions card (launchSession.mjs).
+      welcomeThisLaunch: true,
       // browser_extension is a card stage: it needs the card ledger loaded.
       cardLedger: { version: 1, firstLaunchAt: Date.now() - 2 * 86_400_000, launchCount: 1, lastPromoShownAt: null, imported: {}, cards: {} },
     },

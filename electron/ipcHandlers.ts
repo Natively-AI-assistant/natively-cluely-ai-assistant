@@ -12,6 +12,7 @@ import { normalizeMeetingSurface } from './utils/meetingSurface';
 import { openInNotepadBlockReason, resumeBlockReason } from './services/meeting/meetingResume';
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import { resolveMacScreenStatus } from '../src/lib/permissionAttentionPolicy.mjs';
+import { applyPermissionsCardEvent, normalizePermissionsCardRecord } from '../src/lib/permissionsCardPolicy.mjs';
 import { hasOwnAiKey, resolveExpiredTrial } from '../src/lib/trialPolicy.mjs';
 import { CARDS, OUTCOMES } from '../src/lib/cards/cardPolicy.mjs';
 import { TRIAL_CAMPAIGN, TRIAL_PROMO_ID, runTrialCampaignReset } from '../src/lib/trialCampaign.mjs';
@@ -9112,11 +9113,13 @@ export function initializeIpcHandlers(appState: AppState): void {
       // banner can render Cloud-key-specific copy (different from the generic "Can't connect").
       // isAuthFailed() reads the cached lastAuthFailedAt timestamp.
       if (hm.isAuthFailed?.()) {
+        const status = { state: 'auth-failed', reason: 'Cloud key rejected (401/403) — check your Hindsight Cloud account key', at: Date.now() };
+        hm.noteStatus(status);
         try {
           const { BrowserWindow } = require('electron') as typeof import('electron');
           BrowserWindow.getAllWindows().forEach((win) => {
             if (!win.isDestroyed()) {
-              win.webContents.send('hindsight-status', { state: 'auth-failed', reason: 'Cloud key rejected (401/403) — check your Hindsight Cloud account key', at: Date.now() });
+              win.webContents.send('hindsight-status', status);
             }
           });
         } catch { /* headless */ }
@@ -9125,6 +9128,18 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { healthy };
     } catch (e: any) {
       return { healthy: false, error: e?.message };
+    }
+  });
+
+  // The last Hindsight lifecycle status, for a window that subscribes after it
+  // was broadcast (the launcher's notice mounts seconds after boot, after a
+  // spawn failure at startup). null before the first.
+  safeHandle('hindsight:get-status', async () => {
+    try {
+      const { HindsightManager } = require('./services/HindsightManager') as typeof import('./services/HindsightManager');
+      return HindsightManager.getInstance().getLastStatus();
+    } catch {
+      return null;
     }
   });
 
@@ -9177,11 +9192,13 @@ export function initializeIpcHandlers(appState: AppState): void {
       // If we spawned an app-managed server, kill it. Cloud / user-managed servers stay up.
       try { HindsightManager.getInstance().stopSync(); } catch { /* nothing to stop */ }
       // Broadcast so any open banner clears with the "you're in control" state.
+      const status = { state: 'ready', reason: 'disabled by user', at: Date.now() };
+      try { HindsightManager.getInstance().noteStatus(status); } catch { /* not loaded */ }
       try {
         const { BrowserWindow } = require('electron') as typeof import('electron');
         BrowserWindow.getAllWindows().forEach((win) => {
           if (!win.isDestroyed()) {
-            win.webContents.send('hindsight-status', { state: 'ready', reason: 'disabled by user', at: Date.now() });
+            win.webContents.send('hindsight-status', status);
           }
         });
       } catch { /* headless */ }
@@ -9242,6 +9259,21 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: true };
     }
     return { success: false, error: 'invalid_key' };
+  });
+
+  // The permissions card's closes while a permission is still missing
+  // (src/lib/permissionsCardPolicy.mjs). Main-process owned, like permsShown:
+  // it must survive restarts and updates, whatever origin the renderer has.
+  safeHandle('permissions-card:get', async () => {
+    return normalizePermissionsCardRecord(SettingsManager.getInstance().get('permissionsCard'));
+  });
+
+  safeHandle('permissions-card:record', async (_, event: unknown) => {
+    if (event !== 'dismissed' && event !== 'granted') return { success: false, error: 'invalid_event' };
+    const sm = SettingsManager.getInstance();
+    const record = applyPermissionsCardEvent(sm.get('permissionsCard'), event, Date.now());
+    if (!sm.set('permissionsCard', record)) return { success: false, error: 'settings_store_degraded' };
+    return { success: true, record };
   });
 
   // First-launch shortcut tour: route the shortcuts it teaches to the calling
@@ -13272,6 +13304,23 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // The review ledger says the user reviewed (or said never): retire the review
+  // card in the card ledger at once and tell every window, so a card scheduled
+  // later this session does not ask again (mainLegacy.ts settleReviewCard).
+  const settleReviewCardNow = (state: unknown): void => {
+    try {
+      const { settleReviewCard } = require('./services/cards/mainLegacy');
+      const ledger = settleReviewCard(CardLedger.getInstance(), state as { has_reviewed?: boolean; dont_show_again?: boolean });
+      if (ledger) {
+        BrowserWindow.getAllWindows().forEach((win) => {
+          if (!win.isDestroyed()) win.webContents.send('cards:changed', ledger);
+        });
+      }
+    } catch (e: any) {
+      console.warn('[IPC] review card not retired in the card ledger:', e?.message);
+    }
+  };
+
   safeHandle('review:dismiss-forever', async () => {
     try {
       const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
@@ -13318,6 +13367,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         svc.markReviewed(result.id);
         // Backend already records this server-side; the local call is redundant
         // but keeps the file in sync if the network blip happens after submit.
+        // A review left from About retires the review card now, not at the next
+        // launch's backend sync (which never comes offline).
+        settleReviewCardNow(svc.getLocalState());
       }
       return result;
     } catch (error: any) {

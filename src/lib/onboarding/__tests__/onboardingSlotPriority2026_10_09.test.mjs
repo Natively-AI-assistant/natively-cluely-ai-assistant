@@ -30,9 +30,12 @@ const originals = new Map();
 const originalDateNow = Date.now;
 
 before(() => {
-  for (const key of ['localStorage', 'performance', 'setTimeout', 'clearTimeout']) {
+  for (const key of ['localStorage', 'sessionStorage', 'performance', 'setTimeout', 'clearTimeout']) {
     originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
   }
+  // Each orchestrator built here is a new launch: no sessionStorage (Node has
+  // one per process), so this launch's card record starts empty (launchSession.mjs).
+  Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: undefined });
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
     getItem: (key) => store.get(key) ?? null,
     setItem: (key, value) => store.set(key, String(value)),
@@ -222,8 +225,9 @@ test('background time does not advance Home readiness', (t) => {
   assert.equal(active(orchestrator), 'natively_api_new');
 });
 
+// The first-run launch (Welcome): the permissions card may be followed by one more.
 test('permissions completion still requires the full 60-second spacing', (t) => {
-  const orchestrator = launch(t, { ...TRIAL_USED, permsShown: false });
+  const orchestrator = launch(t, { ...TRIAL_USED, permsShown: false, welcomeThisLaunch: true });
   advance(2_000);
   assert.equal(active(orchestrator), 'permissions');
   advance(3_000);

@@ -15,6 +15,14 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { GenieModal } from './ui/GenieModal';
 import { AlertTriangle, ExternalLink, X } from 'lucide-react';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
+import { useCornerSlot } from '../hooks/useCornerSlot';
+import {
+  applyHindsightStatus,
+  dismissHindsightBanner,
+  hindsightBannerDismissed,
+  initialHindsightBanner,
+  type HindsightBannerState,
+} from '../lib/hindsightBannerPolicy.mjs';
 import '../ui-components/LiquidGlassButton.css';
 
 type HindsightStatus =
@@ -40,27 +48,33 @@ function hashOf(text: string): string {
 }
 
 export const HindsightStatusBanner: React.FC<{ variant?: 'top-strip' | 'floating-card' }> = ({ variant = 'top-strip' }) => {
-  const [status, setStatus] = useState<HindsightStatus | null>(null);
-  // Per-session dismissal — once the user clicks X the banner stays hidden until a NEW
-  // failure occurs (state goes null → failure again). Avoids re-showing the same nudge
-  // for every poll cycle.
-  const [dismissed, setDismissed] = useState(false);
+  // Per-session dismissal — once the user clicks X the banner stays hidden until
+  // something genuinely different happens: another failure, or a recovery and
+  // then a failure (src/lib/hindsightBannerPolicy.mjs). The same failure
+  // broadcast again, or a retry, does not bring it back.
+  const [banner, setBanner] = useState<HindsightBannerState<HindsightStatus>>(initialHindsightBanner);
+  const status = banner.status;
+  const dismissed = hindsightBannerDismissed(banner);
+  const dismiss = useCallback(() => setBanner(dismissHindsightBanner), []);
   const isLight = useResolvedTheme() === 'light';
 
   useEffect(() => {
+    // A broadcast that arrives first knows better than the read still in flight.
+    let heard = false;
+    let live = true;
     const handler = (data: HindsightStatus) => {
-      // Success state → hide banner, reset dismissal so the NEXT failure can re-show.
-      if (data.state === 'ready') {
-        setStatus(null);
-        setDismissed(false);
-        return;
-      }
-      // Failure state → show (or re-show after a previous dismissal).
-      setStatus(data);
-      setDismissed(false);
+      heard = true;
+      setBanner((prev) => applyHindsightStatus(prev, data));
     };
     const off = window.electronAPI?.onHindsightStatus?.(handler);
-    return () => { try { off?.(); } catch { /* unmount */ } };
+    // This banner mounts seconds after boot (App.tsx), after main may already
+    // have broadcast a failure: read the current state too.
+    Promise.resolve(window.electronAPI?.getHindsightStatus?.())
+      .then((current) => {
+        if (live && !heard && current) setBanner((prev) => applyHindsightStatus(prev, current as HindsightStatus));
+      })
+      .catch(() => {});
+    return () => { live = false; try { off?.(); } catch { /* unmount */ } };
   }, []);
 
   const openLog = useCallback(async () => {
@@ -94,8 +108,14 @@ export const HindsightStatusBanner: React.FC<{ variant?: 'top-strip' | 'floating
   // whatever was behind it when it was taken, so a kept one would pour out a
   // stale launcher and then jump to the live one as it lands. The view key
   // (state + hashed reason) still names what it shows.
+  // Hooks above the variant branch: the corner slot is asked only by the
+  // launcher's floating card (the top strip renders nothing).
+  const wantsCorner = variant === 'floating-card' && !!status && !!copy && !dismissed;
+  const corner = useCornerSlot('hindsight', wantsCorner);
+
   if (variant === 'floating-card') {
-    const open = !!status && !!copy && !dismissed;
+    // The bottom-right corner shows one notice at a time (src/lib/cornerSlot.mjs).
+    const open = corner.show;
     const view = status ? `${status.state}|${hashOf(status.reason ?? '')}` : undefined;
     // The stand-in for .lg-notice's lift while the genie runs.
     const shadow = isLight ? '0 16px 36px -14px rgba(0,0,0,0.22)' : '0 22px 44px -18px rgba(0,0,0,0.7)';
@@ -104,6 +124,7 @@ export const HindsightStatusBanner: React.FC<{ variant?: 'top-strip' | 'floating
     return (
       <GenieModal
         open={open}
+        closeInstantly={corner.displaced}
         label="HindsightStatusBanner"
         modal={false}
         placement="bottom-right"
@@ -144,7 +165,7 @@ export const HindsightStatusBanner: React.FC<{ variant?: 'top-strip' | 'floating
                 </div>
                 <button
                   type="button"
-                  onClick={() => setDismissed(true)}
+                  onClick={dismiss}
                   aria-label="Dismiss"
                   style={{
                     flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer',
@@ -242,7 +263,7 @@ export const HindsightStatusBanner: React.FC<{ variant?: 'top-strip' | 'floating
       ) : null}
       <button
         type="button"
-        onClick={() => setDismissed(true)}
+        onClick={dismiss}
         aria-label="Dismiss"
         className="inline-flex shrink-0 items-center rounded-md p-1 text-text-tertiary transition-colors hover:text-text-primary"
       >

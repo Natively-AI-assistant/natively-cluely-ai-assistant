@@ -1,5 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
 import UpdateModal, { UpdateCornerToast, LATEST_RELEASE_URL, type DownloadDetail } from './UpdateModal';
+import { isUpdateDismissed, readUpdateDismissal, writeUpdateDismissal } from '../lib/updatePromptPolicy.mjs';
+import { useCornerSlot } from '../hooks/useCornerSlot';
+
+/** This window's localStorage, or null where it refuses. */
+function localStore(): Storage | null {
+    try { return typeof localStorage !== 'undefined' ? localStorage : null; } catch { return null; }
+}
 
 type UpdateInfo = {
     version?: string;
@@ -14,7 +21,24 @@ type ParsedReleaseNotes = {
     url?: string;
 };
 
-const UpdateBanner: React.FC = () => {
+interface UpdateBannerProps {
+    /**
+     * Nothing else holds the screen: no first-run Welcome or tour, no Settings,
+     * no onboarding card, no Trial ended card (App.tsx). The card waits until
+     * then; it does not open over them. Default: true.
+     */
+    canOpen?: boolean;
+    /**
+     * Take the one full-window card slot from the launcher's card scheduler
+     * (OnboardingOrchestrator.claimExternalCard); false while a card holds it.
+     * While held, no onboarding card opens.
+     */
+    claimSlot?: () => boolean;
+    /** Give the slot back once the card is closed or shrunk to its corner toast. */
+    releaseSlot?: () => void;
+}
+
+const UpdateBanner: React.FC<UpdateBannerProps> = ({ canOpen = true, claimSlot, releaseSlot }) => {
     const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
     const [parsedNotes, setParsedNotes] = useState<ParsedReleaseNotes | null>(null);
     const [isVisible, setIsVisible] = useState(false);
@@ -57,10 +81,17 @@ const UpdateBanner: React.FC = () => {
             if (info.parsedNotes) {
                 setParsedNotes(info.parsedNotes);
             }
-            setIsVisible(true);
             // A new update cycle begins — clear any prior dismiss state so the toast shows.
             userDismissedRef.current = false;
             setMinimized(false);
+            // This version was closed in the last 7 days (updatePromptPolicy.mjs):
+            // it does not open the card by itself. A download started from
+            // Settings still shows its progress.
+            if (isUpdateDismissed(readUpdateDismissal(localStore()), info?.version, Date.now())) {
+                console.log('[UpdateBanner] version closed recently; not opening the card:', info?.version);
+                return;
+            }
+            setIsVisible(true);
         });
 
         // Listen for download progress
@@ -207,6 +238,14 @@ const UpdateBanner: React.FC = () => {
             setMinimized(true);
             return;
         }
+        handleUserClose();
+    };
+
+    /** The user closed the card or its toast: this version stays closed for 7 days. */
+    const handleUserClose = () => {
+        if (!(import.meta.env.DEV && mockRef.current)) {
+            writeUpdateDismissal(localStore(), updateInfo?.version, Date.now());
+        }
         handleClose();
     };
 
@@ -219,6 +258,39 @@ const UpdateBanner: React.FC = () => {
         setStatus('idle'); // Reset error/downloading state so next event starts clean
     };
 
+    // One full-window card at a time (2026-11-09): the card opens only when
+    // nothing else holds the screen, and holds the scheduler's slot while
+    // open, so no onboarding card opens over it. It waits, it is not lost.
+    // A user expanding the corner toast is let through: they asked for it.
+    const wantsCard = isVisible && !minimized;
+    const [holdsSlot, setHoldsSlot] = useState(false);
+    const expandRequestedRef = useRef(false);
+    useEffect(() => {
+        if (wantsCard && !holdsSlot) {
+            const asked = expandRequestedRef.current;
+            if (!asked && !canOpen) return;
+            if ((claimSlot?.() ?? true) || asked) {
+                expandRequestedRef.current = false;
+                setHoldsSlot(true);
+            }
+            return;
+        }
+        if (!wantsCard && holdsSlot) {
+            releaseSlot?.();
+            setHoldsSlot(false);
+        }
+    }, [wantsCard, holdsSlot, canOpen, claimSlot, releaseSlot]);
+    // Unmounting gives the slot back.
+    const releaseRef = useRef(releaseSlot);
+    releaseRef.current = releaseSlot;
+    const holdsSlotRef = useRef(holdsSlot);
+    holdsSlotRef.current = holdsSlot;
+    useEffect(() => () => { if (holdsSlotRef.current) releaseRef.current?.(); }, []);
+    const cardOpen = wantsCard && holdsSlot;
+
+    // The corner toast shares the bottom-right corner with the other notices.
+    const corner = useCornerSlot('update', isVisible && minimized);
+
     // Always rendered: UpdateModal's GenieModal plays the close after
     // isVisible goes false, and an early return here would cut it off.
     // Hiding and expanding are hand-overs between the card and the corner
@@ -226,17 +298,17 @@ const UpdateBanner: React.FC = () => {
     return (
         <>
         <UpdateCornerToast
-            isOpen={isVisible && minimized}
-            closeInstantly={isVisible && !minimized}
+            isOpen={corner.show}
+            closeInstantly={(isVisible && !minimized) || corner.displaced}
             updateInfo={updateInfo}
             downloadProgress={downloadProgress}
             downloadDetail={downloadDetail}
             status={status}
-            onExpand={() => setMinimized(false)}
-            onClose={handleClose}
+            onExpand={() => { expandRequestedRef.current = true; setMinimized(false); }}
+            onClose={handleUserClose}
         />
         <UpdateModal
-            isOpen={isVisible && !minimized}
+            isOpen={cardOpen}
             closeInstantly={isVisible && minimized}
             updateInfo={updateInfo}
             parsedNotes={parsedNotes}

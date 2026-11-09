@@ -32,6 +32,17 @@
 import { loadState, saveState } from './persistence.ts';
 import { CARDS, msUntilCardAllowed } from '../cards/cardPolicy.mjs';
 import type { CardId, Ledger } from '../cards/cardPolicy.mjs';
+import { launchCapAllows, loadLaunchSession, saveLaunchSession } from './launchSession.mjs';
+import type { LaunchSession } from './launchSession.mjs';
+
+/** This window's sessionStorage, or null where there is none (tests) or it refuses. */
+function sessionStore(): Storage | null {
+  try {
+    return typeof sessionStorage !== 'undefined' ? sessionStorage : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Minimum gap between one card closing and the next opening (toaster policy §3.2). */
 export const CARD_SPACING_MS = 60_000;
@@ -125,6 +136,16 @@ export interface UserState {
   cardLedger: Ledger | null;
   /** The Trial ended card is on screen: nothing else may open. */
   trialEndedOpen: boolean;
+  /**
+   * This launch began with the first-run Welcome: the permissions card may be
+   * followed by one more card (launchSession.mjs). Latched for the launch.
+   */
+  welcomeThisLaunch: boolean;
+  /**
+   * A meeting failed to start for a missing permission: the permissions card
+   * is the way out, so this launch's card limit does not hold it back.
+   */
+  permissionsRecoveryRequested: boolean;
 }
 
 export interface Triggers {
@@ -163,11 +184,15 @@ export interface StageConfig {
   isGateOnly?: boolean;
   /**
    * The card-ledger entry this stage is (src/lib/cards/cardPolicy.mjs). A
-   * stage with a card also obeys the ledger (strikes, retirement), its class
-   * rules (promo: day one and the 72 h budget) and one card of its class per
-   * launch.
+   * stage with a card also obeys the ledger (strikes, retirement) and its
+   * class rules (promo: day one and the 72 h budget; onboarding: 24 h apart).
    */
   card?: CardId;
+  /**
+   * Every card stage counts against one full-window card per launch
+   * (launchSession.mjs). True here lets this stage show past it.
+   */
+  bypassesLaunchCap?: (s: UserState) => boolean;
 }
 
 export interface Ctx {
@@ -222,6 +247,8 @@ export const DEFAULT_USER_STATE: UserState = {
   trialClaimed: false,
   cardLedger: null,
   trialEndedOpen: false,
+  welcomeThisLaunch: false,
+  permissionsRecoveryRequested: false,
 };
 
 // ─── Orchestrator ─────────────────────────────────────────────────
@@ -240,20 +267,38 @@ export class OnboardingOrchestrator {
   // snapshot reference and re-render. Persisted `state.version` (string) is
   // unrelated.
   private revision = 0;
-  // Toasters the user explicitly dismissed THIS session. Not persisted — a
-  // permission that still needs attention is re-raised on the next
-  // launch. This exists so an explicit dismiss (the X button) is not undone on
-  // the very next RAF frame by a still-true reEligibility predicate, which is
-  // what made the X appear to do nothing for a re-eligible stage.
-  private dismissedThisSession = new Set<ToasterId>();
-  // Card pacing for THIS launch (not persisted; toaster policy §3.2).
-  // performance.now() when the last rendered card closed, for the spacing.
+  // THIS launch, kept in sessionStorage so a renderer reload in the same app
+  // run keeps it (launchSession.mjs):
+  //  - the toasters the user explicitly dismissed, so an explicit dismiss (the
+  //    X button) is not undone on the very next frame by a still-true
+  //    reEligibility predicate, which made the X appear to do nothing;
+  //  - the full-window cards shown, for one card per launch.
+  // Across launches the card ledger and the permissions card record decide.
+  private launch: LaunchSession;
+  // Card pacing for THIS launch (toaster policy §3.2): performance.now() when
+  // the last rendered card closed, for the spacing.
   private lastCardClosedAt: number | null = null;
-  private onboardingShownThisLaunch = false;
-  private promoShownThisLaunch = false;
+  /** A full-window card the orchestrator does not schedule (the update card) holds the slot. */
+  private externalCardId: string | null = null;
 
   constructor() {
     this.state = loadState();
+    this.launch = loadLaunchSession(sessionStore());
+  }
+
+  private saveLaunch(): void {
+    saveLaunchSession(sessionStore(), this.launch);
+  }
+
+  private isDismissedThisLaunch(id: ToasterId): boolean {
+    return this.launch.dismissed.includes(id);
+  }
+
+  /** One full-window card per launch, unless the stage may pass it now. */
+  private launchSlotOpen(config: StageConfig, s: UserState): boolean {
+    if (config.isGateOnly) return true;
+    if (config.bypassesLaunchCap?.(s)) return true;
+    return launchCapAllows(this.launch, config.id);
   }
 
   // ─── Lifecycle ────────────────────────────────────────────────
@@ -487,7 +532,7 @@ export class OnboardingOrchestrator {
 
     for (const id of this.state.queue) {
       const config = this.stageConfigs.find(c => c.id === id);
-      if (!config || this.state.skipped.has(id) || this.dismissedThisSession.has(id)) continue;
+      if (!config || this.state.skipped.has(id) || this.isDismissedThisLaunch(id)) continue;
 
       // A hard skip is progress that evaluateAndDispatch can make immediately.
       if (config.skipWhen?.(ctx.userState)) {
@@ -501,6 +546,8 @@ export class OnboardingOrchestrator {
       // left to dispatch them.
       if (config.onceEver && ctx.completed[id] && !config.reEligibility?.(ctx.userState, ctx.completed)) continue;
       if (config.requiresStages?.some(dep => !ctx.completed[dep] && !ctx.skipped.has(dep))) continue;
+      // This launch already had its card: nothing to wait for until the next.
+      if (!this.launchSlotOpen(config, ctx.userState)) continue;
 
       const triggers = config.triggers;
       // These values cannot become true merely by waiting, so wait for their
@@ -538,6 +585,7 @@ export class OnboardingOrchestrator {
       this.state.homepageCurrentlyMounted &&
       !this.state.meetingActive &&
       this.state.activeToasterId === null &&
+      this.externalCardId === null &&
       !this.userState.trialEndedOpen
     );
   }
@@ -589,10 +637,8 @@ export class OnboardingOrchestrator {
           }
           this.state.activeToasterId = id;
           this.state.lastShownTimes[id] = ctx.now;
-          if (config.card) {
-            if (CARDS[config.card]?.cls === 'onboarding') this.onboardingShownThisLaunch = true;
-            else this.promoShownThisLaunch = true;
-          }
+          this.launch.shown.push(id);
+          this.saveLaunch();
           this.persist();
           this.notify();
           return; // single-slot invariant
@@ -604,8 +650,8 @@ export class OnboardingOrchestrator {
   // ─── Decision engine ──────────────────────────────────────────
 
   shouldShowToaster(id: ToasterId, ctx: Ctx, config: StageConfig): boolean {
-    // 0. Explicitly dismissed this session — never re-raise until next launch.
-    if (this.dismissedThisSession.has(id)) return false;
+    // 0. Explicitly dismissed this launch — never re-raise until the next.
+    if (this.isDismissedThisLaunch(id)) return false;
 
     // 1. Hard skip — user-state
     if (config.skipWhen?.(ctx.userState)) return false;
@@ -638,7 +684,9 @@ export class OnboardingOrchestrator {
     // 6. Custom predicate (e.g. DonationManager fetch outcome)
     if (config.customPredicate && !config.customPredicate(ctx)) return false;
 
-    // 7. Spacing after the previous card, and the card ledger.
+    // 7. One full-window card per launch, spacing after the previous card,
+    // and the card ledger.
+    if (!this.launchSlotOpen(config, ctx.userState)) return false;
     if (!config.isGateOnly && this.spacingRemainingMs() > 0) return false;
     if (config.card) {
       const wait = this.cardWaitMs(config.card, ctx);
@@ -655,17 +703,44 @@ export class OnboardingOrchestrator {
   }
 
   /**
-   * ms until this card may show (0 = now), or null when it cannot this launch:
-   * the ledger has not loaded, the card is retired, or its class already had
-   * its one card this launch.
+   * ms until this card may show (0 = now), or null when it cannot: the ledger
+   * has not loaded, or the card is retired. The one-card-per-launch limit is
+   * launchSlotOpen's.
    */
   private cardWaitMs(card: CardId, ctx: Ctx): number | null {
     const ledger = ctx.userState.cardLedger;
     if (!ledger) return null;
-    const cls = CARDS[card]?.cls;
-    if (!cls) return null;
-    if (cls === 'onboarding' ? this.onboardingShownThisLaunch : this.promoShownThisLaunch) return null;
+    if (!CARDS[card]?.cls) return null;
     return msUntilCardAllowed(ledger, card, ctx.now);
+  }
+
+  /**
+   * A full-window card this scheduler does not own (the update card,
+   * UpdateBanner.tsx) asks for the slot. Refused while a card or the Trial
+   * ended card is on screen; once granted, no card opens until it is
+   * released, and it counts as this launch's card.
+   */
+  claimExternalCard(id: string): boolean {
+    if (this.externalCardId === id) return true;
+    if (this.externalCardId !== null || this.state.activeToasterId !== null || this.userState.trialEndedOpen) return false;
+    this.externalCardId = id;
+    this.launch.shown.push(id);
+    this.saveLaunch();
+    this.notify();
+    return true;
+  }
+
+  /** The external card closed: the slot is free again, after the usual spacing. */
+  releaseExternalCard(id: string): void {
+    if (this.externalCardId !== id) return;
+    this.externalCardId = null;
+    this.lastCardClosedAt = performance.now();
+    this.notify();
+  }
+
+  /** The external card holding the slot, if any. */
+  getExternalCard(): string | null {
+    return this.externalCardId;
   }
 
   // ─── Toaster dismissal / skip ─────────────────────────────────
@@ -686,10 +761,13 @@ export class OnboardingOrchestrator {
   }
 
   markDismissed(id: ToasterId): void {
-    // Record the explicit dismiss for this session so the drain loop does not
+    // Record the explicit dismiss for this launch so the drain loop does not
     // instantly re-raise a re-eligible stage (e.g. permissions while
     // permissionsNeedAttention is genuinely true) on the next animation frame.
-    this.dismissedThisSession.add(id);
+    if (!this.launch.dismissed.includes(id)) {
+      this.launch.dismissed.push(id);
+      this.saveLaunch();
+    }
     this.completeToaster(id, false);
   }
 
@@ -756,6 +834,11 @@ export class OnboardingOrchestrator {
     const before = this.userState;
     this.userState = { ...before, ...patch };
     this.unskipOnReEligibility(before, this.userState);
+    // The Welcome launch is latched for the launch, reloads included.
+    if (this.userState.welcomeThisLaunch && !this.launch.welcome) {
+      this.launch.welcome = true;
+      this.saveLaunch();
+    }
     // "Trial ended" is exclusive: a card already open when it arrives leaves
     // the slot without being completed. The host then records no outcome for
     // it (interrupted), so it costs no strike and may show on a later launch.

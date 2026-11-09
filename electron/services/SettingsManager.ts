@@ -321,6 +321,10 @@ export interface AppSettings {
     seenProfileOnboarding?: boolean;
     seenModesOnboarding?: boolean;
     permsShown?: boolean;
+    // How often the permissions card was closed while a required permission was
+    // still missing, and when last; it stops returning at launch after that
+    // (src/lib/permissionsCardPolicy.mjs). Cleared once everything is granted.
+    permissionsCard?: { dismissals: number; lastDismissedAt: number | null };
     // The trialStartedAt of the free trial whose profile data the expiry wipe
     // already removed, so the wipe runs once per trial however many windows or
     // launches notice the expiry (ipcHandlers.ts settleExpiredTrial).

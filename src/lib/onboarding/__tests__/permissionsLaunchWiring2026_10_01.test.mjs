@@ -37,7 +37,8 @@ test('permsShown reaches the orchestrator before the permission check is awaited
 test('the check result still decides whether a permission needs attention', () => {
   const block = launchBlock();
   const then = block.slice(block.indexOf('maybeCheck()'));
-  assert.match(then, /permissionsNeedAttention: permissionsNeedAttention\(p\)/);
+  // Through the permissions card record since 2026-11-09 (permissionsCardPolicy.mjs).
+  assert.match(then, /permissionsNeedAttention: startupPermissionsAttention\(p, record, Date\.now\(\)\)/);
 });
 
 // localStorage is per origin, and `npm run dev:agent` serves the renderer on a

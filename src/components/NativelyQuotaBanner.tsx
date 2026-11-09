@@ -10,6 +10,7 @@ import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import '../ui-components/LiquidGlassButton.css';
 import { CHECKOUT_URLS } from '../config/urls';
 import { endedPackFromRefusal, isPackPlan, packMeetingBucket } from '../lib/apiPlans.mjs';
+import { useCornerSlot } from '../hooks/useCornerSlot';
 
 interface NearLimitBucket {
     label: string;
@@ -155,12 +156,16 @@ export const NativelyQuotaBanner: React.FC = () => {
         return () => { cancelled = true; };
     }, []);
 
+    // The bottom-right corner shows one notice at a time (src/lib/cornerSlot.mjs).
+    const corner = useCornerSlot('quota', visible);
+
     // A notice, not a modal: the launcher stays usable around it. Its numbers
     // are new every start-up, so no picture of it is kept (a kept one would
     // pour out last time's readings); it stays mounted so the close can play.
     return (
         <GenieModal
-            open={visible}
+            open={corner.show}
+            closeInstantly={corner.displaced}
             label="NativelyQuotaBanner"
             modal={false}
             placement="bottom-right"

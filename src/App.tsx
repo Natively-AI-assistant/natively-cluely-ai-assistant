@@ -36,7 +36,7 @@ import { savedMeetingAudio } from "./lib/startMeetingRequest"
 import { ProviderChangeNotice, type EmbeddingDegradedNotice } from "./components/ProviderChangeNotice"
 import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
 import { getMeetingInterfaceTheme, resolveMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
-import { permissionsNeedAttention } from './lib/permissionAttentionPolicy.mjs'
+import { requiredPermissionsGranted, startupPermissionsAttention } from './lib/permissionsCardPolicy.mjs'
 import { collectRendererLegacy } from './lib/cards/rendererLegacy.mjs'
 import { resetRendererTrialClaim } from './lib/trialCampaign.mjs'
 import { cardInputsFromSources } from './lib/cards/cardInputs.mjs'
@@ -301,6 +301,11 @@ const App: React.FC = () => {
   // motion, the launcher keeps its plain fade-up instead.
   const cameFromWelcome = useRef(false);
   if (showWelcome) cameFromWelcome.current = true;
+  // The first-run Welcome happened this launch: the permissions card may be
+  // followed by one more card (src/lib/onboarding/launchSession.mjs).
+  useEffect(() => {
+    if (showWelcome && (isLauncherWindow || isDefault)) setOrchestratorUserState({ welcomeThisLaunch: true });
+  }, [showWelcome, isLauncherWindow, isDefault]);
   const launcherLands = !cameFromWelcome.current && !reduceManagerMotion;
   const launcherLanded = useRef(false);
   const landLauncher = useCallback((el: HTMLDivElement | null) => {
@@ -519,6 +524,13 @@ const App: React.FC = () => {
     [orch],
   );
   const orchState = useSyncExternalStore(orchSubscribe, orchSnapshot);
+  // The update card is a full-window card too (2026-11-09): it opens only when
+  // nothing else holds the screen, and while open it holds the card
+  // scheduler's one slot, so no onboarding card opens over it.
+  const updateCardMayOpen = !showStartup && showWelcome === false && !isSettingsOpen && !isManagerOpen
+    && !showTrialExpiredModal && !trialEndedDue && !orchState?.activeToasterId;
+  const claimUpdateSlot = useCallback(() => (orch ? orch.claimExternalCard('update') : true), [orch]);
+  const releaseUpdateSlot = useCallback(() => { orch?.releaseExternalCard('update'); }, [orch]);
   // ── Card scheduler inputs (toaster policy) ──────────────────────────────
   // What decides which card is relevant (keys, plan, profile, JD, trial,
   // extension, quota) is read live and re-read whenever it can have changed;
@@ -916,10 +928,20 @@ const App: React.FC = () => {
 
       const maybeCheck = window.electronAPI?.checkPermissions;
       if (maybeCheck) {
+        // How often the card was closed while a permission was still missing
+        // (permissionsCardPolicy.mjs): it waits 7 days after a close and stops
+        // coming back at launch after the third. Read alongside the check; an
+        // unreadable record counts as never closed.
+        const cardRecord = Promise.resolve(window.electronAPI?.permissionsCardGet?.()).catch(() => null);
         maybeCheck()
-          .then((p) => {
+          .then(async (p) => {
+            const record = await cardRecord;
+            // Everything granted: a permission that breaks later starts afresh.
+            if (requiredPermissionsGranted(p) && record && record.dismissals > 0) {
+              window.electronAPI?.permissionsCardRecord?.('granted')?.catch?.(() => {});
+            }
             setOrchestratorUserState({
-              permissionsNeedAttention: permissionsNeedAttention(p),
+              permissionsNeedAttention: startupPermissionsAttention(p, record, Date.now()),
               extensionSupported: true, // updated by phoneMirrorGetInfo below
             });
           })
@@ -1163,8 +1185,10 @@ const App: React.FC = () => {
         // the "I press Start Natively and nothing happens" report.
         if (result.code === 'mic-permission-denied') {
           // Route through the orchestrator: mark permissions as needing
-          // attention so the permissions stage becomes re-eligible.
-          setOrchestratorUserState({ permissionsNeedAttention: true });
+          // attention so the permissions stage becomes re-eligible. The user
+          // asked for a meeting, so neither a put-off card nor this launch's
+          // one-card limit holds it back.
+          setOrchestratorUserState({ permissionsNeedAttention: true, permissionsRecoveryRequested: true });
         }
       }
     } catch (err) {
@@ -1175,7 +1199,7 @@ const App: React.FC = () => {
       // serialized error .code across ipcRenderer.invoke — keep the recovery
       // working so the denial never regresses to a silent failure.
       if ((err as { code?: string })?.code === 'mic-permission-denied') {
-        setOrchestratorUserState({ permissionsNeedAttention: true });
+        setOrchestratorUserState({ permissionsNeedAttention: true, permissionsRecoveryRequested: true });
       }
     }
   };
@@ -1529,7 +1553,7 @@ const App: React.FC = () => {
       />
 
       <div data-opacity-preview-surface="">
-        {!isolateGlobalSurfaces && <UpdateBanner />}
+        {!isolateGlobalSurfaces && <UpdateBanner canOpen={updateCardMayOpen} claimSlot={claimUpdateSlot} releaseSlot={releaseUpdateSlot} />}
         {!isolateGlobalSurfaces && <NativelyQuotaBanner />}
         {/* A call was detected: Start / Not now, and the countdown when Start automatically is on. */}
         {!isolateGlobalSurfaces && (isLauncherWindow || isDefault) && <MeetingOfferToast />}

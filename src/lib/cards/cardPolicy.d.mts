@@ -51,6 +51,7 @@ export const STRIKE_GAPS_MS: readonly number[];
 export const MAX_STRIKES: number;
 export const PROMO_BUDGET_MS: number;
 export const DAY_ONE_MS: number;
+export const ONBOARDING_GAP_MS: number;
 
 export function emptyLedger(now: number): Ledger;
 export function entryOf(ledger: Ledger, id: CardId | string): Entry;
@@ -58,6 +59,7 @@ export function applyOutcome(ledger: Ledger, id: CardId | string, outcome: Outco
 export function reopenCard(ledger: Ledger, id: CardId | string): Ledger;
 export function isCardAvailable(ledger: Ledger, id: CardId | string, now: number): boolean;
 export function promoBudgetOpen(ledger: Ledger, now: number): boolean;
+export function lastOnboardingShownAt(ledger: Ledger): number | null;
 export function dayOneOver(ledger: Ledger, now: number): boolean;
 export function msUntilCardAllowed(ledger: Ledger, id: CardId | string, now: number): number | null;
 export function pickPromotional(candidateIds: readonly (CardId | string)[], ledger: Ledger, now: number): CardId | null;

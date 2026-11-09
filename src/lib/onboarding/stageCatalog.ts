@@ -5,7 +5,8 @@
  * Order matters: stages are evaluated front-to-back and the first eligible
  * wins (single-slot invariant), so the promotional stages' order IS their
  * priority. A stage that names a `card` also obeys the card ledger (strikes,
- * retirement, day one, the 72 h budget, one card of its class per launch);
+ * retirement, day one, the 72 h budget, onboarding cards 24 h apart), and
+ * every visible stage shares one full-window card per launch;
  * those rules live in the orchestrator and src/lib/cards/cardPolicy.mjs. The
  * predicates here only say whether a card is relevant to this user at all.
  *
@@ -87,7 +88,9 @@ export const STAGE_ORDER: ToasterId[] = [
 export const STAGES: StageConfig[] = [
   // ── Essential ─────────────────────────────────────────────────
   // Permissions — first launch, then only when a required permission needs
-  // attention (src/lib/permissionAttentionPolicy.mjs).
+  // attention (src/lib/permissionAttentionPolicy.mjs) and the user has not put
+  // it off (src/lib/permissionsCardPolicy.mjs, applied where App.tsx pushes
+  // permissionsNeedAttention).
   {
     id: 'permissions',
     order: 1,
@@ -98,6 +101,9 @@ export const STAGES: StageConfig[] = [
       (s.permsShown && !s.permissionsNeedAttention),
     reEligibility: (s) => s.permissionsNeedAttention,
     reopensWhenReEligible: true,
+    // A meeting that could not start for a missing permission: this card is
+    // the way out, even after this launch's one card.
+    bypassesLaunchCap: (s) => s.permissionsRecoveryRequested,
   },
 
   // ── Onboarding (day 1 allowed, one per launch) ────────────────

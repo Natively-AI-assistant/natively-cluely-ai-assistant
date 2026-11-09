@@ -59,8 +59,11 @@ test('live download figures flow from the updater event to the card', () => {
 
 test('hiding a running download minimises to the corner toast; errors bring the card back', () => {
   assert.match(banner, /if \(status === 'downloading'\) \{\s*setMinimized\(true\);\s*return;/);
-  assert.ok(banner.includes('isOpen={isVisible && minimized}'));
-  assert.ok(banner.includes('isOpen={isVisible && !minimized}'));
+  // Through the corner slot and the one full-window card slot since 2026-11-09.
+  assert.ok(banner.includes("useCornerSlot('update', isVisible && minimized)"));
+  assert.ok(banner.includes('isOpen={corner.show}'));
+  assert.ok(banner.includes('const wantsCard = isVisible && !minimized;'));
+  assert.ok(banner.includes('isOpen={cardOpen}'));
   const onError = banner.slice(banner.indexOf('onUpdateError'), banner.indexOf('return () => {', banner.indexOf('onUpdateError')));
   assert.ok(onError.includes('setMinimized(false)'), 'an error must restore the full card');
 });

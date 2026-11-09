@@ -16,6 +16,7 @@ import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { useT } from '../i18n';
 import { FONT, INK_DARK, INK_LIGHT, PANEL, PANEL_INK, QuietButton, TOAST_SHADOW } from './UpdateModal';
 import { offerHeadline, offerSecondsLeft, type MeetingOfferLike } from '../lib/meetingOfferView.mjs';
+import { useCornerSlot } from '../hooks/useCornerSlot';
 
 export const MeetingOfferToast: React.FC = () => {
     const t = useT();
@@ -41,6 +42,9 @@ export const MeetingOfferToast: React.FC = () => {
         return () => window.clearInterval(timer);
     }, [counting, offer?.id]);
 
+    // The bottom-right corner holds one notice at a time; this one has it first.
+    const corner = useCornerSlot('meeting_offer', !!offer);
+
     const secondsLeft = offerSecondsLeft(offer, now);
     const headline = offer ? offerHeadline(offer) : '';
 
@@ -59,7 +63,8 @@ export const MeetingOfferToast: React.FC = () => {
 
     return (
         <GenieModal
-            open={!!offer}
+            open={corner.show}
+            closeInstantly={corner.displaced}
             label="MeetingOfferToast"
             modal={false}
             placement="bottom-right"

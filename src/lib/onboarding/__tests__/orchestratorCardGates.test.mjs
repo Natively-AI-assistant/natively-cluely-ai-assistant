@@ -21,6 +21,9 @@ let mockNow = 0;
 
 function installPolyfills() {
   const store = new Map();
+  // Each orchestrator built here is a new launch: no sessionStorage (Node has
+  // one per process), so this launch's card record starts empty (launchSession.mjs).
+  globalThis.sessionStorage = undefined;
   globalThis.localStorage = {
     getItem: (k) => (store.has(k) ? store.get(k) : null),
     setItem: (k, v) => store.set(k, String(v)),
@@ -117,28 +120,39 @@ test('one onboarding card per launch', () => {
   assert.equal(active(orch), null);
 });
 
-test('an onboarding card and a promo can share a launch, 60 s apart', () => {
+// 2026-11-09: one full-window card per launch in total, not one per class.
+test('an onboarding card and a promo do not share a launch', () => {
   const orch = launch([EXT, PROFILE], { cardLedger: matureLedger() });
   assert.equal(active(orch), 'browser_extension');
   orch.markDismissed('browser_extension');
-  mockNow += 30_000;
+  mockNow += 10 * 60_000;
   flush();
-  assert.equal(active(orch), null, 'too soon after the last card closed');
-  mockNow += 31_000;
-  flush();
-  assert.equal(active(orch), 'profile_ad');
+  assert.equal(active(orch), null, 'the promo waits for a later launch');
 });
 
-test('spacing also follows a card without a ledger entry (permissions)', () => {
+test('the permissions card is the launch\'s one card outside the Welcome launch', () => {
   const orch = launch([PLAIN, EXT], { cardLedger: matureLedger() });
+  assert.equal(active(orch), 'permissions');
+  orch.markDismissed('permissions');
+  mockNow += 10 * 60_000;
+  flush();
+  assert.equal(active(orch), null);
+});
+
+test('on the Welcome launch the permissions card may be followed by one more, 60 s apart', () => {
+  const orch = launch([PLAIN, EXT, PROFILE], { cardLedger: matureLedger(), welcomeThisLaunch: true });
   assert.equal(active(orch), 'permissions');
   orch.markDismissed('permissions');
   mockNow += 10_000;
   flush();
-  assert.equal(active(orch), null);
+  assert.equal(active(orch), null, 'spacing also follows a card without a ledger entry');
   mockNow += 51_000;
   flush();
   assert.equal(active(orch), 'browser_extension');
+  orch.markDismissed('browser_extension');
+  mockNow += 10 * 60_000;
+  flush();
+  assert.equal(active(orch), null, 'no third card');
 });
 
 test('nothing opens while the Trial ended card is on screen', () => {

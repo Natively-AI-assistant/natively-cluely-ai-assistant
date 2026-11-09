@@ -421,6 +421,8 @@ export interface ElectronAPI {
   onHindsightStatus: (callback: (data: { state: 'spawning' | 'ready' | 'unreachable' | 'spawn-failed' | 'auth-failed'; reason?: string; logPath?: string; at?: number }) => void) => () => void
   // Hindsight: open the server's log file in the OS default viewer. Path is resolved
   // server-side; renderer never supplies a path.
+  /** The last Hindsight lifecycle status broadcast, or null before the first. */
+  getHindsightStatus: () => Promise<{ state: 'spawning' | 'ready' | 'unreachable' | 'spawn-failed' | 'auth-failed'; reason?: string; logPath?: string; at?: number } | null>
   openHindsightLog: () => Promise<{ ok: boolean; logPath?: string; error?: string }>
   // Hindsight: user-initiated opt-out. Sets the explicit-disable sentinel.
   disableHindsight: () => Promise<{ success: boolean; error?: string }>
@@ -1333,6 +1335,9 @@ export interface ElectronAPI {
     key: 'seenStartup' | 'seenProfileOnboarding' | 'seenModesOnboarding' | 'permsShown',
     value: boolean,
   ) => Promise<{ success: boolean; error?: string }>;
+  /** The permissions card's closes while a permission is missing (src/lib/permissionsCardPolicy.mjs). */
+  permissionsCardGet: () => Promise<{ dismissals: number; lastDismissedAt: number | null }>;
+  permissionsCardRecord: (event: 'dismissed' | 'granted') => Promise<{ success: boolean; error?: string; record?: { dismissals: number; lastDismissedAt: number | null } }>;
   /** First-launch shortcut tour: taught shortcuts become practice presses. */
   onboardingSetShortcutTour: (active: boolean) => Promise<{ success: boolean }>;
   onOnboardingTourShortcut: (callback: (actionId: string) => void) => () => void;

@@ -32,6 +32,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AlertCircle, Check, RefreshCw } from 'lucide-react';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
+import { useCornerSlot } from '../hooks/useCornerSlot';
 import '../ui-components/LiquidGlassButton.css';
 import './ProviderChangeNotice.css';
 
@@ -159,7 +160,9 @@ type Main =
   | { kind: 'running' | 'done'; progress: ReindexProgress };
 
 export const ProviderChangeNotice: React.FC<ProviderChangeNoticeProps> = (props) => {
-  const { open } = props;
+  // The bottom-right corner shows one notice at a time, and this one is last
+  // in line (src/lib/cornerSlot.mjs): it waits while another is there.
+  const open = useCornerSlot('provider_notice', props.open).show;
   // The host clears everything as it closes the card; the slide out keeps the
   // last open content instead of emptying as it goes.
   const lastOpen = useRef(props);

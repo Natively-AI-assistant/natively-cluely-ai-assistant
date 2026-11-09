@@ -19,6 +19,7 @@ import { useT } from '../../i18n';
 import { formatMeter, TRIAL_FALLBACK_LIMITS, type TrialLimits, type TrialUsage } from '../../types/nativelyUsage';
 import { TRIAL_ENDING_MS } from '../../lib/trial/overlayTrialNotice.mjs';
 import { shouldShowTrialMeter, trialClock, trialMeterView, type TrialMeterRow, type TrialMeterTone } from '../../lib/trial/trialMeter.mjs';
+import { useCornerSlot } from '../../hooks/useCornerSlot';
 import '../../ui-components/LiquidGlassButton.css';
 import './TrialMeterToaster.css';
 
@@ -126,7 +127,11 @@ export const TrialMeterToaster: React.FC<TrialMeterToasterProps> = ({ trial, rea
             limits: { ...TRIAL_FALLBACK_LIMITS, ...trial.limits },
         })
         : null;
-    const open = settled && !!live && shouldShowTrialMeter(live.tone, closedAt);
+    const wantsOpen = settled && !!live && shouldShowTrialMeter(live.tone, closedAt);
+    // The corner shows one notice at a time: a meeting offer, the update toast
+    // or the quota notice take it first, and the card is back when they go.
+    const corner = useCornerSlot('trial_meter', wantsOpen);
+    const open = corner.show;
 
     // The close plays on the last reading, not on an empty pane.
     const capMs = trial?.limits?.duration_ms;
@@ -157,12 +162,13 @@ export const TrialMeterToaster: React.FC<TrialMeterToasterProps> = ({ trial, rea
     return (
         <GenieModal
             open={open}
+            closeInstantly={corner.displaced}
             label="TrialMeterToaster"
             modal={false}
             placement="bottom-right"
             keepPictures={false}
-            // Under the corner's passing notices (update, memory): they land
-            // on top of it and it is there again when they leave.
+            // Under the corner's other notices; the corner slot
+            // (src/lib/cornerSlot.mjs) keeps them from showing at once.
             zIndex={9998}
             padding={24}
             wrapClassName="w-[256px]"

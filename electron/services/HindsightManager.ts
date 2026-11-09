@@ -107,6 +107,22 @@ export class HindsightManager {
   private sessionMemoryOverride = false;
   /** Where the spawned server's stdout/stderr is written (for failure diagnostics). */
   private logPath: string | null = null;
+  /**
+   * The last lifecycle status sent to the renderers. A window that subscribes
+   * after a broadcast (the launcher's notice mounts seconds after boot) reads
+   * it through `hindsight:get-status` instead of missing a boot-time failure.
+   */
+  private lastStatus: { state: string; reason?: string; logPath?: string; at: number } | null = null;
+
+  /** The last lifecycle status broadcast, or null before the first. */
+  getLastStatus(): { state: string; reason?: string; logPath?: string; at: number } | null {
+    return this.lastStatus;
+  }
+
+  /** A status broadcast from outside this class (ipcHandlers.ts), kept as the last one. */
+  noteStatus(payload: { state: string; reason?: string; logPath?: string; at: number }): void {
+    this.lastStatus = payload;
+  }
 
   /** Lazily read SettingsManager — avoids a hard import cycle + works headless (returns null). */
   private settings(): SettingsLike | null {
@@ -138,9 +154,10 @@ export class HindsightManager {
       this.lastHealthy = false;
       this.lastCheckedAt = Date.now();
     }
+    const payload = { state, reason: reason || undefined, logPath: this.logPath || undefined, at: Date.now() };
+    this.lastStatus = payload;
     try {
       const { BrowserWindow } = require('electron') as typeof import('electron');
-      const payload = { state, reason: reason || undefined, logPath: this.logPath || undefined, at: Date.now() };
       BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) {
           win.webContents.send('hindsight-status', payload);
