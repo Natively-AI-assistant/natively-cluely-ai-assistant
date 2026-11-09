@@ -96,7 +96,7 @@ describe('no-evidence notice — branch ordering', () => {
     assert.ok(!/No NEW material was retrieved/.test(t2.user),
       'the history block must not REPLACE the tailored notice');
     // And the caveat is still there — both facts, not one overriding the other.
-    assert.match(t2.user, /check the conversation above/i,
+    assert.match(t2.user, /check the conversation below/i,
       'plain history is appended as a caveat, never a replacement');
     // Scoped to the EVIDENCE BLOCK. The conversation header carries its own
     // "you may answer from it directly" for the screen exception, so a

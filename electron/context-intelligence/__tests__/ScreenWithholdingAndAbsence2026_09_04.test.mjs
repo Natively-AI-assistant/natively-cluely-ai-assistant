@@ -140,7 +140,7 @@ describe('a stale screen line does not replace the tailored absence copy', () =>
     store.recordAnswerSummary(sid, 'Plenty — ask me anything.');
     const t2 = await turn(sid, 'What is my strongest skill?', 2);
     assert.match(t2.user, /not established by any available source|no such file exists here/i);
-    assert.match(t2.user, /check the conversation above/i,
+    assert.match(t2.user, /check the conversation below/i,
       'plain history keeps appending its caveat, exactly as before');
   });
 });
