@@ -1366,6 +1366,8 @@ export interface ElectronAPI {
   // manager. Enable/disable is intentionally NOT exposed on the renderer —
   // users who don't want a skill delete it instead.
   skillsDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
+  /** "Use in every answer": the skill rides every live and typed answer without its /name. */
+  skillsSetAlwaysOn?: (id: string, alwaysOn: boolean) => Promise<{ success: boolean; error?: string }>;
   // Skill upload — step-3 wiring. `skillsUpload(payload, { autoInstall: true })`
   // is a one-shot validate+install; `skillsPreview(payload)` always sets
   // `autoInstall: false` so the renderer can show a confirm card first.
@@ -1576,6 +1578,7 @@ export interface SkillSummary {
   description: string;
   source: 'builtin' | 'userData';
   enabled: boolean;
+  alwaysOn?: boolean; // "Use in every answer" (Settings › Skills)
 }
 
 // ---------------------------------------------------------------------------

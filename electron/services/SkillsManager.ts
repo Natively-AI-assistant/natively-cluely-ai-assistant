@@ -10,6 +10,11 @@ export interface SkillSummary {
   description: string;
   source: SkillSource;
   enabled: boolean;
+  /**
+   * Used in every answer (live What to answer, typed chat) without a /name
+   * prefix — the "Use in every answer" switch in Settings › Skills.
+   */
+  alwaysOn: boolean;
 }
 
 export interface SkillDetails extends SkillSummary {
@@ -23,7 +28,17 @@ const SKILLS_STATE_FILE_NAME = '.skills-state.json';
 
 interface SkillsState {
   disabledFolders: string[];
+  /** Folders whose skill rides every answer (see SkillSummary.alwaysOn). */
+  alwaysOnFolders: string[];
 }
+
+/**
+ * Cap on the always-on skills' combined instructions per answer. A SKILL.md may
+ * be up to 100 KB, and an always-on one rides EVERY live answer, so an
+ * uncapped one would crowd out the transcript and slow every turn. Skills are
+ * taken whole in list order until the next would pass the cap.
+ */
+const ALWAYS_ON_MAX_CHARS = 16_000;
 
 const BUILTIN_HUMANIZE_TEXT = `---
 name: humanize-ai-text
@@ -714,9 +729,12 @@ ${skill.instructions}
   private pruneDeletedFolder(folderName: string): void {
     try {
       const state = this.readSkillsState();
-      if (state.disabledFolders.includes(folderName)) {
+      // Both sets: a skill installed later into the same folder name must not
+      // inherit "disabled" or "Use in every answer" from the one deleted.
+      if (state.disabledFolders.includes(folderName) || state.alwaysOnFolders.includes(folderName)) {
         this.writeSkillsState({
           disabledFolders: state.disabledFolders.filter(f => f !== folderName),
+          alwaysOnFolders: state.alwaysOnFolders.filter(f => f !== folderName),
         });
       }
     } catch (error: any) {
@@ -741,16 +759,58 @@ ${skill.instructions}
 
     if (enabled && currentlyDisabled) {
       this.writeSkillsState({
+        ...state,
         disabledFolders: state.disabledFolders.filter(f => f !== folderName),
       });
     } else if (!enabled && !currentlyDisabled) {
       this.writeSkillsState({
+        ...state,
         disabledFolders: [...state.disabledFolders, folderName],
       });
     }
     // If the desired state already matches what's persisted, no-op (don't write).
 
     return { success: true };
+  }
+
+  /** The "Use in every answer" switch. Keyed by folder, like the disabled set. */
+  public setSkillAlwaysOn(id: string, alwaysOn: boolean): { success: boolean; error?: string } {
+    const skill = this.getSkill(id);
+    if (!skill) return { success: false, error: `Skill "${id}" not found.` };
+    if (!skill.filePath) return { success: false, error: 'Skill has no on-disk location.' };
+    const folderName = path.basename(path.dirname(skill.filePath));
+    const state = this.readSkillsState();
+    const current = state.alwaysOnFolders.includes(folderName);
+    if (alwaysOn && !current) {
+      this.writeSkillsState({ ...state, alwaysOnFolders: [...state.alwaysOnFolders, folderName] });
+    } else if (!alwaysOn && current) {
+      this.writeSkillsState({ ...state, alwaysOnFolders: state.alwaysOnFolders.filter(f => f !== folderName) });
+    }
+    return { success: true };
+  }
+
+  /**
+   * The prompt block for every enabled skill switched to "Use in every answer",
+   * or '' when there are none. `excludeId` leaves out a skill the turn already
+   * carries because the user typed its /name.
+   */
+  public getAlwaysOnPromptBlock(excludeId?: string): string {
+    // Runs on every answer: with nothing switched on (the common case) answer
+    // from the small state file instead of loading every SKILL.md from disk.
+    if (this.readSkillsState().alwaysOnFolders.length === 0) return '';
+    const blocks: string[] = [];
+    let total = 0;
+    for (const skill of this.loadSkills()) {
+      if (!skill.alwaysOn || skill.enabled === false || skill.id === excludeId) continue;
+      const block = this.buildPromptBlock(skill);
+      if (total + block.length > ALWAYS_ON_MAX_CHARS) {
+        console.warn(`[SkillsManager] always-on skill "${skill.id}" left out: the always-on skills pass ${ALWAYS_ON_MAX_CHARS} chars`);
+        continue;
+      }
+      blocks.push(block);
+      total += block.length;
+    }
+    return blocks.join('\n\n');
   }
 
   private ensureSkillsDir(): void {
@@ -782,16 +842,18 @@ ${skill.instructions}
   private readSkillsState(): SkillsState {
     const statePath = path.join(this.skillsDir, SKILLS_STATE_FILE_NAME);
     try {
-      if (!fs.existsSync(statePath)) return { disabledFolders: [] };
+      if (!fs.existsSync(statePath)) return { disabledFolders: [], alwaysOnFolders: [] };
       const raw = fs.readFileSync(statePath, 'utf8');
       const parsed = JSON.parse(raw);
-      if (!parsed || !Array.isArray(parsed.disabledFolders)) return { disabledFolders: [] };
+      if (!parsed || typeof parsed !== 'object') return { disabledFolders: [], alwaysOnFolders: [] };
+      const strings = (v: unknown): string[] => Array.isArray(v) ? v.filter((x: unknown): x is string => typeof x === 'string') : [];
       return {
-        disabledFolders: parsed.disabledFolders.filter((x: unknown) => typeof x === 'string'),
+        disabledFolders: strings(parsed.disabledFolders),
+        alwaysOnFolders: strings(parsed.alwaysOnFolders),
       };
     } catch (error: any) {
       console.warn('[SkillsManager] Failed to read skills state file, defaulting to empty:', error?.message || error);
-      return { disabledFolders: [] };
+      return { disabledFolders: [], alwaysOnFolders: [] };
     }
   }
 
@@ -829,7 +891,9 @@ ${skill.instructions}
     const skills: SkillDetails[] = [];
     // The disabled set is keyed by on-disk folder name (NOT by parsed id) so a
     // user hand-editing SKILL.md's name: field doesn't silently orphan the entry.
-    const disabledFolders = new Set(this.readSkillsState().disabledFolders);
+    const skillsState = this.readSkillsState();
+    const disabledFolders = new Set(skillsState.disabledFolders);
+    const alwaysOnFolders = new Set(skillsState.alwaysOnFolders);
 
     let entries: fs.Dirent[];
     try {
@@ -876,7 +940,7 @@ ${skill.instructions}
         const source: SkillSource = (
           BUILTIN_SKILL_IDS.has(entry.name) || BUILTIN_SKILL_IDS.has(skill.id)
         ) ? 'builtin' : 'userData';
-        skills.push({ ...skill, source, enabled: !disabledFolders.has(entry.name) });
+        skills.push({ ...skill, source, enabled: !disabledFolders.has(entry.name), alwaysOn: alwaysOnFolders.has(entry.name) });
       } catch (error: any) {
         if (error?.code !== 'ENOENT') {
           console.warn(`[SkillsManager] Skipping invalid skill "${entry.name}":`, error?.message || error);

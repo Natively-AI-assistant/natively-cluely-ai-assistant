@@ -31,6 +31,7 @@ import {
     SettingsNotice,
     SettingsRow,
     SettingsSectionHeading,
+    SettingsSwitch,
     SwapLabel,
     useMotionReadyAfter,
     useSettingsTones,
@@ -199,6 +200,27 @@ export const SkillsSettings: React.FC = () => {
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, [confirmingId]);
+    // "Use in every answer": flips at once, and flips back if main refuses.
+    const toggleAlwaysOn = async (skill: SkillSummary) => {
+        const next = !skill.alwaysOn;
+        const setLocal = (value: boolean) => setSkills(prev => prev.map(s => (s.id === skill.id ? { ...s, alwaysOn: value } : s)));
+        if (typeof window.electronAPI?.skillsSetAlwaysOn !== 'function') {
+            setStatus(BRIDGE_MISSING_MSG);
+            return;
+        }
+        setLocal(next);
+        try {
+            const result = await window.electronAPI.skillsSetAlwaysOn(skill.id, next);
+            if (!result?.success) {
+                setLocal(!next);
+                setStatus(result?.error || 'Could not update this skill.');
+            }
+        } catch (error: any) {
+            setLocal(!next);
+            setStatus(error?.message || 'Could not update this skill.');
+        }
+    };
+
     const openFolder = async () => {
         try {
             if (typeof window.electronAPI?.skillsOpenFolder !== 'function') {
@@ -507,7 +529,7 @@ export const SkillsSettings: React.FC = () => {
                 <div className="min-w-0">
                     <SettingsSectionHeading
                         title={t('Skills')}
-                        subtitle={t('Instructions the chat follows. Start a message with /name or $name to use one.')}
+                        subtitle={t('Instructions Natively follows. Switch one on to use it in every answer, live ones included, or start a message with /name to use it once.')}
                     />
                 </div>
                 {/* Icon only (Evin, 2026-11-01: two labelled buttons beside the
@@ -652,8 +674,16 @@ export const SkillsSettings: React.FC = () => {
                                     truncateTitle
                                     badge={<span className="text-[11px] font-mono text-text-tertiary">/{skill.id}</span>}
                                     description={skill.description ? <span className="line-clamp-2">{skill.description}</span> : undefined}
-                                    // Built-ins have no delete: SkillsManager would refuse it.
-                                    control={skill.source !== 'builtin' ? (
+                                    // The switch: "Use in every answer". Built-ins have no
+                                    // delete: SkillsManager would refuse it.
+                                    control={<div className="flex items-center gap-2">
+                                    <SettingsSwitch
+                                        checked={skill.alwaysOn === true}
+                                        onChange={() => { void toggleAlwaysOn(skill); }}
+                                        label={t('Use {name} in every answer').replace('{name}', skill.name)}
+                                        disabled={deleting}
+                                    />
+                                    {skill.source !== 'builtin' ? (
                                         // The delete button and its confirm are one slot that changes identity.
                                         <Presence kind="control" id={confirming ? 'confirm' : 'idle'}>
                                             {confirming ? (
@@ -698,7 +728,8 @@ export const SkillsSettings: React.FC = () => {
                                                 </button>
                                             )}
                                         </Presence>
-                                    ) : undefined}
+                                    ) : null}
+                                    </div>}
                                 />
                             </div>
                         </CollapseItem>

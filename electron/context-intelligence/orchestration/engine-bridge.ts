@@ -165,6 +165,14 @@ export interface BridgeInput {
    * "Profile and history" provider scope is off. See ComposeInput.userBio.
    */
   userBio?: string;
+  /**
+   * Facts from the active mode's Real-time prompt (ModesManager.getActiveModeUserNotes).
+   * Mode configuration, like realtimeInstruction, so no provider scope removes
+   * it. See ComposeInput.modeNotes.
+   */
+  modeNotes?: string;
+  /** "Use in every answer" skills (SkillsManager.getAlwaysOnPromptBlock). See ComposeInput.standingSkills. */
+  standingSkills?: string;
   /** The APP's per-turn length default — see ComposeInput.defaultLengthDirective. Never concatenate it onto realtimeInstruction. */
   defaultLengthDirective?: string;
   /**
@@ -607,6 +615,8 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       realtimeInstruction: input.realtimeInstruction,
       defaultLengthDirective: input.defaultLengthDirective,
       userBio,
+      modeNotes: input.modeNotes,
+      standingSkills: input.standingSkills,
       diagramTurn,
       conversationSummary: convoSummary,
       // What-to-answer answers the OTHER person's question: their "I" is theirs.

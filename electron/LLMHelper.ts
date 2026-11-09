@@ -76,6 +76,7 @@ import curl2Json from "@bany/curl-to-json";
 import { CustomProvider, CurlProvider } from './services/CredentialsManager';
 import { TRIAL_SENTINEL_KEY } from './config/constants';
 import { emitNativelyPlanLimit, nativelyLimitErrorMessage } from './llm/nativelyPlanLimitEvents';
+import { interactiveSeedFor } from './llm/interactiveSeed';
 import axios from 'axios';
 import { createProviderRateLimiters, RateLimiter } from './services/RateLimiter';
 import { chatGptCompatibleModel, CodexCliConfig, CodexCliService, codexSignedOutMessage, DEFAULT_CODEX_CLI_CONFIG, getCodexAuthStatus } from './services/CodexCliService';
@@ -483,7 +484,11 @@ const MIN_USEFUL_RUNG_MS = 3_000;
 // run-to-run variance and keeps the race winner's STYLE consistent with the
 // primary. Vision/multimodal temps are left untouched.
 const INTERACTIVE_TEMPERATURE = 0.2; // "very low" per report; avoids degenerate-0 loops some models show
-const INTERACTIVE_SEED = 7;          // fixed seed where the SDK supports it (Groq/DeepSeek; Gemini via config). NOT sent to OpenAI: reasoning models (gpt-5/o-series) reject non-default seed/temperature with a 400.
+// Fixed seed where the SDK supports it (Groq/DeepSeek; Gemini via config), as
+// interactiveSeedFor's BASE: an identical prompt sent again within minutes (a
+// retry after a hang or an empty answer) gets the next seed, so one prompt
+// that makes a model hang cannot hang on every retry. NOT sent to OpenAI:
+// reasoning models (gpt-5/o-series) reject non-default seed/temperature with a 400.
 
 // Canned-fallback phrases that mean the model gave up entirely, not phrases
 // that might legitimately appear inside a real answer. Matched only when the
@@ -4571,6 +4576,7 @@ ANSWER DIRECTLY:`;
 Detect the language of the user's most recent message and ALWAYS respond in that exact same language.
 If the user writes in Hindi, respond in Hindi. If in Spanish, respond in Spanish. If in English, respond in English.
 If the language is ambiguous, default to English.
+If an ACTIVE SKILL the user switched on asks for a specific response language, answer in that language instead.
 You may mix scripts naturally (e.g. code stays in English even when the explanation is in another language).
 [END LANGUAGE INSTRUCTION]`;
     }
@@ -7593,11 +7599,11 @@ let isMultimodal = !!(imagePaths?.length);
    * DeepSeek ran at 0.2 / seed 7 / 8192 — same prompt, different generation.
    * `opts` is the fast-model seam's override (a small cap, temperature 0).
    */
-  private agentRouterOpenAIParams(model: string, opts?: AgentRouterCallOptions): Record<string, unknown> {
+  private agentRouterOpenAIParams(model: string, opts?: AgentRouterCallOptions, promptParts: Array<string | undefined> = []): Record<string, unknown> {
     if (isDeepseekModelId(model)) {
       return {
         temperature: opts?.temperature ?? INTERACTIVE_TEMPERATURE,
-        seed: INTERACTIVE_SEED,
+        seed: interactiveSeedFor('agentrouter', [model, ...promptParts]),
         max_tokens: opts?.maxTokens ?? this.getDeepseekMaxOutput(model),
         ...DEEPSEEK_NO_THINKING,
       };
@@ -7750,7 +7756,7 @@ let isMultimodal = !!(imagePaths?.length);
     let stream: any;
     try {
       stream = await client.chat.completions.create(
-        { model, messages, stream: true, ...this.agentRouterOpenAIParams(model, opts) } as any,
+        { model, messages, stream: true, ...this.agentRouterOpenAIParams(model, opts, [systemPrompt, userMessage, (imagePaths ?? []).join('|')]) } as any,
         { signal: abortSignal },
       );
     } catch (e: any) {
@@ -12632,7 +12638,7 @@ let isMultimodal = !!(imagePaths?.length);
       messages,
       stream: true as const,
       temperature: INTERACTIVE_TEMPERATURE,
-      seed: INTERACTIVE_SEED, // Groq honors seed for near-deterministic output
+      seed: interactiveSeedFor('groq', [modelId, systemPrompt, userMessage]), // Groq honors seed for near-deterministic output
       max_tokens: 8192,
     };
     require('./llm/providerPayloadCapture').captureProviderPayload({
@@ -12845,7 +12851,7 @@ let isMultimodal = !!(imagePaths?.length);
         messages,
         stream: true,
         temperature: INTERACTIVE_TEMPERATURE,
-        seed: INTERACTIVE_SEED, // DeepSeek is OpenAI-compatible and honors seed
+        seed: interactiveSeedFor('deepseek', [model, systemPrompt, userMessage, (imagePaths ?? []).join('|')]), // DeepSeek is OpenAI-compatible and honors seed
         max_tokens: this.getDeepseekMaxOutput(model),
         ...DEEPSEEK_NO_THINKING, // else the first token waits out the default reasoning
       }, { signal: abortSignal });
@@ -13207,10 +13213,13 @@ let isMultimodal = !!(imagePaths?.length);
       : null;
     if (_gmeasure) console.log(`[Gemini.stream] +${Date.now() - _gt0}ms  cache resolve done (cacheHit=${Boolean(cacheName)}, sysPrompt=${systemInstruction?.length ?? 0}c, model=${model})`);
 
+    // Once per request (buildConfig runs again on a cache miss retry, which must
+    // not count as a repeat of the prompt).
+    const requestSeed = interactiveSeedFor('gemini', [model, systemInstruction, fullMessage, (imagePaths ?? []).join('|')]);
     const buildConfig = (useCacheName: string | null) => ({
       maxOutputTokens: MAX_OUTPUT_TOKENS,
       temperature: INTERACTIVE_TEMPERATURE,
-      seed: INTERACTIVE_SEED, // Gemini v1alpha honors seed in generationConfig
+      seed: requestSeed, // Gemini v1alpha honors seed in generationConfig
       // Per-request thinking config (doc-correct 3.x thinkingLevel): 'minimal'
       // (off, fast) for budget≤0, 'low' for Pro (which can't disable), or an
       // explicit numeric budget when a caller passes a positive one. Threaded

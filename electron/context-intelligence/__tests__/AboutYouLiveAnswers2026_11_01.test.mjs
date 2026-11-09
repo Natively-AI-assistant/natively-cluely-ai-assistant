@@ -81,10 +81,16 @@ describe('every V3 call site passes the gated bio', () => {
   const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
   test('IntelligenceEngine (what-to-answer, assist, engine chat) and ipcHandlers (typed chat)', () => {
     const count = (src) => (src.match(/buildV3Prompt\(\{/g) ?? []).length;
-    const gated = (src) => (src.match(/userBio: \(require\('\.\/services\/proAccess'\)[^)]*\)\)\.userBioForAnswers\(\)/g) ?? []).length;
+    // 2026-11-09: each site spreads personalContextForAnswers, the one reader
+    // of About you (plus the mode's notes and "Use in every answer" skills).
+    const gated = (src) => (src.match(/\.\.\.\(require\('\.\/services\/answerPersonalContext'\)[^)]*\)\)\.personalContextForAnswers\(/g) ?? []).length;
     const ie = read('electron/IntelligenceEngine.ts');
     const ipc = read('electron/ipcHandlers.ts');
     assert.equal(gated(ie), count(ie));
     assert.equal(gated(ipc), count(ipc));
+  });
+  test('that reader takes About you through the Pro gate', () => {
+    const helper = read('electron/services/answerPersonalContext.ts');
+    assert.match(helper, /userBio = \(require\('\.\/proAccess'\)[^)]*\)\)\.userBioForAnswers\(\)/);
   });
 });

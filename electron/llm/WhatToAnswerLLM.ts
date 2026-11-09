@@ -1151,7 +1151,22 @@ The user triggered this action with a coding problem on screen and NO new questi
             // own section; the v2 envelope and the legacy packet get it appended
             // (never twice — see withDiagramTurnBlock).
             const _wtaUserBase = _v3p?.user ?? _v2TurnUser ?? packet.userMessage;
-            const _wtaUserMessage = _v3p ? _wtaUserBase : withDiagramTurnBlock(_wtaUserBase, diagramTurn);
+            // What the user told the app about themselves (2026-11-09): the V3
+            // composer carries About you, the mode's Real-time prompt facts and
+            // "Use in every answer" skills; the v2 envelope and the legacy packet
+            // carried none, so with V3 off or failed a live answer invented the
+            // user's background. Appended last, where the composer puts them.
+            const _personalBlock = _v3p ? '' : (() => {
+                try {
+                    return (require('../services/answerPersonalContext') as typeof import('../services/answerPersonalContext')).personalContextBlockForAnswers({
+                        answerType: answerPlan?.answerType,
+                        modeId: requestSnapshot?.modeUniqueId ?? null,
+                        explicitSkillId: activeSkill?.id ?? null,
+                    });
+                } catch { return ''; }
+            })();
+            const _wtaLegacyUser = _personalBlock ? `${_wtaUserBase}\n\n${_personalBlock}` : _wtaUserBase;
+            const _wtaUserMessage = _v3p ? _wtaUserBase : withDiagramTurnBlock(_wtaLegacyUser, diagramTurn);
             // PR #429 Bug 003: `_v3p?.system ?? finalPromptOverride` discarded the
             // ACTIVE SKILL block on every V3 turn — finalPromptOverride is its only
             // carrier and V3 is default ON, so `??` never fell through.
