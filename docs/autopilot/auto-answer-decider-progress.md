@@ -322,3 +322,57 @@ The Natively decision tier, 3 passes, 561 calls, one at a time. Exit 0: **no set
   - Estimate: ~5 min per transcript per worker, so about 40 h for 1,000 at 2 workers.
 - **Internal disk is at 187 MB free.** Claude Code's temp output lives there; everything in
   this campaign writes to the SSD.
+
+### 2026-11-10 (cont.): pilot end to end; Phase 3 sequence port with parity
+
+- **Restart lesson.** The detached runs died with the session at 21:36 UTC; the generator was at
+  15/1000 and pilot labeling at 72/117. Both resumed from their outputs. They now start with
+  `os.setsid()` (their own session), so a Claude Code restart cannot kill them. Generation
+  measures ~97-100 s per transcript at 2 workers, about 27 h for the rest.
+- **Teacher tie handling.**
+  - The two views split on audio and readiness checks ("can you hear me okay?").
+  - The production judge prompt makes those `answer` (rule: "small logistics they still have
+    to respond to"), so the rubric now says the same. This comes from the judge prompt, not
+    from gold.
+  - A 2-2 tie gets a 5th vote: the judge prompt at `high` effort. The soft label keeps the
+    3/5 split.
+  - `adjudicate.html` (offline; keys a/s/w/x and arrows; exports JSONL) handles any record
+    still without a majority. `build_dataset.py --adjudicated` merges the export back with
+    one-hot labels.
+- **Leakage check: bag-of-words containment was wrong.**
+  - On the first pilot build, "and what would you change?" "contained" itself in three
+    unrelated long texts, one of them gold.
+  - Containment is now over normalized word trigrams, i.e. copying, not shared vocabulary.
+  - Self-test adds that exact false positive (must pass) and a gold ask embedded in a longer
+    synthetic candidate (must leak). PASSED.
+- **Pilot build** (4 transcripts → 117 candidates → 117 labels):
+
+      .venv/bin/python data/build_dataset.py --candidates data/work/pilot-candidates.jsonl --labels data/work/pilot-labels.jsonl --out data/work/pilot-dataset --e5-dir <main>/resources/models/Xenova/multilingual-e5-small
+
+  - 0 leaks; 110 records, 7 to adjudicate.
+  - Fit dropped context turns on 15 records; no candidate was cut.
+- **`laya-train --dry-run`** on the pilot rows: 21/21 train and 89/89 eval valid, none
+  skipped. The row format is accepted by the trainer itself.
+
+      .venv/bin/laya-train --data data/work/pilot-dataset/train.laya.jsonl --eval data/work/pilot-dataset/dev.laya.jsonl --dry-run --device cpu
+
+- **Phase 3, steps 3 and 4 (done early: the input format does not change with fine-tuning).**
+  - Files: `decider/layaSequence.ts` (build_head, build_sequence, collate, decode, clamp,
+    temp buckets) and `decider/layaTokenizer.ts` (a transformers.js adapter that resolves the
+    special ids from the vocabulary, because `cls_token_id` is undefined in transformers.js
+    3.8 for this tokenizer).
+  - Fixtures: `export/make_sequence_fixtures.py` writes 303 cases (187 gold, 113 pilot,
+    3 edge: a mask token, astral characters and U+2028, an over-long candidate) plus 3
+    head-cap questions, and ships the checkpoint tokenizer gzipped (637 KB, Apache-2.0
+    NOTICE).
+  - `DeciderSequence2026_11_10.test.mjs`: 8/8 pass (2 ONNX tests skip without the model).
+    The TS fit reproduces Python's serialized state, and ids, markers and truncation are
+    IDENTICAL on all 303. Decoded probabilities and both confidences agree within 1e-4.
+  - Mutation probes: mask not replaced, option cap 47, K floor 1, per-option budget, and
+    no temperature. All red. The first run had 2 probes green, which led to adding the
+    head-cap fixtures and a lone one-option collate case.
+  - **ONNX through onnxruntime-node 1.22 (the app's runtime), zero-shot export:** fp32 logits
+    within 1e-3 of Python on 303/303. **int8 keeps fp32's argmax on only 196/303.** That is
+    the known zero-shot int8 problem; the ≥99% bar applies to the fine-tuned export.
+
+      DECIDER_ONNX_DIR=$PWD/ml/auto-answer-decider/artifacts/zero-shot-onnx node --test electron/intelligence/autoAnswer/__tests__/DeciderSequence2026_11_10.test.mjs

@@ -50,7 +50,8 @@ Labels:
 
 Hard cases:
 - A task stated as a sentence ("your job is to build X", "we need a schema for orders") is answer. So is a short or yes/no question, and a report that implies "how do we fix this".
-- Explanation that only contains question words, a recap ending in "right?" or "okay?", a paraphrase of what the USER said, permission ("feel free to…"), scheduling, screen sharing, time checks and "we'll come back to that" are silent.
+- Explanation that only contains question words, a recap ending in "right?" or "okay?", a paraphrase of what the USER said, permission ("feel free to…"), arranging the session (scheduling, "go ahead and share your screen", time checks) and "we'll come back to that" are silent.
+- A small check the USER still has to reply to ("can you hear me okay?", "can you see my screen?", "are you ready to start?") is answer: the USER must respond.
 - A question the speaker answers themselves is silent. A question followed by a DIFFERENT person's short reply is still answer if the USER is meant to answer it.
 - Named to someone other than the USER: silent. The USER's own words leaking onto the meeting audio ("can I use Python?") are silent.
 - The ask in last_answered, restated or with details added: silent. A genuinely changed requirement: answer.
@@ -108,10 +109,20 @@ export async function labelRecord(rec, log = () => {}) {
     const [j2, r2] = await Promise.all([judgeVote(rec, 'medium', log), rubricVote(rec, 'medium', log)]);
     votes.push({ view: 'judge', effort: 'medium', ...j2 }, { view: 'rubric', effort: 'medium', ...r2 });
   }
-  const counts = Object.fromEntries(LABELS.map((l) => [l, votes.filter((v) => v.label === l).length]));
-  const valid = votes.filter((v) => v.label).length;
-  const ranked = LABELS.slice().sort((a, b) => counts[b] - counts[a]);
-  const label = valid && counts[ranked[0]] > counts[ranked[1]] ? ranked[0] : null;
+  const tally = () => {
+    const counts = Object.fromEntries(LABELS.map((l) => [l, votes.filter((v) => v.label === l).length]));
+    const ranked = LABELS.slice().sort((a, b) => counts[b] - counts[a]);
+    return { counts, valid: votes.filter((v) => v.label).length, top: counts[ranked[0]] > counts[ranked[1]] ? ranked[0] : null };
+  };
+  let t = tally();
+  if (t.valid && !t.top) {
+    // a tie: one more vote, the production judge prompt at high effort, breaks it. The soft
+    // label keeps the split (3/5 vs 2/5), so the student learns these are uncertain.
+    votes.push({ view: 'judge', effort: 'high', tiebreak: true, ...(await judgeVote(rec, 'high', log)) });
+    t = tally();
+  }
+  const { counts, valid } = t;
+  const label = t.top;
   const soft = valid ? LABELS.map((l) => counts[l] / valid) : null;
   return { id: rec.id, label, soft, votes, teacher: MODEL, needs_adjudication: label === null };
 }

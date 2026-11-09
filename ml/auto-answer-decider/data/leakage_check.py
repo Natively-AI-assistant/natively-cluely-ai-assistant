@@ -6,7 +6,7 @@ near-duplicates with each other either (they are split by transcript, so one wou
 the generator repeated itself across transcripts).
 
 A pair is a leak when EITHER test fires:
-  - normalized-text containment >= 0.8: the share of the shorter text's word bag found in
+  - normalized-text containment >= 0.8: the share of the shorter text's word TRIGRAMS found in
     the longer one. Texts under 5 words only match on exact normalized equality, since
     "and why?" would otherwise "contain" half the corpus;
   - cosine >= 0.92 between multilingual-e5-small embeddings ("query: " prefix, mean pooling,
@@ -42,20 +42,26 @@ def words(text):
     return re.sub(r"[^\w\s']", " ", str(text).lower()).split()
 
 
+def shingles(ws, n=3):
+    return Counter(tuple(ws[i:i + n]) for i in range(len(ws) - n + 1))
+
+
 def containment(a, b):
+    """Share of the shorter text's word trigrams found in the longer one (normalized text).
+
+    Trigrams, not a bag of words: measured on the first pilot build (2026-11-10), a bag let
+    "and what would you change?" (5 common words) "contain" itself in three unrelated long
+    candidates, gold included. Copying keeps word order; common words do not.
+    """
     wa, wb = words(a), words(b)
     short, long_ = (wa, wb) if len(wa) <= len(wb) else (wb, wa)
     if not short:
         return 0.0
     if len(short) < SHORT_WORDS:
         return 1.0 if short == long_ else 0.0
-    bag = Counter(long_)
-    hit = 0
-    for w in short:
-        if bag[w] > 0:
-            hit += 1
-            bag[w] -= 1
-    return hit / len(short)
+    sa, sb = shingles(short), shingles(long_)
+    hit = sum(min(n, sb[g]) for g, n in sa.items())
+    return hit / max(1, sum(sa.values()))
 
 
 class E5:
@@ -134,19 +140,21 @@ def find_leaks(a_rows, b_rows, e5, same=False):
                 leaks.append((a_rows[ai]["id"], b_rows[bj]["id"], "cosine", float(row[bj])))
     # containment: word-bag prefilter by shared rare words would be faster; at <=30k x 30k it is
     # run only against gold (small) and as a cheap exact/short check within splits.
+    def keys(t):
+        ws = words(t)
+        return {tuple(ws)} if len(ws) < SHORT_WORDS else set(shingles(ws))
     b_index = {}
     for j, t in enumerate(tb):
-        for w in set(words(t)):
-            b_index.setdefault(w, []).append(j)
+        for g in keys(t):
+            b_index.setdefault(g, []).append(j)
+        # a short text can only equal another short text, but a long text's trigrams must also
+        # be findable from a short one's side; containment() below decides either way
     for ai, t in enumerate(ta):
-        ws = words(t)
-        if not ws:
+        ks = keys(t)
+        if not ks:
             continue
-        cand = Counter(j for w in set(ws) for j in b_index.get(w, []))
-        need = max(1, int(CONTAINMENT_MIN * min(len(set(ws)), SHORT_WORDS)))
+        cand = Counter(j for g in ks for j in b_index.get(g, []))
         for bj, n in cand.items():
-            if n < need:
-                continue
             if same and (bj <= ai or a_rows[ai].get("transcript_id") == b_rows[bj].get("transcript_id")):
                 continue
             c = containment(t, tb[bj])
@@ -179,10 +187,15 @@ def self_test(e5):
         {"id": "t-short", "transcript_id": "c", "candidate": "and why"},
         {"id": "t-clean", "transcript_id": "d", "candidate": "Tell me about the last time you disagreed with your manager about a deadline."},
         {"id": "t-short-ok", "transcript_id": "e", "candidate": "And how?"},
+        # measured false positive of the bag-of-words version (pilot build 2026-11-10)
+        {"id": "t-common-words", "transcript_id": "f", "candidate": "and what would you change?"},
+        # a copied stretch of a gold candidate inside a longer synthetic one still leaks
+        {"id": "t-embedded", "transcript_id": "g", "candidate": "Okay so before lunch, how would you design a rate limiter for a public API that serves millions of clients? Take a minute."},
     ]
+    gold.append({"id": "g3", "candidate": "essentially a set yeah cool so I'm going to kind of change up the problem a little bit so now let's say that we were given this original dictionary as is but now what would you do"})
     leaks = find_leaks(train, gold, e5)
     hit = {a for a, *_ in leaks}
-    ok = {"t-exact", "t-para", "t-short"} <= hit and not ({"t-clean", "t-short-ok"} & hit)
+    ok = {"t-exact", "t-para", "t-short", "t-embedded"} <= hit and not ({"t-clean", "t-short-ok", "t-common-words"} & hit)
     print("self-test leaks:", sorted({(a, b, k) for a, b, k, _ in leaks}))
     print("self-test", "PASSED" if ok else "FAILED")
     return ok

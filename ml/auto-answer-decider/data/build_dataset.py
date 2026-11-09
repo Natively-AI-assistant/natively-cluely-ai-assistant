@@ -81,20 +81,28 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--e5-dir", default=os.path.join(lc.REPO, "resources", "models", "Xenova", "multilingual-e5-small"))
     ap.add_argument("--drop-leaks", action="store_true")
+    ap.add_argument("--adjudicated", help="adjudicated.jsonl exported from data/adjudicate.html")
     ap.add_argument("--model", default="convaiinnovations/laya")
     ap.add_argument("--skip-laya-rows", action="store_true")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
 
     labels = {r["id"]: r for r in read_jsonl(a.labels)}
+    human = {r["id"]: r["label"] for r in read_jsonl(a.adjudicated)} if a.adjudicated else {}
     recs, adjud = [], []
     for c in read_jsonl(a.candidates):
         lab = labels.get(c["id"])
         if not lab:
             continue
-        c = {**c, "label": lab["label"], "soft": lab["soft"], "teacher": lab.get("teacher"),
+        label, soft, by = lab["label"], lab["soft"], "teacher"
+        if c["id"] in human and human[c["id"]] in LABELS:
+            label, soft, by = human[c["id"]], [float(l == human[c["id"]]) for l in LABELS], "human"
+        c = {**c, "label": label, "soft": soft, "teacher": lab.get("teacher"), "labeled_by": by,
              "split": split_of(c["transcript_id"]), "source": "synthetic"}
-        (adjud if lab["label"] is None else recs).append(c)
+        if label is None:
+            adjud.append({**c, "votes": lab.get("votes", [])})
+        else:
+            recs.append(c)
     write_jsonl(os.path.join(a.out, "adjudicate.jsonl"), adjud)
 
     e5 = lc.E5(a.e5_dir)
