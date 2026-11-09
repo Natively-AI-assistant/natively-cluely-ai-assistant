@@ -181,8 +181,8 @@ export const INERT_MAX_WORDS = 6;
 /** Total inert words a verdict may be carried across. */
 export const INERT_MAX_TOTAL_WORDS = 12;
 const FILLER = /^(?:u+h+|u+m+|e+r+m*|a+h+|h+m+|m+)(?:[\s,.!-]+(?:u+h+|u+m+|e+r+m*|a+h+|h+m+|m+))*[\s,.!-]*$/i;
-/** Opens a clause that extends the ask ("and how you resolved it", "in O(1) time"). */
-const CONTINUATION_LEAD = /^(?:and|or|but|also|plus|then|so|because|cause|which|where|when|while|including|with|without|in|on|for|using|like|especially|except|unless|if|whether|that(?!['’])|to|as|how|what|why|who)\b/i;
+/** Opens a clause that extends the ask ("and how you resolved it", "in O(1) time", "First, insert a value.", "The input is sorted."). */
+const CONTINUATION_LEAD = /^(?:and|or|but|also|plus|then|so|because|cause|which|where|when|while|including|with|without|in|on|for|using|like|especially|except|unless|if|whether|that(?!['’])|to|as|how|what|why|who|first(?:ly)?|second(?:ly)?|third(?:ly)?|fourth|fifth|next|finally|lastly|last|another|additionally|bonus|step|part|one|two|three|four|five|a|an|the)\b/i;
 /** Opens a task or a constraint ("now implement it", "show me", "use three threads"). */
 const TASK_LEAD = /^(?:(?:ok(?:ay)?|now|alright|so|well|please|just)[,.!\s]+)*(?:write|implement|code|design|build|create|make|explain|describe|tell|walk|show|give|list|name|compare|contrast|solve|calculate|compute|draw|sketch|share|summari[sz]e|define|optimi[sz]e|refactor|debug|fix|prove|estimate|talk|elaborate|expand|clarify|try|start|continue|go|use|assume|imagine|suppose|consider|think|let['’]?s|now|answer|pick|choose)\b/i;
 

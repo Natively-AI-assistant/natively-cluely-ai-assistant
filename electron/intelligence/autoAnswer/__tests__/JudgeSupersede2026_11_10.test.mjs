@@ -81,6 +81,11 @@ test('isInertUtterance: short finished non-asks are inert; anything that could c
     'Our biggest pain is the weekend escalations.',     // report-shaped
     'Put that down',                          // a final with no full stop: unfinished
     'Second—',                                // cut off
+    'First, insert a value.',                 // a list item of the spec (live T08)
+    'Second, remove a value.',
+    'Finally, keep it thread safe.',
+    'The input is sorted.',                   // a constraint stated as a fact
+    'A value can repeat.',
   ]) {
     assert.equal(isInertUtterance(t, true), false, `not inert: ${t}`);
   }
@@ -146,9 +151,9 @@ test('an interim that grows past inert aborts the call then', async () => {
   const h = makeHarness();
   h.say('Why did you choose PostgreSQL over the alternatives on that project?');
   await h.advance(EARLY_JUDGE_MS + 60);
-  h.say('A man', false);
+  h.say('You need', false);
   assert.equal(h.state.calls[0].signal.aborted, false);
-  h.say('A man who killed my wife is still out', false);
+  h.say('You need to get out of here right now', false);
   assert.equal(h.state.calls[0].signal.aborted, true, 'eight words is past what can be ruled inert');
 });
 
