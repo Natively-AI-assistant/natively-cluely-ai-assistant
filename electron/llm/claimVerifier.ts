@@ -294,6 +294,35 @@ export function claimVerifierDraftMessage(draftBody: string): string {
 }
 
 /**
+ * The pass as the TAIL of the answer's own call (2026-11-10), for the prompt cache.
+ *
+ * The pass used to run under its own system prompt, with the answer's user
+ * message replayed after it. A provider prompt cache (DeepSeek, Gemini) bills
+ * the start of a prompt it saw on a recent call at ~2% of the normal rate, but
+ * only an IDENTICAL start counts, and a different system prompt comes first.
+ * So the pass re-paid in full for material the answer had sent a second
+ * earlier: about 20% of all DeepSeek streamed prompt tokens in production.
+ *
+ * Now the call is the answer's system prompt and user message, unchanged, and
+ * this block after them: the verifier's instructions, then the draft after
+ * the last "---" line (the instructions say where to find it). Checked on 8
+ * live-answer scenarios with a planted unsupported claim, 4 runs each,
+ * deepseek-flash: the claim left the rewrite 32/32 in both shapes; the rails
+ * accepted the edit 26/32 vs 22/32; the claim survived into the shipped text
+ * 6/32 vs 10/32; the supported fact kept 29/32 vs 30/32. On the last 3 hours
+ * of real prompt sizes the pass's billed input falls ~75%.
+ * NATIVELY_CLAIM_VERIFIER_SHARED_PREFIX=0 restores the old shape.
+ */
+export function claimVerifierInlineMessage(verifierSystemPrompt: string, draftBody: string): string {
+  return `# Verification pass — not a question to answer\nYour role for this message only: ${verifierSystemPrompt}\n\n---\n${claimVerifierDraftMessage(draftBody)}`;
+}
+
+/** Whether the live pass rides on the answer's own prompt (see claimVerifierInlineMessage). */
+export function claimVerifierSharesAnswerPrefix(env: Record<string, string | undefined> = process.env): boolean {
+  return env.NATIVELY_CLAIM_VERIFIER_SHARED_PREFIX !== '0';
+}
+
+/**
  * How much of the answer's prompt the pass may see, on both surfaces (2026-10-03).
  *
  * It was 24,000 characters everywhere: here for the typed pass, and through

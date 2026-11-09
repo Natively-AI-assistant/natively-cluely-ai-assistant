@@ -408,11 +408,17 @@ export class IntelligenceEngine extends EventEmitter {
         // message comes first); without one, the V3 user message stands in.
         const h: any = this.llmHelper;
         const canReplay = Boolean(h.replayAnswerCall?.(opts.turnKey, ''));
+        // The answer's own system prompt + user message first, the pass's
+        // instructions after them, so the provider's prompt cache reuses what
+        // the answer sent a second ago (cv.claimVerifierInlineMessage).
+        const shared = canReplay && cv.claimVerifierSharesAnswerPrefix();
         const run = await cv.runClaimVerifier({
             answer: opts.answer,
             material: opts.material,
             budgetMs: h.replayedAnswerHasImages?.(opts.turnKey) === true ? cv.CLAIM_VERIFIER_IMAGE_BUDGET_MS : cv.CLAIM_VERIFIER_BUDGET_MS,
-            startStream: (body, signal) => this.llmHelper.streamChat(...(canReplay
+            startStream: (body, signal) => this.llmHelper.streamChat(...(shared
+                ? this.repairCallArgs(opts.turnKey, cv.claimVerifierInlineMessage(system, body), signal, undefined, [], cv.CLAIM_VERIFIER_MATERIAL_MAX_CHARS)
+                : canReplay
                 ? this.repairCallArgs(opts.turnKey, cv.claimVerifierDraftMessage(body), signal, system, [], cv.CLAIM_VERIFIER_MATERIAL_MAX_CHARS)
                 : this.repairCallArgs(undefined, cv.claimVerifierStandaloneMessage(opts.material, body), signal, system))) as AsyncGenerator<string>,
             parentSignal: opts.signal,
@@ -420,7 +426,7 @@ export class IntelligenceEngine extends EventEmitter {
             clean: cleanAnswerArtifacts,
             observe: secondaryStreamObserver('verification'),
         });
-        console.log(`[ClaimVerifier] hotkey kind=${kind} ${run.changed ? 'edited' : 'kept'} (${run.outcome}) ${run.ms}ms`);
+        console.log(`[ClaimVerifier] hotkey kind=${kind} ${run.changed ? 'edited' : 'kept'} (${run.outcome}) ${run.ms}ms${shared ? ' shared_prefix' : ''}`);
         opts.trace.mark('repair_used', { reason: 'claim_verifier', outcome: run.outcome, changed: run.changed, ms: run.ms });
         return run.text;
     }

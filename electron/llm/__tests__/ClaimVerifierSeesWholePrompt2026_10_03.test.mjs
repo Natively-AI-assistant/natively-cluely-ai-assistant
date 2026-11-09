@@ -103,9 +103,10 @@ describe('the claim pass sees the pack the answer saw', () => {
     // 24,000 on every run since E1 (evidence-rich/docs/ITERATIONS-ER.md § E10). Every other repair keeps 24,000.
     const src = fs.readFileSync(path.join(root, 'electron/IntelligenceEngine.ts'), 'utf8');
     const uses = [...src.matchAll(/CLAIM_VERIFIER_MATERIAL_MAX_CHARS/g)].map((m) => m.index);
-    assert.equal(uses.length, 2, 'two call sites: verifyAnswerClaims and the doc-grounded repair');
+    assert.equal(uses.length, 3, 'three call sites: verifyAnswerClaims (shared-prefix and own-system shapes) and the doc-grounded repair');
     assert.ok(uses.some((at) => src.lastIndexOf('private async verifyAnswerClaims', at) > src.lastIndexOf('private repairCallArgs', at)), 'the cap is passed inside verifyAnswerClaims');
     assert.ok(/claimVerifierDraftMessage\(body\), signal, system, \[\], cv\.CLAIM_VERIFIER_MATERIAL_MAX_CHARS\)/.test(src));
+    assert.ok(/claimVerifierInlineMessage\(system, body\), signal, undefined, \[\], cv\.CLAIM_VERIFIER_MATERIAL_MAX_CHARS\)/.test(src), 'the shared-prefix shape asks for the cap too');
     assert.ok(/wtaRepairSystemPrompt,\s*\['reference_files'\],[\s\S]{0,900}?CLAIM_VERIFIER_MATERIAL_MAX_CHARS/.test(src), 'the doc-grounded repair passes the cap');
   });
 });
