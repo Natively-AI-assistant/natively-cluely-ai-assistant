@@ -124,3 +124,46 @@ leakage check, the adjudication tool, plus Phase 3 and 4 plumbing on the zero-sh
   sure of, and the judge takes the rest. Phase 7 checks this on gold against the judge's
   36/36 and 3 false-fire bar.
 - **D2 → later.** The Windows bench is deferred. Model-size choice stays provisional until then.
+
+---
+
+## Open questions from Phase 4 (2026-11-10)
+
+Both questions are Evin's to answer. Neither blocks: the code ships the safe current behavior,
+and the decider is `off` in packaged builds.
+
+### D4: memory arena for the decider worker
+
+**Background.** The app turns ORT's CPU memory arena off for every session
+(`getBoundedOnnxSessionOptions`). That is crash hardening: 9/9 macOS crash reports died in
+`BFCArena::Extend` during `Run()`.
+
+**Measured (ledger `20261110-0430-ort-version-arena-ab`).** On the zero-shot int8 graph, the
+arena cuts p90 from 1301 to 724 ms in onnxruntime-node 1.22.
+
+**Current state.** The decider worker keeps the app's bounded options (arena off).
+`NATIVELY_ONNX_ENABLE_CPU_MEM_ARENA=1` already overrides it for testing.
+
+**Question.** Enable the arena for this one worker? It runs at most one call at a time and holds
+an ONNX slot, but the crash class was aggregate pressure across sessions, so it is not obviously
+safe. My recommendation is no, unless D5 does not close the latency gap.
+
+### D5: upgrade onnxruntime-node (1.22.0 → current)
+
+**Measured on the same 187 gold sequences, same int8 graph, 4 threads.**
+
+| Runtime | p50 | p90 |
+|---|---|---|
+| Python ORT 1.31.1 | 246 ms | 371 ms |
+| Python ORT 1.22.0 | 651 ms | 924 ms |
+| onnxruntime-node 1.22 | 424 ms | 724 ms |
+
+Most of the app's latency gap is the ORT version, not Node.
+
+**Why it is not my call.** onnxruntime-node is a native dependency shared by Whisper/Moonshine/
+Parakeet STT, embeddings, the reranker and the router, on darwin and win32 (x64 and arm64,
+DirectML DLLs). CLAUDE.md forbids upgrading a native dependency without checking both platforms
+and packaged loading.
+
+**Question.** Upgrade in its own branch with a Windows run? The decider's latency budget depends
+on it, as does the Path S student's.

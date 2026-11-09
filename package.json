@@ -169,6 +169,7 @@
       "**/localRerankerWorker.js",
       "**/ggufRerankerWorker.js",
       "**/routerWorker.js",
+      "**/deciderWorker.js",
       "**/host/bootstrap.js",
       "**/node_modules/better-sqlite3/**",
       "**/node_modules/keytar/**",

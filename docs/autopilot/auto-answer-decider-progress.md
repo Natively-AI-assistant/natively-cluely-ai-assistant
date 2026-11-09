@@ -376,3 +376,65 @@ The Natively decision tier, 3 passes, 561 calls, one at a time. Exit 0: **no set
     the known zero-shot int8 problem; the ≥99% bar applies to the fine-tuned export.
 
       DECIDER_ONNX_DIR=$PWD/ml/auto-answer-decider/artifacts/zero-shot-onnx node --test electron/intelligence/autoAnswer/__tests__/DeciderSequence2026_11_10.test.mjs
+
+## Phase 4: DecisionBackend in the app (2026-11-10)
+
+**Files** (all under `electron/intelligence/autoAnswer/decider/`):
+
+| File | Kind | Role |
+|---|---|---|
+| `DecisionBackend.ts` | pure | The contract (`BackendDecision`, `DeciderThresholds`, `ESCALATE_ALL`). `gateDecision` (calibrated `answerConfidence` ≥ the label's threshold, per D1; truncated input never trusted). `labelOfJudgeReply`, through the engine's own parser and router. `judgeReplyFor` (a decision in judge format). |
+| `AutoAnswerDecider.ts` | pure | The cascade. `off` is the judge hook itself. `shadow` returns the judge's reply unchanged and records the decider beside it; with no model available it does nothing. `on` tries backends in order under per-kind deadlines (hosted 600 ms, local 900 ms) and escalates to the judge below threshold. Doubt policy: escalated, the judge failed, and the top choice was `answer` → answer. Judge errors reach the engine unchanged in every mode, unless doubt answers. |
+| `deciderPlatform.ts` | pure | Mode flag (dev `shadow`, packaged `off`). EP list by injected platform: darwin `cpu` (CoreML opt-in), win32 `cpu` (DirectML opt-in), anything else throws. Thread count. |
+| `deciderPipeline.ts` | pure | Request → fields → fit → sequence → collate → run (injected) → decode. |
+| `deciderManifest.ts` | pure | `manifest.json` schema 1. Rejects paths that leave the model directory (POSIX and Windows spellings); thresholds missing → `ESCALATE_ALL`. |
+| `deciderWorker.ts` | worker | routerWorker pattern: shutdown first, EP fallback list, bounded session options. |
+| `LocalLayaBackend.ts` | host | RouterModel pattern: ONNX slot, memory floor, `decider` load sentinel (a new `OnnxFamily`), cooperative retire, one call in flight. |
+| `appDecider.ts` | wiring | Lazy and injectable. |
+
+- **`main.ts`.** `judgeCandidate` now goes through `autoAnswerDecider()`. The LLM judge call is
+  unchanged and passed in as `llmJudge`. Packaged default `off` = identical behavior.
+- **`package.json`.** `asarUnpack` gains `**/deciderWorker.js`.
+- **`OnnxWorkerCooperativeShutdown` test.** The decider worker and host are added to its three
+  lists (real-worker exit 0; host never calls `terminate()`; shutdown checked first).
+
+**Tests:**
+- `DeciderCascade2026_11_10`: 22/22. Both platform branches, every cascade path on the fake
+  clock, telemetry key/enum allowlist (no text).
+- `DeciderLocalBackend2026_11_10`: 15/15, plus 1 opt-in.
+  - The pipeline reproduces Python on all 303 fixtures.
+  - All 187 gold cases rebuilt as engine requests give exactly the fixture's fields.
+  - Host covered on a fake worker, darwin and win32.
+- Mutation probes (on the compiled JS, restored after), all red: shadow returns the decider's
+  reply (3 fail); gate ignores `truncated` (1); gate `>` instead of `>=` (1); doubt on any
+  choice (1); no deadline (2); win32 default DirectML (1).
+- Auto Answer suite and the main.ts source-scan tests: 338 pass, 1 fail, 3 skip.
+  - The failure is `SttContextTerms` "main sets the terms at meeting start", which **fails on
+    the base commit too** (checked by stashing these changes and rebuilding). Not touched.
+  - `AutoAnswerJudgeRouting` pins `judgeCandidate: async (req, signal) =>`; the wiring keeps
+    that exact form rather than editing the test.
+- `npx tsc --noEmit -p electron/tsconfig.json`: clean. There is no lint script or ESLint
+  config in the repo.
+
+**Measured in the app's own runtime** (ledger `20261110-0405`, `-0415`, `-0430`):
+
+- **Real worker thread, fp32 zero-shot:** 187/187 gold requests give the fixture's choice, with
+  probabilities within 1e-3. (fp32 p50 902 ms; not a shipping format.)
+- **int8 zero-shot in the worker:** p50 465 / p90 785 ms, agreeing with fp32's choice on
+  253/373. Python ORT 1.31 on the same sequences: p50 246 / p90 371.
+- **Attribution:** JS prep (tokenize, fit, decode) is ~1 ms. The rest is ORT.
+  - onnxruntime-node 1.22's runtime ≈ Python ORT 1.22's (424–651 ms p50, arena on).
+  - The 1.22 → 1.31 gap is the bulk.
+  - Arena off adds ~30%.
+  - This becomes D4 (arena) and D5 (ORT upgrade) in the decisions log; both are Evin's.
+- These are zero-shot Laya-large numbers. Phase 0 chose Path S (a distilled student), whose
+  latency is measured when it exists.
+
+**Not done in Phase 4:**
+- Hosted backend (Phase 5).
+- Model download, entitlement and settings (Phase 6).
+- `warmUp` at meeting start: the first candidate pays the load (~1.4 s int8), which in shadow
+  only delays the record.
+- Physical runs:
+  - Reviewed but not executed on Windows (worker, DirectML DLLs, packaged asar unpack).
+  - Packaged macOS not run either.

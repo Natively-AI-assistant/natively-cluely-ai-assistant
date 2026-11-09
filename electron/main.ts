@@ -3865,11 +3865,11 @@ export class AppState {
       } catch { /* speculative */ }
     },
     ...((process.env.NATIVELY_AUTO_ANSWER_JUDGE || '').toLowerCase() === 'off' ? {} : {
-      judgeCandidate: async (req, signal) => {
-        const llm = this.processingHelper?.getLLMHelper?.();
-        if (!llm) return null;
-        return await llm.generateJudgeVerdict(buildJudgePrompt(req), { signal });
-      },
+      // The decision cascade (intelligence/autoAnswer/decider) wraps the LLM judge. Packaged
+      // builds default to NATIVELY_AUTO_ANSWER_DECIDER=off, which calls the judge exactly as
+      // before; shadow (the dev default) keeps the judge authoritative and only records the
+      // decider beside it.
+      judgeCandidate: async (req, signal) => await this.autoAnswerDecider().judgeCandidate(req, signal),
     }),
     modeName: () => {
       try {
@@ -3893,6 +3893,32 @@ export class AppState {
     // (the stricter MEETING bar), not the compiled-in interview constants.
   }, undefined, resolveAutoAnswerThresholds(null));
   private autoAnswerEmbedder: { embed(text: string): Promise<number[]> } | null = null;
+  private _autoAnswerDecider: import('./intelligence/autoAnswer/decider/appDecider').AppDecider | null = null;
+  private autoAnswerDecider(): import('./intelligence/autoAnswer/decider/appDecider').AppDecider {
+    if (this._autoAnswerDecider) return this._autoAnswerDecider;
+    const { createAppDecider } = require('./intelligence/autoAnswer/decider/appDecider') as typeof import('./intelligence/autoAnswer/decider/appDecider');
+    const { systemClock } = require('./intelligence/autoAnswer/AutoAnswerClock') as typeof import('./intelligence/autoAnswer/AutoAnswerClock');
+    this._autoAnswerDecider = createAppDecider({
+      platform: process.platform,
+      env: process.env,
+      isPackaged: app.isPackaged,
+      clock: systemClock,
+      llmJudge: async (req, signal) => {
+        const llm = this.processingHelper?.getLLMHelper?.();
+        if (!llm) return null;
+        return await llm.generateJudgeVerdict(buildJudgePrompt(req), { signal });
+      },
+      // TelemetryService, the path the engine's auto_answer_* events take: enums and numbers, never text.
+      telemetry: (event) => {
+        try {
+          const { telemetryService } = require('./services/telemetry/TelemetryService');
+          const { name, ...properties } = event;
+          telemetryService.track({ name, properties });
+        } catch { /* telemetry must never break the pipeline */ }
+      },
+    });
+    return this._autoAnswerDecider;
+  }
 
   /**
    * End meetings automatically when the call ends (services/meeting/
