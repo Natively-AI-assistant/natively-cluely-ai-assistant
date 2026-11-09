@@ -49,9 +49,9 @@ function hashOf(text: string): string {
 
 export const HindsightStatusBanner: React.FC<{ variant?: 'top-strip' | 'floating-card' }> = ({ variant = 'top-strip' }) => {
   // Per-session dismissal — once the user clicks X the banner stays hidden until
-  // something genuinely different happens: another failure, or a recovery and
-  // then a failure (src/lib/hindsightBannerPolicy.mjs). The same failure
-  // broadcast again, or a retry, does not bring it back.
+  // the server recovers ('ready'); a failure after that shows again
+  // (src/lib/hindsightBannerPolicy.mjs). Retries, state flips and new exit
+  // codes from a crash-looping server do not bring it back.
   const [banner, setBanner] = useState<HindsightBannerState<HindsightStatus>>(initialHindsightBanner);
   const status = banner.status;
   const dismissed = hindsightBannerDismissed(banner);

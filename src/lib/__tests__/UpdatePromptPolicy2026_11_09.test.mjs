@@ -81,6 +81,16 @@ test('the card opens only when nothing else holds the screen, and holds the sche
   assert.match(banner, /const cardOpen = wantsCard && holdsSlot;/);
   assert.match(app, /const updateCardMayOpen = !showStartup && showWelcome === false && !isSettingsOpen && !isManagerOpen\s*&& !showTrialExpiredModal && !trialEndedDue && !orchState\?\.activeToasterId;/);
   assert.match(app, /<UpdateBanner canOpen=\{updateCardMayOpen\} claimSlot=\{claimUpdateSlot\} releaseSlot=\{releaseUpdateSlot\} \/>/);
-  assert.match(app, /orch\.claimExternalCard\('update'\)/);
+  assert.match(app, /orch \? orch\.claimExternalCard\('update', \{ force \}\) : true/);
   assert.match(app, /orch\?\.releaseExternalCard\('update'\)/);
+});
+
+// Review fix (2026-11-09 b): an expand the scheduler refuses (a card is open)
+// used to show the card anyway, without the slot, so nothing stopped a card
+// opening over it and its close set no spacing. It now asks with force and
+// opens only when the slot is really held.
+test('a toast expand claims with force and opens only once it holds the slot', () => {
+  assert.doesNotMatch(banner, /\|\| asked\)/, 'no opening without the slot');
+  assert.match(banner, /if \(claimSlot\?\.\(asked\) \?\? true\) \{\s*expandRequestedRef\.current = false;\s*setHoldsSlot\(true\);/);
+  assert.match(banner, /onExpand=\{\(\) => \{ expandRequestedRef\.current = true; setMinimized\(false\); \}\}/);
 });

@@ -16,21 +16,38 @@ import { CORNER_PRIORITY, createCornerSlot } from '../cornerSlot.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-test('the priority: meeting offer > update > quota > trial meter > hindsight > provider notice', () => {
-  assert.deepEqual([...CORNER_PRIORITY], ['meeting_offer', 'update', 'quota', 'trial_meter', 'hindsight', 'provider_notice']);
+// The trial meter is last (review fix 2026-11-09 b): it is a status that is
+// up on Home for the whole trial, not a passing notice, so above the others
+// it hid the Hindsight notice and the provider notice's Reindex all trial.
+test('the priority: meeting offer > update > quota > hindsight > provider notice > trial meter', () => {
+  assert.deepEqual([...CORNER_PRIORITY], ['meeting_offer', 'update', 'quota', 'hindsight', 'provider_notice', 'trial_meter']);
+});
+
+test('a running trial does not starve the passing notices; the meter returns when they clear', () => {
+  const slot = createCornerSlot();
+  slot.request('trial_meter');
+  assert.equal(slot.holder(), 'trial_meter');
+  slot.request('provider_notice');
+  assert.equal(slot.holder(), 'provider_notice', 'the Reindex notice is shown during a trial');
+  slot.request('hindsight');
+  assert.equal(slot.holder(), 'hindsight');
+  slot.release('hindsight');
+  assert.equal(slot.holder(), 'provider_notice');
+  slot.release('provider_notice');
+  assert.equal(slot.holder(), 'trial_meter', 'the meter is back');
 });
 
 test('only the highest asking is shown; a lower one waits and comes back', () => {
   const slot = createCornerSlot();
-  slot.request('trial_meter');
-  assert.equal(slot.holder(), 'trial_meter');
+  slot.request('quota');
+  assert.equal(slot.holder(), 'quota');
   slot.request('meeting_offer');
   assert.equal(slot.holder(), 'meeting_offer', 'a call detected takes the corner');
   slot.request('provider_notice');
   assert.equal(slot.holder(), 'meeting_offer');
   slot.release('meeting_offer');
-  assert.equal(slot.holder(), 'trial_meter', 'the meter was waiting, not lost');
-  slot.release('trial_meter');
+  assert.equal(slot.holder(), 'quota', 'the quota notice was waiting, not lost');
+  slot.release('quota');
   assert.equal(slot.holder(), 'provider_notice');
   slot.release('provider_notice');
   assert.equal(slot.holder(), null);
@@ -74,7 +91,7 @@ const participants = [
   ['components/NativelyQuotaBanner.tsx', "useCornerSlot('quota', visible)", /open=\{corner\.show\}/],
   ['components/trial/TrialMeterToaster.tsx', "useCornerSlot('trial_meter', wantsOpen)", /const open = corner\.show;/],
   ['components/HindsightStatusBanner.tsx', "useCornerSlot('hindsight', wantsCorner)", /const open = corner\.show;/],
-  ['components/ProviderChangeNotice.tsx', "useCornerSlot('provider_notice', props.open)", /const open = useCornerSlot\('provider_notice', props\.open\)\.show;/],
+  ['components/ProviderChangeNotice.tsx', "useCornerSlot('provider_notice', props.open)", /const \{ show: open, displaced \} = useCornerSlot\('provider_notice', props\.open\);/],
 ];
 for (const [file, ask, shows] of participants) {
   test(`${file} asks the corner and shows only while it holds it`, () => {
@@ -83,6 +100,14 @@ for (const [file, ask, shows] of participants) {
     assert.match(src, shows);
   });
 }
+
+// Review fix (2026-11-09 b): pushed out by a higher notice, the provider notice
+// leaves at once, like the others (closeInstantly), instead of sliding out
+// while the incoming one pours in.
+test('ProviderChangeNotice leaves at once when displaced', () => {
+  const src = read('components/ProviderChangeNotice.tsx');
+  assert.match(src, /if \(displaced\) \{ setEntered\(false\); setMounted\(false\); return; \}/);
+});
 
 test('MeetingOfferToast keeps its own logic: only its open flag goes through the slot', () => {
   const src = read('components/MeetingOfferToast.tsx');

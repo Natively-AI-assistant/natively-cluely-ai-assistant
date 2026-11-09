@@ -716,20 +716,27 @@ export class OnboardingOrchestrator {
 
   /**
    * A full-window card this scheduler does not own (the update card,
-   * UpdateBanner.tsx) asks for the slot. Refused while a card or the Trial
-   * ended card is on screen, and for the usual spacing after a card closed
-   * (so closing one card never puts the update card straight up); once
-   * granted, no card opens until it is released, and it counts as this
-   * launch's card. It is not held to one card per launch: its own rule (one
-   * version, once per 7 days, updatePromptPolicy.mjs) caps it.
+   * UpdateBanner.tsx) asks for the slot. Once granted, no card opens until it
+   * is released, and the release starts the usual spacing.
+   *
+   * Always refused while a card or the Trial ended card is on screen: never
+   * two cards at once. Opening by itself (not `force`) is also refused for
+   * the usual spacing after a card closed (closing one card never puts the
+   * update card straight up) and for the whole Welcome launch, which belongs
+   * to the permissions card and the one after it; the update card shows on
+   * the next launch. `force` is the user expanding its corner toast: past the
+   * spacing and the Welcome launch, but still never over an open card.
+   *
+   * It does NOT count against one card per launch (launch.shown): its own
+   * rule caps it (one version, once per 7 days, updatePromptPolicy.mjs).
+   * Counting it let an update that arrived under Welcome claim the slot
+   * before the permissions card, which then never came.
    */
-  claimExternalCard(id: string): boolean {
+  claimExternalCard(id: string, { force = false }: { force?: boolean } = {}): boolean {
     if (this.externalCardId === id) return true;
     if (this.externalCardId !== null || this.state.activeToasterId !== null || this.userState.trialEndedOpen) return false;
-    if (this.spacingRemainingMs() > 0) return false;
+    if (!force && (this.launch.welcome || this.spacingRemainingMs() > 0)) return false;
     this.externalCardId = id;
-    this.launch.shown.push(id);
-    this.saveLaunch();
     this.notify();
     return true;
   }
@@ -841,6 +848,13 @@ export class OnboardingOrchestrator {
     // The Welcome launch is latched for the launch, reloads included.
     if (this.userState.welcomeThisLaunch && !this.launch.welcome) {
       this.launch.welcome = true;
+      this.saveLaunch();
+    }
+    // A meeting failed for a missing permission (each failure sends this
+    // again): the permissions card is the way out, even if the user closed it
+    // earlier this launch.
+    if (patch.permissionsRecoveryRequested === true && this.launch.dismissed.includes('permissions')) {
+      this.launch.dismissed = this.launch.dismissed.filter((d) => d !== 'permissions');
       this.saveLaunch();
     }
     // "Trial ended" is exclusive: a card already open when it arrives leaves

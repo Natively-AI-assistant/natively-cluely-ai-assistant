@@ -7,7 +7,8 @@ export interface HindsightStatusLike {
 
 export interface HindsightBannerState<S extends HindsightStatusLike = HindsightStatusLike> {
   status: S | null;
-  dismissedKey: string | null;
+  /** The user closed it; holds until a 'ready' status. */
+  dismissed: boolean;
 }
 
 export function initialHindsightBanner<S extends HindsightStatusLike = HindsightStatusLike>(): HindsightBannerState<S>;

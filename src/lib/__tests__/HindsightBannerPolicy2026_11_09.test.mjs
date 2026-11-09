@@ -5,8 +5,8 @@
 //   a spawn failure broadcast at boot never reached it. It now reads the last
 //   status from main (hindsight:get-status) on mount.
 // - Every broadcast cleared the ✕, so a server that kept retrying brought the
-//   notice straight back. A close now holds until a different failure, or a
-//   recovery and then a failure.
+//   notice straight back. A close now holds until the server recovers
+//   ('ready'); a failure after that shows again.
 //
 // Run: node --test src/lib/__tests__/HindsightBannerPolicy2026_11_09.test.mjs
 import { test } from 'node:test';
@@ -37,10 +37,21 @@ test('a retry (spawning) does not undo the ✕, nor does the same failure after 
   assert.equal(shown(run(failed(), 'X', { state: 'spawning' }, failed())), false);
 });
 
-test('a genuinely different failure shows again', () => {
-  assert.equal(shown(run(failed('a'), 'X', failed('b'))), true, 'another reason');
-  assert.equal(shown(run(failed(), 'X', { state: 'unreachable', reason: 'no answer' })), true, 'another state');
-  assert.equal(shown(run({ state: 'spawning' }, 'X', failed())), true, 'closed while starting, then it failed');
+// Review fix (2026-11-09 b): a crash-looping server flips between states and
+// exit codes (auth-failed → unreachable → spawn-failed, code 1, code 137…).
+// Each of those reopened the notice. The ✕ now holds until the server
+// actually recovers.
+test('status flips and new exit codes do not undo the ✕; only a recovery does', () => {
+  const flips = [
+    failed('server exited with code 1'), 'X',
+    { state: 'auth-failed', reason: 'Cloud key rejected' },
+    { state: 'unreachable', reason: 'server unreachable' },
+    failed('server exited with code 137'),
+    { state: 'spawning' },
+    failed('spawn exception: EACCES'),
+  ];
+  assert.equal(shown(run(...flips)), false);
+  assert.equal(shown(run({ state: 'spawning' }, 'X', failed())), false, 'closed while starting, then it failed: still closed');
 });
 
 test('a recovery, then the same failure, shows again', () => {

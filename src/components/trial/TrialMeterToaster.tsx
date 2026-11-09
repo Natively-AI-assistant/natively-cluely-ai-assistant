@@ -128,8 +128,10 @@ export const TrialMeterToaster: React.FC<TrialMeterToasterProps> = ({ trial, rea
         })
         : null;
     const wantsOpen = settled && !!live && shouldShowTrialMeter(live.tone, closedAt);
-    // The corner shows one notice at a time: a meeting offer, the update toast
-    // or the quota notice take it first, and the card is back when they go.
+    // The corner shows one notice at a time, and this card is last in line: it
+    // is up for the whole trial, so every passing notice (meeting offer,
+    // update, quota, memory, provider) goes first, and the card is back when
+    // they go (src/lib/cornerSlot.mjs).
     const corner = useCornerSlot('trial_meter', wantsOpen);
     const open = corner.show;
 
