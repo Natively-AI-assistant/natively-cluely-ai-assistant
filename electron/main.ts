@@ -11401,6 +11401,16 @@ if (process.env.THINKING_MATRIX === '1') {
     }
   }
 
+  // Main's own calendar refresh (CalendarManager.refreshInBackground): the
+  // reminders no longer depend on the Launcher's renderer asking for the list.
+  const refreshCalendarInBackground = (reason: 'resume' | 'unlock') => {
+    try {
+      void require('./services/CalendarManager').CalendarManager.getInstance().refreshInBackground(reason);
+    } catch (err) {
+      console.warn(`[Main] calendar refresh on ${reason} failed (non-fatal):`, err);
+    }
+  };
+
   // System sleep/wake handling. macOS invalidates CoreAudio AggregateDevice
   // handles on sleep — without this the Process Tap silently stops delivering
   // buffers on resume and the user sits in front of a frozen transcript with
@@ -11451,6 +11461,9 @@ if (process.env.THINKING_MATRIX === '1') {
       } catch (err) {
         console.error('[Main] revalidateShortcuts on resume threw:', err);
       }
+      // Calendar reminders: their timers stood still in sleep. Re-planned at
+      // once, then the list refreshed (not while Undetectable is on).
+      refreshCalendarInBackground('resume');
     });
     powerMonitor.on('suspend', () => {
       console.log('[Main] powerMonitor: system suspending. Captures will be recreated on resume if a meeting is active.');
@@ -11468,6 +11481,7 @@ if (process.env.THINKING_MATRIX === '1') {
       } catch (err) {
         console.error('[Main] revalidateShortcuts on unlock-screen threw:', err);
       }
+      refreshCalendarInBackground('unlock');
     });
   } catch (err) {
     console.warn('[Main] powerMonitor unavailable — sleep/wake recovery disabled:', err);
@@ -11852,10 +11866,18 @@ if (process.env.THINKING_MATRIX === '1') {
     const { CalendarManager } = require('./services/CalendarManager');
     const calMgr = CalendarManager.getInstance();
     // Reminders are system notifications (with a chime): their own OS window,
-    // outside content protection. Checked when each one fires, not when it is
-    // scheduled, since the mode can change during the wait.
-    calMgr.setNotificationSuppressor(() => nativePromptsBlocked(() => appState.getUndetectable()));
+    // outside content protection, saying "Natively". Not while Undetectable or
+    // a disguise is on (as meeting detection and dictation), and no Start while
+    // a Natively meeting runs. Checked when each one fires, not when it is
+    // scheduled, since either can change during the wait.
+    calMgr.setNotificationSuppressor(
+      () => nativePromptsBlocked(() => appState.getUndetectable()) || appState.getDisguise() !== 'none',
+      () => appState.getIsMeetingActive(),
+    );
     calMgr.init();
+    // Re-fetched every few minutes by main itself (none while Undetectable:
+    // no calendar traffic then, like the Launcher's poll).
+    calMgr.startBackgroundRefresh(() => nativePromptsBlocked(() => appState.getUndetectable()));
 
     // The Launcher card and Settings › Calendar follow the connection wherever it changes.
     require('./services/calendar/calendarConnectionBroadcast').broadcastCalendarConnection(calMgr, () => BrowserWindow.getAllWindows());

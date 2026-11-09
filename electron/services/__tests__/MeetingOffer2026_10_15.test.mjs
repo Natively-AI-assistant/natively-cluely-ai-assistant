@@ -96,15 +96,20 @@ test('Not now on either surface clears the offer; a stale id does nothing', () =
     assert.deepEqual(state.starts, []);
 });
 
-test('a notification\'s Start acts even after the panel moved on, but never over a running meeting', () => {
+test('a notification\'s Start acts only while its offer is up, and never over a running meeting', () => {
     const { offers, state } = rig();
     offers.offer(CALL);
     const first = state.notes[0];
     state.active = true;
     first.onStart();
     assert.deepEqual(state.starts, []);
+    // 2026-11-09: the offer went with that press; a later press on the same
+    // notification (a Windows toast left in the Action Center) starts nothing.
     state.active = false;
     first.onStart();
+    assert.deepEqual(state.starts, []);
+    offers.offer(CALL);
+    state.notes.at(-1).onStart();
     assert.deepEqual(state.starts, [{ via: 'detected' }]);
 });
 

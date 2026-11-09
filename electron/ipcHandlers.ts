@@ -17563,16 +17563,15 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
   // The offer on screen now, for a launcher that (re)loads while one is up.
   safeHandle('meeting-offer:current', async () => require('./services/meetingDetection/wireMeetingDetection').getMeetingOffers()?.view() ?? null);
-  // Calendar reminder lead time (Settings › Calendar): 1, 2 or 5 minutes. Unset = 2.
-  // Applies to reminders scheduled from the next calendar refresh, which this
-  // asks for at once.
+  // Calendar reminder lead time (Settings › Calendar): 1, 2 or 5 minutes, or
+  // 0 = Off. Unset = 2. The pending reminders are re-planned at once.
   safeHandle('get-calendar-reminder-minutes', async () => {
     const { reminderMinutes } = require('./services/meetingDetection/meetingOffer');
     return reminderMinutes(SettingsManager.getInstance().get('calendarReminderMinutes'));
   });
   safeHandle('set-calendar-reminder-minutes', async (_, minutes: number) => {
-    const { REMINDER_MINUTE_CHOICES } = require('./services/meetingDetection/meetingOffer');
-    if (!REMINDER_MINUTE_CHOICES.includes(minutes)) return { success: false };
+    const { REMINDER_SETTING_CHOICES } = require('./services/meetingDetection/meetingOffer');
+    if (!REMINDER_SETTING_CHOICES.includes(minutes)) return { success: false };
     if (!SettingsManager.getInstance().set('calendarReminderMinutes', minutes)) return { success: false, error: 'settings_store_degraded' };
     try { require('./services/CalendarManager').CalendarManager.getInstance().rescheduleReminders(); } catch { /* next refresh applies it */ }
     return { success: true };

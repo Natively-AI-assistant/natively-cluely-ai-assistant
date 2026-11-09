@@ -62,32 +62,31 @@ for (const platform of ['darwin', 'win32']) {
         // Four seconds of silence in the tab: the offer stays up (a grace, not the end).
         r.setAudible(false); r.step(4000);
         assert.notEqual(r.panel.at(-1), null, 'a short quiet stretch does not withdraw it');
-        // Still quiet when the countdown ends: no start, offer withdrawn.
+        // Still quiet when the countdown ends: no start.
         r.step(6000);
         assert.deepEqual(r.starts, [], 'not seen at the last poll: no automatic start');
-        assert.equal(r.panel.at(-1), null);
-        // Sound again within the minute: offered again, with a fresh countdown.
-        r.setAudible(true); r.step(2000);
-        const again = r.panel.at(-1);
-        assert.ok(again, 'offered again');
-        assert.equal(again.autoStartAt, r.now() + 10_000, 'a fresh countdown');
-        assert.ok(again.autoStartAt > first.autoStartAt);
-        r.step(10_000);
-        assert.deepEqual(r.starts, [{ via: 'detected' }], 'the call is on: it starts');
+        // 2026-11-09: the offer stays up (no withdraw and second notification);
+        // the countdown looks again each poll and starts once the call is heard.
+        assert.equal(r.panel.at(-1), first, 'the same offer, still up');
+        // (The rig runs timers before each poll: the look after the call is heard starts it.)
+        r.setAudible(true); r.step(4000);
+        assert.deepEqual(r.starts, [{ via: 'detected' }], 'the call is on again: it starts');
+        assert.equal(r.panel.filter(Boolean).length, 1, 'offered once');
     });
 
-    test(`${platform}: a tab-only call that stays quiet past the grace is withdrawn, and comes back when it plays again`, () => {
+    test(`${platform}: a tab-only call that stays quiet past the grace is withdrawn, and not offered again when it plays within the minute`, () => {
         const r = quietTabRig(platform);
         r.d.tick(); r.step(4000);
         r.setAudible(false); r.step(22_000);
         assert.equal(r.panel.at(-1), null, 'gone after the grace');
         const offersBefore = r.panel.filter(Boolean).length;
+        // 2026-11-09: back within the minute is the same call, already offered.
         r.setAudible(true); r.step(2000);
-        assert.equal(r.panel.filter(Boolean).length, offersBefore + 1, 'back: offered again');
+        assert.equal(r.panel.filter(Boolean).length, offersBefore, 'back: not offered again');
     });
 }
 
-test('Not now, Start and a running meeting are final answers: no re-offer when the call comes back', () => {
+test('Not now, Start, a running meeting and a withdrawal are final answers: no re-offer when the call comes back', () => {
     let t = 0;
     let active = false;
     const shown = [];
@@ -102,18 +101,23 @@ test('Not now, Start and a running meeting are final answers: no re-offer when t
     offers.callGone('tab:meet:a');
     offers.callBack('tab:meet:a');
     assert.equal(offers.view(), null, 'Not now holds');
+    // 2026-11-09: and that call is not offered again for 10 minutes.
+    assert.equal(offers.offer(input), null, 'Not now holds for the same call');
+    input.callId = 'tab:meet:b';
     offers.offer(input);
-    offers.callGone('tab:meet:a');
+    offers.callGone('tab:meet:b');
     active = true;
     offers.callBack('tab:meet:a');
     assert.equal(offers.view(), null, 'a meeting is running');
     active = false;
+    input.callId = 'tab:meet:c';
     offers.offer(input);
-    offers.callGone('tab:meet:a');
+    offers.callGone('tab:meet:c');
     offers.callBack('tab:meet:other');
     assert.equal(offers.view(), null, 'another call is not this one');
-    offers.callBack('tab:meet:a');
-    assert.ok(offers.view(), 'the same call: back');
+    offers.callBack('tab:meet:c');
+    // 2026-11-09: a withdrawn offer no longer comes back (one call raised it several times).
+    assert.equal(offers.view(), null, 'the same call: already offered, not again');
 });
 
 // ── 2. Dictation waits for work still on its way ──────────────────────────

@@ -310,7 +310,7 @@ export const CalendarSettings: React.FC = () => {
       .catch(() => setAutoStart(was));
   }, []);
 
-  // How long before a calendar meeting the reminder comes: 1, 2 or 5 minutes.
+  // How long before a calendar meeting the reminder comes: 1, 2 or 5 minutes, or 0 = Off.
   const [reminderLead, setReminderLead] = useState<number | null>(null);
   useEffect(() => {
     let live = true;
@@ -927,7 +927,7 @@ export const CalendarSettings: React.FC = () => {
                 <span className="cp-card-icon"><Bell size={12} /></span>
                 <h4 className="cp-card-label">{t('Remind me before meetings')}</h4>
                 <span className="ml-auto flex items-center gap-1.5" role="radiogroup" aria-label={t('Remind me before meetings')}>
-                  {[1, 2, 5].map((m) => (
+                  {[0, 1, 2, 5].map((m) => (
                     <button
                       key={m}
                       type="button"
@@ -937,7 +937,7 @@ export const CalendarSettings: React.FC = () => {
                       onClick={() => chooseReminderLead(m)}
                       disabled={reminderLead === null}
                     >
-                      {m === 1 ? t('1 min') : m === 2 ? t('2 min') : t('5 min')}
+                      {m === 0 ? t('Off') : m === 1 ? t('1 min') : m === 2 ? t('2 min') : t('5 min')}
                     </button>
                   ))}
                 </span>

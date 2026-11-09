@@ -80,6 +80,10 @@ export interface MeetingOfferDeps {
 
 export const OFFER_COUNTDOWN_MS = 10_000;
 export const OFFER_EXPIRE_MS = 120_000;
+/** Not now for a call holds this long: the same app's (or tab's) call is not offered again meanwhile. */
+export const OFFER_NOT_NOW_MS = 10 * 60_000;
+/** The countdown ended while the call was not seen at the last poll: looked at again this often. */
+export const OFFER_RECHECK_MS = 2_000;
 
 /** The notification's text for an offer (exported for the tests). */
 export function offerNotificationText(body: string, autoStart: boolean, countdownMs: number): { title: string; body: string; action: string } {
@@ -100,6 +104,16 @@ export function closeMeansNotNow(platform: string, reason: string | undefined): 
 
 type OfferInput = { app: string; title?: string | null; body: string; start: MeetingStartRequestLike; callId?: string };
 
+/**
+ * Whether a call may be offered now: not while a Not now for the same call id
+ * (an app: "app:Zoom", a meeting tab: "tab:meet:…") is younger than
+ * `holdMs` (2026-11-09). Prunes expired entries.
+ */
+export function notNowHolds(notNow: Map<string, number>, callId: string | null | undefined, nowMs: number): boolean {
+    for (const [id, until] of notNow) if (until <= nowMs) notNow.delete(id);
+    return !!callId && (notNow.get(callId) ?? 0) > nowMs;
+}
+
 interface Current {
     input: OfferInput;
     view: MeetingOfferView;
@@ -114,8 +128,8 @@ interface Current {
 
 export class MeetingOffers {
     private current: Current | null = null;
-    /** An offer withdrawn unanswered because its call went quiet: offered again if the call comes back. */
-    private withdrawn: { callId: string; input: OfferInput } | null = null;
+    /** Not now per call id, until when it holds (OFFER_NOT_NOW_MS). */
+    private notNow = new Map<string, number>();
     private seq = 0;
     private readonly now: () => number;
     private readonly setT: (fn: () => void, ms: number) => unknown;
@@ -123,7 +137,7 @@ export class MeetingOffers {
 
     constructor(
         private readonly deps: MeetingOfferDeps,
-        private readonly options: { countdownMs?: number; expireMs?: number } = {},
+        private readonly options: { countdownMs?: number; expireMs?: number; notNowMs?: number; recheckMs?: number } = {},
     ) {
         this.now = deps.now ?? Date.now;
         this.setT = deps.setTimeout ?? ((fn, ms) => setTimeout(fn, ms));
@@ -139,10 +153,16 @@ export class MeetingOffers {
         return this.current?.view ?? null;
     }
 
-    /** A new call: replaces any earlier offer. */
-    offer(input: OfferInput): MeetingOfferView {
+    /**
+     * A new call: replaces any earlier offer. Null (nothing shown) when Not now
+     * was pressed for this same call in the last OFFER_NOT_NOW_MS.
+     */
+    offer(input: OfferInput): MeetingOfferView | null {
+        if (notNowHolds(this.notNow, input.callId, this.now())) {
+            this.deps.log?.(`call ${input.callId}: not offered, Not now was pressed for it in the last ${Math.round((this.options.notNowMs ?? OFFER_NOT_NOW_MS) / 60_000)} min`);
+            return null;
+        }
         this.clear('replaced');
-        this.withdrawn = null;
         const auto = (() => { try { return this.deps.autoStart(); } catch { return false; } })();
         const id = `offer-${++this.seq}`;
         const view: MeetingOfferView = {
@@ -188,10 +208,16 @@ export class MeetingOffers {
         const startReq = input.start;
         return this.deps.notify({
             ...text,
-            // A notification's Start acts on its own call even after the
-            // panel moved on; a meeting already running wins.
+            // A notification's Start counts only while its own offer is live:
+            // a Windows toast that timed out into the Action Center can be
+            // clicked hours later, after the offer expired or was replaced
+            // (2026-11-09). A meeting already running wins.
             onStart: () => {
-                if (this.current?.view.id === id) this.clear('started');
+                if (this.current?.view.id !== id) {
+                    this.deps.log?.(`offer ${id}: Start ignored, the offer is no longer up`);
+                    return;
+                }
+                this.clear('started');
                 if (!this.deps.isMeetingActive()) this.deps.requestStart(startReq);
             },
             onDismiss: () => this.dismiss(id),
@@ -227,7 +253,6 @@ export class MeetingOffers {
 
     /** Start pressed on the panel. False when that offer is gone. */
     start(id: string): boolean {
-        this.withdrawn = null;
         const cur = this.current;
         if (!cur || cur.view.id !== id) return false;
         this.clear('started');
@@ -242,37 +267,32 @@ export class MeetingOffers {
     }
 
     /**
-     * The call is seen again: an offer it lost unanswered comes back, with a
-     * fresh countdown when Start automatically is on. Never over a meeting.
+     * The call is seen again within the detector's minute. Until 2026-11-09 an
+     * offer it lost unanswered came back here, with a new notification; one
+     * call then raised "Start Natively?" several times. It is the same call,
+     * already offered: nothing is shown again (a call gone longer than the
+     * detector's rearm is a new call and is offered as one).
      */
     callBack(callId: string): void {
-        const w = this.withdrawn;
-        if (!w || w.callId !== callId || this.current) return;
-        if (this.deps.isMeetingActive()) { this.withdrawn = null; return; }
-        this.deps.log?.(`call ${callId} is back: offered again`);
-        this.offer(w.input);
+        this.deps.log?.(`call ${callId} is back: already offered, not shown again`);
     }
 
-    /** The call went quiet before anyone answered: withdrawn, kept for callBack. */
+    /** The call went quiet before anyone answered: withdrawn. */
     private withdraw(): void {
-        const cur = this.current;
-        if (!cur) return;
-        this.clear('call ended');
-        if (cur.callId) this.withdrawn = { callId: cur.callId, input: cur.input };
+        if (this.current) this.clear('call ended');
     }
 
-    /** Not now, on either surface. */
+    /** Not now, on either surface: this call is not offered again for OFFER_NOT_NOW_MS. */
     dismiss(id: string): void {
-        if (this.current?.view.id === id) {
-            this.withdrawn = null;
+        const cur = this.current;
+        if (cur?.view.id === id) {
+            if (cur.callId) this.notNow.set(cur.callId, this.now() + (this.options.notNowMs ?? OFFER_NOT_NOW_MS));
             this.clear('dismissed');
         }
     }
 
     /** A meeting started some other way, or detection was switched off. */
     clear(reason = 'cleared'): void {
-        // Anything but the call going quiet answers it for good.
-        if (reason !== 'call ended' && reason !== 'replaced') this.withdrawn = null;
         const cur = this.current;
         if (!cur) return;
         this.current = null;
@@ -299,11 +319,15 @@ export class MeetingOffers {
             this.showWithoutCountdown(cur);
             return;
         }
-        // The call may have ended between the detector's polls.
+        // The call may have ended between the detector's polls. Not seen at
+        // the last one: no start yet, and the offer stays up; it is looked at
+        // again each poll until the call is heard (it starts then) or the
+        // detector reports it gone after its grace (callGone withdraws it).
+        // Withdrawing here at once made a quiet second re-offer the call.
         let stillOn = true;
         try { stillOn = cur.callId === null || !this.deps.callStillOn || this.deps.callStillOn(cur.callId); } catch { stillOn = false; }
         if (!stillOn) {
-            this.withdraw();
+            cur.countdown = this.setT(() => this.fire(id), this.options.recheckMs ?? OFFER_RECHECK_MS);
             return;
         }
         this.clear('auto-started');
@@ -316,10 +340,14 @@ export class MeetingOffers {
 
 export const REMINDER_MINUTE_CHOICES = [1, 2, 5] as const;
 export const DEFAULT_REMINDER_MINUTES = 2;
+/** Settings › Calendar › Remind me before meetings: Off (2026-11-09). */
+export const REMINDERS_OFF = 0;
+/** Every value the setting takes: Off or a lead time. */
+export const REMINDER_SETTING_CHOICES: readonly number[] = [REMINDERS_OFF, ...REMINDER_MINUTE_CHOICES];
 
-/** The saved reminder lead time, or the default for anything else. */
+/** The saved reminder lead time (0 = Off), or the default for anything else. */
 export function reminderMinutes(raw: unknown): number {
-    return typeof raw === 'number' && (REMINDER_MINUTE_CHOICES as readonly number[]).includes(raw) ? raw : DEFAULT_REMINDER_MINUTES;
+    return typeof raw === 'number' && REMINDER_SETTING_CHOICES.includes(raw) ? raw : DEFAULT_REMINDER_MINUTES;
 }
 
 /** "starts in 1 minute" / "starts in 2 minutes". */
@@ -336,16 +364,20 @@ export function reminderKey(event: { id?: string; startTime?: string }): string 
  * When each event's reminder fires, `leadMinutes` before its start: only
  * future reminders within a day, and never one for an occurrence already
  * reminded (a shorter lead chosen after a reminder fired would repeat it).
+ * None when reminders are Off, and none for a meeting the user declined
+ * (calendarSessionMatch and the Launcher skip those too).
  */
-export function planReminders<E extends { id?: string; startTime?: string }>(
+export function planReminders<E extends { id?: string; startTime?: string; selfResponse?: string }>(
     events: readonly E[],
     nowMs: number,
     leadMinutes: number,
     reminded: ReadonlySet<string>,
 ): Array<{ event: E; delayMs: number }> {
     const out: Array<{ event: E; delayMs: number }> = [];
+    if (!(leadMinutes > 0)) return out;
     for (const event of events) {
         if (!event.startTime) continue;
+        if (event.selfResponse === 'declined') continue;
         const start = new Date(event.startTime).getTime();
         if (!Number.isFinite(start)) continue;
         if (reminded.has(reminderKey(event))) continue;
@@ -361,4 +393,74 @@ export function pruneReminded(reminded: Set<string>, nowMs: number): void {
         const start = new Date(key.slice(key.lastIndexOf('|') + 1)).getTime();
         if (!Number.isFinite(start) || start < nowMs - 24 * 60 * 60_000) reminded.delete(key);
     }
+}
+
+/** How far a reminder may drift from its lead time and still say "starts in N minutes". */
+export const REMINDER_DRIFT_MS = 60_000;
+/** A reminder still up this long after its meeting started is closed. */
+export const REMINDER_CLOSE_AFTER_START_MS = 5 * 60_000;
+
+export type ReminderFire =
+    | { kind: 'show' }
+    /** Fired before its time (the wall clock moved back): wait `delayMs` more. */
+    | { kind: 'early'; delayMs: number }
+    | { kind: 'skip'; reason: 'off' | 'started' | 'late' };
+
+/**
+ * A reminder's timer fired: checked against the wall clock, since a timer
+ * does not count the time a Mac spends asleep. "Starts in 2 minutes" is said
+ * only when that is still true to within REMINDER_DRIFT_MS; a late one (the
+ * lid opened a minute before the meeting) or one for a meeting already started
+ * is skipped, not reworded. Off (0) shows nothing.
+ */
+export function reminderFire(startMs: number, nowMs: number, leadMinutes: number): ReminderFire {
+    if (!(leadMinutes > 0)) return { kind: 'skip', reason: 'off' };
+    if (!Number.isFinite(startMs) || nowMs >= startMs) return { kind: 'skip', reason: 'started' };
+    const off = startMs - nowMs - leadMinutes * 60_000;
+    if (off > REMINDER_DRIFT_MS) return { kind: 'early', delayMs: off };
+    if (off < -REMINDER_DRIFT_MS) return { kind: 'skip', reason: 'late' };
+    return { kind: 'show' };
+}
+
+export type ReminderAction = 'start' | 'dismiss' | 'late';
+
+/**
+ * What a reminder says and which buttons it has. During a Natively meeting
+ * there is no "Start Natively?" (App.tsx ignores a start while one runs): a
+ * meeting with other people keeps only Running late, for the back-to-back
+ * case, and one without has nothing to offer and is not shown (null).
+ */
+export function reminderContent(input: {
+    title: string;
+    lead: string;
+    lastTime: string | null;
+    hasAttendees: boolean;
+    meetingActive: boolean;
+}): { title: string; body: string; actions: Array<{ kind: ReminderAction; text: string }> } | null {
+    const late = input.hasAttendees ? [{ kind: 'late' as const, text: 'Running late' }] : [];
+    if (input.meetingActive) {
+        if (!input.hasAttendees) return null;
+        return {
+            title: 'Meeting starting soon',
+            body: input.lastTime ? `"${input.title}" starts in ${input.lead}.\n${input.lastTime}` : `"${input.title}" starts in ${input.lead}.`,
+            actions: [{ kind: 'dismiss', text: 'Dismiss' }, ...late],
+        };
+    }
+    return {
+        title: 'Meeting starting soon',
+        body: input.lastTime ? `"${input.title}" starts in ${input.lead}.\n${input.lastTime}` : `"${input.title}" starts in ${input.lead}. Start Natively?`,
+        actions: [{ kind: 'start', text: 'Start Meeting' }, { kind: 'dismiss', text: 'Dismiss' }, ...late],
+    };
+}
+
+/**
+ * Whether a reminder's Start still means this meeting: until it ends (an hour
+ * after its start when it has no end). A reminder tapped in the Notification
+ * Center the next day does nothing.
+ */
+export function reminderStartAllowed(event: { startTime?: string; endTime?: string }, nowMs: number): boolean {
+    const start = new Date(event.startTime ?? '').getTime();
+    if (!Number.isFinite(start)) return false;
+    const end = new Date(event.endTime ?? '').getTime();
+    return nowMs < (Number.isFinite(end) && end > start ? end : start + 60 * 60_000);
 }

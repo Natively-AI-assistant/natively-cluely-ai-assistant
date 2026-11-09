@@ -103,6 +103,9 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
     const t = useT();
     const [meetings, setMeetings] = useState<Meeting[]>([]);
     const [isDetectable, setIsDetectable] = useState(false);
+    // The minute poll below is set up once: it reads the current value here.
+    const isDetectableRef = useRef(isDetectable);
+    isDetectableRef.current = isDetectable;
     const [isMeetingActive, setIsMeetingActive] = useState(false);
     const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
     // The notes page's "ask about this meeting" chat is open. See the details
@@ -250,7 +253,9 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
         });
 
         // Simple polling for events every minute (stealth-gated: no calendar egress while undetectable)
-        const interval = setInterval(() => { if (isDetectable) fetchEvents(); }, 60000);
+        // Through the ref: this effect runs once, and `isDetectable` here would
+        // stay the first render's false forever (the poll never ran).
+        const interval = setInterval(() => { if (isDetectableRef.current) fetchEvents(); }, 60000);
 
         // Orchestrator: foreground/background tracking via window blur/focus.
         // On macOS Cmd+H and Cmd+Tab the BrowserWindow fires 'blur'/'focus'
