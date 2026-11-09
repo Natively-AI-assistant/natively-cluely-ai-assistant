@@ -204,11 +204,14 @@ export async function replayTranscript(tx, opts = {}) {
       for (let w = 0; w < chunk.length; w++) {
         const word = chunk[w];
         if (profile === 'rest-batch') { await advance(wordMs()); spoken.push(word); continue; }
-        // Streaming STT revises its interim several times per word (every ~100-200 ms),
-        // the partial word included, so a talking speaker never leaves the engine's
-        // EARLY_JUDGE_MS (120 ms) gap. The engine judges between words only on a real pause.
+        // Streaming STT revises its interim every 70-110 ms while someone talks, the partial
+        // word included, so continuous speech never leaves the engine's EARLY_JUDGE_MS
+        // (120 ms) gap. Speakers DO pause: a hesitation (~7% of words) or a breath after a
+        // clause (~35% of clause ends) of 150-700 ms, and that is where early judging happens.
+        const prev = spoken.length ? spoken[spoken.length - 1] : (c > 0 ? chunks[c - 1][chunks[c - 1].length - 1] : '');
+        if (spoken.length + c > 0 && r() < (/[,;:.?!]$/.test(prev) ? 0.35 : 0.07)) await advance(between(r, 150, 700));
         const dur = wordMs();
-        const ticks = between(r, 2, 4);
+        const ticks = Math.max(2, Math.ceil(dur / between(r, 70, 110)));
         for (let t = 1; t <= ticks; t++) {
           await advance(Math.round(dur / ticks));
           const partial = t < ticks ? word.slice(0, Math.max(1, Math.ceil(word.length * t / ticks))) : word;

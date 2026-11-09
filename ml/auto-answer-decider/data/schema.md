@@ -45,10 +45,11 @@ The TypeScript builder (`electron/intelligence/autoAnswer/decider/deciderState.t
 helpers. `decider/state.py` fits and serializes them. Training rows are then:
 
 ```json
-{"state": "<serialized fitted state>", "questions": {"respond": {…§4…}}, "gold": {"respond": [p_answer, p_silent, p_wait]}}
+{"state": "<serialized fitted state>", "questions": {"respond": {…§4…}}, "gold": {"respond": {"probabilities": {"answer": p, "silent": p, "wait": p}}}}
 ```
 
-(`gold` format to be confirmed against `laya/train.py` `target_from_gold` before Phase 2.)
+Confirmed against laya 0.4.30 `train.py` `target_from_gold`: a choice question's target is
+`gold_q["probabilities"][label]` in criterion order, normalized.
 
 ## Teacher-label mapping (judge prompt)
 

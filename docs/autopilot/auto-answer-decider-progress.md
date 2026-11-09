@@ -283,3 +283,42 @@ The Natively decision tier, 3 passes, 561 calls, one at a time. Exit 0: **no set
 
     node ml/auto-answer-decider/data/segment_via_replay.mjs --self-test
     ml/auto-answer-decider/.venv/bin/python ml/auto-answer-decider/data/leakage_check.py --self-test --e5-dir <main checkout>/resources/models/Xenova/multilingual-e5-small
+
+### 2026-11-10: D3 answered (AgentRouter gpt-6.1-sol, no cap); teacher measured; full run started
+
+- **New scripts:**
+  - `data/agentrouter_client.mjs`: Responses API, `originator` header, pacing, 402
+    batch-wait, 429 backoff, `response.incomplete` handling.
+  - `data/teacher_label.mjs`: the judge-prompt view plus the §4 rubric view at effort `none`;
+    on disagreement both re-run at `medium`; majority vote; a tie goes to adjudication.
+  - `data/generate_transcripts.mjs`: quota planner from `taxonomy.md`, 5 tags per transcript
+    asked for twice each, 50% unpunctuated, `USER_ECHO` speaker for `user_own_voice`.
+  - `data/emit_fields.mjs` and `data/build_dataset.py`: by-transcript 80/10/10 split,
+    leakage check, Laya rows in the confirmed `target_from_gold` format.
+- **Teacher accuracy on gold (EVAL ONLY; no gold text is used for labels or prompts):**
+
+      AGENTROUTER_API_KEY=<.env> node ml/auto-answer-decider/data/teacher_label.mjs --gold --out ml/auto-answer-decider/results/runs/teacher-gold-gpt61sol.jsonl --concurrency 3
+
+  - Ensemble: **recall 32/36, false fires 1/151.** For comparison, the production decision
+    tier scores 36/36 and 3/151.
+  - First-pass agreement 178/187; 7 ties went to adjudication.
+  - The misses are 3 asks cut off at the end (teacher says wait) and 1 case the teacher reads
+    as the user's own follow-up.
+  - 72 gold "silent" cases came back as **wait**: mid-explanation fragments. Neither label
+    fires, so answer-vs-not accuracy is unaffected.
+  - **The teacher prompts were NOT tuned on these results.** Doing so would leak gold into
+    the labels.
+  - Throughput: 20 min for 187 records at 3 workers. 51 upstream token-rate-limit retries,
+    so 3 is about the gateway ceiling.
+- **Segmenter timing fix.** Interims now arrive every 70 to 110 ms, with real pauses:
+  hesitations on ~7% of words and breaths on ~35% of clause ends.
+  - Before the fix, gaps of up to 215 ms between interims set off the engine's 120 ms early
+    judge mid-word, so 53% of pilot candidates were "incomplete". After: 39%.
+  - Pilot: 4 transcripts → 117 candidates.
+- **Full run started 2026-11-10 21:10 UTC**, detached, logs in `natively-decider-cache/`:
+  - generation: `--n 1000 --seed 1 --concurrency 2` → `data/work/transcripts.jsonl`
+    (log `gen.log`);
+  - pilot labeling at concurrency 1 (log `pilot-label.log`).
+  - Estimate: ~5 min per transcript per worker, so about 40 h for 1,000 at 2 workers.
+- **Internal disk is at 187 MB free.** Claude Code's temp output lives there; everything in
+  this campaign writes to the SSD.

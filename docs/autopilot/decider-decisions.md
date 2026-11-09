@@ -96,3 +96,31 @@ about 1.4M tokens, about $0.50 by estimate.)
 **Blocks:** Phase 1 steps 3 and 6 (generation, teacher labeling), and so Phase 2 training on
 real data. Meanwhile, unblocked: schema, taxonomy, segmentation through the real engine, the
 leakage check, the adjudication tool, plus Phase 3 and 4 plumbing on the zero-shot checkpoint.
+
+---
+
+## Answers from Evin (2026-11-10)
+
+- **D3 → AgentRouter, `gpt-6.1-sol`, no spending limit.** Use the AgentRouter key in the
+  main checkout's `.env` (`AGENTROUTER_API_KEY`). It is exported into the process env at
+  run time and never written into the repo. DeepSeek is dropped.
+  - Facts the scripts must handle, from `electron/llm/agentRouter.ts`:
+    - GPT is Responses-API only.
+    - Requests need the `originator: codex_cli_rs` header (Evin's 2026-09-30 decision).
+    - GPT is rationed in daily batches (`402 Budget pool quota has been exhausted`) and
+      gpt-6.1-sol rate-limits.
+    - A canned probe phrase is content-blocked.
+  - **Risk, noted rather than blocking:** AgentRouter's terms name heavy automated Q&A use
+    as grounds for suspension. A bulk labeling run is exactly that. The scripts pace
+    requests, back off on 402/429, and stop after repeated 401s rather than hammering.
+    OpenAI's usage terms also restrict using outputs to build competing models. Evin chose
+    this provider knowing a 3-way meeting-turn classifier is the use.
+- **D1 → mine to decide; the requirement is that it decides correctly.** Decision: fit
+  per-question temperatures on calib, then gate on calibrated **`answer_confidence`**
+  (laya's own calibrated quantity). Accept the decider's verdict only above a threshold set
+  so that accepted verdicts reach ≥99% accuracy on calib. Everything below that escalates
+  to the LLM judge. Raw `confidence` (entropy) is logged and plotted for comparison but
+  does not gate. "Without error" is met by the cascade: the model answers only what it is
+  sure of, and the judge takes the rest. Phase 7 checks this on gold against the judge's
+  36/36 and 3 false-fire bar.
+- **D2 → later.** The Windows bench is deferred. Model-size choice stays provisional until then.
