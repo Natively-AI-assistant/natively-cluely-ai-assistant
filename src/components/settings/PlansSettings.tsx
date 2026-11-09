@@ -6,6 +6,8 @@ import { HowItWorksRefund, PartnerPrograms } from './HowItWorksRefund';
 import { getLicenseSnapshot, setLicenseSnapshot } from '../../lib/licenseCache';
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'framer-motion';
 import { BEAT, EASE_ENTER, EASE_LEAVE, INK, SETTLE } from '../../lib/plansMotion';
+import { plansVisit } from '../../lib/funnel/plansVisit.mjs';
+import { usePlansSeen } from '../../lib/funnel/usePlansSeen';
 
 // ─── Thin container ─────────────────────────────────────────
 // Natively API (managed AI/STT/search usage) and Natively Pro (a device
@@ -169,6 +171,9 @@ export const PlansSettings: React.FC<PlansSettingsProps> = ({
     }, [readLicense]);
 
     const isPremium = !!licenseDetails?.isPremium;
+    // Funnel (plans_visit): the end of the page (partner programs, refund
+    // policy) was on screen, i.e. the visit scrolled all the way down.
+    const bottomSeenRef = usePlansSeen(() => plansVisit.seen('bottom'));
     // Natively API is the primary/default-visible path (it's the managed
     // subscription this product sells). The app-only license is always the
     // secondary option UNLESS it's the user's actual active entitlement —
@@ -318,6 +323,7 @@ export const PlansSettings: React.FC<PlansSettingsProps> = ({
                 layout="position"
                 transition={{ layout: reduceMotion ? { duration: 0 } : { duration: SETTLE.remove, ease: EASE_ENTER } }}
                 className="space-y-6"
+                ref={bottomSeenRef}
             >
                 {/* The affiliate and creator programs ride in the same region:
                     they shift with it and never appear on their own. */}

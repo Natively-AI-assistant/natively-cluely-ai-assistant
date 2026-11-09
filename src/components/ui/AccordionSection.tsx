@@ -70,6 +70,8 @@ interface AccordionSectionProps {
   icon?: React.ReactNode;
   children: React.ReactNode;
   defaultOpen?: boolean;
+  /** Called with the new state when the header is pressed. */
+  onOpenChange?: (open: boolean) => void;
   /** Outer container classes (bg/border/radius) — override to match the surrounding card convention. */
   className?: string;
   /** The hairline between the header and the body. On by default; a body that
@@ -257,6 +259,7 @@ export const AccordionSection: React.FC<AccordionSectionProps> = ({
   icon,
   children,
   defaultOpen = false,
+  onOpenChange,
   className = 'bg-bg-card rounded-xl border-border-subtle',
   divider = true,
   hoverFill = true,
@@ -274,7 +277,7 @@ export const AccordionSection: React.FC<AccordionSectionProps> = ({
     // AccordionPanel the height, the body settling in and out, and the scroll.
     <div ref={cardRef} className={`t-acc acc-section border mb-4 overflow-hidden shadow-sm ${className}`} data-open={String(isOpen)}>
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => { const next = !isOpen; setIsOpen(next); onOpenChange?.(next); }}
         aria-expanded={isOpen}
         className={`w-full flex items-center justify-between gap-3 p-4 text-left transition-colors ${hoverFill ? 'hover:bg-[color:var(--bg-row-hover)]' : ''} focus-visible:[outline-offset:-2px] group`}
       >

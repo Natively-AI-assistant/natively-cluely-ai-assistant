@@ -28,6 +28,8 @@ One table, `funnel_events` (natively-api migrations 025 and 026).
 | `checkout_opened` | app | any Dodo checkout link opened, with product and screen |
 | `key_entered` | app | API key or Pro licence entered; accepted or not; minutes since trial start / own-keys exit |
 | `upgrade_prompt`, `paywall_hit` | app | quota banner shown; locked Modes / Profile Intelligence opened |
+| `plans_viewed` | app | Settings › Plans & Billing came into view, once each time: `from` sidebar (picked in Settings) or link (opened there by a card, banner, the trial meter, Help or a meeting page). With `checkout_opened` from `api_settings` / `pro_settings` it counts who looked and left |
+| `plans_visit` | app | one row per visit to Plans & Billing, sent when it leaves view: how far down it got (API plans, Max/Ultra in the rail, packs, Pro cards, the bottom), whether the person moved the plan rail, the Monthly/Yearly switch, seconds while the window was visible and in front (at most 1800), checkouts opened from it, and whether the refund policy was opened. `src/lib/funnel/plansVisit.mjs`; the server report's `plans_page` sums it |
 | `trial_started`, `trial_reissued` | server | a trial row was created or re-issued; ties trial to install |
 | `purchase_completed`, `checkout_failed`, `subscription_cancelled` | server | from Dodo webhooks; carries the install and screen the checkout link was opened from, and the amount |
 | `subscription_renewed`, `subscription_on_hold` | server | the customer paid again (one row per billing period); a renewal payment failed and access stopped |

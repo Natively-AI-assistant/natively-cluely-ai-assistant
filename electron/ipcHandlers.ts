@@ -13424,7 +13424,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Events only the renderer can see: a card on screen, a locked feature opened.
   // The event name is checked against this list and its properties against the
   // catalogue, so the renderer cannot send anything the catalogue does not hold.
-  const RENDERER_FUNNEL_EVENTS = new Set(['trial_card', 'trial_notice', 'upgrade_prompt', 'paywall_hit', 'onboarding_stage', 'feature_used', 'answer_failed', 'notepad_used']);
+  const RENDERER_FUNNEL_EVENTS = new Set(['trial_card', 'trial_notice', 'upgrade_prompt', 'paywall_hit', 'plans_viewed', 'plans_visit', 'onboarding_stage', 'feature_used', 'answer_failed', 'notepad_used']);
   safeHandle('funnel:track', async (_, eventType: unknown, props: unknown) => {
     if (typeof eventType !== 'string' || !RENDERER_FUNNEL_EVENTS.has(eventType)) return { ok: false, error: 'unknown_event' };
     const checked = checkFunnelProps(eventType, props);

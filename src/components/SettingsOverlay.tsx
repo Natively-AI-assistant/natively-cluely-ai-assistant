@@ -59,6 +59,8 @@ import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
 import { LiquidGlassButton } from '../ui-components/LiquidGlassButton';
 import icon from './icon.png';
 import { WELCOME_BUTTON_TOKENS } from './onboarding/welcomeButtonTokens';
+import { isPlansTab, plansViewTransition } from '../lib/funnel/plansViewed.mjs';
+import { plansVisit } from '../lib/funnel/plansVisit.mjs';
 
 // Process Disguise tiles: Liquid Glass fed this card's own tokens. `.lg-action`
 // otherwise reads the legacy action blue, and `.lg-clear`'s defaults are the
@@ -671,6 +673,53 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
            sub-tab) that the deep link is trying to reach. Without it the second
            click of a deep link did nothing at all. */
     }, [isOpen, initialTab, initialTabSeq]);
+
+    /* Funnel: Plans & Billing came into view (plans_viewed), once each time.
+       Set by the sidebar's Plans & Billing item, so the view says whether the
+       person went there themselves or was sent there by a card or banner. */
+    const plansFromSidebarRef = useRef(false);
+    const plansInViewRef = useRef(false);
+    const plansWasOpenRef = useRef(false);
+    useEffect(() => {
+        /* On the render Settings opens, activeTab can still hold the previous
+           session's tab: the initialTab sync above switches it one render
+           later. Judge that render by the tab Settings is opening on, so a
+           stale Plans tab is not counted as a view. */
+        const opening = isOpen && !plansWasOpenRef.current;
+        plansWasOpenRef.current = isOpen;
+        const tab = opening && initialTab ? initialTab : activeTab;
+        const view = plansViewTransition(plansInViewRef.current, { open: isOpen, tab, fromSidebar: plansFromSidebarRef.current });
+        const wasInView = plansInViewRef.current;
+        plansInViewRef.current = isOpen && isPlansTab(tab);
+        plansFromSidebarRef.current = false;
+        if (view) {
+            window.electronAPI?.funnelTrack?.('plans_viewed', view)?.catch?.(() => {});
+            // plans_visit: what this visit does on the page, sent when it leaves.
+            plansVisit.start(view.from, { visible: document.visibilityState !== 'hidden' && document.hasFocus() });
+        } else if (wasInView && !plansInViewRef.current) {
+            plansVisit.end();
+        }
+    }, [isOpen, activeTab, initialTab]);
+
+    /* plans_visit: time counts only while the window is visible and in front,
+       and a visit still open when the window goes away (quit, reload) is sent
+       then. Focus as well as visibility: the launcher can run with background
+       throttling off, and then a hidden window still reports "visible". */
+    useEffect(() => {
+        const onVisibility = () => plansVisit.visibility(document.visibilityState !== 'hidden' && document.hasFocus());
+        const onGone = () => { plansVisit.end(); };
+        document.addEventListener('visibilitychange', onVisibility);
+        window.addEventListener('focus', onVisibility);
+        window.addEventListener('blur', onVisibility);
+        window.addEventListener('pagehide', onGone);
+        return () => {
+            document.removeEventListener('visibilitychange', onVisibility);
+            window.removeEventListener('focus', onVisibility);
+            window.removeEventListener('blur', onVisibility);
+            window.removeEventListener('pagehide', onGone);
+            plansVisit.end();
+        };
+    }, []);
 
     const { shortcuts, updateShortcut, resetShortcuts, conflicts, globalShortcutsEnabled, setGlobalShortcutsEnabled } = useShortcuts();
     // Small badge shown next to a shortcut row when globalShortcut.register()
@@ -2344,7 +2393,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         <Monitor size={16} /> {t('General')}
                                     </button>
                                     <button
-                                        onClick={() => setActiveTab('plans')}
+                                        onClick={() => { plansFromSidebarRef.current = true; setActiveTab('plans'); }}
                                         className={navItemClass(activeTab === 'plans' || activeTab === 'natively-api' || activeTab === 'natively-pro')}
                                     >
                                         {(activeTab === 'plans' || activeTab === 'natively-api' || activeTab === 'natively-pro') && navActivePill}

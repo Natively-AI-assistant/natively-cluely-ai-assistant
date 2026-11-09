@@ -2,6 +2,7 @@ import React, { useLayoutEffect, useRef, useState } from 'react';
 import { animate, motion, useMotionValue, useReducedMotion } from 'framer-motion';
 import { CalendarClock, CalendarX, CirclePlay, Clock3, FileText, Gauge, HandCoins, Heart, KeyRound, Mail, Megaphone, Power, Receipt, Ticket } from 'lucide-react';
 import { AccordionSection } from '../ui/AccordionSection';
+import { plansVisit } from '../../lib/funnel/plansVisit.mjs';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
 import { AFFILIATE_PROGRAM_URL, CREATORS_PROGRAM_URL } from '../../lib/partnerLinks';
 import './HowItWorksRefund.css';
@@ -468,6 +469,7 @@ export const HowItWorksRefund: React.FC = () => {
     <AccordionSection
       title="How it works & refund policy"
       description="Setup steps, refund rules and how to cancel."
+      onOpenChange={(open) => { if (open) plansVisit.refundOpened(); }}
       className="natively-key-card bg-bg-item-surface rounded-2xl border-border-subtle !mb-0"
       divider={false}
       hoverFill={false}

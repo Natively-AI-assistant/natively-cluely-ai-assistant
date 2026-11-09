@@ -3,6 +3,8 @@ import { useT } from '../../i18n';
 import { AnimatePresence, motion, useReducedMotion, type Variants, useMotionValue, useTransform, useSpring } from 'framer-motion';
 import { CheckCircle, AlertCircle, X, ChevronDown, Check, ArrowUpRight } from 'lucide-react';
 import { TierBand } from './NativelyApiSettings';
+import { plansVisit } from '../../lib/funnel/plansVisit.mjs';
+import { usePlansSeen } from '../../lib/funnel/usePlansSeen';
 import './apiTier.css';
 import { InteractiveCard } from '../ui/InteractiveCard';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../../lib/meetingInterfaceTheme';
@@ -631,7 +633,12 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
         }
     };
 
-    const openExternal = (url: string) => { (window.electronAPI as any)?.openExternal?.(url, { surface: 'pro_settings' }); };
+    const openExternal = (url: string) => {
+        plansVisit.opened(url); // plans_visit counts it when it is a checkout link
+        (window.electronAPI as any)?.openExternal?.(url, { surface: 'pro_settings' });
+    };
+    // Funnel (plans_visit): the Pro cards were on screen during this visit.
+    const proSeenRef = usePlansSeen(() => plansVisit.seen('pro'));
     // Literals, because they always were. These sat behind a
     // getNativelyPricing fetch whose /v1/pricing route exists in no version of
     // natively-api — added 2026-05-29 in a commit named "partial" and never
@@ -968,7 +975,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                         were removed at the owner's request (2026-11-09). The
                         struck list price still appears only while a named sale
                         runs (lib/lifetimeSale.mjs). */}
-                    <div className="pt-3" id="natively-pro-pricing">
+                    <div className="pt-3" id="natively-pro-pricing" ref={proSeenRef}>
                         <div className="flex items-baseline justify-between gap-3 px-1 mb-2">
                             <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.07em]">Natively Pro</p>
                             <span className="text-[11px] text-text-tertiary whitespace-nowrap">Use your own AI keys</span>

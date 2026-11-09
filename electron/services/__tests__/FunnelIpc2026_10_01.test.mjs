@@ -192,6 +192,17 @@ describe('funnel telemetry through the real IPC handlers', { skip: HAVE_BUILD ? 
     const paywall = await during(() => call('funnel:track', 'paywall_hit', { feature: 'modes' }));
     assert.equal(paywall.events[0].event_type, 'paywall_hit');
 
+    const plans = await during(() => call('funnel:track', 'plans_viewed', { from: 'sidebar' }));
+    assert.deepEqual(plans.events.map((e) => [e.event_type, e.props]), [['plans_viewed', { from: 'sidebar' }]]);
+
+    const visitProps = {
+      from: 'link', seconds: 42, saw_api_plans: true, saw_packs: true, saw_pro: false, saw_bottom: false,
+      plan_cards: 3, saw_max_ultra: true, rail_scrolled: true, cycle: 'yearly', cycle_switched: true,
+      checkouts: 1, refund_opened: false,
+    };
+    const visit = await during(() => call('funnel:track', 'plans_visit', visitProps));
+    assert.deepEqual(visit.events.map((e) => [e.event_type, e.props]), [['plans_visit', visitProps]]);
+
     for (const [name, props, error] of [
       ['checkout_opened', { product: 'api_pro', surface: 'trial_card', opened: true }, 'unknown_event'],
       ['key_entered', { kind: 'api_key', result: 'ok' }, 'unknown_event'],
@@ -200,6 +211,9 @@ describe('funnel telemetry through the real IPC handlers', { skip: HAVE_BUILD ? 
       ['trial_card', { mode: 'expired', action: 'plan_pro' }, 'bad_prop:action'],
       ['trial_card', { mode: 'expired', action: 'shown', note: 'hello there' }, 'unknown_prop:note'],
       ['paywall_hit', { feature: 'everything' }, 'bad_prop:feature'],
+      ['plans_viewed', { from: 'elsewhere' }, 'bad_prop:from'],
+      ['plans_visit', { seconds: -1 }, 'bad_prop:seconds'],
+      ['plans_visit', { saw_packs: 'yes' }, 'bad_prop:saw_packs'],
       [42, {}, 'unknown_event'],
     ]) {
       const r = await during(() => call('funnel:track', name, props));

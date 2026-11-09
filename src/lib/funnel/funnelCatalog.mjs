@@ -284,6 +284,35 @@ export const FUNNEL_CATALOG = Object.freeze({
   paywall_hit: {
     feature: ['modes', 'profile_intelligence'],
   },
+  // Settings › Plans & Billing came into view (added 2026-11-06), once each
+  // time it does. With checkout_opened from api_settings / pro_settings this
+  // counts who looked at the plans and left without opening a checkout.
+  // sidebar: picked from the Settings sidebar. link: Settings opened straight
+  // on it (a card, the trial meter, a banner, Help, a meeting page).
+  plans_viewed: {
+    from: ['sidebar', 'link'],
+  },
+  // One visit to Settings › Plans & Billing, summed up when it leaves view
+  // (added 2026-11-09; the app's src/lib/funnel/plansVisit.mjs). What people
+  // do on the pricing page, to judge its design: how far down they got,
+  // whether they moved the plan rail, tried Yearly, how long they stayed and
+  // how many checkouts they opened from it. The event's entitlement says
+  // what they already had.
+  plans_visit: {
+    from: ['sidebar', 'link'],
+    seconds: INT,            // while the window was visible and in front, at most 1800
+    saw_api_plans: BOOL,     // the API plan cards were on screen
+    saw_packs: BOOL,         // the Pro packs
+    saw_pro: BOOL,           // the Natively Pro licence cards
+    saw_bottom: BOOL,        // the end of the page (partner programs, refunds)
+    plan_cards: INT,         // how many of the four plan cards were on screen
+    saw_max_ultra: BOOL,     // Max or Ultra was on screen
+    rail_scrolled: BOOL,     // moved the plan rail themselves
+    cycle: ['monthly', 'yearly'], // the Monthly / Yearly switch when they left
+    cycle_switched: BOOL,
+    checkouts: INT,          // checkout links opened from the tab
+    refund_opened: BOOL,     // opened "How it works & refund policy"
+  },
 
   // ── The notepad ──────────────────────────────────────────────────────────
   // Added 2026-11-01: is the notepad worth more work? Who picks it over the

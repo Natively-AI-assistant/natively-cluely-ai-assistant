@@ -29,6 +29,8 @@ import { trialRefusal } from '../../lib/trial/trialStart.mjs';
 import { CHECKOUT_URLS } from '../../config/urls';
 import { BillingCycleSwitch } from '../ui/BillingCycleSwitch';
 import './apiTier.css';
+import { plansVisit } from '../../lib/funnel/plansVisit.mjs';
+import { usePlansSeen } from '../../lib/funnel/usePlansSeen';
 import {
   apiPlanLabel, formatMeetingTime, isPackPlan, packStatus, PRO_PACKS, YEARLY_MONTHS_FREE,
   type BillingCycle, type PackStatus,
@@ -198,7 +200,7 @@ export const PLANS = [
     yearlyUrl: CHECKOUT_URLS.apiMaxYearly,
     badgeText: 'Best value',
     includesPro: true,
-    description: 'Higher volume for developers and teams doing more each month.',
+    description: 'Higher volume for developers and teams doing more.',
     note: 'Includes the full Natively Pro desktop app license while you are subscribed.',
     features: [
       'High-volume AI usage',
@@ -790,6 +792,29 @@ function PlanRail({ children }: { children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
   const [edge, setEdge] = useState<'start' | 'middle' | 'end'>('start');
+  // Funnel (plans_visit): the plan row was on screen, and which of its cards.
+  // railOnScreen gates the card count: the row keeps rotating while scrolled
+  // out of view or folded inside a closed "Change plan", and cards turning
+  // past there were never seen.
+  const railOnScreenRef = useRef(false);
+  const seenRef = usePlansSeen(() => plansVisit.seen('api_plans'), (onScreen) => {
+    railOnScreenRef.current = onScreen;
+    if (onScreen) countCardsRef.current();
+  });
+  const railRef = useCallback((el: HTMLDivElement | null) => { ref.current = el; seenRef(el); }, [seenRef]);
+  const countCardsRef = useRef(() => {});
+  countCardsRef.current = () => {
+    const rail = ref.current;
+    if (!rail || !railOnScreenRef.current) return;
+    // A card counts once most of its width sits inside the row's window.
+    const box = rail.getBoundingClientRect();
+    rail.querySelectorAll<HTMLElement>('[data-tier]').forEach((card) => {
+      const r = card.getBoundingClientRect();
+      const inside = Math.min(r.right, box.right) - Math.max(r.left, box.left);
+      if (r.width > 0 && inside >= r.width * 0.6 && card.dataset.tier) plansVisit.card(card.dataset.tier);
+    });
+  };
+  useEffect(() => plansVisit.onStart(() => countCardsRef.current()), []);
 
   useEffect(() => {
     const rail = ref.current;
@@ -806,6 +831,27 @@ function PlanRail({ children }: { children: React.ReactNode }) {
     // trackpad, a drag, arrow keys), never from scroll events, so the
     // rail's own smooth scroll can never be mistaken for it.
     const hold = () => { heldUntil = Date.now() + RAIL_RESUME_AFTER_MS; };
+    // plans_visit's rail_scrolled: the row actually moved sideways AND the
+    // person had just pushed it that way (a sideways wheel or trackpad swipe,
+    // a drag, an arrow key). A click on a Get button, the page scrolling up and
+    // down under the pointer, and the row's own rotation do not count.
+    let pushedAt = -Infinity;
+    let autoUntil = 0;
+    let lastLeft = rail.scrollLeft;
+    let dragging = false;
+    const pushed = () => { pushedAt = Date.now(); };
+    const onWheel = (e: WheelEvent) => { hold(); if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) pushed(); };
+    const onPointerDown = () => { hold(); dragging = true; };
+    const onPointerMove = () => { if (dragging) pushed(); };
+    const onPointerUp = () => { dragging = false; };
+    const onKeyDown = (e: KeyboardEvent) => { hold(); if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') pushed(); };
+    const onRailScroll = () => {
+      updateEdge();
+      const moved = rail.scrollLeft !== lastLeft;
+      lastLeft = rail.scrollLeft;
+      if (moved && Date.now() >= autoUntil && Date.now() - pushedAt < 800) plansVisit.railScrolled();
+      countCardsRef.current();
+    };
     const onEnter = () => { hovered = true; };
     const onLeave = () => { hovered = false; };
     // Keyboard focus only: a mouse click on a Get button leaves focus inside
@@ -813,11 +859,13 @@ function PlanRail({ children }: { children: React.ReactNode }) {
     const onFocusIn = (e: FocusEvent) => { focused = (e.target as Element | null)?.matches?.(':focus-visible') ?? false; };
     const onFocusOut = (e: FocusEvent) => { if (!rail.contains(e.relatedTarget as Node | null)) focused = false; };
 
-    rail.addEventListener('scroll', updateEdge, { passive: true });
-    rail.addEventListener('wheel', hold, { passive: true });
-    rail.addEventListener('pointerdown', hold);
+    rail.addEventListener('scroll', onRailScroll, { passive: true });
+    rail.addEventListener('wheel', onWheel, { passive: true });
+    rail.addEventListener('pointerdown', onPointerDown);
+    rail.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
     rail.addEventListener('touchstart', hold, { passive: true });
-    rail.addEventListener('keydown', hold);
+    rail.addEventListener('keydown', onKeyDown);
     rail.addEventListener('pointerenter', onEnter);
     rail.addEventListener('pointerleave', onLeave);
     rail.addEventListener('focusin', onFocusIn);
@@ -832,16 +880,19 @@ function PlanRail({ children }: { children: React.ReactNode }) {
       const step = card.offsetWidth + gap;
       const max = rail.scrollWidth - rail.clientWidth;
       if (max <= 0) return;
+      autoUntil = Date.now() + 1200; // its own smooth scroll is not the person's
       rail.scrollTo({ left: rail.scrollLeft >= max - 2 ? 0 : Math.min(rail.scrollLeft + step, max), behavior: 'smooth' });
     }, RAIL_STEP_MS);
 
     return () => {
       if (timer !== null) window.clearInterval(timer);
-      rail.removeEventListener('scroll', updateEdge);
-      rail.removeEventListener('wheel', hold);
-      rail.removeEventListener('pointerdown', hold);
+      rail.removeEventListener('scroll', onRailScroll);
+      rail.removeEventListener('wheel', onWheel);
+      rail.removeEventListener('pointerdown', onPointerDown);
+      rail.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
       rail.removeEventListener('touchstart', hold);
-      rail.removeEventListener('keydown', hold);
+      rail.removeEventListener('keydown', onKeyDown);
       rail.removeEventListener('pointerenter', onEnter);
       rail.removeEventListener('pointerleave', onLeave);
       rail.removeEventListener('focusin', onFocusIn);
@@ -850,7 +901,7 @@ function PlanRail({ children }: { children: React.ReactNode }) {
   }, [reduceMotion]);
 
   return (
-    <div ref={ref} className="api-tier-rail" data-edge={edge} role="list" aria-label="Natively API plans">
+    <div ref={railRef} className="api-tier-rail" data-edge={edge} role="list" aria-label="Natively API plans">
       {children}
     </div>
   );
@@ -870,8 +921,10 @@ const PACK_LOOK: Record<string, { mesh: TierMesh; pattern: TierPattern; blurb: s
 function ProPacks({ currentPlan, onBuy }: { currentPlan?: string; onBuy: (url: string) => void }) {
   const urls: Record<string, string> = { pack_light: CHECKOUT_URLS.packLight, pack_heavy: CHECKOUT_URLS.packHeavy };
   const current = currentPlan?.toLowerCase();
+  // Funnel (plans_visit): the packs were on screen during this visit.
+  const seenRef = usePlansSeen(() => plansVisit.seen('packs'));
   return (
-    <div className="pt-3">
+    <div className="pt-3" ref={seenRef}>
       <SectionLabel aside={<span className="text-[11px] text-text-tertiary whitespace-nowrap">Pay once, nothing renews</span>}>
         Pro packs
       </SectionLabel>
@@ -1042,6 +1095,13 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   useEffect(() => {
     if (keyBillingPeriod === 'yearly') setBillingCycle('yearly');
   }, [keyBillingPeriod]);
+  // Funnel (plans_visit): the switch's value, and again at each visit's start
+  // so a visit knows what it opened on. Only a press on the switch counts as
+  // a switch (onChange below); the move to Yearly for a yearly key does not.
+  const billingCycleRef = useRef(billingCycle);
+  billingCycleRef.current = billingCycle;
+  useEffect(() => { plansVisit.cycle(billingCycle); }, [billingCycle]);
+  useEffect(() => plansVisit.onStart(() => plansVisit.cycle(billingCycleRef.current)), []);
 
   const selectPlan = useCallback((newPlanId: string) => {
     setSelectedPlanId(prev => {
@@ -1516,6 +1576,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   };
 
   const openExternal = (url: string) => {
+    plansVisit.opened(url); // plans_visit counts it when it is a checkout link
     (window.electronAPI as any)?.openExternal?.(url, { surface: 'api_settings' });
   };
 
@@ -1575,7 +1636,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           below, so each group of cards on the tab has a name. */}
       <div className="flex items-center justify-between gap-3 px-1">
         <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.07em]">Natively API plans</p>
-        <BillingCycleSwitch value={billingCycle} onChange={setBillingCycle} showNote={false} align="start" />
+        <BillingCycleSwitch value={billingCycle} onChange={(next) => { plansVisit.cycleSwitched(next); setBillingCycle(next); }} showNote={false} align="start" />
       </div>
 
       {/* All four plans as website pricing tiers, the same card and anatomy
