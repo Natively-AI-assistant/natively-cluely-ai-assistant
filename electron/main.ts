@@ -4469,6 +4469,10 @@ export class AppState {
     // ends its stand-in too.
     (stt as any).stop = () => {
       failover.stop();
+      // The provider object outlives the meeting (the next one reuses it): a
+      // "reconnecting" shown or waiting, and the once-only "behind", end here.
+      reconnectNotice.settle();
+      _behindReported = false;
       return rawStop();
     };
     stt.on('transcript', (segment: { text: string, isFinal: boolean, confidence: number, speakerId?: string, voiceEpoch?: number }) => {
@@ -4496,6 +4500,8 @@ export class AppState {
     // teardown cancels the wait. `_lastState` turns 'reconnecting' only when
     // the notice is actually sent.
     const reconnectNotice = new SttReconnectNotice({
+      // A wait that started in one meeting never shows in the next.
+      epoch: () => this._meetingGeneration,
       show: (payload: SttStatusPayload) => {
         // Not for a channel a stand-in carries, nor for a provider that was
         // torn down or replaced while the notice waited (meeting end,
@@ -4506,8 +4512,8 @@ export class AppState {
         this.sendSttStatus(payload);
       },
     });
-    // A local model slower than speech is said once per provider instance (and
-    // the overlay keeps it to once per meeting).
+    // A local model slower than speech is said once per meeting: stop() (every
+    // meeting end) resets it.
     let _behindReported = false;
 
     stt.on('error', (raw: unknown) => {
@@ -4814,6 +4820,8 @@ export class AppState {
                 maxAttempts: 3,
                 terminal: false,
                 stuck: true,
+                // A blocked permission: the overlay shows it even when hidden (quietly).
+                permission: true,
               });
             })
             .catch(() => { /* probe failed — keep log-only behavior */ });
@@ -4833,6 +4841,8 @@ export class AppState {
               maxAttempts: 3,
               terminal: false,
               stuck: true,
+              // A blocked permission: the overlay shows it even when hidden (quietly).
+              permission: true,
             });
           }
         }
@@ -5232,6 +5242,8 @@ export class AppState {
             maxAttempts: 3,
             terminal: false,
             stuck: true,
+            // Most often a blocked mic permission: shown even on a hidden overlay.
+            permission: true,
           });
         }
       }

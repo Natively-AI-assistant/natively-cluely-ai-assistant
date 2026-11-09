@@ -20,6 +20,7 @@ import {
   EMPTY_AUDIO_WARNINGS,
   audioWarningSeverity,
   clearAudioWarning,
+  clearedByRecovery,
   dismissShownAudioWarning,
   offerAudioWarning,
   resetAudioWarnings,
@@ -62,9 +63,9 @@ test('one slot per channel: the most serious shows, the other is held and shows 
 
 test('recovery clears only its channel, and never a warning real audio does not fix', () => {
   const s = offer(W({ channel: 'mic', stuck: true, message: 'mic silent' }), W({ channel: 'system', terminal: true, clearsOnRecovery: false, message: 'stt' }));
-  const recovered = (st, ch) => clearAudioWarning(st, ch, (w) => w.kind === 'audio-capture-failure' && w.clearsOnRecovery !== false);
+  const recovered = (st, ch) => clearAudioWarning(st, ch, clearedByRecovery);
   const afterMic = recovered(s, 'mic');
-  assert.equal(afterMic.slots.mic, undefined);
+  assert.equal(afterMic.held.filter((w) => w.channel === 'mic').length, 0);
   assert.equal(shownAudioWarning(afterMic).message, 'stt');
   assert.equal(recovered(afterMic, 'system'), afterMic, 'an STT provider fault stays');
 });
@@ -97,11 +98,11 @@ const handler = (() => {
 })();
 
 test('overlay: recovered clears; terminal/stuck are offered; advice too; transient reports still dropped', () => {
-  assert.match(handler, /if \(payload\.recovered\) \{\s*setAudioWarnings\(\(s\) => clearAudioWarning\(s, payload\.channel, \(w\) => w\.kind === 'audio-capture-failure' && w\.clearsOnRecovery !== false\)\);\s*return;/);
+  assert.match(handler, /if \(payload\.recovered\) \{\s*setAudioWarnings\(\(s\) => clearAudioWarning\(s, payload\.channel, clearedByRecovery\)\);\s*return;/);
   assert.match(handler, /if \(payload\.terminal \|\| payload\.stuck\) \{/);
   assert.match(handler, /\} else if \(payload\.advisory\) \{/);
   assert.doesNotMatch(handler, /setIsExpanded\(true\)/);
-  assert.match(handler, /if \(payload\.terminal\) revealOverlayForWarning\(\);/, 'only a terminal fault reopens the overlay');
+  assert.match(handler, /if \(payload\.terminal \|\| payload\.permission\) revealOverlayForWarning\(\);/, 'only a terminal fault or a lost permission reopens the overlay');
 });
 
 test('overlay: reopening is quiet (no focus) and leaves an open overlay alone (O2)', () => {
@@ -123,7 +124,7 @@ test('overlay: the warnings end with the meeting, not on the start-side session 
 
 test('overlay: the ✕ closes the warning it shows; a rebuilt capture clears a terminal system warning', () => {
   assert.match(overlay, /onDismiss=\{\(\) => setAudioWarnings\(dismissShownAudioWarning\)\}/);
-  assert.match(overlay, /setAudioWarnings\(\(s\) => clearAudioWarning\(s, 'system', \(w\) => w\.kind === 'audio-capture-failure' && !!w\.terminal\)\);/);
+  assert.match(overlay, /setAudioWarnings\(\(s\) => clearAudioWarning\(s, 'system', clearedByRebuild\)\);/);
   // Advice does not stand in for "Transcription Stopped".
   assert.match(overlay, /const audioFailureBannerActive = systemAudioWarning\?\.kind === 'audio-capture-failure' && audioWarningSeverity\(systemAudioWarning\) >= 2;/);
 });

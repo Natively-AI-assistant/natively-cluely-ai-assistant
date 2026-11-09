@@ -72,8 +72,15 @@ export function pickOverlayBanners(wanted, cap = OVERLAY_BANNER_CAP) {
 /**
  * The banner id for the audio warning the overlay holds, by how serious it is
  * (audioWarningSlots.mjs severity: 3 error, 2 stuck, 1 advisory).
+ *
+ * `standsInForStop`: "Transcription Stopped" steps down while the audio banner
+ * explains the stop, so the audio banner takes the stop's place in the order
+ * (at least 'audio-error'). Held back by the cap, it would leave neither on
+ * screen.
  * @param {0 | 1 | 2 | 3} severity
+ * @param {boolean} [standsInForStop]
  */
-export function audioBannerId(severity) {
+export function audioBannerId(severity, standsInForStop = false) {
+  if (standsInForStop) return 'audio-error';
   return severity >= 3 ? 'audio-error' : severity === 2 ? 'audio-stuck' : 'audio-advisory';
 }

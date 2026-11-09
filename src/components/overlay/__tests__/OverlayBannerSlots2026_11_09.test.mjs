@@ -73,7 +73,8 @@ test('every banner fold in the overlay goes through the picker', () => {
     assert.match(tag, re, testId);
   }
   assert.match(overlay, /const bannerSlots = pickOverlayBanners\(\{/);
-  assert.match(overlay, /\[audioBannerId\(audioWarningSeverity\(systemAudioWarning\)\)\]: !!systemAudioWarning,/);
+  assert.match(overlay, /const audioBannerSlotId = audioBannerId\(audioWarningSeverity\(systemAudioWarning\), audioFailureBannerActive && sttFailed\);/);
+  assert.match(overlay, /\[audioBannerSlotId\]: !!systemAudioWarning,/);
   // Both stealth banners want the same slot, whichever platform draws one.
   assert.match(overlay, /'stealth-permission': \(isMac \|\| isWindows\) && stealthPermissionMissing,/);
 });

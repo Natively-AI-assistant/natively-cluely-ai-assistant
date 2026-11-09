@@ -17,4 +17,4 @@ export type OverlayBannerId =
 export const OVERLAY_BANNER_CAP: number;
 export const OVERLAY_BANNER_PRIORITY: readonly OverlayBannerId[];
 export function pickOverlayBanners(wanted: Partial<Record<OverlayBannerId, boolean>>, cap?: number): Set<OverlayBannerId>;
-export function audioBannerId(severity: 0 | 1 | 2 | 3): 'audio-error' | 'audio-stuck' | 'audio-advisory';
+export function audioBannerId(severity: 0 | 1 | 2 | 3, standsInForStop?: boolean): 'audio-error' | 'audio-stuck' | 'audio-advisory';

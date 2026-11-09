@@ -532,6 +532,8 @@ interface ElectronAPI {
       titleKey?: string;
       /** Advice only (shown once per meeting). */
       advisory?: boolean;
+      /** A blocked permission: shown even on a hidden overlay. */
+      permission?: boolean;
       /** false: real audio on the channel does not clear it. */
       clearsOnRecovery?: boolean;
       /** The channel carries real audio again: its stuck/terminal warning no longer holds. */
@@ -2305,6 +2307,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       stuck?: boolean;
       titleKey?: string;
       advisory?: boolean;
+      permission?: boolean;
       clearsOnRecovery?: boolean;
       recovered?: boolean;
     }) => void,

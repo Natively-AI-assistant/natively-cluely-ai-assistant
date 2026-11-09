@@ -476,6 +476,8 @@ import {
   EMPTY_AUDIO_WARNINGS,
   audioWarningSeverity,
   clearAudioWarning,
+  clearedByRebuild,
+  clearedByRecovery,
   dismissShownAudioWarning,
   offerAudioWarning,
   resetAudioWarnings,
@@ -483,6 +485,7 @@ import {
   type AudioWarningState,
 } from './overlay/audioWarningSlots.mjs';
 import { audioBannerId, pickOverlayBanners } from './overlay/overlayBannerSlots.mjs';
+import { forgetSettledSttOutages, sttReconnectingKey, sttStoppedKey } from './overlay/sttBannerKeys.mjs';
 
 // ── Streaming-height headroom buffer (native OS window resize during token
 // streaming) ─────────────────────────────────────────────────────────────
@@ -1534,6 +1537,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // makes one a different banner: the pack's reason, the stand-in's notice).
   // A banner with another key still shows; the next meeting starts clean.
   const [sttBannerDismissed, setSttBannerDismissed] = useState<readonly string[]>([]);
+  // A closed stop or reconnect is keyed by its channels; once both channels are
+  // healthy again it is forgotten, so the next outage shows
+  // (overlay/sttBannerKeys.mjs).
+  useEffect(() => {
+    setSttBannerDismissed((prev) => forgetSettledSttOutages(prev, sttUserStatus, sttInterviewerStatus));
+  }, [sttUserStatus, sttInterviewerStatus]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   // The notes window (`?window=notes`) is open: the Notes button shows it.
@@ -3054,10 +3063,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     stuck?: boolean;
     // false: the channel carrying audio again does not clear it (main.ts).
     clearsOnRecovery?: boolean;
+    // A blocked permission reported mid-meeting as stuck (main.ts sets it).
+    permission?: boolean;
   };
-  // One slot per channel, a milder warning never over a more serious one, and
-  // the banner shows the most serious (overlay/audioWarningSlots.mjs,
-  // 2026-11-09). The single slot used to take whatever arrived last.
+  // Every warning is held until it no longer holds; the banner shows the most
+  // serious, and a milder one waits under it instead of being lost
+  // (overlay/audioWarningSlots.mjs, 2026-11-09). The single slot used to take
+  // whatever arrived last.
   const [audioWarnings, setAudioWarnings] = useState<AudioWarningState<SystemAudioWarning>>(EMPTY_AUDIO_WARNINGS);
   const systemAudioWarning = shownAudioWarning(audioWarnings);
   const setSystemAudioWarning = useCallback((w: SystemAudioWarning) => {
@@ -3117,7 +3129,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // The channel carries real audio again after a stuck or terminal
       // report (main.ts noteCaptureAudio): its warning is no longer true.
       if (payload.recovered) {
-        setAudioWarnings((s) => clearAudioWarning(s, payload.channel, (w) => w.kind === 'audio-capture-failure' && w.clearsOnRecovery !== false));
+        setAudioWarnings((s) => clearAudioWarning(s, payload.channel, clearedByRecovery));
         return;
       }
       // Only surface terminal failures or the stuck signal — transient
@@ -3132,8 +3144,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           terminal: !!payload.terminal,
           stuck: !!payload.stuck,
           clearsOnRecovery: payload.clearsOnRecovery,
+          permission: !!payload.permission,
         });
-        if (payload.terminal) revealOverlayForWarning();
+        // A capture that gave up, or a permission lost mid-meeting (sent as
+        // stuck: main keeps probing), reopens a hidden overlay, quietly.
+        if (payload.terminal || payload.permission) revealOverlayForWarning();
       } else if (payload.advisory) {
         // Advice that is still true but changes nothing on its own (a
         // Bluetooth mic in call mode): once per meeting, lowest priority,
@@ -3170,7 +3185,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   useEffect(() => {
     const unsub = window.electronAPI?.onDeviceSelectionApplied?.((payload) => {
       if (payload.kind !== 'output' || payload.fellBack) return;
-      setAudioWarnings((s) => clearAudioWarning(s, 'system', (w) => w.kind === 'audio-capture-failure' && !!w.terminal));
+      setAudioWarnings((s) => clearAudioWarning(s, 'system', clearedByRebuild));
     });
     return () => unsub?.();
   }, []);
@@ -11687,7 +11702,7 @@ Provide only the answer, nothing else.`;
                   ? t('Your microphone is no longer being transcribed.')
                   : t('Interviewer audio is no longer being transcribed.')
             } ${sttConnectionAdvice ?? sttLocalModelAdvice ?? t('Check your transcription provider and its key in Settings.')}`,
-            key: 'stopped',
+            key: sttStoppedKey(sttUserStatus, sttInterviewerStatus),
           }
         : sttReconnecting && !sttFailed
           ? {
@@ -11695,7 +11710,7 @@ Provide only the answer, nothing else.`;
               kind: 'reconnecting',
               title: t('Transcription Reconnecting'),
               message: `${t('The connection to your speech-to-text provider dropped.')} ${sttConnectionAdvice ?? t('Retrying.')}`,
-              key: 'reconnecting',
+              key: sttReconnectingKey(sttUserStatus, sttInterviewerStatus),
             }
           : (sttUserFallback || sttInterviewerFallback)
             ? {
@@ -11724,8 +11739,11 @@ Provide only the answer, nothing else.`;
   // a dozen folds used to stack without limit and push the answer off screen
   // mid-call. One that wants to show but has no slot is only held: its state
   // is untouched, so it folds in by itself when a slot frees.
+  // The audio banner that stands in for "Transcription Stopped" takes its rank,
+  // so the cap never holds both back.
+  const audioBannerSlotId = audioBannerId(audioWarningSeverity(systemAudioWarning), audioFailureBannerActive && sttFailed);
   const bannerSlots = pickOverlayBanners({
-    [audioBannerId(audioWarningSeverity(systemAudioWarning))]: !!systemAudioWarning,
+    [audioBannerSlotId]: !!systemAudioWarning,
     'stt-error': sttStatusBannerOpen && sttStatusBanner?.tone === 'error',
     'stt-not-configured': sttNotConfigured && !trialExplainsNoStt,
     'stt-warning': sttStatusBannerOpen && sttStatusBanner?.tone === 'warning',
@@ -11738,7 +11756,7 @@ Provide only the answer, nothing else.`;
     'stealth-permission': (isMac || isWindows) && stealthPermissionMissing,
     'hotkey-conflict': !!stealthHotkeyConflict,
   });
-  const audioWarningSlotted = !!systemAudioWarning && bannerSlots.has(audioBannerId(audioWarningSeverity(systemAudioWarning)));
+  const audioWarningSlotted = !!systemAudioWarning && bannerSlots.has(audioBannerSlotId);
   // Whether the vision chip will render (mirrors the IIFE's early-return guard).
   const visionPillFailed = screenContextStatus === 'failed' || !!latestVisionFailureReason;
   const visionPillSucceeded =

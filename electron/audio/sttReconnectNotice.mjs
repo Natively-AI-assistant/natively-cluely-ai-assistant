@@ -25,6 +25,8 @@ export class SttReconnectNotice {
    *   delayMs?: number,
    *   setTimer?: (fn: () => void, ms: number) => any,
    *   clearTimer?: (handle: any) => void,
+   *   epoch?: () => unknown,   which meeting it is: a wait or a shown notice from
+   *                            an earlier one never carries into this one
    * }} opts
    */
   constructor(opts) {
@@ -32,8 +34,10 @@ export class SttReconnectNotice {
     this._delayMs = opts.delayMs ?? STT_RECONNECT_NOTICE_DELAY_MS;
     this._setTimer = opts.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
     this._clearTimer = opts.clearTimer ?? ((h) => clearTimeout(h));
+    this._epoch = opts.epoch ?? (() => 0);
     this._timer = null;
     this._latest = null;
+    this._shownEpoch = undefined;
     this.showing = false;
   }
 
@@ -49,15 +53,19 @@ export class SttReconnectNotice {
    */
   retrying(payload) {
     this._latest = payload;
+    // Shown in an earlier meeting and never settled: this one starts quiet.
+    if (this.showing && this._shownEpoch !== this._epoch()) this.showing = false;
     if (this.showing) {
       this._emit(payload);
       return;
     }
     if (this._timer !== null) return;
+    const scheduledIn = this._epoch();
     this._timer = this._setTimer(() => {
       this._timer = null;
       const latest = this._latest;
       this._latest = null;
+      if (this._epoch() !== scheduledIn) return; // that meeting is over
       if (latest) this._emit(latest);
     }, this._delayMs);
   }
@@ -85,6 +93,7 @@ export class SttReconnectNotice {
   _emit(payload) {
     if (this._show(payload) === false) return;
     this.showing = true;
+    this._shownEpoch = this._epoch();
   }
 
   _cancelTimer() {
