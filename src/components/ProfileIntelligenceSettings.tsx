@@ -1767,14 +1767,72 @@ const PI_GATE_CSS = `
     }
     .pig-cta-group:hover .pig-cta-icon-ring { transform: translateX(2px) scale(1.05); }
 
+    /*
+      Unlock Pro is Liquid Glass in the colours the pill had before: black
+      glass on the light page, white glass on the dark one. Light theme is
+      LiquidGlassButton variant="neutral" with its #555 body taken to near
+      black; dark is variant="sky" (the light-body material: sheen on the top
+      face, a darker underside, a contact shadow) in white with a dark label.
+      Sized to the pill it replaced: 44px tall, 14px label, arrow trailing.
+      background-color is left to the library's :hover rule, so only the
+      image and the tokens are set here.
+    */
+    .lg-button.lg-sm.pig-unlock-lg {
+        --lg-pill-h: 44px;
+        --lg-label-size: 14px;
+        padding: 0 20px 0 22px;
+    }
+    .lg-button.lg-neutral.lg-sm.pig-unlock-lg {
+        background-image: linear-gradient(180deg,
+            rgba(255, 255, 255, .10) 0%, rgba(255, 255, 255, 0) 14%,
+            rgba(255, 255, 255, 0) 86%, rgba(255, 255, 255, .07) 100%);
+        background-color: #0a0a0a;
+        --lg-tint-hover: #262626;
+        --lg-lens-tint: rgba(255, 255, 255, .07);
+        --lg-lens-rim: rgba(255, 255, 255, .34);
+        --lg-rim-1: rgba(255, 255, 255, .20);
+        --lg-rim-2: rgba(255, 255, 255, .15);
+        --lg-rim-3: rgba(255, 255, 255, .17);
+        box-shadow:
+            0 1px 2px rgba(0, 0, 0, .18),
+            0 8px 18px -8px rgba(0, 0, 0, .45);
+    }
+    .lg-button.lg-sky.lg-sm.pig-unlock-lg {
+        --lg-sky-bg: #ffffff;
+        --lg-sky-hover: #e9e9ec;
+        --lg-sky-fg: #141414;
+        background-image: linear-gradient(180deg,
+            rgba(255, 255, 255, 0) 0%, rgba(0, 0, 0, .03) 55%, rgba(0, 0, 0, .09) 100%);
+        --lg-lens-tint: rgba(0, 0, 0, .04);
+        --lg-lens-rim: rgba(255, 255, 255, .9);
+        --lg-lens-rim-soft: rgba(0, 0, 0, .06);
+        --lg-rim-1: rgba(255, 255, 255, .95);
+        --lg-rim-2: rgba(0, 0, 0, .10);
+        --lg-rim-3: rgba(0, 0, 0, .06);
+        box-shadow:
+            inset 0 -1px 0 rgba(0, 0, 0, .16),
+            0 1px 2px rgba(0, 0, 0, .30),
+            0 8px 18px -8px rgba(0, 0, 0, .60);
+    }
+    .lg-button.lg-neutral.lg-sm.pig-unlock-lg:not(:disabled):hover,
+    .lg-button.lg-sky.lg-sm.pig-unlock-lg:not(:disabled):hover {
+        background-color: var(--lg-tint-hover);
+    }
+    .pig-unlock-lg .lg-label { display: inline-flex; align-items: center; gap: 8px; }
+    .pig-unlock-arrow { transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1); }
+    .pig-unlock-lg:hover .pig-unlock-arrow { transform: translateX(2px); }
+    @media (prefers-reduced-motion: reduce) {
+        .pig-unlock-lg:hover .pig-unlock-arrow { transform: none; }
+    }
+
     .pig-close-btn {
         display: flex; align-items: center; justify-content: center;
         width: 28px; height: 28px; border-radius: 50%; border: none;
-        background: var(--pig-close-bg);
+        background: none;
         color: var(--pig-sub);
-        cursor: pointer; transition: background var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out), transform var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out), color var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out);
+        cursor: pointer; transition: transform var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out), color var(--duration-quick, 150ms) var(--ease-in-out, ease-in-out);
     }
-    .pig-close-btn:hover { background: var(--pig-close-hover); color: var(--pig-hero); }
+    .pig-close-btn:hover { color: var(--pig-hero); }
     .pig-close-btn:active { transform: scale(0.9); }
 
     .pig-text-btn {
@@ -1973,7 +2031,6 @@ function ProfileIntelligenceProGate({ onOpenNativelyAPI, onClose }: {
             {/* ── Footer ──────────────────────────────────────────────────────── */}
             <div className="pig-foot" style={{
                 padding: '24px 32px',
-                borderTop: '1px solid var(--pig-border)',
                 display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center',
                 flexShrink: 0, background: 'var(--pig-bg)',
             }}>
@@ -1991,12 +2048,14 @@ function ProfileIntelligenceProGate({ onOpenNativelyAPI, onClose }: {
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <button className="pig-cta-group" onClick={unlockPro}>
+                    <LiquidGlassButton
+                        variant={theme === 'dark' ? 'sky' : 'neutral'}
+                        className="lg-sm pig-unlock-lg"
+                        onClick={unlockPro}
+                    >
                         Unlock Pro
-                        <div className="pig-cta-icon-ring">
-                            <ArrowRight size={14} strokeWidth={2.5} />
-                        </div>
-                    </button>
+                        <ArrowRight className="pig-unlock-arrow" size={15} strokeWidth={2.25} aria-hidden="true" />
+                    </LiquidGlassButton>
                 </div>
             </div>
         </div>

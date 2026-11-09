@@ -297,8 +297,9 @@ export const DemoVideoToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
               </span>
             </button>
 
-            {/* Close on the picture, like the review card's; it carries its own
-                dark disc so it reads on the film's colours in both themes. */}
+            {/* Close on the picture, like the review card's. No disc behind it:
+                a soft dark drop shadow keeps the white X readable on the
+                film's colours in both themes. */}
             <button
               type="button"
               onClick={handleDismiss}
@@ -307,11 +308,12 @@ export const DemoVideoToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                 position: 'absolute', top: '8px', right: '8px', zIndex: 2,
                 width: '28px', height: '28px', padding: 0, border: 0, borderRadius: '999px',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'rgba(11,16,32,0.42)', color: '#FFFFFF', cursor: 'pointer',
-                transition: `background-color 180ms ${EASE_CSS}, transform 160ms ${EASE_CSS}`,
+                background: 'none', color: '#FFFFFF', cursor: 'pointer', opacity: 0.86,
+                filter: 'drop-shadow(0 1px 2px rgba(11,16,32,0.55)) drop-shadow(0 0 6px rgba(11,16,32,0.35))',
+                transition: `opacity 180ms ${EASE_CSS}, transform 160ms ${EASE_CSS}`,
               }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(11,16,32,0.62)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(11,16,32,0.42)'; e.currentTarget.style.transform = 'scale(1)'; }}
+              onMouseEnter={e => { e.currentTarget.style.opacity = '1'; }}
+              onMouseLeave={e => { e.currentTarget.style.opacity = '0.86'; e.currentTarget.style.transform = 'scale(1)'; }}
               onMouseDown={e => { e.currentTarget.style.transform = 'scale(0.92)'; }}
               onMouseUp={e => { e.currentTarget.style.transform = 'scale(1)'; }}
             >

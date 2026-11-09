@@ -101,7 +101,9 @@ const LIGHT = {
   motif: { line: 'rgba(139,107,224,0.26)', dot: 'rgba(139,107,224,0.34)', accent: 'rgba(156,111,243,0.20)' },
   card: '#F7F4FD',
   cardShadow: '0 18px 40px -28px rgba(76,46,122,0.26)',
-  cardShadowFeatured: '0 30px 60px -28px rgba(76,46,122,0.46)',
+  // Ends 36px under the card. 0 30px 60px -28px reached 62px, past the
+  // scroller's bottom edge, which cut the glow off in a straight line.
+  cardShadowFeatured: '0 20px 40px -24px rgba(76,46,122,0.46)',
   tab: { bg: 'linear-gradient(140deg, #FFFFFF, #F1EAFD)', ink: DEEP, shadow: '0 -6px 18px -12px rgba(76,46,122,0.6)' },
   badge: { bg: '#FFFFFF', ink: '#6B5F7D', inkFeatured: DEEP, shadow: '0 2px 7px -2px rgba(76,46,122,0.34)' },
   well: { bg: '#FFFFFF', shadow: 'inset 0 1px 0 rgba(255,255,255,0.9), 0 16px 32px -20px rgba(76,46,122,0.5)' },
@@ -137,7 +139,7 @@ const DARK: typeof LIGHT = {
   motif: { line: 'rgba(196,179,251,0.16)', dot: 'rgba(196,179,251,0.24)', accent: 'rgba(175,140,254,0.22)' },
   card: '#1A1822',
   cardShadow: '0 18px 40px -28px rgba(0,0,0,0.70)',
-  cardShadowFeatured: '0 30px 60px -28px rgba(124,92,255,0.40)',
+  cardShadowFeatured: '0 20px 40px -24px rgba(124,92,255,0.40)',
   tab: { bg: 'linear-gradient(140deg, #2B2638, #221E2D)', ink: '#C4B3FB', shadow: '0 -6px 18px -12px rgba(0,0,0,0.8)' },
   badge: { bg: '#2B2738', ink: 'rgba(236,230,253,0.72)', inkFeatured: DEEP, shadow: '0 2px 7px -2px rgba(0,0,0,0.5)' },
   well: { bg: '#25222F', shadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 16px 32px -20px rgba(0,0,0,0.75)' },

@@ -93,7 +93,6 @@ interface CardColors {
   closeBtnColor: string;
   closeBtnOpacityDefault: number;
   closeBtnOpacityHover: number;
-  closeBtnBgHover: string;
   mockBg: string;
   mockBorder: string;
   mockShadow: string;
@@ -196,7 +195,6 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
     closeBtnColor: isLight ? '#1C1C1E' : '#FFFFFF',
     closeBtnOpacityDefault: isLight ? 0.45 : 0.4,
     closeBtnOpacityHover: isLight ? 0.85 : 0.8,
-    closeBtnBgHover: isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.08)',
 
     // Mock of the macOS consent dialog. No backdrop-filter: these sit on an
     // opaque pane, so the blur cost bought nothing and this card's animated
@@ -426,15 +424,13 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
           width: '26px', height: '26px',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           borderRadius: '50%', opacity: colors.closeBtnOpacityDefault,
-          transition: 'opacity 200ms, background 200ms',
+          transition: 'opacity 200ms',
         }}
         onMouseEnter={e => {
           e.currentTarget.style.opacity = String(colors.closeBtnOpacityHover);
-          e.currentTarget.style.background = colors.closeBtnBgHover;
         }}
         onMouseLeave={e => {
           e.currentTarget.style.opacity = String(colors.closeBtnOpacityDefault);
-          e.currentTarget.style.background = 'transparent';
         }}>
         <X size={12} strokeWidth={2.5} color={colors.closeBtnColor} />
       </button>
@@ -546,15 +542,13 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
                   padding: 0, cursor: 'pointer',
                   background: 'none', border: 0, borderRadius: '8px',
                   opacity: colors.closeBtnOpacityDefault,
-                  transition: 'opacity 200ms, background 200ms',
+                  transition: 'opacity 200ms',
                 }}
                 onMouseEnter={e => {
                   e.currentTarget.style.opacity = String(colors.closeBtnOpacityHover);
-                  e.currentTarget.style.background = colors.closeBtnBgHover;
                 }}
                 onMouseLeave={e => {
                   e.currentTarget.style.opacity = String(colors.closeBtnOpacityDefault);
-                  e.currentTarget.style.background = 'transparent';
                 }}>
                 <X size={14} strokeWidth={2} color={colors.closeBtnColor} />
               </button>
