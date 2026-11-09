@@ -109,6 +109,8 @@ import { NVIDIA_NIM_STT_MODELS, DEFAULT_NVIDIA_NIM_STT_MODEL, allowedLanguageKey
 import { STT_MODEL_CATALOG, isEnglishOnlySttModel, sttModelRejectsLanguage, type SttModelProvider } from '../../electron/audio/sttModelCatalog';
 import { isDefaultOpenAiSttBase } from '../../electron/audio/openaiSttBaseUrl';
 import { isRecognitionLanguageOffered, PARAKEET_ONLY_LANGUAGE_KEYS } from '../../electron/config/languages';
+import { SettingsGuide } from './guide/SettingsGuide';
+import { dispatchGuide } from './guide/useGuide';
 
 // ---------------------------------------------------------------------------
 // StarRating — renders filled/empty stars for culture ratings
@@ -2333,6 +2335,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     return (
         <>
             {confirmDialog}
+            {/* The first-run guide's Settings steps (6 and 7), while Settings is open. */}
+            {isOpen && <SettingsGuide />}
             {/* Settings pours out of, and back into, the bottom of the window
                 like every other popup (GenieModal). */}
             <GenieModal
@@ -2393,6 +2397,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         <Monitor size={16} /> {t('General')}
                                     </button>
                                     <button
+                                        data-guide="nav-plans"
                                         onClick={() => { plansFromSidebarRef.current = true; setActiveTab('plans'); }}
                                         className={navItemClass(activeTab === 'plans' || activeTab === 'natively-api' || activeTab === 'natively-pro')}
                                     >
@@ -2401,6 +2406,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         <span>{t('Plans & Billing')}</span>
                                     </button>
                                     <button
+                                        data-guide="nav-ai-providers"
                                         onClick={() => setActiveTab('ai-providers')}
                                         className={navItemClass(activeTab === 'ai-providers')}
                                     >
@@ -4570,7 +4576,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             )}
 
                             {activeTab === 'help' && (
-                                <HelpSettings onNavigate={setActiveTab} onOpenModes={onOpenModes} onOpenProfile={onOpenProfile} />
+                                <HelpSettings onNavigate={setActiveTab} onOpenModes={onOpenModes} onOpenProfile={onOpenProfile} onShowGuide={() => { dispatchGuide({ type: 'restart' }); onClose(); }} />
                             )}
 
                             {activeTab === 'about' && (

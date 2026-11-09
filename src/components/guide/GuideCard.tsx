@@ -2,6 +2,7 @@
 // next to the real control (lit with data-guide-lit) and draws nothing while
 // that control is not on screen, so it never points at empty space.
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { Keycaps, LavenderButton, WELCOME_FONT, useWelcomeTheme } from '../onboarding/welcomeShared';
 import { useT } from '../../i18n';
 import { GUIDE_STEP_COUNT, GUIDE_STEP_NUMBER } from '../../lib/onboarding/firstRunGuide.mjs';
@@ -69,7 +70,9 @@ export const GuideCard: React.FC<GuideCardProps> = ({
     color: t.strong, fontFamily: WELCOME_FONT, WebkitFontSmoothing: 'antialiased',
   };
 
-  return (
+  // Portalled to <body>: a transformed ancestor (Settings and the launcher
+  // animate theirs) would otherwise move a position:fixed card off its anchor.
+  return createPortal(
     <div className="guide-enter" style={card} role="dialog" aria-label={title} data-guide-card={stepId}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.02em', color: guideAccentText(dark) }}>{eyebrow}</span>
@@ -150,6 +153,7 @@ export const GuideCard: React.FC<GuideCardProps> = ({
           <GuideStatusDot dark={dark} label={waiting} />
         ) : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
