@@ -344,6 +344,8 @@ export async function installUploadedSkill(
     // SkillsManager.setSkillEnabled); a fresh install implicitly clears any
     // stale sidecar entry for this folder because we re-resolve from disk.
     enabled: true,
+    // Off until the user switches on "Use in every answer".
+    alwaysOn: false,
   };
   return { success: true, skill, installedPath: targetDir };
 }

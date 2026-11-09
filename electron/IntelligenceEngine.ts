@@ -4264,8 +4264,9 @@ export class IntelligenceEngine extends EventEmitter {
                     const _ctx = this.v3ModeRetrievalContext(_screenPortText);
                     if (!_ctx) return undefined;
                     const _v3 = await buildV3Prompt({
-                        // "About you" (Cue Cards, Pro): every surface, every mode.
-                        userBio: (require('./services/proAccess') as typeof import('./services/proAccess')).userBioForAnswers(),
+                        // What the user told the app about themselves: About you (Cue Cards, Pro),
+                        // the facts in the mode's Real-time prompt, "Use in every answer" skills.
+                        ...(require('./services/answerPersonalContext') as typeof import('./services/answerPersonalContext')).personalContextForAnswers({ answerType: answerPlan.answerType, modeId: snapshotModeInfo?.id, explicitSkillId: options?.activeSkill?.id ?? null }),
                         surface: 'what-to-answer',
                         // The user's own spoken line was chosen above: its "we" is theirs.
                         questionSpeaker: questionSpokenByUser && !question?.trim() ? 'user' : 'other',
@@ -7767,8 +7768,9 @@ export class IntelligenceEngine extends EventEmitter {
             if (!ctx) return null;
             const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
             const _v3 = await buildV3Prompt({
-                // "About you" (Cue Cards, Pro): every surface, every mode.
-                userBio: (require('./services/proAccess') as typeof import('./services/proAccess')).userBioForAnswers(),
+                // What the user told the app about themselves: About you (Cue Cards, Pro),
+                // the facts in the mode's Real-time prompt, "Use in every answer" skills.
+                ...(require('./services/answerPersonalContext') as typeof import('./services/answerPersonalContext')).personalContextForAnswers({ modeId: ctx.modeUniqueId }),
                 surface: pinned?.surface ?? 'assist',
                 // Low-confidence query rewrite: the user's fast model, 1.5 s hard cap.
                 // Not for Brainstorm, which only wants the evidence: a model
@@ -8582,8 +8584,9 @@ export class IntelligenceEngine extends EventEmitter {
                     const _ctx = this.v3ModeRetrievalContext();
                     if (!_ctx) return null;
                     return await buildV3Prompt({
-                        // "About you" (Cue Cards, Pro): every surface, every mode.
-                        userBio: (require('./services/proAccess') as typeof import('./services/proAccess')).userBioForAnswers(),
+                        // What the user told the app about themselves: About you (Cue Cards, Pro),
+                        // the facts in the mode's Real-time prompt, "Use in every answer" skills.
+                        ...(require('./services/answerPersonalContext') as typeof import('./services/answerPersonalContext')).personalContextForAnswers({ answerType: answerPlan.answerType, modeId: _ctx.modeUniqueId }),
                         surface: 'manual-chat',
                         diagramTurn: (() => {
                             try {
@@ -8648,9 +8651,21 @@ export class IntelligenceEngine extends EventEmitter {
                 const _docEnforced = (activeModeInfo as any)?.strictDocumentGroundedActive === true
                     || (activeModeInfo?.documentGroundedCustomModeActive === true
                         && Boolean((activeModeInfo as any)?.hasReferenceFiles));
-                const context = _docEnforced || isCodingAnswerType(answerPlan.answerType)
+                const transcriptContext = _docEnforced || isCodingAnswerType(answerPlan.answerType)
                     ? undefined
                     : this.session.getFormattedContext(120);
+                // About you, the mode's Real-time prompt facts and "Use in every
+                // answer" skills, which the V3 branch above carries (2026-11-09).
+                // Scoped by this turn's answer type, so a coding turn gets the
+                // skills but none of the user's facts (About you included, see
+                // personalContextBlockForAnswers). AFTER the transcript: an
+                // over-budget context is trimmed from its head, and the block
+                // must outlive an old transcript line.
+                const personalBlock = (require('./services/answerPersonalContext') as typeof import('./services/answerPersonalContext')).personalContextBlockForAnswers({
+                    answerType: answerPlan.answerType,
+                    modeId: (activeModeInfo as any)?.id ?? null,
+                });
+                const context = [transcriptContext, personalBlock].filter(Boolean).join('\n\n') || undefined;
                 answer = await this.answerLLM.generate(question, context, answerPlan, undefined, manualDiagramTurn);
             }
             const _manualSignals = require('./llm/codingPromptSignals').resolveCodingPromptSignals({

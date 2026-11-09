@@ -569,6 +569,51 @@ export const selectCustomContextForAnswer = (
   return { included: inSourceOrder(included), excluded, sensitiveIncluded };
 };
 
+// Answer types whose answer is a self-contained technical artifact. The user's
+// own facts (who they are, where they work) have no place in a solution or an
+// explanation of a concept, so none ride. identity_answer is deliberately NOT
+// here: "tell me about yourself" is exactly the question those facts answer.
+// Derived, not copied: an answer type added to CUSTOM_CONTEXT_FORBIDDEN_TYPES
+// (as technical_concept_answer was on 2026-08-22) is forbidden here too.
+const SELF_FACTS_FORBIDDEN_TYPES: ReadonlySet<AnswerType> = new Set<AnswerType>(
+  [...CUSTOM_CONTEXT_FORBIDDEN_TYPES].filter((t) => t !== 'identity_answer'),
+);
+/** For callers outside the classifier (the personal-context reader). */
+export const isSelfFactsForbiddenType = (t?: AnswerType | null): boolean => Boolean(t && SELF_FACTS_FORBIDDEN_TYPES.has(t));
+
+/**
+ * The FACTS the user wrote in a mode's Real-time prompt ("I'm Paolo, a backend
+ * engineer from Cebu", "We sell to dental clinics"), for the prompt's
+ * "notes the user wrote" data section (2026-11-09).
+ *
+ * The instruction channel carries only presentation, and tells the model to
+ * treat any fact in it as no instruction at all; with nothing else carrying
+ * them, a user's own background never reached an answer and "where are you
+ * from?" was answered with an invented one (a 1★ review: "it literally says im
+ * from india when im from ph"). These are the user's own words about
+ * themselves, the same class as About you, so they ride as data.
+ *
+ * Same gates as the rest of the text: sensitive sentences (salary, pricing,
+ * strategy) only for the answer types allowed them, and nothing for technical
+ * artifacts. With no answer type, sensitive sentences stay out.
+ */
+export const selectCustomContextFactsForAnswer = (
+  classified: ClassifiedCustomContext,
+  answerType?: AnswerType,
+): CustomContextChunk[] => {
+  if (answerType && SELF_FACTS_FORBIDDEN_TYPES.has(answerType)) return [];
+  // NOT by category: `pinned` means SHORT, and "I'm Paolo, a backend engineer
+  // from Cebu City." is short. The instruction detector the identity gate uses
+  // decides instead: a chunk that is wholly an instruction stays out (it rides
+  // the instruction block); anything with a fact in it rides here.
+  const formatContext = classified.definesAnswerFormat ?? false;
+  const wholeInstruction = (t: string) =>
+    extractInstructionText(t, formatContext) === parseInstructionLines(t).map(l => l.line).join('\n');
+  const chunks: CustomContextChunk[] = [...classified.pinned, ...classified.searchable].filter(c => !wholeInstruction(c.text));
+  if (answerType && SENSITIVE_ALLOWED_TYPES.has(answerType)) chunks.push(...classified.sensitive);
+  return inSourceOrder(chunks);
+};
+
 /**
  * Convenience: classify + select + render the included chunks back into a single
  * blob suitable for the existing single-string custom-context slot. Backward

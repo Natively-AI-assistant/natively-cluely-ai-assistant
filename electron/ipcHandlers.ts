@@ -2189,6 +2189,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         // bare user query, then inject the skill's instructions into context
         // right before streamChat so the model follows them for this turn only.
         let skillPromptBlock = '';
+        // The skill typed as /name this turn, so a "Use in every answer" copy of
+        // the same skill is not added a second time.
+        let activatedSkillId: string | null = null;
         const skillPrefixMatch = typeof message === 'string'
           ? message.match(/^[/$]([A-Za-z0-9_-]+)\s*(.*)$/s)
           : null;
@@ -2217,6 +2220,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 return null;  // sibling error paths return null; handler is typed `| null`
               }
               skillPromptBlock = SkillsManager.getInstance().buildPromptBlock(skill);
+              activatedSkillId = skill.id;
               const strippedQuery = skillPrefixMatch[2].trim();
               // Parsed here, APPLIED later (see the deferred assignment at the
               // original site). Mutating `message` now would change what every
@@ -2609,12 +2613,17 @@ export function initializeIpcHandlers(appState: AppState): void {
             // persona (the contract) and the composer (the note + the design on
             // the table), so the two cannot disagree. Same planner call the
             // coding verdict below uses.
+            // The planner's verdict for this typed turn, computed ONCE (it used
+            // to run five times inside this one call, from five copies that
+            // could drift). null when it threw; each reader keeps its fallback.
+            const v3Plan = (() => { try { return planAnswer({ question: v3Question, source: 'manual_input', speakerPerspective: 'user', activeMode: modeInfo ?? undefined }); } catch { return null; } })();
             const manualDiagramTurn: DiagramTurn | null = (() => {
               try {
+                if (!v3Plan) return null;
                 const im = appState.getIntelligenceManager?.();
                 const turn = resolveDiagramTurn({
                   question: v3Question,
-                  answerType: planAnswer({ question: v3Question, source: 'manual_input', speakerPerspective: 'user', activeMode: modeInfo ?? undefined }).answerType,
+                  answerType: v3Plan.answerType,
                   activeDesign: im?.getActiveDesign?.() ?? null,
                   pinnedModeId: modeInfo?.id ?? undefined,
                   hasVisualContext: (imagePaths?.length ?? 0) > 0,
@@ -2627,8 +2636,14 @@ export function initializeIpcHandlers(appState: AppState): void {
             })();
 
             const composed = await buildV3Prompt({
-              // "About you" (Cue Cards, Pro): every surface, every mode.
-              userBio: (require('./services/proAccess') as typeof import('./services/proAccess')).userBioForAnswers(),
+              // What the user told the app about themselves: About you (Cue
+              // Cards, Pro), the facts in the mode's Real-time prompt, and
+              // "Use in every answer" skills (a typed /name skill rides below).
+              ...(require('./services/answerPersonalContext') as typeof import('./services/answerPersonalContext')).personalContextForAnswers({
+                answerType: v3Plan?.answerType,
+                modeId: modeInfo?.id ?? null,
+                explicitSkillId: activatedSkillId,
+              }),
               surface: 'manual-chat',
               readingSurface: answerSurface === 'chat',
               diagramTurn: v3DiagramTurn(manualDiagramTurn),
@@ -2678,16 +2693,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               // 06d88fba, left open here. planAnswer is pure and the real plan
               // is not built until much later in this handler, so this computes
               // the verdict directly from the message + active mode.
-              codingTask: (() => {
-                try {
-                  return isCodingAnswerType(planAnswer({
-                    question: v3Question,
-                    source: 'manual_input',
-                    speakerPerspective: 'user',
-                    activeMode: modeInfo ?? undefined,
-                  }).answerType);
-                } catch { return undefined; } // fall back to the bridge's own check
-              })(),
+              codingTask: v3Plan ? isCodingAnswerType(v3Plan.answerType) : undefined, // undefined: the bridge's own check
               // The mode's Real-time prompt, on V3's own channel (2026-09-20).
               // This call passed NO instruction channel at all: typed chat
               // relied on LLMHelper's mode-injection block, which is skipped
@@ -2697,8 +2703,8 @@ export function initializeIpcHandlers(appState: AppState): void {
               // of the system prompt (§19.2).
               realtimeInstruction: (() => {
                 try {
-                  const _plan = planAnswer({ question: v3Question, source: 'manual_input', speakerPerspective: 'user', activeMode: modeInfo ?? undefined });
-                  return ModesManager.getInstance().getActiveModePinnedInstructions?.(_plan.answerType, modeInfo?.id ?? undefined) || undefined;
+                  if (!v3Plan) return undefined;
+                  return ModesManager.getInstance().getActiveModePinnedInstructions?.(v3Plan.answerType, modeInfo?.id ?? undefined) || undefined;
                 } catch { return undefined; }
               })(),
               // The app's spoken-length default, on the LIVE surface only
@@ -2710,7 +2716,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               defaultLengthDirective: answerSurface === 'live' ? (() => {
                 try {
                   const { renderLengthDirectiveForPlan } = require('./llm/AnswerPlanner') as typeof import('./llm/AnswerPlanner');
-                  return renderLengthDirectiveForPlan(planAnswer({ question: v3Question, source: 'manual_input', speakerPerspective: 'user', activeMode: modeInfo ?? undefined })) || undefined;
+                  return v3Plan ? renderLengthDirectiveForPlan(v3Plan) || undefined : undefined;
                 } catch { return undefined; }
               })() : undefined,
               modeTemplateType: rawMode,
@@ -5113,6 +5119,22 @@ export function initializeIpcHandlers(appState: AppState): void {
         // are the first thing the model sees in the user context block.
         if (skillPromptBlock) {
           context = context ? `${skillPromptBlock}\n\n${context}` : skillPromptBlock;
+        }
+        // What the user told the app about themselves, on the legacy transport
+        // too (2026-11-09): About you, the mode's Real-time prompt facts, and
+        // "Use in every answer" skills. A V3 turn whose provider fails falls
+        // back HERE, and live the skill then vanished (a "write in Spanish"
+        // skill on, a typed question came back in English). Same scoping as the
+        // V3 call: this turn's answer type and mode; the typed /name skill is
+        // excluded so it is not carried twice.
+        {
+          const personalBlock = (require('./services/answerPersonalContext') as typeof import('./services/answerPersonalContext')).personalContextBlockForAnswers({
+            answerType: answerPlan.answerType,
+            modeId: manualActiveMode?.id ?? null,
+            explicitSkillId: activatedSkillId,
+          });
+          // AFTER the rest: an over-budget context is trimmed from its head.
+          if (personalBlock) context = context ? `${context}\n\n${personalBlock}` : personalBlock;
         }
         const legacyWebSearchBlock = await webSearchBlockPromise;
         if (legacyWebSearchBlock) {
@@ -8605,13 +8627,39 @@ export function initializeIpcHandlers(appState: AppState): void {
       console.warn('[direct-assist] live session transcript unavailable, proceeding without it:', (error as Error)?.message);
     }
 
+    // What the user told the app about themselves (2026-11-09), which every
+    // other answer surface carries: "Use in every answer" skills ride Direct
+    // Assist's own skill slot (merged after a /name skill, never duplicating
+    // it), and About you + the mode's Real-time prompt facts ride its
+    // user-context block. No answer type: Direct Assist never consults the
+    // answer planner (DirectAssistIpcBridge pins that), so the mode's notes come
+    // without their per-type gate — the sensitive ones (pricing floors, salary)
+    // stay out, as for any turn without a type.
+    let directSkill: DirectAssistRequestInput['skill'] = resolvedSkill.skill ?? null;
+    let directManualContext = request.manualContext;
+    try {
+      const personal = require('./services/answerPersonalContext') as typeof import('./services/answerPersonalContext');
+      const ctx = personal.personalContextForAnswers({ explicitSkillId: directSkill?.id ?? null });
+      if (ctx.standingSkills) {
+        directSkill = Object.freeze({
+          id: directSkill?.id ?? 'always-on',
+          name: directSkill?.name ?? 'Use in every answer',
+          instructions: directSkill ? `${directSkill.instructions}\n\n${ctx.standingSkills}` : ctx.standingSkills,
+        });
+      }
+      const facts = personal.renderPersonalContextBlock(ctx, { includeSkills: false });
+      if (facts) directManualContext = directManualContext ? `${directManualContext}\n\n${facts}` : facts;
+    } catch (error) {
+      console.warn('[direct-assist] personal context unavailable, proceeding without it:', (error as Error)?.message);
+    }
+
     const directRequest: DirectAssistRequestInput = Object.freeze({
       requestId: request.requestId,
       source: request.source,
       selection,
       currentRequest: resolvedSkill.currentRequest,
-      skill: resolvedSkill.skill ?? null,
-      manualContext: request.manualContext,
+      skill: directSkill,
+      manualContext: directManualContext,
       referenceFiles,
       pageContext: request.pageContext,
       history: request.history,
@@ -20767,6 +20815,20 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (e: any) {
       console.warn('[IPC] skills:delete error:', e?.message || e);
       return { success: false, error: e?.message || 'failed to delete skill' };
+    }
+  });
+
+  // "Use in every answer" (Settings › Skills, 2026-11-09). A switched-on skill
+  // rides every live and typed answer without its /name prefix: a skill only
+  // ever applied when typed, so one written to "answer in my voice" never
+  // reached a live answer.
+  safeHandle('skills:set-always-on', async (_evt, id: string, alwaysOn: boolean) => {
+    try {
+      if (typeof id !== 'string' || typeof alwaysOn !== 'boolean') return { success: false, error: 'invalid arguments' };
+      return SkillsManager.getInstance().setSkillAlwaysOn(id, alwaysOn);
+    } catch (e: any) {
+      console.warn('[IPC] skills:set-always-on error:', e?.message || e);
+      return { success: false, error: e?.message || 'failed to update skill' };
     }
   });
 

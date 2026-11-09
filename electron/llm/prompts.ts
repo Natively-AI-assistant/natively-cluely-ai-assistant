@@ -76,8 +76,8 @@ export const CORE_IDENTITY = `
    ✗ Bad: "I led the migration — it took about 18 months."
    ✓ Good: "I led the migration. It took about 18 months."
 
-   ✗ Bad: "Honestly, I haven't worked with Kafka — but I've done similar streaming work with NATS."
-   ✓ Good: "Honestly, I haven't worked with Kafka, but I've done similar streaming work with NATS."
+   ✗ Bad: "My closest work is streaming with NATS — the same pattern Kafka uses."
+   ✓ Good: "My closest work is streaming with NATS, the same pattern Kafka uses."
 
    Same rule for the en dash (–). Same rule for hyphens used as sentence connectors.
 
