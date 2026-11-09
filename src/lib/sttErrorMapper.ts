@@ -59,10 +59,15 @@ const SECURE_CONNECTION_BLOCKED = [
  *   'download' the model is not on disk yet and its download stalled or failed
  *   'model'    any other local failure (not loaded in time, engine stopped,
  *              damaged files, a runtime or OS it needs)
+ *   'slow'     the model runs, but slower than people talk on this computer
+ *              (LocalWhisperSTT 'local_stt_behind'): text comes later and later
  * Issue #707: every one of these used to read as a provider fault, and the
  * banner told a local-only user to check a key they do not have.
  */
-function localModelCause(lower: string): 'memory' | 'download' | 'model' | null {
+function localModelCause(lower: string): 'memory' | 'download' | 'model' | 'slow' | null {
+    // LocalWhisperSTT's "behind" message names no "local" anything: "Transcription
+    // is 34 seconds behind: this model is too slow for this computer. …"
+    if (lower.includes('too slow for this computer')) return 'slow';
     const isLocal = lower.includes('local stt')
         || lower.includes('local model')
         || lower.includes('local speech model')
@@ -77,6 +82,7 @@ function localModelCause(lower: string): 'memory' | 'download' | 'model' | null 
 const LOCAL_MEMORY_ADVICE = 'Close other apps, or choose a smaller local model in Settings → Audio.';
 const LOCAL_DOWNLOAD_BODY = 'The local model has not finished downloading. Check your internet connection, or choose a cloud provider in Settings → Audio.';
 const LOCAL_MODEL_BODY = 'The local speech model stopped. Restart the meeting, or choose another local model or a cloud provider in Settings → Audio.';
+const LOCAL_SLOW_BODY = 'This local model is too slow for this computer, so text arrives later and later. Choose a lighter local model in Settings → Audio.';
 
 /**
  * Categorize a raw STT error message into a user-friendly display.
@@ -119,6 +125,10 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
     }
     if (local === 'download') {
         return { title: 'Local Model Not Downloaded', body: LOCAL_DOWNLOAD_BODY, category: 'local_model' };
+    }
+    if (local === 'slow') {
+        // Not a stop: text still comes, only late (the overlay's own notice).
+        return { title: 'Transcription Falling Behind', body: LOCAL_SLOW_BODY, category: 'local_model' };
     }
     if (local === 'model') {
         // A runtime or OS the models need: that message already names what to
@@ -332,13 +342,15 @@ export function sttConnectionCause(rawErrors: ReadonlyArray<string>): 'secure-co
 
 /**
  * Why an on-device model stopped, across the given raw errors (most specific
- * first: memory, then download, then any other local failure). Null when none
- * of them is a local model, so the banner keeps its provider advice.
+ * first: memory, then download, then any other local failure, then a model
+ * that is merely too slow). Null when none of them is a local model, so the
+ * banner keeps its provider advice.
  */
-export function sttLocalModelCause(rawErrors: ReadonlyArray<string>): 'memory' | 'download' | 'model' | null {
+export function sttLocalModelCause(rawErrors: ReadonlyArray<string>): 'memory' | 'download' | 'model' | 'slow' | null {
     const causes = rawErrors.filter(Boolean).map((raw) => localModelCause(raw.toLowerCase()));
     if (causes.includes('memory')) return 'memory';
     if (causes.includes('download')) return 'download';
     if (causes.includes('model')) return 'model';
+    if (causes.includes('slow')) return 'slow';
     return null;
 }

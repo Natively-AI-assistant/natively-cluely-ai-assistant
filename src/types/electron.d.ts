@@ -453,10 +453,10 @@ export interface ElectronAPI {
   // generic one.
   onSystemAudioPermissionDenied: (callback: (message: string, titleKey?: string) => void) => () => void
   onDeviceSelectionApplied: (callback: (payload: { kind: 'input' | 'output'; requested: string | null; actual: string | null; fellBack: boolean; reason?: string }) => void) => () => void
-  onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; attempt: number; maxAttempts: number; terminal?: boolean; stuck?: boolean; titleKey?: string }) => void) => () => void
+  onAudioCaptureFailed: (callback: (payload: { channel: 'system' | 'mic'; message: string; attempt: number; maxAttempts: number; terminal?: boolean; stuck?: boolean; titleKey?: string; /** Advice only (shown once per meeting). */ advisory?: boolean; /** false: real audio on the channel does not clear it. */ clearsOnRecovery?: boolean; /** The channel carries real audio again: its stuck/terminal warning no longer holds. */ recovered?: boolean }) => void) => () => void
 
   // STT Status Events
-  onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number; /** A stand-in carries the channel while `provider` is down. */ fallback?: { provider: string; notice: string } }) => void) => () => void
+  onSttStatusChanged: (callback: (data: { state: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing'; provider: string; error?: string; channel: 'user' | 'interviewer'; reconnectAttempts?: number; /** A stand-in carries the channel while `provider` is down. */ fallback?: { provider: string; notice: string }; /** A local model is slower than speech: not a state change. */ behind?: true }) => void) => () => void
 
   getNativeAudioStatus: () => Promise<{ connected: boolean }>
 

@@ -486,6 +486,9 @@ export class SonioxStreamingSTT extends EventEmitter {
                 this.configSent = true;
                 this.isConnecting = false;
                 console.log('[SonioxStreaming] Config sent');
+                // Session ready for audio: main maps it to awaiting-audio, which
+                // clears "Transcription Reconnecting" after a reconnect (2026-11-09).
+                try { this.emit('connected'); } catch { /* listeners never break the socket */ }
 
                 // Flush buffer after config is sent
                 while (this.buffer.length > 0) {

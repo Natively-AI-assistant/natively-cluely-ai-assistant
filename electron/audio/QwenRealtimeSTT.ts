@@ -199,6 +199,9 @@ export class QwenRealtimeSTT extends EventEmitter {
                 this.queued = [];
                 this.queuedBytes = 0;
                 for (const chunk of pending) this.appendAudio(ws, chunk);
+                // Session ready for audio: main maps it to awaiting-audio, which
+                // clears "Transcription Reconnecting" after a reconnect (2026-11-09).
+                try { this.emit('connected'); } catch { /* listeners never break the socket */ }
             } else if (event.type === 'conversation.item.input_audio_transcription.text') {
                 if (!this.active) return;
                 const text = `${event.text ?? ''}${event.stash ?? ''}`.trim();

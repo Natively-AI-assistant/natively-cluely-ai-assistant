@@ -796,6 +796,9 @@ export class OpenAIStreamingSTT extends EventEmitter {
                 this.wsFailures     = 0; // Reset failures on successful session
                 this._startKeepAlive();
                 this._flushRingBuffer();
+                // Session ready for audio: main maps it to awaiting-audio, which
+                // clears "Transcription Reconnecting" after a reconnect (2026-11-09).
+                try { this.emit('connected'); } catch { /* listeners never break the socket */ }
                 break;
 
             case 'conversation.item.input_audio_transcription.delta': {

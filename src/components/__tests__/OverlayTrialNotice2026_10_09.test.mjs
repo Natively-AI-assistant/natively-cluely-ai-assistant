@@ -61,7 +61,8 @@ test('the overlay mounts the trial state once and folds its notice like every ot
   const at = overlay.indexOf('testId="fold-trial-notice"');
   assert.ok(at > 0);
   const tag = overlay.slice(overlay.lastIndexOf('<ChromeFold', at), at);
-  assert.match(tag, /show=\{!!trial\.banner\} overlayVisible=\{isExpanded\} requestHeightMotion=\{requestChromeHeightMotion\}/);
+  // Gated by the two-banner cap too (overlayBannerSlots.mjs, 2026-11-09).
+  assert.match(tag, /show=\{!!trial\.banner && bannerSlots\.has\('trial'\)\} overlayVisible=\{isExpanded\} requestHeightMotion=\{requestChromeHeightMotion\}/);
   assert.ok(overlay.includes('{trial.banner && <TrialNoticeBanner trial={trial} />}'));
   // The countdown lives in the status row, which must open for it alone.
   assert.ok(overlay.includes('<ChromeFold show={hasStatusPill || !!trial.chip} '));
@@ -70,7 +71,7 @@ test('the overlay mounts the trial state once and folds its notice like every ot
 
 test('"Transcription Not Configured" stands down while the trial explains it', () => {
   assert.ok(overlay.includes("const trialExplainsNoStt = trial.pending || trial.banner === 'ended' || trial.banner === 'failed';"));
-  assert.ok(overlay.includes('<ChromeFold show={sttNotConfigured && !trialExplainsNoStt} '));
+  assert.ok(overlay.includes("<ChromeFold show={sttNotConfigured && !trialExplainsNoStt && bannerSlots.has('stt-not-configured')} "));
   assert.ok(overlay.includes('{sttNotConfigured && !trialExplainsNoStt && ('));
 });
 

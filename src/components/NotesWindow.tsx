@@ -400,6 +400,8 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
         transcriptRef.current?.querySelector(`[data-at="${highlightAt}"]`)?.scrollIntoView({ block: 'center' });
     }, [highlightAt, showTranscript]);
 
+    // Capture problems that real audio does not clear (see the recovery below).
+    const stickyCaptureProblems = useRef(new Set<string>());
     // Status while the meeting runs: pause, the audio level, the automatic stop's
     // warning, capture and transcription trouble.
     useEffect(() => {
@@ -426,8 +428,24 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                 });
             }),
             api.onAudioCaptureFailed?.((p) => {
+                const key = `capture:${p?.channel}`;
+                // The channel carries real audio again (main.ts noteCaptureAudio,
+                // 2026-11-09): "can't hear" is no longer true. Not for a problem
+                // that audio does not fix (main: clearsOnRecovery false, e.g. a
+                // speech-to-text provider that would not start).
+                if (p?.recovered) {
+                    if (stickyCaptureProblems.current.has(key)) return;
+                    setProblems((prev) => {
+                        if (!(key in prev)) return prev;
+                        const next = { ...prev };
+                        delete next[key];
+                        return next;
+                    });
+                    return;
+                }
                 if (!p?.terminal && !p?.stuck) return;
-                const key = `capture:${p.channel}`;
+                if (p.clearsOnRecovery === false) stickyCaptureProblems.current.add(key);
+                else stickyCaptureProblems.current.delete(key);
                 const msg = p.channel === 'mic'
                     ? 'Natively can’t hear your microphone. Check Settings › Audio.'
                     : 'Natively can’t hear the call. Check Settings › Audio.';
@@ -440,6 +458,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
         if (phase === 'live') return;
         setStopsAt(null);
         setProblems({});
+        stickyCaptureProblems.current.clear();
         setPaused(false);
         setLevel(null);
     }, [phase]);

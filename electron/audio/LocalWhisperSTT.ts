@@ -1540,8 +1540,8 @@ export class LocalWhisperSTT extends EventEmitter {
             if (msg.type === 'behind') {
                 // The worker's oldest final waited longer than 30s: this model
                 // runs slower than people talk on this computer, and text
-                // comes later and later (whisperTaskQueue.ts). Counted like any
-                // provider error, so a stand-in takes over when one is set up.
+                // comes later and later (whisperTaskQueue.ts). Main shows it
+                // once as "choose a lighter model", not as a reconnect.
                 console.warn(`[LocalWhisperSTT/${this.channelLabel}] transcription is ${Math.round(msg.waitedMs / 1000)}s behind the audio (${this.modelId})`);
                 this.emit('error', Object.assign(new Error(
                     `Transcription is ${Math.round(msg.waitedMs / 1000)} seconds behind: this model is too slow for this computer. ` +
