@@ -11,10 +11,13 @@
 // the page-capture notice after 20 s, the "trial started" note after 12 s,
 // goes unseen: it described a moment that has passed.)
 //
-// Priority, most important first. Errors that mean nothing is being heard or
-// transcribed come first; notices about something the user just did come
-// before passive advice, which comes last.
+// Priority, most important first. Auto-stop leads: it ends the meeting in a
+// minute unless the user acts, and a dead mic (an error banner) is exactly
+// when silence makes it fire. Then errors that mean nothing is being heard or
+// transcribed; notices about something the user just did come before passive
+// advice, which comes last.
 //
+//   auto-stop          the meeting stops in a minute unless something is said
 //   audio-error        a blocked permission, or a capture that gave up
 //   stt-error          transcription stopped, or the pack that paid for it ended
 //   stt-not-configured nothing transcribes: no provider
@@ -22,7 +25,6 @@
 //   stt-warning        reconnecting, on a backup provider, or falling behind
 //   ambient-mic        Ambient AI Chat: this meeting is not heard on purpose
 //   trial              the free trial started / is ending / ended / could not start
-//   auto-stop          the meeting stops in a minute unless something is said
 //   last-time          what last time's notes left open
 //   capture-fallback   the page capture the user just asked for fell back
 //   refusal-retry      the screenshot answer was retried without the border
@@ -36,6 +38,7 @@
 export const OVERLAY_BANNER_CAP = 2;
 
 export const OVERLAY_BANNER_PRIORITY = Object.freeze([
+  'auto-stop',
   'audio-error',
   'stt-error',
   'stt-not-configured',
@@ -43,7 +46,6 @@ export const OVERLAY_BANNER_PRIORITY = Object.freeze([
   'stt-warning',
   'ambient-mic',
   'trial',
-  'auto-stop',
   'last-time',
   'capture-fallback',
   'refusal-retry',

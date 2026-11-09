@@ -17,7 +17,9 @@ const overlay = fs.readFileSync(path.resolve(here, '../../NativelyInterface.tsx'
 test('two at most, the most important first', () => {
   assert.equal(OVERLAY_BANNER_CAP, 2);
   const all = Object.fromEntries(OVERLAY_BANNER_PRIORITY.map((id) => [id, true]));
-  assert.deepEqual([...pickOverlayBanners(all)], ['audio-error', 'stt-error']);
+  assert.deepEqual([...pickOverlayBanners(all)], ['auto-stop', 'audio-error']);
+  // A dead mic and stopped transcription do not hide the auto-stop warning.
+  assert.deepEqual([...pickOverlayBanners({ 'audio-error': true, 'stt-error': true, 'auto-stop': true })], ['auto-stop', 'audio-error']);
   assert.deepEqual([...pickOverlayBanners({ 'hotkey-conflict': true, trial: true, 'refusal-retry': true })], ['trial', 'refusal-retry']);
   assert.deepEqual([...pickOverlayBanners({ 'audio-advisory': true })], ['audio-advisory']);
   assert.deepEqual([...pickOverlayBanners({})], []);
@@ -28,8 +30,9 @@ test('the order: faults that mean nothing is heard, then transcription, then the
   assert.ok(rank('audio-error') < rank('stt-error'));
   assert.ok(rank('stt-error') < rank('stt-warning'));
   assert.ok(rank('stt-warning') < rank('trial'));
-  assert.ok(rank('trial') < rank('auto-stop'));
-  assert.ok(rank('auto-stop') < rank('last-time'));
+  // Auto-stop ends the meeting unless the user acts: never held behind errors.
+  assert.equal(rank('auto-stop'), 0);
+  assert.ok(rank('trial') < rank('last-time'));
   assert.ok(rank('last-time') < rank('capture-fallback'));
   assert.ok(rank('capture-fallback') < rank('hotkey-conflict'));
   assert.equal(OVERLAY_BANNER_PRIORITY.at(-1), 'audio-advisory', 'advice is last');
