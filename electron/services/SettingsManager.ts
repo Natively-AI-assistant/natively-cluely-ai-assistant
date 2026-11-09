@@ -42,6 +42,10 @@ export interface AppSettings {
      *  build (turnAmbientChatOffOnce); set once, after which the user's own
      *  choice stands. */
     ambientChatResetOnUpgrade?: boolean;
+    /** "Open Natively when you log in" default-on for fresh installs
+     *  (utils/openAtLoginDefault.ts): 'pending' until written to the OS once,
+     *  then 'done' and the user's own choice stands. */
+    openAtLoginDefault?: 'pending' | 'done';
     // Automatic answers after the interviewer finishes a question. Off by
     // default: until the user opts in from Settings > General, an answer is
     // produced only by the What-to-Answer hotkey, exactly as before. The
@@ -408,6 +412,8 @@ export class SettingsManager {
     private static instance: SettingsManager;
     private settings: AppSettings = {};
     private settingsPath: string;
+    /** settings.json did not exist when this launch loaded it. */
+    private freshInstall = false;
 
     private constructor() {
         if (!app.isReady()) {
@@ -433,6 +439,11 @@ export class SettingsManager {
 
     public get<K extends keyof AppSettings>(key: K): AppSettings[K] {
         return this.settings[key];
+    }
+
+    /** True when settings.json did not exist at load: a first launch. */
+    public isFreshInstall(): boolean {
+        return this.freshInstall;
     }
 
     /**
@@ -624,7 +635,8 @@ export class SettingsManager {
 
     private loadSettings(): void {
         try {
-            if (fs.existsSync(this.settingsPath)) {
+            this.freshInstall = !fs.existsSync(this.settingsPath);
+            if (!this.freshInstall) {
                 const data = fs.readFileSync(this.settingsPath, 'utf8');
                 try {
                     const parsed = JSON.parse(data);

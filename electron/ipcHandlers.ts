@@ -7776,6 +7776,11 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('set-open-at-login', async (_, openAtLogin: boolean) => {
     // Explicitly point to executable for production reliability
     setOpenAtLogin(app, process.platform, openAtLogin, app.getPath('exe'));
+    // The user chose: a pending fresh-install default (e.g. a DMG launch on
+    // macOS) must not override it later. See utils/openAtLoginDefault.ts.
+    if (SettingsManager.getInstance().get('openAtLoginDefault') !== 'done') {
+      SettingsManager.getInstance().set('openAtLoginDefault', 'done');
+    }
     return { success: true };
   });
 

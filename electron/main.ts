@@ -1479,7 +1479,8 @@ import { disguiseIconRelativePath, shouldSetMacDockIcon } from './utils/disguise
 import { createPageTitleGuard } from './utils/windowTitleGuard'
 import { createStealthProtectionLoop } from './utils/stealthProtection'
 import { resolveTrayIcon } from './utils/trayIcon'
-import { appUserModelIdForDisguise } from './utils/windowsTaskbarPolicy'
+import { appUserModelIdForDisguise, setOpenAtLogin } from './utils/windowsTaskbarPolicy'
+import { decideOpenAtLoginDefault } from './utils/openAtLoginDefault'
 import { shouldOpenExternally } from './utils/windowOpenPolicy'
 import { ensureNativeModuleAbi } from './utils/nativeModuleGuard'
 import { getPackMeetingClock } from './services/packs/packClockWiring'
@@ -10731,6 +10732,29 @@ async function initializeApp() {
       process.title = disguiseAppName(normalizeDisguiseMode(SettingsManager.getInstance().get('disguiseMode')), process.platform);
       if (app.dock) app.dock.hide();  // app.dock is macOS-only (undefined elsewhere); darwin gated at 7445
     }
+  }
+
+  // 2b. "Open Natively when you log in" is on by default for fresh installs,
+  // written to the OS once; after that the Settings toggle owns it. The marker
+  // is persisted BEFORE the login item is written, so a store that refuses
+  // writes can't re-enable it on every launch. See utils/openAtLoginDefault.ts.
+  try {
+    const settings = SettingsManager.getInstance();
+    const decision = decideOpenAtLoginDefault({
+      platform: process.platform,
+      state: settings.get('openAtLoginDefault'),
+      freshInstall: settings.isFreshInstall(),
+      isPackaged: app.isPackaged,
+      inApplicationsFolder: process.platform === 'darwin' ? app.isInApplicationsFolder() : false,
+      isPortable: process.platform === 'win32' && !!process.env.PORTABLE_EXECUTABLE_FILE,
+    });
+    const persisted = decision.nextState === null || settings.set('openAtLoginDefault', decision.nextState);
+    if (decision.enable && persisted) {
+      setOpenAtLogin(app, process.platform, true, app.getPath('exe'));
+      console.log('[Startup] Open at login turned on (fresh-install default)');
+    }
+  } catch (err) {
+    console.warn('[Startup] Open-at-login default skipped:', err);
   }
 
   // 3. Initialize Managers
