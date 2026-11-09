@@ -9727,6 +9727,14 @@ html[data-platform="linux"][data-window="launcher"] body {
 .t-toggle[data-on="true"] .t-toggle-thumb {
     transform: translateX(var(--toggle-travel));
 }
+/* White knob + lift on the pale --toggle-on-track, in both themes. */
+.t-toggle[data-on="true"] .t-toggle-thumb,
+.t-toggle[aria-checked="true"] .t-toggle-thumb {
+    background: #FFFFFF;
+    box-shadow:
+        0 1px 2.5px rgba(0, 0, 0, 0.18),
+        0 0 0 0.5px rgba(0, 0, 0, 0.04);
+}
 /* Elastic press, matching the reference exactly: literal width growth (not a
    scale trick), anchored against whichever wall the thumb is resting on —
    left edge fixed when OFF; when ON, translateX shrinks by --toggle-grow so
@@ -9768,14 +9776,6 @@ html[data-platform="linux"][data-window="launcher"] body {
    to sit inside. Tabs sit on z-index: 1, the pill on z-index: 0,
    so labels read above the pill background. */
 .t-tabs {
-/* White knob + lift on the pale --toggle-on-track, in both themes. */
-.t-toggle[data-on="true"] .t-toggle-thumb,
-.t-toggle[aria-checked="true"] .t-toggle-thumb {
-    background: #FFFFFF;
-    box-shadow:
-        0 1px 2.5px rgba(0, 0, 0, 0.18),
-        0 0 0 0.5px rgba(0, 0, 0, 0.04);
-}
   position: relative;
   display: inline-flex;
   align-items: center;

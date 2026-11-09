@@ -107,6 +107,17 @@ const ReviewPromptHost: React.FC<ReviewPromptHostProps> = ({ paused, isOpen: isO
     const isOrchestratorControlled = isOpenProp !== undefined
     const isOpen = isOrchestratorControlled ? isOpenProp : isOpenInternal
 
+    // The orchestrator opens the card by prop and never runs check(), so its
+    // showings are recorded here, once per opening.
+    const shownRef = useRef(false)
+    useEffect(() => {
+        if (!isOrchestratorControlled) return
+        if (!isOpen) { shownRef.current = false; return }
+        if (shownRef.current) return
+        shownRef.current = true
+        void window.electronAPI?.reviewMarkShown?.()
+    }, [isOrchestratorControlled, isOpen])
+
     // Expose dev helpers on `window` so we can re-show / reset state from devtools
     // without re-launching the app. These are no-ops in production.
     useEffect(() => {

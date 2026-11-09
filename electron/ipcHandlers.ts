@@ -13329,9 +13329,14 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('review:mark-shown', async () => {
     try {
-      const { ReviewService } = require('./services/ReviewService');
+      const { ReviewService, getReviewApiKey, getReviewHardwareId } = require('./services/ReviewService');
       const svc = ReviewService.getInstance();
       svc.markShown();
+      // The server stamps last_prompted_at, so prompt views can be counted
+      // against reviews and dismissals.
+      const apiKey = getReviewApiKey();
+      const hwid = await getReviewHardwareId();
+      svc.reportEvent(apiKey, hwid, { type: 'shown' }).catch(() => {});
       return { ok: true };
     } catch (error: any) {
       return { ok: false, error: error?.message || 'unknown' };
