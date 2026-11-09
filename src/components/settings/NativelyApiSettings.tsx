@@ -1898,10 +1898,46 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           exit={{ opacity: 0, transition: { duration: INK.out, ease: EASE_LEAVE } }}
           transition={{ duration: INK.in, ease: EASE_ENTER, delay: prefersReducedMotion ? 0 : BEAT }}
         >
+        <div className="space-y-6">
         <ActiveTrialCard
           expiresAt={trialState.expiresAt}
           onOptions={() => setShowTrialModal(true)}
         />
+          {/* The usage sits under the clock, not under the plans: the card owns
+              the trial's time and this its allowance, so the two read as one
+              (Evin, 2026-11-10: it used to come after the whole plans section). */}
+          {/* ── Usage, for a TRIAL ────────────────────────────────────
+              A trial user never reached the section below: it is gated on
+              `usageData`, which comes from /v1/usage authenticated with a real
+              key, and a trial authenticates with `x-trial-token` against the
+              sentinel `__trial__` — so the whole usage table was simply absent
+              for exactly the people with the tightest allowances and the most
+              reason to watch them. The pills on the trial card show progress
+              bars; they do not show used-against-limit numbers.
+
+              Same ResourceMeter rows as the paid table, so the two read
+              identically. "this trial", not "this month": a trial does not
+              reset, it ends — the countdown for that is on the card above. */}
+          {trialState?.active && !trialState.expired && (
+            <div>
+              <SectionLabel>Usage this trial</SectionLabel>
+              <Card>
+                <div className="px-4 py-4 space-y-4">
+                  <ResourceMeter label="AI Usage" icon={Brain} meter={trialMeter(trialState.usage.ai_tokens ?? 0, trialState.limits?.ai_tokens ?? TRIAL_FALLBACK_LIMITS.ai_tokens, 'tokens')} />
+                  <ResourceMeter label="Voice Usage" icon={Mic} meter={trialMeter(Math.round(trialState.usage.stt_seconds / 60), trialState.limits?.stt_minutes ?? TRIAL_FALLBACK_LIMITS.stt_minutes, 'minutes')} />
+                  <ResourceMeter label="Research" icon={Search} meter={trialMeter(trialState.usage.search, trialState.limits?.search_requests ?? TRIAL_FALLBACK_LIMITS.search_requests, 'requests')} />
+                  {/* Knowledge only when the server actually reported it: an
+                      absent counter is an older API, not zero usage, and
+                      ResourceMeter's own rule is to render nothing rather than a
+                      confident 0%. */}
+                  {trialState.usage.embedding_tokens !== undefined && trialState.limits?.embedding_tokens ? (
+                    <ResourceMeter label="Knowledge Usage" icon={Layers} meter={trialMeter(trialState.usage.embedding_tokens, trialState.limits.embedding_tokens, 'tokens')} />
+                  ) : null}
+                </div>
+              </Card>
+            </div>
+          )}
+        </div>
         </motion.div>
       )}
 
@@ -2253,38 +2289,6 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           both in the same tick made this unmount instantly no matter what it was
           wrapped in. The inner guard keeps the null-safety for the case where a
           saved key simply has no valid plan. */}
-      {/* ── Usage, for a TRIAL ────────────────────────────────────
-          A trial user never reached the section below: it is gated on
-          `usageData`, which comes from /v1/usage authenticated with a real
-          key, and a trial authenticates with `x-trial-token` against the
-          sentinel `__trial__` — so the whole usage table was simply absent
-          for exactly the people with the tightest allowances and the most
-          reason to watch them. The pills on the trial card show progress
-          bars; they do not show used-against-limit numbers.
-
-          Same ResourceMeter rows as the paid table, so the two read
-          identically. "this trial", not "this month": a trial does not
-          reset, it ends — the countdown for that is on the card above. */}
-      {trialState?.active && !trialState.expired && (
-        <div>
-          <SectionLabel>Usage this trial</SectionLabel>
-          <Card>
-            <div className="px-4 py-4 space-y-4">
-              <ResourceMeter label="AI Usage" icon={Brain} meter={trialMeter(trialState.usage.ai_tokens ?? 0, trialState.limits?.ai_tokens ?? TRIAL_FALLBACK_LIMITS.ai_tokens, 'tokens')} />
-              <ResourceMeter label="Voice Usage" icon={Mic} meter={trialMeter(Math.round(trialState.usage.stt_seconds / 60), trialState.limits?.stt_minutes ?? TRIAL_FALLBACK_LIMITS.stt_minutes, 'minutes')} />
-              <ResourceMeter label="Research" icon={Search} meter={trialMeter(trialState.usage.search, trialState.limits?.search_requests ?? TRIAL_FALLBACK_LIMITS.search_requests, 'requests')} />
-              {/* Knowledge only when the server actually reported it: an
-                  absent counter is an older API, not zero usage, and
-                  ResourceMeter's own rule is to render nothing rather than a
-                  confident 0%. */}
-              {trialState.usage.embedding_tokens !== undefined && trialState.limits?.embedding_tokens ? (
-                <ResourceMeter label="Knowledge Usage" icon={Layers} meter={trialMeter(trialState.usage.embedding_tokens, trialState.limits.embedding_tokens, 'tokens')} />
-              ) : null}
-            </div>
-          </Card>
-        </div>
-      )}
-
       <AnimatePresence mode="popLayout" initial={false} onExitComplete={() => setUsageData(null)}>
       {isSaved && usageData && (
         <motion.div
