@@ -27,7 +27,7 @@ import { Presence, SettingsMotionReady, SwapLabel } from './SettingsRow';
 import { isTrialClaimedLocally, markTrialClaimedLocally } from '../../lib/trialCampaign.mjs';
 import { trialRefusal } from '../../lib/trial/trialStart.mjs';
 import { CHECKOUT_URLS } from '../../config/urls';
-import { BillingCycleSwitch } from '../ui/BillingCycleSwitch';
+import { BillingCycleSwitch, PLANS_VIEWS, type PlansView } from '../ui/BillingCycleSwitch';
 import './apiTier.css';
 import { plansVisit } from '../../lib/funnel/plansVisit.mjs';
 import { usePlansSeen } from '../../lib/funnel/usePlansSeen';
@@ -907,6 +907,21 @@ function PlanRail({ children }: { children: React.ReactNode }) {
   );
 }
 
+// ─── Hourly <-> Monthly / Yearly ──────────────────────────────
+// The swap between the four plans and the two packs, the same as the website's
+// pricing page (natively-website PricingSection.tsx, DISSOLVE): the old row
+// softens and sinks a touch and leaves the flow at once (popLayout); the new
+// cards settle out of a soft blur on a bounce-free spring, 60ms apart.
+const DISSOLVE = {
+  leave: { opacity: 0, scale: 0.985, filter: 'blur(6px)', transition: { duration: 0.22, ease: EASE_ENTER } },
+  from: { opacity: 0, scale: 0.97, y: 10, filter: 'blur(8px)' },
+  settle: (i: number) => ({
+    default: { type: 'spring' as const, duration: 0.65, bounce: 0, delay: 0.08 + i * 0.06 },
+    opacity: { duration: 0.45, ease: EASE_ENTER, delay: 0.08 + i * 0.06 },
+    filter: { duration: 0.5, ease: EASE_ENTER, delay: 0.08 + i * 0.06 },
+  }),
+};
+
 // ─── Pro packs ───────────────────────────────────────────────
 // Two one-time buys beside the subscriptions, drawn as small website tiers
 // like the plan card above: Light on the Max band, Heavy on the Ultra band.
@@ -914,33 +929,31 @@ function PlanRail({ children }: { children: React.ReactNode }) {
 // a pack a pack (hours OR days, whichever first; any live meeting counts, even
 // on your own keys) is said once, under both.
 const PACK_LOOK: Record<string, { mesh: TierMesh; pattern: TierPattern; blurb: string }> = {
-  pack_light: { mesh: 'max', pattern: 'dots', blurb: 'For an interview or two' },
-  pack_heavy: { mesh: 'ultra', pattern: 'grid', blurb: 'For two busy weeks' },
+  pack_light: { mesh: 'max', pattern: 'dots', blurb: 'For an interview or two: a few hours of Pro, paid once.' },
+  pack_heavy: { mesh: 'ultra', pattern: 'grid', blurb: 'For two busy weeks of meetings, with no plan to cancel.' },
 };
 
-function ProPacks({ currentPlan, onBuy }: { currentPlan?: string; onBuy: (url: string) => void }) {
+function ProPacks({ currentPlan, onBuy, arrive }: { currentPlan?: string; onBuy: (url: string) => void; arrive: (i: number) => object }) {
   const urls: Record<string, string> = { pack_light: CHECKOUT_URLS.packLight, pack_heavy: CHECKOUT_URLS.packHeavy };
   const current = currentPlan?.toLowerCase();
   // Funnel (plans_visit): the packs were on screen during this visit.
   const seenRef = usePlansSeen(() => plansVisit.seen('packs'));
   return (
-    <div className="pt-3" ref={seenRef}>
-      <SectionLabel aside={<span className="text-[11px] text-text-tertiary whitespace-nowrap">Pay once, nothing renews</span>}>
-        Pro packs
-      </SectionLabel>
+    <div ref={seenRef}>
       <div className="grid grid-cols-2 gap-3">
-        {PRO_PACKS.map((p) => {
+        {PRO_PACKS.map((p, i) => {
           // Another pack adds hours to the one running, so the owner of a pack
           // is offered more time rather than a second identical card.
           const owned = current === p.id;
           const look = PACK_LOOK[p.id] ?? PACK_LOOK.pack_light;
           return (
-            <section key={p.id} data-pack={p.id} aria-label={p.name} className="api-tier api-tier-card">
+            <motion.section key={p.id} data-pack={p.id} aria-label={p.name} className="api-tier api-tier-card" {...arrive(i)}>
               <TierBand mesh={look.mesh} pattern={look.pattern} name={p.name} badge={owned ? 'Your pack' : undefined} />
               <div className="api-tier-well">
                 <p className="api-tier-blurb">{look.blurb}</p>
                 <p className="api-tier-price">
-                  <span className="api-tier-amount">${p.price}</span>
+                  {/* The plans' odometer, still here: it sets the same line height, so a pack and a plan match. */}
+                  <span className="api-tier-amount"><RollingPrice price={`$${p.price}`} from={`$${p.price}`} /></span>
                   <span className="api-tier-per">once</span>
                 </p>
                 <button
@@ -955,14 +968,17 @@ function ProPacks({ currentPlan, onBuy }: { currentPlan?: string; onBuy: (url: s
               <ul className="api-tier-tray">
                 <li><Check size={14} strokeWidth={2} aria-hidden="true" /><span><b>{p.hours} hours</b> of live meetings</span></li>
                 <li><Check size={14} strokeWidth={2} aria-hidden="true" /><span>Use within <b>{p.days} days</b></span></li>
+                {/* Four lines and a two-line blurb, like a plan card, so a pack
+                    stands exactly as tall when Hourly swaps them (Evin, 2026-11-10). */}
+                <li><Check size={14} strokeWidth={2} aria-hidden="true" /><span>AI, transcription and search</span></li>
                 <li><Check size={14} strokeWidth={2} aria-hidden="true" /><span>Natively Pro features</span></li>
               </ul>
-            </section>
+            </motion.section>
           );
         })}
       </div>
       <p className="text-[11px] text-text-tertiary px-1 mt-2 leading-snug">
-        A pack ends when its hours or its days run out, whichever comes first. Every live meeting counts toward
+        Pay once, nothing renews. A pack ends when its hours or its days run out, whichever comes first. Every live meeting counts toward
         the hours, even on your own AI keys. Buying another pack adds more hours.
       </p>
     </div>
@@ -1098,6 +1114,24 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   // Funnel (plans_visit): the switch's value, and again at each visit's start
   // so a visit knows what it opened on. Only a press on the switch counts as
   // a switch (onChange below); the move to Yearly for a yearly key does not.
+  // Hourly on the same switch shows the two Pro packs in the plans' place, as
+  // the website's pricing page does (Evin, 2026-11-10). A pack key opens on it.
+  const [packsView, setPacksView] = useState<boolean>(() => isPackPlan(usageCache?.plan));
+  const plansView: PlansView = packsView ? 'hourly' : billingCycle;
+  // Cards only dissolve in after a press on the switch, never on first paint.
+  const [viewSwitched, setViewSwitched] = useState(false);
+  const choosePlansView = (next: PlansView) => {
+    if (next === plansView) return;
+    if (next === 'hourly') {
+      setViewSwitched(true);
+      setPacksView(true);
+      return;
+    }
+    if (packsView) setViewSwitched(true);
+    setPacksView(false);
+    plansVisit.cycleSwitched(next);
+    setBillingCycle(next);
+  };
   const billingCycleRef = useRef(billingCycle);
   billingCycleRef.current = billingCycle;
   useEffect(() => { plansVisit.cycle(billingCycle); }, [billingCycle]);
@@ -1653,6 +1687,18 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     </button>
   );
 
+  // A card's arrival after Hourly is switched on or off: the website's dissolve.
+  const arrive = (i: number) =>
+    !viewSwitched
+      ? {}
+      : prefersReducedMotion
+        ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { duration: 0.15 } }
+        : {
+            initial: DISSOLVE.from,
+            animate: { opacity: 1, y: 0, scale: 1, filter: 'blur(0px)', transitionEnd: { filter: 'none' } },
+            transition: DISSOLVE.settle(i),
+          };
+
   const PlansCard = (
     // The hover handlers that used to live here only existed to pause a
     // setInterval that auto-rotated the tier selector every 4.5s. That
@@ -1669,10 +1715,42 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           "2 months free" once Yearly is picked. */}
       {/* Titled like the "Pro packs" and "Natively Pro" rows
           below, so each group of cards on the tab has a name. */}
+      {/* Hourly | Monthly | Yearly, as on the website's pricing page: Hourly
+          shows the two Pro packs where the plans are. The title says which. */}
       <div className="flex items-center justify-between gap-3 px-1">
-        <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.07em]">Natively API plans</p>
-        <BillingCycleSwitch value={billingCycle} onChange={(next) => { plansVisit.cycleSwitched(next); setBillingCycle(next); }} showNote={false} align="start" />
+        <p className="grid text-[11px] font-medium text-text-tertiary uppercase tracking-[0.07em]">
+          {(['Natively API plans', 'Pro packs'] as const).map((label) => {
+            const on = (label === 'Pro packs') === packsView;
+            return (
+              <span
+                key={label}
+                aria-hidden={!on}
+                className="col-start-1 row-start-1"
+                style={{
+                  opacity: on ? 1 : 0,
+                  transform: on || prefersReducedMotion ? 'none' : 'translateY(4px)',
+                  filter: on || prefersReducedMotion ? 'none' : 'blur(2px)',
+                  visibility: on ? 'visible' : 'hidden',
+                  transition: prefersReducedMotion
+                    ? 'none'
+                    : `opacity 150ms ease-in-out, transform 150ms ease-in-out, filter 150ms ease-in-out, visibility 0s linear ${on ? '0s' : '150ms'}`,
+                }}
+              >
+                {label}
+              </span>
+            );
+          })}
+        </p>
+        <BillingCycleSwitch value={plansView} onChange={choosePlansView} options={PLANS_VIEWS} showNote={false} align="start" />
       </div>
+
+      <AnimatePresence mode="popLayout" initial={false}>
+      {packsView ? (
+        <motion.div key="packs" exit={prefersReducedMotion ? { opacity: 0, transition: { duration: 0.15 } } : DISSOLVE.leave}>
+          <ProPacks currentPlan={usageData?.plan} onBuy={openExternal} arrive={arrive} />
+        </motion.div>
+      ) : (
+      <motion.div key="plans" className="space-y-3" exit={prefersReducedMotion ? { opacity: 0, transition: { duration: 0.15 } } : DISSOLVE.leave}>
 
       {/* All four plans as website pricing tiers, the same card and anatomy
           as the two Pro packs below, in one sideways row that scrolls and
@@ -1698,13 +1776,14 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             keyCycle === billingCycle;
           const look = TIER_LOOK[plan.planKey] ?? TIER_LOOK.standard;
           return (
-            <section
+            <motion.section
               key={plan.id}
               role="listitem"
               aria-label={plan.name}
               className="api-tier api-tier-card"
               data-tier={plan.planKey}
               data-active={isActive ? 'true' : 'false'}
+              {...arrive(PLANS.indexOf(plan))}
             >
               {/* One badge on the row: Recommended on Pro, or Your plan on the
                   one you have. The other three tags only restated the blurb. */}
@@ -1759,7 +1838,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                   </li>
                 )}
               </ul>
-            </section>
+            </motion.section>
           );
         })}
       </PlanRail>
@@ -1769,10 +1848,9 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         month{billingCycle === 'yearly' ? ', even when billed yearly' : ''}. Pro, Max and Ultra include Natively Pro.
         Cancel anytime.
       </p>
-
-      {/* One-time Pro packs: the same Pro app and API, for a short stretch,
-          paid once. Shown under the subscriptions as the smaller option. */}
-      <ProPacks currentPlan={usageData?.plan} onBuy={openExternal} />
+      </motion.div>
+      )}
+      </AnimatePresence>
     </div>
   );
 
