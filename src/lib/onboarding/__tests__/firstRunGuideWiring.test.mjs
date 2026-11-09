@@ -34,3 +34,8 @@ test('preload exposes guideGet, guideDispatch and onGuideChanged (types and impl
 test('SettingsManager has a firstRunGuide slot', () => {
   assert.ok(read('electron/services/SettingsManager.ts').includes('firstRunGuide?:'));
 });
+
+test('the renderer ElectronAPI type declares the guide calls', () => {
+  const d = read('src/types/electron.d.ts');
+  for (const name of ['guideGet:', 'guideDispatch:', 'onGuideChanged:']) assert.ok(d.includes(name), name);
+});

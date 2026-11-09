@@ -1,0 +1,49 @@
+/* First-run guide (docs/superpowers/specs/2026-11-10-first-run-guide-design.md).
+   The real control the guide points at wears a lavender ring and a soft glow on
+   the element itself: the overlay is zoomed, so a measured cut-out lands in the
+   wrong place there. */
+
+@keyframes guideIn {
+  from { opacity: 0; transform: translateY(4px) scale(0.98); filter: blur(3px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+
+@keyframes guideLit {
+  50% { box-shadow: 0 0 0 1.5px #7C5CFF, 0 0 0 6px rgba(124, 92, 255, 0.12), 0 0 22px rgba(124, 92, 255, 0.38); }
+}
+
+[data-guide-lit] {
+  position: relative;
+  z-index: 2;
+  box-shadow: 0 0 0 1.5px #7C5CFF, 0 0 0 4px rgba(124, 92, 255, 0.16), 0 0 16px rgba(124, 92, 255, 0.28) !important;
+  animation: guideLit 2.6s ease-in-out infinite;
+}
+
+.guide-enter {
+  animation: guideIn 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.guide-skip {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  transition: opacity 150ms ease-out;
+}
+@media (hover: hover) {
+  .guide-skip:hover { opacity: 0.75; }
+}
+
+.guide-dot {
+  transition: width 250ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-guide-lit] { animation: none !important; }
+  .guide-dot { transition: none; }
+  @keyframes guideIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+}
