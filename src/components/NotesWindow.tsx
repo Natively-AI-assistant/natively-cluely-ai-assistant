@@ -8,6 +8,7 @@ import { useLastTimeRecap } from './assist/useLastTimeRecap';
 import { shouldBlockFocus, shouldFireStealthTapStart } from '../lib/overlayStealthFocusGuards.mjs';
 import { editCommand, editShortcutLetter, paste } from '../lib/stealthEdit.mjs';
 import { NotesEditor, type NotesEditorHandle } from './notes/NotesEditor';
+import { useNotesGuide } from './guide/NotesGuide';
 import { NotesHeading, type HeadingInfo } from './notes/NotesHeading';
 import { NotesEnhanced, type NotesEnhancedHandle } from './notes/NotesEnhanced';
 import { NoteTemplateGallery } from './notes/NoteTemplateGallery';
@@ -224,6 +225,8 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     const enhancedRef = useRef<NotesEnhancedHandle>(null);
     const answerScrollRef = useRef<HTMLDivElement>(null);
     const editorRef = useRef<NotesEditorHandle>(null);
+    // The first-run guide's notepad step (guide/NotesGuide.tsx).
+    const notesGuide = useNotesGuide();
     const askRef = useRef<HTMLInputElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
     const transcriptRef = useRef<HTMLDivElement>(null);
@@ -466,12 +469,13 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     const commit = useCallback((next: string) => {
         setText(next);
         window.electronAPI?.liveNotesSetText?.(next);
+        notesGuide.onTyped(next);
         const now = Date.now();
         if (phase === 'live' && now - lastTypingPing.current > TYPING_PING_MS) {
             lastTypingPing.current = now;
             window.electronAPI?.meetingAutoStopTyping?.();
         }
-    }, [phase]);
+    }, [phase, notesGuide.onTyped]);
 
     // The answer streams to this window only (the handler replies to its sender).
     useEffect(() => {
@@ -1318,6 +1322,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                     <NotesEnhanced ref={enhancedRef} meetingId={meetingId!} onTitle={setSavedTitle} onOpenGallery={openGallery} myNotes={text} bottomInset={bottomInset} />
                 ) : (
                     <>
+                    {phase !== 'ended' && notesGuide.node}
                     {phase !== 'ended' && (liveTemplate || templateNotice) && (
                         // The template this meeting's notes will be written in ("/" › Templates).
                         <div className="px-8 pt-3 -mb-1 flex items-center gap-2 min-w-0" role="status">
