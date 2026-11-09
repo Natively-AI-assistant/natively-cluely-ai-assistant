@@ -104,7 +104,11 @@ test('every banner sentence is translated, and the table has no leftover rows', 
   const start = src.indexOf('const sttConnectionAdvice');
   const end = src.indexOf("title: t('Transcribing on a backup provider')", start);
   assert.ok(start > 0 && end > start, 'banner block found');
-  const block = src.slice(start, end);
+  // And the "falling behind" banner after it (2026-11-09).
+  const behindAt = src.indexOf("kind: 'behind',", end);
+  const behindEnd = src.indexOf('const sttStatusBannerOpen', behindAt);
+  assert.ok(behindAt > end && behindEnd > behindAt, 'behind banner found');
+  const block = src.slice(start, end) + src.slice(behindAt, behindEnd);
   const used = [...block.matchAll(/\bt\('((?:[^'\\]|\\.)+)'\)/g)].map((m) => m[1].replace(/\\'/g, "'"));
   assert.ok(used.length >= 9, `found ${used.length} sentences`);
 

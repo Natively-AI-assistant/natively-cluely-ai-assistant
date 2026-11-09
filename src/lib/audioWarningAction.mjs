@@ -20,11 +20,15 @@ const MAC_MIC_PANE = 'x-apple.systempreferences:com.apple.preference.security?Pr
 const MAC_SCREEN_PANE = 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture';
 
 /**
- * @param {{ platform: string, kind: string, channel?: string, titleKey?: string, message?: string }} w
+ * @param {{ platform: string, kind: string, channel?: string, titleKey?: string, message?: string, advisory?: boolean }} w
  */
 export function audioWarningAction(w) {
   const title = String(w.titleKey ?? '').toLowerCase();
   const message = String(w.message ?? '');
+  // Advice, not a fault (2026-11-09: "Your mic is in low-quality Bluetooth call
+  // mode", main.ts): no permission is missing, so no privacy pane. The fix is a
+  // device choice, in Settings → Audio, on either platform.
+  if (w.advisory) return { type: 'settings-tab', tab: 'audio' };
   // A speech-to-text provider that failed to start is a provider/API-key
   // problem, fixed in Settings → Audio, on either platform. On the mic channel
   // it used to open the macOS Microphone privacy pane: a permission it isn't.

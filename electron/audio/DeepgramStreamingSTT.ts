@@ -356,6 +356,10 @@ export class DeepgramStreamingSTT extends EventEmitter {
                     this.stabilityTimer = null;
                     if (this.isOpen) this.reconnectAttempts = 0;
                 }, 5000);
+
+                // Session ready for audio: main maps it to awaiting-audio, which
+                // clears "Transcription Reconnecting" after a reconnect (2026-11-09).
+                try { this.emit('connected'); } catch { /* listeners never break the socket */ }
             });
 
             // UtteranceEnd (utterance_end_ms above) — the fallback endpoint when

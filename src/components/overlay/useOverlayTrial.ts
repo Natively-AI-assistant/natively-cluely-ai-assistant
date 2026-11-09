@@ -30,6 +30,8 @@ export interface OverlayTrialView {
   pending: boolean;
   /** A meeting is on. Outside one the overlay is hidden, and nothing it computes was seen. */
   active: boolean;
+  /** The ending or ended banner the user closed in this meeting (it is still true). */
+  closed: 'ending' | 'ended' | null;
 }
 
 export interface OverlayTrial extends OverlayTrialView {
@@ -39,13 +41,14 @@ export interface OverlayTrial extends OverlayTrialView {
   startManually: () => void;
 }
 
-const EMPTY: OverlayTrialView = { banner: null, chip: null, minutesLeft: null, reason: null, failure: null, starting: false, pending: false, active: false };
+const EMPTY: OverlayTrialView = { banner: null, chip: null, minutesLeft: null, reason: null, failure: null, starting: false, pending: false, active: false, closed: null };
 /** A 'pending' with no answer is dropped after this long (two 10 s attempts and the wait between them). */
 const PENDING_MAX_MS = 30_000;
 
 const sameView = (a: OverlayTrialView, b: OverlayTrialView) =>
   a.banner === b.banner && a.failure === b.failure && a.starting === b.starting && a.pending === b.pending && a.active === b.active
-  && a.minutesLeft === b.minutesLeft && a.reason === b.reason && !a.chip === !b.chip && a.chip?.tone === b.chip?.tone;
+  && a.minutesLeft === b.minutesLeft && a.reason === b.reason && !a.chip === !b.chip && a.chip?.tone === b.chip?.tone
+  && a.closed === b.closed;
 
 // `reason` goes with ending and ended only (catalogue, 2026-11-03): the funnel
 // can then tell a trial whose AI allowance ran out from one whose clock did.
@@ -61,7 +64,7 @@ export function useOverlayTrial(): OverlayTrial {
     announcedAt: null as number | null,
     liveThisMeeting: false,
     startFailed: null as Failure | null,
-    dismissed: {} as { started?: boolean },
+    dismissed: {} as { started?: boolean; ending?: boolean; ended?: boolean },
     starting: false,
     pendingSince: null as number | null,
     // How long a trial lasts, from the server's own two times: it caps what a
@@ -102,6 +105,7 @@ export function useOverlayTrial(): OverlayTrial {
       starting: f.starting,
       pending: f.pendingSince !== null,
       active: f.meetingActive,
+      closed: notice.closed ?? null,
     };
     setView((prev) => (sameView(prev, next) ? prev : next));
   }, []);
@@ -258,10 +262,13 @@ export function useOverlayTrial(): OverlayTrial {
   const reason = view.reason;
   const actions = useMemo(() => ({
     dismiss: () => {
-      // Only the started banner has a close.
-      if (banner !== 'started') return;
-      facts.current.dismissed.started = true;
-      track(banner, 'dismissed');
+      // Started, ending and ended have a close; the failure has none (closed,
+      // it would uncover "Transcription Not Configured" and its wrong advice).
+      // A close holds for this meeting: onSessionReset and the meeting's end
+      // clear `dismissed`.
+      if (banner !== 'started' && banner !== 'ending' && banner !== 'ended') return;
+      facts.current.dismissed[banner] = true;
+      track(banner, 'dismissed', reason);
       refresh();
     },
     useOwnKeys: () => {

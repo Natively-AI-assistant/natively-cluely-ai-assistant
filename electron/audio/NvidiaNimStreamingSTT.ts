@@ -248,10 +248,18 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
     try {
       const cfg = NVIDIA_NIM_STT_MODEL_CONFIG[this.model];
       this.stream = this.streamFactory(this.apiKey, cfg.functionId);
+      let announced = false;
       this.stream.on('data', (response: any) => {
         // A response proves the session works; clear the backoff so a later
         // blip starts from 1s again instead of inheriting this session's count.
         if (gen === this.generation) this.reconnectAttempts = 0;
+        // A gRPC stream has no "open": its first response is the proof. Main
+        // maps it to awaiting-audio, which clears "Transcription Reconnecting"
+        // after a reconnect (2026-11-09). Once per stream.
+        if (gen === this.generation && !announced) {
+          announced = true;
+          try { this.emit('connected'); } catch { /* listeners never break the stream */ }
+        }
         for (const result of response?.results || []) {
           const alt = result?.alternatives?.[0];
           if (alt?.transcript) this.emit('transcript', { text: alt.transcript, isFinal: !!result.isFinal, confidence: alt.confidence || 1 });

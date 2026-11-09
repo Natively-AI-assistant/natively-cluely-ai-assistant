@@ -93,6 +93,19 @@ const ROWS: Record<string, Row> = {
     'ローカルの音声モデルが停止しました。会議をやり直すか、「設定」→「オーディオ」で別のローカルモデルかクラウドのサービスを選んでください。',
     'El modelo de voz local se detuvo. Reinicia la reunión o elige otro modelo local o un proveedor en la nube en Ajustes → Audio.',
   ],
+  // A local model slower than speech (2026-11-09): text still comes, late.
+  'Transcription Falling Behind': [
+    'Расшифровка отстаёт',
+    '转录跟不上',
+    '文字起こしが遅れています',
+    'La transcripción se está retrasando',
+  ],
+  'This local model is too slow for this computer, so text arrives later and later. Choose a lighter local model in Settings → Audio.': [
+    'Эта локальная модель слишком медленная для этого компьютера, поэтому текст появляется всё позже. Выберите более лёгкую локальную модель в «Настройки» → «Аудио».',
+    '这个本地模型在这台电脑上太慢，文字会越来越晚出现。请在“设置”→“音频”中选择更轻量的本地模型。',
+    'このローカルモデルはこのコンピューターには遅すぎるため、文字がどんどん遅れて表示されます。「設定」→「オーディオ」でより軽いローカルモデルを選んでください。',
+    'Este modelo local es demasiado lento para este equipo, así que el texto llega cada vez más tarde. Elige un modelo local más ligero en Ajustes → Audio.',
+  ],
   // A Pro pack ran out mid-meeting (2026-11-09). "Plans & Billing" stays in
   // English: it is the Settings tab's name, which is not translated.
   'Your pack hours are used up': [

@@ -142,7 +142,8 @@ test('Windows: a keyboard hook that will not start shows its own banner, in its 
   // stealth-tap-state {active:false, reason:'permission'} also fires on
   // Windows when tap.start() fails (StealthKeyboardManager), but the
   // Accessibility banner is macOS-only, so the failure was silent.
-  const fold = ui.match(/<ChromeFold show=\{isWindows && stealthPermissionMissing\}[\s\S]*?<\/ChromeFold>/);
+  // (and the two-banner cap, overlayBannerSlots.mjs, 2026-11-09)
+  const fold = ui.match(/<ChromeFold show=\{isWindows && stealthPermissionMissing && bannerSlots\.has\('stealth-permission'\)\}[\s\S]*?<\/ChromeFold>/);
   assert.ok(fold, 'the Windows stealth banner must sit in a ChromeFold gated on isWindows');
   assert.match(fold[0], /stealthTapStart/, 'Try Again must re-engage stealth typing');
   assert.doesNotMatch(fold[0], /stealthTapOpenSettings|Accessibility/, 'no macOS permission advice on Windows');

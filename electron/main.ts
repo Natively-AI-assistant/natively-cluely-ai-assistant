@@ -21,8 +21,10 @@ import path from "path"
 import fs from "fs"
 import os from "os"
 import { windowsMicBlocker, windowsMicPage } from '../src/lib/micPermissionPolicy.mjs'
-import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier.mjs"
+import { SystemAudioHealthClassifier, peakToPeakInt16LE } from "./audio/systemAudioHealthClassifier.mjs"
 import { classifySttError } from "./audio/sttErrorClassifier.mjs"
+import { SttReconnectNotice } from "./audio/sttReconnectNotice.mjs"
+import { CaptureRecoveryLatch } from "./audio/captureRecoveryLatch.mjs"
 import { OutputRouteMismatchDetector } from "./audio/outputRouteMismatch.mjs"
 import { FatalMainProcessCoordinator } from "./utils/fatalMainProcess"
 import { installResilientDnsLookup } from "./utils/resilientDnsLookup"
@@ -1177,6 +1179,13 @@ function formatPermissionMessage(reason: PermissionReason, extra?: { device?: st
  * `formatPermissionMessage`'s switch. Keep the two in lockstep: no title may
  * be a restatement of the first sentence of its body.
  */
+// Banner text for a capture that gave up (2026-11-09). It used to end in
+// "Last error: <raw exception>", English engine text in a live-call banner; the
+// raw error is logged where it happens instead. Worded like the wake-restart
+// messages, which already say what to do.
+const SYSTEM_AUDIO_GAVE_UP_MESSAGE = 'System audio capture stopped and could not restart. End and restart the meeting to recover.';
+const MIC_GAVE_UP_MESSAGE = 'Microphone capture stopped and could not restart. Close other apps using the mic, then restart the meeting.';
+
 function permissionTitleKey(reason: PermissionReason): string {
   const isMac = process.platform === 'darwin';
   switch (reason) {
@@ -1364,6 +1373,12 @@ interface SttStatusPayload {
   reconnectAttempts?: number;
   /** A stand-in carries the channel while `provider` is down (audio/sttFailover.ts). */
   fallback?: { provider: string; notice: string };
+  /**
+   * A local model is slower than speech (LocalWhisperSTT 'local_stt_behind'):
+   * text still comes, later and later. Not a state change; the overlay shows
+   * its own "choose a lighter model" notice once per meeting.
+   */
+  behind?: true;
 }
 
 export interface LocalWhisperRecoveryNotice {
@@ -2714,7 +2729,24 @@ export class AppState {
   // banner symmetrically with sendSystemAudioPermissionDenied. Other in-class
   // call sites are unaffected.
   public sendAudioCaptureFailed(payload: any): void {
+    // A warning that says the channel is not heard is cleared again once it
+    // carries real audio (noteCaptureAudio, audio/captureRecoveryLatch.mjs).
+    this._captureRecovery.noteWarning(payload);
     this.sendToMeetingSurfaces('audio-capture-failed', payload);
+  }
+
+  // Recovery for the overlay's audio banner (2026-11-09). A "stuck" or
+  // "terminal" capture warning used to stay up until its ✕, also after the
+  // channel came back by itself (a re-plugged mic, a grant given mid-meeting,
+  // a capture rebuilt by a route change). The data paths report each chunk of
+  // an armed channel here; once it has carried real signal for a few seconds
+  // the surfaces are told, on the same channel, with `recovered: true`.
+  private readonly _captureRecovery = new CaptureRecoveryLatch();
+  private noteCaptureAudio(channel: 'mic' | 'system', nowMs: number, hasSignal: boolean): void {
+    if (!this.isMeetingActive) return;
+    if (!this._captureRecovery.noteAudio(channel, nowMs, hasSignal)) return;
+    console.log(`[Main] ${channel} capture is carrying audio again — clearing its warning.`);
+    this.sendToMeetingSurfaces('audio-capture-failed', { channel, recovered: true, message: '', attempt: 0, maxAttempts: 0 });
   }
 
   // `titleKey` is the i18n key for the banner heading (see permissionTitleKey).
@@ -4401,6 +4433,9 @@ export class AppState {
       // A provider that reports no confidence counts as sure, as the providers' own do.
       onTranscript: (seg, id) => onSegment({ ...seg, confidence: typeof seg.confidence === 'number' ? seg.confidence : 1 }, id),
       onStatus: (st: FailoverStatus) => {
+        // A stand-in, a recovery or the end of the line: whichever, a
+        // "reconnecting" still waiting to be shown is out of date.
+        reconnectNotice.settle();
         if (st.phase === 'fallback' && st.fallback) {
           _lastState = 'connected';
           _consecutiveErrors = 0;
@@ -4453,6 +4488,28 @@ export class AppState {
     // implied a recovery state from the get-go.
     let _lastState: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio' | 'preparing' = 'awaiting-audio';
 
+    // "Transcription Reconnecting" only for an outage that lasts
+    // (audio/sttReconnectNotice.mjs, 2026-11-09): sent on the first retryable
+    // error, it flashed over a live call for every socket that dropped and was
+    // back a second later. It now waits 5 s, or for the provider to say the
+    // outage is sustained; a reconnect, a final, a stand-in, a failure or a
+    // teardown cancels the wait. `_lastState` turns 'reconnecting' only when
+    // the notice is actually sent.
+    const reconnectNotice = new SttReconnectNotice({
+      show: (payload: SttStatusPayload) => {
+        // Not for a channel a stand-in carries, nor for a provider that was
+        // torn down or replaced while the notice waited (meeting end,
+        // reconfigure): its outage is over with it.
+        const current: unknown = speaker === 'interviewer' ? this.googleSTT : this.googleSTT_User;
+        if (failover.active || !this.isMeetingActive || current !== stt) return false;
+        _lastState = 'reconnecting';
+        this.sendSttStatus(payload);
+      },
+    });
+    // A local model slower than speech is said once per provider instance (and
+    // the overlay keeps it to once per meeting).
+    let _behindReported = false;
+
     stt.on('error', (raw: unknown) => {
       // Every check below reads err.message; a provider that emits a bare
       // string or object (ElevenLabs did, for quota/auth) made this handler
@@ -4484,6 +4541,7 @@ export class AppState {
 
       if (isAuthError || isLocalSttUnavailable) {
         _consecutiveErrors = 0;
+        reconnectNotice.settle();
         _lastState = 'failed';
         this.sendSttStatus( {
           state: 'failed',
@@ -4494,22 +4552,37 @@ export class AppState {
         return;
       }
 
+      // A local model that is merely behind (LocalWhisperSTT
+      // LOCAL_STT_BEHIND_CODE, at most every 30 s) is not an outage: its text
+      // still comes, only late. Counted as one, it raised "Transcription
+      // Reconnecting" every 30 s, the next final cleared it, and five of them
+      // ended in "Transcription Stopped" over a transcript that was still
+      // arriving. Its own notice instead, once: choose a lighter model. No
+      // gap recovery either: that would run a second local model over the same
+      // audio on an already overloaded CPU.
+      if ((err as any)?.code === 'local_stt_behind') {
+        if (!_behindReported) {
+          _behindReported = true;
+          this.sendSttStatus({ state: _lastState, provider: sttProvider, channel: speaker, behind: true } as SttStatusPayload);
+        }
+        return;
+      }
+
       // A stand-in carries this channel (sttFailover.ts): the provider keeps
-      // retrying quietly, and there is no outage to recover.
+      // retrying quietly, and there is no outage to recover. (A pending
+      // "reconnecting" is declined by its show(), and engaging settled it.)
       if (failover.active) return;
 
       // Retryable: network drop, timeout, 5xx, 400, 429, WS drop. The audio
       // from here until text comes back is kept for recovery (sttGapRecovery.ts).
-      // Not for a local model that is merely behind (LocalWhisperSTT
-      // LOCAL_STT_BEHIND_CODE): its text still comes, and recovery would run a
-      // second local model over the same audio on an already overloaded CPU.
-      if ((err as any)?.code !== 'local_stt_behind') this.sttGap.onProviderError(gapSource);
+      this.sttGap.onProviderError(gapSource);
       _consecutiveErrors++;
       const maxErrors = 5;
 
       if (_consecutiveErrors >= maxErrors || isQuotaError) {
         // Past the reconnect policy: another transcriber takes the live stream
         // when the user has one set up (it reports its own status).
+        reconnectNotice.settle();
         failoverCause = isQuotaError ? 'quota' : 'other';
         if (failover.engage()) return;
         _lastState = 'failed';
@@ -4523,8 +4596,7 @@ export class AppState {
           reconnectAttempts: _consecutiveErrors,
         } as SttStatusPayload);
       } else {
-        _lastState = 'reconnecting';
-        this.sendSttStatus( {
+        reconnectNotice.retrying( {
           state: 'reconnecting',
           provider: sttProvider,
           error: errorMessage,
@@ -4539,6 +4611,7 @@ export class AppState {
     stt.on('transcript', (segment: { text: string, isFinal: boolean, confidence: number }) => {
       if (segment.isFinal) {
         _consecutiveErrors = 0; // Success — reset counter
+        reconnectNotice.settle();
         if (_lastState !== 'connected') {
           _lastState = 'connected';
           this.sendSttStatus( {
@@ -4585,12 +4658,40 @@ export class AppState {
       });
     }
 
+    // A streaming provider's session is (re)open (2026-11-09): Deepgram,
+    // Soniox, OpenAI, ElevenLabs, Qwen and NVIDIA NIM emit 'connected' when it
+    // is ready for audio. Only a final transcript used to clear
+    // "Transcription Reconnecting", so after a reconnect it stayed up through
+    // any silence that followed. Back to the neutral awaiting-audio state, as
+    // NativelyPro's handshake does below. Only from 'reconnecting': a 'failed'
+    // channel waits for real text, or a provider that opens and then fails
+    // again would flap between "stopped" and nothing. The error count is NOT
+    // reset here (NativelyPro's server handshake is a stronger signal than a
+    // socket opening), so an open-then-fail loop still ends in 'failed'.
+    // Google STT (gRPC, reconnects lazily on the next chunk) and the REST and
+    // local providers have no session to open; they clear on the next final.
+    if (!(stt instanceof NativelyProSTT)) {
+      stt.on('connected', () => {
+        reconnectNotice.settle();
+        if (failover.active || _lastState !== 'reconnecting') return;
+        _lastState = 'awaiting-audio';
+        this.sendSttStatus({
+          state: 'awaiting-audio',
+          provider: sttProvider,
+          channel: speaker,
+        } as SttStatusPayload);
+      });
+    }
+
     // Auto language detection: NativelyProSTT emits 'languageDetected' when the
     // backend resolves the language from the first audio batch. Notify the renderer
     // so the settings UI can show what was detected.
     if (stt instanceof NativelyProSTT) {
       stt.on('connected', () => {
         _consecutiveErrors = 0;
+        reconnectNotice.settle();
+        // A stand-in leads: its own status (and backup notice) stays.
+        if (failover.active) return;
         if (_lastState !== 'connected') {
           _lastState = 'awaiting-audio';
           this.sendSttStatus({
@@ -4615,7 +4716,8 @@ export class AppState {
       // attempts count so the renderer's existing banner picks it up.
       stt.on('persistent-reconnect', (info: { attempts: number }) => {
         console.warn(`[Main] STT persistent reconnect (${speaker}): ${info.attempts} consecutive attempts.`);
-        this.sendSttStatus( {
+        // Sustained: shown now, without the 5 s wait (sttReconnectNotice.mjs).
+        reconnectNotice.persistent( {
           state: 'reconnecting',
           provider: sttProvider,
           error: `Reconnecting to transcription service — ${info.attempts} consecutive attempts. Check your network connection.`,
@@ -4824,6 +4926,10 @@ export class AppState {
     capture.on('data', (chunk: Buffer) => {
       const now = Date.now();
       handleSystemAudioHealthDecision(systemAudioHealth.handle({ kind: 'chunk', nowMs: now, chunk }));
+      // The classifier just stamped this chunk if it carried real signal.
+      if (this.systemAudioCapture === capture && this._captureRecovery.isArmed('system')) {
+        this.noteCaptureAudio('system', now, systemAudioHealth.lastMeaningfulSignalAtMs === now);
+      }
       chunkCount++;
       if (chunkCount === 1 && stuckTimer) {
         clearTimeout(stuckTimer);
@@ -5015,6 +5121,12 @@ export class AppState {
         clearTimeout(stuckTimer);
         stuckTimer = null;
       }
+      // The raw chunk (before the meeting-mute and pause gates), measured only
+      // while a mic warning is up: the same peak-to-peak floor as the zero-fill
+      // detector below.
+      if (this.microphoneCapture === capture && this._captureRecovery.isArmed('mic')) {
+        this.noteCaptureAudio('mic', now, peakToPeakInt16LE(chunk) > 100);
+      }
       if (!this._micSttRateApplied && this.googleSTT_User && this.microphoneCapture === capture) {
         const rate = capture.getSampleRate();
         this.googleSTT_User.setSampleRate(rate);
@@ -5080,6 +5192,10 @@ export class AppState {
                 maxAttempts: 0,
                 terminal: false,
                 stuck: false,
+                // Advice the overlay shows once per meeting, lowest priority.
+                // Without the flag it was dropped with the transient recovery
+                // reports and never reached the user.
+                advisory: true,
               });
             }
           }
@@ -5289,6 +5405,8 @@ export class AppState {
             maxAttempts: 0,
             terminal: true,
             stuck: false,
+            // A provider fault: the channel carrying audio says nothing about it.
+            clearsOnRecovery: false,
           });
         }
       }
@@ -5309,6 +5427,8 @@ export class AppState {
             maxAttempts: 0,
             terminal: true,
             stuck: false,
+            // A provider fault: the channel carrying audio says nothing about it.
+            clearsOnRecovery: false,
           });
         }
       }
@@ -6373,9 +6493,12 @@ export class AppState {
           setTimeout(() => {
             if (!isRecoveryCurrentMeeting()) return;
             if (this.systemAudioCapture !== failedCapture || this._systemAudioRecoveryAttempts !== 4) return;
+            // The banner says what happened and what to do; the raw error is
+            // for the log (support reads it there), not for a live call.
+            console.error(`[AudioRecovery] System audio capture gave up after 3 attempts. Last error: ${err.message}`);
             this.sendAudioCaptureFailed({
               channel: 'system',
-              message: `System audio capture gave up after 3 attempts. Last error: ${err.message}`,
+              message: SYSTEM_AUDIO_GAVE_UP_MESSAGE,
               attempt: 3,
               maxAttempts: 3,
               terminal: true,
@@ -6474,9 +6597,10 @@ export class AppState {
         // for this meeting so it can stop showing "reconnecting" and surface a
         // mic-only banner instead.
         if (this._systemAudioRecoveryAttempts >= 3 && isRecoveryCurrentMeeting()) {
+          console.error(`[AudioRecovery] System audio capture gave up after 3 attempts. Last error: ${recoveryErr?.message || err.message}`);
           this.sendAudioCaptureFailed( {
             channel: 'system',
-            message: `System audio capture gave up after 3 attempts. Last error: ${recoveryErr?.message || err.message}`,
+            message: SYSTEM_AUDIO_GAVE_UP_MESSAGE,
             attempt: this._systemAudioRecoveryAttempts,
             maxAttempts: 3,
             terminal: true,
@@ -6675,6 +6799,8 @@ export class AppState {
       maxAttempts: 3,
       terminal: false,
       stuck: true,
+      // Other sound on the captured device is not the meeting coming back.
+      clearsOnRecovery: false,
     });
   }
 
@@ -7144,9 +7270,10 @@ export class AppState {
             // was being transcribed but no banner ever showed. Meeting-generation
             // check mirrors isRecoveryCurrentMeeting() in the system-side handler.
             if (this._micRecoveryAttempts >= 3 && isMicRecoveryCurrentMeeting()) {
+              console.error(`[MicRecovery] Microphone capture gave up after 3 attempts. Last error: ${recoveryErr?.message || err.message}`);
               this.sendAudioCaptureFailed({
                 channel: 'mic',
-                message: `Microphone capture gave up after 3 attempts. Last error: ${recoveryErr?.message || err.message}`,
+                message: MIC_GAVE_UP_MESSAGE,
                 attempt: this._micRecoveryAttempts,
                 maxAttempts: 3,
                 terminal: true,
@@ -7179,12 +7306,16 @@ export class AppState {
             systemCapturePausedByMicRecovery.start();
           } catch (restartErr) {
             console.error('[MicRecovery] Failed to restart system audio after mic recovery pause:', restartErr);
+            // Nothing retries it: the overlay hides non-terminal, non-stuck
+            // reports, so this one never reached the user while the
+            // interviewer went untranscribed. Terminal; the raw error is logged above.
             this.sendAudioCaptureFailed({
               channel: 'system',
-              message: `System audio failed to restart after microphone recovery: ${(restartErr as Error)?.message || 'unknown error'}`,
+              message: SYSTEM_AUDIO_GAVE_UP_MESSAGE,
               attempt: 0,
               maxAttempts: 0,
-              terminal: false,
+              terminal: true,
+              stuck: false,
             });
           }
         }
@@ -7497,7 +7628,8 @@ export class AppState {
       console.error(`[Main] ${context}: mic channel failed to start:`, err);
       this.sendAudioCaptureFailed({
         channel: 'mic',
-        message: `Microphone failed to start (${(err as Error)?.message || 'unknown error'}). The meeting continues with system audio only.`,
+        // The cause is in the log line above.
+        message: 'Microphone failed to start. The meeting continues with system audio only.',
         attempt: 0,
         maxAttempts: 0,
         terminal: true,
@@ -7512,7 +7644,8 @@ export class AppState {
       console.error(`[Main] ${context}: system channel failed to start:`, err);
       this.sendAudioCaptureFailed({
         channel: 'system',
-        message: `System audio failed to start (${(err as Error)?.message || 'unknown error'}). The meeting continues with microphone only.`,
+        // The cause is in the log line above.
+        message: 'System audio failed to start. The meeting continues with microphone only.',
         attempt: 0,
         maxAttempts: 0,
         terminal: true,
@@ -8220,6 +8353,9 @@ export class AppState {
     // for the cold-start / crash-recovery path where endMeeting never ran; on
     // the normal Stop→Start path it is now a no-op (state already clean).
     this.sendToWindow(this.getWindowHelper().getOverlayWindow(), 'session-reset');
+    // The overlay drops this meeting's audio warnings as it ends; nothing armed
+    // for them may clear a warning in the next one.
+    this._captureRecovery.reset();
 
     // ─── UX STATE FLIP — SYNCHRONOUS ───────────────────────────────────────
     // Now flip the UX-facing meeting flag and broadcast. The launcher's

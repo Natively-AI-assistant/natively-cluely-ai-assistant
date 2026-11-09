@@ -530,6 +530,12 @@ interface ElectronAPI {
       terminal?: boolean;
       stuck?: boolean;
       titleKey?: string;
+      /** Advice only (shown once per meeting). */
+      advisory?: boolean;
+      /** false: real audio on the channel does not clear it. */
+      clearsOnRecovery?: boolean;
+      /** The channel carries real audio again: its stuck/terminal warning no longer holds. */
+      recovered?: boolean;
     }) => void,
   ) => () => void;
 
@@ -543,6 +549,8 @@ interface ElectronAPI {
       reconnectAttempts?: number;
       /** A stand-in carries the channel while `provider` is down (audio/sttFailover.ts). */
       fallback?: { provider: string; notice: string };
+      /** A local model is slower than speech: not a state change. */
+      behind?: true;
     }) => void,
   ) => () => void;
 
@@ -2290,6 +2298,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       terminal?: boolean;
       stuck?: boolean;
       titleKey?: string;
+      advisory?: boolean;
+      clearsOnRecovery?: boolean;
+      recovered?: boolean;
     }) => void,
   ) => {
     const subscription = (_: any, payload: any) => callback(payload);
@@ -2309,6 +2320,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       reconnectAttempts?: number;
       /** A stand-in carries the channel while `provider` is down (audio/sttFailover.ts). */
       fallback?: { provider: string; notice: string };
+      /** A local model is slower than speech: not a state change. */
+      behind?: true;
     }) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);

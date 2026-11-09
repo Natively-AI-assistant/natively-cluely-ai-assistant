@@ -472,6 +472,17 @@ const REHYPE_PLUGINS: any[] = [[rehypeKatex, { throwOnError: false, strict: fals
 
 import { DOM_CONTEXT_MAX_CHARS } from '../constants/domCapture';
 import { isKeepOverlaySizeEnabled, subscribeKeepOverlaySize } from '../lib/overlaySizeSetting';
+import {
+  EMPTY_AUDIO_WARNINGS,
+  audioWarningSeverity,
+  clearAudioWarning,
+  dismissShownAudioWarning,
+  offerAudioWarning,
+  resetAudioWarnings,
+  shownAudioWarning,
+  type AudioWarningState,
+} from './overlay/audioWarningSlots.mjs';
+import { audioBannerId, pickOverlayBanners } from './overlay/overlayBannerSlots.mjs';
 
 // ── Streaming-height headroom buffer (native OS window resize during token
 // streaming) ─────────────────────────────────────────────────────────────
@@ -1514,6 +1525,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // meeting starts: the clock re-sends it on that meeting's first tick if the
   // pack is still empty. 'hours_used' | 'window_closed' | 'ended'.
   const [packEndedReason, setPackEndedReason] = useState<string | null>(null);
+  // A local model is slower than speech (main: `behind` on stt-status,
+  // 2026-11-09). Its text still comes, later and later, so it is advice with a
+  // close, said once per meeting; it used to count as a reconnect and flash
+  // "Transcription Reconnecting" every 30 s.
+  const [sttBehind, setSttBehind] = useState(false);
+  // The transcription banners closed in this meeting, by key (kind, plus what
+  // makes one a different banner: the pack's reason, the stand-in's notice).
+  // A banner with another key still shows; the next meeting starts clean.
+  const [sttBannerDismissed, setSttBannerDismissed] = useState<readonly string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   // The notes window (`?window=notes`) is open: the Notes button shows it.
@@ -1793,6 +1813,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const timer = setTimeout(() => setCaptureFallback(null), 20_000);
     return () => clearTimeout(timer);
   }, [captureFallback]);
+
+  // The same for "Answer was retried without the browser border" (2026-11-09):
+  // it explains one answer, and with no expiry it stayed up for the rest of the
+  // meeting and into the next one. Cleared on session reset too.
+  useEffect(() => {
+    if (!refusalRetryNotice) return;
+    const timer = setTimeout(() => setRefusalRetryNotice(null), 20_000);
+    return () => clearTimeout(timer);
+  }, [refusalRetryNotice]);
 
   // Auto-expire the captured page-context pill if it's never consumed. The DOM
   // itself is cleared on use (handleWhatToSay) or dismiss; this just stops the
@@ -3021,8 +3050,32 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // True when main gave up (no more recovery attempts). Decides the banner's
     // tone: a terminal fault is an error, a stuck-but-retrying one a warning.
     terminal?: boolean;
+    // Main is still retrying; neither this nor `terminal` is advice only.
+    stuck?: boolean;
+    // false: the channel carrying audio again does not clear it (main.ts).
+    clearsOnRecovery?: boolean;
   };
-  const [systemAudioWarning, setSystemAudioWarning] = useState<SystemAudioWarning | null>(null);
+  // One slot per channel, a milder warning never over a more serious one, and
+  // the banner shows the most serious (overlay/audioWarningSlots.mjs,
+  // 2026-11-09). The single slot used to take whatever arrived last.
+  const [audioWarnings, setAudioWarnings] = useState<AudioWarningState<SystemAudioWarning>>(EMPTY_AUDIO_WARNINGS);
+  const systemAudioWarning = shownAudioWarning(audioWarnings);
+  const setSystemAudioWarning = useCallback((w: SystemAudioWarning) => {
+    setAudioWarnings((s) => offerAudioWarning(s, w));
+  }, []);
+  // A warning that stops the meeting being heard (a blocked permission, a
+  // capture that gave up) reopens a collapsed overlay, WITHOUT focus: set
+  // isStealthRef first, as onEnsureExpanded does, or the [isExpanded] effect
+  // calls show()+focus() and the overlay takes the keyboard from the call
+  // (WindowHelper). An overlay already open is left alone, so the next
+  // expansion the user makes is not made quiet. A warning that main is still
+  // retrying, or advice, only sets the banner: someone who hid the overlay
+  // mid-call is not interrupted for it.
+  const revealOverlayForWarning = useCallback(() => {
+    if (isExpandedRef.current) return;
+    isStealthRef.current = true;
+    setIsExpanded(true);
+  }, []);
   // UX2: in-flight guard for the "Repair Permissions" button so a double-click
   // can't fire two concurrent tccutil sequences (whose second-arriving response
   // would clobber the first's banner mid-render).
@@ -3045,7 +3098,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // Screen Recording TCC pane). Set channel for consistency so the
       // button-resolution logic has a single source of truth.
       setSystemAudioWarning({ kind: 'screen-recording-permission', message, channel: 'system', titleKey });
-      setIsExpanded(true); // Force overlay open so user sees the warning
+      revealOverlayForWarning();
     });
     return () => unsub?.();
   }, []);
@@ -3061,6 +3114,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // emits the right payload (channel:'mic', stuck:true, mic-zero-fill
       // message); we just need to display it.
       //
+      // The channel carries real audio again after a stuck or terminal
+      // report (main.ts noteCaptureAudio): its warning is no longer true.
+      if (payload.recovered) {
+        setAudioWarnings((s) => clearAudioWarning(s, payload.channel, (w) => w.kind === 'audio-capture-failure' && w.clearsOnRecovery !== false));
+        return;
+      }
       // Only surface terminal failures or the stuck signal — transient
       // recovery attempts shouldn't spam the banner since recovery
       // typically succeeds within ~1.5s.
@@ -3071,9 +3130,33 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           channel: payload.channel,
           titleKey: payload.titleKey,
           terminal: !!payload.terminal,
+          stuck: !!payload.stuck,
+          clearsOnRecovery: payload.clearsOnRecovery,
         });
-        setIsExpanded(true);
+        if (payload.terminal) revealOverlayForWarning();
+      } else if (payload.advisory) {
+        // Advice that is still true but changes nothing on its own (a
+        // Bluetooth mic in call mode): once per meeting, lowest priority,
+        // never over a real fault (audioWarningSlots.mjs).
+        setSystemAudioWarning({
+          kind: 'audio-capture-failure',
+          message: payload.message,
+          channel: payload.channel,
+          titleKey: payload.titleKey,
+        });
       }
+    });
+    return () => unsub?.();
+  }, []);
+
+  // The overlay window outlives meetings, so a meeting's audio warnings end
+  // with it (2026-11-09): one left up said the next meeting's audio was
+  // broken before it had started. Not on the start-side session reset: main
+  // checks the permissions BEFORE it sends that, and the meeting's own
+  // "Screen Recording Blocked" would be wiped as it arrived.
+  useEffect(() => {
+    const unsub = window.electronAPI?.onMeetingStateChanged?.((data) => {
+      if (!data?.isActive) setAudioWarnings(resetAudioWarnings());
     });
     return () => unsub?.();
   }, []);
@@ -3087,9 +3170,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   useEffect(() => {
     const unsub = window.electronAPI?.onDeviceSelectionApplied?.((payload) => {
       if (payload.kind !== 'output' || payload.fellBack) return;
-      setSystemAudioWarning((w) => (
-        w?.kind === 'audio-capture-failure' && w.channel === 'system' && w.terminal ? null : w
-      ));
+      setAudioWarnings((s) => clearAudioWarning(s, 'system', (w) => w.kind === 'audio-capture-failure' && !!w.terminal));
     });
     return () => unsub?.();
   }, []);
@@ -5675,6 +5756,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       setSttInterviewerStatus('awaiting-audio');
       setSttUserError('');
       setSttInterviewerError('');
+      // Closed banners and once-per-meeting notices are per meeting (2026-11-09),
+      // and so is the "retried without the browser border" note: it described
+      // a screenshot of the meeting that just ended.
+      setSttBehind(false);
+      setSttBannerDismissed([]);
+      setRefusalRetryNotice(null);
       // Optionally reset connection status if needed, but connection persists
 
       // A resumed meeting (2026-11-03): its earlier answers come back, so the
@@ -5705,6 +5792,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // If registered inside the [isExpanded] effect, events are dropped during cleanup.
   useEffect(() => {
     return window.electronAPI.onSttStatusChanged((data) => {
+      // Not a state change (main sends the channel's state as it was): only
+      // the "falling behind" notice, so nothing else about the channel moves.
+      if (data.behind) {
+        setSttBehind(true);
+        return;
+      }
       if (data.channel === 'user') {
         setSttUserStatus(data.state);
         setSttUserProvider(data.provider);
@@ -11289,25 +11382,45 @@ Provide only the answer, nothing else.`;
   // the user presses the hotkey, nothing happens, and they assume the
   // stealth feature is broken. We filter to the stealth-typing keybind
   // and render an inline banner pointing to Settings → Shortcuts.
+  //
+  // Two gaps closed (2026-11-09):
+  //  - a conflict already there at launch was never shown: main's boot-time
+  //    registration runs before this window exists, so the push is missed.
+  //    The snapshot (getKeybindRegistrationFailures) is read on mount, unless
+  //    a live push has already said something newer;
+  //  - a closed banner came back: every full re-registration (a mode switch,
+  //    a meeting start) re-tests the shortcut and re-sends the same failure.
+  //    The close holds while the failure is the same accelerator; a success,
+  //    or a conflict on another accelerator, is new and shows again.
+  const dismissedHotkeyConflictRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!window.electronAPI?.onKeybindRegistrationFailed) return;
-    const unsubscribe = window.electronAPI.onKeybindRegistrationFailed(({ id, accelerator }) => {
+    const api = window.electronAPI;
+    if (!api?.onKeybindRegistrationFailed) return;
+    let heardLive = false;
+    const offFailed = api.onKeybindRegistrationFailed(({ id, accelerator }) => {
       if (id !== 'chat:focusInput') return;
+      heardLive = true;
+      if (dismissedHotkeyConflictRef.current === accelerator) return;
+      dismissedHotkeyConflictRef.current = null;
       setStealthHotkeyConflict(accelerator);
     });
-    return unsubscribe;
-  }, []);
-
-  // Clears a stale conflict banner once the shortcut re-registers successfully
-  // (e.g. right after the user rebinds it via the "Rebind" button → Settings),
-  // instead of leaving it up until the user manually dismisses it.
-  useEffect(() => {
-    if (!window.electronAPI?.onKeybindRegistrationSucceeded) return;
-    const unsubscribe = window.electronAPI.onKeybindRegistrationSucceeded(({ id }) => {
+    // Clears a stale conflict banner once the shortcut re-registers successfully
+    // (e.g. right after the user rebinds it via the "Rebind" button → Settings),
+    // instead of leaving it up until the user manually dismisses it.
+    const offSucceeded = api.onKeybindRegistrationSucceeded?.(({ id }) => {
       if (id !== 'chat:focusInput') return;
+      heardLive = true;
+      dismissedHotkeyConflictRef.current = null;
       setStealthHotkeyConflict(null);
     });
-    return unsubscribe;
+    api.getKeybindRegistrationFailures?.()
+      .then((failures) => {
+        if (heardLive) return;
+        const conflict = failures?.find((f) => f.id === 'chat:focusInput');
+        if (conflict?.accelerator) setStealthHotkeyConflict(conflict.accelerator);
+      })
+      .catch(() => { /* older main without the snapshot: the pushes still work */ });
+    return () => { offFailed(); offSucceeded?.(); };
   }, []);
 
   // ── Click-to-activate: engage CGEventTap on chat-input click only
@@ -11490,14 +11603,16 @@ Provide only the answer, nothing else.`;
   // When an audio-capture-failure banner is showing it already conveys the
   // hard failure with the fix, so the STT failure banner stands down rather
   // than saying the same thing twice.
-  const audioFailureBannerActive = systemAudioWarning?.kind === 'audio-capture-failure';
+  // Not for advice (a Bluetooth mic in call mode): that does not explain a stop.
+  const audioFailureBannerActive = systemAudioWarning?.kind === 'audio-capture-failure' && audioWarningSeverity(systemAudioWarning) >= 2;
   // With no keys the transcription provider is 'none', so "Transcription Not
   // Configured" is true in three moments where saying it would be wrong: the
   // second it takes the automatic trial to arrive; after the trial has run out
   // (the expiry reverts the provider to 'none'); and when the trial could not
   // start. In the last two the trial banner already says what happened and
   // what to do, and "open Settings → Audio" beside it is the wrong advice.
-  const trialExplainsNoStt = trial.pending || trial.banner === 'ended' || trial.banner === 'failed';
+  // An "ended" the user closed still explains it (useOverlayTrial `closed`).
+  const trialExplainsNoStt = trial.pending || trial.banner === 'ended' || trial.closed === 'ended' || trial.banner === 'failed';
   const sttFailed = sttUserStatus === 'failed' || sttInterviewerStatus === 'failed';
   const sttReconnecting = sttUserStatus === 'reconnecting' || sttInterviewerStatus === 'reconnecting';
   const shouldShowSttSummaryPill =
@@ -11526,12 +11641,19 @@ Provide only the answer, nothing else.`;
     if (cause === 'memory') return t('There is not enough free memory for the local model. Close other apps, or choose a smaller local model in Settings → Audio.');
     if (cause === 'download') return t('The local model has not finished downloading. Check your internet connection, or choose a cloud provider in Settings → Audio.');
     if (cause === 'model') return t('The local speech model stopped. Restart the meeting, or choose another local model or a cloud provider in Settings → Audio.');
+    if (cause === 'slow') return t('This local model is too slow for this computer, so text arrives later and later. Choose a lighter local model in Settings → Audio.');
     return null;
   })();
   // kind picks the icon: only a live reconnect spins. The backup-provider
   // banner used the same spinning arrows, and a user whose key was stopped for
   // quota reported it as "transcription reconnecting" (user log 2026-11-03).
-  const sttStatusBanner: { tone: 'warning' | 'error'; kind: 'stopped' | 'reconnecting' | 'backup' | 'pack'; title: string; message: string; settingsTab?: string; action?: string } | null =
+  //
+  // Every one of them has the banner's ✕ (2026-11-09): "Your pack has ended"
+  // and the backup-provider note could sit there for the rest of a call. A
+  // close holds for this meeting (sttBannerDismissed, keyed below), and a
+  // banner that says something new (reconnecting → stopped, another pack
+  // reason, another stand-in) shows again.
+  const sttStatusBanner: { tone: 'warning' | 'error'; kind: 'stopped' | 'reconnecting' | 'backup' | 'pack' | 'behind'; title: string; message: string; key: string; settingsTab?: string; action?: string } | null =
     packEndedReason
       ? {
           // Before every transcription case: when the pack is the cause, the
@@ -11546,6 +11668,7 @@ Provide only the answer, nothing else.`;
             : t('What the pack included has stopped. Add hours or choose a plan in Plans & Billing.'),
           settingsTab: 'plans',
           action: t('Add hours'),
+          key: `pack:${packEndedReason}`,
         }
       : sttNotConfigured
       ? null
@@ -11564,6 +11687,7 @@ Provide only the answer, nothing else.`;
                   ? t('Your microphone is no longer being transcribed.')
                   : t('Interviewer audio is no longer being transcribed.')
             } ${sttConnectionAdvice ?? sttLocalModelAdvice ?? t('Check your transcription provider and its key in Settings.')}`,
+            key: 'stopped',
           }
         : sttReconnecting && !sttFailed
           ? {
@@ -11571,6 +11695,7 @@ Provide only the answer, nothing else.`;
               kind: 'reconnecting',
               title: t('Transcription Reconnecting'),
               message: `${t('The connection to your speech-to-text provider dropped.')} ${sttConnectionAdvice ?? t('Retrying.')}`,
+              key: 'reconnecting',
             }
           : (sttUserFallback || sttInterviewerFallback)
             ? {
@@ -11579,8 +11704,41 @@ Provide only the answer, nothing else.`;
                 kind: 'backup',
                 title: t('Transcribing on a backup provider'),
                 message: sttInterviewerFallback || sttUserFallback,
+                key: `backup:${sttInterviewerFallback || sttUserFallback}`,
               }
-            : null;
+            : sttBehind
+              ? {
+                  // Text still comes, only late: advice, not a fault.
+                  tone: 'warning',
+                  kind: 'behind',
+                  title: t('Transcription Falling Behind'),
+                  message: t('This local model is too slow for this computer, so text arrives later and later. Choose a lighter local model in Settings → Audio.'),
+                  settingsTab: 'audio',
+                  key: 'behind',
+                }
+              : null;
+  const sttStatusBannerOpen = !!sttStatusBanner && !sttBannerDismissed.includes(sttStatusBanner.key);
+
+  // At most two banners at once, the most important first
+  // (overlay/overlayBannerSlots.mjs holds the order and why, 2026-11-09). About
+  // a dozen folds used to stack without limit and push the answer off screen
+  // mid-call. One that wants to show but has no slot is only held: its state
+  // is untouched, so it folds in by itself when a slot frees.
+  const bannerSlots = pickOverlayBanners({
+    [audioBannerId(audioWarningSeverity(systemAudioWarning))]: !!systemAudioWarning,
+    'stt-error': sttStatusBannerOpen && sttStatusBanner?.tone === 'error',
+    'stt-not-configured': sttNotConfigured && !trialExplainsNoStt,
+    'stt-warning': sttStatusBannerOpen && sttStatusBanner?.tone === 'warning',
+    'ambient-mic': showAmbientMicNotice,
+    trial: !!trial.banner,
+    'auto-stop': autoStop.stopsAt !== null,
+    'last-time': !!lastTime.recap,
+    'capture-fallback': !!captureFallback,
+    'refusal-retry': !!refusalRetryNotice,
+    'stealth-permission': (isMac || isWindows) && stealthPermissionMissing,
+    'hotkey-conflict': !!stealthHotkeyConflict,
+  });
+  const audioWarningSlotted = !!systemAudioWarning && bannerSlots.has(audioBannerId(audioWarningSeverity(systemAudioWarning)));
   // Whether the vision chip will render (mirrors the IIFE's early-return guard).
   const visionPillFailed = screenContextStatus === 'failed' || !!latestVisionFailureReason;
   const visionPillSucceeded =
@@ -11864,7 +12022,7 @@ Provide only the answer, nothing else.`;
                 row wraps (rather than crushing the text into a ~150px ribbon,
                 the shape that shipped the vertical-overflow bug).
               */}
-              <ChromeFold show={!!systemAudioWarning} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-audio-warning">
+              <ChromeFold show={audioWarningSlotted} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-audio-warning">
               {systemAudioWarning && (() => {
                 /*
                   Which macOS pane actually FIXES this warning.
@@ -11914,6 +12072,7 @@ Provide only the answer, nothing else.`;
                   channel: systemAudioWarning.channel,
                   titleKey: systemAudioWarning.titleKey,
                   message: systemAudioWarning.message,
+                  advisory: audioWarningSeverity(systemAudioWarning) === 1,
                 });
                 const deepLinkUrl = warningAction.type === 'external' ? warningAction.url : null;
                 const wantsMicrophonePane = warningAction.type === 'external' && warningAction.pane === 'microphone';
@@ -11961,7 +12120,7 @@ Provide only the answer, nothing else.`;
                     }
                     message={systemAudioWarning.message}
                     messageTooltip={systemAudioWarning.message}
-                    onDismiss={() => setSystemAudioWarning(null)}
+                    onDismiss={() => setAudioWarnings(dismissShownAudioWarning)}
                     dismissLabel={t('Dismiss')}
                     actions={
                       <>
@@ -12047,21 +12206,21 @@ Provide only the answer, nothing else.`;
 
               {/* A recurring meeting started: what last time's notes left open
                   (overlay/LastTimeRecapNotice.tsx; main: AssistService). */}
-              <ChromeFold show={!!lastTime.recap} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-last-time">
+              <ChromeFold show={!!lastTime.recap && bannerSlots.has('last-time')} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-last-time">
               {lastTime.recap && <LastTimeRecapBanner state={lastTime} />}
               </ChromeFold>
 
               {/* The free trial that starts by itself with a meeting: it began,
                   it is nearly over, it ran out, or it could not start
                   (overlay/TrialNotice.tsx). Never blocks the overlay. */}
-              <ChromeFold show={!!trial.banner} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-trial-notice">
+              <ChromeFold show={!!trial.banner && bannerSlots.has('trial')} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-trial-notice">
               {trial.banner && <TrialNoticeBanner trial={trial} />}
               </ChromeFold>
 
               {/* Nothing said for a while: Natively stops in a minute unless
                   something is said or the user keeps going
                   (overlay/AutoStopNotice.tsx; main: MeetingEndDetector). */}
-              <ChromeFold show={autoStop.stopsAt !== null} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-auto-stop">
+              <ChromeFold show={autoStop.stopsAt !== null && bannerSlots.has('auto-stop')} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-auto-stop">
               {autoStop.stopsAt !== null && <AutoStopNoticeBanner notice={autoStop} />}
               </ChromeFold>
 
@@ -12069,7 +12228,7 @@ Provide only the answer, nothing else.`;
                   setting on thinking it is something good, then report the mic
                   as broken. Say why, and turn it off from here; main starts
                   the meeting's capture (setAmbientChatEnabled). */}
-              <ChromeFold show={showAmbientMicNotice} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-ambient-mic">
+              <ChromeFold show={showAmbientMicNotice && bannerSlots.has('ambient-mic')} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-ambient-mic">
               {showAmbientMicNotice && (
                 <OverlayBanner
                   className="mx-4"
@@ -12092,7 +12251,7 @@ Provide only the answer, nothing else.`;
               </ChromeFold>
 
               {/* PR #173: STT Not Configured Warning Banner */}
-              <ChromeFold show={sttNotConfigured && !trialExplainsNoStt} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-stt-not-configured">
+              <ChromeFold show={sttNotConfigured && !trialExplainsNoStt && bannerSlots.has('stt-not-configured')} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-stt-not-configured">
               {sttNotConfigured && !trialExplainsNoStt && (
                 /*
                   The shared banner, as an error: with no provider nothing is
@@ -12127,12 +12286,12 @@ Provide only the answer, nothing else.`;
                   reconnecting"); warnings and errors are banners now (owner
                   request), so each says what happened in a sentence and the
                   failure carries the fix. */}
-              <ChromeFold show={!!sttStatusBanner} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-stt-status">
+              <ChromeFold show={sttStatusBannerOpen && bannerSlots.has(sttStatusBanner?.tone === 'error' ? 'stt-error' : 'stt-warning')} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-stt-status">
               {sttStatusBanner && (
                 <OverlayBanner
                   className="mx-4"
                   tone={sttStatusBanner.tone}
-                  icon={sttStatusBanner.kind === 'pack'
+                  icon={sttStatusBanner.kind === 'pack' || sttStatusBanner.kind === 'behind'
                     ? <Clock strokeWidth={2.2} />
                     : sttStatusBanner.kind === 'stopped'
                     ? <MicOff strokeWidth={2.2} />
@@ -12141,7 +12300,9 @@ Provide only the answer, nothing else.`;
                       : <RefreshCw strokeWidth={2.2} className="ov-banner-spin" />}
                   title={sttStatusBanner.title}
                   message={sttStatusBanner.message}
-                  actions={sttStatusBanner.tone === 'error' ? (
+                  onDismiss={() => setSttBannerDismissed((prev) => (prev.includes(sttStatusBanner.key) ? prev : [...prev, sttStatusBanner.key]))}
+                  dismissLabel={t('Dismiss')}
+                  actions={sttStatusBanner.tone === 'error' || sttStatusBanner.kind === 'behind' ? (
                     <OverlayBannerButton
                       variant="primary"
                       onClick={() => window.electronAPI?.openSettingsTab?.(sttStatusBanner.settingsTab ?? 'audio')}
@@ -12158,7 +12319,7 @@ Provide only the answer, nothing else.`;
                   explanation lived in a tooltip; the banner shows the
                   explanation. Label and detail are main's own strings
                   (electron/services/pageCaptureFallback.ts). */}
-              <ChromeFold show={!!captureFallback} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-capture-fallback">
+              <ChromeFold show={!!captureFallback && bannerSlots.has('capture-fallback')} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-capture-fallback">
               {captureFallback && (
                 <OverlayBanner
                   className="mx-4"
@@ -12189,7 +12350,7 @@ Provide only the answer, nothing else.`;
                   to the browser's page area. Warning tone: the answer the
                   user sees is degraded, and the selective screenshot
                   (⌘/Ctrl+Shift+H) is the way around it. */}
-              <ChromeFold show={!!refusalRetryNotice} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-refusal-retry">
+              <ChromeFold show={!!refusalRetryNotice && bannerSlots.has('refusal-retry')} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-refusal-retry">
               {refusalRetryNotice && (
                 <OverlayBanner
                   className="mx-4"
@@ -12212,7 +12373,7 @@ Provide only the answer, nothing else.`;
                                   activation hotkey is already claimed by another app or by the
                                   OS). Click-to-activate still works (mousedown listener is
                                   independent of the hotkey), but the user can rebind in Settings. */}
-              <ChromeFold show={!!stealthHotkeyConflict} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-hotkey-conflict">
+              <ChromeFold show={!!stealthHotkeyConflict && bannerSlots.has('hotkey-conflict')} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-hotkey-conflict">
               {stealthHotkeyConflict && (
                 /*
                   The shared banner, as a warning: clicking the input still
@@ -12238,7 +12399,10 @@ Provide only the answer, nothing else.`;
                       {t('is already in use. Click the input to activate, or rebind in Settings.')}
                     </>
                   }
-                  onDismiss={() => setStealthHotkeyConflict(null)}
+                  onDismiss={() => {
+                    dismissedHotkeyConflictRef.current = stealthHotkeyConflict;
+                    setStealthHotkeyConflict(null);
+                  }}
                   dismissLabel={t('Dismiss')}
                   dismissButtonProps={{ 'data-stealth-ignore': 'true' }}
                   actions={
@@ -12260,7 +12424,7 @@ Provide only the answer, nothing else.`;
                                   doesn't exist on Windows, and the underlying CGEventTap
                                   Rust module ships only in the Darwin binary. Gating here
                                   is belt-and-suspenders on top of the native-side gate. */}
-              <ChromeFold show={isMac && stealthPermissionMissing} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-accessibility">
+              <ChromeFold show={isMac && stealthPermissionMissing && bannerSlots.has('stealth-permission')} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-accessibility">
               {isMac && stealthPermissionMissing && (
                 <OverlayBanner
                   className="mx-4"
@@ -12319,7 +12483,7 @@ Provide only the answer, nothing else.`;
                   so stealth typing just did nothing. There is no permission
                   to grant; the usual cause is security software blocking the
                   low-level hook. */}
-              <ChromeFold show={isWindows && stealthPermissionMissing} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-stealth-hook-blocked">
+              <ChromeFold show={isWindows && stealthPermissionMissing && bannerSlots.has('stealth-permission')} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-stealth-hook-blocked">
               {isWindows && stealthPermissionMissing && (
                 <OverlayBanner
                   className="mx-4"

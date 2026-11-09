@@ -20,14 +20,15 @@ export const TRIAL_STARTED_BANNER_MS = 12_000;
  *   liveThisMeeting?: boolean,        the trial was running at some point in this meeting
  *   startFailed?: null | 'unreachable' | 'rate_limited' | 'paused',
  *   durationMs?: number | null,       how long a trial lasts, when known: caps the time shown
- *   dismissed?: { started?: boolean },          only the started banner can be closed
+ *   dismissed?: { started?: boolean, ending?: boolean, ended?: boolean },   closed by the user in this meeting
  *   allowanceLow?: boolean,           main says the AI allowance is in its last quarter
  *   endedBy?: null | 'clock' | 'allowance',     what ended it, when main said so
  * }} s
  * @returns {{ banner: null | 'started' | 'ending' | 'ended' | 'failed',
  *             chip: null | { minutesLeft: number, tone: 'ok' | 'warning' },
  *             minutesLeft: number | null,   minutes left while the trial is live
- *             reason: null | 'clock' | 'allowance' }}  for ending and ended: why
+ *             reason: null | 'clock' | 'allowance',  for ending and ended: why
+ *             closed?: 'ending' | 'ended' }}  the banner that would show, closed by the user
  */
 export function overlayTrialNotice(s) {
   const dismissed = s.dismissed ?? {};
@@ -45,9 +46,15 @@ export function overlayTrialNotice(s) {
     const ending = byClock || byAllowance;
     const minutesLeft = Math.max(1, Math.ceil(left / 60_000));
     const chip = { minutesLeft, tone: ending ? 'warning' : 'ok' };
-    // The warning has no close (owner's decision, 2026-10-10): it stays, with
-    // the amber countdown, until the trial ends.
-    if (ending) return { banner: 'ending', chip, minutesLeft, reason: byClock ? 'clock' : 'allowance' };
+    // The warning has a close (2026-11-09; until then it had none and sat up
+    // to five minutes over a live call). Closed, the amber countdown still
+    // says it, and the end is a new banner that shows by itself.
+    if (ending) {
+      const reason = byClock ? 'clock' : 'allowance';
+      return dismissed.ending
+        ? { banner: null, chip, minutesLeft, reason, closed: 'ending' }
+        : { banner: 'ending', chip, minutesLeft, reason };
+    }
     const announced = typeof s.announcedAt === 'number'
       && s.now - s.announcedAt < TRIAL_STARTED_BANNER_MS && !dismissed.started;
     // The started banner says the minutes itself, so the countdown waits for
@@ -55,10 +62,16 @@ export function overlayTrialNotice(s) {
     return announced ? { banner: 'started', chip: null, minutesLeft, reason: null } : { banner: null, chip, minutesLeft, reason: null };
   }
 
-  // Run out. Said only in the meeting it ran out in: nothing works until the
-  // user picks a plan or their own keys, so this one has no close.
+  // Run out. Said only in the meeting it ran out in. It has a close
+  // (2026-11-09): it used to stay for the rest of the meeting. Closed, it is
+  // reported as `closed`, so the overlay still knows the trial explains why
+  // nothing transcribes (and does not put "Transcription Not Configured" up
+  // in its place).
   if (expiresAt !== null && s.liveThisMeeting) {
-    return { banner: 'ended', chip: null, minutesLeft: null, reason: s.endedBy === 'allowance' ? 'allowance' : 'clock' };
+    const reason = s.endedBy === 'allowance' ? 'allowance' : 'clock';
+    return dismissed.ended
+      ? { banner: null, chip: null, minutesLeft: null, reason, closed: 'ended' }
+      : { banner: 'ended', chip: null, minutesLeft: null, reason };
   }
 
   // Could not start. No close here either: nothing transcribes or answers,

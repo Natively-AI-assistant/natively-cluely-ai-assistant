@@ -9,4 +9,6 @@ export function audioWarningAction(w: {
   channel?: string;
   titleKey?: string;
   message?: string;
+  /** Advice, not a fault: never a privacy pane. */
+  advisory?: boolean;
 }): AudioWarningAction;

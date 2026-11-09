@@ -436,6 +436,9 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
                                 this.write(chunk);
                             }
                         }
+                        // Session ready for audio: main maps it to awaiting-audio, which
+                        // clears "Transcription Reconnecting" after a reconnect (2026-11-09).
+                        try { this.emit('connected'); } catch { /* listeners never break the socket */ }
                         break;
 
                     case 'partial_transcript':
