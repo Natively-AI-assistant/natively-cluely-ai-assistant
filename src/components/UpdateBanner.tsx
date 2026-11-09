@@ -265,6 +265,9 @@ const UpdateBanner: React.FC<UpdateBannerProps> = ({ canOpen = true, claimSlot, 
     const wantsCard = isVisible && !minimized;
     const [holdsSlot, setHoldsSlot] = useState(false);
     const expandRequestedRef = useRef(false);
+    // A refused claim (the spacing after another card closed) asks again a
+    // little later: nothing else re-runs this effect when the spacing ends.
+    const [claimRetry, setClaimRetry] = useState(0);
     useEffect(() => {
         if (wantsCard && !holdsSlot) {
             const asked = expandRequestedRef.current;
@@ -272,14 +275,16 @@ const UpdateBanner: React.FC<UpdateBannerProps> = ({ canOpen = true, claimSlot, 
             if ((claimSlot?.() ?? true) || asked) {
                 expandRequestedRef.current = false;
                 setHoldsSlot(true);
+                return;
             }
-            return;
+            const retry = setTimeout(() => setClaimRetry((n) => n + 1), 5_000);
+            return () => clearTimeout(retry);
         }
         if (!wantsCard && holdsSlot) {
             releaseSlot?.();
             setHoldsSlot(false);
         }
-    }, [wantsCard, holdsSlot, canOpen, claimSlot, releaseSlot]);
+    }, [wantsCard, holdsSlot, canOpen, claimSlot, releaseSlot, claimRetry]);
     // Unmounting gives the slot back.
     const releaseRef = useRef(releaseSlot);
     releaseRef.current = releaseSlot;

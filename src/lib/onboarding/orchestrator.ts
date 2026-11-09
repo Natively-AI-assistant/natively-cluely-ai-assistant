@@ -717,12 +717,16 @@ export class OnboardingOrchestrator {
   /**
    * A full-window card this scheduler does not own (the update card,
    * UpdateBanner.tsx) asks for the slot. Refused while a card or the Trial
-   * ended card is on screen; once granted, no card opens until it is
-   * released, and it counts as this launch's card.
+   * ended card is on screen, and for the usual spacing after a card closed
+   * (so closing one card never puts the update card straight up); once
+   * granted, no card opens until it is released, and it counts as this
+   * launch's card. It is not held to one card per launch: its own rule (one
+   * version, once per 7 days, updatePromptPolicy.mjs) caps it.
    */
   claimExternalCard(id: string): boolean {
     if (this.externalCardId === id) return true;
     if (this.externalCardId !== null || this.state.activeToasterId !== null || this.userState.trialEndedOpen) return false;
+    if (this.spacingRemainingMs() > 0) return false;
     this.externalCardId = id;
     this.launch.shown.push(id);
     this.saveLaunch();

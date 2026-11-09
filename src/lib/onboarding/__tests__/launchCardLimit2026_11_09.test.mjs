@@ -189,6 +189,10 @@ test('the update card is refused while a card is open, and holds the slot once g
   assert.equal(active(orch), 'browser_extension');
   assert.equal(orch.claimExternalCard('update'), false, 'waits for the open card');
   orch.markDismissed('browser_extension');
+  assert.equal(orch.claimExternalCard('update'), false, 'not straight after a card closes');
+  mockNow += 59_000;
+  assert.equal(orch.claimExternalCard('update'), false, 'still inside the 60 s spacing');
+  mockNow += 2_000;
   assert.equal(orch.claimExternalCard('update'), true);
   assert.equal(orch.getExternalCard(), 'update');
   orch.stop();
