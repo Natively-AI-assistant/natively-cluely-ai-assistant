@@ -187,6 +187,15 @@ export function isReportShaped(candidate: string): boolean {
  * never inert: those providers keep the old behaviour.
  */
 export const INERT_MAX_WORDS = 6;
+/**
+ * The judge deadline for a candidate that carries a literal '?'. Its timeout
+ * outcome is the '?' fallback dispatch either way, so waiting the full
+ * JUDGE_DEADLINE_MS on a stalled call only delays the answer (live 2026-11-10
+ * T05: the call hung, the prefetched answer sat ready 0.5 s, shown at 3.4 s).
+ * Production, 15,209 judge calls over 14 days: 99.5% completed inside 1.6 s
+ * server-side (p99 1.49 s), so a reply still missing at 1.9 s is a stall.
+ */
+export const QUESTION_JUDGE_DEADLINE_MS = 1900;
 /** Total inert words a verdict may be carried across. */
 export const INERT_MAX_TOTAL_WORDS = 12;
 const FILLER = /^(?:u+h+|u+m+|e+r+m*|a+h+|h+m+|m+)(?:[\s,.!-]+(?:u+h+|u+m+|e+r+m*|a+h+|h+m+|m+))*[\s,.!-]*$/i;
@@ -874,7 +883,10 @@ export class SimpleAutoAnswerEngine {
                         ...(this.pending.some(p => p.provisional) ? { transcriptLagging: true } : {}),
                     }, abort.signal),
                     new Promise<null>((resolve) => {
-                        timer = this.clock.setTimeout(() => { timedOut = true; resolve(null); }, JUDGE_DEADLINE_MS);
+                        // A candidate with a literal '?' is answered by the fallback when
+                        // the judge times out, so a stalled call only delays that answer.
+                        const asked = /\?\s*$/.test(candidate) || sentencesOf(unjudged).some(x => /\?\s*$/.test(x));
+                        timer = this.clock.setTimeout(() => { timedOut = true; resolve(null); }, asked ? QUESTION_JUDGE_DEADLINE_MS : JUDGE_DEADLINE_MS);
                     }),
                 ]);
                 if (timedOut) { outcome = 'timeout'; try { abort.abort(); } catch { /* noop */ } }

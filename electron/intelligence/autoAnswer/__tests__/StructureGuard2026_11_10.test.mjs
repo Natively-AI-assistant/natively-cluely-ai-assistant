@@ -19,7 +19,7 @@ import { FakeClock } from './fakeClock.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const Simple = require(path.resolve(__dirname, '../../../../dist-electron/electron/intelligence/autoAnswer/SimpleAutoAnswer.js'));
-const { SimpleAutoAnswerEngine, STABILITY_MS, EARLY_JUDGE_MS, STRUCTURE_GRACE_MS, PUNCTUATING_MIN_FINALS, awaitsStructure } = Simple;
+const { SimpleAutoAnswerEngine, STABILITY_MS, EARLY_JUDGE_MS, STRUCTURE_GRACE_MS, PUNCTUATING_MIN_FINALS, QUESTION_JUDGE_DEADLINE_MS, awaitsStructure } = Simple;
 
 const flush = () => new Promise((r) => setImmediate(r));
 const YES = JSON.stringify({ is_ask: true, directed_at_user: true, complete: true, act: 'question', answerability: 0.95, question_text: null });
@@ -28,11 +28,11 @@ const INCOMPLETE = JSON.stringify({ is_ask: true, directed_at_user: true, comple
 
 function rig(judge = () => YES) {
   const clock = new FakeClock();
-  const state = { calls: [], dispatched: [], prefetched: [], logs: [] };
+  const state = { calls: [], dispatched: [], prefetched: [], logs: [], events: [] };
   const host = {
     isEnabled: () => true, isMeetingActive: () => true, meetingGeneration: () => 1, engineAccepting: () => true,
     answerStreamActive: () => false, recentTurns: () => [], offer() {}, cancelAutomaticAnswer: () => true,
-    dispatch: (q) => state.dispatched.push(q.text), telemetry() {}, log: (l) => state.logs.push(l),
+    dispatch: (q) => state.dispatched.push(q.text), telemetry: (e) => state.events.push(e), log: (l) => state.logs.push(l),
     prefetchAnswer: (id, text) => state.prefetched.push(text),
     speculativeSnapshot: () => ({ questionId: null, text: null }),
     judgeCandidate: async (req) => { state.calls.push(req.candidateText); return judge(req.candidateText, state.calls.length); },
@@ -171,4 +171,22 @@ test('an "incomplete" verdict is not re-bought on the same words; more speech st
   await h.advance(STABILITY_MS + 300);
   assert.equal(h.state.calls.length, 2);
   assert.equal(h.state.dispatched.length, 1);
+});
+
+test('a stalled judge delays a question-mark ask only to the short deadline; a statement keeps the full one', async () => {
+  const { JUDGE_DEADLINE_MS } = require(path.resolve(__dirname, '../../../../dist-electron/electron/intelligence/autoAnswer/AutoAnswerJudge.js'));
+  const h = rig(() => new Promise(() => {}));                 // the call hangs
+  h.say('Right, and when would you pick one over the other?');
+  await h.advance(EARLY_JUDGE_MS + QUESTION_JUDGE_DEADLINE_MS - 150);
+  assert.equal(h.state.dispatched.length, 0);
+  await h.advance(300);
+  assert.equal(h.state.dispatched.length, 1, 'the fallback answers at the short deadline');
+
+  const g = rig(() => new Promise(() => {}));
+  g.say('Please compare optimistic and pessimistic locking for this design.');
+  await g.advance(EARLY_JUDGE_MS + QUESTION_JUDGE_DEADLINE_MS + 300);
+  const timedOut = () => g.state.events.some(e => e.name === 'auto_answer_judged' && e.judgeOutcome === 'timeout');
+  assert.equal(timedOut(), false, 'no early timeout without a question mark');
+  await g.advance(JUDGE_DEADLINE_MS - QUESTION_JUDGE_DEADLINE_MS);
+  assert.equal(timedOut(), true, 'it times out at the full deadline');
 });
