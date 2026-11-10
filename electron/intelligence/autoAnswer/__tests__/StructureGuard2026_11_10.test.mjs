@@ -19,7 +19,7 @@ import { FakeClock } from './fakeClock.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const Simple = require(path.resolve(__dirname, '../../../../dist-electron/electron/intelligence/autoAnswer/SimpleAutoAnswer.js'));
-const { SimpleAutoAnswerEngine, STABILITY_MS, EARLY_JUDGE_MS, STRUCTURE_GRACE_MS, PUNCTUATING_MIN_FINALS, QUESTION_JUDGE_DEADLINE_MS, awaitsStructure } = Simple;
+const { SimpleAutoAnswerEngine, STABILITY_MS, EARLY_JUDGE_MS, STRUCTURE_GRACE_MS, PUNCTUATING_MIN_FINALS, QUESTION_JUDGE_DEADLINE_MS, awaitsStructure, isBareTransition } = Simple;
 
 const flush = () => new Promise((r) => setImmediate(r));
 const YES = JSON.stringify({ is_ask: true, directed_at_user: true, complete: true, act: 'question', answerability: 0.95, question_text: null });
@@ -189,4 +189,48 @@ test('a stalled judge delays a question-mark ask only to the short deadline; a s
   assert.equal(timedOut(), false, 'no early timeout without a question mark');
   await g.advance(JUDGE_DEADLINE_MS - QUESTION_JUDGE_DEADLINE_MS);
   assert.equal(timedOut(), true, 'it times out at the full deadline');
+});
+
+// ── bare transitions (live runs 3 and 4: "Alright. Let's move on to coding." → answer, a=0.9) ──
+
+test('isBareTransition: a move to the next topic with nothing asked', () => {
+  for (const t of [
+    'Alright. Let\'s move on to coding.',
+    'I would add replicas for the hot keys. Alright. Let\'s move on to coding.',
+    'Okay, let\'s switch gears.',
+    'Great. Moving on.',
+    'So we\'ll transition into the system design portion now.',
+    'Good. Let\'s get started.',
+  ]) assert.equal(isBareTransition(t), true, `bare: ${t}`);
+  for (const t of [
+    'Let\'s move on to how you would design the cache.',
+    'Let\'s switch gears. Can you walk me through what happens when you type a URL?',
+    'What is a mutex? Okay, let\'s move on.',
+    'Let\'s start with you. Tell me a little bit about yourself.',
+    'Let\'s talk about your last project.',
+    'Let\'s move on to',
+    'Why did you choose Postgres?',
+  ]) assert.equal(isBareTransition(t), false, `not bare: ${t}`);
+});
+
+test('a bare transition costs no judge call and no prefetch, however long the silence; the task after it is judged with it as context', async () => {
+  const h = rig();
+  h.say('Alright. Let\'s move on to coding.');
+  await h.advance(STRUCTURE_GRACE_MS + 3000);
+  assert.equal(h.state.calls.length, 0, 'never judged alone');
+  assert.equal(h.state.prefetched.length, 0);
+  assert.equal(h.state.dispatched.length, 0);
+  h.say('Write a function that reverses a linked list in place.');
+  await h.advance(STABILITY_MS + 300);
+  assert.equal(h.state.calls.length, 1);
+  assert.match(h.state.calls[0], /move on to coding\. Write a function/);
+  assert.equal(h.state.dispatched.length, 1);
+});
+
+test('an unanswered question before the transition is still judged', async () => {
+  const h = rig();
+  h.say('What is the difference between a mutex and a semaphore?');
+  h.say('Okay, let\'s move on.');
+  await h.advance(STABILITY_MS + 300);
+  assert.equal(h.state.calls.length, 1);
 });

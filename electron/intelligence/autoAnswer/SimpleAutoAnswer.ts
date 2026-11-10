@@ -276,6 +276,27 @@ export function awaitsStructure(text: string): boolean {
     return after.length < (want ?? 2);
 }
 
+/**
+ * A bare transition (2026-11-10): "Alright. Let's move on to coding." names
+ * where the meeting goes next and asks nothing yet. The judge prompt says so
+ * ("…before any problem has been stated is still logistics") and flash-lite
+ * answered it a=0.9 in two live runs in a row, drafting an answer to nothing.
+ * Unlike an announced list it is not judged after a grace either: it is not an
+ * ask however long the silence after it. It stays in the candidate as context
+ * for whatever is asked next.
+ */
+const TRANSITION = /^(?:(?:ok(?:ay)?|alright|all right|so|now|great|good|cool|right|well|nice|perfect|awesome)[,.!\s]+)*(?:(?:let['’]?s|let us|we['’]?ll|we will|we can|i['’]?d like to|i want to|shall we|time to|we['’]?re going to|i['’]?m going to)\s+(?:now\s+|just\s+)?(?:move on|move to|move into|switch gears|shift gears|change gears|transition|jump (?:in)?to|dive in(?:to)?|get started|get into|begin|start with|turn to|go to the next)|moving on|next up)\b/i;
+const CARRIES_ASK = /\?|\b(?:how|what|why|which|who|explain|describe|tell|walk)\b/i;
+
+/** Whether the unjudged speech ends on a transition and carries no ask anywhere. */
+export function isBareTransition(text: string): boolean {
+    const sentences = sentencesOf((text ?? '').trim());
+    if (sentences.length === 0) return false;
+    const last = sentences[sentences.length - 1];
+    if (!TRANSITION.test(last) || CARRIES_ASK.test(last) || !/[.!]["'”’)\]]*$/.test(last)) return false;
+    return !sentences.slice(0, -1).some(x => isQuestionShaped(x) || isReportShaped(x));
+}
+
 /** A finished sentence a verdict can stand on: terminal mark, not cut off, no dangling word. */
 function endsFinishedSentence(text: string): boolean {
     const t = (text ?? '').trim();
@@ -770,6 +791,14 @@ export class SimpleAutoAnswerEngine {
             return;
         }
 
+        // A bare transition asks nothing: no judge call, no prefetch, no grace.
+        if (isBareTransition(this.unjudgedText())) {
+            if (!early) {
+                this.host.log?.('[AutoAnswer:simple] bare transition: nothing asked yet');
+                this.emit({ name: 'auto_answer_ignored', skipReason: 'not_question', candidateWordCount: words });
+            }
+            return;
+        }
         // Structure guard: an announced list still being delivered, or a scene
         // with no ask yet. No judge call, no prefetch — wait for the rest, and
         // judge it as it stands if the interviewer stays quiet.
