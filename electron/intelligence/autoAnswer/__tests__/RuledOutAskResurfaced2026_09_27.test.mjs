@@ -65,7 +65,10 @@ test('a NEW question after a ruled-out remark is still answered', async () => {
 test('an incomplete ask finished by later speech is still answered (incomplete is never ruled out)', async () => {
   const whole = 'And what I want you to do is design a rate limiter for our public API.';
   const h = rig([INCOMPLETE, verdict({ question_text: whole })]);
-  await h.say('And what I want you to do is', 300);
+  // 2026-11-10: the pause outlasts the commit window. A fragment that stops on
+  // "is" is no longer asked EARLY (its verdict was always thrown away), so the
+  // scripted "incomplete" reaches the fragment only once the speaker has paused.
+  await h.say('And what I want you to do is', 1000);
   await h.say('design a rate limiter for our public API.');
   assert.equal(h.state.dispatched.length, 1);
   assert.match(h.state.dispatched[0], /rate limiter/);
