@@ -65,9 +65,15 @@ export const STABILITY_MS = 900;
  * activeMode out of idle and park the real dispatch behind a junk generation.
  */
 export const EARLY_JUDGE_MS = 120;
-/** A session counts as punctuating once this many finals were seen and this share ended in . ? ! */
-export const PUNCTUATING_MIN_FINALS = 6;
-export const PUNCTUATING_SHARE = 0.8;
+/**
+ * A session counts as punctuating once this many finals ENDED in . ? ! and they
+ * are at least this share of all finals. The share is low on purpose: a
+ * punctuating provider still cuts about a quarter of its finals mid-sentence
+ * (live 2026-11-10: 43 of 59 and 46 of 60 terminated, 0.55-0.65 early in the
+ * meeting), while a provider that does not punctuate terminates none.
+ */
+export const PUNCTUATING_MIN_FINALS = 4;
+export const PUNCTUATING_SHARE = 0.4;
 /** A provider endpoint (speech_final / <end>) confirms the stop: shorten the wait. */
 export const ENDPOINT_CONFIRM_MS = 350;
 /** Below this many NEW words (and no '?') we wait for more speech instead of calling. */
@@ -731,7 +737,7 @@ export class SimpleAutoAnswerEngine {
         const last = this.pending[this.pending.length - 1];
         // …and so is one with no full stop at all, once this session's
         // transcript has shown that it punctuates its finished sentences.
-        const punctuates = this.finalsSeen >= PUNCTUATING_MIN_FINALS && this.finalsTerminated / this.finalsSeen >= PUNCTUATING_SHARE;
+        const punctuates = this.finalsTerminated >= PUNCTUATING_MIN_FINALS && this.finalsTerminated / this.finalsSeen >= PUNCTUATING_SHARE;
         const unterminated = punctuates && !/[.?!]["'”’)\]]*$/.test(last.text);
         if (early && (last.glueNext || isCutOffEnding(last.text) || unterminated)) {
             this.host.log?.('[AutoAnswer:simple] early ask skipped: the final stops mid-sentence');

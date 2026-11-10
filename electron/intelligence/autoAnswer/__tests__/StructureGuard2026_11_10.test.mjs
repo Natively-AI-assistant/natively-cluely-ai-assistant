@@ -137,6 +137,17 @@ test('an unterminated final is not asked early once the transcript has shown it 
   assert.equal(h.state.calls.length, before + 1, 'a real stop is judged at the commit');
 });
 
+test('the punctuation habit is learnt even when a quarter of the finals are cut mid-sentence (live share was 0.55-0.65)', async () => {
+  const h = rig(() => NO);
+  const lines = ['This part is finished.', 'So I lead the plat', 'form team here today.', 'We will spend about', 'forty five minutes on this.', 'Sounds good to me.', 'Then some fundamentals come next.'];
+  for (const l of lines) { h.say(l); await h.advance(60); }
+  await h.advance(STABILITY_MS + 300);
+  const before = h.state.calls.length;
+  h.say('Okay so now let us start');
+  await h.advance(EARLY_JUDGE_MS + 200);
+  assert.equal(h.state.calls.length, before, 'no early call on the unterminated final');
+});
+
 test('a transcript that never punctuates keeps its early ask', async () => {
   const h = rig(() => NO);
   for (let i = 0; i < PUNCTUATING_MIN_FINALS; i++) {
