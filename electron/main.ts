@@ -8454,6 +8454,9 @@ export class AppState {
     // over the next ~150ms while we're already returning to the renderer.
     this.googleSTT?.finalize?.();
     this.googleSTT_User?.finalize?.();
+    // Natively Pro: the server asks its provider for the last finals now
+    // (a sentence spoken just before Stop was otherwise lost whole).
+    for (const s of [this.googleSTT, this.googleSTT_User]) if (s instanceof NativelyProSTT) s.finish();
     // A failover stand-in carrying a channel (audio/sttFailover.ts) gets the
     // same: told the audio is over, and waited for (bounded, per provider)
     // before the providers stop and the transcript is saved. Resolves at once
@@ -8507,7 +8510,9 @@ export class AppState {
         await new Promise(resolve => setTimeout(resolve, 250));
         // 1a. A REST provider (Groq: ~10 s chunks, issue #698) answers only
         //     after its upload: wait for one in flight or queued, up to 5 s.
-        const restStts = [this.googleSTT, this.googleSTT_User].filter((s): s is RestSTT => s instanceof RestSTT);
+        //     Natively Pro waits for the server's `finished` (finish() above;
+        //     it gives up by itself after NATIVELY_FINISH_WAIT_MS).
+        const restStts = [this.googleSTT, this.googleSTT_User].filter((s): s is RestSTT | NativelyProSTT => s instanceof RestSTT || s instanceof NativelyProSTT);
         for (const deadline = Date.now() + 5_000; Date.now() < deadline && restStts.some((s) => s.hasPendingWork());) {
           await new Promise(resolve => setTimeout(resolve, 100));
         }

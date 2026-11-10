@@ -149,6 +149,8 @@ export class LiveDictationSession {
             }
             try { stt.notifySpeechEnded?.(); } catch { /* optional */ }
             try { if ((stt as { finalize?: () => unknown }).finalize?.() === true) this.finalPending = true; } catch { /* optional */ }
+            // End of stream: a provider that can flush its last finals now does (NativelyProSTT.finish).
+            try { (stt as { finish?: () => unknown }).finish?.(); } catch { /* optional */ }
             const start = this.o.now();
             this.lastEventAt = Math.max(this.lastEventAt, start);
             // A provider that can say so reports work still on its way: an
