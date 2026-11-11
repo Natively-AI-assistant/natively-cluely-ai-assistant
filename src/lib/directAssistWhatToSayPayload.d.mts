@@ -10,4 +10,5 @@ export function buildDirectWhatToSayPayload(input: {
   interviewerRequest?: string;
   dynamicPromptInstruction?: string;
   hasScreenshots: boolean;
+  customScreenshotPrompt?: string;
 }): DirectAssistWhatToSayPayload;

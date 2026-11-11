@@ -12,6 +12,7 @@ import { ASSIST_RU, ASSIST_ZH, ASSIST_JA, ASSIST_ES } from './i18n.assist';
 import { AMBIENT_CHAT_RU, AMBIENT_CHAT_ZH, AMBIENT_CHAT_JA, AMBIENT_CHAT_ES } from './i18n.ambientChat';
 import { STT_STATUS_RU, STT_STATUS_ZH, STT_STATUS_JA, STT_STATUS_ES } from './i18n.sttStatus';
 import { SCREENSHOT_SCREEN_RU, SCREENSHOT_SCREEN_ZH, SCREENSHOT_SCREEN_JA, SCREENSHOT_SCREEN_ES } from './i18n.screenshotScreen';
+import { SCREENSHOT_QUESTION_RU, SCREENSHOT_QUESTION_ZH, SCREENSHOT_QUESTION_JA, SCREENSHOT_QUESTION_ES } from './i18n.screenshotQuestion';
 
 // ─── Lightweight in-house i18n ────────────────────────────────────────────────
 // No external dependency. `t(englishText)` returns the translation for the
@@ -61,6 +62,7 @@ const RU: Record<string, string> = {
     ...AMBIENT_CHAT_RU,
     ...STT_STATUS_RU,
     ...SCREENSHOT_SCREEN_RU,
+    ...SCREENSHOT_QUESTION_RU,
     // ── Settings sidebar / navigation ──
     'General': 'Основные',
     'AI Providers': 'AI-провайдеры',
@@ -310,6 +312,7 @@ const ZH: Record<string, string> = {
     ...AMBIENT_CHAT_ZH,
     ...STT_STATUS_ZH,
     ...SCREENSHOT_SCREEN_ZH,
+    ...SCREENSHOT_QUESTION_ZH,
     'Language': '语言',
     'English': '英语',
     'Russian': '俄语',
@@ -334,6 +337,7 @@ const JA: Record<string, string> = {
     ...AMBIENT_CHAT_JA,
     ...STT_STATUS_JA,
     ...SCREENSHOT_SCREEN_JA,
+    ...SCREENSHOT_QUESTION_JA,
     'Language': '言語',
     'English': '英語',
     'Russian': 'ロシア語',
@@ -357,6 +361,7 @@ const ES: Record<string, string> = {
     ...AMBIENT_CHAT_ES,
     ...STT_STATUS_ES,
     ...SCREENSHOT_SCREEN_ES,
+    ...SCREENSHOT_QUESTION_ES,
     'Language': 'Idioma',
     'English': 'Inglés',
     'Russian': 'Ruso',

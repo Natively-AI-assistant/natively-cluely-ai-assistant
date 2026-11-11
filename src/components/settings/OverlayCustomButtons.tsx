@@ -65,11 +65,11 @@ const HAIRLINE = 'border-[color:color-mix(in_srgb,var(--text-primary)_10%,transp
 // The surface of the Overlay tab's other cards (SETTINGS_CARD): near-white in
 // light, the lifted grey in dark, so this section reads as one of them.
 const BOX = `rounded-xl border border-border-subtle bg-bg-card transition-[border-color,background-color] duration-200 ease-out`;
-const BOX_FOCUS = 'focus-within:border-[color:color-mix(in_srgb,var(--accent-primary)_38%,transparent)]';
+export const BOX_FOCUS = 'focus-within:border-[color:color-mix(in_srgb,var(--accent-primary)_38%,transparent)]';
 const LABEL = 'text-[15px] font-bold leading-[1.2] tracking-[-0.02em] text-text-primary mb-2.5';
 /** Real-time prompt's Save: a small quiet rectangle that dims while disabled. */
 const QUIET_BTN = `px-3 py-1 rounded-full border ${HAIRLINE} bg-[color:color-mix(in_srgb,var(--text-primary)_5%,transparent)] text-xs font-medium text-text-primary transition-[background-color,opacity,transform] duration-150 ease-out hover:bg-[color:color-mix(in_srgb,var(--text-primary)_10%,transparent)] active:scale-[0.97] disabled:opacity-35 disabled:hover:bg-[color:color-mix(in_srgb,var(--text-primary)_5%,transparent)] disabled:active:scale-100 disabled:cursor-default motion-reduce:active:scale-100`;
-const TEXT_BTN = 'text-xs text-text-tertiary hover:text-text-primary transition-colors duration-150';
+export const TEXT_BTN = 'text-xs text-text-tertiary hover:text-text-primary transition-colors duration-150';
 // "Writing…" shimmers while the model works (transitions.dev shimmer text,
 // index.css .t-shimmer), in Settings' inks so it follows the theme.
 const SHIMMER_VARS = {

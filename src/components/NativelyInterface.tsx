@@ -330,6 +330,7 @@ import {
 } from '../lib/overlayCustomSize.mjs';
 import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch, resolveChatStreamSurfaceError, isStaleDesktopChatEvent } from '../lib/chatStreamGuard.mjs';
 import { buildDirectWhatToSayPayload } from '../lib/directAssistWhatToSayPayload.mjs';
+import { resolveScreenshotPromptText, getScreenshotPresetPrompt } from '../lib/screenshotPrompt';
 import { chatFailureFromError, isProviderFailureSentence } from '../lib/chatFailure.mjs';
 import {
   CHAT_HINTS,
@@ -8399,13 +8400,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     if (currentAttachments.length > 0) {
       setAttachedContext([]);
-      // Show the attached image in chat FIRST — question card must appear before AI response
+      const promptText = resolveScreenshotPromptText();
+      // Show the attached image in chat FIRST: question card must appear before AI response
       setMessages((prev) => [
         ...prev,
         {
           id: questionCardId,
           role: 'user',
-          text: 'What should I say about this?',
+          text: promptText,
           hasScreenshot: true,
           screenshotPreview: currentAttachments[0].preview,
           screenshotPreviews: currentAttachments.map((a) => a.preview).filter(Boolean),
@@ -8462,11 +8464,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           .join('  ·  ')
           .trim()
           .slice(-8192);
+        const customPrompt = getScreenshotPresetPrompt();
         const hasScreenshots = currentAttachments.length > 0;
         const directWhatToSayPayload = buildDirectWhatToSayPayload({
           interviewerRequest,
           dynamicPromptInstruction,
           hasScreenshots,
+          customScreenshotPrompt: customPrompt || undefined,
         });
         await beginDirectAssist({
           source: directWhatToSayPayload.source,
@@ -8567,10 +8571,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         console.debug(`[DOM Context] Forwarding captured active-tab DOM structure (${domContext.length} chars)`);
       }
 
+      const customPrompt = currentAttachments.length > 0 ? getScreenshotPresetPrompt() : undefined;
+      const effectiveInstruction = dynamicPromptInstruction || customPrompt;
       const options =
-        dynamicPromptInstruction || domContext
+        effectiveInstruction || domContext
           ? {
-              ...(dynamicPromptInstruction ? { promptInstruction: dynamicPromptInstruction } : {}),
+              ...(effectiveInstruction ? { promptInstruction: effectiveInstruction } : {}),
               ...(domContext ? { domContext } : {}),
               ...(domContextEnvelope ? { domContextEnvelope } : {}),
             }
@@ -8895,7 +8901,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const currentAttachments = attachedContext;
     if (currentAttachments.length > 0) {
       setAttachedContext([]);
-      // Show the attached image in chat FIRST — question card must appear before AI response
+      // Show the attached image in chat FIRST: question card must appear before AI response
       setMessages((prev) => [
         ...prev,
         {

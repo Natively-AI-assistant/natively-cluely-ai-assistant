@@ -17,7 +17,7 @@
 // and buttons slide to their new places with a FLIP transform.
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { AppWindow, ChevronDown, Layout, Monitor, NotebookPen, RotateCcw } from 'lucide-react';
+import { AppWindow, Camera, ChevronDown, Layout, Monitor, NotebookPen, RotateCcw } from 'lucide-react';
 import NotesWindow, { type NotesWindowPreview } from '../NotesWindow';
 import { NOTEPAD_DEMO_PEOPLE, NOTEPAD_DEMO_TEMPLATE, NOTEPAD_DEMO_THEM, NOTEPAD_DEMO_TITLE } from '../notes/notepadDemo';
 import { useT } from '../../i18n';
@@ -37,9 +37,10 @@ import {
 } from '../../lib/overlayButtonOrder';
 import { useOverlayCustomButtons } from '../../lib/overlayCustomButtons';
 import { overlayButtonFace } from '../overlay/overlayButtons';
-import { CustomButtonsSection } from './OverlayCustomButtons';
+import { BOX_FOCUS, CustomButtonsSection, TEXT_BTN } from './OverlayCustomButtons';
 import { OverlayChipContent, OverlayMockup, overlayChipClass, useOverlayAppearance } from './OverlayMockup';
 import { Presence, SETTINGS_CARD, SettingsMenu, SettingsRow, SettingsSectionHeading } from './SettingsRow';
+import { useScreenshotPresetPrompt, DEFAULT_SCREENSHOT_PROMPT, SCREENSHOT_PRESET_PROMPT_MAX } from '../../lib/screenshotPrompt';
 
 /** The overlay card's width (OverlayMockup's w-[600px]); the preview scales it down to the page. */
 const MOCKUP_WIDTH = 600;
@@ -508,6 +509,76 @@ const NotepadPreview: React.FC = () => (
     </div>
 );
 
+/**
+ * The question a screenshot is sent with when none is typed: the screenshot
+ * shortcut, or What to say with a screenshot attached (src/lib/screenshotPrompt.ts).
+ * Reset is "Reset order"'s and the focus ring the custom-button editor's
+ * (OverlayCustomButtons), so the row reads as part of this tab.
+ */
+// Inside a card the field takes the fill of the card's own controls (index.css,
+// `.bg-bg-card .bg-bg-component`); the editor's bg-card box would vanish into it.
+const FIELD = 'rounded-xl border border-border-subtle bg-[color:color-mix(in_srgb,var(--text-primary)_5%,var(--bg-card))] transition-[border-color,background-color] duration-200 ease-out';
+
+const ScreenshotQuestionRow: React.FC = () => {
+    const t = useT();
+    const [prompt, setPrompt] = useScreenshotPresetPrompt();
+    const inputRef = useRef<HTMLInputElement>(null);
+    const used = prompt.length;
+
+    // Enter and Escape leave the field (it saves as you type); Escape never
+    // reaches the window-level Escape that closes all of Settings.
+    const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Escape' || e.key === 'Enter') {
+            e.preventDefault();
+            e.stopPropagation();
+            e.currentTarget.blur();
+        }
+    };
+
+    return (
+        <div className={SETTINGS_CARD}>
+            <SettingsRow
+                icon={<Camera size={20} />}
+                title={t('Screenshot question')}
+                description={t("Sent with a screenshot when you don't type a question.")}
+            >
+                <div className="pb-4">
+                    <div className={`${FIELD} ${BOX_FOCUS} flex items-center`}>
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            spellCheck={false}
+                            autoComplete="off"
+                            aria-label={t('Screenshot question')}
+                            maxLength={SCREENSHOT_PRESET_PROMPT_MAX}
+                            className="flex-1 min-w-0 bg-transparent border-none outline-none px-4 py-3 text-xs text-text-primary placeholder:text-text-tertiary"
+                            placeholder={DEFAULT_SCREENSHOT_PROMPT}
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            onKeyDown={onKeyDown}
+                        />
+                        {/* The count only once the limit is near, as the Name field's. */}
+                        {used >= SCREENSHOT_PRESET_PROMPT_MAX - 50 && (
+                            <span className={`pl-2 text-[11px] tabular-nums ${used >= SCREENSHOT_PRESET_PROMPT_MAX ? 'text-text-secondary' : 'text-text-tertiary'}`}>
+                                {used}/{SCREENSHOT_PRESET_PROMPT_MAX}
+                            </span>
+                        )}
+                        <Presence kind="control" id={prompt ? 'reset' : null} className="shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => { setPrompt(''); inputRef.current?.focus({ preventScroll: true }); }}
+                                className={`flex items-center gap-1 px-4 py-3 ${TEXT_BTN}`}
+                            >
+                                <RotateCcw size={12} aria-hidden="true" /> {t('Reset')}
+                            </button>
+                        </Presence>
+                    </div>
+                </div>
+            </SettingsRow>
+        </div>
+    );
+};
+
 type ScreenshotDisplay = { id: number; number: number; name: string; width: number; height: number; primary: boolean };
 
 /**
@@ -647,6 +718,7 @@ export const OverlaySettings: React.FC<{
                     />
                     <NotepadPreview />
                 </section>
+                <ScreenshotQuestionRow />
                 <ScreenshotScreenRow />
             </div>
         );
@@ -689,6 +761,8 @@ export const OverlaySettings: React.FC<{
             </div>
 
             {opacityControl}
+
+            <ScreenshotQuestionRow />
 
             <ScreenshotScreenRow />
         </div>
