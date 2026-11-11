@@ -20,14 +20,19 @@ export function suppressionKeyForArm(streamingId) {
 }
 
 /**
- * Suppressed for as long as the stream it was armed for is live, and through
- * that stream's finalize (the streaming id goes null for one commit before
- * the last effect run). A different, non-null stream id lifts it.
+ * Suppressed for as long as an armed scroll interrupt remains active.
+ *
+ * An interrupt is cleared when the user explicitly resumes auto-scroll
+ * (by sending a message, clicking the "jump to latest" pill, or scrolling
+ * back to the bottom). Subsequent answers arriving automatically without
+ * user action (such as Auto Answer) do not lift suppression, preserving
+ * the reader's scroll position and keeping the jump-to-latest pill visible.
+ *
  * @param {string | null} suppressedId
- * @param {string | null} streamingId
+ * @param {string | null} [_streamingId]
  */
-export function isAutoScrollSuppressed(suppressedId, streamingId) {
-  return suppressedId !== null && (streamingId === null || streamingId === suppressedId);
+export function isAutoScrollSuppressed(suppressedId, _streamingId) {
+  return suppressedId !== null;
 }
 
 /**

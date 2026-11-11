@@ -39,13 +39,13 @@ describe('isAutoScrollSuppressed', () => {
     assert.equal(isAutoScrollSuppressed('a', null), true);
   });
 
-  test('a NEW stream lifts suppression', () => {
-    assert.equal(isAutoScrollSuppressed('a', 'b'), false);
+  test('a NEW stream (e.g. auto-answer) does not lift suppression without user interaction', () => {
+    assert.equal(isAutoScrollSuppressed('a', 'b'), true);
   });
 
-  test('an idle arm holds through non-streaming updates and lifts on the next stream', () => {
+  test('an idle arm holds through non-streaming updates and subsequent streams until resumed', () => {
     assert.equal(isAutoScrollSuppressed(IDLE_SUPPRESSION, null), true);
-    assert.equal(isAutoScrollSuppressed(IDLE_SUPPRESSION, 'first-stream'), false);
+    assert.equal(isAutoScrollSuppressed(IDLE_SUPPRESSION, 'first-stream'), true);
   });
 });
 
