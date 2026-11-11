@@ -208,8 +208,10 @@ function validateNativeModule(mod: any): asserts mod is NativeModule {
  * These filenames are produced by \`npx napi build\` in native-module/.
  * Naming convention: index.<platform>-<arch>-<abi>.node
  */
-function getNativeBinaryName(): string {
-    const { platform, arch } = process;
+export function getNativeBinaryName(
+    platform: NodeJS.Platform = process.platform,
+    arch: string = process.arch
+): string {
     const map: Record<string, Record<string, string>> = {
         win32:  {
             x64:   'index.win32-x64-msvc.node',
@@ -217,7 +219,11 @@ function getNativeBinaryName(): string {
             arm64: 'index.win32-arm64-msvc.node',
         },
         darwin: { x64: 'index.darwin-x64.node', arm64: 'index.darwin-arm64.node' },
-        linux:  { x64: 'index.linux-x64-gnu.node', arm64: 'index.linux-arm64-gnu.node' },
+        linux:  {
+            x64:   'index.linux-x64-gnu.node',
+            arm64: 'index.linux-arm64-gnu.node',
+            arm:   'index.linux-arm-gnueabihf.node',
+        },
     };
     return map[platform]?.[arch] ?? `index.${platform}-${arch}.node`;
 }
