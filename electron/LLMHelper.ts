@@ -212,6 +212,16 @@ const CLAUDE_MODEL = "claude-sonnet-4-6"
 // judge budget for the ladder beneath. The variance here is real and the deeper
 // lever is prompt size: JUDGE_PROMPT_RULES alone is 7420 chars of the ~12.2k
 // total, so trimming the boilerplate would buy more than any timeout tuning.
+/**
+ * A non-streaming Natively answer that may be long (chatWithGemini: the
+ * follow-up email, the suggestion path). The server lets a JSON DeepSeek
+ * answer run up to 30 s (natively-api DEEPSEEK_JSON_CAP_MS) so a long one is
+ * not thrown away; generateWithNatively's 8 s default hung up first. Live,
+ * 10-12 Nov: 180 requests in 50 h cancelled at 7.8-7.9 s while DeepSeek was
+ * still writing (body read aborted), paid for and lost; a Natively-only user
+ * has no other provider for chatWithGemini to fall back to.
+ */
+export const NATIVELY_LONG_TEXT_TIMEOUT_MS = 30_000
 const FAST_MODEL_JUDGE_RUNG_TIMEOUT_MS = 1800
 /** OpenRouter's judge model: the small tier Natively's decision route also runs. */
 export const OPENROUTER_JUDGE_MODEL = 'openrouter/google/gemini-3.1-flash-lite'
@@ -5321,7 +5331,7 @@ let isMultimodal = !!(imagePaths?.length);
         const nativelyKey = CredentialsManager.getInstance().getNativelyApiKey();
         if (nativelyKey) {
           try {
-            return await this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudImagePaths);
+            return await this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudImagePaths, { timeoutMs: NATIVELY_LONG_TEXT_TIMEOUT_MS });
           } catch (err: any) {
             console.warn('[LLMHelper] Natively API failed in chatWithGemini, falling back to Gemini:', err.message);
             // Fall through to smart dynamic fallback below
@@ -5437,7 +5447,7 @@ let isMultimodal = !!(imagePaths?.length);
         if (routedProvider.status !== 'available') continue;
         switch (routedProvider.provider) {
           case 'natively':
-            providers.push({ name: routedProvider.name, execute: () => this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined) });
+            providers.push({ name: routedProvider.name, execute: () => this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined, { timeoutMs: NATIVELY_LONG_TEXT_TIMEOUT_MS }) });
             break;
           case 'groq':
             if (cloudIsMultimodal) {
@@ -15909,20 +15919,23 @@ let isMultimodal = !!(imagePaths?.length);
     }
 
     // ATTEMPT 1: Natively API (if configured — first in chain)
-    // Inner fetch timeout: caller's timeoutMs, default 8s (AbortSignal.timeout in
-    // generateWithNatively). Outer safety net: timeoutMs + 5s (default 10s when the
-    // caller passes no opts, so uninvolved callers are unaffected) — the extra slack
-    // covers JSON parsing and any overhead after the fetch resolves, mirroring the
-    // headroom generateWithNatively's own OVERALL_DEADLINE_MS gives the body read.
+    // Inner fetch timeout: caller's timeoutMs, default NATIVELY_LONG_TEXT_TIMEOUT_MS.
+    // Outer safety net: timeoutMs + 5s — the extra slack covers JSON parsing and
+    // any overhead after the fetch resolves, mirroring the headroom
+    // generateWithNatively's own OVERALL_DEADLINE_MS gives the body read. The
+    // default was generateWithNatively's 8 s, which hung up on a long summary the
+    // server was still writing (it allows a JSON DeepSeek answer 30 s); only this
+    // rung's default changes, the other rungs keep theirs.
     if (this.hasNatively()) {
       try {
         console.log(`[LLMHelper] Attempting Natively API for summary...`);
+        const nativelySummaryTimeoutMs = opts?.timeoutMs || NATIVELY_LONG_TEXT_TIMEOUT_MS;
         const text = await this.withTimeout(
           this.generateWithNatively(`Context:\n${context}`, systemPrompt, undefined, {
             ...(opts?.purpose ? { purpose: opts.purpose } : {}),
-            ...(opts?.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
+            timeoutMs: nativelySummaryTimeoutMs,
           }),
-          opts?.timeoutMs ? opts.timeoutMs + 5000 : 10000,
+          nativelySummaryTimeoutMs + 5000,
           'Natively Summary'
         );
         if (text.trim().length > 0) {
