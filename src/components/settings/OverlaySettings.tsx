@@ -17,7 +17,7 @@
 // and buttons slide to their new places with a FLIP transform.
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { AppWindow, ChevronDown, Layout, Monitor, NotebookPen, RotateCcw } from 'lucide-react';
+import { AppWindow, Camera, ChevronDown, Layout, Monitor, NotebookPen, RotateCcw } from 'lucide-react';
 import NotesWindow, { type NotesWindowPreview } from '../NotesWindow';
 import { NOTEPAD_DEMO_PEOPLE, NOTEPAD_DEMO_TEMPLATE, NOTEPAD_DEMO_THEM, NOTEPAD_DEMO_TITLE } from '../notes/notepadDemo';
 import { useT } from '../../i18n';
@@ -39,7 +39,8 @@ import { useOverlayCustomButtons } from '../../lib/overlayCustomButtons';
 import { overlayButtonFace } from '../overlay/overlayButtons';
 import { CustomButtonsSection } from './OverlayCustomButtons';
 import { OverlayChipContent, OverlayMockup, overlayChipClass, useOverlayAppearance } from './OverlayMockup';
-import { Presence, SETTINGS_CARD, SettingsMenu, SettingsRow, SettingsSectionHeading } from './SettingsRow';
+import { Presence, SETTINGS_CARD, SETTINGS_INPUT, SettingsMenu, SettingsRow, SettingsSectionHeading } from './SettingsRow';
+import { useScreenshotPresetPrompt, DEFAULT_SCREENSHOT_PROMPT } from '../../lib/screenshotPrompt';
 
 /** The overlay card's width (OverlayMockup's w-[600px]); the preview scales it down to the page. */
 const MOCKUP_WIDTH = 600;
@@ -508,6 +509,47 @@ const NotepadPreview: React.FC = () => (
     </div>
 );
 
+/**
+ * Custom preset prompt used when capturing a screenshot and asking AI
+ * (Cmd+Shift+Enter or What to Say with an attached screenshot).
+ */
+const ScreenshotPresetPromptRow: React.FC = () => {
+    const t = useT();
+    const [prompt, setPrompt] = useScreenshotPresetPrompt();
+
+    return (
+        <div className={SETTINGS_CARD}>
+            <SettingsRow
+                icon={<Camera size={20} />}
+                title={t('Preset screenshot prompt')}
+                description={t('Custom prompt used when analyzing screenshots (Cmd+Shift+Enter or What to Say with an image). Leave blank for default.')}
+            >
+                <div className="pt-1 pb-3">
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="text"
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            placeholder={DEFAULT_SCREENSHOT_PROMPT}
+                            className={SETTINGS_INPUT}
+                            maxLength={500}
+                        />
+                        {Boolean(prompt) && (
+                            <button
+                                type="button"
+                                onClick={() => setPrompt('')}
+                                className="text-xs text-text-secondary hover:text-text-primary px-2 py-1 shrink-0 transition-colors"
+                            >
+                                {t('Reset')}
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </SettingsRow>
+        </div>
+    );
+};
+
 type ScreenshotDisplay = { id: number; number: number; name: string; width: number; height: number; primary: boolean };
 
 /**
@@ -647,6 +689,7 @@ export const OverlaySettings: React.FC<{
                     />
                     <NotepadPreview />
                 </section>
+                <ScreenshotPresetPromptRow />
                 <ScreenshotScreenRow />
             </div>
         );
@@ -689,6 +732,8 @@ export const OverlaySettings: React.FC<{
             </div>
 
             {opacityControl}
+
+            <ScreenshotPresetPromptRow />
 
             <ScreenshotScreenRow />
         </div>
