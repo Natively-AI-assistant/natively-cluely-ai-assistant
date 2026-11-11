@@ -50,22 +50,43 @@ if (typeof window !== 'undefined') {
   });
 }
 
+/**
+ * The saved prompt, trimmed, read from storage at call time. The Settings
+ * panel is in the launcher window and the question is sent from the overlay,
+ * and the `storage` event does not reliably cross BrowserWindows (see
+ * genieAnimationSetting.ts), so a send reads storage rather than this
+ * window's copy. Storage unavailable: this window's copy.
+ */
 export function getScreenshotPresetPrompt(): string {
+  try {
+    if (typeof localStorage === 'undefined') return current.trim();
+    const val = localStorage.getItem(SCREENSHOT_PRESET_PROMPT_KEY);
+    return typeof val === 'string' ? val.trim().slice(0, SCREENSHOT_PRESET_PROMPT_MAX) : '';
+  } catch {
+    return current.trim();
+  }
+}
+
+/** The field's text as typed (spaces kept), for the Settings input. */
+export function getScreenshotPresetPromptDraft(): string {
   return current;
 }
 
 export function resolveScreenshotPromptText(customPrompt?: string | null): string {
   const trimmed = typeof customPrompt === 'string' ? customPrompt.trim() : '';
-  return trimmed || current || DEFAULT_SCREENSHOT_PROMPT;
+  return trimmed || getScreenshotPresetPrompt() || DEFAULT_SCREENSHOT_PROMPT;
 }
 
 export function resolveScreenshotInstruction(customPrompt?: string | null): string {
   const trimmed = typeof customPrompt === 'string' ? customPrompt.trim() : '';
-  return trimmed || current || DEFAULT_SCREENSHOT_INSTRUCTION;
+  return trimmed || getScreenshotPresetPrompt() || DEFAULT_SCREENSHOT_INSTRUCTION;
 }
 
 export function setScreenshotPresetPrompt(prompt: string): void {
-  const next = typeof prompt === 'string' ? prompt.trim().slice(0, SCREENSHOT_PRESET_PROMPT_MAX) : '';
+  // Not trimmed: this runs on every keystroke, and trimming would eat the
+  // space typed between two words. Readers trim; whitespace alone clears it.
+  const raw = typeof prompt === 'string' ? prompt.slice(0, SCREENSHOT_PRESET_PROMPT_MAX) : '';
+  const next = raw.trim() ? raw : '';
   try {
     if (typeof localStorage !== 'undefined') {
       if (next) {
@@ -90,8 +111,8 @@ export function subscribeScreenshotPresetPrompt(onChange: () => void): () => voi
 export function useScreenshotPresetPrompt(): [string, (next: string) => void] {
   const prompt = useSyncExternalStore(
     subscribeScreenshotPresetPrompt,
-    getScreenshotPresetPrompt,
-    () => current
+    getScreenshotPresetPromptDraft,
+    getScreenshotPresetPromptDraft
   );
   return [prompt, setScreenshotPresetPrompt];
 }
