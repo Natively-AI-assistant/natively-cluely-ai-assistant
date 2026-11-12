@@ -8878,12 +8878,13 @@ html[data-platform="linux"][data-window="launcher"] body {
    and a soft light ring replaces the coloured one. Removing the indicator
    outright is not an option — this is a text field, and keyboard users need to
    see where focus landed. */
+/* Focus: the edge brightens, nothing outside it (no grey halo), same as the
+   "Lost your key?" pill above it. */
 .natively-key-input:focus {
   outline: none !important;
   border-color: rgba(255, 255, 255, 0.30) !important;
   box-shadow:
-    inset 0 2px 5px rgba(0, 0, 0, 0.50),
-    0 0 0 2px rgba(255, 255, 255, 0.10) !important;
+    inset 0 2px 5px rgba(0, 0, 0, 0.50) !important;
 }
 
 [data-theme='light'] .natively-key-input {
@@ -8897,8 +8898,7 @@ html[data-platform="linux"][data-window="launcher"] body {
 [data-theme='light'] .natively-key-input:focus {
   border-color: rgba(0, 0, 0, 0.34) !important;
   box-shadow:
-    inset 0 2px 4px rgba(0, 0, 0, 0.06),
-    0 0 0 2px rgba(0, 0, 0, 0.09) !important;
+    inset 0 2px 4px rgba(0, 0, 0, 0.06) !important;
 }
 
 /* Last, and at (0,3,0): the per-theme rules above use the `border` shorthand,
