@@ -1,6 +1,6 @@
 // src/i18n.keyResend.ts
 //
-// What "Bought a key but no email?" says under the activation card in Plans &
+// What "Lost your key?" says inside the activation card in Plans &
 // Billing (src/components/settings/KeyResendHelp.tsx). English source →
 // [ru, zh, ja, es], one row per sentence, so a language can never miss a row
 // the others have. Same shape as src/i18n.trial.ts.
@@ -15,17 +15,11 @@
 type Row = readonly [ru: string, zh: string, ja: string, es: string];
 
 const ROWS: Record<string, Row> = {
-  'Bought a key but no email? Check Spam and Promotions, or': [
-    'Купили ключ, но письма нет? Проверьте «Спам» и «Промоакции» или',
-    '买了密钥却没收到邮件？请查看“垃圾邮件”和“推广”，或',
-    'キーを購入したのにメールが届かない場合は、「迷惑メール」と「プロモーション」を確認するか、',
-    '¿Compraste una clave y no te llegó el correo? Revisa Spam y Promociones, o',
-  ],
-  'email it again': [
-    'отправьте его ещё раз',
-    '重新发送',
-    'もう一度メールで送る',
-    'envíala de nuevo',
+  'Lost your key?': [
+    'Потеряли ключ?',
+    '找不到密钥？',
+    'キーが見つかりませんか？',
+    '¿Perdiste tu clave?',
   ],
   'Email you paid with': [
     'Email, с которого вы платили',

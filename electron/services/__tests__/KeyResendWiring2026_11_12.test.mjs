@@ -32,8 +32,17 @@ test('preload exposes it and the renderer type matches', () => {
   assert.match(TYPES, /resendNativelyKey: \(email: string\) => Promise<\{ ok: boolean; message\?: string; error\?: string \}>/);
 });
 
-test('Plans & Billing shows the help only while no key is saved', () => {
-  assert.match(SETTINGS, /\{!isSaved && <KeyResendHelp \/>\}/);
+test('Plans & Billing shows the help only while no key is saved, and only when asked', () => {
+  // "Lost your key?" sits in the card's heading row, the pill right under it and
+  // above the key field, both gated; the Terms line no longer carries it.
+  const heading = SETTINGS.indexOf('Activate with a Natively API key or a Natively Pro license.');
+  const link = SETTINGS.search(/\{!isSaved && \(\s*<KeyResendLink ref=\{resendLinkRef\} open=\{resendOpen\}/);
+  const pill = SETTINGS.search(/\{!isSaved && \(\s*<KeyResendHelp\s+open=\{resendOpen\}/);
+  const field = SETTINGS.indexOf('className="natively-key-input', heading);
+  assert.ok(heading > 0 && link > heading && pill > link && field > pill, 'heading, link, pill, key field, in that order');
+  const terms = SETTINGS.slice(SETTINGS.indexOf('By activating, you agree'), SETTINGS.indexOf('By activating, you agree') + 600);
+  assert.doesNotMatch(terms, /KeyResend/);
+  assert.match(SETTINGS, /const \[resendOpen, setResendOpen\] = useState\(false\)/, 'hidden until asked for');
   assert.match(HELP, /window\.electronAPI\?\.resendNativelyKey\?\.\(address\)/);
   // Same message whether or not a key exists: the UI must not claim one was found.
   const shown = [...HELP.matchAll(/\bt\((['"])(.*?)\1\)/g)].map((m) => m[2]);

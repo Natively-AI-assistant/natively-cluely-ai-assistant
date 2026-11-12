@@ -27,7 +27,7 @@ import { Presence, SettingsMotionReady, SwapLabel } from './SettingsRow';
 import { isTrialClaimedLocally, markTrialClaimedLocally } from '../../lib/trialCampaign.mjs';
 import { trialRefusal } from '../../lib/trial/trialStart.mjs';
 import { CHECKOUT_URLS } from '../../config/urls';
-import { KeyResendHelp } from './KeyResendHelp';
+import { KeyResendHelp, KeyResendLink } from './KeyResendHelp';
 import { BillingCycleSwitch, PLANS_VIEWS, type PlansView } from '../ui/BillingCycleSwitch';
 import './apiTier.css';
 import { plansVisit } from '../../lib/funnel/plansVisit.mjs';
@@ -1073,6 +1073,9 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   const cachedKeyKnown = !!usageCache;
   const [apiKey, setApiKey] = useState(() => (initialIsSaved || cachedKeyKnown ? MASKED_NATIVELY_KEY : ''));
   const [isSaved, setIsSaved] = useState(initialIsSaved || cachedKeyKnown);
+  // "Lost your key?" (KeyResendHelp): hidden until asked for.
+  const [resendOpen, setResendOpen] = useState(false);
+  const resendLinkRef = useRef<HTMLButtonElement>(null);
   const [isLoading, setIsLoading] = useState(!(initialIsSaved || cachedKeyKnown));
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2109,9 +2112,30 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                 placeholder alone was carrying that, and a placeholder
                 disappears the moment you type. It is also the card's heading now
                 that the "Natively key" label is gone. */}
-            <p className="natively-key-sub text-[12px] leading-snug">
-              Activate with a Natively API key or a Natively Pro license.
-            </p>
+            {/* The heading row, with "Lost your key?" at its right (only while
+                no key is saved: once one is, there is nothing to recover), and
+                the pill it reveals right under it, above the field the key goes
+                into. One block, so the card's 12px rhythm does not jump when the
+                pill mounts: the pill brings its own gap and animates it. */}
+            <div>
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="natively-key-sub min-w-0 text-[12px] leading-snug">
+                  Activate with a Natively API key or a Natively Pro license.
+                </p>
+                {!isSaved && (
+                  <KeyResendLink ref={resendLinkRef} open={resendOpen} onToggle={() => setResendOpen((o) => !o)} />
+                )}
+              </div>
+              {!isSaved && (
+                <KeyResendHelp
+                  open={resendOpen}
+                  onClose={(fromKeyboard) => {
+                    setResendOpen(false);
+                    if (fromKeyboard) resendLinkRef.current?.focus();
+                  }}
+                />
+              )}
+            </div>
 
             {/* The input is the subject of this card. It's now a pressed-in
                 well rather than a hairline box — same inset vocabulary as the
@@ -2220,10 +2244,6 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             </button>
           </div>
         </Card>
-
-        {/* Key email missing (Spam/Promotions, or lost): send it again. Only
-            while no key is saved: once one is, there is nothing to recover. */}
-        {!isSaved && <KeyResendHelp />}
 
         {/* T&C footnote under the card. The "Don't have a key? Subscribe to get
             one" prompt that used to lead this line is gone — the plan chooser

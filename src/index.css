@@ -9196,10 +9196,9 @@ html[data-platform="linux"][data-window="launcher"] body {
 /* ── 3b. "Bought a key but no email?": the resend pill ──────────────────
    One capsule under the card (src/components/settings/KeyResendHelp.tsx),
    built only from materials this tab already has:
-     rest / sent  a quiet glass chip: .lg-chip's edge in the Activate
-                  periwinkle on a faint fill, so it reads as a label that can
-                  be pressed, not as a second card
-     open         the same capsule as a recessed WELL, the key field's own
+     sent         a quiet glass chip: .lg-chip's edge in the Activate
+                  periwinkle on a faint fill
+     open         the capsule as a recessed WELL, the key field's own
                   recipe (.natively-key-input), holding the address and a
                   round .natively-key-cta send button
    A label is a chip and a field is a well, here and everywhere on this tab.
@@ -9212,18 +9211,18 @@ html[data-platform="linux"][data-window="launcher"] body {
 [data-theme='light'] .natively-key-resend { background: rgba(0, 0, 0, 0.028); }
 
 .natively-key-resend[data-state='open'] {
-  width: 360px;
+  width: 100%;
   background: linear-gradient(180deg, #161618 0%, #1C1C1F 100%);
   box-shadow:
     inset 0 0 0 1px rgba(0, 0, 0, 0.55),
     inset 0 2px 5px rgba(0, 0, 0, 0.50),
     inset 0 -1px 0 rgba(255, 255, 255, 0.05);
 }
+/* Focus: the edge brightens, nothing outside it (no grey halo). */
 .natively-key-resend[data-state='open']:focus-within {
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.30),
-    inset 0 2px 5px rgba(0, 0, 0, 0.50),
-    0 0 0 2px rgba(255, 255, 255, 0.10);
+    inset 0 2px 5px rgba(0, 0, 0, 0.50);
 }
 [data-theme='light'] .natively-key-resend[data-state='open'] {
   background: linear-gradient(180deg, #EFEFF1 0%, #FDFDFD 100%);
@@ -9235,11 +9234,10 @@ html[data-platform="linux"][data-window="launcher"] body {
 [data-theme='light'] .natively-key-resend[data-state='open']:focus-within {
   box-shadow:
     inset 0 0 0 1px rgba(0, 0, 0, 0.34),
-    inset 0 2px 4px rgba(0, 0, 0, 0.06),
-    0 0 0 2px rgba(0, 0, 0, 0.09);
+    inset 0 2px 4px rgba(0, 0, 0, 0.06);
 }
 
-/* rest / sent: one line of 11px copy, 6px × 14px inside the capsule. */
+/* sent: one line of 11px copy, 6px × 14px inside the capsule. */
 .natively-key-resend-line {
   display: flex;
   align-items: center;
@@ -9254,22 +9252,33 @@ html[data-platform="linux"][data-window="launcher"] body {
 }
 .natively-key-resend-icon { flex-shrink: 0; color: var(--text-tertiary); opacity: 0.85; }
 
-/* The action is the accent's ink, not a link underline: the chip already says
-   "this can be pressed", so the word only has to say where. */
-.natively-key-resend-action {
-  color: #A3AAF5;
-  font-weight: 500;
-  border-radius: 4px;
+/* The trigger: grey 12px text at the right of the card's heading row, the
+   heading's own size, one step quieter. No underline: it sits in a heading
+   row, not in a sentence. Brightens on hover; holds the secondary ink while the
+   pill is open, as a pressed state. A 4px × 2px pad (cancelled by margin)
+   gives the click and the focus ring some room. */
+.natively-key-resend-link {
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  font-size: 12px;
+  line-height: 1.375;
+  color: var(--text-tertiary);
+  border-radius: 6px;
+  cursor: pointer;
   transition: color 150ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-[data-theme='light'] .natively-key-resend-action { color: #454FB8; }
+.natively-key-resend-link[aria-expanded='true'] { color: var(--text-secondary); }
 @media (hover: hover) and (pointer: fine) {
-  .natively-key-resend-action:hover { color: #C4C9FA; }
-  [data-theme='light'] .natively-key-resend-action:hover { color: #2F3894; }
+  .natively-key-resend-link:hover { color: var(--text-primary); }
 }
-.natively-key-resend-action:focus-visible {
+.natively-key-resend-link:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px rgba(163, 170, 245, 0.45);
+}
+@media (prefers-reduced-motion: reduce) {
+  .natively-key-resend-link { transition: none; }
 }
 
 /* Sent: a small emerald disc, the Activate button's `done` green. */
@@ -9289,8 +9298,8 @@ html[data-platform="linux"][data-window="launcher"] body {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 34px;
-  padding: 0 4px 0 10px;
+  height: 36px;
+  padding: 0 5px 0 12px;
 }
 .natively-key-resend-input {
   flex: 1;
@@ -9333,7 +9342,6 @@ html[data-platform="linux"][data-window="launcher"] body {
 
 @media (prefers-contrast: more) {
   .natively-key-resend { box-shadow: inset 0 0 0 1px currentColor; }
-  .natively-key-resend-action { text-decoration: underline; text-underline-offset: 3px; }
 }
 
 /* ── 4. Supporting copy ───────────────────────────────────────────────────
