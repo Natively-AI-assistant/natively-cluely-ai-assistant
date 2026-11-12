@@ -35,12 +35,13 @@ const ROWS: Record<string, Row> = {
   ],
   'Send': ['Отправить', '发送', '送信', 'Enviar'],
   'Sending…': ['Отправка…', '正在发送…', '送信中…', 'Enviando…'],
-  "If that email has a Natively API key, we've sent it again. It can take a minute; check Spam and Promotions too.": [
-    'Если на этот email оформлен ключ Natively API, мы отправили его ещё раз. Письмо может прийти через минуту; проверьте также «Спам» и «Промоакции».',
-    '如果该邮箱有 Natively API 密钥，我们已重新发送。可能需要一分钟；也请查看“垃圾邮件”和“推广”。',
-    'このメールアドレスに Natively API キーがある場合は、もう一度送信しました。届くまで 1 分ほどかかることがあります。「迷惑メール」と「プロモーション」も確認してください。',
-    'Si ese correo tiene una clave de Natively API, te la hemos enviado de nuevo. Puede tardar un minuto; revisa también Spam y Promociones.',
+  "If that email has a Natively API key, it's on its way. Check Spam and Promotions too.": [
+    'Если на этот email оформлен ключ Natively API, письмо уже в пути. Проверьте также «Спам» и «Промоакции».',
+    '如果该邮箱有 Natively API 密钥，邮件已在路上。也请查看“垃圾邮件”和“推广”。',
+    'このメールアドレスに Natively API キーがあれば、メールを送信しました。「迷惑メール」と「プロモーション」も確認してください。',
+    'Si ese correo tiene una clave de Natively API, ya va en camino. Revisa también Spam y Promociones.',
   ],
+  'Cancel': ['Отмена', '取消', 'キャンセル', 'Cancelar'],
   'Too many tries. Please try again in an hour.': [
     'Слишком много попыток. Попробуйте через час.',
     '尝试次数过多。请一小时后再试。',
