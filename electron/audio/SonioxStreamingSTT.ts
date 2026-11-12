@@ -27,6 +27,18 @@ import { RealtimeSilenceTail } from './realtimeSilenceTail';
 import { nextVoiceEpoch, runsByVoice } from './sttDiarization';
 
 const SONIOX_WEBSOCKET_URL = 'wss://stt-rt.soniox.com/transcribe-websocket';
+
+/**
+ * The key goes in the WebSocket upgrade's Authorization header, never in the
+ * config frame: Soniox deprecated api_key there and refuses connections that
+ * send it only there from 2027-01-15 (a config key that differs from the
+ * header key is a 400). Measured 2026-11-12: same handshake time, and a bad
+ * key still upgrades and then fails in-band with 401 unauthenticated, so the
+ * error handling below is unchanged.
+ */
+export function sonioxAuthHeaders(apiKey: string): Record<string, string> {
+    return { Authorization: `Bearer ${apiKey}` };
+}
 const RECONNECT_BASE_DELAY_MS = 1000;
 const RECONNECT_MAX_DELAY_MS = 30000;
 // Cap reconnect attempts so a flapping network can't drive a tight WS
@@ -255,8 +267,8 @@ export class SonioxStreamingSTT extends EventEmitter {
      *     to lose.
      */
     private buildConfigFrame(): Record<string, unknown> {
+        // No api_key: the key is in the upgrade header (sonioxAuthHeaders).
         const config: Record<string, unknown> = {
-            api_key: this.apiKey,
             model: SONIOX_RT_MODEL,
             audio_format: 'pcm_s16le',
             sample_rate: this.sampleRate,
@@ -446,7 +458,7 @@ export class SonioxStreamingSTT extends EventEmitter {
         // streamingStttWsOptions: forces IPv4-only DNS lookup (sidesteps Node's
         // macOS dual-stack ENOTFOUND on IPv4-only CNAME chains) and caps the
         // TLS+upgrade handshake at 15s. See dnsHelpers.ts.
-        this.ws = new WebSocket(SONIOX_WEBSOCKET_URL, streamingStttWsOptions() as any);
+        this.ws = new WebSocket(SONIOX_WEBSOCKET_URL, streamingStttWsOptions({ headers: sonioxAuthHeaders(this.apiKey) }) as any);
 
         // F-203: identity guard. stop() does not detach listeners and
         // scheduleRestart()/setSampleRate()/setRecognitionLanguage() do a

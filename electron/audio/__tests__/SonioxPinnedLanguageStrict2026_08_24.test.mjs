@@ -78,7 +78,7 @@ describe('SonioxStreamingSTT config frame — pinned language must actually pin'
   test('the rest of the frame is unchanged in both modes', () => {
     for (const code of ['es', undefined]) {
       const cfg = frameFor(code);
-      assert.equal(cfg.api_key, 'test-key');
+      assert.equal('api_key' in cfg, false, 'the key is in the upgrade header (refused in the config from 2027-01-15)');
       assert.equal(cfg.model, 'stt-rt-v6');
       assert.equal(cfg.audio_format, 'pcm_s16le');
       assert.equal(cfg.sample_rate, 16000);

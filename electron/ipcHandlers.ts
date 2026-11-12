@@ -14607,7 +14607,10 @@ export function initializeIpcHandlers(appState: AppState): void {
               resolve(result);
             };
 
-            const ws = new WebSocket('wss://stt-rt.soniox.com/transcribe-websocket');
+            // Key in the upgrade header, not the config frame (refused there from 2027-01-15).
+            const ws = new WebSocket('wss://stt-rt.soniox.com/transcribe-websocket', {
+              headers: { Authorization: `Bearer ${apiKey}` },
+            });
 
             // Hard connect timeout — server unreachable
             const connectTimeout = setTimeout(() => {
@@ -14618,7 +14621,6 @@ export function initializeIpcHandlers(appState: AppState): void {
               clearTimeout(connectTimeout);
               ws.send(
                 JSON.stringify({
-                  api_key: apiKey,
                   model: require('./audio/sttModelCatalog').SONIOX_RT_MODEL,
                   audio_format: 'pcm_s16le',
                   sample_rate: 16000,
