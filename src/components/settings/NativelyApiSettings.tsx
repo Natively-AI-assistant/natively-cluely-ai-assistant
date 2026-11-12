@@ -27,6 +27,7 @@ import { Presence, SettingsMotionReady, SwapLabel } from './SettingsRow';
 import { isTrialClaimedLocally, markTrialClaimedLocally } from '../../lib/trialCampaign.mjs';
 import { trialRefusal } from '../../lib/trial/trialStart.mjs';
 import { CHECKOUT_URLS } from '../../config/urls';
+import { KeyResendHelp } from './KeyResendHelp';
 import { BillingCycleSwitch, PLANS_VIEWS, type PlansView } from '../ui/BillingCycleSwitch';
 import './apiTier.css';
 import { plansVisit } from '../../lib/funnel/plansVisit.mjs';
@@ -2219,6 +2220,10 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
             </button>
           </div>
         </Card>
+
+        {/* Key email missing (Spam/Promotions, or lost): send it again. Only
+            while no key is saved: once one is, there is nothing to recover. */}
+        {!isSaved && <KeyResendHelp />}
 
         {/* T&C footnote under the card. The "Don't have a key? Subscribe to get
             one" prompt that used to lead this line is gone — the plan chooser

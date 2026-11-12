@@ -285,6 +285,7 @@ interface ElectronAPI {
   /** The plan catalog — allowances and prices, straight from the server, so the
    *  plan table never carries its own copy of numbers the server enforces. */
   getNativelyPlans: () => Promise<NativelyPlansResponse>;
+  resendNativelyKey: (email: string) => Promise<{ ok: boolean; message?: string; error?: string }>;
   getStoredCredentials: () => Promise<{
     /** Any AI route of the user's own (trialPolicy.hasOwnAiKey: custom and cURL providers count). */
     hasOwnAiKey?: boolean;
@@ -1997,6 +1998,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }) => ipcRenderer.invoke('review:update-testimonial', payload),
   getNativelyUsage: (force?: boolean) => ipcRenderer.invoke('get-natively-usage', force ? { force: true } : undefined),
   getNativelyPlans: () => ipcRenderer.invoke('get-natively-plans'),
+  resendNativelyKey: (email: string) => ipcRenderer.invoke('resend-natively-key', email),
   getStoredCredentials: () => ipcRenderer.invoke('get-stored-credentials'),
   // R-10 resolution flow: ambiguous credential stores (names + last-4 only).
   getAmbiguousCredentialStores: () => ipcRenderer.invoke('credentials:get-ambiguous-stores'),

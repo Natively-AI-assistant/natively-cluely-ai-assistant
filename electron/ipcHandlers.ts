@@ -12772,6 +12772,29 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // "Didn't get your key? Email it again" (Plans & Billing). The server sends
+  // the key to the address on file and never returns it, answering the same
+  // whether or not a key exists; it allows 5 tries per network per hour. No key
+  // required: the person asking is exactly the one who has no key yet.
+  safeHandle('resend-natively-key', async (_event, email: unknown) => {
+    const address = typeof email === 'string' ? email.trim() : '';
+    if (!address || address.length > 254 || !address.includes('@')) return { ok: false, error: 'invalid_email' };
+    try {
+      const res = await fetch(`${NATIVELY_API_BASE}/keys/resend`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: address }),
+        signal: AbortSignal.timeout(10000),
+      });
+      const body = (await res.json().catch(() => ({}))) as any;
+      if (res.status === 429) return { ok: false, error: 'rate_limited' };
+      if (!res.ok) return { ok: false, error: body?.error || 'request_failed' };
+      return { ok: true, message: typeof body?.message === 'string' ? body.message : undefined };
+    } catch (error: any) {
+      return { ok: false, error: 'network_error' };
+    }
+  });
+
   safeHandle('get-natively-usage', async (_event, opts?: { force?: boolean }) => {
     // Hoisted out of try so the catch block's stale-cache lookup can reach it.
     let key: string | undefined;
