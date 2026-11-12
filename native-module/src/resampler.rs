@@ -100,9 +100,9 @@ mod tests {
         let k = (target / rate) * n as f64;
         let w = 2.0 * PI * k / n as f64;
         let coeff = 2.0 * w.cos();
-        let (mut s0, mut s1, mut s2) = (0.0_f64, 0.0_f64, 0.0_f64);
+        let (mut s1, mut s2) = (0.0_f64, 0.0_f64);
         for &x in samples {
-            s0 = (x as f64 / 32768.0) + coeff * s1 - s2;
+            let s0 = (x as f64 / 32768.0) + coeff * s1 - s2;
             s2 = s1;
             s1 = s0;
         }

@@ -55,7 +55,7 @@ fn normalize_device_name(s: &str) -> String {
         // Strip the WASAPI "(N- " or "(NN- " index prefix that cpal sometimes
         // includes. The trailing close-paren is left in the suffix to compare.
         .trim_start_matches(|c: char| c == '(' || c.is_ascii_digit() || c == '-' || c == ' ')
-        .trim_end_matches(|c: char| c == ')' || c == ' ');
+        .trim_end_matches([')', ' ']);
     // Replace common unicode dashes with ASCII hyphen so en-dash / em-dash / minus
     // all collapse to the same character.
     stripped
@@ -204,8 +204,7 @@ fn pick_supported_config(device: &cpal::Device) -> Result<cpal::SupportedStreamC
                 .0
                 .min(48_000)
                 .max(range.min_sample_rate().0);
-            let cfg = range
-                .clone()
+            let cfg = (*range)
                 .with_sample_rate(cpal::SampleRate(target_rate));
             println!(
                 "[Microphone] Negotiated fallback config: {}Hz, {}ch, {:?}",

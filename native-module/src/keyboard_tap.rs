@@ -249,6 +249,7 @@ pub struct CapturedKey {
 ///     a non-null pointer hands it back; returning null deletes it.
 ///   - We never block in this callback (no synchronous JS calls); the tsfn
 ///     queues onto the V8 thread and returns immediately.
+///
 /// Marked `unsafe extern "C"` because:
 ///   - The C runtime invokes us through a function pointer with the
 ///     `extern "C"` calling convention; `unsafe` documents that we trust
