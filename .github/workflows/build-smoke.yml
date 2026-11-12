@@ -253,26 +253,6 @@ jobs:
         if: runner.os == 'Windows'
         run: npm run build:native
 
-      # The Rust unit tests in native-module (capture-thread restart #729,
-      # resampler, silence suppression, channel state, ...) previously ran only
-      # when someone typed `cargo test` on a Mac. The capture-thread contract is
-      # shared by the macOS (SCK / CoreAudio tap) and Windows (WASAPI)
-      # pipelines, so both legs run them. The second pass compiles the dev-only
-      # fault-injection branch, which nothing else builds.
-      #
-      # Windows is ADVISORY until this step has gone green there once: the
-      # test binary's napi linking has only been exercised on macOS. Flip
-      # continue-on-error off after the first passing Windows run.
-      - name: Native module unit tests
-        continue-on-error: ${{ runner.os == 'Windows' }}
-        working-directory: native-module
-        # bash (-e) on both legs: pwsh only fails the step on the LAST
-        # command's exit code, so a failing first pass would go unnoticed.
-        shell: bash
-        run: |
-          cargo test --lib
-          cargo test --lib --features fault-injection
-
       - name: Package app (Windows, unpacked, unsigned)
         if: runner.os == 'Windows'
         run: node scripts/package-app.js --win dir --x64
@@ -412,6 +392,30 @@ jobs:
       - name: Run build-script unit tests
         if: ${{ !cancelled() && steps.smoke_scope.outputs.mode != 'invalid' }}
         run: npm run test:scripts
+
+      # The Rust unit tests in native-module (capture-thread restart #729,
+      # resampler, silence suppression, channel state, ...) previously ran only
+      # when someone typed `cargo test` on a Mac. The capture-thread contract is
+      # shared by the macOS (SCK / CoreAudio tap) and Windows (WASAPI)
+      # pipelines, so both legs run them. The second pass compiles the dev-only
+      # fault-injection branch, which nothing else builds.
+      #
+      # Windows is ADVISORY until this step has gone green there once: the
+      # test binary's napi linking has only been exercised on macOS. Flip
+      # continue-on-error off after the first passing Windows run.
+      #
+      # Last, with `!cancelled()` like the suites above: it is independent of
+      # them, and placed earlier a red run here skipped `npm test` on macOS.
+      - name: Native module unit tests
+        if: ${{ !cancelled() && steps.smoke_scope.outputs.mode != 'invalid' }}
+        continue-on-error: ${{ runner.os == 'Windows' }}
+        working-directory: native-module
+        # bash (-e) on both legs: pwsh only fails the step on the LAST
+        # command's exit code, so a failing first pass would go unnoticed.
+        shell: bash
+        run: |
+          cargo test --lib
+          cargo test --lib --features fault-injection
 
   extension-tests:
     # The companion browser extension (natively-browser/) has its own package,

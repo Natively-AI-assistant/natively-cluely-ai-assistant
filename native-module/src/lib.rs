@@ -337,9 +337,13 @@ impl SystemAudioCapture {
         self.capture_thread.spawn(move |ending| {
             let run_started = Instant::now();
             // Dev builds with the fault-injection feature only: fail this
-            // run's init the way a busy or missing output does.
+            // run's init the way a busy or missing output does. cfg'd out of
+            // the statements, not left to the optimiser, so shipped binaries
+            // carry none of it.
+            #[cfg(feature = "fault-injection")]
             let inject_init_failure = fault_injection::take_init_failure();
             let open = |id: Option<String>| {
+                #[cfg(feature = "fault-injection")]
                 if inject_init_failure {
                     return Err(anyhow::anyhow!("injected init failure (fault-injection)"));
                 }

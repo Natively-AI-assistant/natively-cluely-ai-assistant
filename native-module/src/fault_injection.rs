@@ -87,11 +87,6 @@ mod imp {
     use std::time::Duration;
 
     #[inline(always)]
-    pub(crate) fn take_init_failure() -> bool {
-        false
-    }
-
-    #[inline(always)]
     pub(crate) fn stop_after() -> Option<Duration> {
         None
     }
@@ -107,4 +102,7 @@ mod imp {
     }
 }
 
-pub(crate) use imp::{describe, stop_after, take_init_failure, take_stop};
+pub(crate) use imp::{describe, stop_after, take_stop};
+// Called only from code that is itself cfg'd on the feature (see lib.rs).
+#[cfg(feature = "fault-injection")]
+pub(crate) use imp::take_init_failure;
