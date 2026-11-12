@@ -27,25 +27,22 @@ describe('suppressionKeyForArm', () => {
 
 describe('isAutoScrollSuppressed', () => {
   test('null suppression id is never suppressed', () => {
-    assert.equal(isAutoScrollSuppressed(null, 'a'), false);
-    assert.equal(isAutoScrollSuppressed(null, null), false);
+    assert.equal(isAutoScrollSuppressed(null), false);
   });
 
-  test('suppressed while the same stream is live', () => {
-    assert.equal(isAutoScrollSuppressed('a', 'a'), true);
+  test('suppressed once armed for a live stream', () => {
+    assert.equal(isAutoScrollSuppressed('a'), true);
   });
 
-  test('stays suppressed after that stream finalizes (streaming id goes null)', () => {
-    assert.equal(isAutoScrollSuppressed('a', null), true);
+  test('an idle arm is suppressed too', () => {
+    assert.equal(isAutoScrollSuppressed(IDLE_SUPPRESSION), true);
   });
 
-  test('a NEW stream lifts suppression', () => {
-    assert.equal(isAutoScrollSuppressed('a', 'b'), false);
-  });
-
-  test('an idle arm holds through non-streaming updates and lifts on the next stream', () => {
-    assert.equal(isAutoScrollSuppressed(IDLE_SUPPRESSION, null), true);
-    assert.equal(isAutoScrollSuppressed(IDLE_SUPPRESSION, 'first-stream'), false);
+  // #723: a new stream no longer lifts the hold by itself. An Auto Answer the
+  // reader did not ask for leaves the view where it is; the actions the user
+  // starts lift it explicitly (pinned in OverlayAutoScrollWiring2026_09_29).
+  test('no stream id argument: a later stream cannot lift the hold', () => {
+    assert.equal(isAutoScrollSuppressed.length, 1);
   });
 });
 

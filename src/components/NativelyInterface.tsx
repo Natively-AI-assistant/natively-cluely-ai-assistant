@@ -1913,7 +1913,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // at that instant). Declared once here rather than duplicated inline at
   // both call sites.
   const isAutoScrollSuppressed = useCallback(
-    () => isAutoScrollSuppressedFor(autoScrollSuppressedForMsgIdRef.current, streamingMsgIdRef.current),
+    () => isAutoScrollSuppressedFor(autoScrollSuppressedForMsgIdRef.current),
     [],
   );
 
@@ -1927,10 +1927,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // frame. Arming keys suppression to the live stream, or to the idle sentinel
   // when nothing is streaming (see suppressionKeyForArm).
   const armAutoScrollInterrupt = useCallback(() => {
-    const alreadySuppressed = isAutoScrollSuppressedFor(
-      autoScrollSuppressedForMsgIdRef.current,
-      streamingMsgIdRef.current,
-    );
+    const alreadySuppressed = isAutoScrollSuppressedFor(autoScrollSuppressedForMsgIdRef.current);
     const streamingId = streamingMsgIdRef.current;
     autoScrollSuppressedForMsgIdRef.current = suppressionKeyForArm(streamingId);
     // Stop the width/height-transition sticky-bottom pin from re-fighting the
@@ -1982,7 +1979,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const followStreamBottom = useCallback(() => {
     const c = scrollContainerRef.current;
     if (!c) return;
-    if (isAutoScrollSuppressedFor(autoScrollSuppressedForMsgIdRef.current, streamingMsgIdRef.current)) return;
+    if (isAutoScrollSuppressedFor(autoScrollSuppressedForMsgIdRef.current)) return;
     const max = c.scrollHeight - c.clientHeight;
     if (detectExternalUpwardScroll({ scrollTop: c.scrollTop, lastScrollTop: lastScrollTopRef.current, maxScroll: max, viewportResized: noteViewportResize(c) })) {
       armAutoScrollInterrupt();
@@ -2002,16 +1999,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // scroll on the very next frame, and scrollIntoView doesn't hand that back
   // synchronously the same way.
   //
-  // Suppression: once the scroll handler below detects the user scrolled
-  // up mid-stream, it arms autoScrollSuppressedForMsgIdRef with the id of
-  // the message that was streaming at the time. While that id is still the
-  // one actively streaming (or the stream it belonged to has just finalized
-  // — streamingMsgIdRef.current briefly goes null on finalize, one commit
-  // before this effect's own re-run for that same message, see
-  // commitStreamingFlush), we withhold the scroll write so completion
-  // doesn't yank the view out from under a user who's still reading. A
-  // genuinely NEW message carries a different (non-null) streaming id, so
-  // suppression naturally lifts without any explicit "new message" handling.
+  // Suppression: once the user scrolls up, armAutoScrollInterrupt arms
+  // autoScrollSuppressedForMsgIdRef and we withhold the scroll write until
+  // something hands control back (resumeAutoScroll): scrolling back to the
+  // bottom, the pill, or an answer the user starts. A new stream alone does
+  // not lift it, so an Auto Answer the reader did not ask for leaves the view
+  // where it is (#723).
   useEffect(() => {
     if (messages.length === 0) return;
     const c = scrollContainerRef.current;
@@ -5371,11 +5364,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // "Jump to latest" pill click handler — the ONE place `behavior: 'smooth'`
   // is used for this scroll container. The per-frame streaming chase (step 4)
   // stays a direct scrollTop write; smooth-scrolling every frame would
-  // restart the animation each time and never reach bottom.
+  // restart the animation each time and never reach bottom. Under Reduce
+  // Motion (macOS) / animations off (Windows) it jumps instead, as Apple asks.
   const handleJumpToLatest = useCallback(() => {
     resumeAutoScroll();
     const c = scrollContainerRef.current;
-    if (c) c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
+    if (c) c.scrollTo({ top: c.scrollHeight, behavior: prefersReducedMotionRef.current ? 'auto' : 'smooth' });
   }, [resumeAutoScroll]);
 
   // "Show me the newest thing": the user just sent something, or otherwise
@@ -5389,7 +5383,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     resumeAutoScroll();
     const settle = () => {
       const c = scrollContainerRef.current;
-      if (!c || isAutoScrollSuppressedFor(autoScrollSuppressedForMsgIdRef.current, streamingMsgIdRef.current)) return;
+      if (!c || isAutoScrollSuppressedFor(autoScrollSuppressedForMsgIdRef.current)) return;
       c.scrollTop = c.scrollHeight - c.clientHeight;
       lastScrollTopRef.current = c.scrollTop;
     };
@@ -5684,6 +5678,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       chatStreamIdRef.current = null;
       chatStreamSourceRef.current = null;
       requestStartTimeRef.current = null;
+      // A hold left over from the last meeting must not carry into this one.
+      resumeAutoScroll();
       setMessages([]);
       eagerCodeExpansionHoldRef.current = false;
       answerPanelPinnedRef.current = false;
@@ -7437,6 +7433,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     chatStreamSourceRef.current = null;
     forceFinalizeStaleRagStream();
     flushToken();
+    // Every Direct Assist turn is one the user started (hotkey, Answer now, a
+    // send): follow it even if the chat was held for reading (#723).
+    resumeAutoScroll();
 
     const requestId = createDirectAssistRequestId();
     const placeholderId = genMessageId();
@@ -7502,7 +7501,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         message: '',
       });
     }
-  }, [flushToken, forceFinalizeStaleRagStream, settleDirectAssistFailure, settleDirectAssistIncomplete]);
+  }, [flushToken, forceFinalizeStaleRagStream, settleDirectAssistFailure, settleDirectAssistIncomplete, resumeAutoScroll]);
 
   const cancelActiveChatStream = useCallback(() => {
     // Stop also stops diagram repairs: any in flight is cancelled, and the
@@ -7553,13 +7552,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     cancelActiveChatStream();
     diagramRepairBlockedRef.current.clear();
     previousDiagramRef.current = null;
+    resumeAutoScroll();
     setMessages([]);
     answerPanelPinnedRef.current = false;
     setAnswerPanelPinned(false);
     lastManualSubmitRef.current = null;
     manualSubmitInFlightRef.current = false;
     directAssistHistoryRef.current = [];
-  }, [cancelActiveChatStream]);
+  }, [cancelActiveChatStream, resumeAutoScroll]);
 
   const finalizeStreamingByIntent = useCallback(
     (intent: string, text: string) => {
@@ -7691,6 +7691,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         cancelAnimationFrame(tokenBufRef.current.raf);
         tokenBufRef.current.raf = null;
       }
+      // Only answers the user started open a placeholder (quick actions, the
+      // What to Answer hotkey, main's manual start). Auto Answer streams in
+      // through queueToken without one and keeps a held chat held (#723).
+      resumeAutoScroll();
       const placeholderId = genMessageId();
       streamingMsgIdRef.current = placeholderId;
       streamingIntentRef.current = intent;
@@ -7710,7 +7714,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         prepareIntelligenceStreamPlaceholderMessages(prev, intent, placeholderId),
       );
     },
-    [flushToken, pinAnswerPanel],
+    [flushToken, pinAnswerPanel, resumeAutoScroll],
   );
 
   // A quick action that failed before a single word arrived leaves its

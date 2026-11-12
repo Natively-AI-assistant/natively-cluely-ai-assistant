@@ -9,8 +9,7 @@
  * Suppression is stored as a message id (or null = not suppressed), and the
  * streaming id is null between answers — arming with it stored null, which
  * reads as "not suppressed", so a scroll-up in a finished chat or during the
- * pre-token "Thinking…" phase armed nothing. Any real stream id differs from
- * this sentinel, so the next stream still lifts it (see isAutoScrollSuppressed).
+ * pre-token "Thinking…" phase armed nothing.
  */
 export const IDLE_SUPPRESSION = '__idle__';
 
@@ -20,14 +19,16 @@ export function suppressionKeyForArm(streamingId) {
 }
 
 /**
- * Suppressed for as long as the stream it was armed for is live, and through
- * that stream's finalize (the streaming id goes null for one commit before
- * the last effect run). A different, non-null stream id lifts it.
+ * Suppressed from the moment a scroll-up arms it until something hands control
+ * back: the user scrolls back to the bottom, clicks the jump-to-latest pill, or
+ * starts an answer (a send, a quick action, the What to Answer hotkey), or the
+ * chat is reset for a new meeting. A new stream on its own never lifts it, so
+ * an answer the reader did not ask for (Auto Answer) leaves the view where it
+ * is and raises the pill instead (#723).
  * @param {string | null} suppressedId
- * @param {string | null} streamingId
  */
-export function isAutoScrollSuppressed(suppressedId, streamingId) {
-  return suppressedId !== null && (streamingId === null || streamingId === suppressedId);
+export function isAutoScrollSuppressed(suppressedId) {
+  return suppressedId !== null;
 }
 
 /**
