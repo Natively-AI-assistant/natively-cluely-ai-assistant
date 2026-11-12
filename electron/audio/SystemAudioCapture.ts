@@ -13,6 +13,31 @@ const RustAudioCapture: any = rendererCaptureFallbackActive(!!NativeModule?.Syst
        require('./fallback/rendererCaptureMonitor').RendererSystemAudioCapture)
     : NativeModule?.SystemAudioCapture;
 
+/**
+ * Copies the native capture lifecycle lines into the app log: which backend
+ * started and how long init took, a requested device that failed over to the
+ * default, how each run ended, how long joins took. Native println output
+ * never reaches natively_debug.log, least of all in a packaged Windows build,
+ * so without this a capture failure there left only the final error string.
+ */
+function flushNativeCaptureLog(): void {
+    const take = NativeModule?.takeNativeCaptureLog;
+    if (typeof take !== 'function') return; // a .node older than #729, or no native module
+    let lines: Array<{ atMs: number; message: string }>;
+    try {
+        lines = take();
+    } catch (e) {
+        console.warn('[SystemAudioCapture] Reading the native capture log failed:', e);
+        return;
+    }
+    const now = Date.now();
+    for (const line of lines) {
+        // Lines are drained at checkpoints, so say when one is old news.
+        const lagMs = Math.round(now - line.atMs);
+        console.log(lagMs > 1000 ? `${line.message} (${lagMs} ms ago)` : line.message);
+    }
+}
+
 export class SystemAudioCapture extends EventEmitter {
     private isRecording: boolean = false;
     private deviceId: string | null = null;
@@ -143,14 +168,16 @@ export class SystemAudioCapture extends EventEmitter {
             this.monitor.start((err: Error | null, chunk: Buffer) => {
                 // napi v3 ThreadsafeFunction passes (err, arg) format
                 if (err) {
+                    flushNativeCaptureLog();
                     console.error('[SystemAudioCapture] Callback error:', err);
                     this.isRecording = false; // Allow recovery via restart
                     // The Rust DSP thread has exited (a fatal init failure, or the
-                    // platform stopped the stream — see speaker/stop_signal.rs),
-                    // but its handle is still Some inside the monitor. A later
-                    // start() on this same instance would hit "Capture already
-                    // running". Retire the monitor now so the next start() takes
-                    // the lazy-init branch; stop() is deferred as in the failed-
+                    // platform stopped the stream — see speaker/stop_signal.rs).
+                    // Since #729 the native start() joins such a thread and can
+                    // restart, but a .node built before that fix still answers
+                    // "Capture already running". Retire the monitor anyway so the
+                    // next start() takes the lazy-init branch and builds a fresh
+                    // native instance either way; stop() is deferred as in the failed-
                     // start path below. isRecording is already false, so stop()
                     // would otherwise skip the native teardown entirely.
                     const dying = this.monitor;
@@ -164,6 +191,7 @@ export class SystemAudioCapture extends EventEmitter {
                                 try { dying.stop(); } catch (e) {
                                     console.error('[SystemAudioCapture] Error retiring monitor after callback error:', e);
                                 }
+                                flushNativeCaptureLog();
                                 resolve();
                             });
                         });
@@ -183,6 +211,8 @@ export class SystemAudioCapture extends EventEmitter {
                     // emit trailing finals deterministically.
                     if (!this.isRecording) return;
                     this.chunkCount++;
+                    // Init has finished by the first chunk: log how it went.
+                    if (this.chunkCount === 1) flushNativeCaptureLog();
                     if (this.chunkCount <= 3 || this.chunkCount % 500 === 0) {
                         console.log(`[SystemAudioCapture] Chunk #${this.chunkCount}: ${chunk.length} bytes from Rust`);
                     }
@@ -217,6 +247,9 @@ export class SystemAudioCapture extends EventEmitter {
             // Fetch real sample rate as soon as monitor starts
             if (typeof this.monitor.getSampleRate === 'function' || typeof this.monitor.get_sample_rate === 'function') {
                 const pollRate = () => {
+                    // Also a drain checkpoint: a silent capture sends no chunk,
+                    // and its init line should not wait for the next error/stop.
+                    flushNativeCaptureLog();
                     const rate = typeof this.monitor?.getSampleRate === 'function' 
                         ? this.monitor.getSampleRate() 
                         : this.monitor?.get_sample_rate?.();
@@ -266,8 +299,10 @@ export class SystemAudioCapture extends EventEmitter {
                     } catch (e) {
                         console.error('[SystemAudioCapture] Error stopping orphaned monitor after failed start:', e);
                     }
+                    flushNativeCaptureLog();
                 });
             }
+            flushNativeCaptureLog();
             this.emit('error', error);
         }
     }
@@ -322,6 +357,7 @@ export class SystemAudioCapture extends EventEmitter {
                 } catch (e) {
                     console.error('[SystemAudioCapture] Error stopping (deferred):', e);
                 }
+                flushNativeCaptureLog();
                 resolve();
             });
         });

@@ -4933,6 +4933,12 @@ export class AppState {
     (capture as any).__disarmStuckWatchdog = disarmStuckWatchdog;
     capture.on('start', armStuckWatchdog);
     capture.on('stop', disarmStuckWatchdog);
+    // A system-audio 'error' means the native thread has ended (init failed,
+    // or the OS stopped the stream), and the wrapper emits no 'stop' for it.
+    // Left armed, the watchdog fired 12 s later on the dead capture (the one
+    // recovery leaves in place after giving up) and logged "0 chunks ...
+    // treating as initial silence" over a capture that never started.
+    capture.on('error', disarmStuckWatchdog);
     capture.on('data', (chunk: Buffer) => {
       const now = Date.now();
       handleSystemAudioHealthDecision(systemAudioHealth.handle({ kind: 'chunk', nowMs: now, chunk }));
@@ -6600,8 +6606,10 @@ export class AppState {
 
         this._systemAudioSuccessfulRestarts++;
         this._systemAudioConsecutiveFailures = 0;
+        // start() only queues native init; whether it worked shows up as
+        // "(Recovery) SystemAudio->STT: chunk #1" or as the next error here.
         console.log(
-          `[AudioRecovery] SystemAudioCapture recreated successfully (total restarts: ${this._systemAudioSuccessfulRestarts}).`,
+          `[AudioRecovery] SystemAudioCapture recreated; native init running (total restarts: ${this._systemAudioSuccessfulRestarts}).`,
         );
       } catch (recoveryErr: any) {
         console.error(`[AudioRecovery] Recovery attempt #${this._systemAudioRecoveryAttempts} failed:`, recoveryErr);

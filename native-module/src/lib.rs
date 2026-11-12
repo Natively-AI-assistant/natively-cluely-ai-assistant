@@ -4,6 +4,7 @@
 extern crate napi_derive;
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use capture_thread::{CaptureThread, SlotState};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -13,7 +14,10 @@ use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use ringbuf::traits::Consumer;
 
 pub mod audio_config;
+pub mod capture_log;
+mod capture_thread;
 pub mod channel_state;
+mod fault_injection;
 pub mod license;
 pub mod microphone;
 pub mod resampler;
@@ -212,7 +216,7 @@ fn report_speech_edge(
 #[napi]
 pub struct SystemAudioCapture {
     stop_signal: Arc<AtomicBool>,
-    capture_thread: Option<thread::JoinHandle<()>>,
+    capture_thread: CaptureThread,
     /// Shared atomic EMITTED sample rate — the rate of the PCM actually handed to
     /// JS/STT. Equals CANONICAL_STT_RATE (16000) when the resampler is active,
     /// or the native rate if resampler init failed (passthrough). Updated by the
@@ -226,17 +230,28 @@ pub struct SystemAudioCapture {
     /// "coreaudio", "wasapi"); empty until init completes. main.ts compares
     /// it with the requested backend to notice a silent fallback.
     active_backend: Arc<Mutex<String>>,
+    /// "sys#<n>" — tells instances apart in the capture log (the app builds a
+    /// fresh one per meeting and per recovery).
+    log_id: String,
+    /// start() calls on this instance; each run's lines carry its number.
+    runs: u32,
 }
+
+static NEXT_SYSTEM_CAPTURE_ID: AtomicU32 = AtomicU32::new(1);
 
 #[napi]
 impl SystemAudioCapture {
     #[napi(constructor)]
     pub fn new(device_id: Option<String>) -> napi::Result<Self> {
-        println!("[SystemAudioCapture] Created (device: {:?})", device_id);
+        let log_id = format!("sys#{}", NEXT_SYSTEM_CAPTURE_ID.fetch_add(1, Ordering::Relaxed));
+        capture_log::record(format!("[SystemAudioCapture] {} created (device: {:?})", log_id, device_id));
+        if let Some(faults) = fault_injection::describe() {
+            capture_log::record(format!("[SystemAudioCapture] {} {}", log_id, faults));
+        }
 
         Ok(SystemAudioCapture {
             stop_signal: Arc::new(AtomicBool::new(false)),
-            capture_thread: None,
+            capture_thread: CaptureThread::new(),
             // Emitted rate is the canonical STT rate by default (resampler active).
             sample_rate: Arc::new(AtomicU32::new(CANONICAL_STT_RATE)),
             // Native default 48kHz (standard macOS CoreAudio rate) until the
@@ -244,6 +259,8 @@ impl SystemAudioCapture {
             native_sample_rate: Arc::new(AtomicU32::new(48000)),
             device_id,
             active_backend: Arc::new(Mutex::new(String::new())),
+            log_id,
+            runs: 0,
         })
     }
 
@@ -277,10 +294,31 @@ impl SystemAudioCapture {
         on_speech_ended: Option<ThreadsafeFunction<bool>>,
         on_speech_edge: Option<ThreadsafeFunction<SpeechEdgeEvent>>,
     ) -> napi::Result<()> {
-        // Guard against double-start — prevents spawning concurrent threads
-        if self.capture_thread.is_some() {
-            return Err(napi::Error::from_reason("Capture already running"));
+        // Guard against double-start — prevents spawning concurrent threads.
+        // A thread that already ended (failed init, stream stopped by the
+        // system) is joined here and does not block a restart.
+        match self.capture_thread.check() {
+            SlotState::Running => {
+                capture_log::record(format!(
+                    "[SystemAudioCapture] {} start refused: run {} is still capturing",
+                    self.log_id, self.runs
+                ));
+                return Err(napi::Error::from_reason("Capture already running"));
+            }
+            SlotState::Reaped { join } => capture_log::record(format!(
+                "[SystemAudioCapture] {} run {} had ended on its own; joined in {} ms before restarting",
+                self.log_id,
+                self.runs,
+                join.as_millis()
+            )),
+            SlotState::Idle => {}
         }
+        self.runs += 1;
+        let tag = format!("{} run {}", self.log_id, self.runs);
+        capture_log::record(format!(
+            "[SystemAudioCapture] {}: starting (device: {:?})",
+            tag, self.device_id
+        ));
 
         let tsfn = callback;
         let speech_ended_tsfn = on_speech_ended;
@@ -296,14 +334,29 @@ impl SystemAudioCapture {
         let device_id = self.device_id.clone();
 
         // ALL init + DSP runs in background thread — start() returns INSTANTLY
-        self.capture_thread = Some(thread::spawn(move || {
+        self.capture_thread.spawn(move |ending| {
+            let run_started = Instant::now();
+            // Dev builds with the fault-injection feature only: fail this
+            // run's init the way a busy or missing output does.
+            let inject_init_failure = fault_injection::take_init_failure();
+            let open = |id: Option<String>| {
+                if inject_init_failure {
+                    return Err(anyhow::anyhow!("injected init failure (fault-injection)"));
+                }
+                speaker::SpeakerInput::new(id)
+            };
             // 1. SpeakerInput Init (takes 5-7 seconds — runs OFF main thread)
             println!("[SystemAudioCapture] Background init starting...");
-            let input = match speaker::SpeakerInput::new(device_id.clone()) {
+            let input = match open(device_id.clone()) {
                 Ok(i) => i,
                 Err(e) => {
-                    println!("[SystemAudioCapture] Init failed: {}. Trying default...", e);
-                    match speaker::SpeakerInput::new(None) {
+                    capture_log::record(format!(
+                        "[SystemAudioCapture] {}: init on requested device failed after {} ms: {}. Trying default...",
+                        tag,
+                        run_started.elapsed().as_millis(),
+                        e
+                    ));
+                    match open(None) {
                         Ok(i) => i,
                         Err(e2) => {
                             let msg = format!(
@@ -311,6 +364,12 @@ impl SystemAudioCapture {
                                 e2
                             );
                             eprintln!("{}", msg);
+                            capture_log::record(format!(
+                                "[SystemAudioCapture] {}: ended, default device init failed too after {} ms",
+                                tag,
+                                run_started.elapsed().as_millis()
+                            ));
+                            ending.set();
                             // Notify JS so it can emit 'error' and reset isRecording
                             tsfn.call(
                                 Err(napi::Error::from_reason(msg)),
@@ -330,6 +389,8 @@ impl SystemAudioCapture {
                         e
                     );
                     eprintln!("{}", msg);
+                    capture_log::record(format!("[SystemAudioCapture] {}: ended, stream() failed: {}", tag, e));
+                    ending.set();
                     tsfn.call(
                         Err(napi::Error::from_reason(msg)),
                         ThreadsafeFunctionCallMode::NonBlocking,
@@ -347,6 +408,8 @@ impl SystemAudioCapture {
                 None => {
                     let msg = "[SystemAudioCapture] FATAL: Failed to get consumer".to_string();
                     eprintln!("{}", msg);
+                    capture_log::record(format!("[SystemAudioCapture] {}: ended, no ring-buffer consumer", tag));
+                    ending.set();
                     tsfn.call(
                         Err(napi::Error::from_reason(msg)),
                         ThreadsafeFunctionCallMode::NonBlocking,
@@ -381,6 +444,19 @@ impl SystemAudioCapture {
                 "[SystemAudioCapture] Background init complete. Native: {}Hz, Emitted: {}Hz. DSP starting.",
                 native_rate, emitted_rate
             );
+            let capture_started = Instant::now();
+            capture_log::record(format!(
+                "[SystemAudioCapture] {}: capturing on {} after {} ms (native {} Hz, emitted {} Hz{})",
+                tag,
+                stream.backend_name(),
+                run_started.elapsed().as_millis(),
+                native_rate,
+                emitted_rate,
+                if resampler.is_none() && native_rate != CANONICAL_STT_RATE { ", resampler unavailable" } else { "" }
+            ));
+            // Dev builds with the fault-injection feature only.
+            let mut injected_stop_after = fault_injection::stop_after();
+            let mut frames_sent: u64 = 0;
 
             // 2. DSP loop with silence suppression + WebRTC VAD.
             // Suppressor operates on the EMITTED-rate stream, so its internal VAD
@@ -414,10 +490,27 @@ impl SystemAudioCapture {
                 // the reason to JS as a capture error (the SystemAudioCapture
                 // wrapper emits 'error' → main.ts rebuilds the capture), and
                 // end this thread.
-                if let Some(reason) = stream.take_stop_error() {
+                let stop_error = stream.take_stop_error().or_else(|| {
+                    let due = injected_stop_after.is_some_and(|after| capture_started.elapsed() >= after);
+                    if !due {
+                        return None;
+                    }
+                    // Spent only when it fires; another run may have used it up.
+                    injected_stop_after = None;
+                    fault_injection::take_stop().then(|| "injected system stop (fault-injection)".to_string())
+                });
+                if let Some(reason) = stop_error {
                     let msg = format!("[SystemAudioCapture] Capture stream stopped by the system: {}", reason);
                     eprintln!("{}", msg);
+                    capture_log::record(format!(
+                        "[SystemAudioCapture] {}: ended, stream stopped by the system after {} ms ({} frames sent): {}",
+                        tag,
+                        capture_started.elapsed().as_millis(),
+                        frames_sent,
+                        reason
+                    ));
                     emitter.flush(&tsfn);
+                    ending.set();
                     tsfn.call(
                         Err(napi::Error::from_reason(msg)),
                         ThreadsafeFunctionCallMode::NonBlocking,
@@ -459,6 +552,7 @@ impl SystemAudioCapture {
 
                     match action {
                         FrameAction::Send(data) => {
+                            frames_sent += 1;
                             let bytes = i16_slice_to_le_bytes(&data);
                             emitter.push(&bytes, &tsfn);
                         }
@@ -500,8 +594,16 @@ impl SystemAudioCapture {
             // Flush any remaining batched audio before exit.
             emitter.flush(&tsfn);
             println!("[SystemAudioCapture] DSP thread stopped.");
+            if stop_signal.load(Ordering::Relaxed) {
+                capture_log::record(format!(
+                    "[SystemAudioCapture] {}: stopped after {} ms of capture ({} frames sent)",
+                    tag,
+                    capture_started.elapsed().as_millis(),
+                    frames_sent
+                ));
+            }
             // stream is dropped here → SpeakerStream::Drop calls stop_with_ch
-        }));
+        });
 
         Ok(())
     }
@@ -509,8 +611,14 @@ impl SystemAudioCapture {
     #[napi]
     pub fn stop(&mut self) {
         self.stop_signal.store(true, Ordering::SeqCst);
-        if let Some(handle) = self.capture_thread.take() {
-            let _ = handle.join();
+        let started = Instant::now();
+        if self.capture_thread.join() {
+            capture_log::record(format!(
+                "[SystemAudioCapture] {} stop: run {} joined in {} ms",
+                self.log_id,
+                self.runs,
+                started.elapsed().as_millis()
+            ));
         }
     }
 }
