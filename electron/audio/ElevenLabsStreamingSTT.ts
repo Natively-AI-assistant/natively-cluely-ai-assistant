@@ -7,6 +7,7 @@ import * as path from 'path';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { streamingStttWsOptions } from './dnsHelpers';
 import { RealtimeSilenceTail } from './realtimeSilenceTail';
+import { ELEVENLABS_RT_MODEL } from './sttModelCatalog';
 
 const ELEVENLABS_WS_URL = 'wss://api.elevenlabs.io/v1/speech-to-text/realtime';
 // Cap reconnect attempts so a flapping network can't drive an indefinite WS
@@ -106,7 +107,7 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
     /** When the current socket opened (0: none open). See ELEVENLABS_HEALTHY_SESSION_MS. */
     private sessionOpenedAt = 0;
     private inputSampleRate = 48000; // what the mic/system audio captures at
-    private targetSampleRate = 16000; // what ElevenLabs Scribe v2 requires
+    private targetSampleRate = 16000; // what ElevenLabs Scribe realtime requires
     
     private buffer: Buffer[] = [];
     private isConnecting = false;
@@ -373,7 +374,7 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
         console.log(`[ElevenLabsStreaming] Connecting`, { hasApiKey: Boolean(this.apiKey) });
 
         // raw WebSocket URL with parameters
-        let url = `${ELEVENLABS_WS_URL}?model_id=scribe_v2_realtime&include_timestamps=true&sample_rate=${this.targetSampleRate}`
+        let url = `${ELEVENLABS_WS_URL}?model_id=${ELEVENLABS_RT_MODEL}&include_timestamps=true&sample_rate=${this.targetSampleRate}`
             + `&commit_strategy=vad&vad_silence_threshold_secs=${ELEVENLABS_VAD_SILENCE_SECS}`;
         
         // Always enable language detection metadata; only pin to a specific code when one is set

@@ -19,6 +19,7 @@ import FormData from 'form-data';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { isValidSttRegion } from '../utils/curlUtils';
 import { currentWhisperGlossaryPrompt, isGlossaryEcho } from './sttContextTerms';
+import { ELEVENLABS_BATCH_MODEL } from './sttModelCatalog';
 
 export type RestSttProvider = 'groq' | 'openai' | 'elevenlabs' | 'azure' | 'ibmwatson';
 
@@ -77,7 +78,7 @@ const PROVIDER_CONFIGS: Record<RestSttProvider, ProviderConfigFactory> = {
         const lang = (languageKey && languageKey !== 'auto') ? RECOGNITION_LANGUAGES[languageKey]?.iso639 : undefined;
         return {
             endpoint: 'https://api.elevenlabs.io/v1/speech-to-text',
-            model: 'scribe_v2',
+            model: ELEVENLABS_BATCH_MODEL,
             authHeader: { 'xi-api-key': apiKey },
             uploadType: 'multipart',
             extraFormFields: {

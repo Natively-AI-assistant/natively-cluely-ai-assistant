@@ -79,7 +79,7 @@ describe('SonioxStreamingSTT config frame — pinned language must actually pin'
     for (const code of ['es', undefined]) {
       const cfg = frameFor(code);
       assert.equal(cfg.api_key, 'test-key');
-      assert.equal(cfg.model, 'stt-rt-v5');
+      assert.equal(cfg.model, 'stt-rt-v6');
       assert.equal(cfg.audio_format, 'pcm_s16le');
       assert.equal(cfg.sample_rate, 16000);
       assert.equal(cfg.num_channels, 1);

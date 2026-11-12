@@ -14,11 +14,25 @@
 //             gpt-4o-transcribe / gpt-4o-mini-transcribe shut down 2027-02-26
 //             (OpenAI deprecations page, announced 2026-08-26).
 // Not listed, and why:
-//   soniox      stt-rt-v5 is the only current real-time model (v4 is an alias).
-//   elevenlabs  scribe_v2_realtime is the only real-time model.
+//   soniox      One current real-time model, SONIOX_RT_MODEL below.
+//   elevenlabs  One current model per path, ELEVENLABS_*_MODEL below.
 //   groq        Its own setting (groqSttModel), predating this module.
 //   nvidia_nim  Its own catalogue, nvidiaNimSttModels.ts (a function-id each).
 //   azure, ibmwatson, google  No model value on the path the app uses.
+
+// The fixed models of the providers above that have no picker, in one place.
+// 2026-11-12, measured live against the old ones with the app's own config:
+//   Soniox stt-rt-v6 (v5 is deprecated, removed 2026-12-15; same $0.12/h).
+//     Same transcripts, same 60 languages, the endpoint tuning knobs still
+//     apply; the first interim word ~300-500 ms later, finals no later.
+//   ElevenLabs scribe_v3_live / scribe_v3 (v2 superseded; same $0.22/h and
+//     $0.20/h; 27% fewer word errors than v2 on FLEURS per ElevenLabs).
+//     Same commits with commit_strategy=vad, first partial ~1 s instead of
+//     ~2.5-3 s after speech starts.
+// The natively-api relay moved to the same models the same day.
+export const SONIOX_RT_MODEL = 'stt-rt-v6';
+export const ELEVENLABS_RT_MODEL = 'scribe_v3_live';
+export const ELEVENLABS_BATCH_MODEL = 'scribe_v3';
 
 export type SttModelProvider = 'deepgram' | 'openai';
 

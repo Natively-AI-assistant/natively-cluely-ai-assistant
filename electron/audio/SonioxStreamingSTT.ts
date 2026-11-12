@@ -20,6 +20,7 @@ import { EventEmitter } from 'events';
 import { getSttContextTerms } from './sttContextTerms';
 import WebSocket from 'ws';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
+import { SONIOX_RT_MODEL } from './sttModelCatalog';
 import { streamingStttWsOptions } from './dnsHelpers';
 import { shouldReviveExhaustedReconnect, DEFAULT_REVIVE_COOLDOWN_MS } from './sttReconnectPolicy.mjs';
 import { RealtimeSilenceTail } from './realtimeSilenceTail';
@@ -46,7 +47,7 @@ const KEEPALIVE_INTERVAL_MS = 5000;
 // (soniox.com/docs/stt/rt/endpoint-detection, "Recommended Configuration"):
 // level 2 + sensitivity 0.3 + a 1500 ms cap. The defaults (0, 0.0, 2000 ms)
 // are tuned for dictation, not for answering a question the moment it ends.
-// Both tuning knobs are v5-only; the model below is stt-rt-v5.
+// Both tuning knobs need stt-rt-v5 or later; the model is SONIOX_RT_MODEL (stt-rt-v6).
 export const SONIOX_ENDPOINT_TUNING = {
     endpoint_latency_adjustment_level: 2,
     endpoint_sensitivity: 0.3,
@@ -245,7 +246,7 @@ export class SonioxStreamingSTT extends EventEmitter {
      *     strict flag. The flag is accepted (no error, no session kill) and has
      *     no observable effect on the real-time model. It is kept because it
      *     costs nothing and is the forward-compatible spelling — NOT because
-     *     the pin is enforced. On stt-rt-v5 a pinned language biases accuracy;
+     *     the pin is enforced (re-measured on stt-rt-v6 2026-11-12: still inert). On stt-rt-v5/v6 a pinned language biases accuracy;
      *     it does not restrict recognition. The relay's other providers
      *     (Chirp2 languageCodes, ElevenLabs language_code, Deepgram pinned
      *     mode) DO restrict.
@@ -256,7 +257,7 @@ export class SonioxStreamingSTT extends EventEmitter {
     private buildConfigFrame(): Record<string, unknown> {
         const config: Record<string, unknown> = {
             api_key: this.apiKey,
-            model: 'stt-rt-v5',
+            model: SONIOX_RT_MODEL,
             audio_format: 'pcm_s16le',
             sample_rate: this.sampleRate,
             num_channels: this.numChannels,

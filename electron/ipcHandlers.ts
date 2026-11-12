@@ -14619,7 +14619,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               ws.send(
                 JSON.stringify({
                   api_key: apiKey,
-                  model: 'stt-rt-v5',
+                  model: require('./audio/sttModelCatalog').SONIOX_RT_MODEL,
                   audio_format: 'pcm_s16le',
                   sample_rate: 16000,
                   num_channels: 1,

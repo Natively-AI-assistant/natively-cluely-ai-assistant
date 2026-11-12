@@ -157,7 +157,7 @@ describe('Soniox: voice-AI endpoint tuning', () => {
   test('the config frame carries Soniox\'s own recommended starting point', () => {
     const stt = new SonioxStreamingSTT('k');
     const frame = stt.buildConfigFrame();
-    assert.equal(frame.model, 'stt-rt-v5', 'the tuning knobs are v5-only');
+    assert.equal(frame.model, 'stt-rt-v6', 'the tuning knobs need v5 or later');
     assert.equal(frame.enable_endpoint_detection, true);
     assert.deepEqual(
       { level: frame.endpoint_latency_adjustment_level, sens: frame.endpoint_sensitivity, max: frame.max_endpoint_delay_ms },

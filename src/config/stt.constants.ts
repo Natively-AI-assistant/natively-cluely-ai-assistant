@@ -80,9 +80,9 @@ export const STT_PROVIDERS: Record<SttProviderId, SttProviderConfig> = {
     elevenlabs: {
         id: 'elevenlabs',
         name: 'ElevenLabs Scribe',
-        description: 'Scribe v2 Realtime API',
+        description: 'Scribe v3 API',
         endpoint: 'https://api.elevenlabs.io/v1/speech-to-text',
-        model: 'scribe_v2',
+        model: 'scribe_v3',
         uploadType: 'multipart',
         authHeader: (apiKey: string) => ({
             'xi-api-key': apiKey,
