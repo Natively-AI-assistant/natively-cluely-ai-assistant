@@ -453,6 +453,9 @@ export interface SimpleAutoAnswerHost {
 /** Share of a picked ask's words that must come from ruled-out finals for it to count as resurfaced. */
 export const RULED_OUT_CONTAINMENT = 0.9;
 
+/** Share of the dispatched question's words a keyed draft's text must hold to be adopted. */
+export const SPECULATION_HOLDS_QUESTION = 0.9;
+
 type PendingPart = { text: string; at: number; speaker?: string; glueNext?: boolean; provisional?: boolean };
 
 export class SimpleAutoAnswerEngine {
@@ -584,6 +587,28 @@ export class SimpleAutoAnswerEngine {
     }
 
     onMeetingStart(): void { this.reset(); }
+    /**
+     * The meeting's mode changed mid-meeting. Speech held for the next
+     * candidate belongs to the old mode's conversation: drop it, and any
+     * verdict still out on it, so the new mode's first question is not
+     * prefixed with it (pipeline forensics 2026-11-13, F-CTX-03: a greeting
+     * ruled silent rode into the Orion question 7.7 s later, after a switch).
+     * Ids keep counting (a reset would reuse them within the meeting).
+     */
+    onModeChanged(): void {
+        this.disarm();
+        this.dropParked();
+        this.pending = [];
+        this.judgedParts = 0;
+        this.held = null;
+        this.inFlight = null;
+        this.graceKey = '';
+        this.lastJudgedKey = '';
+        this.coveredBy = null;
+        this.settledNegative = null;
+        this.promotedInterim = null;
+        this.bumpJudgeSeq('meeting_reset');
+    }
     onMeetingStop(): void { this.reset(); }
     /**
      * The engine went idle. A dispatch parked behind it should go NOW rather
@@ -866,7 +891,12 @@ export class SimpleAutoAnswerEngine {
         if (rationed && !isQuestionShaped(unjudged) && !isReportShaped(unjudged)) return;
         this.lastPrefetchAt = now;
         try {
-            this.host.prefetchAnswer(id, candidate);
+            // Drafted on the UNJUDGED finals only. Finals a verdict already ruled
+            // not an ask stay in the judge's candidate as context, but drafting
+            // on them answered a merged "Morning all, quick note… What does
+            // Orion do?" question, and keyed reuse then adopted that draft for
+            // the clean ask (pipeline forensics 2026-11-13, F-CTX-03).
+            this.host.prefetchAnswer(id, unjudged || candidate);
         } catch { /* prefetch is an optimisation; never break the pipeline */ }
     }
 
@@ -1045,7 +1075,11 @@ export class SimpleAutoAnswerEngine {
             this.judgedParts = partsAtConsult;
             return;
         }
-        const text = route.questionText ?? candidate;
+        // question_text null means "the whole candidate is the ask"; the finals
+        // an earlier verdict ruled not an ask are still not part of it, so the
+        // question line, retrieval query and draft read the unjudged finals
+        // (pipeline forensics 2026-11-13, F-CTX-03).
+        const text = route.questionText ?? (unjudged || candidate);
         // Answer or nothing. The judge decides, and the only number left in
         // the decision is ANSWER_FLOOR — the per-mode bars no longer gate a
         // dispatch, because the thing they used to demote to (the offer card)
@@ -1119,7 +1153,16 @@ export class SimpleAutoAnswerEngine {
             // noteCandidate), adopt it instead of starting over — that is the
             // whole point of prefetching.
             const snapshot = this.host.speculativeSnapshot?.();
-            const reuseSpeculative = Boolean(snapshot && snapshot.questionId === id && snapshot.text);
+            // Same id is not enough: the draft must have been written for THIS
+            // ask. The judge's question_text is verbatim from the candidate, so
+            // a draft whose text holds it is the one; a draft on a merged or
+            // cut-short text is restarted on the clean question instead of
+            // being adopted (pipeline forensics 2026-11-13, F-CTX-03/F-CTX-02).
+            const reuseSpeculative = Boolean(snapshot && snapshot.questionId === id && snapshot.text
+                && tokenContainment(text, snapshot.text) >= SPECULATION_HOLDS_QUESTION);
+            if (snapshot && snapshot.questionId === id && snapshot.text && !reuseSpeculative) {
+                this.host.log?.(`[AutoAnswer:simple] the prefetched answer for ${id} was drafted for other words: starting over on the question`);
+            }
             this.lastAnsweredText = text;
             const promoted = this.pending.find(p => p.provisional);
             this.stallAnswered = promoted ? { text: promoted.text, at: this.clock.now() } : null;

@@ -427,6 +427,8 @@ export class IntelligenceManager extends EventEmitter {
     // ============================================
 
     async stopMeeting(): Promise<{ meetingId: string; memoryEligibleCount: number } | null> {
+        // Before the save: an answer still streaming belongs to this meeting.
+        try { this.engine.cancelAnswersForMeetingEnd(); } catch (err) { console.warn('[IntelligenceManager] answer cancel at meeting stop failed:', err); }
         try {
             return await this.persistence.stopMeeting();
         } finally {

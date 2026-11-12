@@ -20184,6 +20184,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       try { _manualCodingState.clearAllSessions(); } catch { /* non-fatal */ }
 
       ModesManager.getInstance().setActiveMode(id);
+      // Speech Auto Answer holds for the next ask was heard under the old mode:
+      // it must not prefix the new mode's first question (F-CTX-03, 2026-11-13).
+      try { appState.onAutoAnswerModeChanged?.(); } catch { /* non-fatal */ }
       // Supersede in-flight LIVE answers too (the abort loop above only covers
       // manual chat streams): a WTA generation planned under the old mode must
       // not finalize into a UI now showing the new one.
