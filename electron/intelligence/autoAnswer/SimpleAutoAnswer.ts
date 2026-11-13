@@ -171,6 +171,34 @@ export function isReportShaped(candidate: string): boolean {
     return REPORT_SHAPED.test(t) && !HANGING_END.test(t);
 }
 /**
+ * A finished sentence that directs the USER to explain or produce something:
+ * "Walk me through how you would shard it.", "Tell me about a time…", "Your
+ * task is to build a rate limiter.", "Go ahead and implement the merge
+ * function." These are asks with no '?'. Production verbs need an object
+ * after them ("design a…", "build the…"), so "Design reviews happen on
+ * Fridays." is not one; narration by the speaker ("I want to walk you
+ * through…") does not open with the directive and is not one either.
+ */
+const DECLARATIVE_ASK = /^(?:(?:ok(?:ay)?|so|and|now|alright|all right|well|great|next|please)[,.!\s]+)*(?:(?:please|go ahead and|i(?:['’]d| would) like you to|i want you to|your (?:task|job|challenge) (?:is|will be) to)\s+)?(?:walk (?:me|us) through|talk (?:me|us) through|tell (?:me|us) (?:about|how|why|what|when|where|which|who|a (?:bit|little)|more)|explain|describe|elaborate|give (?:me|us) (?:an? |some )?(?:example|overview|rundown|summary|sense)|(?:write|implement|design|build|code(?: up)?|create|solve|compare|define|sketch|draw|estimate|optimi[sz]e|refactor|debug) (?:a|an|the|me|us|some|your|this|that|these|those|it|how|what))\b/i;
+
+/**
+ * Whether `text` ends on a declarative ask (DECLARATIVE_ASK): the last
+ * sentence that is not inert opens with the directive and is finished. Read
+ * only when the judge failed, as the '?' fallback's twin (pipeline forensics
+ * 2026-11-13, F-ACC-07): a statement never qualifies, and a directive the
+ * speaker then moved on from is left alone.
+ */
+export function endsOnDeclarativeAsk(text: string, punctuated: boolean): boolean {
+    const sentences = sentencesOf((text ?? '').trim());
+    let i = sentences.length - 1;
+    while (i >= 0 && isInertUtterance(sentences[i], true)) i--;
+    if (i < 0) return false;
+    const s = sentences[i];
+    if (!DECLARATIVE_ASK.test(s) || isCutOffEnding(s) || HANGING_END.test(s)) return false;
+    return !punctuated || /[.?!]["'”’)\]]*$/.test(s);
+}
+
+/**
  * Supersede economy (2026-11-10). Live TI run, 104 judge calls in 5.4 min, 67
  * thrown away: 33 asked on a final that ended mid-sentence (22 on a dash, all
  * superseded), and stray speech after a FINISHED question ("Put that down.",
@@ -1044,7 +1072,10 @@ export class SimpleAutoAnswerEngine {
             const fresh = sentencesOf(unjudged);
             const asked = /\?\s*$/.test(candidate) || fresh.some(s => /\?\s*$/.test(s));
             const interrogative = fresh.some(s => FALLBACK_INTERROGATIVE.test(s));
-            if (asked || (!this.punctuationGuaranteed && interrogative)) {
+            // A declarative ask ("Walk me through how you would shard it.") is
+            // an ask without a '?': silence was the only outcome (F-ACC-07).
+            const declarative = endsOnDeclarativeAsk(unjudged || candidate, this.punctuationGuaranteed);
+            if (asked || (!this.punctuationGuaranteed && interrogative) || declarative) {
                 this.host.log?.(`[AutoAnswer:simple] judge ${outcome} — fallback dispatch`);
                 this.deliver(id, candidate, 0.9, 'general_question', committedAt);
             }
