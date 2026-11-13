@@ -14,7 +14,7 @@ import { assemblePromptV2 } from "../intelligence/PromptAssemblerV2";
 import { beginTrace, commitTrace } from "../intelligence/IntelligenceTrace";
 import { DOM_CONTEXT_MAX_CHARS } from "../config/constants";
 import { checkAnswerForCodeBugs } from "./CodeSanityCheck";
-import { accountOrSetupUserMessage, providerRejectionUserMessage } from "./providerErrorClassifier";
+import { accountOrSetupUserMessage, isProvidersExhaustedError, providerFailureUserMessage, providerRejectionUserMessage } from "./providerErrorClassifier";
 import { formatAnswerPlanForPrompt, isCodingAnswerType } from "./AnswerPlanner";
 import { resolveCodingPromptSignals, isDeicticAsk, isPromotedScreenCodingTurn, screenPromotedCodingSignals } from "./codingPromptSignals";
 import type { AnswerPlan, AnswerType } from "./AnswerPlanner";
@@ -1341,6 +1341,10 @@ The user triggered this action with a coding problem on screen and NO new questi
             // below would name the wrong cause. Checked first: "quota" and
             // "API key" in these would otherwise match the provider test.
             const ownLine = accountOrSetupUserMessage(error);
+            // Every configured provider was tried and failed (F-ACC-10): say so,
+            // and do not hand the engine an empty stream to regenerate against
+            // a chain that has just failed end to end.
+            const exhaustedLine = isProvidersExhaustedError(error) ? providerFailureUserMessage(error) : null;
             const isProviderFailure = /\b(401|403|429)\b|api key|unauthor|forbidden|quota|rate.?limit|billing|exhausted|permission/.test(msg);
             // A permanent rejection ("The '<model>' model is not supported when
             // using Codex with a ChatGPT account", issue #543) is not retryable:
@@ -1349,6 +1353,8 @@ The user triggered this action with a coding problem on screen and NO new questi
             const rejection = isProviderFailure ? null : providerRejectionUserMessage(error);
             if (ownLine) {
                 yield ownLine;
+            } else if (exhaustedLine) {
+                yield exhaustedLine;
             } else if (rejection) {
                 yield rejection;
             } else if (isProviderFailure) {

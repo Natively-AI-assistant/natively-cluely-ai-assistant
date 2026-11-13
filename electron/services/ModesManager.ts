@@ -1489,11 +1489,14 @@ export class ModesManager {
                 } catch { /* default allow */ }
                 const mode = this.getModes().find(m => m.id === modeId);
                 const { SectionPromptCompiler } = require('./meeting/SectionPromptCompiler');
-                const { instruction, compiled } = await new SectionPromptCompiler(llmHelper).compile({
+                // Background lane: a compile never makes the live judge or answer
+                // wait on the provider's rate limiter (F-LAT-06).
+                const { runAsBackgroundLlmWork } = require('./RateLimiter');
+                const { instruction, compiled } = await runAsBackgroundLlmWork(() => new SectionPromptCompiler(llmHelper).compile({
                     sectionTitle: title,
                     sectionDescription: description,
                     meetingMode: mode?.templateType,
-                });
+                }));
                 if (compiled && instruction) {
                     DatabaseManager.getInstance().updateNoteSection(sectionId, { compiledPrompt: instruction });
                 }
@@ -1530,7 +1533,10 @@ export class ModesManager {
                 const compiler = new SectionPromptCompiler(llmHelper);
                 const CONCURRENCY = 3;
                 let next = 0;
-                await Promise.all(Array.from({ length: Math.min(CONCURRENCY, sections.length) }, async () => {
+                // Background lane (F-LAT-06): dev-s09c's ~112 compile calls drained
+                // the shared bucket and the first judge waited 2.6 s behind them.
+                const { runAsBackgroundLlmWork } = require('./RateLimiter');
+                await runAsBackgroundLlmWork(() => Promise.all(Array.from({ length: Math.min(CONCURRENCY, sections.length) }, async () => {
                     while (next < sections.length) {
                         const s = sections[next++];
                         try {
@@ -1538,7 +1544,7 @@ export class ModesManager {
                             if (compiled && instruction) DatabaseManager.getInstance().updateNoteSection(s.id, { compiledPrompt: instruction });
                         } catch { /* per-section non-fatal */ }
                     }
-                }));
+                })));
             } catch (e) {
                 console.warn('[ModesManager] compileAllSections skipped (non-fatal):', (e as any)?.message);
             }

@@ -135,6 +135,18 @@ export function classifyProviderError(err: any, text?: string): ProviderErrorCla
   return { kind: 'none', isOutage: false, retryable: false, code: 'ok' };
 }
 
+/** `code` on the error LLMHelper throws when every configured provider was
+ *  tried and failed (as opposed to none being configured). */
+export const PROVIDERS_EXHAUSTED_CODE = 'PROVIDERS_EXHAUSTED';
+
+export function isProvidersExhaustedError(err: unknown): boolean {
+  return !!err && typeof err === 'object' && (err as { code?: unknown }).code === PROVIDERS_EXHAUSTED_CODE;
+}
+
+/** Same opening as the transport line below, so the overlay's
+ *  PROVIDER_FAILURE_SENTENCE_STARTS already recognises it. */
+const PROVIDERS_UNREACHABLE_LINE = "The AI provider is unreachable or overloaded right now, so I couldn't generate an answer. Try again in a moment.";
+
 /**
  * The user-facing line for a PROVIDER failure on the What-To-Answer path, or
  * null when the error is not a provider failure (2026-09-07).
@@ -151,6 +163,14 @@ export function providerFailureUserMessage(err: unknown): string | null {
   if (!err) return null;
   const own = accountOrSetupUserMessage(err);
   if (own) return own;
+  // Every configured provider was tried and failed (F-ACC-10). Say what the last
+  // one said when that is specific (a key, a rate limit), else that the
+  // providers are not answering — never "set one up".
+  if (isProvidersExhaustedError(err)) {
+    const cause = (err as { cause?: unknown }).cause;
+    const specific = cause && !isProvidersExhaustedError(cause) ? providerFailureUserMessage(cause) : null;
+    return specific ?? PROVIDERS_UNREACHABLE_LINE;
+  }
   const rejection = providerRejectionUserMessage(err);
   if (rejection) return rejection;
   const c = classifyProviderError(err);
