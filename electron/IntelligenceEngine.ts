@@ -234,6 +234,8 @@ interface SpeculativeAnswer {
      * under the text instead of reading as finished (forensics 2026-11-13, F-ACC-01).
      */
     stopReason?: string;
+    /** The run's source badge, computed from the evidence its prompt carried (F-ACC-04). */
+    sourceLabel?: string;
 }
 
 export class IntelligenceEngine extends EventEmitter {
@@ -1579,6 +1581,16 @@ export class IntelligenceEngine extends EventEmitter {
         this.speculativeAdoptedGenerationId = null;
     }
 
+    /** The overlay source badge for a What-to-Answer final (F-ACC-04). Never throws. */
+    private answerSourceLabel(snapshot: unknown, turnPlan: unknown): string {
+        try {
+            const { computeAnswerSourceLabel } = require('./llm/SourceBadge') as typeof import('./llm/SourceBadge');
+            return computeAnswerSourceLabel({ v3Prompt: (snapshot as any)?.v3Prompt ?? null, turnPlan: (turnPlan as any) ?? null });
+        } catch {
+            return 'General knowledge';
+        }
+    }
+
     /**
      * A speculative run finished. It never rendered, so this is where its text
      * is kept for adoption — or revealed at once if the dispatch already
@@ -1594,13 +1606,14 @@ export class IntelligenceEngine extends EventEmitter {
         generationId: number, question: string | undefined, confidence: number, text: string,
         writeDecision: SessionWriteDecision | undefined,
         streamed?: SpeculativeStreamed,
-        plan?: { answerType?: AnswerType; answerStyle?: string; stopReason?: string },
+        plan?: { answerType?: AnswerType; answerStyle?: string; stopReason?: string; sourceLabel?: string },
     ): string {
         const finished: SpeculativeAnswer = {
             generationId, question: question || 'inferred', confidence, text, writeDecision,
             ...(plan?.answerType ? { answerType: plan.answerType } : {}),
             ...(plan?.answerStyle ? { answerStyle: plan.answerStyle } : {}),
             ...(plan?.stopReason ? { stopReason: plan.stopReason } : {}),
+            ...(plan?.sourceLabel ? { sourceLabel: plan.sourceLabel } : {}),
         };
         const adoptedInFlight = this.speculativeAdoptedGenerationId === generationId && this.currentGenerationId === generationId;
         if (this.speculativeAdoptedGenerationId === generationId) this.speculativeAdoptedGenerationId = null;
@@ -1740,7 +1753,7 @@ export class IntelligenceEngine extends EventEmitter {
         } else {
             console.warn(`[IntelligenceEngine] Prefetched answer revealed but not stored (${finished.writeDecision.reason ?? 'do_not_store'})`);
         }
-        this.emit('suggested_answer', text, finished.question, finished.confidence, generationId, undefined, finished.stopReason);
+        this.emit('suggested_answer', text, finished.question, finished.confidence, generationId, finished.sourceLabel, finished.stopReason);
     }
 
     /** Auto Answer V3: identity of the speculative cache, for keyed/embedding reuse. */
@@ -5483,18 +5496,9 @@ export class IntelligenceEngine extends EventEmitter {
                 // `sourceLabel` field on the `intelligence-suggested-answer`
                 // payload. Defensive fallback to 'General knowledge' if the
                 // helper throws — the emit boundary must never throw.
-                const { computeEngineSourceLabel } = require('./llm/SourceBadge');
-                // When V3 composed this turn's prompt, the legacy TurnPlan did
-                // not drive the answer — labelling from it said "General
-                // knowledge" over reference-grounded V3 answers. Derive from
-                // the V3 decision instead.
-                const _v3ForLabel = (requestSnapshot as any)?.v3Prompt;
-                const _c3SourceLabel = _v3ForLabel
-                    ? ((_v3ForLabel.evidenceCount ?? 0) > 0 ? 'Reference material' : 'General knowledge')
-                    : computeEngineSourceLabel({
-                        turnPlan: _c3TurnPlan,
-                        evidenceFound: true,
-                    });
+                // When V3 composed this turn's prompt the label comes from the
+                // evidence it carried, not the legacy TurnPlan (F-ACC-04).
+                const _c3SourceLabel = this.answerSourceLabel(requestSnapshot, _c3TurnPlan);
                 // A canned opener that a real answer followed is thrown away here
                 // too, so the committed text matches what first paint showed
                 // (cannedOpener.ts, 2026-09-07).
@@ -7147,6 +7151,8 @@ export class IntelligenceEngine extends EventEmitter {
                     // Same rule as the live final below: not when the cut-off
                     // text was replaced, because the user reads the replacement.
                     stopReason: wtaTruncation.truncated && !streamedAnswerReplaced ? wtaTruncation.reason : undefined,
+                    // The badge rides with the held answer so its reveal is labelled too (F-ACC-04).
+                    sourceLabel: this.answerSourceLabel(requestSnapshot, _c3TurnPlan),
                 });
             }
 
@@ -7346,7 +7352,10 @@ export class IntelligenceEngine extends EventEmitter {
             // under the text instead of reading as finished (#644). Not when
             // the cut-off text was replaced: the user reads the replacement.
             const wtaStopReason = wtaTruncation.truncated && !streamedAnswerReplaced ? wtaTruncation.reason : undefined;
-            this.emit('suggested_answer', finalWtaAnswer, question || 'What to Answer', confidence, generationId, undefined, wtaStopReason);
+            // The source badge on the normal exit too: before, only the provider
+            // error branch computed one, so every normal answer read 'General
+            // knowledge' (F-ACC-04).
+            this.emit('suggested_answer', finalWtaAnswer, question || 'What to Answer', confidence, generationId, this.answerSourceLabel(requestSnapshot, _c3TurnPlan), wtaStopReason);
             // Compile-only syntax check of fenced JavaScript (observe-only: the
             // turn trace + telemetry record it, the answer is never changed).
             try {
