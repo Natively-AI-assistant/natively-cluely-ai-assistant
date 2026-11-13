@@ -27,6 +27,7 @@ import { resizeEnvelopeFor, OVERLAY_PANEL_INSET } from '../src/lib/overlayCustom
 import { decideLauncherClose } from '../src/lib/launcherCloseDecision.mjs';
 import { DEV_SERVER_URL } from './devServerUrl';
 import { shortcutRestoreBounds, shortcutRestoreDisplay } from './utils/shortcutRestore';
+import { createLinuxWm } from './services/linuxWm';
 
 const isEnvDev = process.env.NODE_ENV === 'development';
 const isPackaged = app.isPackaged;
@@ -994,6 +995,7 @@ export class WindowHelper {
       // compositors ignore both requests; there the overlay is a normal window.
       this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
       this.overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      this.pinOverlayViaCompositor(this.overlayWindow);
     }
 
     this.overlayWindow.loadURL(`${startUrl}?window=overlay`).catch((e) => {
@@ -1711,6 +1713,23 @@ export class WindowHelper {
         }
       }
     }
+  }
+
+  /**
+   * Linux/Wayland: Electron's always-on-top is ignored by the compositor, so
+   * ask it directly (KWin keepAbove, Sway floating+sticky, Hyprland pin) once
+   * the page has loaded and the window has its final title. Best-effort: no
+   * adapter (GNOME) or a failure leaves a normal window.
+   */
+  private pinOverlayViaCompositor(win: BrowserWindow): void {
+    const wm = createLinuxWm();
+    if (!wm) return;
+    win.webContents.once('did-finish-load', () => {
+      if (win.isDestroyed()) return;
+      wm.setAlwaysOnTop(process.pid, win.getTitle())
+        .then((ok) => console.log(`[WindowHelper] ${wm.name} always-on-top ${ok ? 'applied' : 'not applied'}`))
+        .catch((e) => console.warn('[WindowHelper] compositor always-on-top failed:', e));
+    });
   }
 
   private createPopoverCatcher(): void {
