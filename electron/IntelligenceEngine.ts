@@ -627,6 +627,13 @@ export class IntelligenceEngine extends EventEmitter {
         // A new meeting never inherits a design drawn before it started (in the
         // launcher's chat, or in the meeting that just ended).
         try { this.session.clearActiveDesign(); } catch { /* continuity only */ }
+        // Compile the answer path's regexes and classifiers now, in small idle
+        // slices, instead of on the first question (forensics 2026-11-13,
+        // F-LAT-01: 0.6-1.45 s of one-time main-thread work landed between the
+        // judge and the first token). Once per process; synthetic text only.
+        try {
+            (require('./llm/answerPathWarmup') as typeof import('./llm/answerPathWarmup')).scheduleAnswerPathWarmup();
+        } catch { /* the first answer just runs cold */ }
     }
 
     /**
