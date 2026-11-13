@@ -931,9 +931,18 @@ export function evaluateAnswerability(
     (req.authoritativeSources ?? []).some((s) => plannedTypes.has(s));
   const family = (req: ClaimRequirement): string =>
     plannable(req) && String(req.claimType).startsWith('JOB_') ? 'job' : 'user';
+  // ONE clause, ONE key (F-ACC-03, 2026-11-13). The classifier records a
+  // claim's clause from its LOWER-CASED question, while a claim without a
+  // clause falls back to the resolved question as asked — so one clause was
+  // two subjects that differed only in case. In a live meeting the reference
+  // file satisfied the document claim and the meeting claim sat alone in the
+  // other group: a fact in the pack read PARTIAL (P2-s16b, "What is the
+  // retention window for raw spans in Orion?"). Case, spacing and the closing
+  // punctuation never make a different subject.
+  const subjectKey = (s: string): string => s.toLowerCase().replace(/\s+/g, ' ').replace(/[\s?!.]+$/, '').trim();
   const bySubject = new Map<string, typeof required>();
   for (const req of required) {
-    const subject = `${req.subject ?? decision.resolvedQuestion} ${family(req)}`;
+    const subject = `${subjectKey(req.subject ?? decision.resolvedQuestion)} ${family(req)}`;
     if (!bySubject.has(subject)) bySubject.set(subject, []);
     bySubject.get(subject)!.push(req);
   }
