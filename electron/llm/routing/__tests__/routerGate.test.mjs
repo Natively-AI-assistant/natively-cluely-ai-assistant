@@ -45,7 +45,10 @@ describe('the gate can never silence an explicit user action', () => {
 describe('the gate leaves the engine in the state the generated path would have', () => {
     // Skipping a mutation would make the next turn behave differently purely
     // because the router fired, which is a behaviour change rather than a cost
-    // saving. These are the five the post-generation sentinel path performs.
+    // saving. These are the four the post-generation sentinel path performs.
+    // F-ACC-08 (2026-11-13): both now stamp lastSpeculativeDeclineAt instead of
+    // the answered-turn cooldown (lastTriggerTime/lastTriggerQuestion), so a
+    // speculative decline cannot silence the judged answer to the same ask.
     const block = (() => {
         const i = engine.indexOf('PR 7: INTERACTION ROUTER PRE-CHECK');
         return engine.slice(i, engine.indexOf('if (this.assistCancellationToken) {', i));
@@ -54,14 +57,18 @@ describe('the gate leaves the engine in the state the generated path would have'
     for (const mutation of [
         'this.speculativeText = null;',
         'this.speculativeTextExpiry = Infinity;',
-        'this.lastTriggerTime = Date.now();',
-        'this.lastTriggerQuestion = question ?? null;',
+        'this.lastSpeculativeDeclineAt = Date.now();',
         "this.setMode('idle');",
     ]) {
         test(`it performs ${mutation}`, () => {
             assert.ok(block.includes(mutation), `the gate must perform: ${mutation}`);
         });
     }
+
+    test('and never stamps the answered-turn cooldown (F-ACC-08)', () => {
+        assert.ok(!block.includes('this.lastTriggerTime = Date.now();'));
+        assert.ok(!block.includes('this.lastTriggerQuestion = question ?? null;'));
+    });
 
     test('and returns null, matching the speculative sentinel outcome', () => {
         assert.ok(/return null;/.test(block), 'the gate must return null');
