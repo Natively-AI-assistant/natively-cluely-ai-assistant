@@ -1431,6 +1431,8 @@ try {
     textHasCompEvidence = require('../premium/electron/knowledge/NegotiationConversationTracker').textHasCompEvidence;
 } catch {
     console.log('[Main] Knowledge modules not available — profile intelligence disabled.');
+    // F-ACC-14: tell the answer path this build has no Profile Intelligence.
+    try { require('./premium/featureGate').markPremiumAbsent(); } catch { /* gate unavailable */ }
 }
 
 import { CredentialsManager } from "./services/CredentialsManager"
