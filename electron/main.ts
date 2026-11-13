@@ -5043,13 +5043,17 @@ export class AppState {
         // (its whisper-1 REST fallback; its Realtime mode emits its own
         // endpoint anyway) and the local models (their own VAD closes the
         // segment, then inference runs). For those the stop always precedes
-        // the text, so it would judge the turn without its last words.
+        // the text, so it would judge the turn without its last words: they
+        // get the stop as a hint for the final that FOLLOWS it instead
+        // (F-LAT-07; the engine ignores it once the interviewer speaks again).
         if (this._autoAnswerEnabled && this.isMeetingActive) {
           try {
             const { CredentialsManager } = require('./services/CredentialsManager');
             const provider = CredentialsManager.getInstance().getSttProvider();
             if (acceptsLocalSpeechEndHint(provider)) {
               this.simpleAutoAnswer.onLocalSpeechEnd();
+            } else if (provider && provider !== 'none') {
+              this.simpleAutoAnswer.onLocalSpeechEndBeforeFinal();
             }
           } catch { /* an endpoint hint must never break capture */ }
         }

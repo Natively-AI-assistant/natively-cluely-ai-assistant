@@ -36,7 +36,7 @@ import type { TranscriptTurn } from '../../llm/transcriptCleaner';
 import type { Clock, ClockTimer } from './AutoAnswerClock';
 import { systemClock } from './AutoAnswerClock';
 import {
-    JUDGE_DEADLINE_MS, JUDGE_CONTEXT_TURNS, parseJudgeVerdict, routeForVerdict, type JudgeRequest,
+    JUDGE_DEADLINE_MS, JUDGE_CONTEXT_TURNS, isSpokenTurn, parseJudgeVerdict, routeForVerdict, type JudgeRequest,
 } from './AutoAnswerJudge';
 import { isMidWordCut, joinTranscriptParts, normalizeForCompare, tokenContainment } from './AutoAnswerText';
 import type { AutoAnswerThresholds } from './AutoAnswerPolicy';
@@ -170,6 +170,34 @@ export function isReportShaped(candidate: string): boolean {
     const t = candidate.trim();
     return REPORT_SHAPED.test(t) && !HANGING_END.test(t);
 }
+/**
+ * A finished sentence that directs the USER to explain or produce something:
+ * "Walk me through how you would shard it.", "Tell me about a time…", "Your
+ * task is to build a rate limiter.", "Go ahead and implement the merge
+ * function." These are asks with no '?'. Production verbs need an object
+ * after them ("design a…", "build the…"), so "Design reviews happen on
+ * Fridays." is not one; narration by the speaker ("I want to walk you
+ * through…") does not open with the directive and is not one either.
+ */
+const DECLARATIVE_ASK = /^(?:(?:ok(?:ay)?|so|and|now|alright|all right|well|great|next|please)[,.!\s]+)*(?:(?:please|go ahead and|i(?:['’]d| would) like you to|i want you to|your (?:task|job|challenge) (?:is|will be) to)\s+)?(?:walk (?:me|us) through|talk (?:me|us) through|tell (?:me|us) (?:about|how|why|what|when|where|which|who|a (?:bit|little)|more)|explain|describe|elaborate|give (?:me|us) (?:an? |some )?(?:example|overview|rundown|summary|sense)|(?:write|implement|design|build|code(?: up)?|create|solve|compare|define|sketch|draw|estimate|optimi[sz]e|refactor|debug) (?:a|an|the|me|us|some|your|this|that|these|those|it|how|what))\b/i;
+
+/**
+ * Whether `text` ends on a declarative ask (DECLARATIVE_ASK): the last
+ * sentence that is not inert opens with the directive and is finished. Read
+ * only when the judge failed, as the '?' fallback's twin (pipeline forensics
+ * 2026-11-13, F-ACC-07): a statement never qualifies, and a directive the
+ * speaker then moved on from is left alone.
+ */
+export function endsOnDeclarativeAsk(text: string, punctuated: boolean): boolean {
+    const sentences = sentencesOf((text ?? '').trim());
+    let i = sentences.length - 1;
+    while (i >= 0 && isInertUtterance(sentences[i], true)) i--;
+    if (i < 0) return false;
+    const s = sentences[i];
+    if (!DECLARATIVE_ASK.test(s) || isCutOffEnding(s) || HANGING_END.test(s)) return false;
+    return !punctuated || /[.?!]["'”’)\]]*$/.test(s);
+}
+
 /**
  * Supersede economy (2026-11-10). Live TI run, 104 judge calls in 5.4 min, 67
  * thrown away: 33 asked on a final that ended mid-sentence (22 on a dash, all
@@ -450,13 +478,77 @@ export interface SimpleAutoAnswerHost {
     logContent?(label: string, text: string): void;
 }
 
+/**
+ * A final whose words equal the previous pending final's, this soon after it,
+ * is the STT delivering it twice, not the interviewer repeating themselves.
+ */
+export const DUPLICATE_FINAL_MS = 5000;
+
 /** Share of a picked ask's words that must come from ruled-out finals for it to count as resurfaced. */
 export const RULED_OUT_CONTAINMENT = 0.9;
 
 /** Share of the dispatched question's words a keyed draft's text must hold to be adopted. */
 export const SPECULATION_HOLDS_QUESTION = 0.9;
 
-type PendingPart = { text: string; at: number; speaker?: string; glueNext?: boolean; provisional?: boolean };
+/** `startedAt`: when the utterance's first interim arrived (its final's arrival when there were none). */
+type PendingPart = { text: string; at: number; startedAt?: number; speaker?: string; glueNext?: boolean; provisional?: boolean };
+
+/**
+ * Back-to-back asks (pipeline forensics 2026-11-13, F-CTX-04). When a second
+ * ask starts within this long of the first one's final, the first one's
+ * verdict (asked EARLY_JUDGE_MS after its final, ~1.0-1.5 s; server p99
+ * 1.49 s) has not landed: the second ask's speech supersedes it and both are
+ * judged as one candidate. Owner decision: one combined answer, so the
+ * dispatched question must keep both asks even when the judge's question_text
+ * keeps only the last. Live and replayed merges started 0.65 s apart; an ask
+ * that started later than this had its own verdict's chance and is not merged.
+ */
+export const MERGED_ASK_GAP_MS = 1500;
+/** Logistics and pleasantries: never glued onto a real ask, whatever their shape. */
+const LOGISTICS_ASK = /\b(?:can|could) (?:you|everyone|everybody|y['’]?all) (?:hear|see) (?:me|us|my|this|that|the|it)\b|\b(?:are|is) (?:you|everyone|everybody|we) (?:ready|there|able to (?:hear|see)|good to go|all set)\b|\bam i (?:audible|on mute|muted|coming through|breaking up)\b|\b(?:is|was) (?:my|the) (?:audio|mic|microphone|sound|video|screen|connection|camera)\b|\b(?:shall|should|can) we (?:start|begin|get started|kick off)\b|\bhow are you\b|\bhow(?:['’]s| is) (?:it going|your day|everything|the weather)\b|\bdid you find\b|\b(?:is|was) (?:that|this|it) (?:better|clearer|okay|ok)\b|\bcan (?:i|you) (?:share|present)\b|\bare we (?:good|recording|live)\b|\b(?:any|got any) questions (?:for me|before)\b/i;
+
+/** One sentence that is, by itself, a finished ask worth answering. */
+function isStandaloneAsk(sentence: string, punctuated: boolean): boolean {
+    const t = sentence.trim();
+    if (!t || isCutOffEnding(t) || HANGING_END.test(t) || LOGISTICS_ASK.test(t)) return false;
+    if (punctuated && !/[.?!]["'”’)\]]*$/.test(t)) return false;
+    return /\?["'”’)\]]*$/.test(t) || FALLBACK_INTERROGATIVE.test(t) || DECLARATIVE_ASK.test(t);
+}
+
+/**
+ * The dispatched question for a merged candidate (see MERGED_ASK_GAP_MS).
+ * `parts` are the unjudged finals the verdict ruled on (no verdict has
+ * ruled any of them out); `questionText` is the judge's ask. When finals
+ * BEFORE the ones the ask came from were cut off from it by a second ask that
+ * started within MERGED_ASK_GAP_MS, and they end on an ask of their own, that
+ * ask is put back in front. Lead-ins (statements, logistics, pleasantries), a
+ * fragment, an ask already answered, or an ask well before the second one are
+ * left out, so this returns `questionText` unchanged.
+ */
+export function withMergedEarlierAsk(
+    parts: ReadonlyArray<PendingPart>, questionText: string, punctuated: boolean, lastAnswered: string | null,
+): string {
+    const covered = (p: PendingPart) => tokenContainment(p.text, questionText) >= 0.5;
+    const c = parts.findIndex(covered);
+    if (c <= 0) return questionText;
+    // The finals right before the ask's, each starting within the gap of the one before it.
+    let start = c;
+    while (start > 0) {
+        const next = parts[start];
+        const prev = parts[start - 1];
+        if (prev.provisional || prev.glueNext || covered(prev)) break;
+        if ((next.startedAt ?? next.at) - prev.at > MERGED_ASK_GAP_MS) break;
+        start--;
+    }
+    if (start === c) return questionText;
+    const sentences = sentencesOf(joinTranscriptParts(parts.slice(start, c)));
+    let from = sentences.length;
+    while (from > 0 && isStandaloneAsk(sentences[from - 1], punctuated)) from--;
+    if (from === sentences.length) return questionText;
+    const earlier = sentences.slice(from).join(' ');
+    if (lastAnswered && tokenContainment(earlier, lastAnswered) >= RULED_OUT_CONTAINMENT) return questionText;
+    return `${earlier} ${questionText}`;
+}
 
 export class SimpleAutoAnswerEngine {
     /** `provisional`: a stalled interim standing in for its final (STALL_PROMOTE_MS); only ever the LAST part. */
@@ -489,6 +581,12 @@ export class SimpleAutoAnswerEngine {
      * counts, so a stale stop from an earlier pause never promotes mid-speech.
      */
     private speechStartsSeen = false;
+    /**
+     * The voice detector reported a stop on a provider whose final comes only
+     * after the speech ended (REST, local whisper), and the interviewer has not
+     * started again since. A final that lands now closes the turn.
+     */
+    private stopAwaitsFinal = false;
     /** speakerId per interviewer final, when the STT diarizes. Keyed by normalized text. */
     private speakerByTurn = new Map<string, string>();
     private timer: ClockTimer | null = null;
@@ -607,6 +705,7 @@ export class SimpleAutoAnswerEngine {
         this.coveredBy = null;
         this.settledNegative = null;
         this.promotedInterim = null;
+        this.stopAwaitsFinal = false;
         this.bumpJudgeSeq('meeting_reset');
     }
     onMeetingStop(): void { this.reset(); }
@@ -652,12 +751,30 @@ export class SimpleAutoAnswerEngine {
     }
 
     /**
+     * The local voice detector saw the interviewer stop, on a provider that
+     * transcribes a segment only after it ends (REST uploads, local whisper;
+     * see acceptsLocalSpeechEndHint). The stop precedes the final, so it must
+     * not commit what is pending now (that would judge the turn without its
+     * last words). It confirms the final that FOLLOWS it instead: that final
+     * arms ENDPOINT_CONFIRM_MS rather than STABILITY_MS, as long as the
+     * interviewer has not started talking again (onLocalSpeechStart). Without
+     * voice-detector starts a resumption would be invisible, so the hint is
+     * not used. Pipeline forensics 2026-11-13, F-LAT-07.
+     */
+    onLocalSpeechEndBeforeFinal(): void {
+        if (!this.host.isEnabled()) return;
+        this.stopAwaitsFinal = true;
+        this.host.log?.(`[AutoAnswer:simple] voice stop before its final (${this.speechStartsSeen ? 'the next final closes the turn' : 'no speech starts seen: not used'})`);
+    }
+
+    /**
      * The local voice detector saw the interviewer start talking again. A stop
      * the stall cap was counting on is over: frozen text now means a slow
      * transcriber mid-speech, not a finished speaker. Only the stall cap reads this.
      */
     onLocalSpeechStart(): void {
         this.speechStartsSeen = true;
+        this.stopAwaitsFinal = false;
         this.localStopAt = 0;
         this.clearStallCap();
     }
@@ -702,18 +819,29 @@ export class SimpleAutoAnswerEngine {
             this.clearStallCap();
             this.promotedInterim = null;
             if (this.absorbStalledFinal(text, now, speaker)) return;
+            // The STT sent the same final twice (pipeline forensics 2026-11-13,
+            // F-CTX-10: the dispatched question carried the ask twice). Not new
+            // speech: no part, no supersede, no re-arm.
+            const prev = this.pending[this.pending.length - 1];
+            if (prev && !prev.provisional && now - prev.at <= DUPLICATE_FINAL_MS
+                && normalizeForCompare(prev.text) === normalizeForCompare(text)) {
+                this.lastInterviewerInterim = '';
+                this.host.log?.('[AutoAnswer:simple] duplicate final dropped');
+                return;
+            }
             // Decide the seam NOW: the interim this final was cut from is still
             // in hand, and it is gone as soon as the next one arrives.
             const glueNext = isMidWordCut(text, this.lastInterviewerInterim);
+            const startedAt = this.lastInterviewerInterim ? this.utteranceStartAt : now;
             this.finalsSeen++;
             if (/[.?!]["'”’)\]]*$/.test(text)) this.finalsTerminated++;
             this.lastInterviewerInterim = '';
-            this.pending.push({ text, at: now, speaker, glueNext });
+            this.pending.push({ text, at: now, startedAt, speaker, glueNext });
             // Supersede any in-flight verdict: it judged less than this. Inert
             // growth keeps the call alive — its verdict is held for the quiet point.
             this.bumpJudgeSeq('final', !!this.inFlight && this.isInertExtension(this.inFlight.parts));
             this.lastInterviewerAt = now;
-            this.arm(STABILITY_MS);
+            this.arm(this.stopAwaitsFinal && this.speechStartsSeen ? ENDPOINT_CONFIRM_MS : STABILITY_MS);
             return;
         }
 
@@ -909,6 +1037,7 @@ export class SimpleAutoAnswerEngine {
         const parts = this.pending.map(p => ({ speaker: p.speaker, text: p.text }));
         const partsAtConsult = this.pending.length;
         const snapshot = this.pending.slice();
+        const unjudgedParts = this.pending.slice(Math.min(this.judgedParts, this.pending.length));
         const unjudged = this.unjudgedText();
         const ruledOut = joinTranscriptParts(this.pending.slice(0, Math.min(this.judgedParts, this.pending.length)));
         // Judged on a promoted interim. If its real final replaces it while
@@ -991,7 +1120,9 @@ export class SimpleAutoAnswerEngine {
                     && superseded.answerability > ANSWER_FLOOR) {
                     this.held = {
                         id, key: normalizeForCompare(candidate),
-                        text: superseded.questionText ?? candidate,
+                        text: superseded.questionText
+                            ? withMergedEarlierAsk(unjudgedParts, superseded.questionText, this.punctuationGuaranteed, this.lastAnsweredText)
+                            : candidate,
                         answerability: superseded.answerability, act: superseded.act, at: this.clock.now(),
                         parts: snapshot,
                     };
@@ -1028,7 +1159,10 @@ export class SimpleAutoAnswerEngine {
             const fresh = sentencesOf(unjudged);
             const asked = /\?\s*$/.test(candidate) || fresh.some(s => /\?\s*$/.test(s));
             const interrogative = fresh.some(s => FALLBACK_INTERROGATIVE.test(s));
-            if (asked || (!this.punctuationGuaranteed && interrogative)) {
+            // A declarative ask ("Walk me through how you would shard it.") is
+            // an ask without a '?': silence was the only outcome (F-ACC-07).
+            const declarative = endsOnDeclarativeAsk(unjudged || candidate, this.punctuationGuaranteed);
+            if (asked || (!this.punctuationGuaranteed && interrogative) || declarative) {
                 this.host.log?.(`[AutoAnswer:simple] judge ${outcome} — fallback dispatch`);
                 this.deliver(id, candidate, 0.9, 'general_question', committedAt);
             }
@@ -1079,7 +1213,11 @@ export class SimpleAutoAnswerEngine {
         // an earlier verdict ruled not an ask are still not part of it, so the
         // question line, retrieval query and draft read the unjudged finals
         // (pipeline forensics 2026-11-13, F-CTX-03).
-        const text = route.questionText ?? (unjudged || candidate);
+        // A judge that kept only the LAST of two back-to-back asks: put the
+        // first back, so the one combined answer covers both (F-CTX-04).
+        const text = route.questionText
+            ? withMergedEarlierAsk(unjudgedParts, route.questionText, this.punctuationGuaranteed, this.lastAnsweredText)
+            : (unjudged || candidate);
         // Answer or nothing. The judge decides, and the only number left in
         // the decision is ANSWER_FLOOR — the per-mode bars no longer gate a
         // dispatch, because the thing they used to demote to (the offer card)
@@ -1193,10 +1331,12 @@ export class SimpleAutoAnswerEngine {
     }
 
     private turnsBefore(cutoff: number): TranscriptTurn[] {
-        // Judge context: the hot window minus the pending finals themselves.
+        // Judge context: the hot window's SPEECH minus the pending finals
+        // themselves. Drafted answers and typed lines are dropped before the
+        // window is cut, so they never push real turns out (F-CTX-06).
         const pendingSet = new Set(this.pending.map(p => normalizeForCompare(p.text)));
         return this.host.recentTurns()
-            .filter(t => !(t.role === 'interviewer' && pendingSet.has(normalizeForCompare(t.text))))
+            .filter(t => isSpokenTurn(t) && !(t.role === 'interviewer' && pendingSet.has(normalizeForCompare(t.text))))
             .slice(-JUDGE_CONTEXT_TURNS);
     }
 
@@ -1345,6 +1485,7 @@ export class SimpleAutoAnswerEngine {
         this.stallAnswered = null;
         this.promotedInterim = null;
         this.speechStartsSeen = false;
+        this.stopAwaitsFinal = false;
         this.speakerByTurn.clear();
         this.lastJudgedKey = '';
         this.lastAnsweredText = null;
