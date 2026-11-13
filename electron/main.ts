@@ -1320,6 +1320,7 @@ import { AudioDevices } from "./audio/AudioDevices"
 import { isInternalCaptureDevice, resolveRequestedInputDevice } from "./audio/audioDeviceSelection.mjs"
 import { loadNativeModule } from "./audio/nativeModuleLoader"
 import { GoogleSTT } from "./audio/GoogleSTT"
+import { MissingKeySTT } from "./audio/MissingKeySTT"
 import { RestSTT } from "./audio/RestSTT"
 import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
 import { isIntelligenceFlagEnabled } from "./intelligence/intelligenceFlags"
@@ -4149,9 +4150,10 @@ export class AppState {
     if (sttProvider === 'natively') {
       const nativelyKey = CredentialsManager.getInstance().getNativelyApiKey();
       if (!nativelyKey) {
-        // Natively is Coming Soon — no key means degrade gracefully like every other provider
-        console.warn(`[Main] No Natively API Key configured for ${speaker}, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
+        // No key: nothing is transcribed and the overlay says which key is
+        // missing. Never Google unless Google is the choice (F-PRV-01).
+        console.warn(`[Main] No Natively API Key configured for ${speaker}; transcription is off until one is saved`);
+        stt = new MissingKeySTT(sttProvider) as unknown as STTProvider;
       } else {
         // 'system' for interviewer (system audio), 'mic' for user (microphone).
         // The server uses ${key}:${channel} as the session key so both streams
@@ -4181,8 +4183,8 @@ export class AppState {
         // provider that can label voices (sttDiarization.ts).
         stt = new DeepgramStreamingSTT(apiKey, CredentialsManager.getInstance().getSttModel('deepgram'));
       } else {
-        console.warn(`[Main] No API key for Deepgram STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
+        console.warn(`[Main] No API key for Deepgram STT; transcription is off until one is saved`);
+        stt = new MissingKeySTT(sttProvider) as unknown as STTProvider;
       }
     } else if (sttProvider === 'soniox') {
       const apiKey = CredentialsManager.getInstance().getSonioxApiKey();
@@ -4190,8 +4192,8 @@ export class AppState {
         console.log(`[Main] Using SonioxStreamingSTT for ${speaker}`);
         stt = new SonioxStreamingSTT(apiKey);
       } else {
-        console.warn(`[Main] No API key for Soniox STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
+        console.warn(`[Main] No API key for Soniox STT; transcription is off until one is saved`);
+        stt = new MissingKeySTT(sttProvider) as unknown as STTProvider;
       }
     } else if (sttProvider === 'qwen') {
       const apiKey = CredentialsManager.getInstance().getQwenAsrApiKey();
@@ -4199,8 +4201,8 @@ export class AppState {
         console.log(`[Main] Using QwenRealtimeSTT for ${speaker}`);
         stt = new QwenRealtimeSTT(apiKey);
       } else {
-        console.warn('[Main] No Qwen ASR API key, falling back to GoogleSTT');
-        stt = new GoogleSTT(speaker);
+        console.warn('[Main] No Qwen ASR API key; transcription is off until one is saved');
+        stt = new MissingKeySTT(sttProvider) as unknown as STTProvider;
       }
     } else if (sttProvider === 'elevenlabs') {
       const apiKey = CredentialsManager.getInstance().getElevenLabsApiKey();
@@ -4208,8 +4210,8 @@ export class AppState {
         console.log(`[Main] Using ElevenLabsStreamingSTT for ${speaker}`);
         stt = new ElevenLabsStreamingSTT(apiKey);
       } else {
-        console.warn(`[Main] No API key for ElevenLabs STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
+        console.warn(`[Main] No API key for ElevenLabs STT; transcription is off until one is saved`);
+        stt = new MissingKeySTT(sttProvider) as unknown as STTProvider;
       }
     } else if (sttProvider === 'openai') {
       // OpenAI: WebSocket Realtime (gpt-live-transcribe → gpt-4o-transcribe → gpt-4o-mini-transcribe) with whisper-1 REST fallback.
@@ -4221,8 +4223,8 @@ export class AppState {
         console.log(`[Main] Using OpenAIStreamingSTT for ${speaker}${baseUrl ? ` (custom endpoint: ${baseUrl})` : ' (WebSocket+REST fallback)'}`);
         stt = new OpenAIStreamingSTT(apiKey, baseUrl, CredentialsManager.getInstance().getSttModel('openai'));
       } else {
-        console.warn(`[Main] No API key for OpenAI STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
+        console.warn(`[Main] No API key for OpenAI STT; transcription is off until one is saved`);
+        stt = new MissingKeySTT(sttProvider) as unknown as STTProvider;
       }
     } else if (sttProvider === 'nvidia_nim') {
       const key = CredentialsManager.getInstance().getNvidiaNimApiKey();
@@ -4231,8 +4233,8 @@ export class AppState {
         console.log(`[Main] Using NvidiaNimStreamingSTT for ${speaker} (${model})`);
         stt = new NvidiaNimStreamingSTT(key, model);
       } else {
-        console.warn(`[Main] No NVIDIA NIM API key for ${speaker}, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
+        console.warn(`[Main] No NVIDIA NIM API key for ${speaker}; transcription is off until one is saved`);
+        stt = new MissingKeySTT(sttProvider) as unknown as STTProvider;
       }
     } else if (sttProvider === 'groq' || sttProvider === 'azure' || sttProvider === 'ibmwatson') {
       let apiKey: string | undefined;
@@ -4259,8 +4261,8 @@ export class AppState {
         if (speaker === 'user') rest.setHoldSpeechEnds(true);
         stt = rest;
       } else {
-        console.warn(`[Main] No API key for ${sttProvider} STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
+        console.warn(`[Main] No API key for ${sttProvider} STT; transcription is off until one is saved`);
+        stt = new MissingKeySTT(sttProvider) as unknown as STTProvider;
       }
     } else if (sttProvider === 'apple-speech') {
       stt = new AppleSpeechSTT();
@@ -4284,8 +4286,12 @@ export class AppState {
       // Channel label disambiguates the two concurrent instances in latency logs.
       lws.setChannel(speaker === 'interviewer' ? 'system' : 'mic');
       stt = lws as any;
-    } else {
+    } else if (sttProvider === 'google') {
       stt = new GoogleSTT(speaker);
+    } else {
+      // An id this build does not know (a damaged settings file): not Google.
+      console.warn(`[Main] Unknown STT provider '${sttProvider}' for ${speaker}; transcription is off`);
+      stt = new MissingKeySTT(sttProvider) as unknown as STTProvider;
     }
 
     stt.setRecognitionLanguage(sttLanguage);
@@ -4304,6 +4310,8 @@ export class AppState {
       : stt instanceof ElevenLabsStreamingSTT ? 'elevenlabs'
       : stt instanceof NativelyProSTT ? 'natively'
       : stt instanceof GoogleSTT ? 'google'
+      // No key saved: no connection to watch, nothing to recover (F-PRV-01).
+      : stt instanceof MissingKeySTT ? 'none'
       : sttProvider;
 
     // Gap recovery (sttGapRecovery.ts): which provider replays a missed span,
