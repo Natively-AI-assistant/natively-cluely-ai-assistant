@@ -870,7 +870,7 @@ export interface ElectronAPI {
   onIntelligenceAssistUpdate: (callback: (data: { insight: string }) => void) => () => void
   onIntelligenceSuggestedAnswerToken: (callback: (data: { token: string; question: string; confidence: number }) => void) => () => void
   onIntelligenceSuggestedAnswer: (callback: (data: { answer: string; question: string; confidence: number; generationId?: number; sourceLabel?: string; emittedAt?: number; stopReason?: string }) => void) => () => void
-  onIntelligenceSuggestedAnswerDiscard: (callback: (data: { reason: string }) => void) => () => void
+  onIntelligenceSuggestedAnswerDiscard: (callback: (data: { reason: string; generationId?: number }) => void) => () => void
   // Verified code execution (background): ✓ badge + corrected message.
   onIntelligenceCodeVerified: (callback: (data: { question: string; passed: number; total: number; language: string }) => void) => () => void
   onIntelligenceCodeCorrection: (callback: (data: { question: string; answer: string; note: string; reVerified: boolean }) => void) => () => void

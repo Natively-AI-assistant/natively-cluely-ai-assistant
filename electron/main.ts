@@ -8787,11 +8787,13 @@ export class AppState {
     // coding scaffold ended with no final answer (superseded/declined/errored).
     // Tell the renderer to drop the open scaffold row. Flush pending token
     // batches first so a late scaffold batch can't re-mount the row afterwards.
-    this.intelligenceManager.on('suggested_answer_discard', (reason: string) => {
+    // The generation id rides along so the overlay ignores a late discard from
+    // a replaced run instead of clearing the newer answer (F-CTX-09, 2026-11-13).
+    this.intelligenceManager.on('suggested_answer_discard', (reason: string, generationId?: number) => {
       this.autoAnswerUsage.stopAwaitingAnswer();
       flushBatchesBeforeFinal();
       const win = answerWindow()
-      this.sendToWindow(win, 'intelligence-suggested-answer-discard', { reason })
+      this.sendToWindow(win, 'intelligence-suggested-answer-discard', { reason, ...(typeof generationId === 'number' ? { generationId } : {}) })
     })
 
     // Verified code execution (background): a ✓ badge when the shown code passed

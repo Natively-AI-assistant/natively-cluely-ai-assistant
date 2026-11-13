@@ -720,7 +720,7 @@ interface ElectronAPI {
     callback: (data: { answer: string; question: string; confidence: number; sourceLabel?: string; generationId?: number; stopReason?: string }) => void,
   ) => () => void;
   onIntelligenceSuggestedAnswerDiscard: (
-    callback: (data: { reason: string }) => void,
+    callback: (data: { reason: string; generationId?: number }) => void,
   ) => () => void;
   onIntelligenceCodeVerified: (
     callback: (data: { question: string; passed: number; total: number; language: string }) => void,
@@ -2658,7 +2658,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Orphaned-scaffold fix: drop the open what-to-answer scaffold row when a
   // stream ends with no final answer (superseded / declined / errored).
   onIntelligenceSuggestedAnswerDiscard: (
-    callback: (data: { reason: string }) => void,
+    callback: (data: { reason: string; generationId?: number }) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('intelligence-suggested-answer-discard', subscription);
