@@ -11108,12 +11108,23 @@ let isMultimodal = !!(imagePaths?.length);
         // universe. Dispatch for either attached pixels or request-scoped
         // browser DOM/screen OCR; the WTA govern block draws the same line.
         const { declineYieldsToAttachedImages: _declineYieldsLLM } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+        // F-ACC-13 (2026-11-13): the same refusal policy the coordinator sites
+        // apply. A refusal pack that does not govern dispatches to the model.
+        const { packGovernsGeneration } = require('./intelligence/context-os/refusalPolicy') as typeof import('./intelligence/context-os/refusalPolicy');
+        const _refusalYieldsLLM = pack.answerPolicy === 'refuse_insufficient_evidence'
+          && !packGovernsGeneration({
+            answerPolicy: pack.answerPolicy,
+            sourceAuthority: _cog.modeSnapshot?.sourceAuthority ?? null,
+            hasReferenceFiles: true,
+          });
         if (_declineYieldsLLM({
           answerPolicy: pack.answerPolicy,
           hasAttachedImages: Boolean(imagePaths?.length),
           hasScreenText: routeOptions?.hasScreenText === true,
         })) {
           console.log('[CONTEXT-OS] text-evidence decline yields to current-screen context — dispatching with visual evidence');
+        } else if (_refusalYieldsLLM) {
+          console.log('[CONTEXT-OS] refusal pack does not govern (refusal policy) — dispatching to the model');
         } else {
         if (pack.answerPolicy === 'ask_clarification') {
           const { recordContextOsBenchmarkAudit } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');

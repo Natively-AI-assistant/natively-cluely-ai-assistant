@@ -897,8 +897,23 @@ The user triggered this action with a coding problem on screen and NO new questi
                         hasAttachedImages,
                         hasScreenText,
                     });
+                    // F-ACC-13 (2026-11-13): this is the null-V3 fallback's decline
+                    // site, and the engine marks its doc-grounded context
+                    // `govern: true` without asking the refusal policy. Ask it here,
+                    // as the coordinator and manual chat do: a refusal pack that
+                    // does not govern falls through to the model exactly like the
+                    // visual-context yield (no canned line, no pack rendering).
+                    const { packGovernsGeneration } = require('../intelligence/context-os/refusalPolicy') as typeof import('../intelligence/context-os/refusalPolicy');
+                    const _refusalYields = pack.answerPolicy === 'refuse_insufficient_evidence'
+                        && !packGovernsGeneration({
+                            answerPolicy: pack.answerPolicy,
+                            sourceAuthority: _cog.modeSnapshot?.sourceAuthority ?? null,
+                            hasReferenceFiles: true,
+                        });
                     if (_declineYields) {
                         console.log('[CONTEXT-OS] text-evidence decline yields to current-screen context — answering from visual evidence');
+                    } else if (_refusalYields) {
+                        console.log('[CONTEXT-OS] refusal pack does not govern (refusal policy) — answering with the model');
                     } else {
                     if (pack.answerPolicy === 'ask_clarification') {
                         // contract.reason is a developer diagnostic (e.g. "sourceAuthority=
