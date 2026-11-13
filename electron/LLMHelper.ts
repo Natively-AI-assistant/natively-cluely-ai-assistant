@@ -59,6 +59,14 @@ import { assertProviderDataScopes, getDeniedDataScopes, routeWithScopeFallback, 
 // SourceType → privacy toggle: a second copy here is how the two layers would
 // drift into disagreeing about what a `<evidence source_type="RESUME">` block is.
 import { applyEnvScopeDenials, sourceTypesForScopes, dataScopeForSourceType, dataScopesForEvidenceMarkup, scopeLabels, DENY_PROVIDER_SCOPES_ENV } from "./context-intelligence/policies/provider-scope-policy"
+// Premium Profile Intelligence blocks (F-BND-04 / A5 D7, 2026-11-13). The
+// legacy scope regexes key on `<candidate_` / `<user_context`; these premium
+// blocks (the target job, salary estimate, company dossier, pivots, mock hints,
+// culture map, negotiation state, the résumé JIT request) matched nothing, so a
+// "Profile & history" denial sent them anyway. All are derived from the
+// user's profile, so all are `profile_history`.
+const PREMIUM_PROFILE_BLOCK_RE = /<(?:target_job|target_job_context|salary_intelligence|company_research|gap_pivot_scripts|mock_question_hint|culture_alignment|live_negotiation_state|profile_jit_evidence_request)\b/i;
+const PREMIUM_PROFILE_BLOCK_STRIP_RE = /<(target_job|target_job_context|salary_intelligence|company_research|gap_pivot_scripts|mock_question_hint|culture_alignment|live_negotiation_state|profile_jit_evidence_request)\b[\s\S]*?<\/\1>\s*/gi;
 // Screen-understanding enforcement (private_vision / vision_only). Lives in
 // LLMHelper so EVERY screenshot-bearing path is covered, not the one IPC
 // handler that used to read the enum.
@@ -1211,6 +1219,7 @@ export class LLMHelper {
     if (/<reference_file|<active_mode_retrieved_context|mode_retrieval/i.test(context)) scopes.push('reference_files');
     if (/<meeting_history|USER-PROVIDED PERSONA CONTEXT|<user_context|<candidate_|<active_mode_custom_instructions/i.test(context)) scopes.push('profile_history');
     if (/<post_call_summary|meeting summary|silent meeting summarizer|silent meeting note-taker/i.test(context)) scopes.push('post_call_summary');
+    if (PREMIUM_PROFILE_BLOCK_RE.test(context)) scopes.push('profile_history');
     // Context Intelligence V3 evidence markup. The patterns above are the
     // LEGACY tag vocabulary; V3 has been the default answer path since
     // 2026-07-30 and packs every source as `<evidence source_type="…">`, which
@@ -1226,6 +1235,7 @@ export class LLMHelper {
     if (/<reference_file|<active_mode_retrieved_context|mode_retrieval/i.test(message)) scopes.push('reference_files');
     if (/<meeting_history|USER-PROVIDED PERSONA CONTEXT|<user_context|<candidate_|<active_mode_custom_instructions/i.test(message)) scopes.push('profile_history');
     if (/<post_call_summary/i.test(message)) scopes.push('post_call_summary');
+    if (PREMIUM_PROFILE_BLOCK_RE.test(message)) scopes.push('profile_history');
     // V3 evidence markup — see inferContextScopes. A V3 prompt carries its
     // evidence in the MESSAGE (context is undefined), so this is the branch
     // that actually fires on the default path.
@@ -1260,7 +1270,8 @@ export class LLMHelper {
         .replace(/<user_context\b[\s\S]*?<\/user_context>\s*/gi, '')
         .replace(/<active_mode_custom_instructions\b[\s\S]*?<\/active_mode_custom_instructions>\s*/gi, '')
         .replace(/<candidate_[a-z0-9_:-]+\b[\s\S]*?<\/candidate_[a-z0-9_:-]+>\s*/gi, '')
-        .replace(/<meeting_history\b[\s\S]*?<\/meeting_history>\s*/gi, '');
+        .replace(/<meeting_history\b[\s\S]*?<\/meeting_history>\s*/gi, '')
+        .replace(PREMIUM_PROFILE_BLOCK_STRIP_RE, '');
     }
     if (deniedScopes.includes('post_call_summary')) {
       scrubbed = scrubbed.replace(/<post_call_summary\b[\s\S]*?<\/post_call_summary>\s*/gi, '');
@@ -6491,12 +6502,30 @@ let isMultimodal = !!(imagePaths?.length);
     // its controller's). Only the Natively rung and the preferFast pick take it
     // mid-call; the others finish their in-flight request, then the ladder stops
     // instead of trying the next rung or rotation. An aborted call never resolves.
-    opts?: { preferFast?: boolean; signal?: AbortSignal },
+    //
+    // `opts.dataScopes` (F-BND-04, 2026-11-13): the cloud data scopes the
+    // MESSAGE carries. Premium generation (JIT intro, salary, coaching, company
+    // research, résumé/JD extraction) declares `profile_history`; a denied scope
+    // routes to the local model or the call fails — the message IS the profile,
+    // so there is nothing to strip and still send.
+    opts?: { preferFast?: boolean; signal?: AbortSignal; dataScopes?: ProviderDataScope[] },
   ): Promise<string> {
     const signal = opts?.signal;
     const aborted = () => signal?.aborted === true;
     const abortError = () => Object.assign(new Error('structured generation aborted: superseded or cancelled'), { name: 'AbortError' });
     if (aborted()) throw abortError();
+    if (opts?.dataScopes?.length) {
+      const deniedStructured = getDeniedDataScopes(opts.dataScopes, this.getProviderScopePolicy());
+      if (deniedStructured.length > 0) {
+        const ollamaAvailable = this.useOllama && await this.ensureOllamaModelSelected();
+        for (const scope of deniedStructured) this.logScopeFallback(scope, ollamaAvailable ? 'routing' : 'omitting');
+        if (ollamaAvailable) return this.processResponse(await this.callOllama(message));
+        throw Object.assign(
+          new Error(`Not sent: a privacy setting keeps this data off cloud providers (Settings > AI Providers > Privacy — cloud data scopes: ${scopeLabels(deniedStructured)}).`),
+          { name: 'ProviderScopeDenied' },
+        );
+      }
+    }
 
     type ProviderAttempt = { name: string; execute: () => Promise<string> };
     const providers: ProviderAttempt[] = [];

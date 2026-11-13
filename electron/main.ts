@@ -3103,7 +3103,7 @@ export class AppState {
             .filter(Boolean)
             .join('\n\n');
         this.knowledgeOrchestrator.setGenerateContentFn(async (contents: any[]) => {
-          return await llmHelper.generateContentStructured(joinContents(contents));
+          return await llmHelper.generateContentStructured(joinContents(contents), { dataScopes: ['profile_history'] });
         });
 
         // Low-latency generation for LIVE negotiation coaching (spoken in real
@@ -3115,7 +3115,7 @@ export class AppState {
             // and says aloud, so it is not an "invisible call". The fast rung also caps
             // output at 256 tokens, and a truncated coaching JSON degrades to a canned
             // fallback mid-negotiation with nothing pointing at the setting that caused it.
-            return await llmHelper.generateContentStructured(joinContents(contents));
+            return await llmHelper.generateContentStructured(joinContents(contents), { dataScopes: ['profile_history'] });
           });
         }
 
