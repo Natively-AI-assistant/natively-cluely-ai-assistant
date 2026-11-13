@@ -4311,7 +4311,8 @@ export class IntelligenceEngine extends EventEmitter {
                             ? (require('./services/screen/screenPrepass') as typeof import('./services/screen/screenPrepass')).SCREEN_IN_ATTACHED_IMAGE
                             : '',
                     ].filter(Boolean).join('\n\n') || undefined;
-                    const _ctx = this.v3ModeRetrievalContext(_screenPortText);
+                    // The turn's t0 mode and files, not whatever is live now (F-CTX-11).
+                    const _ctx = this.v3ModeRetrievalContext(_screenPortText, { modeInfo: snapshotModeInfo, referenceFiles: snapshotReferenceFiles });
                     if (!_ctx) return undefined;
                     const _v3 = await buildV3Prompt({
                         // What the user told the app about themselves: About you (Cue Cards, Pro),
@@ -7624,7 +7625,13 @@ export class IntelligenceEngine extends EventEmitter {
     // the active mode. WTA and runManualAnswer previously each carried a copy of
     // this block; a third copy for the proactive surfaces is where drift starts,
     // so all of them now call this.
-    private v3ModeRetrievalContext(screenDescription?: string): {
+    /**
+     * `snapshot`: the mode and files the turn captured at t0. Without it this
+     * read the LIVE mode, so a mode switch between dispatch and the V3 build
+     * gave one answer the old mode's plan and the new mode's files
+     * (pipeline forensics 2026-11-13, F-CTX-11).
+     */
+    private v3ModeRetrievalContext(screenDescription?: string, snapshot?: { modeInfo: ActiveModeInfo | null; referenceFiles: readonly unknown[] }): {
         raw: string; modeUniqueId: string | null; modeName: string | null; meetingId: string | null;
         attachedSourceCount: number;
         attachedFileNames: string[];
@@ -7646,8 +7653,10 @@ export class IntelligenceEngine extends EventEmitter {
             const { resolveModePolicy, isModeId, resolveModeIdOrWarn } = require('./context-intelligence/policies/mode-policy-registry');
             const { ModesManager } = require('./services/ModesManager');
             const _mm = ModesManager.getInstance();
-            const _mi = _mm.getActiveModeInfo?.() ?? null;
-            const _files = _mi?.id ? (_mm.getReferenceFiles?.(_mi.id) ?? []) : [];
+            const _mi = snapshot ? snapshot.modeInfo : (_mm.getActiveModeInfo?.() ?? null);
+            const _files = snapshot
+                ? (_mi?.id ? [...snapshot.referenceFiles] : [])
+                : (_mi?.id ? (_mm.getReferenceFiles?.(_mi.id) ?? []) : []);
             const raw = (_mi as any)?.templateType ?? 'general';
             // Announced, not silent — see resolveModeIdOrWarn (2026-08-09).
             const _modeId = resolveModeIdOrWarn(_mi ? raw : null, 'engine/transcript-surface', { quietWhenAbsent: true });
