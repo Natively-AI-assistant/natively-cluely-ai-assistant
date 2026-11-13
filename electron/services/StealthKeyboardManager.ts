@@ -1,6 +1,7 @@
 import { BrowserWindow, shell, systemPreferences } from 'electron';
 import type { CapturedKey, OverlayBoundsInput } from '../audio/nativeModuleLoader';
 import { isVerboseLogging } from '../verboseLog';
+import { linuxInputAccessHelp } from '../utils/linuxInputAccess';
 
 /**
  * Lifecycle owner for the macOS CGEventTap. JS-side state machine for the
@@ -252,6 +253,9 @@ export class StealthKeyboardManager {
     public isAvailable(): boolean {
         if (!this.nativeAvailable) return false;
         if (process.platform === 'win32' && this.isImeActive()) return false;
+        // Linux grabs the whole keyboard, so it needs /dev/input access, which
+        // the user grants outside the app (see linuxInputAccessHelp).
+        if (process.platform === 'linux') return this.callNativePermissionCheck();
         return true;
     }
 
@@ -284,7 +288,7 @@ export class StealthKeyboardManager {
         // the native isAccessibilityGranted() (returns true on win32) rather
         // than a JS constant, so the check reflects the actual loaded binary:
         // a stale binary without the hook has no such export → false.
-        if (process.platform === 'win32') return this.callNativePermissionCheck();
+        if (process.platform === 'win32' || process.platform === 'linux') return this.callNativePermissionCheck();
         if (process.platform !== 'darwin') return false;
         // Prefer Electron's systemPreferences (well-supported, no rebuild
         // required). Fall back to the native module's check if Electron's
@@ -304,6 +308,9 @@ export class StealthKeyboardManager {
     public requestPermission(): boolean {
         // Windows needs no permission for the keyboard hook — report granted.
         if (process.platform === 'win32') return this.nativeAvailable;
+        // Linux has no prompt to show: access is a group membership the user sets
+        // up themselves. Report the current state; the help text says how.
+        if (process.platform === 'linux') return this.isPermissionGranted();
         if (process.platform !== 'darwin') return false;
         try {
             // Pass true to surface the prompt. macOS shows the standard
@@ -422,6 +429,7 @@ export class StealthKeyboardManager {
 
         if (!ok) {
             this.active = false;
+            if (process.platform === 'linux') this.warnLinuxAccess();
             // Override the optimistic active=true with the failure reason.
             this.broadcastState({ active: false, reason: 'permission' });
             return false;
@@ -582,8 +590,9 @@ export class StealthKeyboardManager {
         // macOS: CGEventTap. Windows: WH_KEYBOARD_LL low-level hook. Both native
         // modules export an identical `StealthKeyboardTap` class (see
         // native-module/src/keyboard_tap.rs and keyboard_hook_windows.rs), so
-        // this loader is platform-agnostic below. Linux has no stealth path.
-        if (process.platform !== 'darwin' && process.platform !== 'win32') return null;
+        // this loader is platform-agnostic below. Linux: an evdev grab
+        // (keyboard_evdev_linux.rs), same surface, opt-in via /dev/input access.
+        if (process.platform !== 'darwin' && process.platform !== 'win32' && process.platform !== 'linux') return null;
         try {
             // eslint-disable-next-line @typescript-eslint/no-var-requires
             const { loadNativeModule } = require('../audio/nativeModuleLoader');
@@ -606,6 +615,21 @@ export class StealthKeyboardManager {
             console.error('[StealthKeyboardManager] failed to instantiate native tap:', e);
             return null;
         }
+    }
+
+    /** Linux: why the grab could not start, with the fix. Logged, never sudo. */
+    private warnLinuxAccess(): void {
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const native = require('../audio/nativeModuleLoader').loadNativeModule();
+            const help = linuxInputAccessHelp(native?.linuxInputAccess?.() ?? 'missing');
+            // 'ok' means access is fine and the grab failed for another reason
+            // (a key held down, every keyboard already grabbed): say that instead.
+            console.warn(
+                '[StealthKeyboardManager]',
+                help ?? 'keyboard grab refused (a key was held, or another tool holds every keyboard); try again',
+            );
+        } catch { /* diagnostics only */ }
     }
 
     private callNativePermissionCheck(): boolean {
@@ -636,14 +660,16 @@ export class StealthKeyboardManager {
      * pattern.
      */
     private getAppChordTable(): Array<{ vk: number; mods: number; id: string }> {
-        if (process.platform !== 'win32' && process.platform !== 'darwin') return [];
+        if (process.platform !== 'win32' && process.platform !== 'darwin' && process.platform !== 'linux') return [];
         try {
             // eslint-disable-next-line @typescript-eslint/no-var-requires
             const { KeybindManager } = require('./KeybindManager');
             // Windows: the chords the hook swallows and dispatches itself.
             // macOS: the app's Cmd+A/C/V/X binds, which the tap leaves to the
             // hot key instead of running them as edits (macEditChord.ts).
-            return process.platform === 'win32'
+            // Linux: like Windows. The grab swallows the keyboard, so Electron's
+            // globalShortcut cannot fire; the tap dispatches these itself.
+            return process.platform !== 'darwin'
                 ? KeybindManager.getInstance().getGlobalChordTable()
                 : KeybindManager.getInstance().getMacEditChordTable();
         } catch (e) {
