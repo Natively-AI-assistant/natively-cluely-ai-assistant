@@ -342,6 +342,7 @@ import {
   directAssistFailureText,
   directAssistNoticeView,
   ownStopFailure,
+  liveAnswerStopFailure,
   type DirectAssistAnswerFailure,
   type DirectAssistFallbackHop,
   type DirectAssistFallbackNotice,
@@ -1531,7 +1532,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // pack is still empty. 'hours_used' | 'window_closed' | 'ended'.
   const [packEndedReason, setPackEndedReason] = useState<string | null>(null);
   // Auto Answer was on but is paused: it is Pro, or free with transcript
-  // sharing (electron/intelligence/autoAnswer/autoAnswerAccess.ts). Main sends
+  // sharing (premium/electron/autoAnswer/autoAnswerAccess.ts). Main sends
   // this once at meeting start; the close holds for the meeting.
   const [autoAnswerAccessNotice, setAutoAnswerAccessNotice] = useState(false);
   // A local model is slower than speech (main: `behind` on stt-status,
@@ -7962,7 +7963,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // An answer Natively stopped itself says so under the text (2026-10-04),
         // like a typed one. Attached to the live row before the finalize, which
         // keeps the row's other fields.
-        const ownStop = ownStopFailure((data as { stopReason?: string }).stopReason);
+        // Since 2026-11-13 also a provider that broke off mid-answer (F-ACC-01).
+        const ownStop = liveAnswerStopFailure((data as { stopReason?: string }).stopReason);
         const liveRowId = streamingIntentRef.current === 'what_to_answer' ? streamingMsgIdRef.current : null;
         if (ownStop && liveRowId != null) {
           setMessages((prev) => prev.map((m) => (m.id === liveRowId ? { ...m, failure: ownStop } : m)));

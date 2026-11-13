@@ -1,7 +1,7 @@
 // src/components/AutoAnswerAccessDialog.tsx
 //
 // Auto Answer is Natively Pro, or free for a user who agrees to share the
-// transcripts of meetings where it runs (electron/intelligence/autoAnswer/
+// transcripts of meetings where it runs (premium/electron/autoAnswer/
 // autoAnswerAccess.ts; Evin 2026-11-13). This is the one place that asks.
 //
 // The wording is the consent: it says what is sent (the whole transcript of a

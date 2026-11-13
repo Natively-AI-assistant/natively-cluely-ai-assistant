@@ -7962,7 +7962,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     const SettingsManager = require('./services/SettingsManager').SettingsManager;
     const consent = SettingsManager.getInstance().get('autoAnswerTrainingConsent') ?? null;
     const access = appState.getAutoAnswerAccess();
-    return { allowed: access.allowed, basis: access.basis, uploads: access.uploads, consent, enabled: appState.getAutoAnswerEnabled() };
+    return { available: appState.isAutoAnswerAvailable(), allowed: access.allowed, basis: access.basis, uploads: access.uploads, consent, enabled: appState.getAutoAnswerEnabled() };
   });
 
   // Agree to share (free users: unlocks Auto Answer; Pro: the opt-in), or withdraw.
@@ -7980,11 +7980,48 @@ export function initializeIpcHandlers(appState: AppState): void {
     return appState.trainingUploader().requestDeletion();
   });
 
+  // The Auto Answer model: a paid, private download for API keys and Pro
+  // (premium/electron/autoAnswer/decider/deciderModelInstaller.ts), and its
+  // before/after judge-call card (deciderSavings.ts, numbers only).
+  const autoAnswerModelState = () => ({
+    install: appState.deciderInstaller().status(),
+    savings: appState.deciderSavings().summary(),
+  });
+  safeHandle('auto-answer-model:get-status', async () => autoAnswerModelState());
+  safeHandle('auto-answer-model:install', async () => {
+    const send = (install: unknown) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send('auto-answer-model:progress', install);
+      }
+    };
+    const result = await appState.deciderInstaller().install(send);
+    if (result.state === 'installed') {
+      appState.deciderSavings().markInstalled();
+      appState.resetAutoAnswerDecider();
+    }
+    return autoAnswerModelState();
+  });
+  safeHandle('auto-answer-model:remove', async () => {
+    // Stop the worker first: Windows will not delete a graph a process still has open.
+    appState.resetAutoAnswerDecider();
+    const installer = appState.deciderInstaller();
+    installer.remove();
+    if (installer.installedDir()) {
+      await new Promise((r) => setTimeout(r, 3500)); // the utility process's stop grace (deciderUtilityHost.ts)
+      installer.remove();
+    }
+    if (!installer.installedDir()) appState.deciderSavings().markRemoved();
+    return autoAnswerModelState();
+  });
+
   safeHandle('set-auto-answer-enabled', async (_, enabled: boolean) => {
     // Auto Answer is Pro or trial, or free with training-data sharing
-    // (intelligence/autoAnswer/autoAnswerAccess.ts). Switching off is always free.
+    // (premium/electron/autoAnswer/autoAnswerAccess.ts). Switching off is always free.
     if (enabled) {
       const access = appState.getAutoAnswerAccess();
+      if (!access.allowed && access.error === 'auto_answer_unavailable') {
+        return { success: false, error: access.error, message: 'Auto Answer is not part of this build.' };
+      }
       if (!access.allowed) {
         return { success: false, error: access.error, message: 'Auto Answer is part of Natively Pro. You can also use it for free by sharing the transcripts of meetings where it runs.' };
       }
@@ -20219,6 +20256,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       try { _manualCodingState.clearAllSessions(); } catch { /* non-fatal */ }
 
       ModesManager.getInstance().setActiveMode(id);
+      // Speech Auto Answer holds for the next ask was heard under the old mode:
+      // it must not prefix the new mode's first question (F-CTX-03, 2026-11-13).
+      try { appState.onAutoAnswerModeChanged?.(); } catch { /* non-fatal */ }
       // Supersede in-flight LIVE answers too (the abort loop above only covers
       // manual chat streams): a WTA generation planned under the old mode must
       // not finalize into a UI now showing the new one.

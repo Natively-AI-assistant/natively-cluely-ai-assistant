@@ -230,7 +230,7 @@ export class FunnelTelemetry {
     /**
      * The install token this server signed for this install (registering it
      * first if needed), for other routes that vouch for an install the same
-     * way: shared Auto Answer transcripts (services/training). Never throws.
+     * way: shared Auto Answer transcripts (premium/electron/autoAnswer/training). Never throws.
      */
     public async installToken(installId: string): Promise<string | undefined> {
         // Sharing transcripts is its own consent: a user who turned Usage

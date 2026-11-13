@@ -3253,24 +3253,44 @@ export class LLMHelper {
     // unconditionally, so without this the whole turn throws rather than merely
     // losing its health tracking.
     if (!this.textHealth) this.textHealth = new Map();
-    yield* runStreamingTextFallback(
-      [primary, ...fittedSpares],
-      this.textHealth,
-      {
-        ...DEFAULT_TEXT_FALLBACK_CONFIG,
-        // One attempt per rung: the hedge is already a second concurrent call,
-        // and maxAttempts 2 would make a single-provider turn four billed
-        // requests before the chain even ends.
-        maxAttempts: 1,
-        ttftTimeoutMs: budgetMs,
-        hedgeEnabled: hedging,
-        hedgeDelayDefaultMs: this.hedgeDelayForBudget(budgetMs),
-        hedgeDelayMinMs: Math.round(budgetMs * 0.4),
-        hedgeDelayMaxMs: Math.round(budgetMs * 0.9),
-      },
-      {},
-      opts.abortSignal,
-    );
+    // Post-commit failures must REACH this method. The shared engine's default
+    // is to end the stream silently when the committed provider dies, which
+    // read as a complete answer: forensics 2026-11-13 (F-ACC-01) replayed
+    // "Raw spans are kept for 14" and "…When a node joins or" shown and stored
+    // as finished answers. With rethrowAfterCommit the engine still never
+    // switches providers mid-answer; it only tells us, and the turn ends with
+    // the truncation marker that _streamChatTracked turns into the outcome.
+    const commit = { emitted: false };
+    try {
+      yield* this.trackCommit(runStreamingTextFallback(
+        [primary, ...fittedSpares],
+        this.textHealth,
+        {
+          ...DEFAULT_TEXT_FALLBACK_CONFIG,
+          // One attempt per rung: the hedge is already a second concurrent call,
+          // and maxAttempts 2 would make a single-provider turn four billed
+          // requests before the chain even ends.
+          maxAttempts: 1,
+          ttftTimeoutMs: budgetMs,
+          hedgeEnabled: hedging,
+          hedgeDelayDefaultMs: this.hedgeDelayForBudget(budgetMs),
+          hedgeDelayMinMs: Math.round(budgetMs * 0.4),
+          hedgeDelayMaxMs: Math.round(budgetMs * 0.9),
+          rethrowAfterCommit: true,
+        },
+        {},
+        opts.abortSignal,
+      ), commit);
+    } catch (e: any) {
+      if (commit.emitted) {
+        // A cancel is not a truncation: end quietly, as before.
+        if (opts.abortSignal?.aborted) return;
+        console.warn(`[LLMHelper] ${opts.name} failed AFTER first token — ending stream as incomplete: ${e?.message || e}`);
+        yield LLMHelper.TRUNCATION_SENTINEL;
+        return;
+      }
+      throw e;
+    }
   }
 
   /**
@@ -12003,7 +12023,10 @@ let isMultimodal = !!(imagePaths?.length);
             },
           }));
           try {
-            yield* this.trackCommit(runStreamingTextFallback(instrumented, this.textHealth, DEFAULT_TEXT_FALLBACK_CONFIG, {}, abortSignal), commit);
+            // rethrowAfterCommit: the catch below assumed the engine throws when
+            // the committed rung dies, but its default is a silent return — the
+            // partial answer then read as complete (forensics 2026-11-13, F-ACC-01).
+            yield* this.trackCommit(runStreamingTextFallback(instrumented, this.textHealth, { ...DEFAULT_TEXT_FALLBACK_CONFIG, rethrowAfterCommit: true }, {}, abortSignal), commit);
             return;
           } catch (raceErr: any) {
             // runStreamingTextFallback is commit-point-safe INTERNALLY (it never
@@ -12015,6 +12038,8 @@ let isMultimodal = !!(imagePaths?.length);
             // already read. This is the primary text path, so it is the site
             // where that would happen most often.
             if (commit.emitted) {
+              // A cancel is not a truncation: end quietly, as before.
+              if (abortSignal?.aborted) return;
               console.warn('[LLMHelper] Text TTFT race failed AFTER first token — ending stream rather than appending a second answer:', raceErr?.message);
               yield LLMHelper.TRUNCATION_SENTINEL;
               return;
@@ -13377,10 +13402,21 @@ let isMultimodal = !!(imagePaths?.length);
     // let the caller fall through to a DIFFERENT provider, instead of burning
     // latency on two more doomed calls. Transient errors (429 rate, 503 overload,
     // timeout, 5xx) still walk lite→flash→pro normally.
-    const cfg: VisionFallbackConfig = { ...DEFAULT_TEXT_FALLBACK_CONFIG, stopChainOnError: isPermanentKeyError };
+    // rethrowAfterCommit: the caller's `geminiYielded` branch turns a rung that
+    // dies mid-answer into the truncation marker; the engine's default silent
+    // return never reached it (forensics 2026-11-13, F-ACC-01).
+    const cfg: VisionFallbackConfig = { ...DEFAULT_TEXT_FALLBACK_CONFIG, stopChainOnError: isPermanentKeyError, rethrowAfterCommit: true };
 
     const ordered = orderTextByHealth(providers, this.textHealth, Date.now());
-    yield* runStreamingTextFallback(ordered, this.textHealth, cfg, {}, abortSignal);
+    try {
+      yield* runStreamingTextFallback(ordered, this.textHealth, cfg, {}, abortSignal);
+    } catch (e) {
+      // A caller cancel mid-answer ends quietly, as it did before the flag:
+      // the engine now rethrows the aborted read, and the caller's catch
+      // rethrows any error under an aborted signal.
+      if (abortSignal?.aborted) return;
+      throw e;
+    }
   }
 
   // --- OLLAMA STREAMING (uses /api/chat with proper messages array) ---

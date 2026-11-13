@@ -55,6 +55,10 @@ const _modesSettings = import.meta.glob<any>(
   '../../premium/src/ModesSettings.tsx',
   { eager: true }
 );
+const _autoAnswerModelCard = import.meta.glob<any>(
+  '../../premium/src/AutoAnswerModelCard.tsx',
+  { eager: true }
+);
 const _roleInsight = import.meta.glob<any>(
   '../../premium/src/RoleInsightPanel.tsx',
   { eager: true }
@@ -93,3 +97,6 @@ export const ModesSettings: React.FC<any> =
 
 export const RoleInsightPanel: React.FC<any> =
   get(_roleInsight, 'RoleInsightPanel', NullComponent);
+
+export const AutoAnswerModelCard: React.FC<any> =
+  get(_autoAnswerModelCard, 'AutoAnswerModelCard', NullComponent);

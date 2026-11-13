@@ -1080,10 +1080,10 @@ export class MeetingPersistence {
             // The older answers are in the saved meeting now (read into the
             // snapshot above), whether or not a live row was ever written.
             DatabaseManager.getInstance().removeLiveUsageOverflow(meetingId);
-            // Auto Answer training data (services/training/TrainingTranscriptUploader.ts):
+            // Auto Answer training data (premium/electron/autoAnswer/training/TrainingTranscriptUploader.ts):
             // shared only if Auto Answer ran in this meeting and the user agreed.
             try {
-                const { offerTrainingMeeting } = require('./services/training/TrainingTranscriptUploader');
+                const { offerTrainingMeeting } = (require('./premium/autoAnswer') as typeof import('./premium/autoAnswer')).loadAutoAnswerPremium();
                 const md: any = metadataSnapshot || {};
                 const knownNames: string[] = [
                     ...((md.calendarEvent?.attendees ?? []) as Array<{ name?: string }>).map((a) => a?.name ?? ''),

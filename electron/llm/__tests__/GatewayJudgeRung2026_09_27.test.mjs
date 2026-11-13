@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
-const { LLMHelper, OPENROUTER_JUDGE_MODEL } = require(path.resolve(__dirname, '../../../../dist-electron/electron/LLMHelper.js'));
+const { LLMHelper, OPENROUTER_JUDGE_MODEL } = require(path.resolve(__dirname, '../../../dist-electron/electron/LLMHelper.js'));
 
 function fakeOpenAIClient(calls, reply = '{"is_ask":true}') {
   return { chat: { completions: { create: async (body) => { calls.push(body); return { choices: [{ message: { content: reply } }] }; } } } };

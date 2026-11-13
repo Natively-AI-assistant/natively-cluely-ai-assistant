@@ -3,6 +3,8 @@ import type { SkillUploadPayload } from './services/skills/SkillValidator';
 import type { NativelyUsageResponse, NativelyPlansResponse } from '../src/types/nativelyUsage';
 import type { MeetingOutputsApi } from '../src/types/meetingOutputs';
 import type { ConnectorsApi } from '../src/types/connectors';
+import type { AutoAnswerModelInstall, AutoAnswerModelSavings } from './premium/autoAnswer';
+type AutoAnswerModelState = { install: AutoAnswerModelInstall; savings: AutoAnswerModelSavings };
 import { PAGE_CAPTURE_FALLBACK_CHANNEL, PAGE_CAPTURE_STARTED_CHANNEL, type PageCaptureFallbackNotice } from './services/pageCaptureFallback';
 import type { CalendarSourceId as CalendarSourceIdInfo, CalendarSourceStatus as CalendarSourceStatusInfo } from './services/calendar/providers/types';
 
@@ -1302,10 +1304,14 @@ interface ElectronAPI {
   onMeetingAudioCapture: (callback: (data: { withoutAudio: boolean }) => void) => () => void;
   getAutoAnswerEnabled: () => Promise<boolean>;
   setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string; message?: string }>;
-  getAutoAnswerAccess: () => Promise<{ allowed: boolean; basis: 'pro' | 'sharing' | 'none'; uploads: boolean; consent: { version: number; grantedAt: string } | null; enabled: boolean }>;
+  getAutoAnswerAccess: () => Promise<{ available: boolean; allowed: boolean; basis: 'pro' | 'sharing' | 'none'; uploads: boolean; consent: { version: number; grantedAt: string } | null; enabled: boolean }>;
   setAutoAnswerTrainingConsent: (granted: boolean) => Promise<{ success: boolean; error?: string }>;
   deleteAutoAnswerSharedData: () => Promise<{ success: boolean; error?: string }>;
   onAutoAnswerAccessRequired: (callback: (info: { reason: string }) => void) => () => void;
+  getAutoAnswerModelStatus: () => Promise<AutoAnswerModelState>;
+  installAutoAnswerModel: () => Promise<AutoAnswerModelState>;
+  removeAutoAnswerModel: () => Promise<AutoAnswerModelState>;
+  onAutoAnswerModelProgress: (callback: (install: AutoAnswerModelInstall) => void) => () => void;
   getDirectAssistEnabled: () => Promise<boolean>;
   setDirectAssistEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   onDirectAssistEnabledChanged: (callback: (enabled: boolean) => void) => () => void;
@@ -3605,6 +3611,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const subscription = (_: any, info: { reason: string }) => callback(info);
     ipcRenderer.on('auto-answer:access-required', subscription);
     return () => { ipcRenderer.removeListener('auto-answer:access-required', subscription); };
+  },
+  getAutoAnswerModelStatus: () => ipcRenderer.invoke('auto-answer-model:get-status'),
+  installAutoAnswerModel: () => ipcRenderer.invoke('auto-answer-model:install'),
+  removeAutoAnswerModel: () => ipcRenderer.invoke('auto-answer-model:remove'),
+  onAutoAnswerModelProgress: (callback: (install: AutoAnswerModelInstall) => void) => {
+    const subscription = (_: Electron.IpcRendererEvent, install: AutoAnswerModelInstall) => callback(install);
+    ipcRenderer.on('auto-answer-model:progress', subscription);
+    return () => { ipcRenderer.removeListener('auto-answer-model:progress', subscription); };
   },
   getDirectAssistEnabled: () => ipcRenderer.invoke('get-direct-assist-enabled'),
   setDirectAssistEnabled: (enabled: boolean) => ipcRenderer.invoke('set-direct-assist-enabled', enabled),

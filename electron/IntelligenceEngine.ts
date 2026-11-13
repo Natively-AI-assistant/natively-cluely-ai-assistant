@@ -228,6 +228,12 @@ interface SpeculativeAnswer {
      */
     answerType?: AnswerType;
     answerStyle?: string;
+    /**
+     * Why the stream stopped early, when it did: the same value the live path
+     * sends with its final, so an adopted answer that was cut off says so
+     * under the text instead of reading as finished (forensics 2026-11-13, F-ACC-01).
+     */
+    stopReason?: string;
 }
 
 export class IntelligenceEngine extends EventEmitter {
@@ -621,6 +627,20 @@ export class IntelligenceEngine extends EventEmitter {
      * hold the meeting's raw questions and answers in memory for no reader, and
      * (before every meeting had its own key) hand them to the next meeting.
      */
+    /**
+     * The meeting stopped: nothing it started may keep painting into the next
+     * one, or finish and be recorded there. Stop never cancelled the live
+     * answer (forensics 2026-11-13, F-CTX-07: the old meeting's answer kept
+     * streaming for 5.5 s after a new meeting began); what cut it short was a
+     * new-meeting interim speculation aborting it, the defect fixed alongside
+     * this. Same cancellation as reset(), plus the mode event reset() skips.
+     */
+    public cancelAnswersForMeetingEnd(): void {
+        const wasBusy = this.activeMode !== 'idle';
+        this.reset();
+        if (wasBusy) this.emit('mode_changed', 'idle');
+    }
+
     public endMeetingConversation(): void {
         const key = this.conversationSessionId();
         this.meetingConversationId = null;
@@ -1473,9 +1493,14 @@ export class IntelligenceEngine extends EventEmitter {
         this.releaseExpiredSpeculation();
         // The engine's OWN speculation (from an interviewer interim) is not a
         // busy engine: the candidate below is the same speech, finished.
+        // Unless the dispatch ADOPTED it: then it is the answer on screen, and
+        // starting a prefetch here would abort it before the judge has ruled on
+        // the new speech. Forensics 2026-11-13 (P3-s18, s17c): an aside or a
+        // second question spoken mid-answer wiped the visible answer.
         const ownSpeculationStreaming = this.activeMode === 'what_to_say'
             && this.speculativeGenerationId !== null
-            && this.speculativeGenerationId === this.currentGenerationId;
+            && this.speculativeGenerationId === this.currentGenerationId
+            && this.speculativeAdoptedGenerationId !== this.currentGenerationId;
         if (this.activeMode !== 'idle' && this.activeMode !== 'assist' && !ownSpeculationStreaming) return;
         if (Date.now() - this.lastTriggerTime < this.triggerCooldown) return;
         // A debounced interim speculation that has not fired yet would start on
@@ -1564,12 +1589,13 @@ export class IntelligenceEngine extends EventEmitter {
         generationId: number, question: string | undefined, confidence: number, text: string,
         writeDecision: SessionWriteDecision | undefined,
         streamed?: SpeculativeStreamed,
-        plan?: { answerType?: AnswerType; answerStyle?: string },
+        plan?: { answerType?: AnswerType; answerStyle?: string; stopReason?: string },
     ): string {
         const finished: SpeculativeAnswer = {
             generationId, question: question || 'inferred', confidence, text, writeDecision,
             ...(plan?.answerType ? { answerType: plan.answerType } : {}),
             ...(plan?.answerStyle ? { answerStyle: plan.answerStyle } : {}),
+            ...(plan?.stopReason ? { stopReason: plan.stopReason } : {}),
         };
         const adoptedInFlight = this.speculativeAdoptedGenerationId === generationId && this.currentGenerationId === generationId;
         if (this.speculativeAdoptedGenerationId === generationId) this.speculativeAdoptedGenerationId = null;
@@ -1709,7 +1735,7 @@ export class IntelligenceEngine extends EventEmitter {
         } else {
             console.warn(`[IntelligenceEngine] Prefetched answer revealed but not stored (${finished.writeDecision.reason ?? 'do_not_store'})`);
         }
-        this.emit('suggested_answer', text, finished.question, finished.confidence, generationId);
+        this.emit('suggested_answer', text, finished.question, finished.confidence, generationId, undefined, finished.stopReason);
     }
 
     /** Auto Answer V3: identity of the speculative cache, for keyed/embedding reuse. */
@@ -5289,12 +5315,22 @@ export class IntelligenceEngine extends EventEmitter {
                 console.warn(`[IntelligenceEngine] wta answer stalled mid-stream (${fullAnswer.length} chars) — shown as cut off, not stored`);
             }
 
-            if (streamAborted) {
+            // A replaced run hands everything to its successor. Used for an
+            // abort mid-stream and, below, for a run replaced AFTER its stream
+            // ended (claim verifier, guards): its successor owns the mode, the
+            // speculative slot and the visible row from here on.
+            //
+            // `discardOpenRow` only at the abort itself. The renderer clears
+            // the CURRENT what-to-answer row on a discard (by intent, no
+            // generation id: NativelyInterface onIntelligenceSuggestedAnswerDiscard),
+            // so a discard sent once the successor may be painting would wipe
+            // the successor's answer — the very failure this guards against.
+            const yieldToSupersedingRun = (discardOpenRow: boolean): null => {
                 recordWtaCancellation();
-                // Aborted mid-stream — don't update session or emit final event.
+                // Don't update session or emit final event.
                 // If we opened a streaming row, discard it so the superseding
                 // generation's row is the only one (no orphaned partial answer).
-                if (openedStreamRow) this.emit('suggested_answer_discard', 'superseded', generationId);
+                if (discardOpenRow && openedStreamRow) this.emit('suggested_answer_discard', 'superseded', generationId);
                 if (isSpeculative && this.ownsSpeculativeSlot(generationId)) {
                     this.speculativeText = null;
                     this.speculativeTextExpiry = Infinity;
@@ -5312,7 +5348,9 @@ export class IntelligenceEngine extends EventEmitter {
                     this.setMode('idle');
                 }
                 return null;
-            }
+            };
+
+            if (streamAborted) return yieldToSupersedingRun(true);
 
             if (!fullAnswer || fullAnswer.trim().length < 5) {
                 // ALWAYS ANSWER (2026-09-07): an empty or aborted stream is retried
@@ -6727,6 +6765,9 @@ export class IntelligenceEngine extends EventEmitter {
                     this.setMode('idle');
                     return honestFallback;
                 }
+                // A run replaced while it was being checked leaves the
+                // speculative slot, the cooldown and the mode to its successor.
+                if (isWtaSuperseded()) return yieldToSupersedingRun(false);
                 // Declined as a non-answer. Discard any open streaming row so it
                 // isn't left as an orphaned partial on the auto path (the manual
                 // path also resolves null via the renderer, but the discard is
@@ -7063,6 +7104,14 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (isSpeculative) {
+                // Replaced AFTER its stream ended (during the claim verifier or a
+                // guard above): the newer run owns the engine now. Completing
+                // here set the mode to idle under the newer run's live answer —
+                // after which any interviewer interim could start a speculation
+                // that aborted it — and parked this stale text as the finished
+                // draft a later dispatch would reveal (forensics 2026-11-13,
+                // F-CTX-01 / F-CTX-02).
+                if (isWtaSuperseded()) return yieldToSupersedingRun(false);
                 // If the dispatch adopted this stream mid-flight it has been
                 // painting live; the reveal must then finish THAT row (flush the
                 // held prefix, replace by the same id) instead of opening a new one.
@@ -7078,6 +7127,9 @@ export class IntelligenceEngine extends EventEmitter {
                 return this.completeSpeculativeRun(generationId, question, confidence, fullAnswer, wtaWriteDecision, streamed, {
                     answerType: answerPlan.answerType,
                     answerStyle: answerPlan.answerStyle as string,
+                    // Same rule as the live final below: not when the cut-off
+                    // text was replaced, because the user reads the replacement.
+                    stopReason: wtaTruncation.truncated && !streamedAnswerReplaced ? wtaTruncation.reason : undefined,
                 });
             }
 
@@ -7381,7 +7433,10 @@ export class IntelligenceEngine extends EventEmitter {
 
             trace.mark('ui_render_completed', { chars: fullAnswer.length });
             trace.finish({ answerType: answerPlan.answerType, chars: fullAnswer.length });
-            this.setMode('idle');
+            // Only the live run may end the engine's busy state: a run replaced
+            // during its post-stream passes must not mark the engine idle while
+            // its successor is streaming (same rule as the abort path above).
+            if (!isWtaSuperseded()) this.setMode('idle');
             return fullAnswer;
 
         } catch (error) {
