@@ -2292,6 +2292,13 @@ export class IntelligenceEngine extends EventEmitter {
         this.automaticGenerationId = this.nextRunIsAutomatic ? generationId : null;
         this.speculativeGenerationId = isSpeculative ? generationId : null;
         this.nextRunIsAutomatic = false;
+        // A question passed in by Auto Answer (the judge's text) or a prefetch
+        // (the candidate) was HEARD, not typed. Only a typed or pressed question
+        // plans as manual input: stamping heard ones manual_input changed the
+        // answer type, voice and speakability, so the same question asked by
+        // Auto Answer and by the hotkey was planned differently (forensics
+        // 2026-11-13, F-ACC-11).
+        const questionTyped = Boolean(question) && !isSpeculative && this.automaticGenerationId !== generationId;
         const isWtaSuperseded = () => (
             this.whatToAnswerCancellationToken !== whatToAnswerCancellationToken
             || this.currentGenerationId !== generationId
@@ -3677,7 +3684,7 @@ export class IntelligenceEngine extends EventEmitter {
             const canonicalTurn = resolveCanonicalTurn({
                 answerInput: {
                     question: question || extractedQuestion.latestQuestion || lastInterviewerTurn,
-                    source: question ? 'manual_input' : 'what_to_answer',
+                    source: questionTyped ? 'manual_input' : 'what_to_answer',
                     speakerPerspective: extractedQuestion.detectedSpeaker === 'interviewer' ? 'interviewer' : 'user',
                     extractedQuestion,
                     intentResult,
@@ -3708,7 +3715,7 @@ export class IntelligenceEngine extends EventEmitter {
                     piTelemetry.emit('wta_plan_divergence', {
                         legacyType,
                         canonicalType: answerPlan.answerType,
-                        typedPress: Boolean(question),
+                        typedPress: questionTyped,
                     });
                 }
             } catch { /* telemetry only */ }
