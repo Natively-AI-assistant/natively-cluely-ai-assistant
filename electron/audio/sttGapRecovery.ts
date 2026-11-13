@@ -286,6 +286,41 @@ export function isCoveredByLive(text: string, liveTexts: readonly string[], thre
     return hit / (w.length - 1) >= threshold;
 }
 
+/**
+ * Stricter than isCoveredByLive, for the failover hand-back (sttFailover.ts):
+ * the line repeats what was already said only when EVERY one of its words was
+ * said, as well as most of its word pairs. "What is your experience with
+ * Kafka?" after "…with Redis?" shares 4 of 5 pairs but not "kafka": a new
+ * question, not the primary's flushed copy of the stand-in's line (F-ACC-09).
+ */
+export function repeatsLiveText(text: string, liveTexts: readonly string[]): boolean {
+    const w = words(text);
+    if (w.length === 0) return true;
+    const said = new Set<string>();
+    for (const t of liveTexts) for (const lw of words(t)) said.add(lw);
+    if (!w.every((x) => said.has(x))) return false;
+    return isCoveredByLive(text, liveTexts);
+}
+
+/**
+ * A recovered line older than this (its audio's end) is history, not a
+ * question waiting for an answer. Recovery starts settleMs (8 s) after the
+ * outage closes and takes a few seconds per clip.
+ */
+export const RECOVERED_ANSWER_MAX_AGE_MS = 60_000;
+
+/**
+ * Whether a recovered line goes to Auto Answer (F-ACC-09 D5): the other
+ * side's words only (Auto Answer acts on the interviewer channel), with text,
+ * and recent enough to still be the open question. Auto Answer's own judge
+ * decides whether it is a question at all.
+ */
+export function recoveredLineMayBeAnswered(seg: RecoveredSegment, nowMs: number): boolean {
+    if (seg.source !== 'system') return false;
+    if (!(seg.text ?? '').trim()) return false;
+    return nowMs - seg.endTimestamp <= RECOVERED_ANSWER_MAX_AGE_MS;
+}
+
 /** Inserts by timestamp, after any entry with the same time, so the list stays in time order. */
 export function insertSortedByTimestamp<T extends { timestamp: number }>(list: T[], item: T): number {
     let lo = 0;

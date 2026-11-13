@@ -1329,7 +1329,7 @@ import { SimpleAutoAnswerEngine } from "./intelligence/autoAnswer/SimpleAutoAnsw
 import { AutoAnswerUsageTelemetry } from "./intelligence/autoAnswer/AutoAnswerUsageTelemetry"
 import { currentWhisperGlossaryPrompt, nameTerms, setSttContextTerms, setSttDictionaryTerms } from "./audio/sttContextTerms"
 import { getUserDictionary } from "./audio/userDictionary"
-import { LOCAL_STT_PROVIDERS, SttGapRecoveryCoordinator, type RecoveredSegment, type SttSource } from "./audio/sttGapRecovery"
+import { LOCAL_STT_PROVIDERS, SttGapRecoveryCoordinator, recoveredLineMayBeAnswered, type RecoveredSegment, type SttSource } from "./audio/sttGapRecovery"
 import { SttFailover, failoverNotice, type FailoverCause, type FailoverStatus } from "./audio/sttFailover"
 import { resolveAutoAnswerThresholds } from "./context-intelligence/policies/mode-policy-registry"
 import type { SpeechEdge } from "./audio/speechEdge"
@@ -3793,13 +3793,25 @@ export class AppState {
     restartStt: (source) => {
       const stt = source === 'system' ? this.googleSTT : this.googleSTT_User;
       if (!stt || !this.isMeetingActive) return;
+      // A stand-in carries the channel (sttFailover.ts): stt.stop() would end
+      // it too, silently, and the failover probe already restarts the
+      // primary (F-ACC-09 D2).
+      if (this._sttFailover[source]?.active) return;
       stt.stop();
       stt.start();
     },
-    watchdogEnabled: (source) => this._sttGapProvider[source].streaming,
+    // Not while a stand-in carries the channel: a slow one (batch, local)
+    // looks exactly like a stall.
+    watchdogEnabled: (source) => this._sttGapProvider[source].streaming && !this._sttFailover[source]?.active,
   });
 
-  /** A recovered line goes into the session at the time it was said; it triggers no answer. */
+  /**
+   * A recovered line goes into the session at the time it was said. A recent
+   * one from the other side also goes to Auto Answer, whose judge decides
+   * whether it is a question (F-ACC-09 D5: a question asked during an outage
+   * was never answered). Only when inserted: one the live transcript already
+   * has is not judged twice.
+   */
   private insertRecoveredTranscript(seg: RecoveredSegment): void {
     if (!this.isMeetingActive && !this._isDraining) return;
     const speaker = seg.source === 'system' ? 'interviewer' : 'user';
@@ -3813,8 +3825,21 @@ export class AppState {
       sttProvider: seg.transcriberId,
       punctuationSource: punctuationSourceFor(seg.transcriberId, true),
     });
-    if (inserted && this.ragManager) {
+    if (!inserted) return;
+    if (this.ragManager) {
       this.ragManager.feedLiveTranscript([{ speaker, text: seg.text, timestamp: seg.timestamp }]);
+    }
+    if (this._autoAnswerEnabled && recoveredLineMayBeAnswered(seg, Date.now())) {
+      this.simpleAutoAnswer.ingest({
+        speaker: 'interviewer',
+        text: seg.text,
+        timestamp: seg.timestamp,
+        final: true,
+        confidence: 1,
+        origin: 'stt',
+        sttProvider: seg.transcriberId,
+        punctuationSource: punctuationSourceFor(seg.transcriberId, true),
+      } as any);
     }
   }
   // ── AUTO ANSWER (Settings > General, default OFF) ────────────────────────
