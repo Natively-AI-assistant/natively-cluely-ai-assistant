@@ -75,3 +75,16 @@ describe('the raw-text index still sees the active documents', () => {
     assert.deepEqual(c.docs.map((d) => d.kind).sort(), ['jd', 'resume']);
   });
 });
+
+describe('the WTA profile snapshot and JIT fallback use the same read gate (F-BND-05)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const ie = readFileSync(path.resolve(process.cwd(), 'electron/IntelligenceEngine.ts'), 'utf8');
+  test('snapshot facts are null when the orchestrator says the profile may not be read', () => {
+    assert.match(ie, /const snapshotReadableKnowledge = snapshotProfileReadable \? snapshotKnowledge : null;/);
+    assert.match(ie, /const snapshotProfileFacts = stripUnsupportedDerivedResumeFields\(\s*\(snapshotReadableKnowledge as any\)/);
+    assert.match(ie, /const snapshotJobDescriptionFacts = \(snapshotReadableKnowledge as any\)/);
+  });
+  test('the manual-evidence JIT fallback is gated on it too', () => {
+    assert.match(ie, /snapshotProfileIntelligenceAllowed\s*\n\s*&& snapshotProfileReadable/);
+  });
+});

@@ -2351,16 +2351,26 @@ export class IntelligenceEngine extends EventEmitter {
         // behavior-preserving for this slice; the frozen snapshot is their measured
         // migration target.
         const snapshotKnowledge = this.llmHelper.getKnowledgeOrchestrator?.();
+        // F-BND-01/05 (2026-11-13): the orchestrator keeps the résumé/JD in memory
+        // after the user switches Profile Intelligence off or Pro ends. Its own
+        // isKnowledgeMode() (switch + Pro + a document) is the read gate; a turn
+        // that may not read the profile sees none — same rule as the V3 collector.
+        const snapshotProfileReadable = (() => {
+            const fn = (snapshotKnowledge as any)?.isKnowledgeMode;
+            if (typeof fn !== 'function') return true;
+            try { return fn.call(snapshotKnowledge) === true; } catch { return false; }
+        })();
         // Keep the same loaded structured-data objects that informed source
         // availability. The canonical evidence coordinator uses these snapshots,
         // never a fresh orchestrator read after a pre-stream await.
         // Derived-evidence hygiene (2026-09-30): only raw-text-supported
         // project descriptions reach evidence (profile-derived-support.ts).
+        const snapshotReadableKnowledge = snapshotProfileReadable ? snapshotKnowledge : null;
         const snapshotProfileFacts = stripUnsupportedDerivedResumeFields(
-            (snapshotKnowledge as any)?.activeResume?.structured_data ?? null,
-            (snapshotKnowledge as any)?.activeResume?.raw_text,
+            (snapshotReadableKnowledge as any)?.activeResume?.structured_data ?? null,
+            (snapshotReadableKnowledge as any)?.activeResume?.raw_text,
         );
-        const snapshotJobDescriptionFacts = (snapshotKnowledge as any)?.activeJD?.structured_data ?? null;
+        const snapshotJobDescriptionFacts = (snapshotReadableKnowledge as any)?.activeJD?.structured_data ?? null;
         const snapshotSourceAvailability = Object.freeze({
             hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
             hasProfileFacts: Boolean(snapshotProfileFacts),
@@ -3497,6 +3507,7 @@ export class IntelligenceEngine extends EventEmitter {
             const _jdShapeAllowed = _jitAnswerType !== null && IntelligenceEngine.shouldJitForAnswerType(_jitAnswerType)
                 && /^jd_/.test(_jitAnswerType);
             if (!candidateProfile && wtaDecisionAllowsCandidateProfile && snapshotProfileIntelligenceAllowed
+                && snapshotProfileReadable
                 && (wtaProfileAllowed || _jdShapeAllowed)) {
                 try {
                     const orch = this.llmHelper.getKnowledgeOrchestrator?.();
