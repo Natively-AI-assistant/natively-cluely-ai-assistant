@@ -161,6 +161,18 @@ export function materialHasNoDocuments(material: string): boolean {
   return !/<evidence\b/.test(String(material ?? ''));
 }
 /**
+ * ONLY WHEN DOCUMENTS ARE ATTACHED (2026-11-13, owner's decision after the live
+ * pipeline forensics, F-LAT-04): the pass was 43 of 103 answer-sized calls on a
+ * spoken General meeting and held the finished state ~0.9 s after the last
+ * word. It now runs on turns whose material carries evidence (reference files,
+ * profile), where a wrong fact costs most. The accepted cost: the 2026-10-01
+ * spoken-General gain without documents (judged 8.53 -> 8.80, hard fails 5 -> 1)
+ * is given up. NATIVELY_CLAIM_VERIFIER_NO_DOCS=1 restores it for a comparison.
+ */
+export function claimVerifierRunsWithoutDocuments(): boolean {
+  return process.env.NATIVELY_CLAIM_VERIFIER_NO_DOCS === '1';
+}
+/**
  * LIST, THEN REWRITE (2026-10-01). Asked only to "output the revised reply",
  * the edit model left the claims the external judge capped most often:
  * "Twice a year sounds manageable", "I'd be looking at a few weeks rather than

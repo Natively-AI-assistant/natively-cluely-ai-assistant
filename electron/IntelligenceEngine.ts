@@ -409,6 +409,11 @@ export class IntelligenceEngine extends EventEmitter {
         const cv = require('./llm/claimVerifier') as typeof import('./llm/claimVerifier');
         const kind = cv.claimVerifierKind({ modeId: opts.modeId, question: opts.question, draft: opts.answer, surface: 'spoken' });
         if (!kind || !opts.modeId) return opts.answer;
+        // Only when documents are attached (F-LAT-04, owner's decision 2026-11-13).
+        if (cv.materialHasNoDocuments(opts.material) && !cv.claimVerifierRunsWithoutDocuments()) {
+            opts.trace.mark('claim_verifier_skipped' as any, { reason: 'no_documents' });
+            return opts.answer;
+        }
         const system = cv.claimVerifierSystemPrompt(opts.modeId, 'spoken', { noDocuments: cv.materialHasNoDocuments(opts.material) });
         // The replayed answer call carries the material itself (its own user
         // message comes first); without one, the V3 user message stands in.
