@@ -8,6 +8,7 @@
 // ============================================================================
 import './nativeArchGate';
 import { isWaylandSession } from "./utils/linuxScreenshot";
+import { createLinuxWm, startWindowPoller } from "./services/linuxWm";
 // Dev-only prompt recorder: must wrap fetch before any SDK client exists (inert unless NATIVELY_PROMPT_DEBUG=1, never when packaged).
 import './llm/promptDebug';
 // Pin the packaged userData to the historical "Natively" folder BEFORE any
@@ -11767,9 +11768,13 @@ if (process.env.THINKING_MATRIX === '1') {
   };
 
   // When a call starts in Zoom, Teams, Meet (…), offer to start Natively.
+  const linuxWm = createLinuxWm();
+  const linuxWindows = linuxWm ? startWindowPoller(linuxWm) : null;
+  if (linuxWindows) app.once('will-quit', () => linuxWindows.stop());
   const meetingDetector = wireMeetingDetection({
     platform: process.platform,
     native: loadNativeModule(),
+    linuxWindows: linuxWindows ? () => linuxWindows.get() : undefined,
     self: { pid: process.pid, execPath: process.execPath },
     isMeetingActive: () => appState.getIsMeetingActive(),
     promptsBlocked: () => nativePromptsBlocked(() => appState.getUndetectable()) || appState.getDisguise() !== 'none',
