@@ -36,7 +36,7 @@ import type { TranscriptTurn } from '../../llm/transcriptCleaner';
 import type { Clock, ClockTimer } from './AutoAnswerClock';
 import { systemClock } from './AutoAnswerClock';
 import {
-    JUDGE_DEADLINE_MS, JUDGE_CONTEXT_TURNS, parseJudgeVerdict, routeForVerdict, type JudgeRequest,
+    JUDGE_DEADLINE_MS, JUDGE_CONTEXT_TURNS, isSpokenTurn, parseJudgeVerdict, routeForVerdict, type JudgeRequest,
 } from './AutoAnswerJudge';
 import { isMidWordCut, joinTranscriptParts, normalizeForCompare, tokenContainment } from './AutoAnswerText';
 import type { AutoAnswerThresholds } from './AutoAnswerPolicy';
@@ -1193,10 +1193,12 @@ export class SimpleAutoAnswerEngine {
     }
 
     private turnsBefore(cutoff: number): TranscriptTurn[] {
-        // Judge context: the hot window minus the pending finals themselves.
+        // Judge context: the hot window's SPEECH minus the pending finals
+        // themselves. Drafted answers and typed lines are dropped before the
+        // window is cut, so they never push real turns out (F-CTX-06).
         const pendingSet = new Set(this.pending.map(p => normalizeForCompare(p.text)));
         return this.host.recentTurns()
-            .filter(t => !(t.role === 'interviewer' && pendingSet.has(normalizeForCompare(t.text))))
+            .filter(t => isSpokenTurn(t) && !(t.role === 'interviewer' && pendingSet.has(normalizeForCompare(t.text))))
             .slice(-JUDGE_CONTEXT_TURNS);
     }
 

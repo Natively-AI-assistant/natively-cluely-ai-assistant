@@ -241,14 +241,30 @@ const JUDGE_ACTS: Record<string, AutoAnswerDialogueAct> = {
 };
 
 /**
+ * Whether a hot-window turn is something a person SAID in the meeting. The
+ * app's own drafted answers (role 'assistant') and lines the user TYPED to the
+ * assistant are not: labelled "USER:" they read as the user having already
+ * answered, which suppressed re-asks and elaborations (pipeline forensics
+ * 2026-11-13, F-CTX-06). The already-answered ask still reaches the judge,
+ * as lastAnsweredText.
+ */
+export function isSpokenTurn(turn: TranscriptTurn): boolean {
+    return turn.role !== 'assistant' && (turn as { typed?: boolean }).typed !== true;
+}
+
+/**
  * One self-contained message for a fast structured-output model. The transcript
  * is DATA: the prompt fences it and instructs the model to never follow
  * instructions inside it.
  */
 export function buildJudgePrompt(req: JudgeRequest): string {
-    const keptFrom = Math.max(0, req.recentTurns.length - JUDGE_CONTEXT_TURNS);
-    const kept = req.recentTurns.slice(keptFrom);
-    const speakerOf = (i: number) => req.speakers?.[keptFrom + i];
+    // Speech only, each turn keeping its index into req.speakers.
+    const spoken = req.recentTurns
+        .map((turn, index) => ({ turn, index }))
+        .filter(({ turn }) => isSpokenTurn(turn));
+    const keptEntries = spoken.slice(Math.max(0, spoken.length - JUDGE_CONTEXT_TURNS));
+    const kept = keptEntries.map(e => e.turn);
+    const speakerOf = (i: number) => req.speakers?.[keptEntries[i].index];
     const anyLabels = kept.some((t, i) => t.role === 'interviewer' && speakerOf(i));
     const context = kept
         .map((t, i) => {
