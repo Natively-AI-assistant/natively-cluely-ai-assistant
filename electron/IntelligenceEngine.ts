@@ -2998,10 +2998,23 @@ export class IntelligenceEngine extends EventEmitter {
                     }).answerType;
                 } catch { return undefined; }
             })();
+            // F-LAT-05 / F-BND-02 (2026-11-13): when V3 composes this turn its
+            // prompt REPLACES the legacy packet, so the legacy prefetch, the premium
+            // grounding call (≤2 s) and the coordinator (≤1-2 s) were built, awaited
+            // and thrown away before V3 even ran. buildV3Prompt returns null only with
+            // the flag off or an empty question (or on a defect); those turns keep
+            // all of it. Same question expression as wtaTurnQuestion below.
+            const wtaV3ExpectedToCompose = (() => {
+                try {
+                    const { isContextIntelligenceV3Enabled } = require('./context-intelligence/contracts/flag');
+                    return isContextIntelligenceV3Enabled() === true
+                        && String(question || extractedQuestion.latestQuestion || lastInterviewerTurn || '').trim().length > 0;
+                } catch { return false; }
+            })();
             // Governed document turns resolve through EvidenceResolver inside
             // WhatToAnswerLLM. Do not start the legacy prefetch in parallel: even
             // an ignored retrieval is an unauthorized competing evidence path.
-            const modeContextPromise: Promise<string> = options?.activeSkill || docGroundedEnforcementActive || !wtaPrefetchDecision.allowed
+            const modeContextPromise: Promise<string> = options?.activeSkill || docGroundedEnforcementActive || !wtaPrefetchDecision.allowed || wtaV3ExpectedToCompose
                 ? Promise.resolve('') // skill/governed-document mode skips legacy retrieval; blind turn (no user-originated query) skips it too
                 : (async () => {
                     try {
@@ -3139,7 +3152,8 @@ export class IntelligenceEngine extends EventEmitter {
                     processQuestion(question: string): Promise<PromptAssemblyResult | null>;
                 }) | undefined = this.llmHelper.getKnowledgeOrchestrator?.();
                 if (orchestrator?.isKnowledgeMode?.() && !strictDocumentGroundedActive
-                    && wtaDecisionAllowsCandidateProfile && snapshotProfileIntelligenceAllowed) {
+                    && wtaDecisionAllowsCandidateProfile && snapshotProfileIntelligenceAllowed
+                    && !wtaV3ExpectedToCompose) {
                     const extracted = extractedQuestion;
                     // Only ground question types that resolve to the candidate's
                     // own plain facts. jd_alignment/company questions are
@@ -3507,10 +3521,10 @@ export class IntelligenceEngine extends EventEmitter {
             const _jdShapeAllowed = _jitAnswerType !== null && IntelligenceEngine.shouldJitForAnswerType(_jitAnswerType)
                 && /^jd_/.test(_jitAnswerType);
             if (!candidateProfile && wtaDecisionAllowsCandidateProfile && snapshotProfileIntelligenceAllowed
-                && snapshotProfileReadable
                 && (wtaProfileAllowed || _jdShapeAllowed)) {
                 try {
-                    const orch = this.llmHelper.getKnowledgeOrchestrator?.();
+                    // F-BND-01/05: no résumé/JD when the profile may not be read.
+                    const orch = snapshotProfileReadable ? this.llmHelper.getKnowledgeOrchestrator?.() : null;
                     const resume = stripUnsupportedDerivedResumeFields(
                         (orch as any)?.activeResume?.structured_data ?? null,
                         (orch as any)?.activeResume?.raw_text,
@@ -3868,6 +3882,7 @@ export class IntelligenceEngine extends EventEmitter {
                 && canonicalTurn.turnSourceDecision
                 && wtaCoordinatorInScope
                 && snapshotProfileIntelligenceAllowed
+                && !wtaV3ExpectedToCompose
                 && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')
                 && isIntelligenceFlagEnabled('contextOsMultiFamilyEvidenceEnabled')) {
                 try {

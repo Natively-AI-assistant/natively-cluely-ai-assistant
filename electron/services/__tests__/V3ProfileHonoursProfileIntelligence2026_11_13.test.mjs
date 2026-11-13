@@ -85,6 +85,6 @@ describe('the WTA profile snapshot and JIT fallback use the same read gate (F-BN
     assert.match(ie, /const snapshotJobDescriptionFacts = \(snapshotReadableKnowledge as any\)/);
   });
   test('the manual-evidence JIT fallback is gated on it too', () => {
-    assert.match(ie, /snapshotProfileIntelligenceAllowed\s*\n\s*&& snapshotProfileReadable/);
+    assert.match(ie, /const orch = snapshotProfileReadable \? this\.llmHelper\.getKnowledgeOrchestrator\?\.\(\) : null;/);
   });
 });
