@@ -795,6 +795,15 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const refreshAutoAnswerAccess = useCallback(() => {
         window.electronAPI?.getAutoAnswerAccess?.().then((a) => { if (a) { setAutoAnswerAvailable(a.available !== false); setAutoAnswerAccess({ basis: a.basis, uploads: a.uploads }); setAutoAnswerEnabled(a.enabled); } }).catch(() => { });
     }, []);
+    /** The sharing switch: off → ask (consent dialog); on → stop, warning a free user it stops Auto Answer too. */
+    const toggleAutoAnswerSharing = async () => {
+        if (!autoAnswerAccess) return;
+        if (!autoAnswerAccess.uploads) { setAutoAnswerDialog('pro'); return; }
+        if (autoAnswerAccess.basis === 'sharing' && autoAnswerEnabled
+            && !(await askConfirm({ title: t('Stop sharing?'), description: t('Auto Answer turns off too, unless you get Pro.'), confirmLabel: t('Stop sharing') }))) return;
+        await window.electronAPI?.setAutoAnswerTrainingConsent?.(false);
+        refreshAutoAnswerAccess();
+    };
     const [meetingRetention, setMeetingRetention] = useState<'forever' | '7d' | '30d' | 'never'>('forever');
     const [codeVerification, setCodeVerification] = useState(false);
     const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
@@ -2725,6 +2734,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             {autoAnswerAccess?.basis === 'none' && (
                                                                 <p className="text-xs text-text-tertiary mt-0.5">{t('Pro, or free when you share meeting transcripts to improve it')}</p>
                                                             )}
+                                                            {/* Panel closed but still sharing: stopping must stay one click away. */}
+                                                            {!autoAnswerEnabled && autoAnswerAccess?.uploads && (
+                                                                <p className="text-xs text-text-tertiary mt-0.5">
+                                                                    {t('Sharing transcripts is on.')}{' '}
+                                                                    <button type="button" onClick={toggleAutoAnswerSharing} className="underline hover:text-text-primary transition-colors cursor-pointer">{t('Stop sharing')}</button>
+                                                                </p>
+                                                            )}
                                                         </div>
                                                     </div>
                                                     <SettingsToggle
@@ -2758,49 +2774,56 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 </div>
                                                 )}
 
-                                                {/* Auto Answer transcript sharing (autoAnswerAccess.ts). Shown once
-                                                    the user shares, and to Pro/trial users as an opt-in. */}
-                                                {autoAnswerAvailable && autoAnswerAccess && (autoAnswerAccess.uploads || autoAnswerAccess.basis === 'pro') && (
-                                                    <div className="flex items-center justify-between px-4 py-3">
-                                                        <div className="pl-14">
-                                                            <h3 className="settings-title text-text-primary">{t('Share transcripts to improve Auto Answer')}</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">
-                                                                {autoAnswerAccess.basis === 'sharing'
-                                                                    ? t('Auto Answer is free while this is on. Turning it off stops Auto Answer unless you have Pro.')
-                                                                    : t('Optional with Pro. Only meetings where Auto Answer runs.')}
-                                                            </p>
-                                                            {autoAnswerAccess.uploads && (
-                                                                <button
-                                                                    type="button"
-                                                                    className="text-xs text-text-tertiary hover:text-text-primary underline mt-1"
-                                                                    onClick={async () => {
-                                                                        if (!(await askConfirm({ title: t('Delete everything you shared?'), description: t('Stops sharing and deletes the transcripts already sent from this computer.'), confirmLabel: t('Delete') }))) return;
-                                                                        const r = await window.electronAPI?.deleteAutoAnswerSharedData?.();
-                                                                        refreshAutoAnswerAccess();
-                                                                        if (r && !r.success) console.error('[Settings] Shared data not deleted:', r.error);
-                                                                    }}
-                                                                >{t('Delete shared transcripts')}</button>
-                                                            )}
-                                                        </div>
-                                                        <SettingsToggle
-                                                            checked={autoAnswerAccess.uploads}
-                                                            label={t('Share transcripts to improve Auto Answer')}
-                                                            onChange={async () => {
-                                                                if (!autoAnswerAccess.uploads) { setAutoAnswerDialog('pro'); return; }
-                                                                if (autoAnswerAccess.basis === 'sharing' && autoAnswerEnabled
-                                                                    && !(await askConfirm({ title: t('Stop sharing?'), description: t('Auto Answer turns off too, unless you get Pro.'), confirmLabel: t('Stop sharing') }))) return;
-                                                                await window.electronAPI?.setAutoAnswerTrainingConsent?.(false);
-                                                                refreshAutoAnswerAccess();
-                                                            }}
-                                                            className={autoAnswerAccess.uploads ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
-                                                        />
-                                                    </div>
-                                                )}
+                                                {/* Under the Auto Answer switch, only while it is on (Evin 2026-11-13):
+                                                    the on-device model and transcript sharing, as the same plain
+                                                    sub-rows Settings uses everywhere (indented to the title). */}
+                                                <AnimatePresence initial={false}>
+                                                    {autoAnswerAvailable && autoAnswerEnabled && autoAnswerAccess && autoAnswerAccess.basis !== 'none' && (
+                                                        <motion.div
+                                                            key="auto-answer-subrows"
+                                                            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
+                                                            animate={reduceMotion ? { opacity: 1 } : { opacity: 1, height: 'auto' }}
+                                                            exit={reduceMotion
+                                                                ? { opacity: 0, transition: { duration: 0.15 } }
+                                                                : { opacity: 0, height: 0, transition: { duration: 0.15, ease: [0.22, 1, 0.36, 1] } }}
+                                                            transition={{ duration: reduceMotion ? 0.15 : 0.25, ease: [0.22, 1, 0.36, 1] }}
+                                                            className="overflow-hidden"
+                                                        >
+                                                            <AutoAnswerModelCard />
 
-                                                {/* The on-device Auto Answer model: paid download (API keys + Pro),
-                                                    with the user's own before/after judge calls. Hidden where no
-                                                    model runs (deciderRuntime.ts). Premium only. */}
-                                                {autoAnswerAvailable && <AutoAnswerModelCard />}
+                                                            {/* Transcript sharing (autoAnswerAccess.ts): opt-in with Pro,
+                                                                what keeps Auto Answer free for a free user. */}
+                                                            <div className="flex items-center justify-between px-4 py-3">
+                                                                <div className="pl-14">
+                                                                    <h3 className="settings-title text-text-primary">{t('Share transcripts to improve Auto Answer')}</h3>
+                                                                    <p className="text-xs text-text-secondary mt-0.5">
+                                                                        {autoAnswerAccess.basis === 'sharing'
+                                                                            ? t('Auto Answer is free while this is on. Turning it off stops Auto Answer unless you have Pro.')
+                                                                            : t('Optional with Pro. Only meetings where Auto Answer runs.')}
+                                                                    </p>
+                                                                    {autoAnswerAccess.uploads && (
+                                                                        <button
+                                                                            type="button"
+                                                                            className="text-xs text-text-tertiary hover:text-text-primary underline mt-1"
+                                                                            onClick={async () => {
+                                                                                if (!(await askConfirm({ title: t('Delete everything you shared?'), description: t('Stops sharing and deletes the transcripts already sent from this computer.'), confirmLabel: t('Delete') }))) return;
+                                                                                const r = await window.electronAPI?.deleteAutoAnswerSharedData?.();
+                                                                                refreshAutoAnswerAccess();
+                                                                                if (r && !r.success) console.error('[Settings] Shared data not deleted:', r.error);
+                                                                            }}
+                                                                        >{t('Delete shared transcripts')}</button>
+                                                                    )}
+                                                                </div>
+                                                                <SettingsToggle
+                                                                    checked={autoAnswerAccess.uploads}
+                                                                    label={t('Share transcripts to improve Auto Answer')}
+                                                                    onChange={toggleAutoAnswerSharing}
+                                                                    className={autoAnswerAccess.uploads ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                                />
+                                                            </div>
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
 
                                                 {/* Ambient AI Chat */}
                                                 <div className="flex items-center justify-between px-4 py-3">
