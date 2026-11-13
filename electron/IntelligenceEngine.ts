@@ -5443,6 +5443,10 @@ export class IntelligenceEngine extends EventEmitter {
                     validationOk: false,
                     criticalViolations: ['leaked_schema_stub'],
                 });
+                // A run replaced (or whose meeting ended) after its stream finished
+                // writes nothing: no history line, no usage row, no final
+                // (pipeline forensics 2026-11-13, F-CTX-08).
+                if (isWtaSuperseded()) return yieldToSupersedingRun(false);
                 if (openedStreamRow) emitChunk(stubFallback);
                 this.session.addAssistantMessage(stubFallback, stubWriteDecision, 'what_to_answer');
                 // Phase 4 defense-in-depth (forensic-report §6b): carry generationId.
@@ -5465,6 +5469,10 @@ export class IntelligenceEngine extends EventEmitter {
                     validationOk: false,
                     criticalViolations: ['provider_transport_error'],
                 });
+                // A run replaced (or whose meeting ended) after its stream finished
+                // writes nothing: no history line, no usage row, no final
+                // (pipeline forensics 2026-11-13, F-CTX-08).
+                if (isWtaSuperseded()) return yieldToSupersedingRun(false);
                 if (openedStreamRow) emitChunk(fullAnswer);
                 this.session.addAssistantMessage(fullAnswer, transportWriteDecision, 'what_to_answer');
                 // Campaign-3 (fix/answer-policy-engine, 2026-07-19, founder §2.6):
@@ -5536,6 +5544,10 @@ export class IntelligenceEngine extends EventEmitter {
                     validationOk: false,
                     criticalViolations: ['leaked_internal_tag_block'],
                 });
+                // A run replaced (or whose meeting ended) after its stream finished
+                // writes nothing: no history line, no usage row, no final
+                // (pipeline forensics 2026-11-13, F-CTX-08).
+                if (isWtaSuperseded()) return yieldToSupersedingRun(false);
                 if (openedStreamRow) emitChunk(tagLeakFallback);
                 this.session.addAssistantMessage(tagLeakFallback, tagLeakWriteDecision, 'what_to_answer');
                 // Phase 4 defense-in-depth (forensic-report §6b): carry generationId.
@@ -7295,6 +7307,11 @@ export class IntelligenceEngine extends EventEmitter {
                 }
             } catch { /* normalizer never blocks the answer */ }
 
+            // A run replaced (or whose meeting ended) while it was being checked
+            // writes nothing: no history line, no usage row, no final, and it
+            // leaves the mode to its successor (pipeline forensics 2026-11-13,
+            // F-CTX-08). Speculative runs check this above, before completing.
+            if (isWtaSuperseded()) return yieldToSupersedingRun(false);
             this.session.addAssistantMessage(finalWtaAnswer, wtaWriteDecision, 'what_to_answer');
 
             // Full-JIT write-gating law (§6): a provider-error/no-answer WTA
