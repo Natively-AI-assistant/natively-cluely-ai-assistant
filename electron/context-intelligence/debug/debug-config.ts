@@ -121,15 +121,31 @@ export function describeContextDebugConfig(): {
 }
 
 /**
- * A user-content string for a log line (F-PRV-02, 2026-11-13): the text itself
- * only while the content gate above is open (dev build + verbose +
- * NATIVELY_CONTEXT_DEBUG_INCLUDE_CONTENT=1), otherwise just its length. Logs
- * reach natively_debug.log on disk; a question, a name, an employer or an
- * answer must not. Never throws.
+ * A personal identifier for a log line (F-PRV-02, 2026-11-13; narrowed by the
+ * owner 2026-11-14): the text itself only while the content gate above is open
+ * (dev build + verbose + NATIVELY_CONTEXT_DEBUG_INCLUDE_CONTENT=1), otherwise
+ * just its length. Use it ONLY for values that identify the user and never
+ * explain a bug (the résumé holder's name). Debugging facts (the question, the
+ * employer, the JD title, matched projects and skills) log as they are, so a
+ * later reader of natively_debug.log can follow what happened. The file stays
+ * on the computer; "Export debug logs" copies it and the user decides whether
+ * to share it. Never throws.
  */
 export function logSafeText(text: unknown): string {
   const s = text == null ? '' : String(text);
   let open = false;
   try { open = getContentInclusionEnabled(); } catch { open = false; }
   return open ? s : `<${s.length} chars>`;
+}
+
+/**
+ * A file path for a log line: the file name only. The folders above it carry
+ * the OS account name (/Users/<name>/…, C:\Users\<name>\…) and add
+ * nothing to a diagnosis. Splits on both separators so a Windows path logged
+ * on any OS is trimmed the same way. Never throws.
+ */
+export function logSafeFileName(filePath: unknown): string {
+  const s = filePath == null ? '' : String(filePath);
+  const parts = s.split(/[\\/]/);
+  return parts[parts.length - 1] || s;
 }
