@@ -2,6 +2,7 @@
 // LLM mode routing and orchestration.
 // Extracted from IntelligenceManager to decouple LLM logic from state management.
 
+import { logSafeText } from './context-intelligence/debug/debug-config';
 import type { SessionWriteDecision } from './llm/FinalAnswerGenerationPolicy';
 import { LiveHelperLLM, LIVE_HELPER_EMPTY, LIVE_HELPER_WINDOW_SECONDS, catchUpWindowSeconds, liveHelperDisplayKind, type LiveHelperAction } from './llm/liveHelpers';
 import { CustomButtonLLM, CUSTOM_BUTTON_EMPTY, CUSTOM_BUTTON_WINDOW_SECONDS } from './llm/customButtons';
@@ -2623,7 +2624,7 @@ export class IntelligenceEngine extends EventEmitter {
                         transcriptTurnsCount: transcriptTurns.length,
                         rawTranscriptChars: rawCharLen,
                         preparedTranscriptChars: preparedTranscript.length,
-                        latestQuestion: extractedQuestion.latestQuestion,
+                        latestQuestion: logSafeText(extractedQuestion.latestQuestion),
                         questionType: extractedQuestion.questionType,
                         detectedSpeaker: extractedQuestion.detectedSpeaker,
                         confidence: extractedQuestion.confidence,
@@ -2842,7 +2843,7 @@ export class IntelligenceEngine extends EventEmitter {
                                 });
                                 if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
                                     console.log('[TRACE:LONGCTX] long_range_recall_fired', JSON.stringify({
-                                        question: extractedQuestion.latestQuestion,
+                                        question: logSafeText(extractedQuestion.latestQuestion),
                                         matchCount: recall.matchCount,
                                         bestAgeSeconds: recall.bestAgeSeconds,
                                         blockChars: recall.block.length,
@@ -5797,8 +5798,8 @@ export class IntelligenceEngine extends EventEmitter {
                     if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
                         try {
                             console.log('[TRACE:LONGCTX] scaffold_contamination_discard', JSON.stringify({
-                                question: scaffoldQuestion || null,
-                                rawAnswer: fullAnswer,
+                                question: logSafeText(scaffoldQuestion),
+                                rawAnswer: logSafeText(fullAnswer),
                                 answerType: answerPlan?.answerType,
                             }));
                         } catch (e) { console.warn('[TRACE:LONGCTX] scaffold_contamination_discard logging failed', e); }
@@ -6642,8 +6643,8 @@ export class IntelligenceEngine extends EventEmitter {
                 if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
                     try {
                         console.log('[TRACE:LONGCTX] false_no_content_claim_discard', JSON.stringify({
-                            question: question || extractedQuestion.latestQuestion || lastInterviewerTurn || null,
-                            rawAnswer: fullAnswer,
+                            question: logSafeText(question || extractedQuestion.latestQuestion || lastInterviewerTurn),
+                            rawAnswer: logSafeText(fullAnswer),
                             answerType: answerPlan?.answerType,
                             extractionConfidence: extractedQuestion.confidence,
                             isSpeculative,
@@ -6756,8 +6757,8 @@ export class IntelligenceEngine extends EventEmitter {
                 if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
                     try {
                         console.log('[TRACE:LONGCTX] nonanswer_sentinel_discard', JSON.stringify({
-                            question: question || extractedQuestion.latestQuestion || lastInterviewerTurn || null,
-                            rawAnswer: fullAnswer,
+                            question: logSafeText(question || extractedQuestion.latestQuestion || lastInterviewerTurn),
+                            rawAnswer: logSafeText(fullAnswer),
                             answerType: answerPlan?.answerType,
                             isSpeculative,
                         }));
@@ -6997,8 +6998,8 @@ export class IntelligenceEngine extends EventEmitter {
                                     if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
                                         try {
                                             console.log('[TRACE:LONGCTX] answer_relevance_discard', JSON.stringify({
-                                                question: relevanceQuestion || null,
-                                                rawAnswer: fullAnswer,
+                                                question: logSafeText(relevanceQuestion),
+                                                rawAnswer: logSafeText(fullAnswer),
                                                 answerType: answerPlan?.answerType,
                                                 confidence: relevance.confidence,
                                             }));
@@ -7025,8 +7026,8 @@ export class IntelligenceEngine extends EventEmitter {
                             if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
                                 try {
                                     console.log('[TRACE:LONGCTX] answer_relevance_discard', JSON.stringify({
-                                        question: relevanceQuestion || null,
-                                        rawAnswer: fullAnswer,
+                                        question: logSafeText(relevanceQuestion),
+                                        rawAnswer: logSafeText(fullAnswer),
                                         answerType: answerPlan?.answerType,
                                         confidence: relevance.confidence,
                                     }));
