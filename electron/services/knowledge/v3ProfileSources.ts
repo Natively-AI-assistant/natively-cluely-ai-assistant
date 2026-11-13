@@ -95,18 +95,88 @@ const EMPTY: CollectedProfileSources = {
   resolved: [],
 };
 
+/** The globalThis key premium KnowledgeOrchestrator.setProAccessCheck writes
+ *  (ipcHandlers wires proAccess.isProOrTrialActive into it). Read here so the
+ *  Cue Cards are held to the same read-time Pro check as the résumé. */
+const KNOWLEDGE_PRO_ACCESS_KEY = '__nativelyKnowledgeProAccessV1__';
+
+/** Same rule as premium isKnowledgeMode's first step: wired and not Pro → false;
+ *  unwired (tests, OSS) → nothing withheld. */
+function proAccessAllows(): boolean {
+  const check = (globalThis as unknown as Record<string, unknown>)[KNOWLEDGE_PRO_ACCESS_KEY];
+  if (typeof check !== 'function') return true;
+  try { return (check as () => unknown)() === true; } catch { return false; }
+}
+
+/**
+ * May an ANSWER read the résumé / JD? (F-BND-01, F-BND-05, 2026-11-13.)
+ *
+ * V3 hydrated the profile on mode policy alone: the user's Profile
+ * Intelligence switch was never read on the default answer path, and nothing
+ * here asked for Pro, so after a licence or trial ended the in-memory résumé
+ * stayed one mode-template lock away from every answer. The orchestrator's own
+ * `isKnowledgeMode()` is the one answer to both: switch on AND Pro/trial AND a
+ * document loaded — the same gate the legacy paths already use.
+ *
+ * An orchestrator without that method is a duck-typed fixture, not premium;
+ * it keeps the old behaviour.
+ */
+function profileDocsAllowedForAnswers(orchestrator: unknown): boolean {
+  const o = orchestrator as { isKnowledgeMode?: () => unknown };
+  if (typeof o?.isKnowledgeMode !== 'function') return true;
+  try { return o.isKnowledgeMode() === true; } catch { return false; }
+}
+
+/**
+ * May an ANSWER read the Cue Cards? They are a Pro feature kept under Profile
+ * Intelligence, so: Pro at read time, and not when the user switched Profile
+ * Intelligence off. The switch can only be ON with a résumé or JD loaded
+ * (setKnowledgeMode refuses otherwise), so with no document loaded the cards
+ * are read on Pro alone — exactly as before for that user.
+ */
+function ownAnswersAllowedForAnswers(orchestrator: unknown): boolean {
+  if (!proAccessAllows()) return false;
+  const o = orchestrator as { isKnowledgeModeSwitchedOn?: () => unknown; activeResume?: unknown; activeJD?: unknown };
+  if (typeof o?.isKnowledgeModeSwitchedOn !== 'function') return true;
+  if (!o.activeResume && !o.activeJD) return true;
+  try { return o.isKnowledgeModeSwitchedOn() === true; } catch { return false; }
+}
+
 /**
  * Collect the ACTIVE profile documents (+ their OKF verified cards, when packs
- * exist) as plain values. Read per turn — no caching here — so a profile
- * re-upload is visible on the very next answer; versionId is the content hash
- * of the structured extraction, which is what invalidates stale evidence.
+ * exist) as plain values, for an ANSWER: gated on the user's Profile
+ * Intelligence switch and on Pro (see profileDocsAllowedForAnswers). Read per
+ * turn — no caching here — so a profile re-upload is visible on the very next
+ * answer; versionId is the content hash of the structured extraction, which is
+ * what invalidates stale evidence.
  *
  * Never throws: profile hydration is additive, and a defect here must degrade
  * to "mode attachments only", never break a live answer.
  */
 export function collectV3ProfileSources(orchestrator: unknown): CollectedProfileSources {
+  if (!orchestrator) return EMPTY;
+  return collectProfileSources(orchestrator, {
+    docs: profileDocsAllowedForAnswers(orchestrator),
+    ownAnswers: ownAnswersAllowedForAnswers(orchestrator),
+  });
+}
+
+/**
+ * Every active profile document, ungated: for the raw-text INDEX only, which
+ * must keep tracking the active documents (and pruning superseded ones)
+ * whatever the switch says. An upload indexes before it switches Profile
+ * Intelligence on, and switching off must not delete or re-embed the index.
+ * Never hand this to an answer.
+ */
+export function collectProfileSourcesForIndex(orchestrator: unknown): CollectedProfileSources {
+  if (!orchestrator) return EMPTY;
+  return collectProfileSources(orchestrator, { docs: true, ownAnswers: true });
+}
+
+function collectProfileSources(orchestrator: unknown, allow: { docs: boolean; ownAnswers: boolean }): CollectedProfileSources {
   try {
     if (!orchestrator) return EMPTY;
+    if (!allow.docs && !allow.ownAnswers) return EMPTY;
     const { buildActiveProfileContext } = require('../../llm/ActiveProfileContext') as
       typeof import('../../llm/ActiveProfileContext');
     const ctx = buildActiveProfileContext(orchestrator as never);
@@ -135,7 +205,7 @@ export function collectV3ProfileSources(orchestrator: unknown): CollectedProfile
     const docs: ProfileDocLike[] = [];
     const resolved: Array<{ role: string; id: string }> = [];
 
-    if (ctx.activeResume?.structured) {
+    if (allow.docs && ctx.activeResume?.structured) {
       const id = canonicalProfileSourceId('resume');
       docs.push({
         kind: 'resume',
@@ -148,7 +218,7 @@ export function collectV3ProfileSources(orchestrator: unknown): CollectedProfile
       });
       resolved.push({ role: 'profile_resume', id });
     }
-    if (ctx.activeJD?.structured) {
+    if (allow.docs && ctx.activeJD?.structured) {
       const id = canonicalProfileSourceId('jd');
       docs.push({
         kind: 'jd',
@@ -161,7 +231,7 @@ export function collectV3ProfileSources(orchestrator: unknown): CollectedProfile
       });
       resolved.push({ role: 'profile_job_description', id });
     }
-    const own = ownAnswersDoc();
+    const own = allow.ownAnswers ? ownAnswersDoc() : null;
     if (own) {
       docs.push(own);
       resolved.push({ role: 'profile_fact', id: own.sourceId });
@@ -170,8 +240,8 @@ export function collectV3ProfileSources(orchestrator: unknown): CollectedProfile
     return {
       docs,
       counts: {
-        profileResume: ctx.activeResume ? 1 : 0,
-        profileJd: ctx.activeJD ? 1 : 0,
+        profileResume: allow.docs && ctx.activeResume ? 1 : 0,
+        profileJd: allow.docs && ctx.activeJD ? 1 : 0,
         // Only what the user wrote or approved (see the note above). No derived
         // fact is served: a salary ESTIMATE is not a profile fact.
         profileFact: own ? 1 : 0,
@@ -296,7 +366,7 @@ let profileIndexChain: Promise<unknown> = Promise.resolve();
 export function indexProfileRawText(modesManager: ProfileRawModesManager | null | undefined, orchestrator: unknown): Promise<number> {
   const run = async (): Promise<number> => {
     if (!modesManager) return 0;
-    const current = () => profilePseudoFiles(collectV3ProfileSources(orchestrator).docs as never);
+    const current = () => profilePseudoFiles(collectProfileSourcesForIndex(orchestrator).docs as never);
     const files = current();
     pruneSupersededProfileIndexes(modesManager, files);
     if (modesManager.indexReferenceFile) {

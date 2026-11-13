@@ -18,7 +18,7 @@ import type {
   RetrievalPlan, ClaimRequirement, SourceType, Answerability, ClaimType,
 } from '../contracts/types';
 import { freezeTurnDecision } from '../contracts/types';
-import { resolveModePolicy, generalKnowledgeAllowed, type ModePolicy } from '../policies/mode-policy-registry';
+import { resolveModePolicy, generalKnowledgeAllowed, applyModeSourceContract, type ModePolicy, type ModeSourceContractInput } from '../policies/mode-policy-registry';
 import { resolveAnswerPolicy, type AnswerPolicy } from '../policies/answer-policy';
 import { CLAIM_AUTHORITY, claimAuthority } from '../policies/source-authority-policy';
 import { isRetrievalFixEnabled } from '../contracts/retrieval-flags';
@@ -106,6 +106,13 @@ export interface AnswerRequest {
    * mode's files, so source isolation is unchanged.
    */
   extraAllowedSourceTypes?: SourceType[];
+
+  /**
+   * The mode's source contract (F-ACC-05): a DELIBERATE reference-files-first
+   * choice promotes the reference files above the mode's own first source. See
+   * applyModeSourceContract. Absent → the mode policy alone, as before.
+   */
+  modeSourceContract?: ModeSourceContractInput | null;
 
   /**
    * The caller wants this turn's evidence for a prompt of its own and is not a
@@ -263,6 +270,7 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
   if (extra.length) {
     policy = { ...policy, allowedSourceTypes: [...policy.allowedSourceTypes, ...extra] };
   }
+  policy = applyModeSourceContract(policy, req.modeSourceContract);
 
   const q = resolveQuestion(req);
 

@@ -119,3 +119,17 @@ export function describeContextDebugConfig(): {
     contentInclusion: getContentInclusionEnabled(level),
   };
 }
+
+/**
+ * A user-content string for a log line (F-PRV-02, 2026-11-13): the text itself
+ * only while the content gate above is open (dev build + verbose +
+ * NATIVELY_CONTEXT_DEBUG_INCLUDE_CONTENT=1), otherwise just its length. Logs
+ * reach natively_debug.log on disk; a question, a name, an employer or an
+ * answer must not. Never throws.
+ */
+export function logSafeText(text: unknown): string {
+  const s = text == null ? '' : String(text);
+  let open = false;
+  try { open = getContentInclusionEnabled(); } catch { open = false; }
+  return open ? s : `<${s.length} chars>`;
+}

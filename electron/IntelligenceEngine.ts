@@ -2,6 +2,7 @@
 // LLM mode routing and orchestration.
 // Extracted from IntelligenceManager to decouple LLM logic from state management.
 
+import { logSafeText } from './context-intelligence/debug/debug-config';
 import type { SessionWriteDecision } from './llm/FinalAnswerGenerationPolicy';
 import { LiveHelperLLM, LIVE_HELPER_EMPTY, LIVE_HELPER_WINDOW_SECONDS, catchUpWindowSeconds, liveHelperDisplayKind, type LiveHelperAction } from './llm/liveHelpers';
 import { CustomButtonLLM, CUSTOM_BUTTON_EMPTY, CUSTOM_BUTTON_WINDOW_SECONDS } from './llm/customButtons';
@@ -73,7 +74,7 @@ import { recordAttribution } from './intelligence/IntelligenceAttribution';
 // tsc collapsed the grounding result to `{}`. The structural contract belongs to the
 // source-available boundary so a core type-check does not require private sources.
 // Follow-up: type getKnowledgeOrchestrator() properly and drop this import.
-import type { PromptAssemblyResult } from './premium/contracts';
+import type { PromptAssemblyResult, KnowledgeOrchestratorBoundary } from './premium/contracts';
 import type { AnswerType } from './llm/AnswerPlanner';
 import { isProfileIntelligenceAllowed } from './context-intelligence/policies/mode-policy-registry';
 import { stripUnsupportedDerivedResumeFields } from './context-intelligence/retrieval/profile-derived-support';
@@ -2411,16 +2412,26 @@ export class IntelligenceEngine extends EventEmitter {
         // behavior-preserving for this slice; the frozen snapshot is their measured
         // migration target.
         const snapshotKnowledge = this.llmHelper.getKnowledgeOrchestrator?.();
+        // F-BND-01/05 (2026-11-13): the orchestrator keeps the résumé/JD in memory
+        // after the user switches Profile Intelligence off or Pro ends. Its own
+        // isKnowledgeMode() (switch + Pro + a document) is the read gate; a turn
+        // that may not read the profile sees none — same rule as the V3 collector.
+        const snapshotProfileReadable = (() => {
+            const fn = (snapshotKnowledge as any)?.isKnowledgeMode;
+            if (typeof fn !== 'function') return true;
+            try { return fn.call(snapshotKnowledge) === true; } catch { return false; }
+        })();
         // Keep the same loaded structured-data objects that informed source
         // availability. The canonical evidence coordinator uses these snapshots,
         // never a fresh orchestrator read after a pre-stream await.
         // Derived-evidence hygiene (2026-09-30): only raw-text-supported
         // project descriptions reach evidence (profile-derived-support.ts).
+        const snapshotReadableKnowledge = snapshotProfileReadable ? snapshotKnowledge : null;
         const snapshotProfileFacts = stripUnsupportedDerivedResumeFields(
-            (snapshotKnowledge as any)?.activeResume?.structured_data ?? null,
-            (snapshotKnowledge as any)?.activeResume?.raw_text,
+            (snapshotReadableKnowledge as any)?.activeResume?.structured_data ?? null,
+            (snapshotReadableKnowledge as any)?.activeResume?.raw_text,
         );
-        const snapshotJobDescriptionFacts = (snapshotKnowledge as any)?.activeJD?.structured_data ?? null;
+        const snapshotJobDescriptionFacts = (snapshotReadableKnowledge as any)?.activeJD?.structured_data ?? null;
         const snapshotSourceAvailability = Object.freeze({
             hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
             hasProfileFacts: Boolean(snapshotProfileFacts),
@@ -2673,7 +2684,7 @@ export class IntelligenceEngine extends EventEmitter {
                         transcriptTurnsCount: transcriptTurns.length,
                         rawTranscriptChars: rawCharLen,
                         preparedTranscriptChars: preparedTranscript.length,
-                        latestQuestion: extractedQuestion.latestQuestion,
+                        latestQuestion: logSafeText(extractedQuestion.latestQuestion),
                         questionType: extractedQuestion.questionType,
                         detectedSpeaker: extractedQuestion.detectedSpeaker,
                         confidence: extractedQuestion.confidence,
@@ -2892,7 +2903,7 @@ export class IntelligenceEngine extends EventEmitter {
                                 });
                                 if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
                                     console.log('[TRACE:LONGCTX] long_range_recall_fired', JSON.stringify({
-                                        question: extractedQuestion.latestQuestion,
+                                        question: logSafeText(extractedQuestion.latestQuestion),
                                         matchCount: recall.matchCount,
                                         bestAgeSeconds: recall.bestAgeSeconds,
                                         blockChars: recall.block.length,
@@ -3048,10 +3059,23 @@ export class IntelligenceEngine extends EventEmitter {
                     }).answerType;
                 } catch { return undefined; }
             })();
+            // F-LAT-05 / F-BND-02 (2026-11-13): when V3 composes this turn its
+            // prompt REPLACES the legacy packet, so the legacy prefetch, the premium
+            // grounding call (≤2 s) and the coordinator (≤1-2 s) were built, awaited
+            // and thrown away before V3 even ran. buildV3Prompt returns null only with
+            // the flag off or an empty question (or on a defect); those turns keep
+            // all of it. Same question expression as wtaTurnQuestion below.
+            const wtaV3ExpectedToCompose = (() => {
+                try {
+                    const { isContextIntelligenceV3Enabled } = require('./context-intelligence/contracts/flag');
+                    return isContextIntelligenceV3Enabled() === true
+                        && String(question || extractedQuestion.latestQuestion || lastInterviewerTurn || '').trim().length > 0;
+                } catch { return false; }
+            })();
             // Governed document turns resolve through EvidenceResolver inside
             // WhatToAnswerLLM. Do not start the legacy prefetch in parallel: even
             // an ignored retrieval is an unauthorized competing evidence path.
-            const modeContextPromise: Promise<string> = options?.activeSkill || docGroundedEnforcementActive || !wtaPrefetchDecision.allowed
+            const modeContextPromise: Promise<string> = options?.activeSkill || docGroundedEnforcementActive || !wtaPrefetchDecision.allowed || wtaV3ExpectedToCompose
                 ? Promise.resolve('') // skill/governed-document mode skips legacy retrieval; blind turn (no user-originated query) skips it too
                 : (async () => {
                     try {
@@ -3185,11 +3209,10 @@ export class IntelligenceEngine extends EventEmitter {
                 // WtaParallelPrestream.test.mjs asserts on the literal source text
                 // `await withTimeout(orchestrator.processQuestion(` — so the fix belongs
                 // on the binding, leaving every call site spelled exactly as before.
-                const orchestrator: (Record<string, any> & {
-                    processQuestion(question: string): Promise<PromptAssemblyResult | null>;
-                }) | undefined = this.llmHelper.getKnowledgeOrchestrator?.();
+                const orchestrator: (KnowledgeOrchestratorBoundary & Record<string, any>) | undefined = this.llmHelper.getKnowledgeOrchestrator?.();
                 if (orchestrator?.isKnowledgeMode?.() && !strictDocumentGroundedActive
-                    && wtaDecisionAllowsCandidateProfile && snapshotProfileIntelligenceAllowed) {
+                    && wtaDecisionAllowsCandidateProfile && snapshotProfileIntelligenceAllowed
+                    && !wtaV3ExpectedToCompose) {
                     const extracted = extractedQuestion;
                     // Only ground question types that resolve to the candidate's
                     // own plain facts. jd_alignment/company questions are
@@ -3559,7 +3582,8 @@ export class IntelligenceEngine extends EventEmitter {
             if (!candidateProfile && wtaDecisionAllowsCandidateProfile && snapshotProfileIntelligenceAllowed
                 && (wtaProfileAllowed || _jdShapeAllowed)) {
                 try {
-                    const orch = this.llmHelper.getKnowledgeOrchestrator?.();
+                    // F-BND-01/05: no résumé/JD when the profile may not be read.
+                    const orch = snapshotProfileReadable ? this.llmHelper.getKnowledgeOrchestrator?.() : null;
                     const resume = stripUnsupportedDerivedResumeFields(
                         (orch as any)?.activeResume?.structured_data ?? null,
                         (orch as any)?.activeResume?.raw_text,
@@ -3665,7 +3689,8 @@ export class IntelligenceEngine extends EventEmitter {
                                 // auto-open with a candidate self-introduction.
                                 // _c3TurnPlan is computed above in the same
                                 // try block; null-safe here.
-                                seedCandidateBackground: (_c3TurnPlan?.answerDirectives?.seedCandidateBackground ?? true),
+                                // F-ACC-12: a failed plan does not seed (was `?? true`).
+                                seedCandidateBackground: (_c3TurnPlan?.answerDirectives?.seedCandidateBackground ?? false),
                             });
                             candidateProfile = `<profile_jit_evidence_request>\n${jit.userPrompt}\n</profile_jit_evidence_request>`;
                             trace.mark('repair_used', { reason: 'identity_jit_evidence_grounding', evidenceItems: evidence.items.length, promptChars: jit.promptChars });
@@ -3917,6 +3942,7 @@ export class IntelligenceEngine extends EventEmitter {
                 && canonicalTurn.turnSourceDecision
                 && wtaCoordinatorInScope
                 && snapshotProfileIntelligenceAllowed
+                && !wtaV3ExpectedToCompose
                 && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')
                 && isIntelligenceFlagEnabled('contextOsMultiFamilyEvidenceEnabled')) {
                 try {
@@ -5834,8 +5860,8 @@ export class IntelligenceEngine extends EventEmitter {
                     if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
                         try {
                             console.log('[TRACE:LONGCTX] scaffold_contamination_discard', JSON.stringify({
-                                question: scaffoldQuestion || null,
-                                rawAnswer: fullAnswer,
+                                question: logSafeText(scaffoldQuestion),
+                                rawAnswer: logSafeText(fullAnswer),
                                 answerType: answerPlan?.answerType,
                             }));
                         } catch (e) { console.warn('[TRACE:LONGCTX] scaffold_contamination_discard logging failed', e); }
@@ -6679,8 +6705,8 @@ export class IntelligenceEngine extends EventEmitter {
                 if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
                     try {
                         console.log('[TRACE:LONGCTX] false_no_content_claim_discard', JSON.stringify({
-                            question: question || extractedQuestion.latestQuestion || lastInterviewerTurn || null,
-                            rawAnswer: fullAnswer,
+                            question: logSafeText(question || extractedQuestion.latestQuestion || lastInterviewerTurn),
+                            rawAnswer: logSafeText(fullAnswer),
                             answerType: answerPlan?.answerType,
                             extractionConfidence: extractedQuestion.confidence,
                             isSpeculative,
@@ -6793,8 +6819,8 @@ export class IntelligenceEngine extends EventEmitter {
                 if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
                     try {
                         console.log('[TRACE:LONGCTX] nonanswer_sentinel_discard', JSON.stringify({
-                            question: question || extractedQuestion.latestQuestion || lastInterviewerTurn || null,
-                            rawAnswer: fullAnswer,
+                            question: logSafeText(question || extractedQuestion.latestQuestion || lastInterviewerTurn),
+                            rawAnswer: logSafeText(fullAnswer),
                             answerType: answerPlan?.answerType,
                             isSpeculative,
                         }));
@@ -7037,8 +7063,8 @@ export class IntelligenceEngine extends EventEmitter {
                                     if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
                                         try {
                                             console.log('[TRACE:LONGCTX] answer_relevance_discard', JSON.stringify({
-                                                question: relevanceQuestion || null,
-                                                rawAnswer: fullAnswer,
+                                                question: logSafeText(relevanceQuestion),
+                                                rawAnswer: logSafeText(fullAnswer),
                                                 answerType: answerPlan?.answerType,
                                                 confidence: relevance.confidence,
                                             }));
@@ -7065,8 +7091,8 @@ export class IntelligenceEngine extends EventEmitter {
                             if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
                                 try {
                                     console.log('[TRACE:LONGCTX] answer_relevance_discard', JSON.stringify({
-                                        question: relevanceQuestion || null,
-                                        rawAnswer: fullAnswer,
+                                        question: logSafeText(relevanceQuestion),
+                                        rawAnswer: logSafeText(fullAnswer),
                                         answerType: answerPlan?.answerType,
                                         confidence: relevance.confidence,
                                     }));

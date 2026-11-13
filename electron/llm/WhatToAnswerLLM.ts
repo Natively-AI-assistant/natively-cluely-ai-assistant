@@ -582,6 +582,12 @@ The user triggered this action with a coding problem on screen and NO new questi
                             (_cog as any).resolutionStrategy = resolution.strategy;
                             modeContextBlock = resolution.pack.items.map((item) => `[Section: ${item.pointer?.section || item.sourceId}]\n${item.text}`).join('\n\n');
                         } else {
+                        // F-LAT-05 (2026-11-13): a V3-composed turn sends `_v3p.user`
+                        // INSTEAD of the legacy packet (see _wtaUserBase below), so the
+                        // block retrieved here is discarded unread — yet it was awaited
+                        // first (prefetch race ≤1.5 s, inline hybrid ≤1.5 s / doc-grounded
+                        // longer). Retrieve nothing on that turn; legacy turns are unchanged.
+                        const v3ComposedTurn = Boolean((requestSnapshot as any)?.v3Prompt);
                         // PI v3 (W5): prefer the caller's PREFETCHED retrieval
                         // (kicked in parallel with intent classification +
                         // grounding) — by the time we get here it has usually
@@ -589,7 +595,9 @@ The user triggered this action with a coding problem on screen and NO new questi
                         // race as the inline path so a cold embedder still can't
                         // stall first-token. Falls through to inline retrieval
                         // when no prefetch was supplied (manual path, tests).
-                        if (preFetchedModeContext && !forceDocumentGrounding) {
+                        if (v3ComposedTurn) {
+                            // nothing to retrieve: the V3 prompt carries its own evidence
+                        } else if (preFetchedModeContext && !forceDocumentGrounding) {
                             const { value, timedOut } = await raceWithBudget(
                                 preFetchedModeContext, HYBRID_RETRIEVAL_BUDGET_MS, '',
                             );
@@ -629,7 +637,7 @@ The user triggered this action with a coding problem on screen and NO new questi
                                 console.warn(`[WhatToAnswerLLM] hybrid retrieval exceeded ${HYBRID_RETRIEVAL_BUDGET_MS}ms — using lexical fallback`);
                             }
                         }
-                        if (!modeContextBlock) {
+                        if (!modeContextBlock && !v3ComposedTurn) {
                             // excludeCustomContext (PI v3 W2): the mode's
                             // customContext is PINNED below — keep retrieval to
                             // reference files only so the text never ships twice.
@@ -889,8 +897,23 @@ The user triggered this action with a coding problem on screen and NO new questi
                         hasAttachedImages,
                         hasScreenText,
                     });
+                    // F-ACC-13 (2026-11-13): this is the null-V3 fallback's decline
+                    // site, and the engine marks its doc-grounded context
+                    // `govern: true` without asking the refusal policy. Ask it here,
+                    // as the coordinator and manual chat do: a refusal pack that
+                    // does not govern falls through to the model exactly like the
+                    // visual-context yield (no canned line, no pack rendering).
+                    const { packGovernsGeneration } = require('../intelligence/context-os/refusalPolicy') as typeof import('../intelligence/context-os/refusalPolicy');
+                    const _refusalYields = pack.answerPolicy === 'refuse_insufficient_evidence'
+                        && !packGovernsGeneration({
+                            answerPolicy: pack.answerPolicy,
+                            sourceAuthority: _cog.modeSnapshot?.sourceAuthority ?? null,
+                            hasReferenceFiles: true,
+                        });
                     if (_declineYields) {
                         console.log('[CONTEXT-OS] text-evidence decline yields to current-screen context — answering from visual evidence');
+                    } else if (_refusalYields) {
+                        console.log('[CONTEXT-OS] refusal pack does not govern (refusal policy) — answering with the model');
                     } else {
                     if (pack.answerPolicy === 'ask_clarification') {
                         // contract.reason is a developer diagnostic (e.g. "sourceAuthority=
