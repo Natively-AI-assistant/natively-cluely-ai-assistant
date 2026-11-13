@@ -394,6 +394,7 @@
   "author": "",
   "license": "SEE LICENSE IN LICENSE",
   "devDependencies": {
+    "@astryxdesign/cli": "^0.7.11",
     "@electron/notarize": "^3.1.1",
     "@electron/rebuild": "^4.2.0",
     "@napi-rs/cli": "^3.5.1",
@@ -427,6 +428,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",
+    "@astryxdesign/core": "^0.7.11",
+    "@astryxdesign/theme-neutral": "^0.7.11",
     "@bany/curl-to-json": "^1.2.10",
     "@deepgram/sdk": "^3.13.0",
     "@google-cloud/speech": "^8.1.1",
@@ -436,6 +439,7 @@
     "@huggingface/transformers": "3.8.1",
     "@radix-ui/react-dialog": "1.1.15",
     "@radix-ui/react-toast": "1.2.15",
+    "@stylexjs/stylex": "^0.19.1",
     "@tanstack/react-query": "^5.103.1",
     "@tavily/core": "^0.7.13",
     "@tiptap/core": "3.31.4",
