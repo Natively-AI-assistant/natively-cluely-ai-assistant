@@ -65,7 +65,32 @@ export function newTrainingConsent(now: Date = new Date()): TrainingConsent {
  * query strings — are replaced by a placeholder. Not a promise of anonymity;
  * the consent text says so.
  */
-export function scrubTranscriptText(text: string): string {
+export function scrubTranscriptText(text: string, knownNames: readonly string[] = []): string {
+  return scrubKnownNames(scrubContacts(text), knownNames);
+}
+
+/**
+ * Replace the names this app knows for the meeting (the user's own, calendar
+ * attendees', the call roster's) with "[name]": each full name and each part
+ * of 3+ letters, as whole words, any case, any script. Names said aloud that
+ * the app does not know stay; the consent text says so.
+ */
+export function scrubKnownNames(text: string, knownNames: readonly string[]): string {
+  const parts = new Set<string>();
+  for (const raw of knownNames) {
+    const name = String(raw ?? '').trim();
+    if (!name || name.length > 80) continue;
+    if (name.length >= 3) parts.add(name);
+    for (const p of name.split(/[\s.,'’()-]+/)) if (p.length >= 3) parts.add(p);
+  }
+  if (!parts.size) return text;
+  // Longest first, so "Priya Kumar" goes before "Priya".
+  const alts = [...parts].sort((a, b) => b.length - a.length).map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const re = new RegExp(`(?<![\\p{L}\\p{N}])(?:${alts.join('|')})(?![\\p{L}\\p{N}])`, 'giu');
+  return text.replace(re, '[name]');
+}
+
+function scrubContacts(text: string): string {
   return text
     .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '[email]')
     .replace(/\bhttps?:\/\/\S+/gi, '[link]')

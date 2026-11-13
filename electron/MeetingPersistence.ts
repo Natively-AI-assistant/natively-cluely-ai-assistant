@@ -1084,9 +1084,13 @@ export class MeetingPersistence {
             // shared only if Auto Answer ran in this meeting and the user agreed.
             try {
                 const { offerTrainingMeeting } = require('./services/training/TrainingTranscriptUploader');
-                let mode: string | null = null;
-                try { mode = require('./services/ModesManager').ModesManager.getInstance().getActiveMode()?.templateType ?? null; } catch { /* no mode */ }
-                offerTrainingMeeting({ meetingId, startTime: snapshot.startTime, durationMs: snapshot.durationMs, mode, transcript: snapshot.transcript as any });
+                const md: any = metadataSnapshot || {};
+                const knownNames: string[] = [
+                    ...((md.calendarEvent?.attendees ?? []) as Array<{ name?: string }>).map((a) => a?.name ?? ''),
+                    ...((md.callRoster?.participants ?? []) as string[]),
+                    md.callSelfName ?? '',
+                ].filter((n) => typeof n === 'string' && n.trim().length > 0);
+                offerTrainingMeeting({ meetingId, startTime: snapshot.startTime, durationMs: snapshot.durationMs, mode: modeSnapshot?.templateType ?? null, transcript: snapshot.transcript as any, knownNames });
             } catch (e) {
                 console.warn('[MeetingPersistence] training share skipped:', (e as Error)?.message);
             }

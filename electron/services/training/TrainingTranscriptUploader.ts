@@ -82,6 +82,8 @@ export interface OfferedMeeting {
   durationMs: number;
   mode: string | null;
   transcript: Array<{ speaker: string; text: string; timestamp: number; final?: boolean }>;
+  /** Names the app knows for this meeting (calendar attendees, call roster); main adds the user's own. Replaced by "[name]". */
+  knownNames?: string[];
 }
 
 /** Pure: a saved transcript → the upload body. Exported for tests. */
@@ -91,7 +93,7 @@ export function buildTrainingBody(m: OfferedMeeting, ctx: {
   const turns: TrainingTurn[] = [];
   for (const seg of m.transcript) {
     if (seg.final === false) continue;
-    const text = scrubTranscriptText(String(seg.text ?? '').trim()).slice(0, MAX_TURN_CHARS);
+    const text = scrubTranscriptText(String(seg.text ?? '').trim(), m.knownNames ?? []).slice(0, MAX_TURN_CHARS);
     if (!text) continue;
     // 'user' is the user's own microphone; everything else is the meeting audio.
     const s: TrainingTurn['s'] = seg.speaker === 'user' || seg.speaker === 'me' ? 'user' : 'others';

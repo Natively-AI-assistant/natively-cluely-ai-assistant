@@ -4062,7 +4062,8 @@ export class AppState {
       access: () => this.getAutoAnswerAccess(),
       consent: () => SettingsManager.getInstance().get('autoAnswerTrainingConsent') ?? null,
     });
-    T.setTrainingMeetingSink((m) => up.offerMeeting(m));
+    // The user's own name joins the meeting's known names (calendar, call roster).
+    T.setTrainingMeetingSink((m) => up.offerMeeting({ ...m, knownNames: [...(m.knownNames ?? []), this.currentUserName() ?? ''].filter(Boolean) }));
     this._trainingUploader = up;
     return up;
   }

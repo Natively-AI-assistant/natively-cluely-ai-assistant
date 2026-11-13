@@ -92,3 +92,9 @@ test('a malformed-body rejection is dropped, not retried forever', async () => {
   await settle();
   assert.equal(r.files().length, 0);
 });
+
+test('known names are replaced in the body', () => {
+  const b = U.buildTrainingBody(meeting({ knownNames: ['Evin John'], transcript: [{ speaker: 'interviewer', text: 'Evin, tell me about it', timestamp: Date.parse('2026-11-13T09:30:01Z'), final: true }] }),
+    { installId: 'inst-1', consent, basis: 'sharing', appVersion: '3.0.0', platform: 'darwin' });
+  assert.equal(b.turns[0].x, '[name], tell me about it');
+});

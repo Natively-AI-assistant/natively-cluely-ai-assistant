@@ -225,11 +225,17 @@ export class FunnelTelemetry {
      * way: shared Auto Answer transcripts (services/training). Never throws.
      */
     public async installToken(installId: string): Promise<string | undefined> {
+        // Sharing transcripts is its own consent: a user who turned Usage
+        // statistics off but agreed to share still needs the token, or every
+        // upload is refused (401) forever. Registration only, for this call;
+        // funnel events stay off.
+        this.tokenForSharing += 1;
         try {
             const r = await this.getRegistrar().ensureToken(installId);
             return typeof (r as any)?.token === 'string' ? (r as any).token : undefined;
-        } catch { return undefined; }
+        } catch { return undefined; } finally { this.tokenForSharing -= 1; }
     }
+    private tokenForSharing = 0;
 
     private getRegistrar(): InstallRegistrar {
         if (!this.registrar) {
@@ -244,7 +250,7 @@ export class FunnelTelemetry {
                 // found inside a packaged app on either platform.
                 yieldFn: () => new Promise<void>((resolve) => { setImmediate(resolve); }),
                 sleep: (ms) => new Promise<void>((resolve) => { const t = setTimeout(resolve, ms); t.unref?.(); }),
-                isEnabled: () => this.isEnabled(),
+                isEnabled: () => this.isEnabled() || this.tokenForSharing > 0,
                 // Never during a meeting: it waits, and so do the events.
                 shouldPause: () => this.meetingStartedAt !== null,
                 loadToken: (installId) => this.loadState().tokens[installId],

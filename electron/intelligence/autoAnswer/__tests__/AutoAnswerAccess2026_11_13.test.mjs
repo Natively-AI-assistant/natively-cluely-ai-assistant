@@ -65,3 +65,13 @@ test('set-auto-answer-enabled refuses to switch on without access; off is always
   const handler = ipc.slice(at, at + 900);
   assert.match(handler, /if \(enabled\) \{\s*const access = appState\.getAutoAnswerAccess\(\);\s*if \(!access\.allowed\)/);
 });
+
+test('known names become [name]: full name and its parts, any case, whole words, any script', () => {
+  const s = A.scrubTranscriptText('Thanks priya, and Priya Kumar said KUMAR would join. Ask Al, also Óscar; Priyanka stays.', ['Priya Kumar', 'Al', 'Óscar']);
+  assert.equal(s, 'Thanks [name], and [name] said [name] would join. Ask Al, also [name]; Priyanka stays.');
+});
+
+test('names with regex characters and no names are safe', () => {
+  assert.equal(A.scrubKnownNames('Hi J. (Jo) Smith+ and Jo', ['J. (Jo) Smith+']), 'Hi [name] and Jo');
+  assert.equal(A.scrubKnownNames('Hello there', []), 'Hello there');
+});

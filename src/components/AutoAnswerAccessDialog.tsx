@@ -52,7 +52,7 @@ export const AutoAnswerAccessDialog: React.FC<AutoAnswerAccessDialogProps> = ({ 
 
                     <ul className="mt-3 space-y-1.5 text-xs text-text-secondary list-disc pl-4">
                         <li>{t('What is sent: the full transcript of each meeting where Auto Answer was on, including what other people said, with the meeting mode and length.')}</li>
-                        <li>{t('Removed on your computer first: e-mail addresses, phone numbers, links and long numbers. Names and other words stay, so do not share meetings you are not allowed to share.')}</li>
+                        <li>{t('Removed on your computer first: e-mail addresses, phone numbers, links, long numbers, and the names Natively knows (yours, your calendar invitees\', the call\'s). Other names said aloud stay, so do not share meetings you are not allowed to share.')}</li>
                         <li>{t('Never sent: audio, screenshots, your notes, AI answers, meeting titles and calendar events.')}</li>
                         <li>{t('Only used to train and test Natively\'s Auto Answer models, with the services we use for that (Anthropic to label, Modal to train). Not sold, not used for ads. Kept until you delete it, at most 2 years.')}</li>
                         <li>{t('You are responsible for telling the other people in the meeting, where the law requires it.')}</li>
