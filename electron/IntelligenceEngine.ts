@@ -503,6 +503,14 @@ export class IntelligenceEngine extends EventEmitter {
      */
     private readonly automaticTriggerCooldown: number = 800;
     /**
+     * When a PREFETCH last declined (the "Nothing actionable" sentinel, or the
+     * router's stay-silent). It throttles the next prefetch only. It used to
+     * stamp lastTriggerTime/lastTriggerQuestion, the answered-turn cooldown, so
+     * the judge's slower "answer" verdict on the same ask then read as a
+     * repeat of it and was silenced (forensics 2026-11-13, F-ACC-08 / D4).
+     */
+    private lastSpeculativeDeclineAt = 0;
+    /**
      * Generation id of the answer run started by an AUTOMATIC trigger
      * (SuggestionTrigger.automatic), or null. Lets the dual-channel gate
      * cancel exactly that stream on user barge-in while a manual
@@ -1117,6 +1125,7 @@ export class IntelligenceEngine extends EventEmitter {
             this.releaseExpiredSpeculation();
             if (this.speculativeText !== null) return;
             if (Date.now() - this.lastTriggerTime < this.triggerCooldown) return;
+            if (Date.now() - this.lastSpeculativeDeclineAt < this.triggerCooldown) return;
             console.log(`[IntelligenceEngine] Speculative inference fired on interim`, { length: text.length, confidence });
             this.speculativeQuestionId = this.currentAutoCandidateId;
             this.runWhatShouldISay(text, confidence || 0.8, undefined, { speculative: true })
@@ -1452,7 +1461,13 @@ export class IntelligenceEngine extends EventEmitter {
             try { this.llmHelper.setGroqFastTextMode(true); } catch { /* routing hint only */ }
         }
         try {
-            await this.runWhatShouldISay(trigger.lastQuestion, trigger.confidence ?? undefined);
+            // A judged automatic ask already passed the planner's same-utterance
+            // cooldown, which compares the TEXT. The time-only 3 s throttle
+            // inside runWhatShouldISay could then only drop a DIFFERENT question
+            // asked soon after the last answer, silently, after Auto Answer had
+            // recorded it as answered (forensics 2026-11-13, F-ACC-08 / D3).
+            await this.runWhatShouldISay(trigger.lastQuestion, trigger.confidence ?? undefined, undefined,
+                trigger.automatic === true ? { skipCooldown: true } : undefined);
         } finally {
             this.nextRunIsAutomatic = false;
             if (fastAuto && !previousFastMode) {
@@ -1517,6 +1532,7 @@ export class IntelligenceEngine extends EventEmitter {
             && this.speculativeAdoptedGenerationId !== this.currentGenerationId;
         if (this.activeMode !== 'idle' && this.activeMode !== 'assist' && !ownSpeculationStreaming) return;
         if (Date.now() - this.lastTriggerTime < this.triggerCooldown) return;
+        if (Date.now() - this.lastSpeculativeDeclineAt < this.triggerCooldown) return;
         // A debounced interim speculation that has not fired yet would start on
         // FEWER words than this candidate: the candidate replaces it.
         if (this.speculativeTimer !== null) {
@@ -2243,8 +2259,8 @@ export class IntelligenceEngine extends EventEmitter {
                 // which would be a behaviour change rather than a cost saving.
                 this.speculativeText = null;
                 this.speculativeTextExpiry = Infinity;
-                this.lastTriggerTime = Date.now();
-                this.lastTriggerQuestion = question ?? null;
+                // A declined prefetch throttles prefetching, not the judged ask (F-ACC-08).
+                this.lastSpeculativeDeclineAt = Date.now();
                 this.setMode('idle');
                 return null;
             }
@@ -6804,8 +6820,11 @@ export class IntelligenceEngine extends EventEmitter {
                 if (openedStreamRow) this.emit('suggested_answer_discard', 'no_answer', generationId);
                 this.speculativeText = null;
                 this.speculativeTextExpiry = Infinity;
-                this.lastTriggerTime = Date.now();
-                this.lastTriggerQuestion = question ?? null;
+                // Only a prefetch reaches here (a real run returned its honest
+                // fallback above). Its decline throttles the next prefetch; it
+                // must not make the judge's verdict on this same ask read as a
+                // repeat (F-ACC-08 / D4).
+                this.lastSpeculativeDeclineAt = Date.now();
                 this.setMode('idle');
                 return null;
             }
