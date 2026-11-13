@@ -301,6 +301,20 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
     } catch { /* store unavailable — mode default applies */ }
     const policy = resolveModePolicy(modeId);
 
+    // The mode's source contract (F-ACC-05), read per turn like the Answer
+    // policy above, read-only (no migration write on the answer path).
+    let modeSourceContract: { sourceAuthority: string; origin: string } | null = null;
+    if (input.modeUniqueId) {
+      try {
+        const { ModesManager } = require('../../services/ModesManager');
+        const mode = ModesManager.getInstance().getModes().find((m: { id: string }) => m.id === input.modeUniqueId);
+        const c = mode?.sourceContract;
+        if (c && typeof c.sourceAuthority === 'string' && typeof c.origin === 'string') {
+          modeSourceContract = { sourceAuthority: c.sourceAuthority, origin: c.origin };
+        }
+      } catch { /* modes store unavailable — mode policy alone */ }
+    }
+
     const req: AnswerRequest = {
       requestId: input.requestId ?? `v3-${input.surface}-${Date.now()}`,
       requestSequence: input.requestSequence ?? 0,
@@ -332,6 +346,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       attachedFileNames: input.attachedFileNames,
       screenText: input.screenText,
       extraAllowedSourceTypes: input.extraAllowedSourceTypes,
+      modeSourceContract,
       keepConversationState: input.keepConversationState,
     };
 
