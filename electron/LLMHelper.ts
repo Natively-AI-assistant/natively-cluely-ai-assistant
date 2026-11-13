@@ -3176,7 +3176,7 @@ export class LLMHelper {
     }
     // Dynamic, like every other liveDeadlines use in this file — a static
     // import here closes a module cycle.
-    const { totalHardTimeoutMs } = await import('./llm/liveDeadlines');
+    const { totalHardTimeoutMs, loneProviderHedgeDelayMs } = await import('./llm/liveDeadlines');
     // The Active Model's rung, so its own endpoint class and measurement — the
     // public predicates follow a Background Model pick, which did not answer.
     const budgetMs = totalHardTimeoutMs({
@@ -3260,6 +3260,7 @@ export class LLMHelper {
     // as finished answers. With rethrowAfterCommit the engine still never
     // switches providers mid-answer; it only tells us, and the turn ends with
     // the truncation marker that _streamChatTracked turns into the outcome.
+    const loneHedgeMs = loneProviderHedgeDelayMs(budgetMs, this.observedLatencyFor(this.activeAnswerLatencyKey()));
     const commit = { emitted: false };
     try {
       yield* this.trackCommit(runStreamingTextFallback(
@@ -3273,9 +3274,13 @@ export class LLMHelper {
           maxAttempts: 1,
           ttftTimeoutMs: budgetMs,
           hedgeEnabled: hedging,
-          hedgeDelayDefaultMs: this.hedgeDelayForBudget(budgetMs),
-          hedgeDelayMinMs: Math.round(budgetMs * 0.4),
-          hedgeDelayMaxMs: Math.round(budgetMs * 0.9),
+          // The lone provider's only failover, so it fires at a first-useful
+          // point (F-LAT-03): 4 s unmeasured instead of 9 s, and just above the
+          // endpoint's own slowest first token once measured. The same number is
+          // the floor, so the engine's EWMA (~p50) can only push it later.
+          hedgeDelayDefaultMs: loneHedgeMs,
+          hedgeDelayMinMs: loneHedgeMs,
+          hedgeDelayMaxMs: Math.max(loneHedgeMs, Math.round(budgetMs * 0.9)),
           rethrowAfterCommit: true,
         },
         {},

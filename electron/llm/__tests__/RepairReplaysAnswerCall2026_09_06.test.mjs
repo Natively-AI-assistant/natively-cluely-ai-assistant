@@ -476,7 +476,10 @@ describe('a selected single provider now fails over — or retries itself in par
     // Same decaying-max map, read under the ACTIVE Model's key: this runs inside
     // its rung, which a Fast Response Background Model pick never reaches.
     assert.match(llm, /hedgeDelayForBudget\(budgetMs: number\)[\s\S]{0,400}?this\.observedLatencyFor\(this\.activeAnswerLatencyKey\(\)\)/);
-    assert.match(llm, /hedgeDelayDefaultMs: this\.hedgeDelayForBudget\(budgetMs\)/);
+    // F-LAT-03 (2026-11-13): the hedge itself now fires at a first-useful point
+    // (liveDeadlines.loneProviderHedgeDelayMs) — from the SAME adaptive max.
+    assert.match(llm, /const loneHedgeMs = loneProviderHedgeDelayMs\(budgetMs, this\.observedLatencyFor\(this\.activeAnswerLatencyKey\(\)\)\);/);
+    assert.match(llm, /hedgeDelayDefaultMs: loneHedgeMs/);
   });
 
   test('IE does not ALSO regenerate a route the engine already retried', () => {

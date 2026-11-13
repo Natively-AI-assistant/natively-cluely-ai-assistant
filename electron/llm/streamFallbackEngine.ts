@@ -393,7 +393,11 @@ export async function* openHedged(
   const startBranch = (p: { id: string; name: string; open: (s: AbortSignal, a: number) => AsyncGenerator<string, void, unknown> }): Branch => {
     const ctrl = new AbortController();
     const onAbort = () => { try { ctrl.abort(); } catch { } };
-    outerSignal.addEventListener('abort', onAbort, { once: true });
+    // An already-aborted signal never fires 'abort' again, so a listener added
+    // now would never run and this branch's request would stay open to the end
+    // of the run (forensics 2026-11-13, F-LAT-03 req#69). Abort it up front.
+    if (outerSignal.aborted) onAbort();
+    else outerSignal.addEventListener('abort', onAbort, { once: true });
     const it = p.open(ctrl.signal, attempt)[Symbol.asyncIterator]();
     const branch: Branch = { id: p.id, name: p.name, ctrl, it, started: now(), firstUsable: undefined as any };
     branch.firstUsable = nextNonBlankChunk(it).then((res) => {
@@ -450,7 +454,15 @@ export async function* openHedged(
       ({ branch: winner, first } = race.v);
     } else {
       // Either the delay elapsed (primary still pending) or the primary failed
-      // fast — launch the partner and race whatever is still live.
+      // fast — launch the partner and race whatever is still live. Not for a
+      // turn that was cancelled meanwhile: the primary most likely "failed fast"
+      // BECAUSE of the cancel, and a partner opened now is a request for an
+      // answer nobody will read (F-LAT-03 req#69, sent 165 ms after the abort).
+      if (outerSignal.aborted) {
+        try { branches[0].ctrl.abort(); } catch { }
+        void closeIteratorBounded(branches[0].it, cfg.cleanupTimeoutMs);
+        throw Object.assign(new Error('hedge cancelled: turn aborted'), { name: 'AbortError' });
+      }
       log(`[${cfg.logPrefix}] hedge fired after ${hedgeDelayMs}ms → racing ${partner!.name}`);
       branches.push(startBranch(partner!));
       // If the primary already failed fast, only the partner is in the race;
