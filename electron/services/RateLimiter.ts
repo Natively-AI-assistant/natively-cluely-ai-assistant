@@ -9,12 +9,54 @@
  *   2. destroy() now rejects waiters instead of resolving them — the old behaviour
  *      called resolve() with no token, silently bypassing the rate limit on shutdown.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+/**
+ * Live vs background lanes (pipeline forensics 2026-11-13, F-LAT-06).
+ *
+ * One bucket per provider is shared by the live meeting (Auto Answer judge,
+ * answer, repair) and background work (note-section prompt compiles). In
+ * dev-s09c a new mode's ~112 compile calls drained the bucket and the first
+ * judge of the meeting waited 2.6 s in acquire(), then timed out. Background
+ * work is marked by running it inside runAsBackgroundLlmWork(); its acquires:
+ *   • never take the last LIVE_RESERVE_FRACTION of the bucket,
+ *   • are served only after every queued live waiter, and
+ *   • hold off while a live acquire happened within `liveQuietMs` (a meeting
+ *     that is answering), resuming once it goes quiet.
+ * Everything not marked is live, so existing callers are unchanged.
+ * AsyncLocalStorage is plain Node and behaves the same on macOS and Windows.
+ */
+const llmWorkLane = new AsyncLocalStorage<'background'>();
+
+/** Run `fn` (and every await inside it) as background LLM work. */
+export function runAsBackgroundLlmWork<T>(fn: () => Promise<T>): Promise<T> {
+    return llmWorkLane.run('background', fn);
+}
+
+export function isBackgroundLlmWork(): boolean {
+    return llmWorkLane.getStore() === 'background';
+}
+
+const LIVE_RESERVE_FRACTION = 0.25;
+const DEFAULT_LIVE_QUIET_MS = 10_000;
+
+export interface RateLimiterOptions {
+    /** How long after the last live acquire background work keeps waiting. */
+    liveQuietMs?: number;
+}
+
+type Waiter = { resolve: () => void; reject: (err: Error) => void };
+
 export class RateLimiter {
     private tokens: number;
     private readonly maxTokens: number;
     private readonly refillRatePerSecond: number;
     private lastRefillTime: number;
-    private waitQueue: Array<{ resolve: () => void; reject: (err: Error) => void }> = [];
+    private waitQueue: Waiter[] = [];
+    private backgroundQueue: Waiter[] = [];
+    private readonly liveReserve: number;
+    private readonly liveQuietMs: number;
+    private lastLiveAcquireAt = Number.NEGATIVE_INFINITY;
     private refillTimer: ReturnType<typeof setInterval> | null = null;
 
     // Hard cap on pending waiters — beyond this depth, new callers get an immediate
@@ -27,11 +69,13 @@ export class RateLimiter {
      * @param maxTokens - Maximum burst capacity (e.g. 30 for Groq free tier)
      * @param refillRatePerSecond - Tokens added per second (e.g. 0.5 = 30/min)
      */
-    constructor(maxTokens: number, refillRatePerSecond: number) {
+    constructor(maxTokens: number, refillRatePerSecond: number, opts: RateLimiterOptions = {}) {
         this.maxTokens = maxTokens;
         this.tokens = maxTokens;
         this.refillRatePerSecond = refillRatePerSecond;
         this.lastRefillTime = Date.now();
+        this.liveReserve = Math.max(1, Math.ceil(maxTokens * LIVE_RESERVE_FRACTION));
+        this.liveQuietMs = Math.max(0, opts.liveQuietMs ?? DEFAULT_LIVE_QUIET_MS);
 
         // Refill tokens periodically. unref() so the timer does not keep the
         // event loop alive — important for unit tests that create a limiter
@@ -49,6 +93,8 @@ export class RateLimiter {
      * Throws RateLimitQueueFullError if the queue is full — callers should catch and fail-fast.
      */
     public async acquire(): Promise<void> {
+        if (isBackgroundLlmWork()) return this.acquireBackground();
+        this.lastLiveAcquireAt = Date.now();
         this.refill();
 
         if (this.tokens >= 1) {
@@ -68,6 +114,29 @@ export class RateLimiter {
         });
     }
 
+    /** A background acquire: may it take a token right now? */
+    private backgroundMayTake(): boolean {
+        return this.waitQueue.length === 0
+            && this.tokens >= 1 + this.liveReserve
+            && Date.now() - this.lastLiveAcquireAt >= this.liveQuietMs;
+    }
+
+    private async acquireBackground(): Promise<void> {
+        this.refill();
+        if (this.backgroundQueue.length === 0 && this.backgroundMayTake()) {
+            this.tokens -= 1;
+            return;
+        }
+        if (this.backgroundQueue.length >= this.MAX_QUEUE_DEPTH) {
+            throw new Error(
+                `Rate limiter background queue full (${this.MAX_QUEUE_DEPTH} waiters) — request rejected`
+            );
+        }
+        return new Promise<void>((resolve, reject) => {
+            this.backgroundQueue.push({ resolve, reject });
+        });
+    }
+
     private refill(): void {
         const now = Date.now();
         const elapsed = (now - this.lastRefillTime) / 1000;
@@ -77,12 +146,18 @@ export class RateLimiter {
             this.tokens = Math.min(this.maxTokens, this.tokens + Math.floor(newTokens));
             this.lastRefillTime = now;
 
-            // Wake up waiting requests
+            // Wake up waiting requests — live first, always.
             while (this.waitQueue.length > 0 && this.tokens >= 1) {
                 this.tokens -= 1;
                 const waiter = this.waitQueue.shift()!;
                 waiter.resolve();
             }
+        }
+        // Background waiters, only from what live does not need. Checked on every
+        // tick, not only on a refill, so they resume when live work goes quiet.
+        while (this.backgroundQueue.length > 0 && this.backgroundMayTake()) {
+            this.tokens -= 1;
+            this.backgroundQueue.shift()!.resolve();
         }
     }
 
@@ -94,9 +169,11 @@ export class RateLimiter {
         // BUG-4 fix: reject (not resolve) all queued waiters on destroy.
         // Previously called resolve() which let callers proceed without a token —
         // silently bypassing the rate limit on app shutdown.
-        while (this.waitQueue.length > 0) {
-            const waiter = this.waitQueue.shift()!;
-            waiter.reject(new Error('RateLimiter destroyed — request cancelled'));
+        for (const queue of [this.waitQueue, this.backgroundQueue]) {
+            while (queue.length > 0) {
+                const waiter = queue.shift()!;
+                waiter.reject(new Error('RateLimiter destroyed — request cancelled'));
+            }
         }
     }
 }
