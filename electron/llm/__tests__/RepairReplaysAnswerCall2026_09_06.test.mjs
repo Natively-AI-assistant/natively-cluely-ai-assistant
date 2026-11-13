@@ -447,7 +447,9 @@ describe('a selected single provider now fails over — or retries itself in par
     // every spare, this is the lone-provider case after all and the hedge must
     // arm — otherwise the primary keeps a shortened failover-trigger ttft with
     // nothing behind it and no parallel retry, worse than before fitting.
-    assert.match(llm, /const hedging = fittedSpares\.length === 0;/);
+    // F-LAT-10 (2026-11-13): and only while the turn's call budget has room
+    // for a second call (ADR-003: 1 primary, 1 hedge or spare, 1 regeneration).
+    assert.match(llm, /const hedging = fittedSpares\.length === 0 && budget\.remaining\(turnKey\) >= 2;/);
     assert.match(llm, /if \(fittedSpares\.length === 0\) primaryTtftMs = budgetMs;/,
       'a turn whose spares were all dropped must get the whole budget back');
     assert.match(llm, /hedgeEnabled: hedging/);

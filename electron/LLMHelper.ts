@@ -46,6 +46,7 @@ import {
   type TextStreamProvider,
 } from "./llm/textStreamFallback"
 import { isPermanentKeyError, PROVIDERS_EXHAUSTED_CODE } from "./llm/providerErrorClassifier"
+import { guardProviderOpen, ProviderCircuitBreaker, sdkRetryOptions, TurnCallBudget } from "./llm/providerCallBudget"
 import { telemetryService } from "./services/telemetry/TelemetryService"
 import {
   ollamaVisionFromShow,
@@ -1149,6 +1150,8 @@ export class LLMHelper {
     if (!args) return null;
     const retried = [...args] as Parameters<LLMHelper['streamChat']>;
     retried[7] = signal;
+    // The regeneration is the same turn: it spends that turn's call budget (F-LAT-10).
+    if (signal) this.callBudget().alias(signal, key);
     return retried;
   }
 
@@ -3131,6 +3134,19 @@ export class LLMHelper {
    * delay comes from the same decaying max the adaptive ceiling uses; a second
    * latency statistic for one provider is the recurring mistake in this area.
    */
+  // Lazily materialised, like textHealth: suites drive this class on
+  // Object.create(LLMHelper.prototype) instances that never run initialisers.
+  private _turnCallBudget?: TurnCallBudget;
+  private _providerBreaker?: ProviderCircuitBreaker;
+  private callBudget(): TurnCallBudget {
+    if (!this._turnCallBudget) this._turnCallBudget = new TurnCallBudget();
+    return this._turnCallBudget;
+  }
+  private providerBreakerFor(): ProviderCircuitBreaker {
+    if (!this._providerBreaker) this._providerBreaker = new ProviderCircuitBreaker();
+    return this._providerBreaker;
+  }
+
   private hedgeDelayForBudget(budgetMs: number): number {
     // The Active Model's own measurement: this runs inside its rung, which is
     // reached only when no Background Model answered the turn.
@@ -3221,11 +3237,28 @@ export class LLMHelper {
     // of two unrelated constants, not a guarantee, and it would break silently
     // the day either one moves. Decide from what actually survived.
     if (fittedSpares.length === 0) primaryTtftMs = budgetMs;
-    const hedging = fittedSpares.length === 0;
+    // Per-turn call budget + per-family breaker (forensics 2026-11-13, F-LAT-10;
+    // ADR-003). Keyed on the turn's own abort signal: speculation, prefetch and
+    // the answer each carry one, and a regeneration shares its turn's (replayed
+    // with the same signal, or aliased in retryAnswerCall). Every call below is
+    // charged to it and gets no SDK-internal retries.
+    const turnKey: object = opts.abortSignal ?? {};
+    const budget = this.callBudget();
+    const breaker = this.providerBreakerFor();
+    const guard = (family: string, name: string, open: (sig: AbortSignal) => AsyncGenerator<string, void, unknown>) =>
+      guardProviderOpen({ family, name, turnKey, budget, breaker, outerSignal: opts.abortSignal, open });
+    for (let i = 0; i < fittedSpares.length; i++) {
+      const spare = fittedSpares[i];
+      const spareOpen = spare.open;
+      fittedSpares[i] = { ...spare, open: (sig, attempt) => guard(spare.id, spare.name, (s) => spareOpen(s, attempt))(sig) };
+    }
+    // A hedge is the turn's second call; with fewer than two left it would only
+    // be refused, so it is not armed at all.
+    const hedging = fittedSpares.length === 0 && budget.remaining(turnKey) >= 2;
     const primary: TextStreamProvider = {
       id: opts.id, name: opts.name, isLocal: false, priority: 0,
       ttftTimeoutMs: primaryTtftMs,
-      open: (sig) => opts.open(sig),
+      open: guard(opts.id, opts.name, (sig) => opts.open(sig)),
     };
     if (hedging) {
       // A distinct id so the primary's own breaker does not suppress its hedge.
@@ -3236,7 +3269,7 @@ export class LLMHelper {
       primary.hedgeWith = {
         id: `${opts.id}#hedge`,
         name: `${opts.name} (parallel retry)`,
-        open: (sig) => opts.open(sig),
+        open: guard(opts.id, `${opts.name} (parallel retry)`, (sig) => opts.open(sig)),
       };
     }
 
@@ -7601,7 +7634,7 @@ let isMultimodal = !!(imagePaths?.length);
     const client = this.fluxionOpenAIClient;
     if (!client) throw new Error('Sidrune client not initialized');
     const messages = await this.buildOpenRouterMessages(userMessage, systemPrompt, imagePaths);
-    const stream = await client.chat.completions.create({ model, messages, stream: true }, { signal: abortSignal }) as any;
+    const stream = await client.chat.completions.create({ model, messages, stream: true }, { signal: abortSignal, ...sdkRetryOptions(abortSignal) }) as any;
     try {
       for await (const chunk of stream) {
         if (abortSignal?.aborted) return;
@@ -7804,7 +7837,7 @@ let isMultimodal = !!(imagePaths?.length);
     try {
       stream = await client.chat.completions.create(
         { model, messages, stream: true, ...this.agentRouterOpenAIParams(model, opts, [systemPrompt, userMessage, (imagePaths ?? []).join('|')]) } as any,
-        { signal: abortSignal },
+        { signal: abortSignal, ...sdkRetryOptions(abortSignal) },
       );
     } catch (e: any) {
       if (abortSignal?.aborted) return;
@@ -12813,7 +12846,7 @@ let isMultimodal = !!(imagePaths?.length);
     require('./llm/providerPayloadCapture').captureProviderPayload({
       provider: 'openai', classification: 'sdk_request_object_before_serialization', payload: request,
     });
-    const stream = await this.openaiClient.chat.completions.create(request, { signal: abortSignal });
+    const stream = await this.openaiClient.chat.completions.create(request, { signal: abortSignal, ...sdkRetryOptions(abortSignal) });
 
     try {
       for await (const chunk of stream) {
@@ -12860,7 +12893,8 @@ let isMultimodal = !!(imagePaths?.length);
     require('./llm/providerPayloadCapture').captureProviderPayload({
       provider: 'claude', classification: 'sdk_request_object_before_serialization', payload: request,
     });
-    const stream = this.claudeClient.messages.stream(request);
+    // No SDK-internal retries when the fallback engine owns this call (F-LAT-10).
+    const stream = this.claudeClient.messages.stream(request, sdkRetryOptions(abortSignal));
     const onAbort = () => { try { stream.abort(); } catch {} };
     abortSignal?.addEventListener('abort', onAbort, { once: true });
     try {
@@ -12913,7 +12947,7 @@ let isMultimodal = !!(imagePaths?.length);
         seed: interactiveSeedFor('deepseek', [model, systemPrompt, userMessage, (imagePaths ?? []).join('|')]), // DeepSeek is OpenAI-compatible and honors seed
         max_tokens: this.getDeepseekMaxOutput(model),
         ...DEEPSEEK_NO_THINKING, // else the first token waits out the default reasoning
-      }, { signal: abortSignal });
+      }, { signal: abortSignal, ...sdkRetryOptions(abortSignal) });
     } catch (err: any) {
       // Hard-trip on billing/quota/auth failures so we don't burn 3 chain rotations
       // re-attempting a 402 every few seconds. Mirrors Gemini's markRateCooled for
@@ -12970,7 +13004,7 @@ let isMultimodal = !!(imagePaths?.length);
     require('./llm/providerPayloadCapture').captureProviderPayload({
       provider: 'litellm', classification: 'sdk_request_object_before_serialization', payload: request,
     });
-    const stream = await this.litellmClient.chat.completions.create(request, { signal: abortSignal });
+    const stream = await this.litellmClient.chat.completions.create(request, { signal: abortSignal, ...sdkRetryOptions(abortSignal) });
 
     try {
       for await (const chunk of stream) {
@@ -13017,7 +13051,7 @@ let isMultimodal = !!(imagePaths?.length);
     // widening it to `any` loses the `stream: true` overload's iterability.
     const stream = await (async () => {
       try {
-        return await this.ninerouterClient!.chat.completions.create(request, { signal: abortSignal });
+        return await this.ninerouterClient!.chat.completions.create(request, { signal: abortSignal, ...sdkRetryOptions(abortSignal) });
       } catch (e: any) {
         // Rewrite before it leaves the adapter. 9Router relays its upstream's
         // status, so the raw text is a nested JSON blob naming a provider the
@@ -13069,7 +13103,7 @@ let isMultimodal = !!(imagePaths?.length);
       const content: any[] = [{ type: 'text', text: userMessage }, ...await this.buildOpenAiImageParts(imagePaths)];
       messages.push({ role: 'user', content });
     } else messages.push({ role: 'user', content: userMessage });
-    const stream = await this.createNvidiaNimCompletion({ model, messages, stream: true }, { signal: abortSignal });
+    const stream = await this.createNvidiaNimCompletion({ model, messages, stream: true }, { signal: abortSignal, ...sdkRetryOptions(abortSignal) });
     try { for await (const chunk of stream) { if (abortSignal?.aborted) return; const content = chunk.choices[0]?.delta?.content; if (content) yield content; } }
     finally { if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort(); }
   }
@@ -13083,7 +13117,7 @@ let isMultimodal = !!(imagePaths?.length);
     const model = this.openrouterWireModel(modelId || this.currentModelId);
     const messages = await this.buildOpenRouterMessages(userMessage, systemPrompt, imagePaths);
     if (abortSignal?.aborted) return;
-    const stream = await client.chat.completions.create({ model, messages, stream: true }, { signal: abortSignal }) as any;
+    const stream = await client.chat.completions.create({ model, messages, stream: true }, { signal: abortSignal, ...sdkRetryOptions(abortSignal) }) as any;
     try {
       for await (const chunk of stream) {
         if (abortSignal?.aborted) return;
