@@ -1324,9 +1324,9 @@ import { RestSTT } from "./audio/RestSTT"
 import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
 import { isIntelligenceFlagEnabled } from "./intelligence/intelligenceFlags"
 import { canDiarize, shouldDiarize, withVoiceEpoch } from "./audio/sttDiarization"
-import { buildJudgePrompt } from "./intelligence/autoAnswer/AutoAnswerJudge"
-import { SimpleAutoAnswerEngine } from "./intelligence/autoAnswer/SimpleAutoAnswer"
-import { AutoAnswerUsageTelemetry } from "./intelligence/autoAnswer/AutoAnswerUsageTelemetry"
+// Auto Answer lives in the private premium submodule; without it this is an inert stand-in
+// and Auto Answer is unavailable (electron/premium/autoAnswer.ts).
+import { loadAutoAnswerPremium, type AutoAnswerAccess, type AutoAnswerDecider, type AutoAnswerModelInstaller, type AutoAnswerSavingsLedger, type TrainingUploader } from "./premium/autoAnswer"
 import { currentWhisperGlossaryPrompt, nameTerms, setSttContextTerms, setSttDictionaryTerms } from "./audio/sttContextTerms"
 import { getUserDictionary } from "./audio/userDictionary"
 import { LOCAL_STT_PROVIDERS, SttGapRecoveryCoordinator, type RecoveredSegment, type SttSource } from "./audio/sttGapRecovery"
@@ -1475,7 +1475,6 @@ import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
 import { nativePromptsBlocked } from './services/stealthPromptGate'
 import { createForeignWindowCaptureGuard, wrapAsyncDialogs, type ForeignWindowCaptureGuard } from './services/foreignWindowCaptureGuard'
-import { acceptsLocalSpeechEndHint } from './intelligence/autoAnswer/SimpleAutoAnswer'
 import { NativeOomTrace } from './utils/NativeOomTrace'
 import { setStealthHookAvailabilityProvider, setNoActivateClickDelivery } from './utils/windowsFocusPolicy'
 import { hasLiveRenderer } from './utils/rendererLiveness'
@@ -3863,7 +3862,7 @@ export class AppState {
     } catch { return false; }
   }
 
-  private readonly simpleAutoAnswer = new SimpleAutoAnswerEngine({
+  private readonly simpleAutoAnswer = loadAutoAnswerPremium().createEngine({
     // Pro, trial, or a free user who shares training data (autoAnswerAccess.ts).
     // Checked per decision, so a licence that lapses or consent that is
     // withdrawn mid-meeting stops the next answer, not just the next toggle.
@@ -3903,7 +3902,7 @@ export class AppState {
       } catch { /* speculative */ }
     },
     ...((process.env.NATIVELY_AUTO_ANSWER_JUDGE || '').toLowerCase() === 'off' ? {} : {
-      // The decision cascade (intelligence/autoAnswer/decider) wraps the LLM judge. Packaged
+      // The decision cascade (premium/electron/autoAnswer/decider) wraps the LLM judge. Packaged
       // builds default to NATIVELY_AUTO_ANSWER_DECIDER=off, which calls the judge exactly as
       // before; shadow (the dev default) keeps the judge authoritative and only records the
       // decider beside it.
@@ -3929,25 +3928,99 @@ export class AppState {
     log: (line) => { if (this._verboseLogging) console.log(line); },
     // review#10 parity (2026-08-25): boot on the registry's no-mode default
     // (the stricter MEETING bar), not the compiled-in interview constants.
-  }, undefined, resolveAutoAnswerThresholds(null));
+  }, resolveAutoAnswerThresholds(null));
   private autoAnswerEmbedder: { embed(text: string): Promise<number[]> } | null = null;
-  private _autoAnswerDecider: import('./intelligence/autoAnswer/decider/appDecider').AppDecider | null = null;
-  private autoAnswerDecider(): import('./intelligence/autoAnswer/decider/appDecider').AppDecider {
+  private _autoAnswerDecider: AutoAnswerDecider | null = null;
+  /**
+   * The shipped, public half of the Auto Answer model (resources/models/auto-answer-decider:
+   * manifest + tokenizer). Packaged: <resources>/models (extraResources, both installers).
+   * Development: the repo's resources/models. The graph itself is a paid download into userData
+   * (deciderModelInstaller.ts), never shipped.
+   */
+  private bundledDeciderResourcesDir(): string | null {
+    const leaf = 'auto-answer-decider';
+    const roots: string[] = [];
+    if (process.resourcesPath) roots.push(path.join(process.resourcesPath, 'models'));
+    try {
+      const appPath = app.getAppPath();
+      roots.push(path.join(appPath, 'resources', 'models'), path.join(appPath, '..', 'resources', 'models'), path.join(appPath, '..', '..', 'resources', 'models'));
+    } catch { /* no app path */ }
+    for (const r of roots) {
+      try { if (fs.existsSync(path.join(r, leaf, 'manifest.json'))) return path.join(r, leaf); } catch { /* next */ }
+    }
+    return null;
+  }
+  private _deciderInstaller: AutoAnswerModelInstaller | null = null;
+  /**
+   * The Auto Answer model download (Evin 2026-11-13): paid, private, for any Natively API key
+   * (not the trial sentinel) or a standalone Pro licence. Which graph comes from deciderRuntime.ts
+   * (int8 on onnxruntime 1.24.3 in a utility process; 4-bit on Intel Macs and macOS 13).
+   */
+  public deciderInstaller(): AutoAnswerModelInstaller {
+    if (this._deciderInstaller) return this._deciderInstaller;
+    const { nativelyApiBase } = require('./services/nativelyApiBase') as typeof import('./services/nativelyApiBase');
+    const { TRIAL_SENTINEL_KEY } = require('./config/constants') as typeof import('./config/constants');
+    this._deciderInstaller = loadAutoAnswerPremium().createModelInstaller({
+      bundledDir: this.bundledDeciderResourcesDir() ?? path.join(process.resourcesPath || app.getAppPath(), 'models', 'auto-answer-decider'),
+      installRoot: path.join(app.getPath('userData'), 'models', 'auto-answer-decider'),
+      platform: process.platform,
+      arch: process.arch,
+      release: os.release(),
+      apiBase: nativelyApiBase(),
+      credential: () => {
+        try {
+          const key = require('./services/CredentialsManager').CredentialsManager.getInstance().getNativelyApiKey();
+          if (typeof key === 'string' && key.trim() && key !== TRIAL_SENTINEL_KEY) return { kind: 'api_key', key: key.trim() };
+        } catch { /* no credentials store */ }
+        try {
+          const { LicenseManager } = require('../premium/electron/services/LicenseManager');
+          const lic = LicenseManager.getInstance().getProLicenceForDownload?.();
+          if (lic) return { kind: 'pro', key: lic.key, provider: lic.provider };
+        } catch { /* open-source build: no premium module */ }
+        return null;
+      },
+      log: { info: (m) => console.log(m), warn: (m) => console.warn(m) },
+    });
+    return this._deciderInstaller;
+  }
+
+  private _deciderSavings: AutoAnswerSavingsLedger | null = null;
+  /** Judge calls and local decisions per day, for the Settings before/after card (numbers only). */
+  public deciderSavings(): AutoAnswerSavingsLedger {
+    if (this._deciderSavings) return this._deciderSavings;
+    let file: string | null = null;
+    try { file = path.join(app.getPath('userData'), 'auto-answer-savings.json'); } catch { /* no userData */ }
+    this._deciderSavings = loadAutoAnswerPremium().createSavingsLedger({ file });
+    return this._deciderSavings;
+  }
+
+  /** After a model install or removal: drop the decider so the next meeting starts on the new model. */
+  public resetAutoAnswerDecider(): void {
+    try { this._autoAnswerDecider?.dispose(); } catch { /* best effort */ }
+    this._autoAnswerDecider = null;
+  }
+
+  private autoAnswerDecider(): AutoAnswerDecider {
     if (this._autoAnswerDecider) return this._autoAnswerDecider;
-    const { createAppDecider } = require('./intelligence/autoAnswer/decider/appDecider') as typeof import('./intelligence/autoAnswer/decider/appDecider');
-    const { systemClock } = require('./intelligence/autoAnswer/AutoAnswerClock') as typeof import('./intelligence/autoAnswer/AutoAnswerClock');
-    this._autoAnswerDecider = createAppDecider({
+    const autoAnswer = loadAutoAnswerPremium();
+    this._autoAnswerDecider = autoAnswer.createDecider({
       platform: process.platform,
       env: process.env,
       isPackaged: app.isPackaged,
-      clock: systemClock,
+      installedModelDir: () => this.deciderInstaller().installedDir(),
       llmJudge: async (req, signal) => {
         const llm = this.processingHelper?.getLLMHelper?.();
         if (!llm) return null;
-        return await llm.generateJudgeVerdict(buildJudgePrompt(req), { signal });
+        const prompt = autoAnswer.buildJudgePrompt(req);
+        // Counted for the before/after card: one judge call, sized by its prompt (never its text).
+        try { this.deciderSavings().recordJudgeCall(prompt.length); } catch { /* a counter never blocks */ }
+        return await llm.generateJudgeVerdict(prompt, { signal });
       },
       // TelemetryService, the path the engine's auto_answer_* events take: enums and numbers, never text.
       telemetry: (event) => {
+        if (event.decisionBackend === 'local' && !event.escalated && event.decisionMode === 'on') {
+          try { this.deciderSavings().recordLocalDecision(); } catch { /* a counter never blocks */ }
+        }
         try {
           const { telemetryService } = require('./services/telemetry/TelemetryService');
           const { name, ...properties } = event;
@@ -4057,14 +4130,14 @@ export class AppState {
   /**
    * Shares the transcripts of meetings where Auto Answer ran, when the user
    * agreed (free users must, to use Auto Answer; Pro may opt in). See
-   * services/training/TrainingTranscriptUploader.ts. Created on first use.
+   * premium/electron/autoAnswer/training/TrainingTranscriptUploader.ts. Created on first use.
    */
-  private _trainingUploader: import('./services/training/TrainingTranscriptUploader').TrainingTranscriptUploader | null = null;
-  public trainingUploader(): import('./services/training/TrainingTranscriptUploader').TrainingTranscriptUploader {
+  private _trainingUploader: TrainingUploader | null = null;
+  public trainingUploader(): TrainingUploader {
     if (this._trainingUploader) return this._trainingUploader;
-    const T = require('./services/training/TrainingTranscriptUploader') as typeof import('./services/training/TrainingTranscriptUploader');
+    const T = loadAutoAnswerPremium();
     const { nativelyApiBase } = require('./services/nativelyApiBase');
-    const up = new T.TrainingTranscriptUploader({
+    const up = T.createTrainingUploader({
       dir: path.join(app.getPath('userData'), 'training-outbox'),
       apiBase: () => nativelyApiBase(),
       installId: () => { try { return require('./services/InstallPingManager').getOrCreateInstallId(); } catch { return undefined; } },
@@ -4094,7 +4167,7 @@ export class AppState {
     return up;
   }
 
-  private readonly autoAnswerUsage = new AutoAnswerUsageTelemetry({
+  private readonly autoAnswerUsage = loadAutoAnswerPremium().createUsageTelemetry({
     sink: (row) => {
       // The same setting TelemetryService honours.
       if (SettingsManager.getInstance().get('telemetryEnabled') === false) return;
@@ -5116,7 +5189,7 @@ export class AppState {
           try {
             const { CredentialsManager } = require('./services/CredentialsManager');
             const provider = CredentialsManager.getInstance().getSttProvider();
-            if (acceptsLocalSpeechEndHint(provider)) {
+            if (loadAutoAnswerPremium().acceptsLocalSpeechEndHint(provider)) {
               this.simpleAutoAnswer.onLocalSpeechEnd();
             }
           } catch { /* an endpoint hint must never break capture */ }
@@ -7930,6 +8003,9 @@ export class AppState {
         setTimeout(() => this._broadcastToAllWindows('auto-answer:access-required', { reason: 'meeting_start' }), 1500);
       }
     } catch { /* a prompt, never a blocker */ }
+    // Load the Auto Answer decider before the first question, so that decision
+    // is not the one waiting on a ~0.5 s model load (no-op when off or absent).
+    try { if (this.isAutoAnswerActive()) this.autoAnswerDecider().warmUp(); } catch { /* optional */ }
     // A Pro pack is sold as meeting hours: report this meeting's time, whatever
     // transcribes it (services/packs/PackMeetingClock.ts). No-op without a
     // Natively API key, and one request per meeting for a key that is not a pack.
@@ -10463,14 +10539,19 @@ export class AppState {
    * case so memory, disk and the renderer's toggle cannot disagree.
    */
   /** Who may run Auto Answer now (autoAnswerAccess.ts): Pro/trial, or free + current sharing consent. */
-  public getAutoAnswerAccess(): import('./intelligence/autoAnswer/autoAnswerAccess').AutoAnswerAccess {
-    const { autoAnswerAccess } = require('./intelligence/autoAnswer/autoAnswerAccess') as typeof import('./intelligence/autoAnswer/autoAnswerAccess');
+  public getAutoAnswerAccess(): AutoAnswerAccess {
+    const { autoAnswerAccess } = loadAutoAnswerPremium();
     let proOrTrial = false;
     try {
       const { isProOrTrialActive } = require('./services/proAccess') as typeof import('./services/proAccess');
       proOrTrial = isProOrTrialActive();
     } catch { /* no licence module: treated as free */ }
     return autoAnswerAccess({ proOrTrial, consent: SettingsManager.getInstance().get('autoAnswerTrainingConsent') });
+  }
+
+  /** False in builds without the premium submodule: Auto Answer is not part of them. */
+  public isAutoAnswerAvailable(): boolean {
+    return loadAutoAnswerPremium().available;
   }
 
   /** The toggle is on AND the user may run Auto Answer. Everything that acts on Auto Answer asks this. */
@@ -10490,7 +10571,7 @@ export class AppState {
 
   /** Record (or, with null, withdraw) the user's agreement to share Auto Answer meeting transcripts. */
   public setAutoAnswerTrainingConsent(granted: boolean): boolean {
-    const { newTrainingConsent } = require('./intelligence/autoAnswer/autoAnswerAccess') as typeof import('./intelligence/autoAnswer/autoAnswerAccess');
+    const { newTrainingConsent } = loadAutoAnswerPremium();
     const persisted = SettingsManager.getInstance().set('autoAnswerTrainingConsent', granted ? newTrainingConsent() : null);
     if (!persisted) return false;
     this._autoAnswerAccessMemo = null;
@@ -10512,6 +10593,7 @@ export class AppState {
     // Drop anything already armed: turning the toggle off mid-meeting must not
     // let one more auto-answer land a second later.
     if (!enabled) this.cancelAutoAnswer();
+    else if (this.isMeetingActive) { try { if (this.isAutoAnswerActive()) this.autoAnswerDecider().warmUp(); } catch { /* optional */ } }
     console.log(`[AppState] autoAnswerEnabled set to ${enabled}`);
     return true;
   }

@@ -45,6 +45,8 @@
   // mode this file was added to fix.
   "exclude": [
     "db/seedDemo.ts",
-    "db/test-db.ts"
+    "db/test-db.ts",
+    // Checked at full `strict` by ./tsconfig.premium-autoanswer-check.json.
+    "../premium/electron/autoAnswer/**"
   ]
 }

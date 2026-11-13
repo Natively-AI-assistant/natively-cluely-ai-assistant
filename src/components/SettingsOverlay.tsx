@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useLayoutEffect, useCallback } from 'react';
 import { LANG_NATIVE_NAMES, useLanguage, useT } from '../i18n';
+import { AutoAnswerModelCard } from '../premium';
 import { CalendarSettings } from './settings/CalendarSettings';
 import { ConnectionsSettings } from './settings/ConnectionsSettings';
 import packageJson from '../../package.json';
@@ -787,10 +788,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [autoAnswerEnabled, setAutoAnswerEnabled] = useState(false);
     // Auto Answer is Pro, or free with transcript sharing (autoAnswerAccess.ts).
     const [autoAnswerAccess, setAutoAnswerAccess] = useState<{ basis: 'pro' | 'sharing' | 'none'; uploads: boolean } | null>(null);
+    // False in builds without the premium submodule: the Auto Answer rows are hidden.
+    const [autoAnswerAvailable, setAutoAnswerAvailable] = useState(true);
     const [autoAnswerDialog, setAutoAnswerDialog] = useState<null | 'free' | 'pro'>(null);
     const [autoAnswerDialogBusy, setAutoAnswerDialogBusy] = useState(false);
     const refreshAutoAnswerAccess = useCallback(() => {
-        window.electronAPI?.getAutoAnswerAccess?.().then((a) => { if (a) { setAutoAnswerAccess({ basis: a.basis, uploads: a.uploads }); setAutoAnswerEnabled(a.enabled); } }).catch(() => { });
+        window.electronAPI?.getAutoAnswerAccess?.().then((a) => { if (a) { setAutoAnswerAvailable(a.available !== false); setAutoAnswerAccess({ basis: a.basis, uploads: a.uploads }); setAutoAnswerEnabled(a.enabled); } }).catch(() => { });
     }, []);
     const [meetingRetention, setMeetingRetention] = useState<'forever' | '7d' | '30d' | 'never'>('forever');
     const [codeVerification, setCodeVerification] = useState(false);
@@ -2702,7 +2705,8 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     </div>
                                                 )}
 
-                                                {/* Auto Answer */}
+                                                {/* Auto Answer (premium/electron/autoAnswer; absent from builds without premium) */}
+                                                {autoAnswerAvailable && (
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
                                                         <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
@@ -2752,10 +2756,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         className={autoAnswerEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
                                                     />
                                                 </div>
+                                                )}
 
                                                 {/* Auto Answer transcript sharing (autoAnswerAccess.ts). Shown once
                                                     the user shares, and to Pro/trial users as an opt-in. */}
-                                                {autoAnswerAccess && (autoAnswerAccess.uploads || autoAnswerAccess.basis === 'pro') && (
+                                                {autoAnswerAvailable && autoAnswerAccess && (autoAnswerAccess.uploads || autoAnswerAccess.basis === 'pro') && (
                                                     <div className="flex items-center justify-between px-4 py-3">
                                                         <div className="pl-14">
                                                             <h3 className="settings-title text-text-primary">{t('Share transcripts to improve Auto Answer')}</h3>
@@ -2791,6 +2796,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         />
                                                     </div>
                                                 )}
+
+                                                {/* The on-device Auto Answer model: paid download (API keys + Pro),
+                                                    with the user's own before/after judge calls. Hidden where no
+                                                    model runs (deciderRuntime.ts). Premium only. */}
+                                                {autoAnswerAvailable && <AutoAnswerModelCard />}
 
                                                 {/* Ambient AI Chat */}
                                                 <div className="flex items-center justify-between px-4 py-3">

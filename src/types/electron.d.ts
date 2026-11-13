@@ -2,6 +2,24 @@ import type { AssistCatchUp, AssistDailyBrief, AssistEvent, AssistLiveRecap, Ass
 // Phase 3 — DynamicActionPayload mirrors electron/services/dynamic-actions/DynamicAction.ts.
 // Kept as a structural interface (not a class import) to preserve the strict main↔renderer
 // type boundary — the renderer never imports from electron/* directly.
+/** Mirrors DeciderInstallState (electron/premium/autoAnswer.ts, AutoAnswerModelInstall). */
+export type AutoAnswerModelInstall =
+  | { state: 'unsupported' }
+  | { state: 'not_entitled' }
+  | { state: 'available'; variant: string; bytes: number }
+  | { state: 'downloading'; variant: string; received: number; total: number }
+  | { state: 'installed'; variant: string; version: string; dir: string }
+  | { state: 'error'; variant: string; error: string; retryable: boolean };
+
+/** Mirrors SavingsSummary (electron/premium/autoAnswer.ts, AutoAnswerModelSavings). */
+export interface AutoAnswerModelSavings {
+  installedAt: string | null;
+  before: { days: number; judgeCalls: number; tokens: number; usd: number };
+  after: { days: number; moments: number; local: number; judged: number; tokensSaved: number; usdSaved: number; tokensSpent: number; usdSpent: number } | null;
+  projection: { localShare: number; judgeCallsSaved: number; tokensSaved: number; usdSaved: number } | null;
+  reference: { model: string; inPerM: number; outPerM: number; outTokensPerCall: number; charsPerToken: number };
+}
+
 export interface DynamicActionEvidenceRef {
   source: 'transcript' | 'screen' | 'reference' | 'meeting_history' | 'browser_dom'
   text: string
@@ -1291,10 +1309,15 @@ export interface ElectronAPI {
   onMeetingAudioCapture?: (callback: (data: { withoutAudio: boolean }) => void) => () => void;
   getAutoAnswerEnabled: () => Promise<boolean>;
   setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string; message?: string }>;
-  getAutoAnswerAccess: () => Promise<{ allowed: boolean; basis: 'pro' | 'sharing' | 'none'; uploads: boolean; consent: { version: number; grantedAt: string } | null; enabled: boolean }>;
+  getAutoAnswerAccess: () => Promise<{ available?: boolean; allowed: boolean; basis: 'pro' | 'sharing' | 'none'; uploads: boolean; consent: { version: number; grantedAt: string } | null; enabled: boolean }>;
   setAutoAnswerTrainingConsent: (granted: boolean) => Promise<{ success: boolean; error?: string }>;
   deleteAutoAnswerSharedData: () => Promise<{ success: boolean; error?: string }>;
   onAutoAnswerAccessRequired: (callback: (info: { reason: string }) => void) => () => void;
+  // The on-device Auto Answer model: paid download (API keys + Pro) and its before/after card.
+  getAutoAnswerModelStatus?: () => Promise<{ install: AutoAnswerModelInstall; savings: AutoAnswerModelSavings }>;
+  installAutoAnswerModel?: () => Promise<{ install: AutoAnswerModelInstall; savings: AutoAnswerModelSavings }>;
+  removeAutoAnswerModel?: () => Promise<{ install: AutoAnswerModelInstall; savings: AutoAnswerModelSavings }>;
+  onAutoAnswerModelProgress?: (callback: (install: AutoAnswerModelInstall) => void) => () => void;
   getDirectAssistEnabled: () => Promise<boolean>;
   setDirectAssistEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   onDirectAssistEnabledChanged: (callback: (enabled: boolean) => void) => () => void;

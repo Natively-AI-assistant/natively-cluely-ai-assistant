@@ -1531,7 +1531,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // pack is still empty. 'hours_used' | 'window_closed' | 'ended'.
   const [packEndedReason, setPackEndedReason] = useState<string | null>(null);
   // Auto Answer was on but is paused: it is Pro, or free with transcript
-  // sharing (electron/intelligence/autoAnswer/autoAnswerAccess.ts). Main sends
+  // sharing (premium/electron/autoAnswer/autoAnswerAccess.ts). Main sends
   // this once at meeting start; the close holds for the meeting.
   const [autoAnswerAccessNotice, setAutoAnswerAccessNotice] = useState(false);
   // A local model is slower than speech (main: `behind` on stt-status,
