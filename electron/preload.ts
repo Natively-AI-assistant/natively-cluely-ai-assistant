@@ -1301,7 +1301,11 @@ interface ElectronAPI {
   getMeetingAudioCapture: () => Promise<{ withoutAudio: boolean }>;
   onMeetingAudioCapture: (callback: (data: { withoutAudio: boolean }) => void) => () => void;
   getAutoAnswerEnabled: () => Promise<boolean>;
-  setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string; message?: string }>;
+  getAutoAnswerAccess: () => Promise<{ allowed: boolean; basis: 'pro' | 'sharing' | 'none'; uploads: boolean; consent: { version: number; grantedAt: string } | null; enabled: boolean }>;
+  setAutoAnswerTrainingConsent: (granted: boolean) => Promise<{ success: boolean; error?: string }>;
+  deleteAutoAnswerSharedData: () => Promise<{ success: boolean; error?: string }>;
+  onAutoAnswerAccessRequired: (callback: (info: { reason: string }) => void) => () => void;
   getDirectAssistEnabled: () => Promise<boolean>;
   setDirectAssistEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   onDirectAssistEnabledChanged: (callback: (enabled: boolean) => void) => () => void;
@@ -3594,6 +3598,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   getAutoAnswerEnabled: () => ipcRenderer.invoke('get-auto-answer-enabled'),
   setAutoAnswerEnabled: (enabled: boolean) => ipcRenderer.invoke('set-auto-answer-enabled', enabled),
+  getAutoAnswerAccess: () => ipcRenderer.invoke('auto-answer:get-access'),
+  setAutoAnswerTrainingConsent: (granted: boolean) => ipcRenderer.invoke('auto-answer:set-training-consent', granted),
+  deleteAutoAnswerSharedData: () => ipcRenderer.invoke('auto-answer:delete-shared-data'),
+  onAutoAnswerAccessRequired: (callback: (info: { reason: string }) => void) => {
+    const subscription = (_: any, info: { reason: string }) => callback(info);
+    ipcRenderer.on('auto-answer:access-required', subscription);
+    return () => { ipcRenderer.removeListener('auto-answer:access-required', subscription); };
+  },
   getDirectAssistEnabled: () => ipcRenderer.invoke('get-direct-assist-enabled'),
   setDirectAssistEnabled: (enabled: boolean) => ipcRenderer.invoke('set-direct-assist-enabled', enabled),
   onDirectAssistEnabledChanged: (callback: (enabled: boolean) => void) => {

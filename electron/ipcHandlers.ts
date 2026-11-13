@@ -7953,7 +7953,39 @@ export function initializeIpcHandlers(appState: AppState): void {
     return appState.getAutoAnswerEnabled();
   });
 
+  // Who may run Auto Answer, and whether this user's meetings are shared
+  // (autoAnswerAccess.ts). basis 'pro' | 'sharing' | 'none'.
+  safeHandle('auto-answer:get-access', async () => {
+    const SettingsManager = require('./services/SettingsManager').SettingsManager;
+    const consent = SettingsManager.getInstance().get('autoAnswerTrainingConsent') ?? null;
+    const access = appState.getAutoAnswerAccess();
+    return { allowed: access.allowed, basis: access.basis, uploads: access.uploads, consent, enabled: appState.getAutoAnswerEnabled() };
+  });
+
+  // Agree to share (free users: unlocks Auto Answer; Pro: the opt-in), or withdraw.
+  // Withdrawing for a free user leaves the toggle as it is but Auto Answer stops
+  // (isAutoAnswerActive), and nothing more is uploaded.
+  safeHandle('auto-answer:set-training-consent', async (_, granted: boolean) => {
+    const ok = appState.setAutoAnswerTrainingConsent(Boolean(granted));
+    return ok ? { success: true } : { success: false, error: 'Settings store is unavailable; the change was not saved.' };
+  });
+
+  // Delete what this install already shared: queued files here, then the
+  // server's copies (DELETE /v1/training/meeting-transcripts). Also withdraws.
+  safeHandle('auto-answer:delete-shared-data', async () => {
+    appState.setAutoAnswerTrainingConsent(false);
+    return appState.trainingUploader().requestDeletion();
+  });
+
   safeHandle('set-auto-answer-enabled', async (_, enabled: boolean) => {
+    // Auto Answer is Pro or trial, or free with training-data sharing
+    // (intelligence/autoAnswer/autoAnswerAccess.ts). Switching off is always free.
+    if (enabled) {
+      const access = appState.getAutoAnswerAccess();
+      if (!access.allowed) {
+        return { success: false, error: access.error, message: 'Auto Answer is part of Natively Pro. You can also use it for free by sharing the transcripts of meetings where it runs.' };
+      }
+    }
     const persisted = appState.setAutoAnswerEnabled(Boolean(enabled));
     return persisted
       ? { success: true }

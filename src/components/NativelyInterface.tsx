@@ -8,6 +8,7 @@ import {
   Copy,
   Check,
   Clock,
+  Sparkles,
   Crop,
   Globe,
   HelpCircle,
@@ -1529,6 +1530,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // meeting starts: the clock re-sends it on that meeting's first tick if the
   // pack is still empty. 'hours_used' | 'window_closed' | 'ended'.
   const [packEndedReason, setPackEndedReason] = useState<string | null>(null);
+  // Auto Answer was on but is paused: it is Pro, or free with transcript
+  // sharing (electron/intelligence/autoAnswer/autoAnswerAccess.ts). Main sends
+  // this once at meeting start; the close holds for the meeting.
+  const [autoAnswerAccessNotice, setAutoAnswerAccessNotice] = useState(false);
   // A local model is slower than speech (main: `behind` on stt-status,
   // 2026-11-09). Its text still comes, later and later, so it is advice with a
   // close, said once per meeting; it used to count as a reconnect and flash
@@ -5659,14 +5664,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Main sends this only with the server's reason ('hours_used' |
     // 'window_closed'); a reasonless one is not a pack and is ignored.
     const offEnded = window.electronAPI?.onPackEnded?.(({ reason }) => { if (reason) setPackEndedReason(reason); });
-    const offReset = window.electronAPI?.onSessionReset?.(() => setPackEndedReason(null));
+    const offAutoAnswerAccess = window.electronAPI?.onAutoAnswerAccessRequired?.(() => setAutoAnswerAccessNotice(true));
+    const offReset = window.electronAPI?.onSessionReset?.(() => { setPackEndedReason(null); setAutoAnswerAccessNotice(false); });
     // Hours added mid-meeting (a top-up adds them to the same key) bring Pro
     // back; the notice goes with it rather than staying until the next meeting.
-    const offLicence = window.electronAPI?.onLicenseStatusChanged?.(({ isPremium }) => { if (isPremium) setPackEndedReason(null); });
+    const offLicence = window.electronAPI?.onLicenseStatusChanged?.(({ isPremium }) => { if (isPremium) { setPackEndedReason(null); setAutoAnswerAccessNotice(false); } });
     // The clock saw the hours come back (also when a lifetime licence kept Pro
     // on, so no licence change arrives).
     const offRenewed = window.electronAPI?.onPackRenewed?.(() => setPackEndedReason(null));
-    return () => { offEnded?.(); offReset?.(); offLicence?.(); offRenewed?.(); };
+    return () => { offEnded?.(); offAutoAnswerAccess?.(); offReset?.(); offLicence?.(); offRenewed?.(); };
   }, []);
 
   // Session Reset Listener - Clears UI when a NEW meeting starts
@@ -11759,6 +11765,7 @@ Provide only the answer, nothing else.`;
     'stt-warning': sttStatusBannerOpen && sttStatusBanner?.tone === 'warning',
     'ambient-mic': showAmbientMicNotice,
     trial: !!trial.banner,
+    'auto-answer-access': autoAnswerAccessNotice,
     'auto-stop': autoStop.stopsAt !== null,
     'last-time': !!lastTime.recap,
     'capture-fallback': !!captureFallback,
@@ -12303,6 +12310,29 @@ Provide only the answer, nothing else.`;
                       onClick={() => window.electronAPI?.openSettingsTab?.('audio')}
                     >
                       {t('Open Settings')}
+                    </OverlayBannerButton>
+                  }
+                />
+              )}
+              </ChromeFold>
+
+              {/* Auto Answer was on but is paused: it is now Pro, or free when
+                  the user shares the transcripts of meetings where it runs
+                  (autoAnswerAccess.ts). Opens Settings › General, where the
+                  consent sheet explains exactly what is shared. */}
+              <ChromeFold show={autoAnswerAccessNotice && bannerSlots.has('auto-answer-access')} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-auto-answer-access">
+              {autoAnswerAccessNotice && (
+                <OverlayBanner
+                  className="mx-4"
+                  tone="warning"
+                  icon={<Sparkles strokeWidth={2.2} />}
+                  title={t('Auto Answer is paused')}
+                  message={t('Auto Answer is now part of Natively Pro. Keep it free by sharing meeting transcripts to improve it, or get Pro.')}
+                  onDismiss={() => setAutoAnswerAccessNotice(false)}
+                  dismissLabel={t('Dismiss')}
+                  actions={
+                    <OverlayBannerButton variant="primary" onClick={() => { setAutoAnswerAccessNotice(false); window.electronAPI?.openSettingsTab?.('general'); }}>
+                      {t('Choose')}
                     </OverlayBannerButton>
                   }
                 />

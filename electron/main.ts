@@ -1798,6 +1798,9 @@ export class AppState {
     setVerboseLoggingFlag(this._verboseLogging);
     this._ambientChatEnabled = settingsManager.get('ambientChatEnabled') ?? false;
     this._autoAnswerEnabled = settingsManager.get('autoAnswerEnabled') ?? false;
+    // Send any shared Auto Answer meeting left over from an earlier run (quit
+    // or offline at meeting end). A minute in, off the start-up path.
+    setTimeout(() => { try { this.trainingUploader().start(); } catch { /* sharing is never a blocker */ } }, 60_000);
     console.log('[AutoAnswer] engine=simple (stoppage + judge)');
     console.log(`[AppState] Initialized with isUndetectable=${this.isUndetectable}, disguiseMode=${this.disguiseMode}, verboseLogging=${this._verboseLogging}, ambientChatEnabled=${this._ambientChatEnabled}, autoAnswerEnabled=${this._autoAnswerEnabled}`);
 
@@ -3861,7 +3864,10 @@ export class AppState {
   }
 
   private readonly simpleAutoAnswer = new SimpleAutoAnswerEngine({
-    isEnabled: () => this._autoAnswerEnabled,
+    // Pro, trial, or a free user who shares training data (autoAnswerAccess.ts).
+    // Checked per decision, so a licence that lapses or consent that is
+    // withdrawn mid-meeting stops the next answer, not just the next toggle.
+    isEnabled: () => this.isAutoAnswerActive(),
     isMeetingActive: () => this.isMeetingActive,
     meetingGeneration: () => this._meetingGeneration,
     engineAccepting: () => this.intelligenceManager.canAutoAnswer(),
@@ -4022,6 +4028,45 @@ export class AppState {
    * above also writes them to TelemetryService, whose only active sink is a
    * local JSONL file. See AutoAnswerUsageTelemetry.ts.
    */
+  /**
+   * Shares the transcripts of meetings where Auto Answer ran, when the user
+   * agreed (free users must, to use Auto Answer; Pro may opt in). See
+   * services/training/TrainingTranscriptUploader.ts. Created on first use.
+   */
+  private _trainingUploader: import('./services/training/TrainingTranscriptUploader').TrainingTranscriptUploader | null = null;
+  public trainingUploader(): import('./services/training/TrainingTranscriptUploader').TrainingTranscriptUploader {
+    if (this._trainingUploader) return this._trainingUploader;
+    const T = require('./services/training/TrainingTranscriptUploader') as typeof import('./services/training/TrainingTranscriptUploader');
+    const { nativelyApiBase } = require('./services/nativelyApiBase');
+    const up = new T.TrainingTranscriptUploader({
+      dir: path.join(app.getPath('userData'), 'training-outbox'),
+      apiBase: () => nativelyApiBase(),
+      installId: () => { try { return require('./services/InstallPingManager').getOrCreateInstallId(); } catch { return undefined; } },
+      // The same callers the shared-notes route accepts: key, trial token, or the
+      // signed install token (free users without a trial).
+      callerHeaders: async (): Promise<Record<string, string>> => {
+        try {
+          const cm = require('./services/CredentialsManager').CredentialsManager.getInstance();
+          const key = cm.getNativelyApiKey();
+          if (key) return { 'x-natively-key': key };
+          const trial = cm.getTrialToken?.();
+          if (trial) return { 'x-trial-token': trial };
+        } catch { /* fall through to the install token */ }
+        const id = (() => { try { return require('./services/InstallPingManager').getOrCreateInstallId(); } catch { return undefined; } })();
+        if (!id) return {};
+        const token = await require('./services/FunnelTelemetry').funnelTelemetry.installToken(id);
+        return token ? { 'x-install-token': token } : {};
+      },
+      appVersion: app.getVersion(),
+      platform: process.platform,
+      access: () => this.getAutoAnswerAccess(),
+      consent: () => SettingsManager.getInstance().get('autoAnswerTrainingConsent') ?? null,
+    });
+    T.setTrainingMeetingSink((m) => up.offerMeeting(m));
+    this._trainingUploader = up;
+    return up;
+  }
+
   private readonly autoAnswerUsage = new AutoAnswerUsageTelemetry({
     sink: (row) => {
       // The same setting TelemetryService honours.
@@ -4302,7 +4347,7 @@ export class AppState {
     // simply never emit it — the quiet window remains the floor.
     if (speaker === 'interviewer') {
       (stt as any).on?.('endpoint', (ev: { type: 'speech_final' | 'utterance_end'; confidence?: number }) => {
-        if (!this._autoAnswerEnabled) return;
+        if (!this.isAutoAnswerActive()) return;
         this.simpleAutoAnswer.onProviderEndpoint();
       });
     }
@@ -4356,7 +4401,8 @@ export class AppState {
         console.log(`[STT:${speaker}${segment.isFinal ? '' : '~'}] ${segment.text}`);
       }
 
-      if (this._autoAnswerEnabled) {
+      if (this.isAutoAnswerActive()) {
+        try { this.trainingUploader().noteAutoAnswerRan(); } catch { /* never a blocker */ }
         this.simpleAutoAnswer.ingest({
           speaker,
           text: segment.text,
@@ -5039,7 +5085,7 @@ export class AppState {
         // endpoint anyway) and the local models (their own VAD closes the
         // segment, then inference runs). For those the stop always precedes
         // the text, so it would judge the turn without its last words.
-        if (this._autoAnswerEnabled && this.isMeetingActive) {
+        if (this.isAutoAnswerActive() && this.isMeetingActive) {
           try {
             const { CredentialsManager } = require('./services/CredentialsManager');
             const provider = CredentialsManager.getInstance().getSttProvider();
@@ -7847,6 +7893,16 @@ export class AppState {
     const meetingGeneration = ++this._meetingGeneration;
     this.isMeetingActive = true;
     this.autoAnswerUsage.meetingStarted();
+    try { this.trainingUploader().meetingStarted(); } catch { /* sharing is never a blocker */ }
+    // Auto Answer switched on from before it became Pro-or-sharing (2026-11-13),
+    // or a licence that has since lapsed: it stays paused (isAutoAnswerActive
+    // is false) and the overlay asks once, at the start of this meeting, to
+    // share or upgrade. Nothing is uploaded unless the user agrees.
+    try {
+      if (this._autoAnswerEnabled && !this.getAutoAnswerAccess().allowed) {
+        setTimeout(() => this._broadcastToAllWindows('auto-answer:access-required', { reason: 'meeting_start' }), 1500);
+      }
+    } catch { /* a prompt, never a blocker */ }
     // A Pro pack is sold as meeting hours: report this meeting's time, whatever
     // transcribes it (services/packs/PackMeetingClock.ts). No-op without a
     // Natively API key, and one request per meeting for a key that is not a pack.
@@ -10379,6 +10435,46 @@ export class AppState {
    * the store is degraded (R-15); the in-memory flag is left untouched in that
    * case so memory, disk and the renderer's toggle cannot disagree.
    */
+  /** Who may run Auto Answer now (autoAnswerAccess.ts): Pro/trial, or free + current sharing consent. */
+  public getAutoAnswerAccess(): import('./intelligence/autoAnswer/autoAnswerAccess').AutoAnswerAccess {
+    const { autoAnswerAccess } = require('./intelligence/autoAnswer/autoAnswerAccess') as typeof import('./intelligence/autoAnswer/autoAnswerAccess');
+    let proOrTrial = false;
+    try {
+      const { isProOrTrialActive } = require('./services/proAccess') as typeof import('./services/proAccess');
+      proOrTrial = isProOrTrialActive();
+    } catch { /* no licence module: treated as free */ }
+    return autoAnswerAccess({ proOrTrial, consent: SettingsManager.getInstance().get('autoAnswerTrainingConsent') });
+  }
+
+  /** The toggle is on AND the user may run Auto Answer. Everything that acts on Auto Answer asks this. */
+  public isAutoAnswerActive(): boolean {
+    if (!this._autoAnswerEnabled) return false;
+    // Asked on every transcript segment: the licence/trial check reads the
+    // trial clock (which can write the credential store), so the answer is
+    // held for 5 s. A consent change clears it at once.
+    const now = Date.now();
+    if (this._autoAnswerAccessMemo && now - this._autoAnswerAccessMemo.at < 5_000) return this._autoAnswerAccessMemo.allowed;
+    let allowed = false;
+    try { allowed = this.getAutoAnswerAccess().allowed; } catch { allowed = false; }
+    this._autoAnswerAccessMemo = { at: now, allowed };
+    return allowed;
+  }
+  private _autoAnswerAccessMemo: { at: number; allowed: boolean } | null = null;
+
+  /** Record (or, with null, withdraw) the user's agreement to share Auto Answer meeting transcripts. */
+  public setAutoAnswerTrainingConsent(granted: boolean): boolean {
+    const { newTrainingConsent } = require('./intelligence/autoAnswer/autoAnswerAccess') as typeof import('./intelligence/autoAnswer/autoAnswerAccess');
+    const persisted = SettingsManager.getInstance().set('autoAnswerTrainingConsent', granted ? newTrainingConsent() : null);
+    if (!persisted) return false;
+    this._autoAnswerAccessMemo = null;
+    // Withdrawn and not Pro: the next decision is already refused by
+    // isAutoAnswerActive(); drop anything already armed too.
+    if (!granted && !this.getAutoAnswerAccess().allowed) this.cancelAutoAnswer();
+    try { if (!granted) this.trainingUploader().withdraw(); else void this.trainingUploader().flush(); } catch { /* best effort */ }
+    console.log(`[AppState] autoAnswerTrainingConsent ${granted ? 'granted' : 'withdrawn'}`);
+    return true;
+  }
+
   public setAutoAnswerEnabled(enabled: boolean): boolean {
     const persisted = SettingsManager.getInstance().set('autoAnswerEnabled', enabled);
     if (!persisted) {

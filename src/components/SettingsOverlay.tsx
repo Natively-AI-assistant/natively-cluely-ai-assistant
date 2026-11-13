@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useLayoutEffect, useCallback } from 'react';
 import { LANG_NATIVE_NAMES, useLanguage, useT } from '../i18n';
 import { CalendarSettings } from './settings/CalendarSettings';
 import { ConnectionsSettings } from './settings/ConnectionsSettings';
@@ -47,6 +47,7 @@ import { setGenieAnimationEnabled, useGenieAnimationEnabled } from '../lib/genie
 import { setKeepOverlaySizeEnabled, useKeepOverlaySizeEnabled } from '../lib/overlaySizeSetting';
 import { KeyRecorder } from './ui/KeyRecorder';
 import { useConfirmDialog } from './ui/ConfirmDialog';
+import { AutoAnswerAccessDialog } from './AutoAnswerAccessDialog';
 import { ModelSelectorLabel } from './ui/ModelSelectorLabel';
 import { MODEL_SELECTOR_WIDTH } from './ui/modelSelectorLabelText';
 import { Disclosure, DisclosureChevron } from './ui/AccordionSection';
@@ -784,6 +785,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [exportResult, setExportResult] = useState<string | null>(null);
     const [ambientChatEnabled, setAmbientChatEnabled] = useState(false);
     const [autoAnswerEnabled, setAutoAnswerEnabled] = useState(false);
+    // Auto Answer is Pro, or free with transcript sharing (autoAnswerAccess.ts).
+    const [autoAnswerAccess, setAutoAnswerAccess] = useState<{ basis: 'pro' | 'sharing' | 'none'; uploads: boolean } | null>(null);
+    const [autoAnswerDialog, setAutoAnswerDialog] = useState<null | 'free' | 'pro'>(null);
+    const [autoAnswerDialogBusy, setAutoAnswerDialogBusy] = useState(false);
+    const refreshAutoAnswerAccess = useCallback(() => {
+        window.electronAPI?.getAutoAnswerAccess?.().then((a) => { if (a) { setAutoAnswerAccess({ basis: a.basis, uploads: a.uploads }); setAutoAnswerEnabled(a.enabled); } }).catch(() => { });
+    }, []);
     const [meetingRetention, setMeetingRetention] = useState<'forever' | '7d' | '30d' | 'never'>('forever');
     const [codeVerification, setCodeVerification] = useState(false);
     const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
@@ -812,6 +820,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             window.electronAPI?.getUsageStatistics?.().then((v) => setUsageStatistics(v !== false)).catch(() => { });
             window.electronAPI?.getAmbientChatEnabled?.().then(setAmbientChatEnabled).catch(() => { });
             window.electronAPI?.getAutoAnswerEnabled?.().then(setAutoAnswerEnabled).catch(() => { });
+            refreshAutoAnswerAccess();
             window.electronAPI?.getCodeVerification?.().then((v) => setCodeVerification(v === true)).catch(() => { });
             window.electronAPI?.getMeetingRetention?.().then(setMeetingRetention).catch(() => { });
         }
@@ -2333,6 +2342,27 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     return (
         <>
             {confirmDialog}
+            <AutoAnswerAccessDialog
+                open={autoAnswerDialog !== null}
+                proOptIn={autoAnswerDialog === 'pro'}
+                busy={autoAnswerDialogBusy}
+                onOpenChange={(o) => { if (!o) setAutoAnswerDialog(null); }}
+                onUpgrade={() => { setAutoAnswerDialog(null); setActiveTab('plans'); }}
+                onShare={async () => {
+                    setAutoAnswerDialogBusy(true);
+                    try {
+                        const c = await window.electronAPI?.setAutoAnswerTrainingConsent?.(true);
+                        if (c?.success && autoAnswerDialog === 'free') {
+                            const r = await window.electronAPI?.setAutoAnswerEnabled?.(true);
+                            if (r && !r.success) console.error('[Settings] Auto Answer not turned on:', r.error);
+                        }
+                    } finally {
+                        setAutoAnswerDialogBusy(false);
+                        setAutoAnswerDialog(null);
+                        refreshAutoAnswerAccess();
+                    }
+                }}
+            />
             {/* Settings pours out of, and back into, the bottom of the window
                 like every other popup (GenieModal). */}
             <GenieModal
@@ -2688,18 +2718,28 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <LiquidGlassBadge variant="sky">{t('Beta')}</LiquidGlassBadge>
                                                             </div>
                                                             <p className="text-xs text-text-secondary mt-0.5">{t('Answers appear as soon as the interviewer finishes a question')}</p>
+                                                            {autoAnswerAccess?.basis === 'none' && (
+                                                                <p className="text-xs text-text-tertiary mt-0.5">{t('Pro, or free when you share meeting transcripts to improve it')}</p>
+                                                            )}
                                                         </div>
                                                     </div>
                                                     <SettingsToggle
-                                                        checked={autoAnswerEnabled}
+                                                        checked={autoAnswerEnabled && autoAnswerAccess?.basis !== 'none'}
                                                         label={t('Auto Answer')}
                                                         onChange={async () => {
                                                             const previous = autoAnswerEnabled;
                                                             const newState = !previous;
+                                                            // Free and not sharing: ask first (share or upgrade), never flip.
+                                                            if (newState && autoAnswerAccess?.basis === 'none') { setAutoAnswerDialog('free'); return; }
                                                             setAutoAnswerEnabled(newState); // Optimistic update
                                                             try {
                                                                 const result = await window.electronAPI?.setAutoAnswerEnabled?.(newState);
-                                                                if (result && !result.success) {
+                                                                if (result && !result.success && result.error === 'auto_answer_access_required') {
+                                                                    // Access changed since Settings opened (trial ended, licence lapsed).
+                                                                    setAutoAnswerEnabled(previous);
+                                                                    refreshAutoAnswerAccess();
+                                                                    setAutoAnswerDialog('free');
+                                                                } else if (result && !result.success) {
                                                                     // Rollback on explicit failure (settings store degraded)
                                                                     setAutoAnswerEnabled(previous);
                                                                     console.error('[Settings] Failed to set Auto Answer:', result.error);
@@ -2712,6 +2752,45 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         className={autoAnswerEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
                                                     />
                                                 </div>
+
+                                                {/* Auto Answer transcript sharing (autoAnswerAccess.ts). Shown once
+                                                    the user shares, and to Pro/trial users as an opt-in. */}
+                                                {autoAnswerAccess && (autoAnswerAccess.uploads || autoAnswerAccess.basis === 'pro') && (
+                                                    <div className="flex items-center justify-between px-4 py-3">
+                                                        <div className="pl-14">
+                                                            <h3 className="settings-title text-text-primary">{t('Share transcripts to improve Auto Answer')}</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">
+                                                                {autoAnswerAccess.basis === 'sharing'
+                                                                    ? t('Auto Answer is free while this is on. Turning it off stops Auto Answer unless you have Pro.')
+                                                                    : t('Optional with Pro. Only meetings where Auto Answer runs.')}
+                                                            </p>
+                                                            {autoAnswerAccess.uploads && (
+                                                                <button
+                                                                    type="button"
+                                                                    className="text-xs text-text-tertiary hover:text-text-primary underline mt-1"
+                                                                    onClick={async () => {
+                                                                        if (!(await askConfirm({ title: t('Delete everything you shared?'), description: t('Stops sharing and deletes the transcripts already sent from this computer.'), confirmLabel: t('Delete') }))) return;
+                                                                        const r = await window.electronAPI?.deleteAutoAnswerSharedData?.();
+                                                                        refreshAutoAnswerAccess();
+                                                                        if (r && !r.success) console.error('[Settings] Shared data not deleted:', r.error);
+                                                                    }}
+                                                                >{t('Delete shared transcripts')}</button>
+                                                            )}
+                                                        </div>
+                                                        <SettingsToggle
+                                                            checked={autoAnswerAccess.uploads}
+                                                            label={t('Share transcripts to improve Auto Answer')}
+                                                            onChange={async () => {
+                                                                if (!autoAnswerAccess.uploads) { setAutoAnswerDialog('pro'); return; }
+                                                                if (autoAnswerAccess.basis === 'sharing' && autoAnswerEnabled
+                                                                    && !(await askConfirm({ title: t('Stop sharing?'), description: t('Auto Answer turns off too, unless you get Pro.'), confirmLabel: t('Stop sharing') }))) return;
+                                                                await window.electronAPI?.setAutoAnswerTrainingConsent?.(false);
+                                                                refreshAutoAnswerAccess();
+                                                            }}
+                                                            className={autoAnswerAccess.uploads ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                        />
+                                                    </div>
+                                                )}
 
                                                 {/* Ambient AI Chat */}
                                                 <div className="flex items-center justify-between px-4 py-3">

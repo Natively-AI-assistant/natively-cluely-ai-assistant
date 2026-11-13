@@ -1,6 +1,6 @@
 # Privacy Policy
 
-_Last updated: October 10th 2026_
+_Last updated: November 13th 2026_
 
 This policy describes how **Natively** — the desktop application, the **Natively Pro** licensed features, and the **Natively API** managed service — handles your data. We've tried to write it like a person, not a lawyer.
 
@@ -24,13 +24,13 @@ If you're using Natively on behalf of an organisation (under a bulk or team lice
 
 We've designed Natively to keep as much of your data on your device as possible. In practice that means:
 
-- **Audio you capture, screen content, transcripts, notes, and meeting history are stored locally on your device** in a SQLite database. They are **not** uploaded to a Natively-operated server.
+- **Audio you capture, screen content, transcripts, notes, and meeting history are stored locally on your device** in a SQLite database. They are **not** uploaded to a Natively-operated server, unless you choose to share meeting transcripts to improve Auto Answer (§3.7).
 - When **Apple Speech** is selected, microphone and system audio are transcribed by Apple's on-device speech framework. The audio is not sent to Natively or a cloud speech provider. macOS may contact Apple to download the selected language's speech asset.
 - When you use a cloud AI, speech-to-text, or search feature, **the relevant text or audio leaves your device only to be processed by the provider you've chosen** (e.g., OpenAI, Anthropic, Google, Groq, Deepgram, ElevenLabs, Azure, IBM, Soniox, Alibaba Cloud (Qwen ASR), Tavily). The result comes back to your device.
 - For **paid products** (Natively Pro, Natively API), we **do** store a small amount of operational data on our servers — your license key, hardware identifier, plan, billing email, and quota counters. We need this to make billing and licensing actually work. We do not store the content you generate.
 - For the **Free Trial**, we additionally store anti-abuse signals (rate-limited IP, trial tokens, basic usage counters). The trial **starts by itself** the first time you start a meeting with no AI of your own set up, and the meeting overlay tells you when it does. It then runs for 30 minutes on the clock, across meetings. While it runs, your meetings' audio and your questions are processed through the Natively API (§4.4).
 - **Every installation**, paid or not, reports **product-usage events** to our own servers: that the app was opened on a given day, that a meeting was held, which features were used, that a trial was started, that a plan page was opened, and the like. They are **linked to your device and, if you have one, your trial or account**. They cannot contain anything you say, see or type. You can turn them off. See §3.2.1.
-- We **do not sell** your data. We **do not use your content to train AI models**. The desktop app also sends anonymous usage events to **Google Analytics**: that the app was opened or closed, which feature or AI model was used, and how long a session lasted. These events never contain anything you say, see or type, and IP addresses are anonymised. We don't use advertising or marketing trackers inside the desktop app.
+- We **do not sell** your data. We **do not use your content to train AI models**, except the meeting transcripts you choose to share to improve Auto Answer (§3.7). The desktop app also sends anonymous usage events to **Google Analytics**: that the app was opened or closed, which feature or AI model was used, and how long a session lasted. These events never contain anything you say, see or type, and IP addresses are anonymised. We don't use advertising or marketing trackers inside the desktop app.
 
 The rest of this document explains those flows in detail.
 
@@ -42,7 +42,7 @@ Different categories of data are handled in different places. This section is th
 
 ### 3.1 Stays on your device — never sent to us
 
-These never leave your device unless you choose a feature that sends a specific portion to a third-party provider (see §4):
+These never leave your device unless you choose a feature that sends a specific portion to a third-party provider (see §4), or you choose to share meeting transcripts to improve Auto Answer (§3.7):
 
 - **Audio captures** (microphone and system audio).
 - **Screen captures** (when you take or trigger one).
@@ -187,6 +187,18 @@ The app fetches calendar data directly from Google to your device. The sign-in t
 **Limited Use.** Natively's use and transfer of information received from Google APIs adheres to the [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements. The use of raw or derived user data received from Workspace APIs will adhere to the Google User Data Policy, including the Limited Use requirements. We do not use Google user data, whether raw, aggregated, or derived, to create, train, or improve foundational or generalized AI or machine-learning models, and we do not transfer it to anyone for that purpose. We do not sell it or use it for advertising.
 
 You can disconnect at any time in Settings › Calendar, which deletes the stored tokens from your device. You can also remove Natively's access from your [Google Account](https://myaccount.google.com/permissions).
+
+### 3.7 Sharing meeting transcripts to improve Auto Answer (optional)
+
+Auto Answer is part of Natively Pro. You can also use it **without Pro** if you agree to share the transcripts of the meetings where it runs, so we can teach it when to answer and when to wait. Pro and Free Trial users can choose to share too; for them it is optional. Nothing is shared until you agree in the app, and the app shows you this list before you do.
+
+- **What is sent:** the full transcript of each meeting in which Auto Answer was on, **including what the other people in the meeting said**. Each line carries only whether it was you or someone else speaking and how far into the meeting it was said. With it: the meeting mode, its length, the day (not the time), the app version, your operating system, your installation identifier, your licence or trial (if you have one), and the consent version and time you agreed.
+- **Removed on your device before sending:** e-mail addresses, phone numbers, web links and long numbers. Names and everything else that was said are **not** removed, so the transcripts can still identify you or others.
+- **Never sent:** audio, screenshots, your notes, AI answers, meeting titles and calendar events.
+- **What we use it for:** only to train and test the models behind Auto Answer. We do not sell it, use it for advertising, or publish it. To label and train, we may process it with the service providers we use for that: Anthropic (Claude) to label examples and Modal to run training. Storage is in our database at Supabase (Tokyo region).
+- **Legal basis:** your consent for your own data. For the other people in the meeting, our legitimate interest in improving Auto Answer, with the safeguards above; you must tell them where the law requires it (Terms §10.1).
+- **How long we keep it:** until you delete it, and at most **2 years** from when we received it.
+- **Stopping and deleting:** turn off **Share transcripts to improve Auto Answer** in Settings › General. Nothing more is sent, and anything not yet sent is deleted from your device. **Delete shared transcripts** in the same place deletes everything already received from your installation. If you use Auto Answer without Pro, it stops when you stop sharing. You can also email us (§9).
 
 ---
 

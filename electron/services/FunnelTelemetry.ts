@@ -219,6 +219,18 @@ export class FunnelTelemetry {
         return name === 'funnel' ? dev : new URL(name, dev).toString();
     }
 
+    /**
+     * The install token this server signed for this install (registering it
+     * first if needed), for other routes that vouch for an install the same
+     * way: shared Auto Answer transcripts (services/training). Never throws.
+     */
+    public async installToken(installId: string): Promise<string | undefined> {
+        try {
+            const r = await this.getRegistrar().ensureToken(installId);
+            return typeof (r as any)?.token === 'string' ? (r as any).token : undefined;
+        } catch { return undefined; }
+    }
+
     private getRegistrar(): InstallRegistrar {
         if (!this.registrar) {
             this.registrar = createInstallRegistrar({

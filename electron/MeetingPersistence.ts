@@ -1080,6 +1080,16 @@ export class MeetingPersistence {
             // The older answers are in the saved meeting now (read into the
             // snapshot above), whether or not a live row was ever written.
             DatabaseManager.getInstance().removeLiveUsageOverflow(meetingId);
+            // Auto Answer training data (services/training/TrainingTranscriptUploader.ts):
+            // shared only if Auto Answer ran in this meeting and the user agreed.
+            try {
+                const { offerTrainingMeeting } = require('./services/training/TrainingTranscriptUploader');
+                let mode: string | null = null;
+                try { mode = require('./services/ModesManager').ModesManager.getInstance().getActiveMode()?.templateType ?? null; } catch { /* no mode */ }
+                offerTrainingMeeting({ meetingId, startTime: snapshot.startTime, durationMs: snapshot.durationMs, mode, transcript: snapshot.transcript as any });
+            } catch (e) {
+                console.warn('[MeetingPersistence] training share skipped:', (e as Error)?.message);
+            }
             // Notify Frontend
             const wins = require('electron').BrowserWindow.getAllWindows();
             wins.forEach((w: any) => w.webContents.send('meetings-updated'));
