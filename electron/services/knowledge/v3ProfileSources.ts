@@ -109,43 +109,26 @@ function proAccessAllows(): boolean {
 }
 
 /**
- * May an ANSWER read the résumé / JD? (F-BND-01, F-BND-05, 2026-11-13.)
+ * May an ANSWER read the résumé / JD / Cue Cards? Pro (or trial) at read time
+ * (F-BND-05, 2026-11-13): after a licence or trial ends mid-session the
+ * orchestrator still holds the résumé in memory, and without this the mode
+ * template was the only gate left.
  *
- * V3 hydrated the profile on mode policy alone: the user's Profile
- * Intelligence switch was never read on the default answer path, and nothing
- * here asked for Pro, so after a licence or trial ended the in-memory résumé
- * stayed one mode-template lock away from every answer. The orchestrator's own
- * `isKnowledgeMode()` is the one answer to both: switch on AND Pro/trial AND a
- * document loaded — the same gate the legacy paths already use.
- *
- * An orchestrator without that method is a duck-typed fixture, not premium;
- * it keeps the old behaviour.
+ * The Profile Intelligence switch ("Persona Engine") is deliberately NOT read
+ * (owner decision 2026-11-14, revising F-BND-01): the mode already decides —
+ * only Looking-for-work and Technical Interview hydrate the profile
+ * (`profileSources` in mode-policy-registry) — and the switch is hidden in
+ * Settings whenever V3 is on, so a stale OFF would silently drop the résumé
+ * with no control to turn it back on.
  */
-function profileDocsAllowedForAnswers(orchestrator: unknown): boolean {
-  const o = orchestrator as { isKnowledgeMode?: () => unknown };
-  if (typeof o?.isKnowledgeMode !== 'function') return true;
-  try { return o.isKnowledgeMode() === true; } catch { return false; }
-}
-
-/**
- * May an ANSWER read the Cue Cards? They are a Pro feature kept under Profile
- * Intelligence, so: Pro at read time, and not when the user switched Profile
- * Intelligence off. The switch can only be ON with a résumé or JD loaded
- * (setKnowledgeMode refuses otherwise), so with no document loaded the cards
- * are read on Pro alone — exactly as before for that user.
- */
-function ownAnswersAllowedForAnswers(orchestrator: unknown): boolean {
-  if (!proAccessAllows()) return false;
-  const o = orchestrator as { isKnowledgeModeSwitchedOn?: () => unknown; activeResume?: unknown; activeJD?: unknown };
-  if (typeof o?.isKnowledgeModeSwitchedOn !== 'function') return true;
-  if (!o.activeResume && !o.activeJD) return true;
-  try { return o.isKnowledgeModeSwitchedOn() === true; } catch { return false; }
+export function profileReadableForAnswers(): boolean {
+  return proAccessAllows();
 }
 
 /**
  * Collect the ACTIVE profile documents (+ their OKF verified cards, when packs
- * exist) as plain values, for an ANSWER: gated on the user's Profile
- * Intelligence switch and on Pro (see profileDocsAllowedForAnswers). Read per
+ * exist) as plain values, for an ANSWER: gated on Pro at read time (see
+ * profileReadableForAnswers); the mode decides eligibility upstream. Read per
  * turn — no caching here — so a profile re-upload is visible on the very next
  * answer; versionId is the content hash of the structured extraction, which is
  * what invalidates stale evidence.
@@ -156,8 +139,8 @@ function ownAnswersAllowedForAnswers(orchestrator: unknown): boolean {
 export function collectV3ProfileSources(orchestrator: unknown): CollectedProfileSources {
   if (!orchestrator) return EMPTY;
   return collectProfileSources(orchestrator, {
-    docs: profileDocsAllowedForAnswers(orchestrator),
-    ownAnswers: ownAnswersAllowedForAnswers(orchestrator),
+    docs: profileReadableForAnswers(),
+    ownAnswers: profileReadableForAnswers(),
   });
 }
 

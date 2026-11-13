@@ -2412,14 +2412,15 @@ export class IntelligenceEngine extends EventEmitter {
         // behavior-preserving for this slice; the frozen snapshot is their measured
         // migration target.
         const snapshotKnowledge = this.llmHelper.getKnowledgeOrchestrator?.();
-        // F-BND-01/05 (2026-11-13): the orchestrator keeps the résumé/JD in memory
-        // after the user switches Profile Intelligence off or Pro ends. Its own
-        // isKnowledgeMode() (switch + Pro + a document) is the read gate; a turn
-        // that may not read the profile sees none — same rule as the V3 collector.
+        // F-BND-05 (2026-11-13): the orchestrator keeps the résumé/JD in memory
+        // after Pro ends. Pro at read time is the gate — the same rule as the V3
+        // collector. The hidden Profile Intelligence switch is not read (owner
+        // 2026-11-14): the mode decides who sees the profile.
         const snapshotProfileReadable = (() => {
-            const fn = (snapshotKnowledge as any)?.isKnowledgeMode;
-            if (typeof fn !== 'function') return true;
-            try { return fn.call(snapshotKnowledge) === true; } catch { return false; }
+            try {
+                const { profileReadableForAnswers } = require('./services/knowledge/v3ProfileSources');
+                return profileReadableForAnswers() === true;
+            } catch { return false; }
         })();
         // Keep the same loaded structured-data objects that informed source
         // availability. The canonical evidence coordinator uses these snapshots,

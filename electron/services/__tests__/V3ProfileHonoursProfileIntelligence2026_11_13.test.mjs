@@ -6,11 +6,12 @@
 // with no Pro check, so after a licence or trial ended mid-session the only
 // gate left was the mode template lock (F-BND-05).
 //
-// The collector now asks the orchestrator's own `isKnowledgeMode()` (switch on
-// AND Pro/trial AND a document loaded) before serving the résumé or JD, and
-// serves Cue Cards only with Pro and when the user has not switched Profile
-// Intelligence off. The raw-text INDEX path still sees every active document:
-// switching off must not delete or re-embed the index.
+// The collector now serves the résumé, JD and Cue Cards only with Pro/trial at
+// read time. Owner decision 2026-11-14 (revising F-BND-01): the Profile
+// Intelligence switch is NOT read. The mode decides (only Looking-for-work and
+// Technical Interview hydrate the profile) and the switch is hidden under V3,
+// so a stale OFF must not silently drop the résumé. The raw-text INDEX path
+// sees every active document.
 import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -43,20 +44,19 @@ function orchestrator({ switchOn }) {
 
 afterEach(() => { delete globalThis[PRO_KEY]; });
 
-describe('V3 profile hydration honours the Profile Intelligence switch (F-BND-01)', () => {
+describe('V3 profile hydration ignores the hidden Profile Intelligence switch (owner 2026-11-14)', () => {
   test('switch ON + Pro: résumé and JD are served', () => {
     globalThis[PRO_KEY] = () => true;
     const c = collectV3ProfileSources(orchestrator({ switchOn: true }));
     assert.deepEqual(c.docs.map((d) => d.kind).sort(), ['jd', 'resume']);
   });
 
-  test('switch OFF: no résumé or JD reaches V3', () => {
+  test('switch OFF + Pro: résumé and JD are still served (the mode decides)', () => {
     globalThis[PRO_KEY] = () => true;
     const c = collectV3ProfileSources(orchestrator({ switchOn: false }));
-    assert.equal(c.docs.filter((d) => d.kind === 'resume' || d.kind === 'jd').length, 0,
-      'the résumé / JD was served with Profile Intelligence switched off');
-    assert.equal(c.counts.profileResume, 0);
-    assert.equal(c.counts.profileJd, 0);
+    assert.deepEqual(c.docs.filter((d) => d.kind === 'resume' || d.kind === 'jd').map((d) => d.kind).sort(), ['jd', 'resume']);
+    assert.equal(c.counts.profileResume, 1);
+    assert.equal(c.counts.profileJd, 1);
   });
 });
 
@@ -79,7 +79,9 @@ describe('the raw-text index still sees the active documents', () => {
 describe('the WTA profile snapshot and JIT fallback use the same read gate (F-BND-05)', async () => {
   const { readFileSync } = await import('node:fs');
   const ie = readFileSync(path.resolve(process.cwd(), 'electron/IntelligenceEngine.ts'), 'utf8');
-  test('snapshot facts are null when the orchestrator says the profile may not be read', () => {
+  test('snapshot facts are null when Pro says the profile may not be read', () => {
+    assert.match(ie, /const \{ profileReadableForAnswers \} = require\('\.\/services\/knowledge\/v3ProfileSources'\);/);
+    assert.doesNotMatch(ie.slice(ie.indexOf('const snapshotProfileReadable'), ie.indexOf('const snapshotProfileReadable') + 600), /isKnowledgeMode/);
     assert.match(ie, /const snapshotReadableKnowledge = snapshotProfileReadable \? snapshotKnowledge : null;/);
     assert.match(ie, /const snapshotProfileFacts = stripUnsupportedDerivedResumeFields\(\s*\(snapshotReadableKnowledge as any\)/);
     assert.match(ie, /const snapshotJobDescriptionFacts = \(snapshotReadableKnowledge as any\)/);
