@@ -573,6 +573,14 @@ function emergencyCloseDatabase(reason: string): void {
 // sockets failing in the same tick) and only the first may act.
 let _fatalMainProcess: FatalMainProcessCoordinator | null = null;
 function terminateAfterFatalError(reason: string, exitCode: number): void {
+  // 2026-11-14: every fatal exit tells the next launch it was one (app_run_ended
+  // 'crash'). The give-ups (renderer crash loop, rejection loop, a failed
+  // startup) exit through app.exit(), which skips before-quit, and used to
+  // leave no reason at all.
+  try {
+    const { LifecycleTracker } = require('./utils/lifecycleTracker');
+    LifecycleTracker.getInstance().markFatal(reason);
+  } catch { /* best-effort */ }
   if (!_fatalMainProcess) {
     _fatalMainProcess = new FatalMainProcessCoordinator({
       closeDatabase: (why) => emergencyCloseDatabase(why),
@@ -766,8 +774,19 @@ function resetStartupLog(): void {
   } catch { /* best-effort */ }
 }
 
+let _priorLogWriteNoted = false;
 function logToFile(msg: string) {
   try {
+    // 2026-11-14: before this process writes anything, note when the log was
+    // last written: the previous run's last sign of life, which app_run_ended
+    // uses (LifecycleTracker.notePriorLogWrite). Must come before the reset
+    // below, which truncates or rotates the file.
+    if (!_priorLogWriteNoted) {
+      _priorLogWriteNoted = true;
+      let mtimeMs: number | null = null;
+      try { const f = getLogFile(); if (f) mtimeMs = fs.statSync(f).mtimeMs; } catch { /* no log yet */ }
+      try { require('./utils/lifecycleTracker').LifecycleTracker.getInstance().notePriorLogWrite(mtimeMs); } catch { /* best-effort */ }
+    }
     // Lazy: reset the log exactly once per process, on the very first write.
     // We reset on first write (not at module load) because getLogFile() may
     // need app.whenReady() to resolve a stable userData path, AND because the

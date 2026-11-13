@@ -23,7 +23,7 @@
 //      (the marker is a few short fields; the lifecycle log lines are
 //      deliberately small).
 
-import { app, BrowserWindow, WebContents, utilityProcess } from 'electron';
+import { app, BrowserWindow, WebContents, utilityProcess, powerMonitor } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -39,6 +39,7 @@ export type QuitReason =
   | 'window-close'            // window-all-closed (non-darwin only; darwin stays running)
   | 'updater-quit-install'    // autoUpdater.quitAndInstall (we ONLY land here for real upgrades)
   | 'manual-relaunch'         // app.relaunch() from a self-update path
+  | 'app-restart'             // 2026-11-14: app.relaunch() + app.exit(0) ("Restart now"), which skips before-quit
   | 'fatal-main-error'        // uncaughtException or unhandledRejection forced exit
   // The next three are kept for markers written by older builds. A process
   // dying no longer sets the quit reason (see `noteIncident`); it is kept in
@@ -48,9 +49,25 @@ export type QuitReason =
   | 'gpu-process-crashed'     // gpu-process-crashed
   | 'second-instance'         // duplicate instance lock fired → we asked user to focus
   | 'os-signal'               // SIGTERM / SIGINT (graceful) or SIGKILL (logged, not caught)
+  // 2026-11-14: the OS is shutting down, restarting or logging the user off
+  // (Windows: a window's 'session-end'; macOS: powerMonitor 'shutdown').
+  | 'os-shutdown'
   | 'unknown';
 
-interface LifecycleMarker {
+/**
+ * Processes the app survived during a session, counted by kind. Only real
+ * failures count (see CRASH_REASONS), and only before a quit began: windows
+ * closing their renderers during a quit are not crashes.
+ */
+export interface ProcessCrashCounts {
+  renderer: number;
+  gpu: number;
+  helper: number;
+  /** How many of the above ran out of memory (oom / memory-eviction). */
+  oom: number;
+}
+
+export interface LifecycleMarker {
   pid: number;
   startedAt: string;          // ISO
   lastEvent: string;          // last lifecycle event name
@@ -62,7 +79,24 @@ interface LifecycleMarker {
    * running. Diagnostic only: it never decides whether the session crashed.
    */
   lastIncident?: { event: string; at: string; meta?: Record<string, unknown> };
+  // Added 2026-11-14 (absent from markers written by older builds):
+  /** The app version that wrote this marker. */
+  version?: string;
+  /** Refreshed every few minutes while the app runs: its last sign of life. */
+  aliveAt?: string;
+  crashes?: ProcessCrashCounts;
 }
+
+/** `render-process-gone` / `child-process-gone` reasons that are failures. */
+export const CRASH_REASONS: ReadonlySet<string> = new Set([
+  'crashed', 'oom', 'abnormal-exit', 'launch-failed', 'integrity-failure', 'memory-eviction',
+]);
+const OOM_REASONS: ReadonlySet<string> = new Set(['oom', 'memory-eviction']);
+
+/** How often a running app refreshes `aliveAt` on its marker. */
+export const HEARTBEAT_MS = 5 * 60_000;
+/** A Windows shutdown asked about but not followed through within this is taken as called off. */
+export const SHUTDOWN_CANCEL_MS = 2 * 60_000;
 
 /**
  * Process deaths the app survives. A renderer, utility or GPU process dying
@@ -100,6 +134,26 @@ export class LifecycleTracker {
   // whole point of the pre-whenReady call.
   private beforeReadyInstalled = false;
   private consoleLog: LogFn | undefined;
+  /**
+   * The previous session's marker, read once by install() BEFORE this session
+   * writes its own. undefined until then (readPreviousSessionMarker reads the
+   * file live until install() has run).
+   */
+  private previous: LifecycleMarker | null | undefined = undefined;
+  /** A quit has begun: process deaths from here on are windows closing, not crashes. */
+  private quitting = false;
+  private heartbeat: NodeJS.Timeout | null = null;
+  /**
+   * Windows asked whether the session may end ('query-session-end') and
+   * 'session-end' has not followed yet: the quit reason is 'os-shutdown' for
+   * now, and `before` is what it was.
+   */
+  private pendingShutdown: {
+    before: { reason: QuitReason | null; meta?: Record<string, unknown> };
+    timer: NodeJS.Timeout;
+  } | null = null;
+  /** When the debug log was last written before this process first wrote to it (ms), or null. */
+  private priorLogWriteAt: number | null | undefined = undefined;
 
   private constructor() {
     this.marker = {
@@ -108,15 +162,35 @@ export class LifecycleTracker {
       lastEvent: 'app-start',
       lastEventAt: new Date().toISOString(),
       quitReason: null,
+      crashes: { renderer: 0, gpu: 0, helper: 0, oom: 0 },
     };
+    try { this.marker.version = app.getVersion(); } catch { /* stub or too early */ }
   }
 
-  /** Wire all lifecycle handlers. Idempotent — second call is a no-op. */
-  install(consoleLog?: LogFn): void {
+  /**
+   * Wire all lifecycle handlers. Idempotent — second call is a no-op.
+   *
+   * @param platform injectable for tests; decides how an OS shutdown is heard
+   *        (Windows: each window's 'session-end'; macOS and Linux: powerMonitor 'shutdown').
+   */
+  install(consoleLog?: LogFn, platform: NodeJS.Platform = process.platform): void {
     if (this.installed) return;
     this.installed = true;
     // Allow installBeforeReady to have set consoleLog earlier (pre-whenReady).
     this.consoleLog = consoleLog ?? this.consoleLog;
+
+    // 2026-11-14: keep the previous session's marker, THEN write this one's.
+    // Before this, a session wrote nothing until it quit or something died, so
+    // a session that vanished without a word (a native crash, a force quit, a
+    // power cut) left the session before it on disk, and the next launch read
+    // that one's 'clean-exit' and reported no crash.
+    this.previous = this.readMarkerFile();
+    try { this.writeMarker(); } catch { /* best-effort */ }
+    this.heartbeat = setInterval(() => {
+      this.marker.aliveAt = new Date().toISOString();
+      try { this.writeMarker(); } catch { /* best-effort */ }
+    }, HEARTBEAT_MS);
+    this.heartbeat.unref?.();
 
     // Helper that logs + persists in one place. Never logs secrets.
     const record = (event: string, reason?: QuitReason, meta?: Record<string, unknown>) => {
@@ -159,11 +233,27 @@ export class LifecycleTracker {
     });
 
     app.on('window-all-closed', () => {
+      // macOS keeps running with no windows: closing them is not a quit, and
+      // labelling it one made a later crash read as a quit (2026-11-14).
+      if (platform === 'darwin') { record('window-all-closed'); return; }
+      this.takeBackPendingShutdown('session-end-cancelled-by-quit', record);
       // Already handled elsewhere — but tag it so the log explains the quit.
-      record('window-all-closed', 'window-close');
+      // Not over a more specific reason: on a Windows shutdown 'session-end'
+      // comes first and the windows close after it.
+      if (!this.marker.quitReason || this.marker.quitReason === 'user-quit') {
+        record('window-all-closed', 'window-close');
+      } else {
+        record('window-all-closed', this.marker.quitReason, this.marker.quitMeta);
+      }
     });
 
     app.on('before-quit', (event) => {
+      // A quit while Windows has only asked about ending the session: the
+      // shutdown was called off (during a real one Windows ends the process
+      // after 'session-end' and no quit runs first), and this quit is the
+      // user's. If 'session-end' still follows, it marks the shutdown again.
+      this.takeBackPendingShutdown('session-end-cancelled-by-quit', record);
+      this.quitting = true;
       // Don't overwrite a more specific reason (e.g. updater-quit-install).
       if (!this.marker.quitReason) {
         record('before-quit', 'user-quit');
@@ -172,7 +262,16 @@ export class LifecycleTracker {
       }
     });
 
+    // Counted before noteIncident writes the marker, so the count is on disk with it.
+    const countCrash = (kind: 'renderer' | 'gpu' | 'helper', reason: unknown) => {
+      if (this.quitting || typeof reason !== 'string' || !CRASH_REASONS.has(reason)) return;
+      const c = (this.marker.crashes ||= { renderer: 0, gpu: 0, helper: 0, oom: 0 });
+      c[kind] += 1;
+      if (OOM_REASONS.has(reason)) c.oom += 1;
+    };
+
     app.on('render-process-gone', (event, webContents: WebContents, details: Electron.RenderProcessGoneDetails) => {
+      countCrash('renderer', details?.reason);
       noteIncident(
         'render-process-gone',
         {
@@ -185,6 +284,7 @@ export class LifecycleTracker {
     });
 
     app.on('child-process-gone', (event, details: Electron.Details) => {
+      countCrash(details?.type === 'GPU' ? 'gpu' : 'helper', details?.reason);
       noteIncident(
         'child-process-gone',
         {
@@ -203,6 +303,53 @@ export class LifecycleTracker {
     app.on('gpu-process-crashed' as any, (event: Electron.Event, killed: boolean) => {
       noteIncident('gpu-process-crashed', { killed });
     });
+
+    // 2026-11-14: an OS shutdown, restart or log-off. Without this it read as a
+    // user quit at best (macOS sends the app a quit), and on Windows, where the
+    // session can end before 'before-quit' runs, as a session that vanished.
+    //
+    // `tentative`: Windows asks first (WM_QUERYENDSESSION, 'query-session-end')
+    // and the shutdown can still be called off (another app holds it up, the
+    // user cancels). It is recorded at once, the earliest moment there is, in
+    // case Windows ends the process before 'session-end' is handled; if the app
+    // is still running SHUTDOWN_CANCEL_MS later with no quit begun, the label
+    // is taken back.
+    const osShutdown = (source: string, meta?: Record<string, unknown>, tentative = false) => {
+      if (this.marker.quitReason === 'updater-quit-install') return;
+      if (!tentative) {
+        // Confirmed: nothing takes it back now.
+        this.clearPendingShutdown();
+        this.quitting = true;
+        if (this.marker.quitReason !== 'os-shutdown') record(source, 'os-shutdown', meta);
+        return;
+      }
+      if (this.marker.quitReason === 'os-shutdown') return; // every window is asked; once is enough
+      const before = { reason: this.marker.quitReason, meta: this.marker.quitMeta };
+      record(source, 'os-shutdown', meta);
+      const timer = setTimeout(() => this.takeBackPendingShutdown('session-end-cancelled', record), SHUTDOWN_CANCEL_MS);
+      timer.unref?.();
+      this.pendingShutdown = { before, timer };
+    };
+    if (platform === 'win32') {
+      // Both are BrowserWindow events; every window gets them.
+      const reasonsOf = (e: any) => ({
+        reasons: Array.isArray(e?.reasons) ? e.reasons.filter((r: unknown) => typeof r === 'string').slice(0, 4) : [],
+      });
+      app.on('browser-window-created', (_event, win: BrowserWindow) => {
+        try {
+          win.on('query-session-end' as any, (e: any) => osShutdown('query-session-end', reasonsOf(e), true));
+          win.on('session-end', (e: any) => osShutdown('session-end', reasonsOf(e)));
+        } catch { /* best-effort */ }
+      });
+    } else if (platform === 'darwin' || platform === 'linux') {
+      // powerMonitor can only be used once the app is ready. Never preventDefault:
+      // the app does not hold up a shutdown.
+      try {
+        app.whenReady?.().then(() => {
+          try { powerMonitor?.on?.('shutdown', () => osShutdown('power-shutdown')); } catch { /* best-effort */ }
+        }).catch(() => { /* best-effort */ });
+      } catch { /* best-effort */ }
+    }
 
     // NOTE: OS-level signals (SIGTERM/SIGINT/SIGHUP), uncaughtException, and
     // unhandledRejection are wired by `installBeforeReady()` (callable from
@@ -255,10 +402,18 @@ export class LifecycleTracker {
       });
     });
 
+    // 2026-11-14: a rejection is survivable. main.ts keeps running after an
+    // isolated one and exits only when they repeat (terminateAfterFatalError,
+    // which marks the run fatal itself). Setting the quit reason here made one
+    // stray rejection turn the session's later normal quit into a "crash".
     process.on('unhandledRejection', (reason) => {
-      record('unhandledRejection', 'fatal-main-error', {
-        reason: reason instanceof Error ? reason.message : String(reason),
-      });
+      const meta = sanitizeMeta({ reason: reason instanceof Error ? reason.message : String(reason) }) as Record<string, unknown>;
+      const at = new Date().toISOString();
+      instance.marker.lastEvent = 'unhandledRejection';
+      instance.marker.lastEventAt = at;
+      instance.marker.lastIncident = { event: 'unhandledRejection', at, meta };
+      try { instance.writeMarker(); } catch { /* best-effort */ }
+      instance.consoleLog?.('[Lifecycle] unhandledRejection (app keeps running; quit reason unchanged)', meta);
     });
 
     process.on('SIGTERM', () => record('SIGTERM', 'os-signal'));
@@ -280,6 +435,54 @@ export class LifecycleTracker {
     try { this.writeMarker(); } catch { /* best-effort */ }
     const safeMeta = meta ? sanitizeMeta(meta) as Record<string, unknown> : undefined;
     this.consoleLog?.(`[Lifecycle] quit-reason set reason=${reason}`, safeMeta);
+  }
+
+  /**
+   * The debug log's modification time as this process found it, before its
+   * first write (main.ts logToFile): the last moment a previous run wrote to
+   * it. Unlike the marker, every build writes the log, so this still tells
+   * the truth about a run of a build that left no marker of its own. Only the
+   * first call counts.
+   */
+  notePriorLogWrite(mtimeMs: number | null): void {
+    if (this.priorLogWriteAt !== undefined) return;
+    this.priorLogWriteAt = typeof mtimeMs === 'number' && Number.isFinite(mtimeMs) ? mtimeMs : null;
+  }
+
+  getPriorLogWrite(): number | null {
+    return this.priorLogWriteAt ?? null;
+  }
+
+  private clearPendingShutdown(): void {
+    if (!this.pendingShutdown) return;
+    clearTimeout(this.pendingShutdown.timer);
+    this.pendingShutdown = null;
+  }
+
+  /** A shutdown Windows asked about did not happen: put the quit reason back. */
+  private takeBackPendingShutdown(event: string, record: (event: string) => void): void {
+    const pending = this.pendingShutdown;
+    if (!pending) return;
+    this.clearPendingShutdown();
+    if (this.marker.quitReason !== 'os-shutdown') return;
+    this.marker.quitReason = pending.before.reason;
+    this.marker.quitMeta = pending.before.meta;
+    record(event);
+  }
+
+  /** The app is about to restart itself (app.relaunch + app.exit, which skips before-quit). */
+  markRestart(source: string): void {
+    this.quitting = true;
+    this.setQuitReason('app-restart', { source: String(source).slice(0, 80) });
+  }
+
+  /**
+   * The main process is about to exit on a fatal error. Keeps a fatal reason
+   * already set (an uncaughtException records its own, with the message).
+   */
+  markFatal(source: string): void {
+    if (this.marker.quitReason === 'fatal-main-error') return;
+    this.setQuitReason('fatal-main-error', { source: String(source).slice(0, 80) });
   }
 
   /**
@@ -320,6 +523,13 @@ export class LifecycleTracker {
    * cross-launch detection.
    */
   readPreviousSessionMarker(): LifecycleMarker | null {
+    // After install() this session has written its own marker over the file;
+    // the previous one is the copy install() kept.
+    if (this.previous !== undefined) return this.previous;
+    return this.readMarkerFile();
+  }
+
+  private readMarkerFile(): LifecycleMarker | null {
     let file: string | null = null;
     try {
       file = path.join(app.getPath('userData'), 'lifecycle-marker.json');
@@ -349,6 +559,8 @@ export class LifecycleTracker {
    *   - manual-relaunch   — app.relaunch() from a self-update path
    *   - second-instance   — duplicate-instance lock fired
    *   - os-signal         — caught SIGTERM/SIGINT/SIGHUP (graceful shutdown)
+   *   - os-shutdown       — the OS shut down, restarted or logged off
+   *   - app-restart       — the app restarted itself ("Restart now")
    *
    * Anything else (renderer-gone, child-process-gone, gpu-process-crashed,
    * fatal-main-error, unknown) IS a crash signal — surface the warning.
@@ -369,6 +581,8 @@ export class LifecycleTracker {
       'manual-relaunch',
       'second-instance',
       'os-signal',
+      'os-shutdown',
+      'app-restart',
     ]);
     return !NON_CRASH_REASONS.has(prev.quitReason);
   }

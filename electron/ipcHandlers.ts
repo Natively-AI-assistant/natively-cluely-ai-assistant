@@ -7633,6 +7633,9 @@ export function initializeIpcHandlers(appState: AppState): void {
   // already-running process until the app is relaunched.
   safeHandle('restart-app', () => {
     console.log('[IPC] restart-app requested');
+    // app.exit skips before-quit: say it was a restart, or the next launch
+    // reads this run as one that vanished (app_run_ended).
+    try { require('./utils/lifecycleTracker').LifecycleTracker.getInstance().markRestart('restart-app'); } catch { /* best-effort */ }
     app.relaunch();
     app.exit(0);
   });

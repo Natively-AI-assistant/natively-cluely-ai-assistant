@@ -54,13 +54,14 @@ const fire = (event, ...args) => { for (const fn of handlers[event] || []) fn(..
 const webContents = { id: 9, getURL: () => 'http://127.0.0.1:5173/?window=launcher' };
 
 /** A fresh tracker in a fresh userData dir, as at app start. */
-function freshSession() {
+function freshSession(platform = 'darwin') {
   userData = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-lifecycle-'));
   handlers = {};
   LifecycleTracker.instance = null; // private static; reset for each session
   const tracker = LifecycleTracker.getInstance();
   const lines = [];
-  tracker.install((msg) => lines.push(msg));
+  // Platform injected (2026-11-14): window-all-closed means a quit on Windows only.
+  tracker.install((msg) => lines.push(msg), platform);
   return { tracker, lines };
 }
 
@@ -70,7 +71,19 @@ function nextLaunchSaysCrashed() {
   const marker = JSON.parse(fs.readFileSync(file, 'utf8'));
   marker.pid = process.pid + 1;
   fs.writeFileSync(file, JSON.stringify(marker));
-  return { crashed: LifecycleTracker.getInstance().didPreviousSessionCrash(), marker };
+  return { crashed: nextLaunch().didPreviousSessionCrash(), marker };
+}
+
+/**
+ * A new launch over the same userData. Since 2026-11-14 install() keeps the
+ * previous marker before writing its own, so the next launch must install.
+ */
+function nextLaunch() {
+  handlers = {};
+  LifecycleTracker.instance = null;
+  const t = LifecycleTracker.getInstance();
+  t.install(() => {});
+  return t;
 }
 
 const killedRenderer = () => fire('render-process-gone', {}, webContents, { reason: 'killed', exitCode: 15 });
@@ -102,7 +115,7 @@ test('a renderer killed mid-session no longer labels a later Cmd+Q (macOS sequen
 });
 
 test('renderers exiting while the last window closes do not turn a normal quit into a crash (Windows sequence)', () => {
-  const { tracker } = freshSession();
+  const { tracker } = freshSession('win32');
   fire('window-all-closed');
   fire('before-quit', {});
   killedRenderer();
@@ -144,7 +157,7 @@ test('a marker written by an older build with quitReason renderer-gone still rea
   fs.writeFileSync(path.join(userData, 'lifecycle-marker.json'), JSON.stringify({
     pid: process.pid + 1, startedAt: 'x', lastEvent: 'clean-exit', lastEventAt: 'x', quitReason: 'renderer-gone',
   }));
-  assert.equal(LifecycleTracker.getInstance().didPreviousSessionCrash(), true);
+  assert.equal(nextLaunch().didPreviousSessionCrash(), true);
 });
 
 test('the startup warning names the last incident', () => {
