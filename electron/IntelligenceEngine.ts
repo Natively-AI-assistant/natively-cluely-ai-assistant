@@ -3630,7 +3630,8 @@ export class IntelligenceEngine extends EventEmitter {
                                 // auto-open with a candidate self-introduction.
                                 // _c3TurnPlan is computed above in the same
                                 // try block; null-safe here.
-                                seedCandidateBackground: (_c3TurnPlan?.answerDirectives?.seedCandidateBackground ?? true),
+                                // F-ACC-12: a failed plan does not seed (was `?? true`).
+                                seedCandidateBackground: (_c3TurnPlan?.answerDirectives?.seedCandidateBackground ?? false),
                             });
                             candidateProfile = `<profile_jit_evidence_request>\n${jit.userPrompt}\n</profile_jit_evidence_request>`;
                             trace.mark('repair_used', { reason: 'identity_jit_evidence_grounding', evidenceItems: evidence.items.length, promptChars: jit.promptChars });

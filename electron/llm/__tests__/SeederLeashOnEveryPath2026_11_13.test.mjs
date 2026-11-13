@@ -24,6 +24,8 @@ describe('seedsCandidateBackground is the TurnPlanner leash', () => {
     ['How does a B-tree split a node?', undefined],
     ['Write a function that reverses a list', undefined],
     ['what does the job description say about on-call?', undefined],
+    ['What did you do for the Debate Society?', 'project_followup_answer'],
+    ['Why should we hire you?', 'jd_fit_answer'],
   ];
   for (const [question, answerType] of cases) {
     test(`agrees with planTurn for "${question}"`, () => {
@@ -37,6 +39,10 @@ describe('seedsCandidateBackground is the TurnPlanner leash', () => {
   test('a salary question and a general technical question never seed', () => {
     assert.equal(seedsCandidateBackground({ question: "What's your salary expectation?", answerType: 'negotiation_answer' }), false);
     assert.equal(seedsCandidateBackground({ question: 'How does a B-tree split a node?' }), false);
+  });
+  test('profile and fit questions still seed (with the planner answerType)', () => {
+    assert.equal(seedsCandidateBackground({ question: 'What did you do for the Debate Society?', answerType: 'project_followup_answer' }), true);
+    assert.equal(seedsCandidateBackground({ question: 'Why should we hire you?', answerType: 'jd_fit_answer' }), true);
   });
   test('never throws; a bad input does not seed', () => {
     assert.equal(seedsCandidateBackground(null), false);
@@ -52,6 +58,6 @@ describe('every seeder site is leashed (source pins)', () => {
   const ko = path.join(root, 'premium/electron/knowledge/KnowledgeOrchestrator.ts');
   test('premium zero-node seeder asks the same leash', { skip: !fs.existsSync(ko) && 'premium absent (OSS build)' }, () => {
     const src = fs.readFileSync(ko, 'utf8');
-    assert.match(src, /relevantNodes\.length === 0 && !wantsPreciseValue && this\.activeResume\.structured_data\s*&& seedsCandidateBackground\(\{ question/);
+    assert.match(src, /relevantNodes\.length === 0 && !wantsPreciseValue && this\.activeResume\.structured_data\s*&& seedsCandidateBackground\(\{ question, answerType:/);
   });
 });
