@@ -12,11 +12,13 @@ test('ok needs no help', () => {
     assert.equal(linuxInputAccessHelp('ok'), null);
 });
 
-test('permission-denied names the group fix, never asks the app to use sudo itself', () => {
+test('permission-denied recommends the narrow udev rule first, then the group with its risk', () => {
     const t = linuxInputAccessHelp('permission-denied', 'ada');
+    assert.ok(t.indexOf('udev') < t.indexOf('usermod'), 'udev rule is presented first');
     assert.match(t, /usermod -aG input ada/);
+    assert.match(t, /EVERY process.*keylogger-equivalent/s);
+    assert.match(t, /never runs these commands or uses sudo/);
     assert.match(t, /log out/i);
-    assert.match(t, /never runs as root/);
 });
 
 test('no-devices and unknown states each get their own message', () => {

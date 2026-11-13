@@ -11,10 +11,21 @@ const MARK = 'NATIVELY_WM';
  * the list and we read it back from the user journal (the only channel a
  * script has without our own D-Bus service). Needs: busctl, journalctl, and
  * read access to the user journal (default for a desktop user).
+ *
+ * LIMITS of this channel: whatever the script prints is written to the user
+ * journal and kept for journald's retention, readable by anything running as
+ * the user. So the dump carries only what meeting detection needs: pid and
+ * class for every window, and the TITLE only for browsers (a meeting tab's
+ * title is the only title it reads). Other windows' titles never reach the
+ * journal. A real fix is our own D-Bus service for the script to call; until
+ * then the poller (index.ts) also reads on demand, not on a timer.
  */
+export const BROWSER_CLASS = /chrom|firefox|brave|edge|vivaldi|opera|zen|librewolf|falkon|epiphany|floorp/i;
+
 export function dumpScript(nonce: string): string {
-    return `var l = workspace.windowList().filter(function (w) { return w.normalWindow; })
-    .map(function (w) { return { pid: w.pid, title: w.caption, cls: w.resourceClass }; });
+    return `var browser = ${BROWSER_CLASS.toString()};
+var l = workspace.windowList().filter(function (w) { return w.normalWindow; })
+    .map(function (w) { return { pid: w.pid, title: browser.test(w.resourceClass) ? w.caption : "", cls: w.resourceClass }; });
 print(${JSON.stringify(`${MARK} ${nonce} `)} + JSON.stringify(l));`;
 }
 

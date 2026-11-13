@@ -28,6 +28,8 @@ import { decideLauncherClose } from '../src/lib/launcherCloseDecision.mjs';
 import { DEV_SERVER_URL } from './devServerUrl';
 import { shortcutRestoreBounds, shortcutRestoreDisplay } from './utils/shortcutRestore';
 import { createLinuxWm } from './services/linuxWm';
+import { pinTitle } from './services/linuxWm/types';
+import { randomBytes } from 'node:crypto';
 
 const isEnvDev = process.env.NODE_ENV === 'development';
 const isPackaged = app.isPackaged;
@@ -1726,9 +1728,19 @@ export class WindowHelper {
     if (!wm) return;
     win.webContents.once('did-finish-load', () => {
       if (win.isDestroyed()) return;
-      wm.setAlwaysOnTop(process.pid, win.getTitle())
-        .then((ok) => console.log(`[WindowHelper] ${wm.name} always-on-top ${ok ? 'applied' : 'not applied'}`))
-        .catch((e) => console.warn('[WindowHelper] compositor always-on-top failed:', e));
+      // Every Natively window shares one title and pid, so match this one by a
+      // title that exists only for this call, then put the real title back.
+      // keepAbove/sticky stay on the window after the title changes back.
+      const original = win.getTitle();
+      const marker = pinTitle(original, randomBytes(6).toString('hex'));
+      win.setTitle(marker);
+      setTimeout(() => {
+        if (win.isDestroyed()) return;
+        wm.setAlwaysOnTop(process.pid, marker)
+          .then((ok) => console.log(`[WindowHelper] ${wm.name} always-on-top ${ok ? 'applied' : 'not applied'}`))
+          .catch((e) => console.warn('[WindowHelper] compositor always-on-top failed:', e))
+          .finally(() => { if (!win.isDestroyed()) win.setTitle(original); });
+      }, 300); // let the compositor see the new title
     });
   }
 
