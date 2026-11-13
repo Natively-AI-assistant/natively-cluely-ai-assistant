@@ -65,11 +65,16 @@ describe('decide(): the plan makes room for the whole pack on a turn that retrie
     const baseTokens = Math.max(MODE_POLICIES['call-center'].contextBudget.evidenceTokens, MULTI_FILE_EVIDENCE.tokens);
     assert.ok((d.retrievalPlan.evidenceTokens ?? 0) >= baseTokens + PACK_TOKENS + WHOLE_PACK_ITEM_OVERHEAD * PACK.length, String(d.retrievalPlan.evidenceTokens));
   });
-  test('a pack larger than the threshold changes nothing in the plan', () => {
+  // 2026-11-13 (F-LAT-09): reversed. A pack past the threshold used to get no
+  // room at all, so the prompt FELL as a pack grew past it (a 60k-character file
+  // cost more per turn than a 154k one). It is now retrieved with an evidence
+  // budget of the whole-pack size (PackPromptGrowsSmoothly2026_11_13).
+  test('a pack larger than the threshold is retrieved with the whole-pack-size budget, not the bare policy budget', () => {
     const big = decide(req('call-center', Q, { attachedCorpusTokens: WHOLE_PACK_MAX_TOKENS + 1 }));
     const none = decide(req('call-center', Q, { attachedCorpusTokens: null }));
-    assert.equal(big.retrievalPlan.maximumAcceptedEvidence, none.retrievalPlan.maximumAcceptedEvidence);
-    assert.equal(big.retrievalPlan.evidenceTokens, none.retrievalPlan.evidenceTokens);
+    assert.ok(big.retrievalPlan.evidenceTokens >= WHOLE_PACK_MAX_TOKENS, String(big.retrievalPlan.evidenceTokens));
+    assert.ok(big.retrievalPlan.evidenceTokens > (none.retrievalPlan.evidenceTokens ?? 0));
+    assert.ok(big.retrievalPlan.maximumAcceptedEvidence >= none.retrievalPlan.maximumAcceptedEvidence);
   });
   test('a small corpus keeps exactly the plan it had', () => {
     const d = decide(req('team-meet', "What's the crash-free bar?", { attachedSourceCount: 1, attachedCorpusTokens: 180 }));
@@ -103,7 +108,7 @@ describe('orchestrate(): every file of the pack reaches the evidence, and the re
   });
   test('a pack past the threshold goes through the retriever as before', async () => {
     const calls = { n: 0 };
-    const files = PACK.map((f) => ({ ...f, content: f.content + filler(120) })); // ~44,000 tokens (the threshold is 24,000 since 2026-10-09)
+    const files = PACK.map((f) => ({ ...f, content: f.content + filler(120) })); // ~44,000 tokens (the threshold is 10,000 since 2026-11-13)
     assert.equal(isWholePackCorpus(files), false);
     await orchestrate(req('call-center', Q, { attachedCorpusTokens: referenceCorpusTokens(files) }), mk(files, calls));
     assert.ok(calls.n >= 1);

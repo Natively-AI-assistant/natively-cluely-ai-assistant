@@ -18,7 +18,7 @@
 
 import type { TurnDecision, EvidenceItem } from '../contracts/types';
 import type { ModePolicy } from '../policies/mode-policy-registry';
-import { packContext, type PackBudget, type PackedContext } from './context-packer';
+import { packContext, estimateTokens, type PackBudget, type PackedContext } from './context-packer';
 import { scopeLabels } from '../policies/provider-scope-policy';
 import {
   analyzeUserInstructions,
@@ -1567,8 +1567,15 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
   // An exhaustive request carries a tripled evidence cap on its plan; the
   // token budget must grow with it or the extra chunks are dropped here.
   const exhaustive = d.retrievalPlan.exhaustive === true;
+  // UNUSED ROOM FLOWS TO THE EVIDENCE (F-CTX-14, 2026-11-13). The mode declares
+  // a conversation and a transcript budget, and the conversation section
+  // (history plus the live speech window) is cut to them upstream. Whatever it
+  // leaves unused was simply lost, while evidence that did not fit was dropped.
+  // The total stays within the mode's declared budgets.
+  const conversationRoom = Math.max(0, (policy.contextBudget.conversationTokens ?? 0) + (policy.contextBudget.transcriptTokens ?? 0));
+  const unusedConversation = Math.max(0, conversationRoom - estimateTokens(input.conversationSummary ?? ''));
   const budget: PackBudget = {
-    evidenceTokens: (d.retrievalPlan.evidenceTokens ?? policy.contextBudget.evidenceTokens) * (exhaustive ? 3 : 1),
+    evidenceTokens: (d.retrievalPlan.evidenceTokens ?? policy.contextBudget.evidenceTokens) * (exhaustive ? 3 : 1) + unusedConversation,
     conversationTokens: policy.contextBudget.conversationTokens,
     transcriptTokens: policy.contextBudget.transcriptTokens,
   };
@@ -1726,7 +1733,13 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
       // it assistant lines are never a source of facts; another answer padded
       // an earlier suggestion with a store it never named.
       ? push('conversation', '# Conversation so far. Assistant lines are prior generated output — for resolving references only, '
-        + 'never a source of facts. They are, however, the record of what YOU said: asked what you said, suggested or answered '
+        // F-CTX-05 (2026-11-13): "references" includes what a follow-up points
+        // to. The question line names it when the resolver could; this keeps
+        // the header from telling the model to distrust the one line that says
+        // which project "the second one" was.
+        + 'never a source of facts. Resolving a reference includes what a follow-up ("it", "that one", "the second one") '
+        + 'points to: the thing the latest assistant line named, unless the question says otherwise; facts about it still come from the evidence. '
+        + 'They are, however, the record of what YOU said: asked what you said, suggested or answered '
         + 'earlier, answer from those lines faithfully (not from what was later said aloud in the meeting, which may differ), and '
         + 'if they did not specify something, say so rather than filling it in. '
         + 'A "User:" line is what the user told you directly: facts they state there about their meeting, '

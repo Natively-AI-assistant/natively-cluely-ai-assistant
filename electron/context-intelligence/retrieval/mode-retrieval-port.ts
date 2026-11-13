@@ -349,8 +349,26 @@ export function isSmallReferenceCorpus(files: ReadonlyArray<{ content?: string |
 // instead of 8,000. 48,000 was measured too and is not safe: see X1 in the
 // benchmark log. The claim pass's cap (CLAIM_VERIFIER_MATERIAL_MAX_CHARS)
 // moves with this figure, so the pass still sees what the answer saw.
+//
+// 10,000 SINCE 2026-11-13 (F-LAT-09, live-pipeline forensics). At 24,000 the
+// prompt FELL as a pack grew past the threshold: a 60k-character file (15k
+// tokens) was read whole and put 85-92k characters in every answer prompt,
+// while a 154k-character file went through retrieval at the 1,600-2,400-token
+// evidence budget and cost 34-41k. A pack above this size is now retrieved
+// with an evidence budget of the SAME size (LARGE_PACK_EVIDENCE_TOKENS, see the
+// orchestrator), so a turn carries about min(pack, 10,000 tokens) of it at every
+// size: it grows with the pack, never steps down at the threshold, and stays
+// bounded. 10,000 keeps every 2,300-9,800-token benchmark pack above read
+// whole; packs between 10,000 and 24,000 (the 20,700-token measurement below)
+// trade whole-read recall for under half the prompt, retrieved at four to six
+// times the old budget.
 /** Whole-pack threshold, in the packer's estimateTokens units (~4 chars/token). */
-export const WHOLE_PACK_MAX_TOKENS = 24000;
+export const WHOLE_PACK_MAX_TOKENS = 10000;
+
+/** Evidence budget for a turn that retrieves from a pack LARGER than the whole-pack size: the same size, so there is no step at the threshold. */
+export const LARGE_PACK_EVIDENCE_TOKENS = WHOLE_PACK_MAX_TOKENS;
+/** Accepted-evidence floor for such a turn, so the budget can actually be filled with retrieved passages. */
+export const LARGE_PACK_ACCEPTED_EVIDENCE = 16;
 
 /**
  * What the prompt packer charges for one evidence item beyond its text: the

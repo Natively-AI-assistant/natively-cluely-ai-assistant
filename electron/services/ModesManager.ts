@@ -1901,7 +1901,10 @@ export class ModesManager {
                 if (hybridResult && !hybridResult.usedFallback && hybridResult.formattedContext) {
                     return hybridResult.formattedContext;
                 }
-                // Hybrid unavailable — fall back to lexical + identity block.
+                // Hybrid unavailable — fall back to the legacy lexical scorer
+                // (identity block included). Said plainly (F-ACC-06, 2026-11-13):
+                // this block is the legacy scorer's, not a hybrid one.
+                console.info(`[ModesManager] document-grounded retrieval is lexical-only this turn (${hybridResult?.degradedReason ?? 'no semantic arm'}); using the legacy lexical block`);
                 return this.buildRetrievedActiveModeContextBlock(
                     query, transcript, tokenBudget, answerType, excludeCustomContext, pinnedModeId, retrievalOptions,
                 );
