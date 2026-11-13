@@ -48,7 +48,8 @@ test('preferFast is NOT consulted without the flag — the ladder owns normal ca
 test('preferFast is load-bearing in source, so it cannot go vestigial again', () => {
   const src = fs.readFileSync(path.join(root, 'electron/LLMHelper.ts'), 'utf8');
   const i = src.indexOf('public async generateContentStructured');
-  const body = src.slice(i, i + 3000);
+  // 6000: F-BND-04 (2026-11-13) put the data-scope check ahead of the ladder.
+  const body = src.slice(i, i + 6000);
   assert.match(body, /opts\?\.preferFast[\s\S]{0,200}callFastModel/,
     'preferFast must reach callFastModel — it was previously a no-op behind `void opts`');
   assert.doesNotMatch(body, /void opts;/, 'the vestigial marker must be gone');
