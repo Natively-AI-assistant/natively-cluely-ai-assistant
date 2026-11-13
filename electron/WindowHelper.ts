@@ -926,7 +926,7 @@ export class WindowHelper {
     // BOTH desktop platforms now: macOS CGEventTap and the Windows
     // WH_KEYBOARD_LL hook route keystrokes through the same manager, so the
     // overlay must be the registered sink on Windows too.
-    if (process.platform === 'darwin' || process.platform === 'win32') {
+    if (process.platform === 'darwin' || process.platform === 'win32' || process.platform === 'linux') {
       try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');

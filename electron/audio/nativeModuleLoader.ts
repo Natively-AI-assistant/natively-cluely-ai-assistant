@@ -36,6 +36,9 @@ export interface NativeModule {
   // WH_KEYBOARD_LL hook needs no OS permission. Cheap; safe to poll to
   // drive UI state.
   isAccessibilityGranted?: () => boolean;
+  // Linux only: whether the stealth keyboard tap can read /dev/input (evdev):
+  // 'ok' | 'permission-denied' | 'no-devices'. isAccessibilityGranted() is its boolean.
+  linuxInputAccess?: () => string;
   // Windows-only: true when the active keyboard layout is a CJK IME
   // (Chinese/Japanese/Korean). The WH_KEYBOARD_LL hook swallows keystrokes
   // before IMM32/TSF can compose them, so stealth typing must be reported
