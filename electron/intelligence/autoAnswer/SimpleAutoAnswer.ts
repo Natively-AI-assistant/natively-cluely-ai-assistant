@@ -523,6 +523,12 @@ export class SimpleAutoAnswerEngine {
      * counts, so a stale stop from an earlier pause never promotes mid-speech.
      */
     private speechStartsSeen = false;
+    /**
+     * The voice detector reported a stop on a provider whose final comes only
+     * after the speech ended (REST, local whisper), and the interviewer has not
+     * started again since. A final that lands now closes the turn.
+     */
+    private stopAwaitsFinal = false;
     /** speakerId per interviewer final, when the STT diarizes. Keyed by normalized text. */
     private speakerByTurn = new Map<string, string>();
     private timer: ClockTimer | null = null;
@@ -641,6 +647,7 @@ export class SimpleAutoAnswerEngine {
         this.coveredBy = null;
         this.settledNegative = null;
         this.promotedInterim = null;
+        this.stopAwaitsFinal = false;
         this.bumpJudgeSeq('meeting_reset');
     }
     onMeetingStop(): void { this.reset(); }
@@ -686,12 +693,30 @@ export class SimpleAutoAnswerEngine {
     }
 
     /**
+     * The local voice detector saw the interviewer stop, on a provider that
+     * transcribes a segment only after it ends (REST uploads, local whisper;
+     * see acceptsLocalSpeechEndHint). The stop precedes the final, so it must
+     * not commit what is pending now (that would judge the turn without its
+     * last words). It confirms the final that FOLLOWS it instead: that final
+     * arms ENDPOINT_CONFIRM_MS rather than STABILITY_MS, as long as the
+     * interviewer has not started talking again (onLocalSpeechStart). Without
+     * voice-detector starts a resumption would be invisible, so the hint is
+     * not used. Pipeline forensics 2026-11-13, F-LAT-07.
+     */
+    onLocalSpeechEndBeforeFinal(): void {
+        if (!this.host.isEnabled()) return;
+        this.stopAwaitsFinal = true;
+        this.host.log?.(`[AutoAnswer:simple] voice stop before its final (${this.speechStartsSeen ? 'the next final closes the turn' : 'no speech starts seen: not used'})`);
+    }
+
+    /**
      * The local voice detector saw the interviewer start talking again. A stop
      * the stall cap was counting on is over: frozen text now means a slow
      * transcriber mid-speech, not a finished speaker. Only the stall cap reads this.
      */
     onLocalSpeechStart(): void {
         this.speechStartsSeen = true;
+        this.stopAwaitsFinal = false;
         this.localStopAt = 0;
         this.clearStallCap();
     }
@@ -757,7 +782,7 @@ export class SimpleAutoAnswerEngine {
             // growth keeps the call alive — its verdict is held for the quiet point.
             this.bumpJudgeSeq('final', !!this.inFlight && this.isInertExtension(this.inFlight.parts));
             this.lastInterviewerAt = now;
-            this.arm(STABILITY_MS);
+            this.arm(this.stopAwaitsFinal && this.speechStartsSeen ? ENDPOINT_CONFIRM_MS : STABILITY_MS);
             return;
         }
 
@@ -1394,6 +1419,7 @@ export class SimpleAutoAnswerEngine {
         this.stallAnswered = null;
         this.promotedInterim = null;
         this.speechStartsSeen = false;
+        this.stopAwaitsFinal = false;
         this.speakerByTurn.clear();
         this.lastJudgedKey = '';
         this.lastAnsweredText = null;
