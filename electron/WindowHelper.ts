@@ -352,7 +352,7 @@ export class WindowHelper {
    * use it.
    */
   public syncLauncherTaskbarForStealth(): void {
-    if (process.platform !== 'win32') return;
+    if (process.platform !== 'win32' && process.platform !== 'linux') return;
     const win = this.launcherWindow;
     if (!win || win.isDestroyed()) return;
     try {
@@ -988,6 +988,12 @@ export class WindowHelper {
       // visibleOnFullScreen above; Windows has no equivalent flag, so the level
       // itself is what controls fullscreen visibility. See issue #167.
       this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
+    } else if (process.platform === 'linux') {
+      // X11: stay above other windows (_NET_WM_STATE_ABOVE) and follow the user
+      // across virtual desktops, the Spaces behaviour macOS gets above. Wayland
+      // compositors ignore both requests; there the overlay is a normal window.
+      this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
+      this.overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     }
 
     this.overlayWindow.loadURL(`${startUrl}?window=overlay`).catch((e) => {

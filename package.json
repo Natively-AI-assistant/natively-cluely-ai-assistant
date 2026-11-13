@@ -30,6 +30,7 @@
     "app:build:signed": "node scripts/preflight-notary.cjs && npm run build && npm run typecheck:electron && npm run build:electron && cross-env NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native && node scripts/ensure-sharp-mac-deps.js && node scripts/ensure-napi-canvas-mac-deps.js && node scripts/ensure-node-llama-cpp-mac-deps.js && node scripts/ensure-sqlite-vec.js && npm run verify:packaged-local-assets && node scripts/package-app.js --config electron-builder.signed.cjs",
     "watch": "node scripts/build-electron.js --watch",
     "start": "npm run app:dev",
+    "app:build:linux": "npm run build && npm run typecheck:electron && npm run build:electron && npm run build:native && node scripts/ensure-sqlite-vec.js && node scripts/package-app.js --linux",
     "dist": "npm run app:build",
     "dist:signed": "npm run app:build:signed && node scripts/upload-release.mjs",
     "build:native": "node scripts/build-native.js",

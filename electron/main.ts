@@ -7,6 +7,7 @@
 // init_DatabaseManager() (which is what loads better-sqlite3).
 // ============================================================================
 import './nativeArchGate';
+import { isWaylandSession } from "./utils/linuxScreenshot";
 // Dev-only prompt recorder: must wrap fetch before any SDK client exists (inert unless NATIVELY_PROMPT_DEBUG=1, never when packaged).
 import './llm/promptDebug';
 // Pin the packaged userData to the historical "Natively" folder BEFORE any
@@ -134,6 +135,15 @@ try {
   // Never let the mitigation itself break boot. Worst case: Fontations stays
   // enabled and the (rare) font crash remains possible — the render-process-gone
   // auto-reload handler recovers it.
+}
+
+// Linux/Wayland: Chromium registers global shortcuts through the XDG
+// GlobalShortcuts portal (KDE, GNOME); without it globalShortcut.register()
+// silently does nothing on Wayland. X11 sessions keep the default path.
+// ozone-platform-hint lets Electron pick Wayland natively when the session is one.
+if (process.platform === 'linux') {
+  if (isWaylandSession()) app.commandLine.appendSwitch('enable-features', 'GlobalShortcutsPortal');
+  app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
 }
 
 /**
