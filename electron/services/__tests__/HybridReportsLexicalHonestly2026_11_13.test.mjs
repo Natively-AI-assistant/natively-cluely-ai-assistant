@@ -78,12 +78,24 @@ describe('no chunk has a vector yet: lexical, and it says so', () => {
 });
 
 describe('lexical by policy or failure: never reported as hybrid', () => {
-  test('local embedder, heard turn in a meeting, not document-grounded', async () => {
+  test('local embedder, forced keyword-only in a meeting, not document-grounded', async () => {
+    // Heard turns query the vectors since 2026-11-14; keyword-only is now the
+    // NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL=1 escape hatch.
+    process.env.NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL = '1';
+    try {
+      const { hr, embeds } = retriever('local');
+      const r = await ask(hr, file(SMALL), { meetingActive: true, rerankSurface: 'live' });
+      assert.equal(embeds.query, 0);
+      assert.equal(r.usedHybrid, false);
+      assert.equal(r.degradedReason, 'local_lexical');
+    } finally { delete process.env.NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL; }
+  });
+  test('local embedder, heard turn in a meeting: hybrid (owner 2026-11-14)', async () => {
     const { hr, embeds } = retriever('local');
     const r = await ask(hr, file(SMALL), { meetingActive: true, rerankSurface: 'live' });
-    assert.equal(embeds.query, 0, 'owner decision unchanged: no query embed on a heard turn');
-    assert.equal(r.usedHybrid, false);
-    assert.equal(r.degradedReason, 'local_lexical');
+    assert.ok(embeds.query > 0);
+    assert.equal(r.usedHybrid, true);
+    assert.equal(r.degradedReason, undefined);
   });
   test('the query embed throws, not document-grounded', async () => {
     const { hr } = retriever('natively', { queryThrows: true });

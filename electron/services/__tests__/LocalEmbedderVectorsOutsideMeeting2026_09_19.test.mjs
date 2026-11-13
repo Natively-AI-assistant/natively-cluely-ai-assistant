@@ -33,29 +33,30 @@ const ask = (hr, meetingActive, rerankSurface) => hr.retrieve({ query: 'how long
 
 describe('local provider', () => {
   // 2026-10-04 (owner's pick, E11 d): in a meeting a TYPED question queries the
-  // vectors; a heard turn keeps the July keyword search (and with it the awaited
-  // rerank, which the owner decided on 2026-10-03 to keep as it is).
+  // vectors. 2026-11-14 (owner, F-ACC-06 "make it hybrid"): heard turns too.
   test('meeting running, TYPED question → the vectors are queried', async () => {
     const { hr, embeds } = retriever('local');
     const r = await ask(hr, true, 'manual');
     assert.equal(r.usedHybrid, true); assert.ok(embeds.query > 0);
   });
-  test('meeting running, heard turn → lexical-only, no query embed (unchanged)', async () => {
+  test('meeting running, heard turn → the vectors are queried (hybrid)', async () => {
     const { hr, embeds } = retriever('local');
     const r = await ask(hr, true, 'live');
-    assert.equal(r.usedHybrid, false); assert.equal(embeds.query, 0);
+    assert.equal(r.usedHybrid, true); assert.ok(embeds.query > 0);
   });
-  test('UNKNOWN meeting state and surface → still lexical-only (conservative default)', async () => {
+  test('UNKNOWN meeting state and surface → the vectors are queried', async () => {
     const { hr, embeds } = retriever('local');
     const r = await ask(hr, undefined);
-    assert.equal(r.usedHybrid, false); assert.equal(embeds.query, 0);
+    assert.equal(r.usedHybrid, true); assert.ok(embeds.query > 0);
   });
-  test('the July hotfix can be forced back for typed questions too', async () => {
+  test('the July hotfix can still be forced back, for heard and typed turns', async () => {
     process.env.NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL = '1';
     try {
-      const { hr, embeds } = retriever('local');
-      const r = await ask(hr, true, 'manual');
-      assert.equal(r.usedHybrid, false); assert.equal(embeds.query, 0);
+      for (const surface of ['manual', 'live']) {
+        const { hr, embeds } = retriever('local');
+        const r = await ask(hr, true, surface);
+        assert.equal(r.usedHybrid, false); assert.equal(embeds.query, 0);
+      }
     } finally { delete process.env.NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL; }
   });
   test('explicitly NO meeting → the vectors are queried', async () => {

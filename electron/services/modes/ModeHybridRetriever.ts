@@ -1415,14 +1415,16 @@ export class ModeHybridRetriever {
         // (2026-09-19, owner's decision): only an EXPLICIT "no meeting" lifts it.
         if (meetingActive === false) return false;
         if (keylessManualRetrievalForcedLexical()) return true;
-        // IN A MEETING (2026-10-04, owner's pick "smart search for typed too"): a
-        // TYPED question queries the vectors. A heard turn keeps the keyword
-        // search it has had since July — with it the confidence gate reads
-        // "low" and the bundled rerank is awaited, which the owner decided on
-        // 2026-10-03 to keep as it is. Lifting the rule for every turn (the
-        // first version of this change) gave heard turns vector scores, the
-        // gate stopped firing, and the rerank stopped running on them.
-        return surface !== 'manual';
+        // IN A MEETING every turn queries the vectors (owner decision
+        // 2026-11-14, F-ACC-06): typed questions since 2026-10-04, heard turns
+        // now too, so a heard paraphrase ("how long do we keep raw data?")
+        // finds "retention window: 14 days". Accepted cost: with vector
+        // scores the confidence gate reads "low" less often, so the bundled
+        // rerank (~0.5 s) runs on fewer heard turns, and the local model
+        // embeds each heard question. NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL=1
+        // still forces keyword-only search for every turn.
+        void surface;
+        return false;
     }
 
     /**
@@ -1901,9 +1903,8 @@ export class ModeHybridRetriever {
         } else {
             degradedReason = usingLexicalForLocalManualQuery ? 'local_lexical' : 'embedding_unavailable';
             if (usingLexicalForLocalManualQuery) {
-                // Fires for HEARD turns in a meeting (owner decision 2026-10-03/04),
-                // never for a typed one there; the old text said "manual query".
-                console.warn('[ModeHybridRetriever] Local ONNX provider active in a meeting: this heard turn is lexical-only by design (no query embed, cosine not used); typed questions query the vectors');
+                // Only with NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL=1 since 2026-11-14.
+                console.warn('[ModeHybridRetriever] Local ONNX provider in a meeting with NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL=1: this turn is lexical-only (no query embed, cosine not used)');
             } else {
                 console.warn('[ModeHybridRetriever] Embedding provider unavailable, using lexical fallback (no embeddings: this turn is lexical-only, not hybrid)');
             }
