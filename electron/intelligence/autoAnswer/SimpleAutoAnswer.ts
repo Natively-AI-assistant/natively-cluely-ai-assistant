@@ -490,7 +490,65 @@ export const RULED_OUT_CONTAINMENT = 0.9;
 /** Share of the dispatched question's words a keyed draft's text must hold to be adopted. */
 export const SPECULATION_HOLDS_QUESTION = 0.9;
 
-type PendingPart = { text: string; at: number; speaker?: string; glueNext?: boolean; provisional?: boolean };
+/** `startedAt`: when the utterance's first interim arrived (its final's arrival when there were none). */
+type PendingPart = { text: string; at: number; startedAt?: number; speaker?: string; glueNext?: boolean; provisional?: boolean };
+
+/**
+ * Back-to-back asks (pipeline forensics 2026-11-13, F-CTX-04). When a second
+ * ask starts within this long of the first one's final, the first one's
+ * verdict (asked EARLY_JUDGE_MS after its final, ~1.0-1.5 s; server p99
+ * 1.49 s) has not landed: the second ask's speech supersedes it and both are
+ * judged as one candidate. Owner decision: one combined answer, so the
+ * dispatched question must keep both asks even when the judge's question_text
+ * keeps only the last. Live and replayed merges started 0.65 s apart; an ask
+ * that started later than this had its own verdict's chance and is not merged.
+ */
+export const MERGED_ASK_GAP_MS = 1500;
+/** Logistics and pleasantries: never glued onto a real ask, whatever their shape. */
+const LOGISTICS_ASK = /\b(?:can|could) (?:you|everyone|everybody|y['’]?all) (?:hear|see) (?:me|us|my|this|that|the|it)\b|\b(?:are|is) (?:you|everyone|everybody|we) (?:ready|there|able to (?:hear|see)|good to go|all set)\b|\bam i (?:audible|on mute|muted|coming through|breaking up)\b|\b(?:is|was) (?:my|the) (?:audio|mic|microphone|sound|video|screen|connection|camera)\b|\b(?:shall|should|can) we (?:start|begin|get started|kick off)\b|\bhow are you\b|\bhow(?:['’]s| is) (?:it going|your day|everything|the weather)\b|\bdid you find\b|\b(?:is|was) (?:that|this|it) (?:better|clearer|okay|ok)\b|\bcan (?:i|you) (?:share|present)\b|\bare we (?:good|recording|live)\b|\b(?:any|got any) questions (?:for me|before)\b/i;
+
+/** One sentence that is, by itself, a finished ask worth answering. */
+function isStandaloneAsk(sentence: string, punctuated: boolean): boolean {
+    const t = sentence.trim();
+    if (!t || isCutOffEnding(t) || HANGING_END.test(t) || LOGISTICS_ASK.test(t)) return false;
+    if (punctuated && !/[.?!]["'”’)\]]*$/.test(t)) return false;
+    return /\?["'”’)\]]*$/.test(t) || FALLBACK_INTERROGATIVE.test(t) || DECLARATIVE_ASK.test(t);
+}
+
+/**
+ * The dispatched question for a merged candidate (see MERGED_ASK_GAP_MS).
+ * `parts` are the unjudged finals the verdict ruled on (no verdict has
+ * ruled any of them out); `questionText` is the judge's ask. When finals
+ * BEFORE the ones the ask came from were cut off from it by a second ask that
+ * started within MERGED_ASK_GAP_MS, and they end on an ask of their own, that
+ * ask is put back in front. Lead-ins (statements, logistics, pleasantries), a
+ * fragment, an ask already answered, or an ask well before the second one are
+ * left out, so this returns `questionText` unchanged.
+ */
+export function withMergedEarlierAsk(
+    parts: ReadonlyArray<PendingPart>, questionText: string, punctuated: boolean, lastAnswered: string | null,
+): string {
+    const covered = (p: PendingPart) => tokenContainment(p.text, questionText) >= 0.5;
+    const c = parts.findIndex(covered);
+    if (c <= 0) return questionText;
+    // The finals right before the ask's, each starting within the gap of the one before it.
+    let start = c;
+    while (start > 0) {
+        const next = parts[start];
+        const prev = parts[start - 1];
+        if (prev.provisional || prev.glueNext || covered(prev)) break;
+        if ((next.startedAt ?? next.at) - prev.at > MERGED_ASK_GAP_MS) break;
+        start--;
+    }
+    if (start === c) return questionText;
+    const sentences = sentencesOf(joinTranscriptParts(parts.slice(start, c)));
+    let from = sentences.length;
+    while (from > 0 && isStandaloneAsk(sentences[from - 1], punctuated)) from--;
+    if (from === sentences.length) return questionText;
+    const earlier = sentences.slice(from).join(' ');
+    if (lastAnswered && tokenContainment(earlier, lastAnswered) >= RULED_OUT_CONTAINMENT) return questionText;
+    return `${earlier} ${questionText}`;
+}
 
 export class SimpleAutoAnswerEngine {
     /** `provisional`: a stalled interim standing in for its final (STALL_PROMOTE_MS); only ever the LAST part. */
@@ -774,10 +832,11 @@ export class SimpleAutoAnswerEngine {
             // Decide the seam NOW: the interim this final was cut from is still
             // in hand, and it is gone as soon as the next one arrives.
             const glueNext = isMidWordCut(text, this.lastInterviewerInterim);
+            const startedAt = this.lastInterviewerInterim ? this.utteranceStartAt : now;
             this.finalsSeen++;
             if (/[.?!]["'”’)\]]*$/.test(text)) this.finalsTerminated++;
             this.lastInterviewerInterim = '';
-            this.pending.push({ text, at: now, speaker, glueNext });
+            this.pending.push({ text, at: now, startedAt, speaker, glueNext });
             // Supersede any in-flight verdict: it judged less than this. Inert
             // growth keeps the call alive — its verdict is held for the quiet point.
             this.bumpJudgeSeq('final', !!this.inFlight && this.isInertExtension(this.inFlight.parts));
@@ -978,6 +1037,7 @@ export class SimpleAutoAnswerEngine {
         const parts = this.pending.map(p => ({ speaker: p.speaker, text: p.text }));
         const partsAtConsult = this.pending.length;
         const snapshot = this.pending.slice();
+        const unjudgedParts = this.pending.slice(Math.min(this.judgedParts, this.pending.length));
         const unjudged = this.unjudgedText();
         const ruledOut = joinTranscriptParts(this.pending.slice(0, Math.min(this.judgedParts, this.pending.length)));
         // Judged on a promoted interim. If its real final replaces it while
@@ -1060,7 +1120,9 @@ export class SimpleAutoAnswerEngine {
                     && superseded.answerability > ANSWER_FLOOR) {
                     this.held = {
                         id, key: normalizeForCompare(candidate),
-                        text: superseded.questionText ?? candidate,
+                        text: superseded.questionText
+                            ? withMergedEarlierAsk(unjudgedParts, superseded.questionText, this.punctuationGuaranteed, this.lastAnsweredText)
+                            : candidate,
                         answerability: superseded.answerability, act: superseded.act, at: this.clock.now(),
                         parts: snapshot,
                     };
@@ -1151,7 +1213,11 @@ export class SimpleAutoAnswerEngine {
         // an earlier verdict ruled not an ask are still not part of it, so the
         // question line, retrieval query and draft read the unjudged finals
         // (pipeline forensics 2026-11-13, F-CTX-03).
-        const text = route.questionText ?? (unjudged || candidate);
+        // A judge that kept only the LAST of two back-to-back asks: put the
+        // first back, so the one combined answer covers both (F-CTX-04).
+        const text = route.questionText
+            ? withMergedEarlierAsk(unjudgedParts, route.questionText, this.punctuationGuaranteed, this.lastAnsweredText)
+            : (unjudged || candidate);
         // Answer or nothing. The judge decides, and the only number left in
         // the decision is ANSWER_FLOOR — the per-mode bars no longer gate a
         // dispatch, because the thing they used to demote to (the offer card)
