@@ -45,7 +45,7 @@ import {
   DEFAULT_TEXT_FALLBACK_CONFIG,
   type TextStreamProvider,
 } from "./llm/textStreamFallback"
-import { isPermanentKeyError } from "./llm/providerErrorClassifier"
+import { isPermanentKeyError, PROVIDERS_EXHAUSTED_CODE } from "./llm/providerErrorClassifier"
 import { telemetryService } from "./services/telemetry/TelemetryService"
 import {
   ollamaVisionFromShow,
@@ -3995,10 +3995,22 @@ export class LLMHelper {
   }
 
   /** The error for an answer nothing could give: the Natively limit while it
-   *  holds, else "no provider". */
-  private exhaustedChainError(): Error {
+   *  holds; else, when at least one provider was actually tried, "the providers
+   *  failed" (carrying the last provider's own error); else "no provider".
+   *
+   *  Forensics 2026-11-13 (F-ACC-10): a chain whose configured providers all
+   *  failed (an outage, a DNS failure) ended here as "No AI provider
+   *  configured", and the user — keys and all — was told to add one. */
+  private exhaustedChainError(lastProviderError?: unknown): Error {
     if (this.nativelyLimit && this.nativelyQuotaBlockedUntil > Date.now()) {
       return new Error(nativelyLimitErrorMessage(this.nativelyLimit));
+    }
+    if (lastProviderError != null) {
+      const err: any = new Error('All configured AI providers failed to answer.');
+      err.code = PROVIDERS_EXHAUSTED_CODE;
+      err.cause = lastProviderError;
+      err.firstProviderError = lastProviderError;
+      return err;
     }
     return new Error(this.noProviderAvailableMessage());
   }
@@ -11878,6 +11890,9 @@ let isMultimodal = !!(imagePaths?.length);
     // winner does not change answer STYLE — only who serves it. Multimodal with
     // images keeps the dedicated Groq-multimodal path (vision is handled by the
     // separate vision fallback when a vision model is selected).
+    // The last provider error seen on the way down, so an exhausted chain can say
+    // "the providers failed" rather than "none is configured" (F-ACC-10).
+    let lastProviderError: unknown = null;
     if (this.currentModelId === 'natively') {
       // Bug found during Phase 2 harness investigation (2026-07-27): this gate
       // used to check CredentialsManager.getNativelyApiKey() directly, which
@@ -12044,6 +12059,7 @@ let isMultimodal = !!(imagePaths?.length);
               yield LLMHelper.TRUNCATION_SENTINEL;
               return;
             }
+            lastProviderError = raceErr;
             console.warn('[LLMHelper] Text TTFT race exhausted, falling through to Gemini:', raceErr?.message);
             telemetryService.track({ name: 'provider_error', durationMs: Date.now() - raceStart, properties: { path: 'text', stage: 'race_exhausted' } });
             // Fall through to the Gemini block below as the final safety net.
@@ -12106,6 +12122,7 @@ let isMultimodal = !!(imagePaths?.length);
           yield LLMHelper.TRUNCATION_SENTINEL;
           return;
         }
+        lastProviderError = e;
         console.warn('[LLMHelper] Gemini cascade failed pre-commit — falling through to next provider:', e?.message || e);
         // fall through to the Natively last-resort below
       }
@@ -12125,6 +12142,7 @@ let isMultimodal = !!(imagePaths?.length);
           yield LLMHelper.TRUNCATION_SENTINEL;
           return;
         }
+        lastProviderError = e;
         console.warn('[LLMHelper] Natively last-resort fallback failed:', e.message);
       }
     }
@@ -12169,6 +12187,7 @@ let isMultimodal = !!(imagePaths?.length);
           yield LLMHelper.TRUNCATION_SENTINEL;
           return;
         }
+        lastProviderError = e;
         console.warn(`[LLMHelper] Configured custom last-resort failed: ${e?.message || e}`);
       } finally {
         // Restore — never leave a non-active customProvider on the instance,
@@ -12178,7 +12197,7 @@ let isMultimodal = !!(imagePaths?.length);
       }
     }
 
-    throw this.exhaustedChainError();
+    throw this.exhaustedChainError(lastProviderError);
   }
 
   /**
