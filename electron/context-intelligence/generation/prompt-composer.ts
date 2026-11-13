@@ -18,7 +18,7 @@
 
 import type { TurnDecision, EvidenceItem } from '../contracts/types';
 import type { ModePolicy } from '../policies/mode-policy-registry';
-import { packContext, type PackBudget, type PackedContext } from './context-packer';
+import { packContext, estimateTokens, type PackBudget, type PackedContext } from './context-packer';
 import { scopeLabels } from '../policies/provider-scope-policy';
 import {
   analyzeUserInstructions,
@@ -1567,8 +1567,15 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
   // An exhaustive request carries a tripled evidence cap on its plan; the
   // token budget must grow with it or the extra chunks are dropped here.
   const exhaustive = d.retrievalPlan.exhaustive === true;
+  // UNUSED ROOM FLOWS TO THE EVIDENCE (F-CTX-14, 2026-11-13). The mode declares
+  // a conversation and a transcript budget, and the conversation section
+  // (history plus the live speech window) is cut to them upstream. Whatever it
+  // leaves unused was simply lost, while evidence that did not fit was dropped.
+  // The total stays within the mode's declared budgets.
+  const conversationRoom = Math.max(0, (policy.contextBudget.conversationTokens ?? 0) + (policy.contextBudget.transcriptTokens ?? 0));
+  const unusedConversation = Math.max(0, conversationRoom - estimateTokens(input.conversationSummary ?? ''));
   const budget: PackBudget = {
-    evidenceTokens: (d.retrievalPlan.evidenceTokens ?? policy.contextBudget.evidenceTokens) * (exhaustive ? 3 : 1),
+    evidenceTokens: (d.retrievalPlan.evidenceTokens ?? policy.contextBudget.evidenceTokens) * (exhaustive ? 3 : 1) + unusedConversation,
     conversationTokens: policy.contextBudget.conversationTokens,
     transcriptTokens: policy.contextBudget.transcriptTokens,
   };
