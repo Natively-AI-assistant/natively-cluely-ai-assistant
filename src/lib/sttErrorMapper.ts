@@ -107,6 +107,13 @@ export function categorizeSttError(rawError: string): SttErrorCategory {
         };
     }
 
+    // 0a. The chosen provider has no key saved (electron/audio/MissingKeySTT.ts,
+    // F-PRV-01): nothing is transcribed rather than quietly sending the audio
+    // to Google. Its message names the provider and where to add the key.
+    if (/^no .+ key is saved, so nothing is being transcribed\./.test(lower)) {
+        return { title: 'Key Missing', body: rawError.trim(), category: 'auth' };
+    }
+
     // 0b. An on-device model that could not run. Before everything else: its
     // messages mention downloads, connections and "unavailable", and none of
     // that is a provider or a key.

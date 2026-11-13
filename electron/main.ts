@@ -1320,6 +1320,8 @@ import { AudioDevices } from "./audio/AudioDevices"
 import { isInternalCaptureDevice, resolveRequestedInputDevice } from "./audio/audioDeviceSelection.mjs"
 import { loadNativeModule } from "./audio/nativeModuleLoader"
 import { GoogleSTT } from "./audio/GoogleSTT"
+import { MissingKeySTT } from "./audio/MissingKeySTT"
+import { MicEchoGuard } from "./audio/micEchoGuard"
 import { RestSTT } from "./audio/RestSTT"
 import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
 import { isIntelligenceFlagEnabled } from "./intelligence/intelligenceFlags"
@@ -1329,7 +1331,7 @@ import { SimpleAutoAnswerEngine } from "./intelligence/autoAnswer/SimpleAutoAnsw
 import { AutoAnswerUsageTelemetry } from "./intelligence/autoAnswer/AutoAnswerUsageTelemetry"
 import { currentWhisperGlossaryPrompt, nameTerms, setSttContextTerms, setSttDictionaryTerms } from "./audio/sttContextTerms"
 import { getUserDictionary } from "./audio/userDictionary"
-import { LOCAL_STT_PROVIDERS, SttGapRecoveryCoordinator, type RecoveredSegment, type SttSource } from "./audio/sttGapRecovery"
+import { LOCAL_STT_PROVIDERS, SttGapRecoveryCoordinator, recoveredLineMayBeAnswered, type RecoveredSegment, type SttSource } from "./audio/sttGapRecovery"
 import { SttFailover, failoverNotice, type FailoverCause, type FailoverStatus } from "./audio/sttFailover"
 import { resolveAutoAnswerThresholds } from "./context-intelligence/policies/mode-policy-registry"
 import type { SpeechEdge } from "./audio/speechEdge"
@@ -3784,6 +3786,8 @@ export class AppState {
    * user set up carries the live stream until it is back.
    */
   private readonly _sttFailover: Record<SttSource, SttFailover | null> = { mic: null, system: null };
+  /** Interviewer words just heard, to tell speaker bleed on the mic from the user (F-CTX-12). */
+  private readonly _micEcho = new MicEchoGuard();
   private readonly sttGap = new SttGapRecoveryCoordinator({
     transcribers: (source) => {
       const { buildRecoveryTranscribers } = require('./audio/sttRecoveryTranscribers');
@@ -3795,13 +3799,25 @@ export class AppState {
     restartStt: (source) => {
       const stt = source === 'system' ? this.googleSTT : this.googleSTT_User;
       if (!stt || !this.isMeetingActive) return;
+      // A stand-in carries the channel (sttFailover.ts): stt.stop() would end
+      // it too, silently, and the failover probe already restarts the
+      // primary (F-ACC-09 D2).
+      if (this._sttFailover[source]?.active) return;
       stt.stop();
       stt.start();
     },
-    watchdogEnabled: (source) => this._sttGapProvider[source].streaming,
+    // Not while a stand-in carries the channel: a slow one (batch, local)
+    // looks exactly like a stall.
+    watchdogEnabled: (source) => this._sttGapProvider[source].streaming && !this._sttFailover[source]?.active,
   });
 
-  /** A recovered line goes into the session at the time it was said; it triggers no answer. */
+  /**
+   * A recovered line goes into the session at the time it was said. A recent
+   * one from the other side also goes to Auto Answer, whose judge decides
+   * whether it is a question (F-ACC-09 D5: a question asked during an outage
+   * was never answered). Only when inserted: one the live transcript already
+   * has is not judged twice.
+   */
   private insertRecoveredTranscript(seg: RecoveredSegment): void {
     if (!this.isMeetingActive && !this._isDraining) return;
     const speaker = seg.source === 'system' ? 'interviewer' : 'user';
@@ -3815,8 +3831,21 @@ export class AppState {
       sttProvider: seg.transcriberId,
       punctuationSource: punctuationSourceFor(seg.transcriberId, true),
     });
-    if (inserted && this.ragManager) {
+    if (!inserted) return;
+    if (this.ragManager) {
       this.ragManager.feedLiveTranscript([{ speaker, text: seg.text, timestamp: seg.timestamp }]);
+    }
+    if (this._autoAnswerEnabled && recoveredLineMayBeAnswered(seg, Date.now())) {
+      this.simpleAutoAnswer.ingest({
+        speaker: 'interviewer',
+        text: seg.text,
+        timestamp: seg.timestamp,
+        final: true,
+        confidence: 1,
+        origin: 'stt',
+        sttProvider: seg.transcriberId,
+        punctuationSource: punctuationSourceFor(seg.transcriberId, true),
+      } as any);
     }
   }
   // ── AUTO ANSWER (Settings > General, default OFF) ────────────────────────
@@ -4126,9 +4155,10 @@ export class AppState {
     if (sttProvider === 'natively') {
       const nativelyKey = CredentialsManager.getInstance().getNativelyApiKey();
       if (!nativelyKey) {
-        // Natively is Coming Soon — no key means degrade gracefully like every other provider
-        console.warn(`[Main] No Natively API Key configured for ${speaker}, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
+        // No key: nothing is transcribed and the overlay says which key is
+        // missing. Never Google unless Google is the choice (F-PRV-01).
+        console.warn(`[Main] No Natively API Key configured for ${speaker}; transcription is off until one is saved`);
+        stt = new MissingKeySTT(sttProvider) as unknown as STTProvider;
       } else {
         // 'system' for interviewer (system audio), 'mic' for user (microphone).
         // The server uses ${key}:${channel} as the session key so both streams
@@ -4158,8 +4188,8 @@ export class AppState {
         // provider that can label voices (sttDiarization.ts).
         stt = new DeepgramStreamingSTT(apiKey, CredentialsManager.getInstance().getSttModel('deepgram'));
       } else {
-        console.warn(`[Main] No API key for Deepgram STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
+        console.warn(`[Main] No API key for Deepgram STT; transcription is off until one is saved`);
+        stt = new MissingKeySTT(sttProvider) as unknown as STTProvider;
       }
     } else if (sttProvider === 'soniox') {
       const apiKey = CredentialsManager.getInstance().getSonioxApiKey();
@@ -4167,8 +4197,8 @@ export class AppState {
         console.log(`[Main] Using SonioxStreamingSTT for ${speaker}`);
         stt = new SonioxStreamingSTT(apiKey);
       } else {
-        console.warn(`[Main] No API key for Soniox STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
+        console.warn(`[Main] No API key for Soniox STT; transcription is off until one is saved`);
+        stt = new MissingKeySTT(sttProvider) as unknown as STTProvider;
       }
     } else if (sttProvider === 'qwen') {
       const apiKey = CredentialsManager.getInstance().getQwenAsrApiKey();
@@ -4176,8 +4206,8 @@ export class AppState {
         console.log(`[Main] Using QwenRealtimeSTT for ${speaker}`);
         stt = new QwenRealtimeSTT(apiKey);
       } else {
-        console.warn('[Main] No Qwen ASR API key, falling back to GoogleSTT');
-        stt = new GoogleSTT(speaker);
+        console.warn('[Main] No Qwen ASR API key; transcription is off until one is saved');
+        stt = new MissingKeySTT(sttProvider) as unknown as STTProvider;
       }
     } else if (sttProvider === 'elevenlabs') {
       const apiKey = CredentialsManager.getInstance().getElevenLabsApiKey();
@@ -4185,8 +4215,8 @@ export class AppState {
         console.log(`[Main] Using ElevenLabsStreamingSTT for ${speaker}`);
         stt = new ElevenLabsStreamingSTT(apiKey);
       } else {
-        console.warn(`[Main] No API key for ElevenLabs STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
+        console.warn(`[Main] No API key for ElevenLabs STT; transcription is off until one is saved`);
+        stt = new MissingKeySTT(sttProvider) as unknown as STTProvider;
       }
     } else if (sttProvider === 'openai') {
       // OpenAI: WebSocket Realtime (gpt-live-transcribe → gpt-4o-transcribe → gpt-4o-mini-transcribe) with whisper-1 REST fallback.
@@ -4198,8 +4228,8 @@ export class AppState {
         console.log(`[Main] Using OpenAIStreamingSTT for ${speaker}${baseUrl ? ` (custom endpoint: ${baseUrl})` : ' (WebSocket+REST fallback)'}`);
         stt = new OpenAIStreamingSTT(apiKey, baseUrl, CredentialsManager.getInstance().getSttModel('openai'));
       } else {
-        console.warn(`[Main] No API key for OpenAI STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
+        console.warn(`[Main] No API key for OpenAI STT; transcription is off until one is saved`);
+        stt = new MissingKeySTT(sttProvider) as unknown as STTProvider;
       }
     } else if (sttProvider === 'nvidia_nim') {
       const key = CredentialsManager.getInstance().getNvidiaNimApiKey();
@@ -4208,8 +4238,8 @@ export class AppState {
         console.log(`[Main] Using NvidiaNimStreamingSTT for ${speaker} (${model})`);
         stt = new NvidiaNimStreamingSTT(key, model);
       } else {
-        console.warn(`[Main] No NVIDIA NIM API key for ${speaker}, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
+        console.warn(`[Main] No NVIDIA NIM API key for ${speaker}; transcription is off until one is saved`);
+        stt = new MissingKeySTT(sttProvider) as unknown as STTProvider;
       }
     } else if (sttProvider === 'groq' || sttProvider === 'azure' || sttProvider === 'ibmwatson') {
       let apiKey: string | undefined;
@@ -4236,8 +4266,8 @@ export class AppState {
         if (speaker === 'user') rest.setHoldSpeechEnds(true);
         stt = rest;
       } else {
-        console.warn(`[Main] No API key for ${sttProvider} STT, falling back to GoogleSTT`);
-        stt = new GoogleSTT(speaker);
+        console.warn(`[Main] No API key for ${sttProvider} STT; transcription is off until one is saved`);
+        stt = new MissingKeySTT(sttProvider) as unknown as STTProvider;
       }
     } else if (sttProvider === 'apple-speech') {
       stt = new AppleSpeechSTT();
@@ -4261,8 +4291,12 @@ export class AppState {
       // Channel label disambiguates the two concurrent instances in latency logs.
       lws.setChannel(speaker === 'interviewer' ? 'system' : 'mic');
       stt = lws as any;
-    } else {
+    } else if (sttProvider === 'google') {
       stt = new GoogleSTT(speaker);
+    } else {
+      // An id this build does not know (a damaged settings file): not Google.
+      console.warn(`[Main] Unknown STT provider '${sttProvider}' for ${speaker}; transcription is off`);
+      stt = new MissingKeySTT(sttProvider) as unknown as STTProvider;
     }
 
     stt.setRecognitionLanguage(sttLanguage);
@@ -4281,6 +4315,8 @@ export class AppState {
       : stt instanceof ElevenLabsStreamingSTT ? 'elevenlabs'
       : stt instanceof NativelyProSTT ? 'natively'
       : stt instanceof GoogleSTT ? 'google'
+      // No key saved: no connection to watch, nothing to recover (F-PRV-01).
+      : stt instanceof MissingKeySTT ? 'none'
       : sttProvider;
 
     // Gap recovery (sttGapRecovery.ts): which provider replays a missed span,
@@ -4336,23 +4372,33 @@ export class AppState {
       // Any text proves the connection works: closes an open outage (sttGapRecovery.ts).
       this.sttGap.onTranscript(gapSource, segment.text, segment.isFinal);
 
-      this.intelligenceManager.handleTranscript({
-        speaker: speaker,
-        ...(speakerId ? { speakerId } : {}),
-        text: segment.text,
-        timestamp: Date.now(),
-        final: segment.isFinal,
-        confidence: segment.confidence,
-        // Defect B (2026-08-01): this is the ONLY real spoken-audio seam —
-        // provenance 'stt' makes these segments memory-eligible; typed chat
-        // and assistant answers (other origins) are excluded from extraction.
-        origin: 'stt',
-        // WTA audit F9: provider identity + punctuation provenance, so
-        // downstream question scoring can treat a missing '?' as NEUTRAL
-        // when this provider never guaranteed punctuation.
-        sttProvider: sttId,
-        punctuationSource: punctuationSourceFor(sttId, segment.isFinal),
-      });
+      // Speaker bleed (audio/micEchoGuard.ts, F-CTX-12): a mic final that
+      // repeats what the interviewer just said is their voice through the
+      // user's speakers, not the user. It stays out of the session ([ME]
+      // context, refinement follow-ups) and retrieval; the display still gets it.
+      if (speaker === 'interviewer') this._micEcho.noteInterviewer(segment.text, segment.isFinal, Date.now());
+      const micEcho = speaker === 'user' && segment.isFinal && this._micEcho.isEcho(segment.text, Date.now());
+      if (micEcho) console.log(`[STT] mic final repeats the interviewer (${segment.text.length} chars): not counted as the user`);
+
+      if (!micEcho) {
+        this.intelligenceManager.handleTranscript({
+          speaker: speaker,
+          ...(speakerId ? { speakerId } : {}),
+          text: segment.text,
+          timestamp: Date.now(),
+          final: segment.isFinal,
+          confidence: segment.confidence,
+          // Defect B (2026-08-01): this is the ONLY real spoken-audio seam —
+          // provenance 'stt' makes these segments memory-eligible; typed chat
+          // and assistant answers (other origins) are excluded from extraction.
+          origin: 'stt',
+          // WTA audit F9: provider identity + punctuation provenance, so
+          // downstream question scoring can treat a missing '?' as NEUTRAL
+          // when this provider never guaranteed punctuation.
+          sttProvider: sttId,
+          punctuationSource: punctuationSourceFor(sttId, segment.isFinal),
+        });
+      }
 
       // Auto Answer (Settings > General, default OFF). Engine per the A/B
       // switch: legacy = the PR #497 debounce on interviewer finals only;
@@ -4377,7 +4423,7 @@ export class AppState {
       }
 
       // Feed final transcript to JIT RAG indexer
-      if (segment.isFinal && this.ragManager) {
+      if (segment.isFinal && this.ragManager && !micEcho) {
         this.ragManager.feedLiveTranscript([{
           speaker: speaker,
           text: segment.text,

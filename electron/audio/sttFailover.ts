@@ -18,8 +18,10 @@
  *     (sttReconnectPolicy.mjs) keeps trying; every `probeMs` the primary is
  *     also restarted, for providers that latch off. Its first final with text
  *     means it is back: the stand-in is stopped and the primary leads again.
- *     That first line is dropped when the stand-in already said it (the
- *     primary flushes the audio it buffered while down).
+ *     That first line, and for a few seconds the ones after it, are dropped
+ *     when the stand-in already said every word of them (the primary flushes
+ *     the audio it buffered while down); a new question that only shares
+ *     its frame with a stand-in line goes through (F-ACC-09).
  *   - A stand-in that fails too (repeated errors, or a key that is refused)
  *     hands over to the next one; with none left the channel is reported
  *     failed as before.
@@ -34,7 +36,7 @@
  * clock and timers are injected for the tests.
  */
 
-import { isCoveredByLive, type SttSource } from './sttGapRecovery';
+import { repeatsLiveText, type SttSource } from './sttGapRecovery';
 import { providerHasPendingWork, sttTailTimingFor, type SttTailTiming } from './sttTailTiming';
 
 /** The provider surface used here (main's STTProvider shares it). */
@@ -100,6 +102,12 @@ export interface SttFailoverOptions {
     recentFinalsMs?: number;
     /** After every stand-in failed (or none is set up), wait this long before trying again. */
     retryAfterMs?: number;
+    /**
+     * After the hand-back, the primary's finals are still checked against the
+     * stand-in's for this long: its flush of the audio it buffered while down
+     * can hold several lines the stand-in already said.
+     */
+    handbackDedupeMs?: number;
 }
 
 /** User-facing provider names for the notice. */
@@ -190,6 +198,9 @@ export class SttFailover {
     private readonly recentFinalsMs: number;
     private readonly retryAfterMs: number;
     private exhaustedAt: number | null = null;
+    private readonly handbackDedupeMs: number;
+    /** Until when the primary's finals are checked against the stand-in's (after a recovery). */
+    private handbackUntil = 0;
 
     constructor(private readonly deps: SttFailoverDeps, options: SttFailoverOptions = {}) {
         this.now = deps.now ?? Date.now;
@@ -197,6 +208,7 @@ export class SttFailover {
         this.fallbackMaxErrors = options.fallbackMaxErrors ?? 3;
         this.recentFinalsMs = options.recentFinalsMs ?? 60_000;
         this.retryAfterMs = options.retryAfterMs ?? 120_000;
+        this.handbackDedupeMs = options.handbackDedupeMs ?? 10_000;
     }
 
     get active(): boolean {
@@ -231,12 +243,28 @@ export class SttFailover {
      * first final with text means it is back.
      */
     acceptPrimary(seg: LiveSegment): boolean {
-        if (this.phase !== 'fallback') return true;
         const text = (seg.text ?? '').trim();
+        if (this.phase !== 'fallback') {
+            // Just handed back: the rest of the primary's flush may repeat the
+            // stand-in too (F-ACC-09 D8). Only a line whose every word the
+            // stand-in already said is dropped, so a new question goes through.
+            if (!seg.isFinal || !text || this.handbackUntil === 0) return true;
+            if (this.now() > this.handbackUntil) {
+                this.handbackUntil = 0;
+                this.recentFinals = [];
+                return true;
+            }
+            return !repeatsLiveText(text, this.recentTexts());
+        }
         if (!seg.isFinal || !text) return false;
         const recent = this.recentTexts();
         this.disengage('recovered');
-        return !isCoveredByLive(text, recent);
+        // Kept for the flush that follows (above).
+        this.recentFinals = recent.map((t) => ({ text: t, at: this.now() }));
+        this.handbackUntil = this.now() + this.handbackDedupeMs;
+        // F-ACC-09 D1: half the word pairs in common is not a repeat: "…with
+        // Kafka?" after "…with Redis?" is a new question.
+        return !repeatsLiveText(text, recent);
     }
 
     write(chunk: Buffer): void {
@@ -316,6 +344,7 @@ export class SttFailover {
     }
 
     private startNextFallback(): boolean {
+        this.handbackUntil = 0;
         let ids: string[] = [];
         try { ids = this.deps.candidates(); } catch { ids = []; }
         for (const id of ids) {
@@ -388,6 +417,7 @@ export class SttFailover {
         this.stopProbe();
         this.phase = 'primary';
         this.recentFinals = [];
+        this.handbackUntil = 0;
         this.exhaustedAt = reason === 'exhausted' ? this.now() : null;
         this.deps.log?.(`${this.deps.source}: back to ${this.deps.primary} (${reason})`);
         // A teardown reports nothing: the channel is going away.
