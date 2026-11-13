@@ -58,6 +58,7 @@ import { assertProviderDataScopes, getDeniedDataScopes, routeWithScopeFallback, 
 // Outbound-scope vocabulary shared with Context Intelligence V3. ONE mapping of
 // SourceType → privacy toggle: a second copy here is how the two layers would
 // drift into disagreeing about what a `<evidence source_type="RESUME">` block is.
+import type { PromptAssemblyResult } from "./premium/contracts"
 import { applyEnvScopeDenials, sourceTypesForScopes, dataScopeForSourceType, dataScopesForEvidenceMarkup, scopeLabels, DENY_PROVIDER_SCOPES_ENV } from "./context-intelligence/policies/provider-scope-policy"
 // Premium Profile Intelligence blocks (F-BND-04 / A5 D7, 2026-11-13). The
 // legacy scope regexes key on `<candidate_` / `<user_context`; these premium
@@ -4892,7 +4893,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           // Recruiter utterances reach the tracker exclusively via the STT path in main.ts.
           this.knowledgeOrchestrator.feedForDepthScoring(message);
 
-          const knowledgeResult = await this.knowledgeOrchestrator.processQuestion(message);
+          const knowledgeResult: PromptAssemblyResult | null = await this.knowledgeOrchestrator.processQuestion(message);
 
           // Identity recall (intro/name questions) passes through regardless of mode
           // compatibility — factual retrieval, not persona injection, so mode gating is
@@ -10283,7 +10284,7 @@ let isMultimodal = !!(imagePaths?.length);
         this.knowledgeOrchestrator.feedForDepthScoring(message);
 
         _stage('processQuestion START');
-        const knowledgeResult = await this.knowledgeOrchestrator.processQuestion(message);
+        const knowledgeResult: PromptAssemblyResult | null = await this.knowledgeOrchestrator.processQuestion(message);
         _stage('processQuestion DONE');
         // Issue #272: gate ALL premium-intercept side-effects (coaching, intro
         // shortcut, prompt/context injection) by active mode. The depth scorer
@@ -10298,7 +10299,7 @@ let isMultimodal = !!(imagePaths?.length);
           const { isJitFinalAnswerEnforced } = require('./intelligence/intelligenceFlags');
           // A bare social greeting ("hi") is not a factual answer — keep its
           // instant canned reply even under the full-JIT law.
-          if (isJitFinalAnswerEnforced() && !(knowledgeResult as any)?.isBareGreeting) {
+          if (isJitFinalAnswerEnforced() && !knowledgeResult?.isBareGreeting) {
             // FULL-JIT LAW: do not emit the AOT-precomputed intro/identity as the
             // final answer. Demote it to EVIDENCE (a candidate_identity_fact
             // block) and fall through so the provider writes the answer just-in-

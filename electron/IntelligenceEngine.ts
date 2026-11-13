@@ -74,7 +74,7 @@ import { recordAttribution } from './intelligence/IntelligenceAttribution';
 // tsc collapsed the grounding result to `{}`. The structural contract belongs to the
 // source-available boundary so a core type-check does not require private sources.
 // Follow-up: type getKnowledgeOrchestrator() properly and drop this import.
-import type { PromptAssemblyResult } from './premium/contracts';
+import type { PromptAssemblyResult, KnowledgeOrchestratorBoundary } from './premium/contracts';
 import type { AnswerType } from './llm/AnswerPlanner';
 import { isProfileIntelligenceAllowed } from './context-intelligence/policies/mode-policy-registry';
 import { stripUnsupportedDerivedResumeFields } from './context-intelligence/retrieval/profile-derived-support';
@@ -3149,9 +3149,7 @@ export class IntelligenceEngine extends EventEmitter {
                 // WtaParallelPrestream.test.mjs asserts on the literal source text
                 // `await withTimeout(orchestrator.processQuestion(` — so the fix belongs
                 // on the binding, leaving every call site spelled exactly as before.
-                const orchestrator: (Record<string, any> & {
-                    processQuestion(question: string): Promise<PromptAssemblyResult | null>;
-                }) | undefined = this.llmHelper.getKnowledgeOrchestrator?.();
+                const orchestrator: (KnowledgeOrchestratorBoundary & Record<string, any>) | undefined = this.llmHelper.getKnowledgeOrchestrator?.();
                 if (orchestrator?.isKnowledgeMode?.() && !strictDocumentGroundedActive
                     && wtaDecisionAllowsCandidateProfile && snapshotProfileIntelligenceAllowed
                     && !wtaV3ExpectedToCompose) {
