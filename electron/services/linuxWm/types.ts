@@ -19,6 +19,12 @@ export interface LinuxWm {
     readonly name: 'kwin' | 'sway' | 'hyprland';
     /** Normal (non-panel) windows, or null when the compositor could not be read. */
     listWindows(): Promise<WmWindow[] | null>;
-    /** Keep this process's window titled `title` above others and on every workspace. */
+    /** Keep this process's window whose title is EXACTLY `title` above others and on every workspace.
+     * The caller passes a unique title (pinTitle) so no other window of the process matches. */
     setAlwaysOnTop(pid: number, title: string): Promise<boolean>;
+}
+
+/** A title no other window carries, for the moment the compositor is asked to pin one. */
+export function pinTitle(base: string, nonce: string): string {
+    return `${base} \u2063${nonce}`; // invisible separator keeps the visible title unchanged
 }

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
 const d = (p) => require(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../dist-electron/electron/services/linuxWm', p));
 const { detectWm, createLinuxWm, withExecutable } = d('index.js');
-const { parseKwinJournal, aotScript, dumpScript } = d('kwin.js');
+const { parseKwinJournal, aotScript, dumpScript, BROWSER_CLASS } = d('kwin.js');
 const { parseSwayTree, createSwayWm } = d('sway.js');
 const { parseHyprClients, createHyprlandWm } = d('hyprland.js');
 
@@ -75,4 +75,35 @@ test('hyprland: unmapped clients dropped; pin only when needed', async () => {
 test('withExecutable: adds path/owner from /proc, keeps the window when unreadable', () => {
     assert.deepEqual(withExecutable({ pid: 5, owner: 'cls', title: 't' }, () => '/opt/zoom/zoom'), { pid: 5, owner: 'zoom', title: 't', path: '/opt/zoom/zoom' });
     assert.deepEqual(withExecutable({ pid: 5, owner: 'cls', title: 't' }, () => { throw new Error('x'); }), { pid: 5, owner: 'cls', title: 't' });
+});
+
+test('kwin: the journal dump carries titles only for browsers', () => {
+    assert.ok(dumpScript('n1').includes('browser.test(w.resourceClass) ? w.caption : ""'));
+    for (const c of ['brave-browser', 'firefox', 'Google-chrome', 'chromium']) assert.ok(BROWSER_CLASS.test(c), c);
+    for (const c of ['org.kde.konsole', 'code', 'org.keepassxc.KeePassXC', 'zoom']) assert.ok(!BROWSER_CLASS.test(c), c);
+});
+
+test('window poller reads on demand, not on a timer', async () => {
+    const { startWindowPoller } = d('index.js');
+    let reads = 0, t = 0;
+    const wm = { name: 'kwin', listWindows: async () => { reads++; return [{ pid: 1, owner: 'x', title: 'y' }]; }, setAlwaysOnTop: async () => true };
+    const p = startWindowPoller(wm, 10_000, () => t);
+    assert.equal(reads, 0, 'nothing runs until asked');
+    assert.equal(p.get(), null);
+    await new Promise((r) => setImmediate(r));
+    assert.equal(reads, 1);
+    assert.equal(p.get().length, 1);
+    t = 5_000; p.get(); await new Promise((r) => setImmediate(r));
+    assert.equal(reads, 1, 'fresh enough');
+    t = 10_000; p.get(); await new Promise((r) => setImmediate(r));
+    assert.equal(reads, 2, 'stale: one refresh');
+    p.stop(); t = 99_000; p.get(); await new Promise((r) => setImmediate(r));
+    assert.equal(reads, 2, 'stopped');
+});
+
+test('pinTitle makes a per-call unique title that keeps the visible text', () => {
+    const { pinTitle } = d('types.js');
+    const a = pinTitle('Natively', 'aa'), b = pinTitle('Natively', 'bb');
+    assert.notEqual(a, b);
+    assert.ok(a.startsWith('Natively'));
 });

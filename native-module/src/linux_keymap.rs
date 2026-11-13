@@ -136,13 +136,47 @@ pub fn repeats(code: u16) -> bool {
 
 /// How long the grab may sit with no key before the tap lets go on its own.
 pub const IDLE_RELEASE_MS: u64 = 5 * 60_000;
+/// Hard ceiling on one grab, however much the user types (repeats and a stuck
+/// key do not reset it).
+pub const SESSION_CAP_MS: u64 = 15 * 60_000;
 
-/// `NATIVELY_EVDEV_IDLE_MS` shortens the backstop (tests, and anyone wanting a
-/// tighter leash). Never longer than the default: a typo cannot lengthen a grab.
-pub fn idle_release_ms(env: Option<&str>) -> u64 {
+/// An env override may only SHORTEN a limit: a typo or a hostile value can never
+/// lengthen a grab. Unparsable or zero falls back to the default.
+pub fn capped_ms(env: Option<&str>, default_ms: u64) -> u64 {
     env.and_then(|v| v.parse::<u64>().ok())
         .filter(|&ms| ms > 0)
-        .map_or(IDLE_RELEASE_MS, |ms| ms.min(IDLE_RELEASE_MS))
+        .map_or(default_ms, |ms| ms.min(default_ms))
+}
+
+/// `NATIVELY_EVDEV_IDLE_MS`.
+pub fn idle_release_ms(env: Option<&str>) -> u64 {
+    capped_ms(env, IDLE_RELEASE_MS)
+}
+
+/// `NATIVELY_EVDEV_MAX_MS`.
+pub fn session_cap_ms(env: Option<&str>) -> u64 {
+    capped_ms(env, SESSION_CAP_MS)
+}
+
+/// Why a grab ended, which decides whether JS must be told. Esc and an explicit
+/// stop() are already known to JS; everything else is not, and JS must hear it
+/// or the overlay keeps showing typing as active while keys go to the meeting app.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Exit {
+    Stop,
+    Esc,
+    Idle,
+    SessionCap,
+    NoListener,
+    NoDevices,
+    PollError,
+    /// A keyboard appeared that could not be grabbed safely (a key held on it,
+    /// or the grab/nonblocking setup failed): fail open rather than leave it live.
+    HotplugUnsafe,
+}
+
+pub fn exit_needs_notice(e: Exit) -> bool {
+    !matches!(e, Exit::Stop | Exit::Esc | Exit::NoListener)
 }
 
 #[cfg(test)]
@@ -222,6 +256,20 @@ mod tests {
         assert!(!apply_modifier(&mut h, 30, true));
         assert!(repeats(KEY_BACKSPACE) && repeats(30));
         assert!(!repeats(KEY_ENTER) && !repeats(KEY_ESC));
+    }
+
+    #[test]
+    fn session_cap_can_only_be_shortened_and_exits_are_announced() {
+        assert_eq!(session_cap_ms(None), SESSION_CAP_MS);
+        assert_eq!(session_cap_ms(Some("2000")), 2000);
+        assert_eq!(session_cap_ms(Some("999999999")), SESSION_CAP_MS);
+        assert!(SESSION_CAP_MS > IDLE_RELEASE_MS);
+        for e in [Exit::Idle, Exit::SessionCap, Exit::NoDevices, Exit::PollError, Exit::HotplugUnsafe] {
+            assert!(exit_needs_notice(e), "{e:?}");
+        }
+        for e in [Exit::Stop, Exit::Esc, Exit::NoListener] {
+            assert!(!exit_needs_notice(e), "{e:?}");
+        }
     }
 
     #[test]

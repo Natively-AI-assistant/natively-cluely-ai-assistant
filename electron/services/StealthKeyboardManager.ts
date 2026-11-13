@@ -105,7 +105,11 @@ export class StealthKeyboardManager {
     private static readonly IDLE_TIMEOUT_WIN32_MS = 5 * 60_000;
 
     private static idleTimeoutMs(): number {
-        return process.platform === 'win32'
+        // Linux too: its grab is released by the tap itself on Esc/idle/error, but
+        // a 10 s JS timeout would stop the session mid-thought and every later key
+        // would land in the meeting app. The native backstop (5 min idle, 15 min
+        // cap) is the last resort, as on Windows.
+        return process.platform === 'win32' || process.platform === 'linux'
             ? StealthKeyboardManager.IDLE_TIMEOUT_WIN32_MS
             : StealthKeyboardManager.IDLE_TIMEOUT_MS;
     }

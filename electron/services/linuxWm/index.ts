@@ -41,19 +41,32 @@ export function withExecutable(w: WmWindow, readlink: (p: string) => string = fs
 }
 
 /**
- * MeetingDetector reads windows synchronously; the adapters are async, so a
- * poller keeps the latest snapshot. get() is null until the first read.
+ * MeetingDetector reads windows synchronously; the adapters are async, so this
+ * keeps the latest snapshot. It reads ON DEMAND: get() returns the last snapshot
+ * and, when it is older than `staleMs`, starts one refresh in the background. No
+ * timer runs while nothing asks (the KWin adapter's channel is the user journal,
+ * see kwin.ts: fewer reads, fewer window lists written there). get() is null
+ * until the first read lands.
  */
-export function startWindowPoller(wm: LinuxWm, intervalMs = 5000): { get(): WmWindow[] | null; stop(): void } {
+export function startWindowPoller(
+    wm: LinuxWm,
+    staleMs = 10_000,
+    now: () => number = Date.now,
+): { get(): WmWindow[] | null; stop(): void } {
     let latest: WmWindow[] | null = null;
     let busy = false;
-    const tick = async () => {
-        if (busy) return;
+    let lastStart = -Infinity;
+    let stopped = false;
+    const refresh = async () => {
         busy = true;
+        lastStart = now();
         try { latest = (await wm.listWindows())?.map((w) => withExecutable(w)) ?? null; } catch { latest = null; } finally { busy = false; }
     };
-    void tick();
-    const timer = setInterval(tick, intervalMs);
-    timer.unref?.();
-    return { get: () => latest, stop: () => clearInterval(timer) };
+    return {
+        get() {
+            if (!stopped && !busy && now() - lastStart >= staleMs) void refresh();
+            return latest;
+        },
+        stop() { stopped = true; },
+    };
 }
