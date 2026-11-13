@@ -328,7 +328,7 @@ import {
   pinnedViewportBudget,
   type OverlayResizeDirection,
 } from '../lib/overlayCustomSize.mjs';
-import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch, resolveChatStreamSurfaceError, isStaleDesktopChatEvent } from '../lib/chatStreamGuard.mjs';
+import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch, resolveChatStreamSurfaceError, isStaleDesktopChatEvent, shouldApplyLiveAnswerDiscard } from '../lib/chatStreamGuard.mjs';
 import { buildDirectWhatToSayPayload } from '../lib/directAssistWhatToSayPayload.mjs';
 import { resolveScreenshotPromptText, getScreenshotPresetPrompt } from '../lib/screenshotPrompt';
 import { chatFailureFromError, isProviderFailureSentence } from '../lib/chatFailure.mjs';
@@ -7974,9 +7974,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Clear streaming refs FIRST (same ordering rationale as the null-feedback
     // path) so a late token batch can't append onto a row we're removing.
     cleanups.push(
-      window.electronAPI.onIntelligenceSuggestedAnswerDiscard?.(() => {
+      window.electronAPI.onIntelligenceSuggestedAnswerDiscard?.((data) => {
         if (activeDirectAssistRef.current) return;
         if (legacyIntelligenceTombstonedRef.current) return;
+        // A late discard from a replaced run must not clear the newer answer's
+        // row: the row is found by intent, not by generation (F-CTX-09).
+        if (!shouldApplyLiveAnswerDiscard(liveAnswerGenIdRef.current, data?.generationId)) return;
         setIsProcessing(false);
         if (streamingNodeRef.current) streamingNodeRef.current.innerHTML = '';
         streamingNodeRef.current = null;

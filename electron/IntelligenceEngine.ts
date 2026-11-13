@@ -234,6 +234,8 @@ interface SpeculativeAnswer {
      * under the text instead of reading as finished (forensics 2026-11-13, F-ACC-01).
      */
     stopReason?: string;
+    /** The run's source badge, computed from the evidence its prompt carried (F-ACC-04). */
+    sourceLabel?: string;
 }
 
 export class IntelligenceEngine extends EventEmitter {
@@ -409,6 +411,11 @@ export class IntelligenceEngine extends EventEmitter {
         const cv = require('./llm/claimVerifier') as typeof import('./llm/claimVerifier');
         const kind = cv.claimVerifierKind({ modeId: opts.modeId, question: opts.question, draft: opts.answer, surface: 'spoken' });
         if (!kind || !opts.modeId) return opts.answer;
+        // Only when documents are attached (F-LAT-04, owner's decision 2026-11-13).
+        if (cv.materialHasNoDocuments(opts.material) && !cv.claimVerifierRunsWithoutDocuments()) {
+            opts.trace.mark('claim_verifier_skipped' as any, { reason: 'no_documents' });
+            return opts.answer;
+        }
         const system = cv.claimVerifierSystemPrompt(opts.modeId, 'spoken', { noDocuments: cv.materialHasNoDocuments(opts.material) });
         // The replayed answer call carries the material itself (its own user
         // message comes first); without one, the V3 user message stands in.
@@ -495,6 +502,14 @@ export class IntelligenceEngine extends EventEmitter {
      * of each other. 800 ms does that without the user feeling it.
      */
     private readonly automaticTriggerCooldown: number = 800;
+    /**
+     * When a PREFETCH last declined (the "Nothing actionable" sentinel, or the
+     * router's stay-silent). It throttles the next prefetch only. It used to
+     * stamp lastTriggerTime/lastTriggerQuestion, the answered-turn cooldown, so
+     * the judge's slower "answer" verdict on the same ask then read as a
+     * repeat of it and was silenced (forensics 2026-11-13, F-ACC-08 / D4).
+     */
+    private lastSpeculativeDeclineAt = 0;
     /**
      * Generation id of the answer run started by an AUTOMATIC trigger
      * (SuggestionTrigger.automatic), or null. Lets the dual-channel gate
@@ -620,6 +635,13 @@ export class IntelligenceEngine extends EventEmitter {
         // A new meeting never inherits a design drawn before it started (in the
         // launcher's chat, or in the meeting that just ended).
         try { this.session.clearActiveDesign(); } catch { /* continuity only */ }
+        // Compile the answer path's regexes and classifiers now, in small idle
+        // slices, instead of on the first question (forensics 2026-11-13,
+        // F-LAT-01: 0.6-1.45 s of one-time main-thread work landed between the
+        // judge and the first token). Once per process; synthetic text only.
+        try {
+            (require('./llm/answerPathWarmup') as typeof import('./llm/answerPathWarmup')).scheduleAnswerPathWarmup();
+        } catch { /* the first answer just runs cold */ }
     }
 
     /**
@@ -1078,6 +1100,12 @@ export class IntelligenceEngine extends EventEmitter {
 
     // Fires speculative LLM inference on a stable high-confidence interviewer partial.
     // Debounced so rapid word-by-word partials don't spawn multiple streams.
+    private static onlySmallTalk(text: string): boolean {
+        try {
+            return (require('./llm/smallTalk') as typeof import('./llm/smallTalk')).isOnlySmallTalk(text);
+        } catch { return false; }
+    }
+
     private maybeSpeculate(segment: TranscriptSegment): void {
         if (this.activeMode !== 'idle' && this.activeMode !== 'assist') return;
 
@@ -1090,6 +1118,8 @@ export class IntelligenceEngine extends EventEmitter {
             words.length < this.SPECULATIVE_MIN_WORDS ||
             !IntelligenceEngine.hasQuestionSignal(text)
         ) return;
+        // Small talk gets no speculative generation (F-LAT-08; see smallTalk.ts).
+        if (IntelligenceEngine.onlySmallTalk(text)) return;
 
         if (this.speculativeTimer !== null) {
             clearTimeout(this.speculativeTimer);
@@ -1103,6 +1133,7 @@ export class IntelligenceEngine extends EventEmitter {
             this.releaseExpiredSpeculation();
             if (this.speculativeText !== null) return;
             if (Date.now() - this.lastTriggerTime < this.triggerCooldown) return;
+            if (Date.now() - this.lastSpeculativeDeclineAt < this.triggerCooldown) return;
             console.log(`[IntelligenceEngine] Speculative inference fired on interim`, { length: text.length, confidence });
             this.speculativeQuestionId = this.currentAutoCandidateId;
             this.runWhatShouldISay(text, confidence || 0.8, undefined, { speculative: true })
@@ -1438,7 +1469,13 @@ export class IntelligenceEngine extends EventEmitter {
             try { this.llmHelper.setGroqFastTextMode(true); } catch { /* routing hint only */ }
         }
         try {
-            await this.runWhatShouldISay(trigger.lastQuestion, trigger.confidence ?? undefined);
+            // A judged automatic ask already passed the planner's same-utterance
+            // cooldown, which compares the TEXT. The time-only 3 s throttle
+            // inside runWhatShouldISay could then only drop a DIFFERENT question
+            // asked soon after the last answer, silently, after Auto Answer had
+            // recorded it as answered (forensics 2026-11-13, F-ACC-08 / D3).
+            await this.runWhatShouldISay(trigger.lastQuestion, trigger.confidence ?? undefined, undefined,
+                trigger.automatic === true ? { skipCooldown: true } : undefined);
         } finally {
             this.nextRunIsAutomatic = false;
             if (fastAuto && !previousFastMode) {
@@ -1490,6 +1527,10 @@ export class IntelligenceEngine extends EventEmitter {
     prefetchAutoAnswer(questionId: string, text: string): void {
         const trimmed = (text ?? '').trim();
         if (trimmed.length < 12) return;
+        // "How are you doing today?" is not drafted before the judge rules on
+        // it: the replay spent four answer-sized calls on that greeting and
+        // showed none (forensics 2026-11-13, F-LAT-08; see smallTalk.ts).
+        if (IntelligenceEngine.onlySmallTalk(trimmed)) return;
         this.releaseExpiredSpeculation();
         // The engine's OWN speculation (from an interviewer interim) is not a
         // busy engine: the candidate below is the same speech, finished.
@@ -1503,6 +1544,7 @@ export class IntelligenceEngine extends EventEmitter {
             && this.speculativeAdoptedGenerationId !== this.currentGenerationId;
         if (this.activeMode !== 'idle' && this.activeMode !== 'assist' && !ownSpeculationStreaming) return;
         if (Date.now() - this.lastTriggerTime < this.triggerCooldown) return;
+        if (Date.now() - this.lastSpeculativeDeclineAt < this.triggerCooldown) return;
         // A debounced interim speculation that has not fired yet would start on
         // FEWER words than this candidate: the candidate replaces it.
         if (this.speculativeTimer !== null) {
@@ -1574,6 +1616,16 @@ export class IntelligenceEngine extends EventEmitter {
         this.speculativeAdoptedGenerationId = null;
     }
 
+    /** The overlay source badge for a What-to-Answer final (F-ACC-04). Never throws. */
+    private answerSourceLabel(snapshot: unknown, turnPlan: unknown): string {
+        try {
+            const { computeAnswerSourceLabel } = require('./llm/SourceBadge') as typeof import('./llm/SourceBadge');
+            return computeAnswerSourceLabel({ v3Prompt: (snapshot as any)?.v3Prompt ?? null, turnPlan: (turnPlan as any) ?? null });
+        } catch {
+            return 'General knowledge';
+        }
+    }
+
     /**
      * A speculative run finished. It never rendered, so this is where its text
      * is kept for adoption — or revealed at once if the dispatch already
@@ -1589,13 +1641,14 @@ export class IntelligenceEngine extends EventEmitter {
         generationId: number, question: string | undefined, confidence: number, text: string,
         writeDecision: SessionWriteDecision | undefined,
         streamed?: SpeculativeStreamed,
-        plan?: { answerType?: AnswerType; answerStyle?: string; stopReason?: string },
+        plan?: { answerType?: AnswerType; answerStyle?: string; stopReason?: string; sourceLabel?: string },
     ): string {
         const finished: SpeculativeAnswer = {
             generationId, question: question || 'inferred', confidence, text, writeDecision,
             ...(plan?.answerType ? { answerType: plan.answerType } : {}),
             ...(plan?.answerStyle ? { answerStyle: plan.answerStyle } : {}),
             ...(plan?.stopReason ? { stopReason: plan.stopReason } : {}),
+            ...(plan?.sourceLabel ? { sourceLabel: plan.sourceLabel } : {}),
         };
         const adoptedInFlight = this.speculativeAdoptedGenerationId === generationId && this.currentGenerationId === generationId;
         if (this.speculativeAdoptedGenerationId === generationId) this.speculativeAdoptedGenerationId = null;
@@ -1735,7 +1788,7 @@ export class IntelligenceEngine extends EventEmitter {
         } else {
             console.warn(`[IntelligenceEngine] Prefetched answer revealed but not stored (${finished.writeDecision.reason ?? 'do_not_store'})`);
         }
-        this.emit('suggested_answer', text, finished.question, finished.confidence, generationId, undefined, finished.stopReason);
+        this.emit('suggested_answer', text, finished.question, finished.confidence, generationId, finished.sourceLabel, finished.stopReason);
     }
 
     /** Auto Answer V3: identity of the speculative cache, for keyed/embedding reuse. */
@@ -2218,8 +2271,8 @@ export class IntelligenceEngine extends EventEmitter {
                 // which would be a behaviour change rather than a cost saving.
                 this.speculativeText = null;
                 this.speculativeTextExpiry = Infinity;
-                this.lastTriggerTime = Date.now();
-                this.lastTriggerQuestion = question ?? null;
+                // A declined prefetch throttles prefetching, not the judged ask (F-ACC-08).
+                this.lastSpeculativeDeclineAt = Date.now();
                 this.setMode('idle');
                 return null;
             }
@@ -2251,6 +2304,13 @@ export class IntelligenceEngine extends EventEmitter {
         this.automaticGenerationId = this.nextRunIsAutomatic ? generationId : null;
         this.speculativeGenerationId = isSpeculative ? generationId : null;
         this.nextRunIsAutomatic = false;
+        // A question passed in by Auto Answer (the judge's text) or a prefetch
+        // (the candidate) was HEARD, not typed. Only a typed or pressed question
+        // plans as manual input: stamping heard ones manual_input changed the
+        // answer type, voice and speakability, so the same question asked by
+        // Auto Answer and by the hotkey was planned differently (forensics
+        // 2026-11-13, F-ACC-11).
+        const questionTyped = Boolean(question) && !isSpeculative && this.automaticGenerationId !== generationId;
         const isWtaSuperseded = () => (
             this.whatToAnswerCancellationToken !== whatToAnswerCancellationToken
             || this.currentGenerationId !== generationId
@@ -3636,7 +3696,7 @@ export class IntelligenceEngine extends EventEmitter {
             const canonicalTurn = resolveCanonicalTurn({
                 answerInput: {
                     question: question || extractedQuestion.latestQuestion || lastInterviewerTurn,
-                    source: question ? 'manual_input' : 'what_to_answer',
+                    source: questionTyped ? 'manual_input' : 'what_to_answer',
                     speakerPerspective: extractedQuestion.detectedSpeaker === 'interviewer' ? 'interviewer' : 'user',
                     extractedQuestion,
                     intentResult,
@@ -3667,7 +3727,7 @@ export class IntelligenceEngine extends EventEmitter {
                     piTelemetry.emit('wta_plan_divergence', {
                         legacyType,
                         canonicalType: answerPlan.answerType,
-                        typedPress: Boolean(question),
+                        typedPress: questionTyped,
                     });
                 }
             } catch { /* telemetry only */ }
@@ -4293,7 +4353,8 @@ export class IntelligenceEngine extends EventEmitter {
                             ? (require('./services/screen/screenPrepass') as typeof import('./services/screen/screenPrepass')).SCREEN_IN_ATTACHED_IMAGE
                             : '',
                     ].filter(Boolean).join('\n\n') || undefined;
-                    const _ctx = this.v3ModeRetrievalContext(_screenPortText);
+                    // The turn's t0 mode and files, not whatever is live now (F-CTX-11).
+                    const _ctx = this.v3ModeRetrievalContext(_screenPortText, { modeInfo: snapshotModeInfo, referenceFiles: snapshotReferenceFiles });
                     if (!_ctx) return undefined;
                     const _v3 = await buildV3Prompt({
                         // What the user told the app about themselves: About you (Cue Cards, Pro),
@@ -5438,6 +5499,10 @@ export class IntelligenceEngine extends EventEmitter {
                     validationOk: false,
                     criticalViolations: ['leaked_schema_stub'],
                 });
+                // A run replaced (or whose meeting ended) after its stream finished
+                // writes nothing: no history line, no usage row, no final
+                // (pipeline forensics 2026-11-13, F-CTX-08).
+                if (isWtaSuperseded()) return yieldToSupersedingRun(false);
                 if (openedStreamRow) emitChunk(stubFallback);
                 this.session.addAssistantMessage(stubFallback, stubWriteDecision, 'what_to_answer');
                 // Phase 4 defense-in-depth (forensic-report §6b): carry generationId.
@@ -5460,6 +5525,10 @@ export class IntelligenceEngine extends EventEmitter {
                     validationOk: false,
                     criticalViolations: ['provider_transport_error'],
                 });
+                // A run replaced (or whose meeting ended) after its stream finished
+                // writes nothing: no history line, no usage row, no final
+                // (pipeline forensics 2026-11-13, F-CTX-08).
+                if (isWtaSuperseded()) return yieldToSupersedingRun(false);
                 if (openedStreamRow) emitChunk(fullAnswer);
                 this.session.addAssistantMessage(fullAnswer, transportWriteDecision, 'what_to_answer');
                 // Campaign-3 (fix/answer-policy-engine, 2026-07-19, founder §2.6):
@@ -5470,18 +5539,9 @@ export class IntelligenceEngine extends EventEmitter {
                 // `sourceLabel` field on the `intelligence-suggested-answer`
                 // payload. Defensive fallback to 'General knowledge' if the
                 // helper throws — the emit boundary must never throw.
-                const { computeEngineSourceLabel } = require('./llm/SourceBadge');
-                // When V3 composed this turn's prompt, the legacy TurnPlan did
-                // not drive the answer — labelling from it said "General
-                // knowledge" over reference-grounded V3 answers. Derive from
-                // the V3 decision instead.
-                const _v3ForLabel = (requestSnapshot as any)?.v3Prompt;
-                const _c3SourceLabel = _v3ForLabel
-                    ? ((_v3ForLabel.evidenceCount ?? 0) > 0 ? 'Reference material' : 'General knowledge')
-                    : computeEngineSourceLabel({
-                        turnPlan: _c3TurnPlan,
-                        evidenceFound: true,
-                    });
+                // When V3 composed this turn's prompt the label comes from the
+                // evidence it carried, not the legacy TurnPlan (F-ACC-04).
+                const _c3SourceLabel = this.answerSourceLabel(requestSnapshot, _c3TurnPlan);
                 // A canned opener that a real answer followed is thrown away here
                 // too, so the committed text matches what first paint showed
                 // (cannedOpener.ts, 2026-09-07).
@@ -5531,6 +5591,10 @@ export class IntelligenceEngine extends EventEmitter {
                     validationOk: false,
                     criticalViolations: ['leaked_internal_tag_block'],
                 });
+                // A run replaced (or whose meeting ended) after its stream finished
+                // writes nothing: no history line, no usage row, no final
+                // (pipeline forensics 2026-11-13, F-CTX-08).
+                if (isWtaSuperseded()) return yieldToSupersedingRun(false);
                 if (openedStreamRow) emitChunk(tagLeakFallback);
                 this.session.addAssistantMessage(tagLeakFallback, tagLeakWriteDecision, 'what_to_answer');
                 // Phase 4 defense-in-depth (forensic-report §6b): carry generationId.
@@ -6775,8 +6839,11 @@ export class IntelligenceEngine extends EventEmitter {
                 if (openedStreamRow) this.emit('suggested_answer_discard', 'no_answer', generationId);
                 this.speculativeText = null;
                 this.speculativeTextExpiry = Infinity;
-                this.lastTriggerTime = Date.now();
-                this.lastTriggerQuestion = question ?? null;
+                // Only a prefetch reaches here (a real run returned its honest
+                // fallback above). Its decline throttles the next prefetch; it
+                // must not make the judge's verdict on this same ask read as a
+                // repeat (F-ACC-08 / D4).
+                this.lastSpeculativeDeclineAt = Date.now();
                 this.setMode('idle');
                 return null;
             }
@@ -7130,6 +7197,8 @@ export class IntelligenceEngine extends EventEmitter {
                     // Same rule as the live final below: not when the cut-off
                     // text was replaced, because the user reads the replacement.
                     stopReason: wtaTruncation.truncated && !streamedAnswerReplaced ? wtaTruncation.reason : undefined,
+                    // The badge rides with the held answer so its reveal is labelled too (F-ACC-04).
+                    sourceLabel: this.answerSourceLabel(requestSnapshot, _c3TurnPlan),
                 });
             }
 
@@ -7290,6 +7359,11 @@ export class IntelligenceEngine extends EventEmitter {
                 }
             } catch { /* normalizer never blocks the answer */ }
 
+            // A run replaced (or whose meeting ended) while it was being checked
+            // writes nothing: no history line, no usage row, no final, and it
+            // leaves the mode to its successor (pipeline forensics 2026-11-13,
+            // F-CTX-08). Speculative runs check this above, before completing.
+            if (isWtaSuperseded()) return yieldToSupersedingRun(false);
             this.session.addAssistantMessage(finalWtaAnswer, wtaWriteDecision, 'what_to_answer');
 
             // Full-JIT write-gating law (§6): a provider-error/no-answer WTA
@@ -7324,7 +7398,10 @@ export class IntelligenceEngine extends EventEmitter {
             // under the text instead of reading as finished (#644). Not when
             // the cut-off text was replaced: the user reads the replacement.
             const wtaStopReason = wtaTruncation.truncated && !streamedAnswerReplaced ? wtaTruncation.reason : undefined;
-            this.emit('suggested_answer', finalWtaAnswer, question || 'What to Answer', confidence, generationId, undefined, wtaStopReason);
+            // The source badge on the normal exit too: before, only the provider
+            // error branch computed one, so every normal answer read 'General
+            // knowledge' (F-ACC-04).
+            this.emit('suggested_answer', finalWtaAnswer, question || 'What to Answer', confidence, generationId, this.answerSourceLabel(requestSnapshot, _c3TurnPlan), wtaStopReason);
             // Compile-only syntax check of fenced JavaScript (observe-only: the
             // turn trace + telemetry record it, the answer is never changed).
             try {
@@ -7593,7 +7670,13 @@ export class IntelligenceEngine extends EventEmitter {
     // the active mode. WTA and runManualAnswer previously each carried a copy of
     // this block; a third copy for the proactive surfaces is where drift starts,
     // so all of them now call this.
-    private v3ModeRetrievalContext(screenDescription?: string): {
+    /**
+     * `snapshot`: the mode and files the turn captured at t0. Without it this
+     * read the LIVE mode, so a mode switch between dispatch and the V3 build
+     * gave one answer the old mode's plan and the new mode's files
+     * (pipeline forensics 2026-11-13, F-CTX-11).
+     */
+    private v3ModeRetrievalContext(screenDescription?: string, snapshot?: { modeInfo: ActiveModeInfo | null; referenceFiles: readonly unknown[] }): {
         raw: string; modeUniqueId: string | null; modeName: string | null; meetingId: string | null;
         attachedSourceCount: number;
         attachedFileNames: string[];
@@ -7615,8 +7698,10 @@ export class IntelligenceEngine extends EventEmitter {
             const { resolveModePolicy, isModeId, resolveModeIdOrWarn } = require('./context-intelligence/policies/mode-policy-registry');
             const { ModesManager } = require('./services/ModesManager');
             const _mm = ModesManager.getInstance();
-            const _mi = _mm.getActiveModeInfo?.() ?? null;
-            const _files = _mi?.id ? (_mm.getReferenceFiles?.(_mi.id) ?? []) : [];
+            const _mi = snapshot ? snapshot.modeInfo : (_mm.getActiveModeInfo?.() ?? null);
+            const _files = snapshot
+                ? (_mi?.id ? [...snapshot.referenceFiles] : [])
+                : (_mi?.id ? (_mm.getReferenceFiles?.(_mi.id) ?? []) : []);
             const raw = (_mi as any)?.templateType ?? 'general';
             // Announced, not silent — see resolveModeIdOrWarn (2026-08-09).
             const _modeId = resolveModeIdOrWarn(_mi ? raw : null, 'engine/transcript-surface', { quietWhenAbsent: true });
