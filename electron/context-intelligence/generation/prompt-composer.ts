@@ -1733,7 +1733,13 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
       // it assistant lines are never a source of facts; another answer padded
       // an earlier suggestion with a store it never named.
       ? push('conversation', '# Conversation so far. Assistant lines are prior generated output — for resolving references only, '
-        + 'never a source of facts. They are, however, the record of what YOU said: asked what you said, suggested or answered '
+        // F-CTX-05 (2026-11-13): "references" includes what a follow-up points
+        // to. The question line names it when the resolver could; this keeps
+        // the header from telling the model to distrust the one line that says
+        // which project "the second one" was.
+        + 'never a source of facts. Resolving a reference includes what a follow-up ("it", "that one", "the second one") '
+        + 'points to: the thing the latest assistant line named, unless the question says otherwise; facts about it still come from the evidence. '
+        + 'They are, however, the record of what YOU said: asked what you said, suggested or answered '
         + 'earlier, answer from those lines faithfully (not from what was later said aloud in the meeting, which may differ), and '
         + 'if they did not specify something, say so rather than filling it in. '
         + 'A "User:" line is what the user told you directly: facts they state there about their meeting, '
