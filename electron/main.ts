@@ -4206,6 +4206,11 @@ export class AppState {
     } catch { /* keep the current thresholds */ }
   }
 
+  /** The active mode changed mid-meeting: speech held for the next ask belongs to the old mode (F-CTX-03). */
+  public onAutoAnswerModeChanged(): void {
+    try { this.simpleAutoAnswer.onModeChanged(); } catch { /* keep Auto Answer running */ }
+  }
+
   private cancelAutoAnswer(): void {
     this.simpleAutoAnswer.onMeetingStop();
   }

@@ -83,6 +83,8 @@ export interface AutoAnswerEngineHost {
 export interface AutoAnswerEngine {
     setThresholds(t: AutoAnswerThresholds): void;
     onMeetingStart(): void;
+    /** The meeting's mode changed: drop speech held under the old mode (F-CTX-03). */
+    onModeChanged(): void;
     onMeetingStop(): void;
     onEngineIdle(): void;
     onProviderEndpoint(): void;
@@ -242,7 +244,7 @@ const noop = (): void => { /* Auto Answer is not part of this build */ };
 export const UNAVAILABLE_AUTO_ANSWER: AutoAnswerPremium = Object.freeze({
     available: false,
     createEngine: (): AutoAnswerEngine => ({
-        setThresholds: noop, onMeetingStart: noop, onMeetingStop: noop, onEngineIdle: noop,
+        setThresholds: noop, onMeetingStart: noop, onModeChanged: noop, onMeetingStop: noop, onEngineIdle: noop,
         onProviderEndpoint: noop, onLocalSpeechEnd: noop, onLocalSpeechStart: noop,
         onManualAnswerStarted: noop, ingest: noop,
     }),

@@ -35,7 +35,7 @@ test('without premium: Auto Answer is unavailable and refused, never allowed', (
 test('without premium: every object main.ts builds is safe to call', async () => {
   const m = B.UNAVAILABLE_AUTO_ANSWER;
   const engine = m.createEngine({}, {});
-  for (const k of ['setThresholds', 'onMeetingStart', 'onMeetingStop', 'onEngineIdle', 'onProviderEndpoint',
+  for (const k of ['setThresholds', 'onMeetingStart', 'onModeChanged', 'onMeetingStop', 'onEngineIdle', 'onProviderEndpoint',
     'onLocalSpeechEnd', 'onLocalSpeechStart', 'onManualAnswerStarted']) assert.equal(engine[k](), undefined, k);
   assert.equal(engine.ingest({ speaker: 'interviewer', text: 'what is a closure?', timestamp: 1, final: true }), undefined);
 
