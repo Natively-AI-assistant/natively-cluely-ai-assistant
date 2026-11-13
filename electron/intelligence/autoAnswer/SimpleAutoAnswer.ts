@@ -450,6 +450,12 @@ export interface SimpleAutoAnswerHost {
     logContent?(label: string, text: string): void;
 }
 
+/**
+ * A final whose words equal the previous pending final's, this soon after it,
+ * is the STT delivering it twice, not the interviewer repeating themselves.
+ */
+export const DUPLICATE_FINAL_MS = 5000;
+
 /** Share of a picked ask's words that must come from ruled-out finals for it to count as resurfaced. */
 export const RULED_OUT_CONTAINMENT = 0.9;
 
@@ -702,6 +708,16 @@ export class SimpleAutoAnswerEngine {
             this.clearStallCap();
             this.promotedInterim = null;
             if (this.absorbStalledFinal(text, now, speaker)) return;
+            // The STT sent the same final twice (pipeline forensics 2026-11-13,
+            // F-CTX-10: the dispatched question carried the ask twice). Not new
+            // speech: no part, no supersede, no re-arm.
+            const prev = this.pending[this.pending.length - 1];
+            if (prev && !prev.provisional && now - prev.at <= DUPLICATE_FINAL_MS
+                && normalizeForCompare(prev.text) === normalizeForCompare(text)) {
+                this.lastInterviewerInterim = '';
+                this.host.log?.('[AutoAnswer:simple] duplicate final dropped');
+                return;
+            }
             // Decide the seam NOW: the interim this final was cut from is still
             // in hand, and it is gone as soon as the next one arrives.
             const glueNext = isMidWordCut(text, this.lastInterviewerInterim);
