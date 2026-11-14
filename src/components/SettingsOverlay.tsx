@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useLayoutEffect, useCallback } from 'react';
 import { LANG_NATIVE_NAMES, useLanguage, useT } from '../i18n';
-import { AutoAnswerModelCard } from '../premium';
+import { AutoAnswerAccessDialog, AutoAnswerModelCard } from '../premium';
 import { CalendarSettings } from './settings/CalendarSettings';
 import { ConnectionsSettings } from './settings/ConnectionsSettings';
 import packageJson from '../../package.json';
@@ -48,7 +48,6 @@ import { setGenieAnimationEnabled, useGenieAnimationEnabled } from '../lib/genie
 import { setKeepOverlaySizeEnabled, useKeepOverlaySizeEnabled } from '../lib/overlaySizeSetting';
 import { KeyRecorder } from './ui/KeyRecorder';
 import { useConfirmDialog } from './ui/ConfirmDialog';
-import { AutoAnswerAccessDialog } from './AutoAnswerAccessDialog';
 import { ModelSelectorLabel } from './ui/ModelSelectorLabel';
 import { MODEL_SELECTOR_WIDTH } from './ui/modelSelectorLabelText';
 import { Disclosure, DisclosureChevron } from './ui/AccordionSection';
@@ -2358,7 +2357,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                 open={autoAnswerDialog !== null}
                 proOptIn={autoAnswerDialog === 'pro'}
                 busy={autoAnswerDialogBusy}
-                onOpenChange={(o) => { if (!o) setAutoAnswerDialog(null); }}
+                onOpenChange={(o: boolean) => { if (!o) setAutoAnswerDialog(null); }}
                 onUpgrade={() => { setAutoAnswerDialog(null); setActiveTab('plans'); }}
                 onShare={async () => {
                     setAutoAnswerDialogBusy(true);
