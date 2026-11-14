@@ -19,7 +19,7 @@ rubato = "0.16"
 rand = "0.8"
 sha2 = "0.10"
 machine-uid = "0.5"
-reqwest = { version = "0.12", features = ["blocking"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls-native-roots"] }
 serde_json = "1.0"
 webrtc-vad = "0.4"
 # Zero-copy reinterpret of &[i16] as &[u8] for napi Buffer hand-off.
