@@ -7,6 +7,8 @@
  *            and an executable path inside the app (…/Google Chrome.app/…)
  *   Windows  an executable path (C:\Program Files\Zoom\bin\Zoom.exe), or a
  *            packaged app's family name (MSTeams_8wekyb3d8bbwe)
+ *   Linux    an executable path (/opt/zoom/zoom); the executable's file name is
+ *            matched against the Windows exe stems plus LINUX_BINARIES below
  * so each known app lists its identities per OS. Pure: the platform is passed
  * in, so both branches are tested on any machine.
  */
@@ -171,6 +173,24 @@ function exeName(path: string | undefined): string | null {
     return name ? name.toLowerCase() : null;
 }
 
+/**
+ * Linux binary names that are not the Windows exe stem (lowercased). Everything
+ * else on Linux matches by stem: slack.exe -> slack, firefox.exe -> firefox.
+ */
+const LINUX_BINARIES: Record<string, string[]> = {
+    'Zoom': ['zoom', 'zoomlauncher'],
+    'Microsoft Teams': ['teams', 'teams-for-linux', 'teams-insiders'],
+    'Telegram': ['telegram-desktop', 'telegram'],
+    'Signal': ['signal-desktop'],
+    'Google Chrome': ['chrome', 'google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser'],
+    'Microsoft Edge': ['msedge', 'microsoft-edge', 'microsoft-edge-stable'],
+    'Brave': ['brave', 'brave-browser'],
+    'Firefox': ['firefox', 'firefox-bin'],
+    'Discord': ['discord'],
+};
+
+const stem = (exe: string) => exe.replace(/\.exe$/, '');
+
 /** The known app this process belongs to, or null. */
 export function appOfProcess(platform: string, proc: ProcessRef): KnownApp | null {
     const bundle = proc.bundleId?.toLowerCase();
@@ -189,6 +209,11 @@ export function appOfProcess(platform: string, proc: ProcessRef): KnownApp | nul
             (exe && k.win.exes.includes(exe))
             || (lowerPath && k.win.pathIncludes?.some((p) => lowerPath.includes(p)))
             || (bundle && k.win.packages.some((p) => bundle.startsWith(p)))) ?? null;
+    }
+    if (platform === 'linux') {
+        const bin = exeName(proc.path);
+        return (bin && KNOWN_APPS.find((k) =>
+            k.win.exes.some((e) => stem(e) === bin) || LINUX_BINARIES[k.name]?.includes(bin))) || null;
     }
     return null;
 }
@@ -209,6 +234,7 @@ export function isSelf(platform: string, proc: ProcessRef, self: SelfIdentity): 
         return !!root && (proc.path === root || proc.path.startsWith(`${root}/`));
     }
     if (platform === 'win32') return proc.path.toLowerCase() === self.execPath.toLowerCase();
+    if (platform === 'linux') return proc.path === self.execPath;
     return false;
 }
 

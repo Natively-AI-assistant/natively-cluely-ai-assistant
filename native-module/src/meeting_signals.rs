@@ -344,7 +344,91 @@ mod imp {
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(target_os = "linux")]
+mod imp {
+    //! Linux: PulseAudio/PipeWire's source-outputs (recording streams) name who
+    //! holds a microphone, with the pid and device; windows come from `wmctrl`
+    //! (X11 and XWayland windows only — Wayland exposes no window list, so on a
+    //! pure-Wayland session this is a partial list or None).
+    use super::{MicUser, WindowInfo, MAX_WINDOWS};
+    use serde_json::Value;
+    use std::process::Command;
+
+    fn run(cmd: &str, args: &[&str]) -> Option<String> {
+        let out = Command::new(cmd).args(args).output().ok()?;
+        out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+    }
+
+    fn exe_of(pid: i32) -> Option<String> {
+        std::fs::read_link(format!("/proc/{pid}/exe")).ok().map(|p| p.to_string_lossy().into_owned())
+    }
+
+    fn pactl_json(what: &str) -> Option<Vec<Value>> {
+        let text = run("pactl", &["-f", "json", "list", what])?;
+        serde_json::from_str::<Value>(&text).ok()?.as_array().cloned()
+    }
+
+    pub fn mic_users() -> Option<Vec<MicUser>> {
+        let outputs = pactl_json("source-outputs")?;
+        let sources = pactl_json("sources").unwrap_or_default();
+        let mut users = Vec::new();
+        for o in outputs {
+            let src = o["source"].as_u64();
+            let source = sources.iter().find(|s| s["index"].as_u64() == src);
+            let name = source.and_then(|s| s["name"].as_str()).unwrap_or("");
+            // A recording of an output's monitor is capturing system audio, not a microphone.
+            if name.ends_with(".monitor") || source.map_or(false, |s| s["monitor_of_sink"].is_number()) {
+                continue;
+            }
+            let props = &o["properties"];
+            let pid = props["application.process.id"].as_str().and_then(|p| p.parse::<i32>().ok());
+            users.push(MicUser {
+                pid,
+                bundle_id: None,
+                path: pid.and_then(exe_of).or_else(|| props["application.process.binary"].as_str().map(String::from)),
+                device_name: source.and_then(|s| s["description"].as_str()).map(String::from),
+            });
+        }
+        Some(users)
+    }
+
+    pub fn input_in_use() -> Option<bool> {
+        None
+    }
+
+    /// `wmctrl -lp`: `<id> <desktop> <pid> <host> <title…>`; desktop -1 = sticky panel.
+    pub fn windows() -> Option<Vec<WindowInfo>> {
+        let text = run("wmctrl", &["-lp"])?;
+        Some(
+            text.lines()
+                .filter_map(|l| {
+                    let mut rest = l.trim_start();
+                    let mut field = || {
+                        let (head, tail) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
+                        rest = tail.trim_start();
+                        head
+                    };
+                    let (_id, desktop, pid, _host) = (field(), field(), field(), field());
+                    let pid: i32 = pid.parse().ok()?;
+                    let title = rest.trim().to_string();
+                    if desktop == "-1" || pid <= 0 {
+                        return None;
+                    }
+                    let path = exe_of(pid);
+                    let owner = path
+                        .as_deref()
+                        .and_then(|p| std::path::Path::new(p).file_name())
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    Some(WindowInfo { pid, owner, title, path })
+                })
+                .take(MAX_WINDOWS)
+                .collect(),
+        )
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 mod imp {
     use super::{MicUser, WindowInfo};
     pub fn mic_users() -> Option<Vec<MicUser>> {

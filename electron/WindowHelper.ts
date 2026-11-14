@@ -27,6 +27,9 @@ import { resizeEnvelopeFor, OVERLAY_PANEL_INSET } from '../src/lib/overlayCustom
 import { decideLauncherClose } from '../src/lib/launcherCloseDecision.mjs';
 import { DEV_SERVER_URL } from './devServerUrl';
 import { shortcutRestoreBounds, shortcutRestoreDisplay } from './utils/shortcutRestore';
+import { createLinuxWm } from './services/linuxWm';
+import { pinTitle } from './services/linuxWm/types';
+import { randomBytes } from 'node:crypto';
 
 const isEnvDev = process.env.NODE_ENV === 'development';
 const isPackaged = app.isPackaged;
@@ -352,7 +355,7 @@ export class WindowHelper {
    * use it.
    */
   public syncLauncherTaskbarForStealth(): void {
-    if (process.platform !== 'win32') return;
+    if (process.platform !== 'win32' && process.platform !== 'linux') return;
     const win = this.launcherWindow;
     if (!win || win.isDestroyed()) return;
     try {
@@ -926,7 +929,7 @@ export class WindowHelper {
     // BOTH desktop platforms now: macOS CGEventTap and the Windows
     // WH_KEYBOARD_LL hook route keystrokes through the same manager, so the
     // overlay must be the registered sink on Windows too.
-    if (process.platform === 'darwin' || process.platform === 'win32') {
+    if (process.platform === 'darwin' || process.platform === 'win32' || process.platform === 'linux') {
       try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
@@ -988,6 +991,13 @@ export class WindowHelper {
       // visibleOnFullScreen above; Windows has no equivalent flag, so the level
       // itself is what controls fullscreen visibility. See issue #167.
       this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
+    } else if (process.platform === 'linux') {
+      // X11: stay above other windows (_NET_WM_STATE_ABOVE) and follow the user
+      // across virtual desktops, the Spaces behaviour macOS gets above. Wayland
+      // compositors ignore both requests; there the overlay is a normal window.
+      this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
+      this.overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      this.pinOverlayViaCompositor(this.overlayWindow);
     }
 
     this.overlayWindow.loadURL(`${startUrl}?window=overlay`).catch((e) => {
@@ -1705,6 +1715,33 @@ export class WindowHelper {
         }
       }
     }
+  }
+
+  /**
+   * Linux/Wayland: Electron's always-on-top is ignored by the compositor, so
+   * ask it directly (KWin keepAbove, Sway floating+sticky, Hyprland pin) once
+   * the page has loaded and the window has its final title. Best-effort: no
+   * adapter (GNOME) or a failure leaves a normal window.
+   */
+  private pinOverlayViaCompositor(win: BrowserWindow): void {
+    const wm = createLinuxWm();
+    if (!wm) return;
+    win.webContents.once('did-finish-load', () => {
+      if (win.isDestroyed()) return;
+      // Every Natively window shares one title and pid, so match this one by a
+      // title that exists only for this call, then put the real title back.
+      // keepAbove/sticky stay on the window after the title changes back.
+      const original = win.getTitle();
+      const marker = pinTitle(original, randomBytes(6).toString('hex'));
+      win.setTitle(marker);
+      setTimeout(() => {
+        if (win.isDestroyed()) return;
+        wm.setAlwaysOnTop(process.pid, marker)
+          .then((ok) => console.log(`[WindowHelper] ${wm.name} always-on-top ${ok ? 'applied' : 'not applied'}`))
+          .catch((e) => console.warn('[WindowHelper] compositor always-on-top failed:', e))
+          .finally(() => { if (!win.isDestroyed()) win.setTitle(original); });
+      }, 300); // let the compositor see the new title
+    });
   }
 
   private createPopoverCatcher(): void {

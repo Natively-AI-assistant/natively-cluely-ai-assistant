@@ -141,7 +141,7 @@ export class NotesWindowHelper {
     }
 
     private stealthTyping(): { stopIfTarget(t: 'notes' | 'overlay'): void; getTarget(): 'notes' | 'overlay'; isActive(): boolean; setNotesWindow(w: BrowserWindow | null): void } | null {
-        if (process.platform !== 'darwin' && process.platform !== 'win32') return null
+        if (process.platform !== 'darwin' && process.platform !== 'win32' && process.platform !== 'linux') return null
         try {
             // eslint-disable-next-line @typescript-eslint/no-var-requires
             const { StealthKeyboardManager } = require('./services/StealthKeyboardManager')

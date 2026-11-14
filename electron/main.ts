@@ -7,6 +7,8 @@
 // init_DatabaseManager() (which is what loads better-sqlite3).
 // ============================================================================
 import './nativeArchGate';
+import { isWaylandSession } from "./utils/linuxScreenshot";
+import { createLinuxWm, startWindowPoller } from "./services/linuxWm";
 // Dev-only prompt recorder: must wrap fetch before any SDK client exists (inert unless NATIVELY_PROMPT_DEBUG=1, never when packaged).
 import './llm/promptDebug';
 // Pin the packaged userData to the historical "Natively" folder BEFORE any
@@ -134,6 +136,15 @@ try {
   // Never let the mitigation itself break boot. Worst case: Fontations stays
   // enabled and the (rare) font crash remains possible — the render-process-gone
   // auto-reload handler recovers it.
+}
+
+// Linux/Wayland: Chromium registers global shortcuts through the XDG
+// GlobalShortcuts portal (KDE, GNOME); without it globalShortcut.register()
+// silently does nothing on Wayland. X11 sessions keep the default path.
+// ozone-platform-hint lets Electron pick Wayland natively when the session is one.
+if (process.platform === 'linux') {
+  if (isWaylandSession()) app.commandLine.appendSwitch('enable-features', 'GlobalShortcutsPortal');
+  app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
 }
 
 /**
@@ -2107,7 +2118,7 @@ export class AppState {
     // CGEventTap, Windows via a WH_KEYBOARD_LL hook (both expose the same
     // native StealthKeyboardTap). The manager + renderer contract are
     // platform-agnostic; only the IME-probe handlers below are macOS-specific.
-    if (process.platform === 'darwin' || process.platform === 'win32') {
+    if (process.platform === 'darwin' || process.platform === 'win32' || process.platform === 'linux') {
       const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
       const stealth = StealthKeyboardManager.getInstance();
       // Only the overlay and the notes window may ENGAGE the system-wide
@@ -2167,6 +2178,14 @@ export class AppState {
           refreshImeDetection();
           return shouldAutoEngageStealthTap();
         });
+      } else if (process.platform === 'linux') {
+        // Linux: the grab takes the whole keyboard, so it is opt-in twice over:
+        // the user has granted /dev/input access (isAvailable) AND turned
+        // undetectable mode on. Otherwise a click in the overlay keeps plain DOM
+        // focus, as it does today. The hotkey path still calls start() directly.
+        const linuxEngage = () => stealth.isAvailable() && this.getUndetectable();
+        registerStealthHandler('stealth-tap:should-auto-engage', linuxEngage);
+        registerStealthHandler('stealth-tap:refresh-ime', linuxEngage);
       } else {
         // Windows: same decision as macOS, different probe. The WH_KEYBOARD_LL
         // hook swallows keystrokes before IMM32/TSF can compose them, so a CJK
@@ -11935,9 +11954,13 @@ if (process.env.THINKING_MATRIX === '1') {
   };
 
   // When a call starts in Zoom, Teams, Meet (…), offer to start Natively.
+  const linuxWm = createLinuxWm();
+  const linuxWindows = linuxWm ? startWindowPoller(linuxWm) : null;
+  if (linuxWindows) app.once('will-quit', () => linuxWindows.stop());
   const meetingDetector = wireMeetingDetection({
     platform: process.platform,
     native: loadNativeModule(),
+    linuxWindows: linuxWindows ? () => linuxWindows.get() : undefined,
     self: { pid: process.pid, execPath: process.execPath },
     isMeetingActive: () => appState.getIsMeetingActive(),
     promptsBlocked: () => nativePromptsBlocked(() => appState.getUndetectable()) || appState.getDisguise() !== 'none',
