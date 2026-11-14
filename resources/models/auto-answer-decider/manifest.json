@@ -2,9 +2,9 @@
   "schema": 1,
   "kind": "seq-cls",
   "id": "natively/auto-answer-decider-student",
-  "version": "2026.11.13-student-1",
-  "about": "Auto Answer decider: ModernBERT-base (149.6M) distilled from the Laya teacher r3 (alpha 0.7, opusfix labels, 4 epochs). Paid, private download (API keys + Pro): int8 per-channel on onnxruntime 1.24.3 (Windows, Apple Silicon macOS 14+), 4-bit MatMulNBits on the app onnxruntime 1.22 (Intel Macs, macOS 13). Gold (corrected 2026-11-13): alone 28/34 asks, 0/153 false fires; with the LLM judge below the cut-off 32/34, 0/153. ml/auto-answer-decider, docs/autopilot/decider-decisions.md.",
-  "graph": "decider-student-1.int8.onnx",
+  "version": "2026.11.14-student-yt2",
+  "about": "Auto Answer decider: ModernBERT-base (149.6M) student yt2, distilled from the Laya teacher r3 (alpha 0.7, 4 epochs) on the 117k synthetic rows plus 6,934 real-call moments from public YouTube interviews and sales calls (Claude Opus 5.5 labels). Paid, private download (API keys + Pro): int8 per-channel with reduced range on onnxruntime 1.24.3 (Windows, Apple Silicon macOS 14+; student 1's full-range int8 broke on x86), 4-bit MatMulNBits on the app onnxruntime 1.22 (Intel Macs, macOS 13). Gold (int8, onnxruntime 1.24.3): alone 32/34 asks, 0/153 false fires; with the LLM judge below the cut-off 32/34, 1/153. Real-call test (627 moments, 8 held-out videos): 88.8% answer-vs-not. ml/auto-answer-decider, docs/autopilot/decider-decisions.md.",
+  "graph": "decider-student-yt2.int8.onnx",
   "tokenizer": "tokenizer",
   "labels": [
     "answer",
@@ -33,14 +33,14 @@
   ],
   "variants": {
     "int8": {
-      "graph": "decider-student-1.int8.onnx",
-      "sha256": "53b4167abfbf7ec7669b09e3138ff64cc38ae47289301c9c8657f5e445fa9d1d",
+      "graph": "decider-student-yt2.int8.onnx",
+      "sha256": "470333e35ec7cf291fc708b06f415f7764d709270f170bc0f55a6d1812b88aae",
       "bytes": 151292425,
       "runtime": "ort-1.24"
     },
     "q4": {
-      "graph": "decider-student-1.q4.onnx",
-      "sha256": "6f890eaaa04117eb923f6d5a747625db7537f355aa4aefbfa5d78145fee7e030",
+      "graph": "decider-student-yt2.q4.onnx",
+      "sha256": "a72162bd3ca62efcfb9294891f8f1b19e99501cd1445b1049051b4933d1610ba",
       "bytes": 94228145,
       "runtime": "ort-1.22"
     }
