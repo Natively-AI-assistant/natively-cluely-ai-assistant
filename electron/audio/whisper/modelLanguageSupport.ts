@@ -119,6 +119,7 @@ const WHISPER_LANGUAGE_BY_ISO639: Record<string, string> = {
   ml: 'malayalam',
   pa: 'punjabi',
   ur: 'urdu',
+  ne: 'nepali',
   hr: 'croatian',
   et: 'estonian',
   lv: 'latvian',
