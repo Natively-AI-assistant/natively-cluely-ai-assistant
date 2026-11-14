@@ -198,6 +198,33 @@ export const FUNNEL_CATALOG = Object.freeze({
     minutes: INT,
     first: BOOL,
   },
+  // How the previous run of the app ended, reported once by the next launch
+  // (added 2026-11-14; the app's src/lib/funnel/runEnd.mjs). The first measure
+  // of crashes: meeting_cut_off cannot tell a crash from a force quit.
+  //   quit         the user quit, or closed the last window
+  //   restart      the app restarted itself ("Restart now")
+  //   update       quit to install an update
+  //   os_shutdown  the computer shut down, restarted or logged off
+  //   signal       the OS or another program asked it to stop
+  //   crash        the app's main process hit a fatal error
+  //   vanished     it ended without a word: a native crash, a force quit,
+  //                a power cut, or the OS killing it
+  // The counts are processes that died and that the app survived (windows
+  // reloaded, helpers respawned), before any quit began. Absent from runs of
+  // builds before 2026-11-14, as is `updated`; a run of such a build that left
+  // no marker (found through the debug log) reports only how, and whether the
+  // computer restarted.
+  app_run_ended: {
+    how: ['quit', 'restart', 'update', 'os_shutdown', 'signal', 'crash', 'vanished'],
+    minutes: INT,           // up to its last sign of life
+    in_meeting: BOOL,       // a meeting was still running: the app never saw it end (a quit ends it first)
+    renderer_crashes: INT,
+    gpu_crashes: INT,
+    helper_crashes: INT,
+    out_of_memory: BOOL,    // one of those ran out of memory
+    updated: BOOL,          // that run was another version than the one reporting it
+    computer_restarted: BOOL, // the computer has started since its last sign of life
+  },
   // An answer was asked for and did not come. At most once per cause per local
   // day per install: which kinds of failure someone met that day, not how often.
   answer_failed: {

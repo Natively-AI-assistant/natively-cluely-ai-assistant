@@ -7633,6 +7633,9 @@ export function initializeIpcHandlers(appState: AppState): void {
   // already-running process until the app is relaunched.
   safeHandle('restart-app', () => {
     console.log('[IPC] restart-app requested');
+    // app.exit skips before-quit: say it was a restart, or the next launch
+    // reads this run as one that vanished (app_run_ended).
+    try { require('./utils/lifecycleTracker').LifecycleTracker.getInstance().markRestart('restart-app'); } catch { /* best-effort */ }
     app.relaunch();
     app.exit(0);
   });
@@ -7953,7 +7956,76 @@ export function initializeIpcHandlers(appState: AppState): void {
     return appState.getAutoAnswerEnabled();
   });
 
+  // Who may run Auto Answer, and whether this user's meetings are shared
+  // (autoAnswerAccess.ts). basis 'pro' | 'sharing' | 'none'.
+  safeHandle('auto-answer:get-access', async () => {
+    const SettingsManager = require('./services/SettingsManager').SettingsManager;
+    const consent = SettingsManager.getInstance().get('autoAnswerTrainingConsent') ?? null;
+    const access = appState.getAutoAnswerAccess();
+    return { available: appState.isAutoAnswerAvailable(), allowed: access.allowed, basis: access.basis, uploads: access.uploads, consent, enabled: appState.getAutoAnswerEnabled() };
+  });
+
+  // Agree to share (free users: unlocks Auto Answer; Pro: the opt-in), or withdraw.
+  // Withdrawing for a free user leaves the toggle as it is but Auto Answer stops
+  // (isAutoAnswerActive), and nothing more is uploaded.
+  safeHandle('auto-answer:set-training-consent', async (_, granted: boolean) => {
+    const ok = appState.setAutoAnswerTrainingConsent(Boolean(granted));
+    return ok ? { success: true } : { success: false, error: 'Settings store is unavailable; the change was not saved.' };
+  });
+
+  // Delete what this install already shared: queued files here, then the
+  // server's copies (DELETE /v1/training/meeting-transcripts). Also withdraws.
+  safeHandle('auto-answer:delete-shared-data', async () => {
+    appState.setAutoAnswerTrainingConsent(false);
+    return appState.trainingUploader().requestDeletion();
+  });
+
+  // The Auto Answer model: a paid, private download for API keys and Pro
+  // (premium/electron/autoAnswer/decider/deciderModelInstaller.ts), and its
+  // before/after judge-call card (deciderSavings.ts, numbers only).
+  const autoAnswerModelState = () => ({
+    install: appState.deciderInstaller().status(),
+    savings: appState.deciderSavings().summary(),
+  });
+  safeHandle('auto-answer-model:get-status', async () => autoAnswerModelState());
+  safeHandle('auto-answer-model:install', async () => {
+    const send = (install: unknown) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send('auto-answer-model:progress', install);
+      }
+    };
+    const result = await appState.deciderInstaller().install(send);
+    if (result.state === 'installed') {
+      appState.deciderSavings().markInstalled();
+      appState.resetAutoAnswerDecider();
+    }
+    return autoAnswerModelState();
+  });
+  safeHandle('auto-answer-model:remove', async () => {
+    // Stop the worker first: Windows will not delete a graph a process still has open.
+    appState.resetAutoAnswerDecider();
+    const installer = appState.deciderInstaller();
+    installer.remove();
+    if (installer.installedDir()) {
+      await new Promise((r) => setTimeout(r, 3500)); // the utility process's stop grace (deciderUtilityHost.ts)
+      installer.remove();
+    }
+    if (!installer.installedDir()) appState.deciderSavings().markRemoved();
+    return autoAnswerModelState();
+  });
+
   safeHandle('set-auto-answer-enabled', async (_, enabled: boolean) => {
+    // Auto Answer is Pro or trial, or free with training-data sharing
+    // (premium/electron/autoAnswer/autoAnswerAccess.ts). Switching off is always free.
+    if (enabled) {
+      const access = appState.getAutoAnswerAccess();
+      if (!access.allowed && access.error === 'auto_answer_unavailable') {
+        return { success: false, error: access.error, message: 'Auto Answer is not part of this build.' };
+      }
+      if (!access.allowed) {
+        return { success: false, error: access.error, message: 'Auto Answer is part of Natively Pro. You can also use it for free by sharing the transcripts of meetings where it runs.' };
+      }
+    }
     const persisted = appState.setAutoAnswerEnabled(Boolean(enabled));
     return persisted
       ? { success: true }

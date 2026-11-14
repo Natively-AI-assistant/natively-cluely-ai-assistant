@@ -25,6 +25,7 @@
 //   stt-warning        reconnecting, on a backup provider, or falling behind
 //   ambient-mic        Ambient AI Chat: this meeting is not heard on purpose
 //   trial              the free trial started / is ending / ended / could not start
+//   auto-answer-access Auto Answer is paused: Pro, or free with transcript sharing
 //   last-time          what last time's notes left open
 //   capture-fallback   the page capture the user just asked for fell back
 //   refusal-retry      the screenshot answer was retried without the border
@@ -46,6 +47,7 @@ export const OVERLAY_BANNER_PRIORITY = Object.freeze([
   'stt-warning',
   'ambient-mic',
   'trial',
+  'auto-answer-access',
   'last-time',
   'capture-fallback',
   'refusal-retry',

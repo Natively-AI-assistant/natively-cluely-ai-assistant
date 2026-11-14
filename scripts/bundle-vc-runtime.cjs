@@ -126,6 +126,20 @@ function onnxBindingDir(appOutDir, arch, pathImpl = path) {
 }
 
 /**
+ * Where the Auto Answer decider's own onnxruntime (onnxruntime-node 1.24.3 under
+ * the npm alias onnxruntime-node-decider) keeps its Windows binaries. They
+ * import the same four Visual C++ DLLs as 1.22 (read from the 1.24.3 import
+ * tables, 2026-11-13), and load in the decider's utility process, where the app
+ * runtime's copies are not loaded.
+ */
+function deciderOnnxBindingDir(appOutDir, arch, pathImpl = path) {
+  return pathImpl.join(
+    appOutDir, 'resources', 'app.asar.unpacked',
+    'node_modules', 'onnxruntime-node-decider', 'bin', 'napi-v6', 'win32', arch,
+  );
+}
+
+/**
  * The folders holding node-llama-cpp's Windows runtimes for `arch`
  * (@node-llama-cpp/win-x64, win-x64-vulkan, win-x64-cuda, ... /bins/<name>).
  * llama-addon.node, llama.dll, ggml*.dll and llama-common.dll import the
@@ -175,8 +189,11 @@ async function bundleVcRuntimeForAfterPack(
   }
 
   const targetDir = onnxBindingDir(context.appOutDir, arch, pathImpl);
+  const deciderDir = deciderOnnxBindingDir(context.appOutDir, arch, pathImpl);
+  const onnxDirs = [targetDir, deciderDir];
   const targetDirs = [
     ...(fsImpl.existsSync(targetDir) ? [targetDir] : []),
+    ...(fsImpl.existsSync(deciderDir) ? [deciderDir] : []),
     ...llamaRuntimeBinDirs(context.appOutDir, arch, fsImpl, pathImpl),
   ];
   if (targetDirs.length === 0) {
@@ -203,9 +220,9 @@ async function bundleVcRuntimeForAfterPack(
   }
 
   for (const dir of targetDirs) {
-    // onnxruntime's folder always gets this host's copies; a llama.cpp folder
+    // onnxruntime's folders always get this host's copies; a llama.cpp folder
     // keeps the ones its package shipped (see llamaRuntimeBinDirs).
-    const keepShipped = dir !== targetDir;
+    const keepShipped = !onnxDirs.includes(dir);
     let copied = 0;
     for (const [dll, source] of found) {
       const dest = pathImpl.join(dir, dll);
@@ -223,5 +240,6 @@ module.exports.bundleVcRuntimeForAfterPack = bundleVcRuntimeForAfterPack;
 module.exports.locateVcRuntime = locateVcRuntime;
 module.exports.readPeMachine = readPeMachine;
 module.exports.onnxBindingDir = onnxBindingDir;
+module.exports.deciderOnnxBindingDir = deciderOnnxBindingDir;
 module.exports.llamaRuntimeBinDirs = llamaRuntimeBinDirs;
 module.exports.VC_RUNTIME_DLLS = VC_RUNTIME_DLLS;

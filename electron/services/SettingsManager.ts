@@ -51,6 +51,12 @@ export interface AppSettings {
     // produced only by the What-to-Answer hotkey, exactly as before. The
     // trigger itself lives in AppState.scheduleAutoAnswer().
     autoAnswerEnabled?: boolean;
+    // Agreement to share the transcripts of meetings where Auto Answer runs, for
+    // training the Auto Answer decider (autoAnswerAccess.ts; Evin 2026-11-13).
+    // Free users need it to run Auto Answer; for Pro/trial it is an opt-in.
+    // null/absent = not agreed. A version below TRAINING_CONSENT_VERSION does
+    // not count, so a change of terms asks again.
+    autoAnswerTrainingConsent?: { version: number; grantedAt: string } | null;
     // Meeting detection (2026-09-27): Natively reads which meeting the user is in
     // (the Companion extension's meeting tabs, later the meeting apps' windows and
     // microphone use) to link a session to its calendar event exactly and to

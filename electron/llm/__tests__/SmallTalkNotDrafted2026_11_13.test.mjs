@@ -41,7 +41,7 @@ describe('isOnlySmallTalk', () => {
     ]) test(`not small talk: ${t || '(empty)'}`, () => assert.equal(isOnlySmallTalk(t), false));
 
     test('no real ask in the judge eval sets reads as small talk', () => {
-        const dir = path.resolve(__dirname, '../../intelligence/autoAnswer/__tests__/judge-eval');
+        const dir = path.resolve(__dirname, '../../../premium/electron/autoAnswer/__tests__/judge-eval');
         const hits = [];
         for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.json'))) {
             const data = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));

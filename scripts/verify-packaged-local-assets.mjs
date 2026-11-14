@@ -147,6 +147,10 @@ const REQUIRED_UNPACKED_NATIVE_COMMON = [
 ];
 const REQUIRED_UNPACKED_NATIVE_DARWIN = [
   'node_modules/onnxruntime-node/bin/napi-v6/darwin',
+  // The Auto Answer decider's own onnxruntime 1.24.3 (npm alias; deciderRuntime.ts).
+  // Apple Silicon only: 1.24 ships no Intel Mac build, and Intel Macs run the
+  // 4-bit graph on the app runtime above.
+  'node_modules/onnxruntime-node-decider/bin/napi-v6/darwin/arm64',
   'node_modules/@img/sharp-darwin-arm64/lib',
   'node_modules/@img/sharp-libvips-darwin-arm64/lib',
   'node_modules/@img/sharp-darwin-x64/lib',
@@ -179,6 +183,12 @@ const REQUIRED_UNPACKED_NATIVE_WIN32 = [
   'node_modules/onnxruntime-node/bin/napi-v6/win32/x64/msvcp140_1.dll',
   'node_modules/onnxruntime-node/bin/napi-v6/win32/x64/vcruntime140.dll',
   'node_modules/onnxruntime-node/bin/napi-v6/win32/x64/vcruntime140_1.dll',
+  // The decider's onnxruntime 1.24.3 (utility process), with the same four.
+  'node_modules/onnxruntime-node-decider/bin/napi-v6/win32/x64/onnxruntime_binding.node',
+  'node_modules/onnxruntime-node-decider/bin/napi-v6/win32/x64/msvcp140.dll',
+  'node_modules/onnxruntime-node-decider/bin/napi-v6/win32/x64/msvcp140_1.dll',
+  'node_modules/onnxruntime-node-decider/bin/napi-v6/win32/x64/vcruntime140.dll',
+  'node_modules/onnxruntime-node-decider/bin/napi-v6/win32/x64/vcruntime140_1.dll',
   // The same four beside node-llama-cpp's CPU runtime, the one every PC falls
   // back to: its addon and DLLs import them too, and are tested in a child
   // process where onnxruntime's copies are not loaded. The package ships three;

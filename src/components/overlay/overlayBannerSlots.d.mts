@@ -6,6 +6,7 @@ export type OverlayBannerId =
   | 'stt-warning'
   | 'ambient-mic'
   | 'trial'
+  | 'auto-answer-access'
   | 'auto-stop'
   | 'last-time'
   | 'capture-fallback'

@@ -28,6 +28,7 @@
 
 import { app } from 'electron';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { createFunnelClient, type FunnelClient, type FunnelTrackResult } from '../../src/lib/funnel/funnelClient.mjs';
@@ -43,6 +44,8 @@ import { SettingsManager } from './SettingsManager';
 import { nativelyApiBase } from './nativelyApiBase';
 import { normalizeMeetingSurface, type MeetingSurface } from '../utils/meetingSurface';
 import { NOTEPAD_ACTIONS, NOTE_RECIPE_IDS } from '../../src/lib/funnel/funnelCatalog.mjs';
+import { summarizeRunEnd } from '../../src/lib/funnel/runEnd.mjs';
+import { LifecycleTracker } from '../utils/lifecycleTracker';
 
 const NATIVELY_API_URL = nativelyApiBase();
 const DISPATCH_INTERVAL_MS = 30_000;
@@ -84,6 +87,8 @@ interface StoredState extends FunnelState {
     /** The local day `failuresReported` belongs to, and the failure causes already reported for it. */
     failuresDay: string;
     failuresReported: string[];
+    /** The last run whose end was reported (app_run_ended), as runEnd.mjs keys it. */
+    runEndReported: string;
 }
 
 export class FunnelTelemetry {
@@ -106,6 +111,8 @@ export class FunnelTelemetry {
     private notepadSent = new Set<string>();
     /** This launch. A meeting note on disk written by any other launch was never ended. */
     private readonly bootId: string = getAppSessionId() || randomUUID();
+    /** The previous run's end has been looked at this launch (reportPreviousRun). */
+    private previousRunChecked = false;
 
     public static getInstance(): FunnelTelemetry {
         if (!FunnelTelemetry.instance) FunnelTelemetry.instance = new FunnelTelemetry();
@@ -170,6 +177,7 @@ export class FunnelTelemetry {
                 openMeeting: normalizeOpenMeeting(raw?.openMeeting),
                 failuresDay: typeof raw?.failuresDay === 'string' ? raw.failuresDay : '',
                 failuresReported: Array.isArray(raw?.failuresReported) ? raw.failuresReported.filter((f: unknown) => typeof f === 'string').slice(0, 50) : [],
+                runEndReported: typeof raw?.runEndReported === 'string' ? raw.runEndReported.slice(0, 120) : '',
             };
         }
         return this.state;
@@ -219,6 +227,24 @@ export class FunnelTelemetry {
         return name === 'funnel' ? dev : new URL(name, dev).toString();
     }
 
+    /**
+     * The install token this server signed for this install (registering it
+     * first if needed), for other routes that vouch for an install the same
+     * way: shared Auto Answer transcripts (premium/electron/autoAnswer/training). Never throws.
+     */
+    public async installToken(installId: string): Promise<string | undefined> {
+        // Sharing transcripts is its own consent: a user who turned Usage
+        // statistics off but agreed to share still needs the token, or every
+        // upload is refused (401) forever. Registration only, for this call;
+        // funnel events stay off.
+        this.tokenForSharing += 1;
+        try {
+            const r = await this.getRegistrar().ensureToken(installId);
+            return typeof (r as any)?.token === 'string' ? (r as any).token : undefined;
+        } catch { return undefined; } finally { this.tokenForSharing -= 1; }
+    }
+    private tokenForSharing = 0;
+
     private getRegistrar(): InstallRegistrar {
         if (!this.registrar) {
             this.registrar = createInstallRegistrar({
@@ -232,7 +258,7 @@ export class FunnelTelemetry {
                 // found inside a packaged app on either platform.
                 yieldFn: () => new Promise<void>((resolve) => { setImmediate(resolve); }),
                 sleep: (ms) => new Promise<void>((resolve) => { const t = setTimeout(resolve, ms); t.unref?.(); }),
-                isEnabled: () => this.isEnabled(),
+                isEnabled: () => this.isEnabled() || this.tokenForSharing > 0,
                 // Never during a meeting: it waits, and so do the events.
                 shouldPause: () => this.meetingStartedAt !== null,
                 loadToken: (installId) => this.loadState().tokens[installId],
@@ -292,6 +318,8 @@ export class FunnelTelemetry {
         this.snapshot = () => {
             try { return fn(); } catch { return { entitlement: 'none', hasOwnAi: false, hasApiKey: false, hasPro: false, meetingAi: 'none' }; }
         };
+        // The earliest point an event carries its entitlement.
+        this.reportPreviousRunNow();
     }
 
     /** ipcHandlers hands this in too: the device and the credentials, read fresh each time. */
@@ -311,6 +339,7 @@ export class FunnelTelemetry {
             // start the one-time registration puzzle.
             const first = setTimeout(() => { void this.tick(); }, FIRST_TICK_MS);
             first.unref?.();
+            this.reportPreviousRunNow();
         } catch (e: any) {
             console.warn('[Funnel] start failed:', e?.message || e);
         }
@@ -331,6 +360,51 @@ export class FunnelTelemetry {
 
     // ── What the main process reports for itself ─────────────────────────────
 
+    /**
+     * How the previous run ended (app_run_ended), once per run. Called as soon
+     * as the app can (the IPC handlers hand in the snapshot resolver, and
+     * start()), so a run that dies within seconds still reports the one
+     * before it: a crash loop is the case this exists for. Also called before
+     * a cut-off meeting note is cleared or replaced, because that note is what
+     * says a meeting was running when the run ended. Changes `st`; the caller saves.
+     * @returns whether `st` changed
+     */
+    private reportPreviousRun(st: StoredState): boolean {
+        if (this.previousRunChecked) return false;
+        try {
+            const tracker = LifecycleTracker.getInstance();
+            let bootAt: number | null = null;
+            try { bootAt = Date.now() - os.uptime() * 1000; } catch { /* unknown */ }
+            const summary = summarizeRunEnd(tracker.readPreviousSessionMarker(), app.getVersion(), {
+                lastLogAt: tracker.getPriorLogWrite(), bootAt,
+            });
+            if (!summary || summary.key === st.runEndReported) { this.previousRunChecked = true; return false; }
+            const inMeeting = cutOffMeeting(st.openMeeting, this.bootId) !== null;
+            const result = this.track('app_run_ended', { ...summary.props, in_meeting: inMeeting });
+            // Not sent (analytics off, no install id yet, a failure): try again
+            // on the next tick. Refused as invalid: it never will be.
+            if (result !== 'queued' && result !== 'duplicate') {
+                if (result === 'invalid') this.previousRunChecked = true;
+                return false;
+            }
+            this.previousRunChecked = true;
+            st.runEndReported = summary.key;
+            return true;
+        } catch {
+            this.previousRunChecked = true;
+            return false;
+        }
+    }
+
+    /** reportPreviousRun on its own, with the state loaded and saved. */
+    private reportPreviousRunNow(): void {
+        if (this.previousRunChecked) return;
+        try {
+            const st = this.loadState();
+            if (this.reportPreviousRun(st)) this.saveState();
+        } catch { /* analytics never blocks startup */ }
+    }
+
     /** First run, once; and one snapshot per local calendar day the app is open. */
     private reportLifecycle(): void {
         if (!this.isEnabled()) return;
@@ -348,6 +422,7 @@ export class FunnelTelemetry {
             st.firstRunSent = true;
             changed = true;
         }
+        if (this.reportPreviousRun(st)) changed = true;
         // A meeting a past launch never saw end: the app was closed or crashed
         // while it ran. Reported once, then forgotten.
         const cutOff = cutOffMeeting(st.openMeeting, this.bootId);
@@ -399,7 +474,9 @@ export class FunnelTelemetry {
             const first = !resumed && st.newInstall && st.meetings === 1;
             // Written down so a meeting the app never sees end is still counted
             // (reportLifecycle, at the next launch). A note left by an earlier
-            // launch is reported before it is replaced.
+            // launch is reported before it is replaced, and so is how that
+            // launch ended, while the note can still say a meeting was running.
+            this.reportPreviousRun(st);
             const cutOff = cutOffMeeting(st.openMeeting, this.bootId);
             if (cutOff) this.track('meeting_cut_off', cutOff);
             st.openMeeting = { startedAt: this.meetingStartedAt, seenAt: this.meetingStartedAt, first, boot: this.bootId };

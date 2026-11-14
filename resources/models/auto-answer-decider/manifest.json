@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "kind": "seq-cls",
+  "id": "natively/auto-answer-decider-student",
+  "version": "2026.11.13-student-1",
+  "about": "Auto Answer decider: ModernBERT-base (149.6M) distilled from the Laya teacher r3 (alpha 0.7, opusfix labels, 4 epochs). Paid, private download (API keys + Pro): int8 per-channel on onnxruntime 1.24.3 (Windows, Apple Silicon macOS 14+), 4-bit MatMulNBits on the app onnxruntime 1.22 (Intel Macs, macOS 13). Gold (corrected 2026-11-13): alone 28/34 asks, 0/153 false fires; with the LLM judge below the cut-off 32/34, 0/153. ml/auto-answer-decider, docs/autopilot/decider-decisions.md.",
+  "graph": "decider-student-1.int8.onnx",
+  "tokenizer": "tokenizer",
+  "labels": [
+    "answer",
+    "silent",
+    "wait"
+  ],
+  "state_room": 372,
+  "max_len": 512,
+  "head_max_len": 192,
+  "thresholds": {
+    "answer": 0.9,
+    "silent": 0.9,
+    "wait": 0.9
+  },
+  "files": [
+    {
+      "path": "tokenizer/tokenizer.json",
+      "sha256": "24e88219a52f2c11d47836d4877ec9218f1aeeceb04e913e437c65f13adb6015",
+      "bytes": 3583325
+    },
+    {
+      "path": "tokenizer/tokenizer_config.json",
+      "sha256": "1ac22ccabdfc304b50d42780a76bcd67b390c133fb9f17ddb946ca1e218ce164",
+      "bytes": 486
+    }
+  ],
+  "variants": {
+    "int8": {
+      "graph": "decider-student-1.int8.onnx",
+      "sha256": "53b4167abfbf7ec7669b09e3138ff64cc38ae47289301c9c8657f5e445fa9d1d",
+      "bytes": 151292425,
+      "runtime": "ort-1.24"
+    },
+    "q4": {
+      "graph": "decider-student-1.q4.onnx",
+      "sha256": "6f890eaaa04117eb923f6d5a747625db7537f355aa4aefbfa5d78145fee7e030",
+      "bytes": 94228145,
+      "runtime": "ort-1.22"
+    }
+  }
+}
