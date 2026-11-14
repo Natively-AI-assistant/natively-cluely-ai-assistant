@@ -527,12 +527,12 @@ export interface ElectronAPI {
   onModeChanged: (callback: (data: { id: string | null; name: string | null; fileCount?: number; indexedCount?: number }) => void) => () => void
 
   // Modes
-  modesGetAll: () => Promise<Array<{ id: string; name: string; templateType: string; customContext: string; isActive: boolean; createdAt: string; referenceFileCount: number }>>
+  modesGetAll: () => Promise<Array<{ id: string; name: string; templateType: string; customContext: string; isActive: boolean; createdAt: string; referenceFileCount: number; answerLength?: 'shorter' | 'smart' | 'longer' }>>
   modesGetActive: () => Promise<{ id: string; name: string; templateType: string; customContext: string; isActive: boolean; createdAt: string } | null>
   modesCreate: (params: { name: string; templateType: string }) => Promise<{ success: boolean; mode?: any; error?: string }>
   modesGenerateFromBrief: (params: { brief: string; requiresGrounding?: boolean; templateHint?: string; key?: string; persist?: boolean }) => Promise<{ success: boolean; mode?: any; draft?: any; attempts?: number; issues?: any[]; persisted?: boolean; error?: string }>
   e2eInvoke: (channel: string, ...args: any[]) => Promise<any>
-  modesUpdate: (id: string, updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any }) => Promise<{ success: boolean; error?: string }>
+  modesUpdate: (id: string, updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any; answerLength?: 'shorter' | 'smart' | 'longer' }) => Promise<{ success: boolean; error?: string; message?: string }>
   modesGetSourceContract: (modeId: string) => Promise<any>
   modesDelete: (id: string) => Promise<{ success: boolean; error?: string }>
   modesSetActive: (id: string | null) => Promise<{ success: boolean; error?: string }>

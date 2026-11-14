@@ -1455,7 +1455,7 @@ interface ElectronAPI {
   e2eInvoke?: (channel: string, ...args: any[]) => Promise<any>;
   modesUpdate: (
     id: string,
-    updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any },
+    updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any; answerLength?: 'shorter' | 'smart' | 'longer' },
   ) => Promise<{ success: boolean; error?: string }>;
   modesGetSourceContract: (modeId: string) => Promise<any>;
   modesBuildUserSourceContract: (input: {
@@ -3764,7 +3764,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     : {}),
   modesUpdate: (
     id: string,
-    updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any },
+    updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any; answerLength?: 'shorter' | 'smart' | 'longer' },
   ) => ipcRenderer.invoke('modes:update', id, updates),
   modesGetSourceContract: (modeId: string) =>
     ipcRenderer.invoke('modes:get-source-contract', modeId),

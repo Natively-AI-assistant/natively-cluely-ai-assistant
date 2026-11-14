@@ -9,6 +9,7 @@ import type { AnswerType } from '../llm/AnswerPlanner';
 import type { ActiveModeInfo } from '../llm/modeProfiles';
 import { classifyCustomContext, selectCustomContextFactsForAnswer, selectCustomContextForAnswer } from '../llm/customContextClassifier';
 import { registerUserInstructionProvider, USER_INSTRUCTIONS_MAX_CHARS } from '../llm/userInstructionContract';
+import { isAnswerLength, normalizeAnswerLength, registerAnswerLengthProvider, type AnswerLength } from '../llm/answerLength';
 import { diagLog } from '../llm/documentGroundedPrompt';
 import { planBuiltinAdoption, BUILTIN_MODE_LABELS } from './builtinModes';
 import {
@@ -89,13 +90,30 @@ export function modeNeedsPro(mode: Pick<Mode, 'templateType'> | null | undefined
 /** True when this mode needs Pro and the user has neither Pro nor a trial. */
 export function modeLockedWithoutPro(mode: Pick<Mode, 'templateType'> | null | undefined): boolean {
     if (!modeNeedsPro(mode)) return false;
+    return !modesProAccessActive();
+}
+/**
+ * Pro or a trial, by the injected check. Not wired (unit tests, early boot)
+ * withholds nothing, the same rule modeLockedWithoutPro has always followed.
+ */
+export function modesProAccessActive(): boolean {
     const check = (globalThis as unknown as Record<string, unknown>)[PRO_ACCESS_KEY] as (() => boolean) | null | undefined;
-    if (typeof check !== 'function') return false;
+    if (typeof check !== 'function') return true;
     try {
-        return check() !== true;
+        return check() === true;
     } catch {
-        return true;
+        return false;
     }
+}
+/**
+ * The Answer length a mode answers with. Shorter and Longer are Pro, like the
+ * editor they are set in, on General too: without Pro or a trial every mode
+ * answers at Smart. The stored choice is kept, so Pro back means length back.
+ */
+export function effectiveAnswerLength(mode: Pick<Mode, 'answerLength'> | null | undefined): AnswerLength {
+    const length = normalizeAnswerLength(mode?.answerLength);
+    if (length === 'smart') return length;
+    return modesProAccessActive() ? length : 'smart';
 }
 
 export type ModeTemplateType =
@@ -138,6 +156,12 @@ export interface Mode {
      * ModesManager.getOrMigrateSourceContract(id) rather than assume a default.
      */
     sourceContract: ModeSourceContract | null;
+    /**
+     * Shorter / Smart / Longer (2026-11-14), set beside the Real-time prompt's
+     * Save. Smart, the default, is the app's own per-question length. Read it
+     * through effectiveAnswerLength, which applies the Pro rule.
+     */
+    answerLength: AnswerLength;
 }
 
 export interface ModeReferenceFile {
@@ -394,6 +418,7 @@ function rowToMode(row: any): Mode {
         createdAt: row.created_at,
         isBuiltin: row.is_builtin === 1,
         sourceContract: parseModeSourceContract(row.source_contract_json),
+        answerLength: normalizeAnswerLength(row.answer_length),
     };
 }
 
@@ -460,6 +485,11 @@ export class ModesManager {
                 const { registerVisualModeProvider, visualModeOf } = require('../llm/diagramPromptSignals') as typeof import('../llm/diagramPromptSignals');
                 registerVisualModeProvider((pinnedModeId) => visualModeOf(instance.resolveMode(pinnedModeId)));
             } catch { /* visuals then stay explicit-only; never blocks startup */ }
+            // The length planner asks which Answer length the turn's mode has
+            // (answerLength.ts). With no mode (General unset, a locked Pro mode)
+            // the General row still answers: it is a mode like any other.
+            registerAnswerLengthProvider((pinnedModeId) =>
+                effectiveAnswerLength(instance.resolveMode(pinnedModeId) ?? instance.getGeneralMode()));
             // Establish the app defaults ONCE, here rather than at a startup
             // hook: the database opens lazily, and every entry point that can
             // read a mode goes through this accessor. Doing it anywhere else
@@ -519,6 +549,15 @@ export class ModesManager {
         if (!modes.some(m => m.templateType === 'general')) {
             this.createMode({ name: 'General', templateType: 'general' });
         }
+    }
+
+    /**
+     * The seeded General mode (not a custom mode built from its template).
+     * With no mode active the app answers as General, so General's own
+     * settings are the ones that apply.
+     */
+    public getGeneralMode(): Mode | null {
+        return this.getModes().find(m => m.templateType === 'general' && !isCustomMode(m)) ?? null;
     }
 
     public getActiveMode(): Mode | null {
@@ -817,10 +856,16 @@ export class ModesManager {
             // flag has exactly one writer.
             isBuiltin: false,
             sourceContract: initialContract,
+            answerLength: 'smart',
         };
     }
 
-    public updateMode(id: string, updates: { name?: string; templateType?: ModeTemplateType; customContext?: string; sourceContract?: ModeSourceContract }): void {
+    public updateMode(id: string, updates: { name?: string; templateType?: ModeTemplateType; customContext?: string; sourceContract?: ModeSourceContract; answerLength?: AnswerLength }): void {
+        // An unknown length is a caller bug, not "Smart": refuse it rather than
+        // silently store a value every reader would then ignore.
+        if (updates.answerLength !== undefined && !isAnswerLength(updates.answerLength)) {
+            throw new Error(`updateMode: unknown answerLength ${JSON.stringify(updates.answerLength)}`);
+        }
         // Reject an unusable template BEFORE it reaches the row (2026-08-09).
         // Persisting one is not a harmless typo: read-time resolution silently
         // degrades it to `general`, which has NO profile sources, so the mode

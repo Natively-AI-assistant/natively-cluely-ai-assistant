@@ -2717,7 +2717,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               defaultLengthDirective: answerSurface === 'live' ? (() => {
                 try {
                   const { renderLengthDirectiveForPlan } = require('./llm/AnswerPlanner') as typeof import('./llm/AnswerPlanner');
-                  return v3Plan ? renderLengthDirectiveForPlan(v3Plan) || undefined : undefined;
+                  return v3Plan ? renderLengthDirectiveForPlan(v3Plan, { pinnedModeId: modeInfo?.id ?? null }) || undefined : undefined;
                 } catch { return undefined; }
               })() : undefined,
               modeTemplateType: rawMode,
@@ -4464,7 +4464,14 @@ export function initializeIpcHandlers(appState: AppState): void {
                 contract: manualSourceContract,
                 evidence: evidenceRoute,
                 styleInstructions: formatAnswerPlanForPrompt(answerPlan, false),
-                maxAnswerWords: answerPlan.answerStyle === 'detailed' ? 180 : 90,
+                // The mode's Answer length moves this on the live surface only,
+                // like the per-turn LENGTH line; the launcher keeps 90.
+                maxAnswerWords: (() => {
+                  try {
+                    const { profileAnswerWordCap, getRegisteredAnswerLength } = require('./llm/answerLength') as typeof import('./llm/answerLength');
+                    return profileAnswerWordCap(answerPlan.answerStyle, answerSurface === 'live' ? getRegisteredAnswerLength(manualActiveMode?.id ?? null) : 'smart');
+                  } catch { return answerPlan.answerStyle === 'detailed' ? 180 : 90; }
+                })(),
               });
               const profileJitBlock = `${profileJitPrompt.systemPrompt}\n\n${profileJitPrompt.userPrompt}`;
               context = context ? `${profileJitBlock}\n\n${context}` : profileJitBlock;
@@ -6247,8 +6254,16 @@ export function initializeIpcHandlers(appState: AppState): void {
               // deterministic trimmer was REMOVED because it cropped the conclusion off long
               // answers — so we NEVER trim here, we only measure the answer for telemetry (the
               // coarse length class + word count). The answer text is left exactly as produced.
-              const budget = applySpeakabilityBudget(fullResponse, answerPlan.answerType, answerPlan.answerStyle as any, message, isCodingChat);
-              piTelemetry.emit('pi_context_policy_applied', { answerType: answerPlan.answerType, via: 'speakability_measured', speakabilityClass: budget.speakability_class, markerCount: budget.spoken_word_count });
+              // Measured against the mode's Answer length, the target this path's
+              // <answer_contract> stated (formatAnswerPlanForPrompt reads the same mode).
+              const measuredLength = (() => {
+                try {
+                  const { getRegisteredAnswerLength } = require('./llm/answerLength') as typeof import('./llm/answerLength');
+                  return getRegisteredAnswerLength(manualActiveMode?.id ?? null);
+                } catch { return 'smart' as const; }
+              })();
+              const budget = applySpeakabilityBudget(fullResponse, answerPlan.answerType, answerPlan.answerStyle as any, message, isCodingChat, measuredLength);
+              piTelemetry.emit('pi_context_policy_applied', { answerType: answerPlan.answerType, via: 'speakability_measured', speakabilityClass: budget.speakability_class, markerCount: budget.spoken_word_count, answerLength: measuredLength });
               // Visible scaffold in a DEFAULT-style answer (user didn't ask for
               // structure): compress to the speakable form. detectAnswerStyle
               // already ran inside planAnswer (answerStyle on the plan).
@@ -19989,15 +20004,24 @@ export function initializeIpcHandlers(appState: AppState): void {
     async (
       _,
       id: string,
-      updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any },
+      updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any; answerLength?: string },
     ) => {
       try {
         const { ModesManager } = require('./services/ModesManager');
+        const { isAnswerLength } = require('./llm/answerLength') as typeof import('./llm/answerLength');
         const mgr = ModesManager.getInstance();
+        if (updates.answerLength !== undefined && !isAnswerLength(updates.answerLength)) {
+          return { success: false, error: 'invalid_answer_length' };
+        }
         // Gate: changing templateType to a non-general template requires pro.
         // Also gate if the existing mode is already non-general (editing a pro mode requires pro).
         if (!isProOrTrialActive()) {
           if (updates.templateType && updates.templateType !== 'general') {
+            return proRefusal();
+          }
+          // Shorter / Longer are Pro on every mode, General included. Going
+          // back to Smart is turning it off, which stays free.
+          if (updates.answerLength !== undefined && updates.answerLength !== 'smart') {
             return proRefusal();
           }
           const existing = mgr.getModes().find((m: any) => m.id === id);

@@ -3681,7 +3681,13 @@ export class IntelligenceEngine extends EventEmitter {
                                 answerShape: evidence.answerShape,
                                 sourceOwner: evidence.sourceOwner,
                                 evidence,
-                                maxAnswerWords: 90,
+                                // Spoken answer: the mode's Answer length sets the target (Smart = 90).
+                                maxAnswerWords: (() => {
+                                    try {
+                                        const { profileAnswerWordCap, getRegisteredAnswerLength } = require('./llm/answerLength') as typeof import('./llm/answerLength');
+                                        return profileAnswerWordCap(undefined, getRegisteredAnswerLength(snapshotModeInfo?.id ?? null));
+                                    } catch { return 90; }
+                                })(),
                                 // Campaign-3 (fix/answer-policy-engine, 2026-07-19,
                                 // founder §2.5): pass the TurnPlanner seeder-leash
                                 // through to the prompt builder so a salary /
@@ -4507,7 +4513,8 @@ export class IntelligenceEngine extends EventEmitter {
                         defaultLengthDirective: (() => {
                             try {
                                 const { renderLengthDirectiveForPlan } = require('./llm/AnswerPlanner') as typeof import('./llm/AnswerPlanner');
-                                return renderLengthDirectiveForPlan(answerPlan) || undefined;
+                                // The mode captured at t0 owns the Answer length too.
+                                return renderLengthDirectiveForPlan(answerPlan, { pinnedModeId: snapshotModeInfo?.id ?? null }) || undefined;
                             } catch { return undefined; /* length directive is best-effort */ }
                         })(),
                         // The diagram turn's note and the design on the table
