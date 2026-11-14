@@ -406,10 +406,10 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     && typeof req.attachedCorpusTokens === 'number'
     && req.attachedCorpusTokens > SMALL_CORPUS_MAX_TOKENS && req.attachedCorpusTokens <= WHOLE_PACK_MAX_TOKENS;
   const packFiles = wholePack ? Math.max(1, req.attachedSourceCount ?? 1) : 0;
-  // A pack LARGER than the whole-pack size is retrieved with an evidence budget
-  // of that same size (F-LAT-09, 2026-11-13), so the prompt never steps down as
-  // the pack grows past the threshold; the accepted-item floor rises with it or
-  // the budget could not be filled.
+  // A pack LARGER than the whole-pack size is retrieved with the larger
+  // LARGE_PACK_EVIDENCE_TOKENS budget (F-LAT-09, measured 2026-11-14: more of
+  // the needed passages than the policy's 1,600-2,400 tokens); the accepted-item
+  // floor rises with it or the budget could not be filled.
   const largePack = retrieves && req.hasAttachedDocuments === true && req.profileOnlyDocuments !== true
     && typeof req.attachedCorpusTokens === 'number' && req.attachedCorpusTokens > WHOLE_PACK_MAX_TOKENS;
   // The résumé and the job description, each handed over whole by the profile

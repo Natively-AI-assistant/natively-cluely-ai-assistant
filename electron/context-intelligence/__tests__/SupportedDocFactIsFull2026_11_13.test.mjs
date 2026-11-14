@@ -24,7 +24,7 @@ const { MODE_POLICIES } = await load('policies/mode-policy-registry.js');
 const { createModeRetrievalPort, referenceCorpusTokens } = await load('retrieval/mode-retrieval-port.js');
 
 const filler = (n) => 'The ingest gateway batches spans and forwards them to the query engine with compression. '.repeat(n);
-const DOC = `# Orion design\n${filler(100)}\n## Retention\nThe retention window for raw spans is 14 days. Aggregated rollups are kept for 400 days in the cold tier.\n${filler(100)}`;
+const DOC = `# Orion design\n${filler(300)}\n## Retention\nThe retention window for raw spans is 14 days. Aggregated rollups are kept for 400 days in the cold tier.\n${filler(300)}`;
 const FILES = [{ id: 'ref_1', fileName: 'orion-design.md', content: DOC }];
 let seq = 0;
 const ask = (q, extra = {}) => orchestrate({

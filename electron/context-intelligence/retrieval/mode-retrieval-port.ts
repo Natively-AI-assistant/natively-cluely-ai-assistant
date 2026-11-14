@@ -350,23 +350,25 @@ export function isSmallReferenceCorpus(files: ReadonlyArray<{ content?: string |
 // benchmark log. The claim pass's cap (CLAIM_VERIFIER_MATERIAL_MAX_CHARS)
 // moves with this figure, so the pass still sees what the answer saw.
 //
-// 10,000 SINCE 2026-11-13 (F-LAT-09, live-pipeline forensics). At 24,000 the
-// prompt FELL as a pack grew past the threshold: a 60k-character file (15k
-// tokens) was read whole and put 85-92k characters in every answer prompt,
-// while a 154k-character file went through retrieval at the 1,600-2,400-token
-// evidence budget and cost 34-41k. A pack above this size is now retrieved
-// with an evidence budget of the SAME size (LARGE_PACK_EVIDENCE_TOKENS, see the
-// orchestrator), so a turn carries about min(pack, 10,000 tokens) of it at every
-// size: it grows with the pack, never steps down at the threshold, and stays
-// bounded. 10,000 keeps every 2,300-9,800-token benchmark pack above read
-// whole; packs between 10,000 and 24,000 (the 20,700-token measurement below)
-// trade whole-read recall for under half the prompt, retrieved at four to six
-// times the old budget.
-/** Whole-pack threshold, in the packer's estimateTokens units (~4 chars/token). */
-export const WHOLE_PACK_MAX_TOKENS = 10000;
+// 24,000 AGAIN SINCE 2026-11-14 (F-LAT-09, measured in the real app). For one
+// day this was 10,000 with packs above it retrieved at a 10,000-token budget.
+// A graded A/B (gpt-6.1-sol handbook of 42 sections cut at 5k/10k/15k/23k/37k
+// tokens, 13 questions each from easy to "hardest" plus one the file does not
+// answer, typed and heard, judged against the full handbook) showed what that
+// cost: on 10k-24k-token packs retrieval missed a needed passage on 4 of 24
+// asks per size where the whole read missed none; two-section questions fell
+// 29 -> 24 of 30, the 15k pack 26 -> 21 of 26, one unanswerable question got
+// an invented answer, and typed answers came 0.3-0.7 s LATER (embed + search).
+// So packs up to 24,000 are read whole again (fastest, nothing missing), and
+// only a pack LARGER than that is retrieved, with the larger evidence budget
+// below: on the 37k pack it gave 20 of 24 asks every needed passage against
+// 18 of 24 at the old 1,600-2,400-token budget, with equal accuracy.
+// The prompt therefore still steps DOWN past 24,000 (about 96k characters
+// whole, about 40k retrieved); accuracy was chosen over a smooth size curve.
+export const WHOLE_PACK_MAX_TOKENS = 24000;
 
-/** Evidence budget for a turn that retrieves from a pack LARGER than the whole-pack size: the same size, so there is no step at the threshold. */
-export const LARGE_PACK_EVIDENCE_TOKENS = WHOLE_PACK_MAX_TOKENS;
+/** Evidence budget for a turn that retrieves from a pack LARGER than the whole-pack size (F-LAT-09): about 40k characters, four to six times the policy budget. */
+export const LARGE_PACK_EVIDENCE_TOKENS = 10000;
 /** Accepted-evidence floor for such a turn, so the budget can actually be filled with retrieved passages. */
 export const LARGE_PACK_ACCEPTED_EVIDENCE = 16;
 

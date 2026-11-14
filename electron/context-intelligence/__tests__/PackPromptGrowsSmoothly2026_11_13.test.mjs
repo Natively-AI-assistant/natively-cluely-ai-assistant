@@ -1,14 +1,11 @@
-// F-LAT-09 (live-pipeline forensics, 2026-11-13): whole-pack reading made a
-// 60k-character file cost MORE per turn than a 150k one. Packs up to
-// WHOLE_PACK_MAX_TOKENS (24,000) were handed over whole, so s13's 60k file put
-// 85-92k characters in every answer prompt, while s13b's 154k file went through
-// retrieval at the normal 1,600-2,400-token evidence budget and cost 34-41k: a
-// cliff at 24k tokens, with the prompt FALLING as the file grew past it.
-//
-// Now the whole-pack size is 10,000 tokens and a pack larger than that is
-// retrieved with an evidence budget of the same size, so the evidence a turn
-// carries is about min(pack, 10,000 tokens) at every size: it grows with the
-// pack, never drops at the threshold, and stays bounded.
+// F-LAT-09 (live-pipeline forensics, 2026-11-13; settled 2026-11-14 by a graded
+// real-app A/B). Packs up to WHOLE_PACK_MAX_TOKENS (24,000) are read whole: in
+// the A/B that kept every needed passage in front of the model and answered
+// fastest, where a 10,000 threshold with retrieval lost two-section questions.
+// A pack LARGER than that is retrieved, and now with LARGE_PACK_EVIDENCE_TOKENS
+// (10,000) instead of the policy's 1,600-2,400: s13b's 154k file carried 34-41k
+// characters per turn, and the bigger budget put more of the needed passages
+// in (20 of 24 asks against 18 of 24 on a 37k-token pack).
 //
 // Run: npm run build:electron && NATIVELY_RAG_LOCAL_RERANK=off node --test electron/context-intelligence/__tests__/PackPromptGrowsSmoothly2026_11_13.test.mjs
 
@@ -22,7 +19,7 @@ const load = (p) => import(pathToFileURL(path.join(base, p)).href);
 const { orchestrate } = await load('orchestration/orchestrator.js');
 const { MODE_POLICIES } = await load('policies/mode-policy-registry.js');
 const { composePrompt } = await load('generation/prompt-composer.js');
-const { createModeRetrievalPort, referenceCorpusTokens, WHOLE_PACK_MAX_TOKENS } = await load('retrieval/mode-retrieval-port.js');
+const { createModeRetrievalPort, referenceCorpusTokens, WHOLE_PACK_MAX_TOKENS, LARGE_PACK_EVIDENCE_TOKENS } = await load('retrieval/mode-retrieval-port.js');
 
 const MODE = 'technical-interview';
 const sentence = (i) => `Section ${i}: the ingest gateway batches spans, compresses them and forwards them to the query engine. `;
@@ -75,23 +72,24 @@ const results = {};
 for (const n of SIZES) results[n] = await promptFor(n);
 console.log('[F-LAT-09] prompt chars by pack size:', JSON.stringify(Object.fromEntries(SIZES.map((n) => [n, results[n]]))));
 
-describe('per-turn prompt size grows smoothly with the pack and stays bounded', () => {
-  test('the whole-pack size is well below the old 24,000-token cliff', () => {
-    assert.ok(WHOLE_PACK_MAX_TOKENS <= 10_000, String(WHOLE_PACK_MAX_TOKENS));
+describe('whole up to 24,000 tokens, a bounded larger retrieval above it', () => {
+  test('the thresholds', () => {
+    assert.equal(WHOLE_PACK_MAX_TOKENS, 24_000);
+    assert.equal(LARGE_PACK_EVIDENCE_TOKENS, 10_000);
   });
   test('every size still puts the planted fact in the prompt', () => {
     for (const n of SIZES) assert.ok(results[n].hasFact, `${n}: ${JSON.stringify(results[n])}`);
   });
-  test('a 60k-character file never costs more than a 154k one (s13 vs s13b)', () => {
-    assert.ok(results[60_000].chars <= results[154_000].chars * 1.1, JSON.stringify([results[60_000], results[154_000]]));
-  });
-  test('no size costs much more than a smaller one did — no cliff upward, none downward', () => {
-    for (let i = 1; i < SIZES.length; i++) {
-      const prev = results[SIZES[i - 1]].chars, cur = results[SIZES[i]].chars;
-      assert.ok(cur >= prev * 0.75, `drop at ${SIZES[i]}: ${prev} -> ${cur}`);
+  test('packs up to 24,000 tokens reach the prompt whole', () => {
+    for (const n of SIZES.filter((x) => results[x].tokens <= WHOLE_PACK_MAX_TOKENS)) {
+      assert.ok(results[n].evidence >= n * 0.95, `${n}: evidence ${results[n].evidence}`);
     }
   });
-  test('the evidence is bounded near the whole-pack size at every pack size', () => {
-    for (const n of SIZES) assert.ok(results[n].evidence <= (WHOLE_PACK_MAX_TOKENS + 2_000) * 4, `${n}: ${results[n].evidence}`);
+  test('a pack above 24,000 tokens is retrieved with the larger budget, and bounded', () => {
+    const big = results[154_000];
+    assert.ok(big.tokens > WHOLE_PACK_MAX_TOKENS);
+    // The old policy budget (1,600-2,400 tokens) carried under about 10k characters of evidence.
+    assert.ok(big.evidence > 6_000 * 4, `evidence ${big.evidence}`);
+    assert.ok(big.evidence <= (LARGE_PACK_EVIDENCE_TOKENS + 2_000) * 4, `evidence ${big.evidence}`);
   });
 });

@@ -7,11 +7,6 @@
 // earlier (no retrieval, no awaited rerank). The claim pass's material cap moves with the threshold, so the pass
 // still sees what the answer saw.
 //
-// 2026-11-13 (F-LAT-09, live-pipeline forensics): the threshold is 10,000 tokens. At 24,000 the prompt FELL as a
-// pack grew past it (a 60k-character file cost 85-92k characters per turn, a 154k one 34-41k). A pack like the
-// 20,700-token one below is now RETRIEVED with an evidence budget of the whole-pack size instead of read whole;
-// see PackPromptGrowsSmoothly2026_11_13. The measurements above are kept as the record of the trade-off.
-//
 // Run: npm run build:electron && node --test electron/context-intelligence/__tests__/WholePackThreshold24k2026_10_09.test.mjs
 
 import { test, describe } from 'node:test';
@@ -22,7 +17,7 @@ import { pathToFileURL } from 'node:url';
 const dist = (p) => import(pathToFileURL(path.resolve(process.cwd(), 'dist-electron/electron', p)).href);
 const { orchestrate, decide, MULTI_FILE_EVIDENCE, WHOLE_PACK_ITEM_OVERHEAD } = await dist('context-intelligence/orchestration/orchestrator.js');
 const { MODE_POLICIES } = await dist('context-intelligence/policies/mode-policy-registry.js');
-const { createModeRetrievalPort, referenceCorpusTokens, isWholePackCorpus, WHOLE_PACK_MAX_TOKENS, LARGE_PACK_EVIDENCE_TOKENS } = await dist('context-intelligence/retrieval/mode-retrieval-port.js');
+const { createModeRetrievalPort, referenceCorpusTokens, isWholePackCorpus, WHOLE_PACK_MAX_TOKENS } = await dist('context-intelligence/retrieval/mode-retrieval-port.js');
 const { PROFILE_WHOLE_MAX_TOKENS } = await dist('context-intelligence/retrieval/profile-retrieval-port.js');
 const { CLAIM_VERIFIER_MATERIAL_MAX_CHARS } = await dist('llm/claimVerifier.js');
 
@@ -47,14 +42,14 @@ const mk = (files, calls) => createModeRetrievalPort({
 });
 
 describe('the threshold', () => {
-  test('is 10,000 tokens (24,000 from 2026-10-09 to 2026-11-13)', () => {
-    assert.equal(WHOLE_PACK_MAX_TOKENS, 10000);
+  test('is 24,000 tokens', () => {
+    assert.equal(WHOLE_PACK_MAX_TOKENS, 24000);
   });
-  test('a pack of about 20,700 tokens no longer fits; one of 10,000 does', () => {
+  test('a pack of about 20,700 tokens fits; one of 24,001 does not', () => {
     assert.ok(PACK_TOKENS > 19000 && PACK_TOKENS < 22500, String(PACK_TOKENS));
-    assert.equal(isWholePackCorpus(PACK), false);
-    assert.equal(isWholePackCorpus([{ content: 'x'.repeat(10000 * 4) }]), true);
-    assert.equal(isWholePackCorpus([{ content: 'x'.repeat(10001 * 4) }]), false);
+    assert.equal(isWholePackCorpus(PACK), true);
+    assert.equal(isWholePackCorpus([{ content: 'x'.repeat(24000 * 4) }]), true);
+    assert.equal(isWholePackCorpus([{ content: 'x'.repeat(24001 * 4) }]), false);
   });
   test('the claim pass is shown a full pack and the whole profile, with room for the rest of the request', () => {
     assert.ok((WHOLE_PACK_MAX_TOKENS + PROFILE_WHOLE_MAX_TOKENS) * 4 + 10_000 <= CLAIM_VERIFIER_MATERIAL_MAX_CHARS);
@@ -62,27 +57,26 @@ describe('the threshold', () => {
 });
 
 describe('a turn that reads the files, with a 20,700-token pack loaded', () => {
-  test('the plan gives the retrieval the whole-pack-size budget', () => {
+  test('the plan makes room for every file', () => {
     const d = decide(req());
     assert.ok(d.retrievalPlan.shouldRetrieve);
-    assert.ok((d.retrievalPlan.evidenceTokens ?? 0) >= LARGE_PACK_EVIDENCE_TOKENS, String(d.retrievalPlan.evidenceTokens));
+    const baseCap = Math.max(MODE_POLICIES['call-center'].retrievalPolicy.maximumAcceptedEvidence, MULTI_FILE_EVIDENCE.accepted);
+    assert.ok(d.retrievalPlan.maximumAcceptedEvidence >= baseCap + PACK.length, String(d.retrievalPlan.maximumAcceptedEvidence));
     const baseTokens = Math.max(MODE_POLICIES['call-center'].contextBudget.evidenceTokens, MULTI_FILE_EVIDENCE.tokens);
-    assert.ok((d.retrievalPlan.evidenceTokens ?? 0) < baseTokens + PACK_TOKENS, 'not the whole pack');
+    assert.ok((d.retrievalPlan.evidenceTokens ?? 0) >= baseTokens + PACK_TOKENS + WHOLE_PACK_ITEM_OVERHEAD * PACK.length, String(d.retrievalPlan.evidenceTokens));
   });
-  test('the retriever is asked, with that budget', async () => {
-    const calls = { n: 0, budget: 0 };
-    const port = createModeRetrievalPort({
-      modesManager: { retrieveHybridRaw: async (_m, _f, o) => { calls.n++; calls.budget = o.tokenBudget; return { chunks: [{ sourceId: PACK[11].id, text: PACK[11].content, chunkIndex: 0, score: 0.9 }] }; } },
-      modeInfo: { id: 'm1' }, files: PACK, tokenBudget: 1800, userId: 'local', allowedSourceTypes: MODE_POLICIES['call-center'].allowedSourceTypes,
-    });
-    const r = await orchestrate(req(), port);
-    assert.ok(calls.n >= 1);
-    assert.ok(calls.budget >= LARGE_PACK_EVIDENCE_TOKENS, String(calls.budget));
-    assert.ok(r.evidence.some((e) => /within 60 days of the delivery date/.test(e.content)));
+  test('every file reaches the evidence whole and the retriever is not called', async () => {
+    const calls = { n: 0 };
+    const r = await orchestrate(req(), mk(PACK, calls));
+    assert.equal(calls.n, 0, 'no embed / rerank round trip');
+    const ids = new Set(r.evidence.filter((e) => e.sourceType !== 'MEETING_TRANSCRIPT').map((e) => e.sourceId));
+    assert.equal(ids.size, PACK.length, JSON.stringify([...ids]));
+    assert.ok(r.evidence.some((e) => /within 60 days of the delivery date/.test(e.content)), 'the 12th file, whole');
   });
-  test('a pack past 24,000 tokens goes through the retriever too', async () => {
+  test('a pack past 24,000 tokens still goes through the retriever', async () => {
     const calls = { n: 0 };
     const files = PACK.map((f) => ({ ...f, content: f.content + filler(20) }));
+    assert.ok(referenceCorpusTokens(files) > WHOLE_PACK_MAX_TOKENS, String(referenceCorpusTokens(files)));
     await orchestrate(req({ attachedCorpusTokens: referenceCorpusTokens(files) }), mk(files, calls));
     assert.ok(calls.n >= 1);
   });
