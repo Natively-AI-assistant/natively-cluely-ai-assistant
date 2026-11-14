@@ -96,6 +96,7 @@ export const AUTO_DETECT_ALTERNATES = [
     'he-IL',
     'ms-MY',
     'fi-FI',
+    'ne-NP',
     // Indian languages (2026-10-16). The relay pins them from auto-detect too;
     // Soniox, ElevenLabs, Deepgram (all but Malayalam) and Google carry them.
     'mr-IN',
@@ -150,6 +151,7 @@ export const RECOGNITION_LANGUAGES: Record<string, LanguageOption> = {
     'malayalam': { label: 'Malayalam', code: 'malayalam', bcp47: 'ml-IN', iso639: 'ml', group: 'Malayalam' },
     'punjabi': { label: 'Punjabi', code: 'punjabi', bcp47: 'pa-IN', iso639: 'pa', group: 'Punjabi' },
     'urdu': { label: 'Urdu', code: 'urdu', bcp47: 'ur-IN', iso639: 'ur', group: 'Urdu' },
+    'nepali': { label: 'Nepali', code: 'nepali', bcp47: 'ne-NP', iso639: 'ne', group: 'Nepali' },
     'croatian': { label: 'Croatian', code: 'croatian', bcp47: 'hr-HR', iso639: 'hr', group: 'Croatian' },
     'estonian': { label: 'Estonian', code: 'estonian', bcp47: 'et-EE', iso639: 'et', group: 'Estonian' },
     'latvian': { label: 'Latvian', code: 'latvian', bcp47: 'lv-LV', iso639: 'lv', group: 'Latvian' },
@@ -225,6 +227,7 @@ export const AI_RESPONSE_LANGUAGES = [
     { label: 'Malayalam', code: 'Malayalam' },
     { label: 'Punjabi', code: 'Punjabi' },
     { label: 'Urdu', code: 'Urdu' },
+    { label: 'Nepali', code: 'Nepali' },
 ];
 
 /**
