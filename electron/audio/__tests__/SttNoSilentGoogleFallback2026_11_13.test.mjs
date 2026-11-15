@@ -11,13 +11,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const REPO = path.resolve(__dirname, '../../..');
 const { MissingKeySTT, missingSttKeyMessage, MISSING_STT_KEY_CODE } = require(path.join(REPO, 'dist-electron/electron/audio/MissingKeySTT.js'));
-const { classifySttError } = await import(path.join(REPO, 'electron/audio/sttErrorClassifier.mjs'));
+const { classifySttError } = await import(pathToFileURL(path.join(REPO, 'electron/audio/sttErrorClassifier.mjs')).href);
 
 const tick = () => new Promise((r) => setImmediate(r));
 
@@ -72,7 +72,7 @@ test('createSTTProvider builds Google only when Google is the chosen provider', 
 });
 
 test('the overlay shows the message as a missing key, not a provider fault', async () => {
-    const { categorizeSttError } = await import(path.join(REPO, 'src/lib/sttErrorMapper.ts'));
+    const { categorizeSttError } = await import(pathToFileURL(path.join(REPO, 'src/lib/sttErrorMapper.ts')).href);
     const c = categorizeSttError(missingSttKeyMessage('soniox'));
     assert.equal(c.title, 'Key Missing');
     assert.equal(c.category, 'auth');

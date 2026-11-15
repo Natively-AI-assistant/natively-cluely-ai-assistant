@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -21,8 +21,8 @@ const wta = readFileSync(path.resolve(__dirname, '../WhatToAnswerLLM.ts'), 'utf8
 const dist = (p) => path.resolve(process.cwd(), 'dist-electron/electron', p);
 const { providerFailureUserMessage, accountOrSetupUserMessage } = require(dist('llm/providerErrorClassifier.js'));
 const { onNativelyPlanLimit, emitNativelyPlanLimit, nativelyLimitErrorMessage } = require(dist('llm/nativelyPlanLimitEvents.js'));
-const { chatFailureFromError } = await import(path.resolve(__dirname, '../../../src/lib/chatFailure.mjs'));
-const { answerFailureCause } = await import(path.resolve(__dirname, '../../../src/lib/funnel/answerFailure.mjs'));
+const { chatFailureFromError } = await import(pathToFileURL(path.resolve(__dirname, '../../../src/lib/chatFailure.mjs')).href);
+const { answerFailureCause } = await import(pathToFileURL(path.resolve(__dirname, '../../../src/lib/funnel/answerFailure.mjs')).href);
 
 const sliceOf = (start, len = 4000) => {
   const at = src.indexOf(start);

@@ -326,8 +326,11 @@ describe('answer pipeline lifecycle telemetry', () => {
     }
     assert.match(engineSrc, /const recordWtaCancellation = \(\) => \s*\{[\s\S]*?\.lifecycle\('cancelled'[\s\S]*?commitTrace\(wtaTrace\)/,
       'WTA cancellation must be committed, not silently dropped');
-    assert.match(engineSrc, /if \(streamAborted\) \{\s*recordWtaCancellation\(\)/,
-      'the streaming cancellation path must record the terminal lifecycle event');
+    // The aborted stream yields to the newer run, and yielding records the cancellation.
+    assert.match(engineSrc, /if \(streamAborted\) return yieldToSupersedingRun\(true\);/,
+      'the streaming cancellation path must yield to the superseding run');
+    assert.match(engineSrc, /const yieldToSupersedingRun = \(discardOpenRow: boolean\): null => \{\s*recordWtaCancellation\(\);/,
+      'yielding to the superseding run must record the terminal lifecycle event');
   });
 
   test('manual chat records the same lifecycle and commits supersession', () => {

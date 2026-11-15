@@ -42,7 +42,9 @@ describe('About you is Pro only', () => {
   test('the save handler refuses without Pro; get stays open', () => {
     const src = read('electron/ipcHandlers.ts');
     const set = src.slice(src.indexOf("safeHandle('user-bio-set'"), src.indexOf("safeHandle('user-bio-set'") + 700);
-    assert.match(set, /if \(clean && !isProOrTrialActive\(\)\) return \{ success: false, error: 'pro_required' \}/, 'refuses text without Pro, lets anyone clear');
+    // The refusal is the shared one (services/proGate.ts), so every Pro handler answers alike.
+    assert.match(set, /if \(clean && !isProOrTrialActive\(\)\) return proRefusal\(\);/, 'refuses text without Pro, lets anyone clear');
+    assert.match(read('electron/services/proGate.ts'), /export const PRO_REQUIRED = 'pro_required' as const;/);
     const get = src.slice(src.indexOf("safeHandle('user-bio-get'"), src.indexOf("safeHandle('user-bio-get'") + 200);
     assert.doesNotMatch(get, /isProOrTrialActive/);
   });

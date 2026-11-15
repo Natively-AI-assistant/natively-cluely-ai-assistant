@@ -18,7 +18,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -29,7 +29,7 @@ const {
     ELEVENLABS_TERMINAL_ERRORS,
     ELEVENLABS_HEALTHY_SESSION_MS,
 } = require(path.join(REPO, 'dist-electron/electron/audio/ElevenLabsStreamingSTT.js'));
-const { categorizeSttError } = await import(path.join(REPO, 'src/lib/sttErrorMapper.ts'));
+const { categorizeSttError } = await import(pathToFileURL(path.join(REPO, 'src/lib/sttErrorMapper.ts')).href);
 
 test('a quota message becomes an Error main can classify as quota', () => {
     const err = elevenLabsServerError({ message_type: 'quota_exceeded', error: 'You have exceeded your quota.' });
@@ -115,7 +115,7 @@ test('the provider wires those decisions, and backoff resets only after a health
 });
 
 test('a terminal non-quota error is final, quota keeps its stand-in branch', async () => {
-    const { classifySttError } = await import(path.join(REPO, 'electron/audio/sttErrorClassifier.mjs'));
+    const { classifySttError } = await import(pathToFileURL(path.join(REPO, 'electron/audio/sttErrorClassifier.mjs')).href);
     assert.equal(classifySttError(elevenLabsServerError({ message_type: 'auth_error', error: 'Invalid API key' })).kind, 'auth');
     assert.equal(classifySttError(elevenLabsServerError({ message_type: 'unaccepted_terms', error: 'Accept the terms' })).kind, 'auth');
     assert.equal(classifySttError(elevenLabsServerError({ message_type: 'quota_exceeded', error: 'You have exceeded your quota.' })).kind, 'quota');

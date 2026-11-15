@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import Module, { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -158,7 +158,7 @@ describe('Dodo licence: lock on an invalid key, restore when it is valid again',
       if (typeof request === 'string' && request.endsWith('.node')) return nativeStub;
       return originalResolve.call(this, request, ...rest);
     };
-    ({ LicenseManager } = await import(PREMIUM));
+    ({ LicenseManager } = await import(pathToFileURL(PREMIUM).href));
   });
   after(() => {
     Module._resolveFilename = originalResolve;

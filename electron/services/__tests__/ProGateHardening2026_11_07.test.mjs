@@ -273,7 +273,7 @@ describe('LicenseManager: offline limit and legacy licences', { skip: !hasPremiu
       if (typeof request === 'string' && request.endsWith('.node')) return nativeStub;
       return originalResolve.call(this, request, ...rest);
     };
-    mod = await import(PREMIUM);
+    mod = await import(pathToFileURL(PREMIUM).href);
     ({ LicenseManager } = mod);
   });
   after(() => {

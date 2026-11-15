@@ -33,5 +33,5 @@ test('electron-builder excludes ml/ and never lists it as a source', () => {
 const giPath = path.join(root, 'premium/ml/auto-answer-decider/.gitignore');
 test('the venv and artifacts are gitignored', { skip: fs.existsSync(giPath) ? false : 'premium not checked out' }, () => {
   const gi = fs.readFileSync(giPath, 'utf8');
-  for (const p of ['.venv/', 'artifacts/', 'results/runs/']) assert.ok(gi.split('\n').includes(p), p);
+  for (const p of ['.venv/', 'artifacts/', 'results/runs/']) assert.ok(gi.split(/\r?\n/).includes(p), p); // CRLF on a Windows checkout
 });

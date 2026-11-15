@@ -19,13 +19,23 @@ test('the answer window is the overlay, whatever the mode; the mode-dependent wi
   assert.doesNotMatch(block, /\bmainWindow\(\)/, 'no answer event follows the window mode');
 });
 
+// The overlay's interface, and hooks only it renders: the first-run guide
+// (useOverlayGuide, 2026-11-15) moves on when an answer arrives.
+const OVERLAY_FILES = new Set(['src/components/NativelyInterface.tsx', 'src/components/guide/OverlayGuide.tsx']);
+test('the first-run guide is a hook of the overlay interface only', () => {
+  const users = fs.readdirSync(path.join(root, 'src'), { recursive: true })
+    .filter((f) => /\.tsx?$/.test(f) && !f.includes('__tests__'))
+    .map((f) => path.join('src', f).split(path.sep).join('/'))
+    .filter((f) => f !== 'src/components/guide/OverlayGuide.tsx' && /\buseOverlayGuide\b/.test(read(f)));
+  assert.deepEqual(users, ['src/components/NativelyInterface.tsx']);
+});
 test('every answer channel sent there is one only the overlay\'s interface listens on', () => {
   const channels = [...new Set([...block.matchAll(/sendToWindow\((?:win|answerWindow\(\)), '([a-z-]+)'/g)].map((m) => m[1]))];
   assert.ok(channels.length >= 12, channels.join(','));
   const preload = read('electron/preload.ts');
   const listeners = (dir) => fs.readdirSync(path.join(root, dir), { recursive: true })
     .filter((f) => /\.tsx?$/.test(f) && !f.includes('__tests__'))
-    .map((f) => path.join(dir, f));
+    .map((f) => path.join(dir, f).split(path.sep).join('/')); // '/' on Windows too
   const files = listeners('src').map((f) => [f, read(f)]);
   for (const channel of channels) {
     const at = preload.indexOf(`ipcRenderer.on('${channel}'`);
@@ -34,6 +44,6 @@ test('every answer channel sent there is one only the overlay\'s interface liste
     assert.ok(fn, `listener name for ${channel}`);
     const users = files.filter(([f, src]) => new RegExp(`\\b${fn}\\b`).test(src) && !f.endsWith('electron.d.ts')).map(([f]) => f);
     // None at all is fine (intelligence-mode-changed has no listener today).
-    assert.ok(users.every((f) => f === 'src/components/NativelyInterface.tsx'), `${channel} (${fn}) listened on by: ${users.join(', ')}`);
+    assert.ok(users.every((f) => OVERLAY_FILES.has(f)), `${channel} (${fn}) listened on by: ${users.join(', ')}`);
   }
 });

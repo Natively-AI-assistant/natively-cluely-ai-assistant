@@ -7841,8 +7841,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     setOpenAtLogin(app, process.platform, openAtLogin, app.getPath('exe'));
     // The user chose: a pending fresh-install default (e.g. a DMG launch on
     // macOS) must not override it later. See utils/openAtLoginDefault.ts.
-    if (SettingsManager.getInstance().get('openAtLoginDefault') !== 'done') {
-      SettingsManager.getInstance().set('openAtLoginDefault', 'done');
+    // If that marker cannot be saved, say so: the default could otherwise turn
+    // the login item back on at a later launch, against the choice just made.
+    if (SettingsManager.getInstance().get('openAtLoginDefault') !== 'done'
+      && !SettingsManager.getInstance().set('openAtLoginDefault', 'done')) {
+      return { success: false, error: 'settings_store_degraded' };
     }
     return { success: true };
   });

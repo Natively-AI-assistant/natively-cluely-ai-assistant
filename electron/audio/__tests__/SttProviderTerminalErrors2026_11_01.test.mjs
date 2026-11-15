@@ -21,7 +21,7 @@ import https from 'node:https';
 import net from 'node:net';
 import { EventEmitter } from 'node:events';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -40,8 +40,8 @@ https.request = function (opts, ...rest) {
     return realHttpsRequest.call(this, opts, ...rest);
 };
 
-const { classifySttError, describeSttError, restAccountVerdict } = await import(path.join(REPO, 'electron/audio/sttErrorClassifier.mjs'));
-const { categorizeSttError } = await import(path.join(REPO, 'src/lib/sttErrorMapper.ts'));
+const { classifySttError, describeSttError, restAccountVerdict } = await import(pathToFileURL(path.join(REPO, 'electron/audio/sttErrorClassifier.mjs')).href);
+const { categorizeSttError } = await import(pathToFileURL(path.join(REPO, 'src/lib/sttErrorMapper.ts')).href);
 const { nativelyProServerError } = dist('NativelyProSTT.js');
 const { deepgramEventError } = dist('DeepgramStreamingSTT.js');
 const { deepgramHandshakeVerdict } = dist('deepgramHandshakeProbe.js');
