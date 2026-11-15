@@ -330,7 +330,8 @@ describe('wiring: every surface hands the same shape to its prompt and its valid
 
   test('Cmd+Enter persona passes the shape; the repeat-press "complete solution" directive only rides a solve', () => {
     assert.match(engine, /codingShape: _codingShape,/);
-    assert.match(engine, /if \(!_promoted \|\| !_base \|\| _codingShape !== 'solve'\) return _base;/);
+    // #742: the shape AND a press with no words of its own (isRepeatPressAsk).
+    assert.match(engine, /if \(!_promoted \|\| !_base\s*\|\| !\(require\('\.\/llm\/codingPromptSignals'\)[\s\S]{0,120}?\.isRepeatPressAsk\(answerPlan\.question, _codingShape\)\) return _base;/);
     assert.doesNotMatch(engine, /coding contract's full section shape/);
   });
 

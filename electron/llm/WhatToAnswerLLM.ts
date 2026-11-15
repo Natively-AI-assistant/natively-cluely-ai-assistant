@@ -16,7 +16,7 @@ import { DOM_CONTEXT_MAX_CHARS } from "../config/constants";
 import { checkAnswerForCodeBugs } from "./CodeSanityCheck";
 import { accountOrSetupUserMessage, isProvidersExhaustedError, providerFailureUserMessage, providerRejectionUserMessage } from "./providerErrorClassifier";
 import { formatAnswerPlanForPrompt, isCodingAnswerType } from "./AnswerPlanner";
-import { resolveCodingPromptSignals, isDeicticAsk, isPromotedScreenCodingTurn, screenPromotedCodingSignals } from "./codingPromptSignals";
+import { resolveCodingPromptSignals, isDeicticAsk, isPromotedScreenCodingTurn, isRepeatPressAsk, screenPromotedCodingSignals } from "./codingPromptSignals";
 import type { AnswerPlan, AnswerType } from "./AnswerPlanner";
 import { isLayerAllowed } from "./contextRoute";
 import { deriveRetrievalQuery } from "./retrievalQueryPolicy";
@@ -351,7 +351,9 @@ ${promptInstruction.trim()}
             // "Explain this" / "what's the complexity" over a screenshot is
             // promoted too, and this directive used to override their shape
             // with the full solution.
-            if (promotedScreenCodingTurn && codingSignals.codingShape === 'solve') {
+            // The shape alone is not enough: `solve` is also the default for a
+            // real question that matched no narrower shape (#742).
+            if (promotedScreenCodingTurn && isRepeatPressAsk(answerPlan?.question, codingSignals.codingShape)) {
                 intentContextParts.push(`<repeat_press_directive>
 The user triggered this action with a coding problem on screen and NO new question. That is a request for the COMPLETE solution to the on-screen problem, in the shape the coding contract asks for, even if a previous answer in this conversation already covered it, and even if this looks like a follow-up. Never respond with commentary on, agreement with, or a summary of an earlier answer. Produce the answer as if asked for the first time.
 </repeat_press_directive>`);

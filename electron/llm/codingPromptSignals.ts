@@ -19,7 +19,7 @@
 import { isCodingAnswerType, type AnswerType } from './AnswerPlanner';
 import { detectExplicitCodingContract, type ExplicitCodingContract } from './codingFollowup';
 import type { CodingShape } from './codingContract';
-import { detectCodingShape } from './codingShape';
+import { detectCodingShape, namesCodingShape } from './codingShape';
 import { getRegisteredUserInstructions, resolveCodingFormatFromInstructions } from './userInstructionContract';
 
 /**
@@ -194,6 +194,57 @@ export function isDeicticAsk(question: string | undefined | null): boolean {
   return DEICTIC_ASK_RE.test(q);
 }
 
+// The words a press uses when the screen is its whole subject: "how do I do
+// this", "what about this", "what's the answer here", "solve this one". A
+// question whose words leave anything else ("what would you change", "the main
+// risk", "this dashboard", "a remote role") has a subject of its own.
+const SCREEN_ONLY_WORDS = new Set([
+  'what', 'whats', 'how', 'hows', 'do', 'does', 'i', 'im', 'you', 'we', 'me', 'my', 'us',
+  'should', 'would', 'could', 'can', 'will', 'say', 'answer', 'respond', 'reply',
+  'about', 'this', 'that', 'these', 'those', 'it', 'its', 'here', 'the', 'above', 'screen',
+  'one', 'a', 'an', 'go', 'goes', 'to', 'with', 'on', 'for', 'of', 'in', 'is', 'are', 'be',
+  'please', 'so', 'ok', 'okay', 'now', 'next', 'um', 'uh', 'and', 'then', 'just',
+  'help', 'solve', 'give', 'tell', 'question', 'problem', 'task', 'part',
+]);
+
+// Nouns that name code. "What would you change in this code?" names code even
+// though no coding shape matches its verb.
+const CODE_NOUN_RE = /\b(?:code|function|snippet|program|method|class|algorithm|solution|implementation|bug|compile[sd]?|tests?|leetcode|hackerrank|query|sql|regex|stack\s*trace|output)\b/i;
+
+/** A press with no words of its own: nothing, a bare trigger, or only words that point at the screen. */
+export function isScreenOnlyAsk(question: string | undefined | null): boolean {
+  const q = (question || '').trim();
+  if (!q) return true;
+  if (BARE_TRIGGER_ASK_RE.test(q)) return true;
+  if (!isDeicticAsk(q)) return false;
+  const words = q.toLowerCase().replace(/['’]/g, '').split(/[^a-z]+/).filter(Boolean);
+  return words.length > 0 && words.every((w) => SCREEN_ONLY_WORDS.has(w));
+}
+
+/**
+ * An ask that an attached IMAGE may turn into a coding turn. The image cannot be
+ * inspected, so the words must leave room for it to be code: a screen-only ask,
+ * one that names code, or one that asks for a coding shape. A short deictic
+ * question about anything else ("what would you change?" over an architecture
+ * diagram, "is this a remote role?" over a job post) keeps its own route (#742).
+ */
+export function isImageCodingAsk(question: string | undefined | null): boolean {
+  const q = (question || '').trim();
+  if (!q) return true;
+  if (!isDeicticAsk(q)) return false;
+  return isScreenOnlyAsk(q) || CODE_NOUN_RE.test(q) || namesCodingShape(q);
+}
+
+/**
+ * The repeat-press directive ("NO new question ... the COMPLETE solution") is
+ * true only of a press that asked nothing of its own over a coding screen.
+ * Keyed on the shape alone it reached real questions, because `solve` is also
+ * detectCodingShape's default (#742).
+ */
+export function isRepeatPressAsk(question: string | undefined | null, shape: CodingShape | undefined): boolean {
+  return shape === 'solve' && isScreenOnlyAsk(question);
+}
+
 // ── screen-coding promotion (single source of truth) ────────────────────────
 //
 // Code-review 2026-08-22, two confirmed findings with one root: the
@@ -212,8 +263,11 @@ export function isDeicticAsk(question: string | undefined | null): boolean {
 //
 // Images still promote without inspection — pixels cannot be structurally
 // checked client-side, and the original live defect ("screenshot attached but
-// code not generated") was image-based. Captured TEXT must contain a real
-// structural code template (a signature or fenced block, not a phrase).
+// code not generated") was image-based. But the image alone no longer decides:
+// the words must leave room for code (isImageCodingAsk), so "what would you
+// change?" over an architecture diagram keeps its own route (#742). Captured
+// TEXT must contain a real structural code template (a signature or fenced
+// block, not a phrase).
 export function isPromotedScreenCodingTurn(input: {
   /** The routed turn is already coding-shaped — promotion is moot. */
   alreadyCoding: boolean;
@@ -224,7 +278,7 @@ export function isPromotedScreenCodingTurn(input: {
   if (input.alreadyCoding) return false;
   const q = (input.question || '').trim();
   if (q && !isDeicticAsk(q)) return false;
-  if (input.hasImages) return true;
+  if (input.hasImages && isImageCodingAsk(q)) return true;
   return detectStructuralCodeTemplate(input.screenText);
 }
 

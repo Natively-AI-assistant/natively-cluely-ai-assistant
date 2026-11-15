@@ -66,6 +66,19 @@ const GREETING_ONLY = /^(hi|hello|hey|good (morning|afternoon|evening)|how are y
 // constraint join in extractLatestQuestion.
 const SPLIT_CONSTRAINT_LEAD = /^(?:you\s+(?:can|may|should|could)\s+(?:safely\s+)?assume|assume\b|note\s+that|the\s+constraints?\b|constraints?\s*:|the\s+input\s+(?:is|will|can|may)|inputs?\s+(?:are|is|will)|do\s+it\s+(?:in|without)|without\s+using\b|in\s+o\s*\(|with\s+o\s*\()/i;
 const SPLIT_CONSTRAINT_MAX_GAP_MS = 30_000;
+// GENERIC CLOSER (#741): an interviewer states a task over several sentences
+// ("So I'd like you to design the notification delivery service ...", three
+// sentences of requirements) and closes with a prompt that has no subject of
+// its own ("So where would you start?"). Recency picked the closer alone, which
+// routed as a general answer with a 75-word ceiling. The closer is joined back
+// to the stated ask, through the requirement turns between, when every turn is
+// the interviewer's (no candidate turn between) and the ask began within 60s.
+const GENERIC_CLOSING_ASK = /^(?:(?:so|okay|ok|alright|all\s+right|and|well|now|then|great)[,.!]?\s+)*(?:where\s+(?:would|do|will|should|could|might)\s+you\s+(?:like\s+to\s+)?(?:start|begin)|where\s+(?:do|should|shall)\s+we\s+(?:start|begin)|how\s+(?:would|do|will|should|could|might)\s+you\s+(?:start|begin|approach|tackle|go\s+about)(?:\s+(?:it|this|that|this\s+one|that\s+one))?|how\s+(?:do|should|shall)\s+we\s+(?:start|begin)|what(?:'s|\s+is|\s+would\s+be)\s+your\s+(?:approach|first\s+step|plan|starting\s+point)|what\s+would\s+you\s+do\s+first|what\s+are\s+your\s+(?:initial\s+|first\s+)?thoughts|(?:any\s+)?(?:initial\s+|first\s+)?thoughts|take\s+it\s+away|over\s+to\s+you|go\s+ahead)\s*[?.!]*$/i;
+// A stated task that a generic closer can belong to: an imperative ask, or one
+// framed as a request ("I'd like you to design", "can you build", "let's design").
+const STATED_TASK_RE = /\b(?:i'?d\s+like\s+you\s+to|i\s+would\s+like\s+you\s+to|i\s+want\s+you\s+to|we'?d\s+like\s+you\s+to|can\s+you|could\s+you|let'?s|let\s+us|your\s+(?:task|job|challenge)\s+(?:is|will\s+be)\s+to)\s+(?:\w+\s+){0,2}?(?:design|build|implement|write|solve|architect|sketch|model|plan|code|create|estimate|debug)\b/i;
+const GENERIC_CLOSER_MAX_SPAN_MS = 60_000;
+const GENERIC_CLOSER_MAX_TURNS_BACK = 6;
 
 // Social-pleasantry chit-chat that is grammatically a question ("did you have
 // any trouble finding parking?", "how was your weekend?", "did you find us
@@ -458,6 +471,28 @@ export function extractLatestQuestion(
         if (prevIsAsk && !GREETING_ONLY.test(prevText) && !GREETING_ONLY.test(prevRaw)) {
             scoringText = `${prevText} ${scoringText}`;
             latestQuestion = `${prevRaw} ${latestQuestion}`;
+        }
+    }
+    // GENERIC CLOSER (#741), see GENERIC_CLOSING_ASK. Walks back over the
+    // interviewer's own run of turns to the stated ask, and joins all of them.
+    const chosenRaw = rawTextAt(chosenIdx) || chosen.text.trim();
+    if (latestQuestion === chosenRaw
+        && (GENERIC_CLOSING_ASK.test(chosen.text.trim()) || GENERIC_CLOSING_ASK.test(chosenRaw))) {
+        let anchorIdx = -1;
+        for (let j = chosenIdx - 1; j >= 0 && chosenIdx - j <= GENERIC_CLOSER_MAX_TURNS_BACK; j--) {
+            const turn = cleaned[j];
+            if (turn.role !== 'interviewer') break;
+            if (Math.abs(chosen.timestamp - turn.timestamp) > GENERIC_CLOSER_MAX_SPAN_MS) break;
+            const text = turn.text.trim();
+            const raw = rawTextAt(j) || text;
+            if (!text || GREETING_ONLY.test(text) || GREETING_ONLY.test(raw)) break;
+            if (GENERIC_CLOSING_ASK.test(text) || GENERIC_CLOSING_ASK.test(raw)) continue;
+            if (TASK_DIRECTIVE.test(text) || STATED_TASK_RE.test(raw) || QUESTION_MARK.test(raw)) { anchorIdx = j; break; }
+        }
+        if (anchorIdx >= 0) {
+            const span = cleaned.slice(anchorIdx, chosenIdx + 1);
+            scoringText = span.map((t) => t.text.trim()).join(' ');
+            latestQuestion = span.map((t, k) => rawTextAt(anchorIdx + k) || t.text.trim()).join(' ');
         }
     }
     const hasMark = QUESTION_MARK.test(scoringText) || QUESTION_MARK.test(latestQuestion);

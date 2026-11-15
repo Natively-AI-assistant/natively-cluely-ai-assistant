@@ -339,7 +339,8 @@ test('speculative pre-fetches are excluded from the ring', async () => {
   // Recording those would make the history describe exchanges that never happened.
   // (2026-10-29: the guard also needs `answered`, and the recorded question is
   // the one the run resolved, so the call spans several lines.)
-  assert.match(engine, /if \(!options\?\.speculative && answered\) \{[\s\S]{0,700}?this\.recordLiveTurn\(answer, options\?\.screenContext,/);
+  // (2026-11-15, #743: and a turn the session declined to store stays out too.)
+  assert.match(engine, /if \(!options\?\.speculative && answered && !declined\) \{[\s\S]{0,700}?this\.recordLiveTurn\(answer, options\?\.screenContext,/);
 });
 
 test('the live writer sits INSIDE the engine, so Auto Answer cannot bypass it', async () => {

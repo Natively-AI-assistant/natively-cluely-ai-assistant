@@ -2857,7 +2857,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                     // boundary skips non-coding screenshots.
                     if (!resolved.codingTask
                         && (imagePaths?.length ?? 0) > 0
-                        && (!v3Question.trim() || require('./llm/codingPromptSignals').isDeicticAsk(v3Question))) {
+                        && require('./llm/codingPromptSignals').isImageCodingAsk(v3Question)) {
                       // The screenshot grounds the problem; the words decide
                       // the shape ("explain this" is not "solve this").
                       return require('./llm/codingPromptSignals').screenPromotedCodingSignals(v3Question) as import('./llm/codingPromptSignals').CodingPromptSignals;

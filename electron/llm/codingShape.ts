@@ -42,6 +42,19 @@ const EXPLAIN_IDEA_RE = /\bexplain\s+(?:the\s+|your\s+)?(?:approach|idea|intuiti
 const APPROACH_RE = /\b(?:what|which)\s+(?:approach|data\s+structures?|algorithms?|technique|pattern|strategy|method)\b|\bapproach\s+(?:should|would|do|can)\b|\bhow\s+(?:would|should|do|can|could)\s+(?:you|i|we)\s+(?:approach|tackle|think\s+about|start)\b|\bhint\b|\bintuition\b|\bkey\s+(?:idea|insight)\b|\bwhere\s+(?:do|should)\s+i\s+start\b|\bhigh[- ]level\s+(?:idea|approach|plan)\b/i;
 
 /**
+ * The question's own words ask for something coding-shaped (code, a solution,
+ * a fix, the complexity, a dry run, an explanation, the approach, ...).
+ * detectCodingShape cannot say this: its `solve` is also the default for a
+ * question that matched nothing ("what would you change?").
+ */
+export function namesCodingShape(question: string | null | undefined): boolean {
+  const q = stripCode(String(question ?? '')).trim();
+  if (!q) return false;
+  return [FULL_RE, DEBUG_RE, WRITE_RE, SOLVE_RE, DRY_RUN_RE, COMPLEXITY_RE, BRUTE_RE,
+    OPTIMIZE_RE, EXPLAIN_IDEA_RE, WALKTHROUGH_RE, EXPLAIN_RE, APPROACH_RE].some((re) => re.test(q));
+}
+
+/**
  * The shape a coding turn asked for. `null`/empty question (a blind press, a
  * screenshot with no words) is a request to solve what is in front of the user.
  *

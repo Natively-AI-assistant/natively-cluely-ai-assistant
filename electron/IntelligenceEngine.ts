@@ -2162,7 +2162,7 @@ export class IntelligenceEngine extends EventEmitter {
         // recording `question` filed the turn under whatever question last
         // advanced the state, or, with no state yet, not at all: the turn and
         // its screenshot were simply never recorded.
-        const turnOut: { question?: string } = {};
+        const turnOut: { question?: string; writeDecision?: SessionWriteDecision } = {};
         const startedUnder = this.conversationSessionId();
         const answer = await this.runWhatShouldISayInner(question, confidence, imagePaths, { ...options, turnOut });
         // With no question, the turn is recorded only once the run got as far as
@@ -2171,7 +2171,17 @@ export class IntelligenceEngine extends EventEmitter {
         // and recording it put that message into the conversation as the reply
         // to the screenshot.
         const answered = Boolean(question?.trim()) || turnOut.question !== undefined;
-        if (!options?.speculative && answered) {
+        // An answer the session declined to store (cut off by the stall guard,
+        // an output cap or a repetition stop; a canned timeout or error line)
+        // stays out of the ring too. The ring is what the next prompt replays
+        // as "what YOU said", with no completeness flag, so a cut-off partial
+        // recorded here passed for a finished answer (#743). Same gate as the
+        // Auto Answer reveal path.
+        const declined = turnOut.writeDecision?.policy === 'do_not_store';
+        if (declined && !options?.speculative && answered) {
+            console.warn(`[IntelligenceEngine] What to answer turn not recorded in the conversation ring (${turnOut.writeDecision?.reason ?? 'do_not_store'})`);
+        }
+        if (!options?.speculative && answered && !declined) {
             // A run that resolved no question ('') and saw no screen or page
             // still answered something; filed with no question it took the
             // question of the turn before it.
@@ -2189,7 +2199,7 @@ export class IntelligenceEngine extends EventEmitter {
         return answer;
     }
 
-    private async runWhatShouldISayInner(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; screenFromImage?: boolean; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string; forceFresh?: boolean; pressedAt?: number; turnOut?: { question?: string } }): Promise<string | null> {
+    private async runWhatShouldISayInner(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; screenFromImage?: boolean; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string; forceFresh?: boolean; pressedAt?: number; turnOut?: { question?: string; writeDecision?: SessionWriteDecision } }): Promise<string | null> {
         const now = Date.now();
         // Intelligence OS observe-only trace (Phase 1). Zero-cost NO-OP unless
         // intelligence_trace_enabled is on. Committed at the primary final-answer emit
@@ -4751,8 +4761,11 @@ export class IntelligenceEngine extends EventEmitter {
                                 // this" / "what's the complexity of this" over a
                                 // screenshot is promoted too, and this directive
                                 // used to override their shape with "the complete
-                                // solution".
-                                if (!_promoted || !_base || _codingShape !== 'solve') return _base;
+                                // solution". The shape alone is not enough:
+                                // `solve` is also the default for a real question
+                                // that matched no narrower shape (#742).
+                                if (!_promoted || !_base
+                                    || !(require('./llm/codingPromptSignals') as typeof import('./llm/codingPromptSignals')).isRepeatPressAsk(answerPlan.question, _codingShape)) return _base;
                                 return `${_base}\n\n<repeat_press_directive>\nThe user triggered this action with a coding problem on screen and NO new question. That is a request for the COMPLETE solution to the on-screen problem, in the shape the coding contract asks for, even if a previous answer in this conversation already covered it, and even if this looks like a follow-up. Never respond with commentary on, agreement with, or a summary of an earlier answer. Produce the answer as if asked for the first time.\n</repeat_press_directive>`;
                             } catch { return null; } // no persona ⇒ composition unchanged
                         },
@@ -5539,6 +5552,7 @@ export class IntelligenceEngine extends EventEmitter {
                 // (pipeline forensics 2026-11-13, F-CTX-08).
                 if (isWtaSuperseded()) return yieldToSupersedingRun(false);
                 if (openedStreamRow) emitChunk(stubFallback);
+                if (options?.turnOut) options.turnOut.writeDecision = stubWriteDecision;
                 this.session.addAssistantMessage(stubFallback, stubWriteDecision, 'what_to_answer');
                 // Phase 4 defense-in-depth (forensic-report §6b): carry generationId.
                 this.emit('suggested_answer', stubFallback, question || extractedQuestion.latestQuestion || 'inferred', confidence, generationId);
@@ -5565,6 +5579,7 @@ export class IntelligenceEngine extends EventEmitter {
                 // (pipeline forensics 2026-11-13, F-CTX-08).
                 if (isWtaSuperseded()) return yieldToSupersedingRun(false);
                 if (openedStreamRow) emitChunk(fullAnswer);
+                if (options?.turnOut) options.turnOut.writeDecision = transportWriteDecision;
                 this.session.addAssistantMessage(fullAnswer, transportWriteDecision, 'what_to_answer');
                 // Campaign-3 (fix/answer-policy-engine, 2026-07-19, founder §2.6):
                 // Source badge label. Computed from the TurnPlan (already
@@ -5631,6 +5646,7 @@ export class IntelligenceEngine extends EventEmitter {
                 // (pipeline forensics 2026-11-13, F-CTX-08).
                 if (isWtaSuperseded()) return yieldToSupersedingRun(false);
                 if (openedStreamRow) emitChunk(tagLeakFallback);
+                if (options?.turnOut) options.turnOut.writeDecision = tagLeakWriteDecision;
                 this.session.addAssistantMessage(tagLeakFallback, tagLeakWriteDecision, 'what_to_answer');
                 // Phase 4 defense-in-depth (forensic-report §6b): carry generationId.
                 this.emit('suggested_answer', tagLeakFallback, question || extractedQuestion.latestQuestion || 'inferred', confidence, generationId);
@@ -7399,6 +7415,7 @@ export class IntelligenceEngine extends EventEmitter {
             // leaves the mode to its successor (pipeline forensics 2026-11-13,
             // F-CTX-08). Speculative runs check this above, before completing.
             if (isWtaSuperseded()) return yieldToSupersedingRun(false);
+            if (options?.turnOut) options.turnOut.writeDecision = wtaWriteDecision;
             this.session.addAssistantMessage(finalWtaAnswer, wtaWriteDecision, 'what_to_answer');
 
             // Full-JIT write-gating law (§6): a provider-error/no-answer WTA

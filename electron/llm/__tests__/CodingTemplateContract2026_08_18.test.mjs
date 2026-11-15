@@ -504,13 +504,14 @@ describe('C5 — channel audit: every screen transport reaches the contract (202
 
   test('chat V3 personaBase promotes an attached screenshot with a deictic ask', () => {
     const src = read('../../ipcHandlers.ts');
-    assert.match(src, /imagePaths\?\.length \?\? 0\) > 0\s*&&\s*\(!v3Question\.trim\(\) \|\| require\('\.\/llm\/codingPromptSignals'\)\.isDeicticAsk\(v3Question\)/, 'chat V3 lost the screenshot promotion');
+    assert.match(src, /imagePaths\?\.length \?\? 0\) > 0\s*&&\s*require\('\.\/llm\/codingPromptSignals'\)\.isImageCodingAsk\(v3Question\)/, 'chat V3 lost the screenshot promotion');
     assert.match(src, /codingTask: codingTask \|\| codingSignals\.codingTask \|\| !!priorProblem/, 'the promoted codingTask is not fed into the composed prompt');
   });
 
   test('both legacy LLMHelper transports promote an attached screenshot', () => {
     const src = read('../../LLMHelper.ts');
-    const hits = (src.match(/imagePaths\?\.length \?\? 0\) > 0\s*&&\s*\(!message\?\.trim\(\) \|\| isDeicticAsk\(message\)/g) || []).length;
+    // #742: the image promotion asks isImageCodingAsk (empty, screen-only, or code-directed).
+    const hits = (src.match(/imagePaths\?\.length \?\? 0\) > 0\s*&&\s*isImageCodingAsk\(message\)/g) || []).length;
     assert.equal(hits, 2, `expected the promotion on BOTH LLMHelper entry points, got ${hits}`);
   });
 

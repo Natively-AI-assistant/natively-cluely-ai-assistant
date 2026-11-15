@@ -42,7 +42,7 @@ export { planAnswer, formatAnswerPlanForPrompt, shapedCodingTemplate, isCodingAn
 export { detectAnswerStyle, styleSuppressesScaffold } from "./answerStyle";
 export type { AnswerStyle, AnswerStyleResult } from "./answerStyle";
 export { detectExplicitCodingContract, isCodingContinuation, withActiveCodingProblem, isActiveCodingProblemFollowUp, isBareCodeRequest, looksLikeCodingAnswer, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode } from "./codingFollowup";
-export { resolveCodingPromptSignals, screenPromotedCodingSignals, detectSuppliedCodeTemplate, codingTaskKindFor, isBuildTask, isDeicticAsk, type CodingPromptSignals, type CodingTaskKind } from "./codingPromptSignals";
+export { resolveCodingPromptSignals, screenPromotedCodingSignals, detectSuppliedCodeTemplate, codingTaskKindFor, isBuildTask, isDeicticAsk, isImageCodingAsk, isScreenOnlyAsk, isRepeatPressAsk, type CodingPromptSignals, type CodingTaskKind } from "./codingPromptSignals";
 export type { ExplicitCodingContract, PriorCodingTurn } from "./codingFollowup";
 export { shouldHumanize, shouldHumanizeOutput, detectCorporateFiller, humanizeDirectiveFor, HUMANIZE_DIRECTIVE, humanizeSpokenAnswer, humanizeForAnswerType } from "./humanLikeness";
 export type { CorporateFillerVerdict } from "./humanLikeness";
