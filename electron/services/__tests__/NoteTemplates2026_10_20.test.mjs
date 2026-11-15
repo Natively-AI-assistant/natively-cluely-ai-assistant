@@ -223,7 +223,12 @@ describe('a template as a mode\'s notes template', () => {
         assert.ok(h.indexOf('isProOrTrialActive()') < h.indexOf('noteTemplateById('));
         assert.ok(h.indexOf("'unknown_template'") < h.indexOf('replaceNoteSectionsWith('));
         assert.ok(h.indexOf("'unknown_mode'") < h.indexOf('replaceNoteSectionsWith('));
-        assert.match(src('electron/services/ModesManager.ts'), /replaceNoteSections\(modeId, rows\)\) return null;\n\s+this\.compileAllSectionsAsync\(modeId\);/);
+        // Template sections are built-in text with shipped instructions (2026-11-16): the replace
+        // writes them and compiles nothing.
+        const mm = src('electron/services/ModesManager.ts');
+        const replace = mm.slice(mm.indexOf('public replaceNoteSectionsWith('), mm.indexOf('// ── LLM Context'));
+        assert.match(replace, /replaceNoteSections\(modeId, rows\)\) return null;\n\s+return this\.getNoteSections\(modeId\);/);
+        assert.doesNotMatch(replace, /compile/i);
         assert.match(src('electron/preload.ts'), /modesApplyNoteTemplate: \(modeId: string, templateId: string\) =>\n\s+ipcRenderer\.invoke\('modes:apply-note-template', modeId, templateId\)/);
         assert.match(src('src/types/electron.d.ts'), /modesApplyNoteTemplate\?: \(modeId: string, templateId: string\)/);
     });

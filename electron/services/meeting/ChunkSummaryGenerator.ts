@@ -2,6 +2,7 @@ import type { LLMHelper } from '../../LLMHelper';
 import type { ChunkMeetingAtoms, MeetingModeSectionInput, TranscriptChunk } from './types';
 import { MeetingSummarySchemaValidator, dropAssistantSourcedAtoms } from './MeetingSummarySchemaValidator';
 import { generateStructured } from './generateStructured';
+import { sectionGuidance as guidanceForSection } from './sectionInstructions';
 import { anchorAtomTimes, chunkElapsedRange } from './evidenceTimes';
 import { chunkDensityTarget, headingBudgetForTranscript, renderNotesPromptContext, userNoteHeadings, type NotesPromptContext } from './meetingNotesContext';
 
@@ -94,13 +95,13 @@ export function buildChunkPrompt(params: {
   meetingTotalChars?: number;
 }): { systemPrompt: string; jsonShapeHint: string } {
   // The mode's note sections are the SOURCE OF TRUTH for output. Each section carries a
-  // per-section extraction instruction (AI-compiled when available, else its description).
+  // per-section extraction instruction (sectionInstructions.ts: shipped for built-in text,
+  // AI-compiled for the user's own, else its description).
   const sectionList = params.modeNoteSections || [];
   const sectionGuidance = sectionList.length > 0
     ? sectionList.map((section, i) => {
-        const guidance = (section.compiledPrompt && section.compiledPrompt.trim())
-          ? section.compiledPrompt.trim()
-          : (section.description?.trim() || `Capture content for "${section.title}", grounded only in this transcript.`);
+        // Shipped instruction for built-in text, else the user's compiled one, else the description.
+        const guidance = guidanceForSection(section);
         return `${i + 1}. SECTION "${section.title}"\n   ${guidance}`;
       }).join('\n')
     : '';

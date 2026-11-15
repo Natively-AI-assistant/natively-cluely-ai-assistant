@@ -12,6 +12,7 @@
 // Pure. No Electron, no database, no platform branches.
 
 import type { MeetingModeSectionInput } from './types';
+import { sectionGuidance } from './sectionInstructions';
 import { MEETING_TITLE_RULE, isEmptyListPlaceholder, isEmptyPlaceholder } from './MeetingSummaryV3';
 import { headingBudgetForTranscript, renderNotesPromptContext, userNoteHeadings, type NotesPromptContext } from './meetingNotesContext';
 
@@ -55,7 +56,7 @@ export function buildV2FallbackPrompts(params: V2FallbackPromptParams): { summar
 
   if (params.modeNoteSections.length > 0) {
     const sectionList = params.modeNoteSections
-      .map(s => s.description?.trim() ? `- "${s.title}": ${s.description}` : `- "${s.title}"`)
+      .map(s => `- "${s.title}": ${sectionGuidance(s)}`)
       .join('\n');
     const sectionKeys = params.modeNoteSections.map(s => `    "${s.title}": []`).join(',\n');
     const summaryPrompt = `You are a silent meeting note-taker. Extract structured notes from the conversation transcript below.
