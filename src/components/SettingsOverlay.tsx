@@ -110,7 +110,7 @@ const DISGUISE_TILE_RESTING = {
 import { NVIDIA_NIM_STT_MODELS, DEFAULT_NVIDIA_NIM_STT_MODEL, allowedLanguageKeysForNvidiaModel } from '../../electron/audio/nvidiaNimSttModels';
 import { STT_MODEL_CATALOG, isEnglishOnlySttModel, sttModelRejectsLanguage, type SttModelProvider } from '../../electron/audio/sttModelCatalog';
 import { isDefaultOpenAiSttBase } from '../../electron/audio/openaiSttBaseUrl';
-import { isRecognitionLanguageOffered, PARAKEET_ONLY_LANGUAGE_KEYS } from '../../electron/config/languages';
+import { isRecognitionLanguageOffered, PARAKEET_ONLY_LANGUAGE_KEYS, sttProviderRejectsLanguage } from '../../electron/config/languages';
 
 // ---------------------------------------------------------------------------
 // StarRating — renders filled/empty stars for culture ratings
@@ -1474,7 +1474,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
     const allowedLanguageKeySet = localLanguageCapability?.allowedKeys ?? nvidiaLanguageCapability ?? deepgramLanguageCapability ?? appleLanguageCapability ?? null;
     const isLanguageEntryAllowed = (key: string) =>
-        isRecognitionLanguageOffered(key, localLanguageCapability?.allowedKeys ?? null, allowedLanguageKeySet);
+        isRecognitionLanguageOffered(key, localLanguageCapability?.allowedKeys ?? null, allowedLanguageKeySet, sttProvider);
 
     // Helper to get unique groups (restricted to what the active model accepts)
     const languageGroups = Array.from(new Set(
@@ -1521,7 +1521,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     // A multilingual Deepgram model sends `multi` for a stored language it has
     // no model for (DeepgramStreamingSTT.connectLanguage), so that is shown as
     // the Auto Detect it gets rather than a value missing from the list.
-    const showsAutoFallback = !showsEnglishFallback && sttProvider === 'deepgram' && storedLanguageUnsupported;
+    // Soniox does the same for a language it refuses (Nepali), and the Natively
+    // API relay turns that refusal into auto-detect.
+    const showsAutoFallback = !showsEnglishFallback && (
+        (sttProvider === 'deepgram' && storedLanguageUnsupported)
+        || sttProviderRejectsLanguage(sttProvider, recognitionLanguage)
+    );
     const displayedSttGroup = showsEnglishFallback ? 'English' : showsAutoFallback ? 'Auto' : selectedSttGroup;
     const displayedRecognitionLanguage = showsEnglishFallback ? 'english-us' : showsAutoFallback ? 'auto' : recognitionLanguage;
 

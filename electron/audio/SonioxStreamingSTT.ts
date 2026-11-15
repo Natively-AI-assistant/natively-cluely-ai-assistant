@@ -19,7 +19,7 @@
 import { EventEmitter } from 'events';
 import { getSttContextTerms } from './sttContextTerms';
 import WebSocket from 'ws';
-import { RECOGNITION_LANGUAGES } from '../config/languages';
+import { RECOGNITION_LANGUAGES, sttProviderRejectsLanguage } from '../config/languages';
 import { SONIOX_RT_MODEL } from './sttModelCatalog';
 import { streamingStttWsOptions } from './dnsHelpers';
 import { shouldReviveExhaustedReconnect, DEFAULT_REVIVE_COOLDOWN_MS } from './sttReconnectPolicy.mjs';
@@ -224,8 +224,17 @@ export class SonioxStreamingSTT extends EventEmitter {
                 console.warn(`[SonioxStreaming] Unknown language key: ${key} — keeping ${previous ?? 'auto'}`);
                 return;
             }
-            this.languageCode = config.iso639;
-            console.log(`[SonioxStreaming] Language hint set to ${this.languageCode} (strict)`);
+            if (sttProviderRejectsLanguage('soniox', key)) {
+                // Soniox answers this hint with a 400 that ends the session
+                // (Nepali, 2026-11-15). Settings hides it under Soniox; this
+                // covers a language stored earlier, so the meeting still
+                // transcribes on auto-detect.
+                this.languageCode = undefined;
+                console.warn(`[SonioxStreaming] Soniox has no ${config.iso639} — using auto-detect`);
+            } else {
+                this.languageCode = config.iso639;
+                console.log(`[SonioxStreaming] Language hint set to ${this.languageCode} (strict)`);
+            }
         }
 
         if (this.languageCode !== previous && this.isActive) {

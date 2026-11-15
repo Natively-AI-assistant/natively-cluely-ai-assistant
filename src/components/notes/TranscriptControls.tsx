@@ -81,7 +81,7 @@ export const TranscriptControls: React.FC = () => {
     };
     const openAudioSettings = () => { setOpen(null); void window.electronAPI?.openSettingsTab?.('audio'); };
 
-    const choices = provider ? notepadLanguageChoices(provider, languages, (k) => isRecognitionLanguageOffered(k, null, null)) : null;
+    const choices = provider ? notepadLanguageChoices(provider, languages, (k) => isRecognitionLanguageOffered(k, null, null, provider)) : null;
     const micLabel = actual ?? micButtonLabel(devices, saved);
     const current = (id: string) => (saved ? id === saved : id === 'default');
     const textBtn = 'h-8 inline-flex items-center gap-1.5 px-2.5 rounded-full text-[13px] transition-colors np-wash';
