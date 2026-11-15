@@ -135,7 +135,7 @@ const ROWS: Record<string, Row> = {
   // Step 1: the first meeting plays the demo film in the browser (Evin, 2026-11-15).
   'Your free trial covers it. Start now: the Natively demo plays in your browser so you can watch it work.': ['Бесплатный пробный период это покрывает. Начните сейчас: демо Natively откроется в браузере, и вы увидите, как он работает.', '免费试用已包含。现在就开始：Natively 演示会在浏览器中播放，让你看看它如何工作。', '無料トライアルで使えます。今すぐ開始すると、Natively のデモがブラウザで再生され、動く様子を見られます。', 'Tu prueba gratuita lo cubre. Empieza ahora: la demo de Natively se reproduce en tu navegador para que veas cómo funciona.'],
   'Your plan covers it. Start now: the Natively demo plays in your browser so you can watch it work.': ['Ваш тариф это покрывает. Начните сейчас: демо Natively откроется в браузере, и вы увидите, как он работает.', '你的套餐已包含。现在就开始：Natively 演示会在浏览器中播放，让你看看它如何工作。', 'ご利用のプランで使えます。今すぐ開始すると、Natively のデモがブラウザで再生され、動く様子を見られます。', 'Tu plan lo cubre. Empieza ahora: la demo de Natively se reproduce en tu navegador para que veas cómo funciona.'],
-  // The first meeting's Stop, locked for 15 s while the demo plays (TopPill, NotesWindow).
+  // The first meeting's Stop, locked for 30 s while the demo plays (TopPill, NotesWindow).
   // The film's autoplay was blocked: nothing heard 8 s in (OverlayGuide).
   'No sound yet? Press play on the Natively demo in your browser.': ['Звука пока нет? Нажмите «Воспроизвести» в демо Natively в браузере.', '还没有声音？请在浏览器中播放 Natively 演示。', 'まだ音が聞こえませんか？ブラウザで Natively のデモを再生してください。', '¿Aún sin sonido? Pulsa reproducir en la demo de Natively en tu navegador.'],
   'Open the demo': ['Открыть демо', '打开演示', 'デモを開く', 'Abrir la demo'],

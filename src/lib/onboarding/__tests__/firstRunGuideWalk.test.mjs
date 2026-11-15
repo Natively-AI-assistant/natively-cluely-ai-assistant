@@ -111,22 +111,23 @@ test('a late save never ends the meeting that is running, and a late meeting-1 s
   assert.equal(reduceGuide(s7, { type: 'meeting_saved', meetingId: 'm-1' }, NOW), s7, 'not once the notepad is picked');
 });
 
-// Evin, 2026-11-15: the first meeting plays the demo film and Stop waits 15 s.
+// Evin, 2026-11-15: the first meeting plays the demo film and Stop waits 30 s (first 15 s, raised so there is time to try things).
 import { GUIDE_STOP_LOCK_MS, guideStopLockLeft, normalizeGuideState } from '../firstRunGuide.mjs';
 import { readFileSync } from 'node:fs';
 
-test('the first guide meeting locks Stop for 15 s; the second never does; skipping unlocks', () => {
+test('the first guide meeting locks Stop for 30 s; the second never does; skipping unlocks', () => {
   const m1 = reduceGuide(at('start'), { type: 'meeting_started', surface: 'overlay' }, NOW);
   assert.equal(m1.stopLockUntil, NOW + GUIDE_STOP_LOCK_MS);
-  assert.equal(guideStopLockLeft(m1, NOW), 15_000);
-  assert.equal(guideStopLockLeft(m1, NOW + 14_999), 1);
-  assert.equal(guideStopLockLeft(m1, NOW + 15_000), 0, 'unlocked on time');
+  assert.equal(GUIDE_STOP_LOCK_MS, 30_000);
+  assert.equal(guideStopLockLeft(m1, NOW), 30_000);
+  assert.equal(guideStopLockLeft(m1, NOW + 29_999), 1);
+  assert.equal(guideStopLockLeft(m1, NOW + 30_000), 0, 'unlocked on time');
   const n1 = reduceGuide(at('start'), { type: 'meeting_started', surface: 'notepad' }, NOW);
-  assert.equal(guideStopLockLeft(n1, NOW), 15_000, 'a first meeting in the notepad is locked too');
+  assert.equal(guideStopLockLeft(n1, NOW), 30_000, 'a first meeting in the notepad is locked too');
   const m2 = reduceGuide(at('start2', { stopLockUntil: NOW + GUIDE_STOP_LOCK_MS }), { type: 'meeting_started' }, NOW);
   assert.equal(guideStopLockLeft(m2, NOW), 0, 'meeting 2 is never locked');
   assert.equal(guideStopLockLeft(reduceGuide(m1, { type: 'skip' }, NOW), NOW), 0, 'skip unlocks at once');
-  assert.equal(guideStopLockLeft({ ...m1, stopLockUntil: NOW + 10 * 60_000 }, NOW), GUIDE_STOP_LOCK_MS, 'never longer than 15 s');
+  assert.equal(guideStopLockLeft({ ...m1, stopLockUntil: NOW + 10 * 60_000 }, NOW), GUIDE_STOP_LOCK_MS, 'never longer than 30 s');
   assert.equal(guideStopLockLeft(null, NOW), 0);
 });
 

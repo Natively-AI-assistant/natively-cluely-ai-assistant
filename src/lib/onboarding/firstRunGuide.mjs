@@ -39,8 +39,9 @@ export const GUIDE_STEP_COUNT = 14;
 
 /** The first guide meeting's Stop stays locked this long, while the demo film
  *  plays in the browser (Evin, 2026-11-15: "dont let him close the app for 15
- *  seconds"). Skipping the guide unlocks it at once. */
-export const GUIDE_STOP_LOCK_MS = 15_000;
+ *  seconds"), then 30 s so there is time to try things (Evin, same day).
+ *  Skipping the guide unlocks it at once. */
+export const GUIDE_STOP_LOCK_MS = 30_000;
 
 /** How long Stop stays locked from `now` (0 = unlocked). Only while the guide
  *  runs; capped, so a clock moved backwards can never lock it for longer. */
@@ -157,7 +158,7 @@ export function reduceGuide(state, event, now) {
       // rather than drawing in a window that is not on screen.
       if (state.step !== 'start' && state.step !== 'start2') return state;
       const surface = event.surface === 'overlay' || event.surface === 'notepad' ? event.surface : (state.step === 'start' ? 'overlay' : 'notepad');
-      // The first meeting: the demo film plays and Stop waits 15 s (GUIDE_STOP_LOCK_MS).
+      // The first meeting: the demo film plays and Stop waits 30 s (GUIDE_STOP_LOCK_MS).
       const stopLockUntil = state.step === 'start' ? now + GUIDE_STOP_LOCK_MS : null;
       return move(state, { step: surface === 'notepad' ? 'notepad' : 'overlay', stopLockUntil }, now);
     }

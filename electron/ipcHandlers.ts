@@ -1739,7 +1739,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       (toggleWin && !toggleWin.isDestroyed() && toggleWin.webContents.id === event.sender.id);
     if (!fromAux || !action?.type) return;
     if (action.type === 'end-meeting' && guideStopLockedMs() > 0) {
-      console.log('[Guide] Stop from the pill held: the first meeting is still in its 15 s');
+      console.log('[Guide] Stop from the pill held: the first meeting is still in its 30 s');
       return;
     }
     await routeOverlayUiAction(action, {
@@ -16136,7 +16136,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('end-meeting', async () => {
-    // The first guide meeting's Stop waits out its 15 s (guideStopLockedMs).
+    // The first guide meeting's Stop waits out its 30 s (guideStopLockedMs).
     const lockedMs = guideStopLockedMs();
     if (lockedMs > 0) {
       console.log(`[Guide] Stop held: ${Math.ceil(lockedMs / 1000)} s of the first meeting left`);

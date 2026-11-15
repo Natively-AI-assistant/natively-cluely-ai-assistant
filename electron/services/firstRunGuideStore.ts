@@ -125,7 +125,7 @@ export function applyGuideEvent(event: GuideEvent | { type: 'surface_notepad' })
 
 /**
  * How long the user's Stop is still locked, in ms (0 = it works). The first
- * guide meeting's 15 s (GUIDE_STOP_LOCK_MS), while the demo film plays. Only
+ * guide meeting's 30 s (GUIDE_STOP_LOCK_MS), while the demo film plays. Only
  * the user's Stop asks this: auto-stop, quit and the app's own teardown never
  * do. Never throws: an unreadable guide never locks Stop.
  */

@@ -1073,7 +1073,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                 title={stopLock.seconds > 0 ? stopLock.label : 'Stop transcript'}
                 aria-disabled={stopLock.seconds > 0 || undefined}
                 data-guide="notes-stop"
-                // The guide's first meeting holds Stop 15 s (useGuideStopLock; main refuses it too).
+                // The guide's first meeting holds Stop 30 s (useGuideStopLock; main refuses it too).
                 onClick={() => { if (stopLock.seconds > 0) return; npTrack('stopped'); void window.electronAPI?.endMeeting?.(); }}
                 // The mic's mirror: a 24px round end (concentric with the pill's 28px end). At
                 // 34.5px wide that curve took most of the button and hovered as a lopsided blob,
