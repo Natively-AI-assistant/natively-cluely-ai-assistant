@@ -149,7 +149,6 @@ const ROWS: Record<string, Row> = {
   'Write while you talk.': ['Пишите, пока говорите.', '边聊边记。', '話しながら書きましょう。', 'Escribe mientras hablas.'],
   'Open notepad': ['Открыть блокнот', '打开记事本', 'メモ帳を開く', 'Abrir bloc de notas'],
   'Jot a line. It goes into your meeting notes.': ['Запишите строчку. Она попадёт в заметки о встрече.', '写一行。它会进入你的会议笔记。', '一行書いてください。会議メモに入ります。', 'Escribe una línea. Irá a tus notas de la reunión.'],
-  'Type a line': ['Напишите строчку', '写一行', '一行入力', 'Escribe una línea'],
   'Stop the meeting when you’re ready.': ['Остановите встречу, когда будете готовы.', '准备好后结束会议。', '準備ができたら会議を終了してください。', 'Detén la reunión cuando quieras.'],
   'Natively writes up your notes as soon as it stops.': ['Natively составит заметки сразу после остановки.', '会议一结束，Natively 就会整理好笔记。', '終了するとすぐに Natively がメモをまとめます。', 'Natively redacta tus notas en cuanto se detiene.'],
   'Meeting notes': ['Заметки о встрече', 'Meeting notes', '会議メモ', 'Meeting notes'],

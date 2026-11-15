@@ -8,7 +8,7 @@ import { useT } from '../../i18n';
 import { GUIDE_STEP_COUNT, GUIDE_STEP_NUMBER } from '../../lib/onboarding/firstRunGuide.mjs';
 import type { GuideStepId } from '../../lib/onboarding/firstRunGuide.mjs';
 import { useAnchorRect, useGuideLit } from './useGuide';
-import { GUIDE_ACCENT, GuideStatusDot, guideAccentText } from './GuideStrip';
+import { GUIDE_ACCENT, GuideStatusDot, guideAccentText } from './guideStyle';
 import './guide.css';
 
 export type GuideListRow = [label: string, state: 'done' | 'now' | 'todo', hint?: string];

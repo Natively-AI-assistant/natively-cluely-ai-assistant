@@ -11,18 +11,27 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
-test('the notes window draws the guide and reports the first line typed', () => {
+test('the notes window draws the guide in its bottom bar and reports the first line typed', () => {
   const w = read('src/components/NotesWindow.tsx');
   assert.ok(w.includes('useNotesGuide()'));
-  assert.ok(w.includes("{phase !== 'ended' && notesGuide.node}"), 'drawn above the editor while the meeting is not over');
+  // Beside the meeting's own status, above the Stop pill; the auto-stop notice wins.
+  assert.ok(w.includes("{phase === 'live' && stopsAt === null && notesGuide.node}"));
+  assert.ok(!w.includes("{phase !== 'ended' && notesGuide.node}"), 'no longer a block above the editor');
+  assert.ok(w.includes('data-guide="notes-stop"'), 'the Stop button can be lit');
   const commit = w.slice(w.indexOf('const commit = useCallback'), w.indexOf('}, [', w.indexOf('const commit = useCallback')));
   assert.ok(commit.includes('notesGuide.onTyped(next)'), 'typing in the notepad reports to the guide');
 });
 
-test('NotesGuide: note_typed once there is text, the two strips, no focus', () => {
+// Evin, 2026-11-10: the hand-drawn purple strip was "messy" in the overlay. The
+// notes window's steps use its own raised pill (np-elevated, the auto-stop
+// notice's look): title, one quiet line, the step count and a plain ✕.
+test('NotesGuide: the notes window pill, note_typed once there is text, Stop lit, no focus', () => {
   const g = read('src/components/guide/NotesGuide.tsx');
-  for (const s of ["type: 'note_typed'", "'Write while you talk.'", "'Jot a line. It goes into your meeting notes.'", "'Type a line'",
-    "'Stop the meeting when you’re ready.'"]) assert.ok(g.includes(s), s);
+  for (const s of ["type: 'note_typed'", "'Write while you talk.'", "'Jot a line. It goes into your meeting notes.'",
+    "'Stop the meeting when you’re ready.'", 'np-elevated', "tr('{n} of {total}')", "aria-label={tr('Skip guide')}",
+    '[data-guide="notes-stop"]']) assert.ok(g.includes(s), s);
+  assert.ok(!g.includes('<GuideStrip'), 'not the hand-drawn strip');
   assert.ok(/next\.trim\(\)/.test(g), 'only real text counts');
-  assert.ok(!/\.focus\(|autoFocus/.test(g) && !/\.focus\(|autoFocus/.test(read('src/components/guide/GuideStrip.tsx')));
+  assert.ok(!/\.focus\(|autoFocus/.test(g), 'the no-activate notes window never takes focus');
+  assert.ok(!fs.existsSync(path.join(ROOT, 'src/components/guide/GuideStrip.tsx')), 'the old strip is gone');
 });

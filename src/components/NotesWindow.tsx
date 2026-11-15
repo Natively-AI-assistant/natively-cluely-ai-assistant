@@ -1062,6 +1062,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                 type="button"
                 aria-label="Stop transcript"
                 title="Stop transcript"
+                data-guide="notes-stop"
                 onClick={() => { npTrack('stopped'); void window.electronAPI?.endMeeting?.(); }}
                 // The mic's mirror: a 24px round end (concentric with the pill's 28px end). At
                 // 34.5px wide that curve took most of the button and hovered as a lopsided blob,
@@ -1322,7 +1323,6 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                     <NotesEnhanced ref={enhancedRef} meetingId={meetingId!} onTitle={setSavedTitle} onOpenGallery={openGallery} myNotes={text} bottomInset={bottomInset} />
                 ) : (
                     <>
-                    {phase !== 'ended' && notesGuide.node}
                     {phase !== 'ended' && (liveTemplate || templateNotice) && (
                         // The template this meeting's notes will be written in ("/" › Templates).
                         <div className="px-8 pt-3 -mb-1 flex items-center gap-2 min-w-0" role="status">
@@ -1373,6 +1373,9 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                                 </button>
                             </div>
                         )}
+                        {/* The first-run guide's notepad and stop steps (guide/NotesGuide.tsx),
+                            just above the Stop button; the auto-stop notice wins. */}
+                        {phase === 'live' && stopsAt === null && notesGuide.node}
                         {phase === 'live' && problem && stopsAt === null && (
                             <p className="px-2 text-center text-balance text-[12px] leading-4" style={ink('--np-ink-secondary')} role="status">{problem}</p>
                         )}
