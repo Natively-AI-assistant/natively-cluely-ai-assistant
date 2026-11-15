@@ -13,39 +13,10 @@ const compilerMod = await import(pathToFileURL(compilerPath).href);
 const { ModesManager } = modesMod;
 const { SectionPromptCompiler, deterministicSectionInstruction } = compilerMod;
 
-test('ModesManager.compileAllSectionsAsync short-circuits when no provider is configured', async () => {
-  let sectionReads = 0;
-  let generateMeetingSummaryCalls = 0;
-
-  const mockLlmHelper = {
-    hasAnyConfiguredProvider() {
-      return false;
-    },
-    async generateMeetingSummary() {
-      generateMeetingSummaryCalls++;
-      return '';
-    },
-  };
-
-  ModesManager.setLlmHelperForCompiler(mockLlmHelper);
-
-  const manager = ModesManager.getInstance();
-  // Override getNoteSections to return sections needing compilation. It is read
-  // only AFTER the provider gate, so a zero count pins that gate itself;
-  // generateMeetingSummaryCalls alone would stay 0 via SectionPromptCompiler's own gate.
-  manager.getNoteSections = () => (sectionReads++, [
-    { id: 's1', modeId: 'm1', title: 'Action Items', description: 'Next steps', compiledPrompt: '' },
-    { id: 's2', modeId: 'm1', title: 'Key Decisions', description: 'Agreed points', compiledPrompt: '' },
-  ]);
-
-  manager.compileAllSectionsAsync('m1');
-
-  // Allow any microtasks / ticks to run
-  await new Promise(r => setTimeout(r, 50));
-
-  assert.equal(sectionReads, 0, 'compileAllSectionsAsync must return at the provider gate, before reading sections');
-  assert.equal(generateMeetingSummaryCalls, 0, 'Should not have called generateMeetingSummary when no provider configured');
-});
+// compileAllSectionsAsync was removed (2026-11-16): seeded sections are built-in text and
+// their instructions ship with the app (meeting/sectionInstructions.ts). Its two tests here
+// (no-provider gate, keys loading after seeding) went with it; seeding making no calls is
+// pinned in BuiltinSectionInstructions2026_11_16.test.mjs.
 
 test('ModesManager.addNoteSection short-circuits compilation when no provider is configured', async () => {
   let generateMeetingSummaryCalls = 0;
@@ -78,37 +49,6 @@ test('ModesManager.addNoteSection short-circuits compilation when no provider is
   manager.getModes = realGetModes;
   assert.equal(modeReads, 0, 'compileSectionPromptAsync must return at the provider gate, before reading modes');
   assert.equal(generateMeetingSummaryCalls, 0, 'Should not have called generateMeetingSummary for single section when no provider configured');
-});
-
-test('compileAllSectionsAsync still compiles when stored keys load right after seeding (packaged startup order)', async () => {
-  // main.ts: AppState.getInstance() seeds built-ins, THEN loadStoredCredentials() runs in the
-  // same synchronous stretch. A packaged build has no keys at seed time, so a gate read at call
-  // time skipped every seeded section for users who have keys (e.g. a release adding a template).
-  let providerReady = false;
-  let sectionReads = 0;
-  let generateMeetingSummaryCalls = 0;
-  ModesManager.setLlmHelperForCompiler({
-    hasAnyConfiguredProvider() { return providerReady; },
-    async generateMeetingSummary() {
-      generateMeetingSummaryCalls++;
-      return JSON.stringify({ instruction: 'Extract the relevant points. Use ONLY the transcript provided; do not use outside knowledge. If this was not discussed, output exactly: Not discussed.' });
-    },
-  });
-
-  const manager = ModesManager.getInstance();
-  const realGetNoteSections = manager.getNoteSections;
-  manager.getNoteSections = () => (sectionReads++, [
-    { id: 's1', modeId: 'm1', title: 'Action Items', description: 'Next steps', compiledPrompt: '' },
-  ]);
-
-  manager.compileAllSectionsAsync('m1'); // seeding
-  providerReady = true;                  // loadStoredCredentials(), same synchronous run
-
-  await new Promise(r => setTimeout(r, 50));
-  manager.getNoteSections = realGetNoteSections;
-
-  assert.equal(sectionReads, 1, 'compileAllSectionsAsync must read provider state after keys load, not at call time');
-  assert.ok(generateMeetingSummaryCalls > 0, 'the seeded section must be compiled once the stored key is loaded');
 });
 
 test('SectionPromptCompiler falls back immediately to deterministic instruction when no provider is configured', async () => {

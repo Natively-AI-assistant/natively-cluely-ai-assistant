@@ -555,16 +555,18 @@ test('reducer Summary is outcome-first and never boilerplate; empty when no cont
 
 // ── Section prompt compiler ──────────────────────────────────────────────────
 
-test('deterministicSectionInstruction carries source-only + empty-if-absent guardrails', () => {
+test('deterministicSectionInstruction carries source-only + leave-it-out guardrails', () => {
   const instr = deterministicSectionInstruction({ sectionTitle: 'Discovery', sectionDescription: 'What the prospect said', meetingMode: 'sales' });
   assert.match(instr, /Discovery/);
   assert.match(instr, /only the transcript/i);
-  assert.match(instr, /Not discussed/);
+  // 2026-11-16: the chunk prompt omits an empty section and forbids "Not discussed".
+  assert.match(instr, /leave this section out/i);
+  assert.doesNotMatch(instr, /Not discussed/i);
 });
 
 test('SectionPromptCompiler returns LLM instruction when it passes guardrails, else fallback', async () => {
   // Good compiled instruction (has both required clauses).
-  const good = '{"instruction":"Extract the prospect statements. Use ONLY the transcript provided. Do not infer. If not present, output exactly: Not discussed."}';
+  const good = '{"instruction":"Extract the prospect statements. Use ONLY the transcript provided. Do not infer. If nothing fits, leave this section out."}';
   const okGen = { generateMeetingSummary: async () => good };
   const r1 = await new SectionPromptCompiler(okGen).compile({ sectionTitle: 'Discovery', sectionDescription: 'x', meetingMode: 'sales' });
   assert.equal(r1.compiled, true);
@@ -574,7 +576,12 @@ test('SectionPromptCompiler returns LLM instruction when it passes guardrails, e
   const badGen = { generateMeetingSummary: async () => '{"instruction":"just grab whatever"}' };
   const r2 = await new SectionPromptCompiler(badGen).compile({ sectionTitle: 'Discovery', sectionDescription: 'x', meetingMode: 'sales' });
   assert.equal(r2.compiled, false);
-  assert.match(r2.instruction, /Not discussed/);
+  assert.match(r2.instruction, /leave this section out/i);
+
+  // An instruction that asks for a placeholder contradicts the chunk prompt: rejected.
+  const sentinelGen = { generateMeetingSummary: async () => '{"instruction":"Extract the prospect statements. Use ONLY the transcript provided. If not present, output exactly: Not discussed."}' };
+  const r3 = await new SectionPromptCompiler(sentinelGen).compile({ sectionTitle: 'Discovery', sectionDescription: 'x', meetingMode: 'sales' });
+  assert.equal(r3.compiled, false, 'a "Not discussed" instruction is not stored');
 });
 
 test('chunk extractor prefers compiledPrompt over description in the prompt', () => {

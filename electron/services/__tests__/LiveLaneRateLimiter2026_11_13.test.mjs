@@ -73,12 +73,13 @@ describe('live vs background lanes', () => {
 });
 
 describe('the section compiles run in the background lane', () => {
-    test('both ModesManager compile paths wrap the compiler in runAsBackgroundLlmWork', async () => {
+    test('the ModesManager section compile wraps the compiler in runAsBackgroundLlmWork', async () => {
+        // compileAllSectionsAsync is gone (2026-11-16): built-in sections ship their
+        // instructions (meeting/sectionInstructions.ts), so only a user's own section compiles.
         const fs = await import('node:fs');
         const src = fs.readFileSync(path.resolve(__dirname, '../ModesManager.ts'), 'utf8');
-        const one = src.slice(src.indexOf('private compileSectionPromptAsync('), src.indexOf('public compileAllSectionsAsync('));
-        const all = src.slice(src.indexOf('public compileAllSectionsAsync('), src.indexOf('private static llmHelperForCompiler'));
+        const one = src.slice(src.indexOf('private compileSectionPromptAsync('), src.indexOf('private static llmHelperForCompiler'));
         assert.match(one, /runAsBackgroundLlmWork\(\(\) => new SectionPromptCompiler\(llmHelper\)\.compile\(/);
-        assert.match(all, /runAsBackgroundLlmWork\(\(\) => Promise\.all\(/);
+        assert.doesNotMatch(src, /compileAllSectionsAsync/);
     });
 });
