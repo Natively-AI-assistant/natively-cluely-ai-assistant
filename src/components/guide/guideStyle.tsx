@@ -3,8 +3,9 @@
 // their own components (OverlayBanner; the notes window's raised pill).
 import React from 'react';
 
-export const GUIDE_ACCENT = '#7C5CFF';
-export const guideAccentText = (dark: boolean) => (dark ? '#B9A6FF' : '#6A4FE0');
+// Soft periwinkle ice (Evin, 2026-11-15).
+export const GUIDE_ACCENT = '#A8B8FF';
+export const guideAccentText = (dark: boolean) => (dark ? '#C3CDFF' : '#5566D0');
 
 export const GuideStatusDot: React.FC<{ dark: boolean; label: string; done?: boolean }> = ({ dark, label, done }) => (
   <span
@@ -14,7 +15,7 @@ export const GuideStatusDot: React.FC<{ dark: boolean; label: string; done?: boo
       color: done ? (dark ? '#8EE3AE' : '#1E8A4C') : guideAccentText(dark),
     }}
   >
-    <i style={{ width: 6, height: 6, borderRadius: 3, background: done ? '#2FB866' : GUIDE_ACCENT, boxShadow: done ? undefined : '0 0 0 4px rgba(124,92,255,.18)' }} />
+    <i style={{ width: 6, height: 6, borderRadius: 3, background: done ? '#2FB866' : GUIDE_ACCENT, boxShadow: done ? undefined : '0 0 0 4px rgba(168,184,255,.22)' }} />
     {label}
   </span>
 );

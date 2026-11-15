@@ -75,6 +75,8 @@ export function applyGuideEvent(event: GuideEvent | { type: 'meeting_saved'; mee
   const next = event.type === 'restart' || event.type === 'plans_closed'
     ? reconcileGuide(reduced, { meetingActive: deps.meetingActive(), atLaunch: false }, now)
     : reduced;
+  // One line per real move, so a support log shows how the guide got where it is.
+  if (next !== current) console.log(`[Guide] ${event.type}: ${current.step}/${current.status} -> ${next.step}/${next.status}`);
   return save(current, next);
 }
 

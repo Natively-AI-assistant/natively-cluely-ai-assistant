@@ -45,6 +45,29 @@ test('the overlay steps are OverlayBanners in the guide tone, one line under the
   const b = read('src/components/ui/OverlayBanner.tsx');
   assert.ok(/OverlayBannerTone = 'warning' \| 'error' \| 'ok' \| 'guide'/.test(b));
   const css = read('src/components/guide/guide.css');
-  assert.ok(/\[data-tone='guide'\]/.test(css) && /124, 92, 255/.test(css), 'the guide tone is lavender');
+  assert.ok(/\[data-tone='guide'\]/.test(css) && /168, 184, 255/.test(css), 'the guide tone is periwinkle ice');
   assert.ok(/\[data-theme='light'\][^{]*\[data-tone='guide'\]/.test(css), 'and has a light-theme mark');
+});
+
+// Evin, 2026-11-15: "use softer periwinkle ice color as accent". No purple left
+// anywhere in the guide.
+test('the guide accent is a soft periwinkle ice, not the old purple', () => {
+  for (const f of ['src/components/guide/guide.css', 'src/components/guide/guideStyle.tsx', 'src/components/guide/GuideCard.tsx',
+    'src/components/guide/OverlayGuide.tsx', 'src/components/guide/NotesGuide.tsx', 'src/components/guide/LauncherGuide.tsx',
+    'src/components/guide/SettingsGuide.tsx']) {
+    const src = read(f);
+    assert.ok(!/7C5CFF|124, ?92, ?255|B9A6FF|6A4FE0|3d2a9e|ece6ff/i.test(src), `${f} has no old purple`);
+  }
+  assert.ok(read('src/components/guide/guideStyle.tsx').includes("GUIDE_ACCENT = '#A8B8FF'"));
+});
+
+// Evin, 2026-11-15: the meeting overlay and the notepad are separate steps.
+test('step 2 is the meeting overlay itself, with Next; step 5 opens the notepad on its own', () => {
+  const g = read('src/components/guide/OverlayGuide.tsx');
+  for (const s of ["guideOn(state, 'overlay')", "tr('This is your meeting overlay.')",
+    "tr('Answers, screenshots and chat show up here, over your call.')", "dispatch({ type: 'overlay_next' })"]) assert.ok(g.includes(s), s);
+  // Entering step 5 opens the notes window once, never closing an open one (toggle).
+  const open = g.slice(g.indexOf('// Step 5 opens the notepad'), g.indexOf('// Step 5 opens the notepad') + 700);
+  assert.ok(open.includes('notesWindowIsOpen') && open.includes('notesWindowToggle'), 'checks before toggling');
+  assert.ok(/if \(!open\)/.test(open), 'only opens a closed one');
 });

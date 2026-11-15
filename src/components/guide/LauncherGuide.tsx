@@ -1,4 +1,4 @@
-// First-run guide, launcher window: step 1 (Start Natively) and step 5 (the
+// First-run guide, launcher window: step 1 (Start Natively) and step 6 (the
 // finished meeting), the meeting and trial events the guide moves on, and the
 // hand-off to Settings for steps 6 and 7. The overlay, notes window and Settings
 // draw their own steps (src/components/guide/*).
@@ -71,7 +71,7 @@ export const LauncherGuide: React.FC<Props> = ({ onOpenSettings, onOpenMeeting }
     onOpenMeeting(endedMeetingId);
   }, [step, justDone, endedMeetingId, onOpenMeeting]);
 
-  // Steps 6 and 7 live in Settings: open the right tab once per step.
+  // Steps 7 and 8 live in Settings: open the right tab once per step.
   const openedSettings = useRef<string | null>(null);
   useEffect(() => {
     if ((step !== 'plans' && step !== 'keys') || justDone) return;

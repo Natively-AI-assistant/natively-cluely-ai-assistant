@@ -11,7 +11,7 @@ const T = 1_000;
 const facts = { hasOwnAiKey: false, hasNativelyKey: false, isPremium: false, launchCount: 1 };
 const walk = (s, ...types) => types.reduce((acc, type) => reduceGuide(acc, { type }, T), s);
 const started = () => reduceGuide(emptyGuideState(), { type: 'restart' }, T);
-const atStop = () => walk(started(), 'meeting_started', 'answer_shown', 'screenshot_taken', 'note_typed');
+const atStop = () => walk(started(), 'meeting_started', 'overlay_next', 'answer_shown', 'screenshot_taken', 'note_typed');
 const atNotes = () => walk(atStop(), 'meeting_stopped');
 const atPlans = () => walk(atNotes(), 'notes_next');
 
@@ -52,7 +52,7 @@ test('normalize keeps the ended meeting id and accepts states saved before it ex
 // Important 3 + 6: main knows whether a meeting runs.
 test('reconcile: a guide on step 1 during a meeting moves to step 2', () => {
   const s = reconcileGuide(started(), { meetingActive: true, atLaunch: false }, T);
-  assert.equal(s.step, 'answer');
+  assert.equal(s.step, 'overlay');
 });
 test('reconcile at launch: an in-meeting step with no meeting goes to the notes step', () => {
   for (const s of [walk(started(), 'meeting_started'), atStop()]) {
@@ -85,4 +85,15 @@ test('the local trial decides step 1: expired → used up, claimed with no token
   assert.equal(trialEventFromLocal({ hasToken: true, trialClaimed: true }), null);
   assert.equal(trialEventFromLocal({ hasToken: false, trialClaimed: false }), null, 'a new device: the trial starts with the meeting');
   assert.equal(trialEventFromLocal(undefined), null);
+});
+
+// Live walk 2026-11-15: after Stop the guide went from step 5 (notes) straight
+// to Plans before the meeting could open. Once main has recorded the saved
+// meeting, a later "nothing saved" report must not throw it away.
+test('meeting_saved with no id leaves a notes step that already has its meeting', () => {
+  const withMeeting = reduceGuide(walk(atStop(), 'meeting_stopped'), { type: 'meeting_saved', meetingId: 'm1' }, T);
+  assert.deepEqual([withMeeting.step, withMeeting.endedMeetingId], ['notes', 'm1']);
+  assert.equal(reduceGuide(withMeeting, { type: 'meeting_saved', meetingId: null }, T + 1), withMeeting);
+  // Nothing saved at all still moves on to Plans.
+  assert.equal(reduceGuide(walk(atStop(), 'meeting_stopped'), { type: 'meeting_saved', meetingId: null }, T).step, 'plans');
 });

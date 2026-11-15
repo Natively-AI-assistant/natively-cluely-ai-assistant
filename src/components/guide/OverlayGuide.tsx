@@ -1,11 +1,12 @@
-// First-run guide, overlay window: step 2 (What to answer), step 3 (screenshots),
-// the hand-off to the notepad when it is closed, and the stop prompt. Each is the
-// overlay's own banner (ui/OverlayBanner.tsx) in a lavender guide tone, in a
+// First-run guide, overlay window: step 2 (the meeting overlay itself), step 3
+// (What to answer), step 4 (screenshots), opening the notepad for step 5 (and an
+// "Open notepad" banner if it gets closed), and the stop prompt. Each is the
+// overlay's own banner (ui/OverlayBanner.tsx) in a periwinkle guide tone, in a
 // banner fold of NativelyInterface.tsx: the overlay grows to hold it and the
 // banner picker can hold it back for a fault. It never takes focus: the user's
 // call stays in front.
-import React, { useEffect, useState } from 'react';
-import { Camera, Check, CircleStop, NotebookPen, Pencil } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { AppWindow, Camera, Check, CircleStop, NotebookPen, Pencil } from 'lucide-react';
 import { useT } from '../../i18n';
 import { GUIDE_STEP_COUNT, GUIDE_STEP_NUMBER } from '../../lib/onboarding/firstRunGuide.mjs';
 import type { GuideStepId } from '../../lib/onboarding/firstRunGuide.mjs';
@@ -25,7 +26,7 @@ export function useOverlayGuide(): { wants: boolean; node: React.ReactNode } {
   const keysFor = useGuideKeys(step === 'answer' || step === 'screenshot');
   useGuideLit(step === 'answer' && !justDone ? '[data-guide="what-to-answer"]' : null);
 
-  // Whether the notes window is open: step 4 is drawn there when it is.
+  // Whether the notes window is open: step 5 is drawn there when it is.
   const [notesOpen, setNotesOpen] = useState(false);
   useEffect(() => {
     if (!active) return;
@@ -35,7 +36,21 @@ export function useOverlayGuide(): { wants: boolean; node: React.ReactNode } {
     return () => { alive = false; off?.(); };
   }, [active]);
 
-  // Has anyone said anything yet? Until then step 2 says how to get a question.
+  // Step 5 opens the notepad by itself: it is its own step, in its own window.
+  // Asked of main first, since a toggle would close one that is already open.
+  // Once per visit to the step, so closing it is respected.
+  const openedForStep = useRef(false);
+  const onNotepad = guideOn(state, 'notepad') && !justDone;
+  useEffect(() => {
+    if (!onNotepad) { openedForStep.current = false; return; }
+    if (openedForStep.current) return;
+    openedForStep.current = true;
+    window.electronAPI?.notesWindowIsOpen?.()
+      .then((open) => { if (!open) void window.electronAPI?.notesWindowToggle?.(); })
+      .catch(() => {});
+  }, [onNotepad]);
+
+  // Has anyone said anything yet? Until then step 3 says how to get a question.
   const [heard, setHeard] = useState(false);
   useEffect(() => {
     if (step !== 'answer' || heard) return;
@@ -45,7 +60,7 @@ export function useOverlayGuide(): { wants: boolean; node: React.ReactNode } {
     return () => { off?.(); };
   }, [step, heard]);
 
-  // Step 2 moves on when an answer arrives, from the keys or the button.
+  // Step 3 moves on when an answer arrives, from the keys or the button.
   useEffect(() => {
     if (step !== 'answer' || justDone) return;
     const done = () => dispatch({ type: 'answer_shown' });
@@ -56,7 +71,7 @@ export function useOverlayGuide(): { wants: boolean; node: React.ReactNode } {
     return () => { offs.forEach((off) => off?.()); };
   }, [step, justDone, dispatch]);
 
-  // Step 3 moves on with either screenshot.
+  // Step 4 moves on with either screenshot.
   useEffect(() => {
     if (step !== 'screenshot' || justDone) return;
     const done = () => dispatch({ type: 'screenshot_taken' });
@@ -97,6 +112,21 @@ export function useOverlayGuide(): { wants: boolean; node: React.ReactNode } {
       />
     );
   };
+
+  if (guideOn(state, 'overlay')) {
+    return {
+      wants: true,
+      node: banner(
+        'overlay',
+        <AppWindow strokeWidth={2.2} />,
+        tr('This is your meeting overlay.'),
+        tr('Answers, screenshots and chat show up here, over your call.'),
+        <OverlayBannerButton variant="primary" onClick={() => dispatch({ type: 'overlay_next' })}>
+          {tr('Next')}
+        </OverlayBannerButton>,
+      ),
+    };
+  }
 
   if (guideOn(state, 'answer')) {
     return {

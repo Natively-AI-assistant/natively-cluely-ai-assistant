@@ -146,6 +146,8 @@ const ROWS: Record<string, Row> = {
   'Whole screen': ['Весь экран', '整个屏幕', '画面全体', 'Pantalla completa'],
   'Drag an area': ['Выделить область', '拖选区域', '範囲をドラッグ', 'Arrastra un área'],
   'Notepad': ['Блокнот', '记事本', 'メモ帳', 'Bloc de notas'],
+  'This is your meeting overlay.': ['Это ваш оверлей встречи.', '这是你的会议浮窗。', 'これがミーティングのオーバーレイです。', 'Esta es tu superposición de reunión.'],
+  'Answers, screenshots and chat show up here, over your call.': ['Ответы, скриншоты и чат появляются здесь, поверх звонка.', '回答、截图和聊天都会显示在这里，悬浮在通话之上。', '回答、スクリーンショット、チャットは通話の上のここに表示されます。', 'Las respuestas, las capturas y el chat aparecen aquí, sobre tu llamada.'],
   'Write while you talk.': ['Пишите, пока говорите.', '边聊边记。', '話しながら書きましょう。', 'Escribe mientras hablas.'],
   'Open notepad': ['Открыть блокнот', '打开记事本', 'メモ帳を開く', 'Abrir bloc de notas'],
   'Jot a line. It goes into your meeting notes.': ['Запишите строчку. Она попадёт в заметки о встрече.', '写一行。它会进入你的会议笔记。', '一行書いてください。会議メモに入ります。', 'Escribe una línea. Irá a tus notas de la reunión.'],

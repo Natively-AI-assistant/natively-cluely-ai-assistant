@@ -1,4 +1,4 @@
-// First-run guide, Settings: step 6 (Plans & Billing) and step 7 (the user's
+// First-run guide, Settings: step 7 (Plans & Billing) and step 8 (the user's
 // own keys). Step 6 reads the real trial status so it never says more than is
 // true; buying a plan or saving keys moves the guide on by itself
 // (src/lib/onboarding/firstRunGuide.mjs decides what each purchase means).
@@ -71,7 +71,7 @@ export const SettingsGuide: React.FC = () => {
     return () => { alive = false; off?.(); clearInterval(timer); };
   }, [onKeys]);
 
-  // A plan bought at step 6: say thanks on the same card, then go.
+  // A plan bought at step 7: say thanks on the same card, then go.
   const [thanks, setThanks] = useState(false);
   useEffect(() => {
     if (!finishedBought || !state?.updatedAt || Date.now() - state.updatedAt > 10_000) return;

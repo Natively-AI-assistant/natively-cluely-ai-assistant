@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {
   GUIDE_EVENT_TYPES,
   GUIDE_RESUME_MS,
+  GUIDE_STEP_COUNT,
   GUIDE_STEP_NUMBER,
   emptyGuideState,
   normalizeGuideState,
@@ -17,7 +18,7 @@ const facts = { hasOwnAiKey: false, hasNativelyKey: false, isPremium: false, lau
 const T = 1_000;
 const started = () => reduceGuide(emptyGuideState(), { type: 'plans_closed', facts }, T);
 const walk = (s, ...types) => types.reduce((acc, type) => reduceGuide(acc, { type }, T), s);
-const atPlans = () => walk(started(), 'meeting_started', 'answer_shown', 'screenshot_taken', 'note_typed', 'meeting_stopped', 'notes_next');
+const atPlans = () => walk(started(), 'meeting_started', 'overlay_next', 'answer_shown', 'screenshot_taken', 'note_typed', 'meeting_stopped', 'notes_next');
 
 test('plans_closed starts an eligible new user at start', () => {
   const s = started();
@@ -35,9 +36,9 @@ test('a Natively key bought from the Plans card still gets the guide', () => {
   assert.equal(reduceGuide(emptyGuideState(), { type: 'plans_closed', facts: { ...facts, hasNativelyKey: true, isPremium: true } }, T).status, 'active');
 });
 
-test('happy path start→answer→screenshot→notepad→stop→notes→plans', () => {
+test('happy path start→overlay→answer→screenshot→notepad→stop→notes→plans', () => {
   let s = started();
-  for (const [type, want] of [['meeting_started', 'answer'], ['answer_shown', 'screenshot'], ['screenshot_taken', 'notepad'],
+  for (const [type, want] of [['meeting_started', 'overlay'], ['overlay_next', 'answer'], ['answer_shown', 'screenshot'], ['screenshot_taken', 'notepad'],
     ['note_typed', 'stop'], ['meeting_stopped', 'notes'], ['notes_next', 'plans']]) {
     s = reduceGuide(s, { type }, T + 5);
     assert.equal(s.step, want, type);
@@ -53,7 +54,7 @@ test('duplicate events are no-ops (same object back)', () => {
 });
 
 test('meeting_stopped mid-meeting jumps to notes', () => {
-  for (const at of [['meeting_started'], ['meeting_started', 'answer_shown'], ['meeting_started', 'answer_shown', 'screenshot_taken']]) {
+  for (const at of [['meeting_started'], ['meeting_started', 'overlay_next'], ['meeting_started', 'overlay_next', 'answer_shown'], ['meeting_started', 'overlay_next', 'answer_shown', 'screenshot_taken']]) {
     assert.equal(reduceGuide(walk(started(), ...at), { type: 'meeting_stopped' }, T).step, 'notes', at.join(','));
   }
   // Before any meeting started there is nothing to stop.
@@ -62,7 +63,7 @@ test('meeting_stopped mid-meeting jumps to notes', () => {
 });
 
 test('trial_out jumps to plans with variant', () => {
-  const s = reduceGuide(walk(started(), 'meeting_started', 'answer_shown'), { type: 'trial_out' }, T);
+  const s = reduceGuide(walk(started(), 'meeting_started', 'overlay_next', 'answer_shown'), { type: 'trial_out' }, T);
   assert.deepEqual([s.step, s.variant, s.status], ['plans', 'trial_out', 'active']);
   // At plans or later it changes nothing.
   const p = atPlans();
@@ -131,14 +132,16 @@ test('normalize: >7 days since update → expired; ≤7 days → unchanged; garb
   assert.equal(GUIDE_RESUME_MS, 7 * 24 * 60 * 60 * 1000);
 });
 
-test('GUIDE_STEP_NUMBER: notepad and stop are both 4, keys is 7', () => {
-  assert.deepEqual(GUIDE_STEP_NUMBER, { start: 1, answer: 2, screenshot: 3, notepad: 4, stop: 4, notes: 5, plans: 6, keys: 7 });
+// Evin, 2026-11-15: the meeting overlay and the notepad are separate steps.
+test('GUIDE_STEP_NUMBER: overlay is its own step 2, notepad and stop are both 5, keys is 8', () => {
+  assert.deepEqual(GUIDE_STEP_NUMBER, { start: 1, overlay: 2, answer: 3, screenshot: 4, notepad: 5, stop: 5, notes: 6, plans: 7, keys: 8 });
+  assert.equal(GUIDE_STEP_COUNT, 8);
 });
 
 test('windowForStep maps every step', () => {
   assert.deepEqual(
-    ['start', 'answer', 'screenshot', 'notepad', 'stop', 'notes', 'plans', 'keys'].map(windowForStep),
-    ['launcher', 'overlay', 'overlay', 'notes', 'overlay', 'launcher', 'settings', 'settings'],
+    ['start', 'overlay', 'answer', 'screenshot', 'notepad', 'stop', 'notes', 'plans', 'keys'].map(windowForStep),
+    ['launcher', 'overlay', 'overlay', 'overlay', 'notes', 'overlay', 'launcher', 'settings', 'settings'],
   );
 });
 
@@ -150,5 +153,5 @@ test('unknown events are no-ops', () => {
 
 test('GUIDE_EVENT_TYPES lists every event the reducer understands (main validates against it)', () => {
   assert.deepEqual([...GUIDE_EVENT_TYPES].sort(), ['answer_shown', 'keys_done', 'meeting_started', 'meeting_stopped', 'note_typed',
-    'notes_next', 'own_keys', 'plan_changed', 'plans_closed', 'restart', 'screenshot_taken', 'skip', 'trial_out', 'trial_unavailable']);
+    'notes_next', 'overlay_next', 'own_keys', 'plan_changed', 'plans_closed', 'restart', 'screenshot_taken', 'skip', 'trial_out', 'trial_unavailable']);
 });

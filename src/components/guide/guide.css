@@ -1,5 +1,5 @@
 /* First-run guide (docs/superpowers/specs/2026-11-10-first-run-guide-design.md).
-   The real control the guide points at wears a lavender ring and a soft glow on
+   The real control the guide points at wears a periwinkle-ice ring (Evin, 2026-11-15) and a soft glow on
    the element itself: the overlay is zoomed, so a measured cut-out lands in the
    wrong place there. */
 
@@ -9,15 +9,19 @@
 }
 
 @keyframes guideLit {
-  50% { box-shadow: 0 0 0 1.5px #7C5CFF, 0 0 0 6px rgba(124, 92, 255, 0.12), 0 0 22px rgba(124, 92, 255, 0.38); }
+  50% { box-shadow: 0 0 0 1.5px rgb(var(--guide-ring)), 0 0 0 6px rgba(var(--guide-ring), 0.12), 0 0 22px rgba(var(--guide-ring), 0.34); }
 }
 
 [data-guide-lit] {
   position: relative;
   z-index: 2;
-  box-shadow: 0 0 0 1.5px #7C5CFF, 0 0 0 4px rgba(124, 92, 255, 0.16), 0 0 16px rgba(124, 92, 255, 0.28) !important;
+  /* #A8B8FF; a deeper periwinkle on a light page, where the pale one vanishes. */
+  --guide-ring: 168, 184, 255;
+  box-shadow: 0 0 0 1.5px rgb(var(--guide-ring)), 0 0 0 4px rgba(var(--guide-ring), 0.16), 0 0 16px rgba(var(--guide-ring), 0.26) !important;
   animation: guideLit 2.6s ease-in-out infinite;
 }
+
+[data-theme='light'] [data-guide-lit] { --guide-ring: 120, 138, 240; }
 
 .guide-enter {
   animation: guideIn 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
@@ -49,25 +53,25 @@
 }
 
 /* The overlay's guide banner (OverlayGuide.tsx): ui/OverlayBanner in a
-   lavender tone. The repeated class outranks every theme scope in
+   soft periwinkle-ice tone. The repeated class outranks every theme scope in
    OverlayBanner.css (the liquid-glass + light one is (0,3,0)). */
 .ov-banner.ov-banner.ov-banner[data-tone='guide'] {
-  --ovb-cta-tone: 124, 92, 255;
-  --ovb-cta-fg: #ece6ff;
+  --ovb-cta-tone: 168, 184, 255;
+  --ovb-cta-fg: #eef1ff;
   --ovb-cta-fill: 0.3;
   --ovb-cta-fill-hover: 0.44;
 }
 .ov-banner.ov-banner.ov-banner[data-tone='guide'] .lg-button.lg-badge.ov-banner-mark {
-  --lg-lav-fg: #b9a6ff;
+  --lg-lav-fg: #c3cdff;
 }
 [data-theme='light'] .ov-banner.ov-banner.ov-banner[data-tone='guide'] {
-  --ovb-cta-tone: 124, 92, 255;
-  --ovb-cta-fg: #3d2a9e;
+  --ovb-cta-tone: 120, 138, 240;
+  --ovb-cta-fg: #34428f;
   --ovb-cta-fill: 0.22;
   --ovb-cta-fill-hover: 0.34;
 }
 [data-theme='light'] .ov-banner.ov-banner.ov-banner[data-tone='guide'] .lg-button.lg-badge.ov-banner-mark {
-  --lg-lav-fg: #6a4fe0;
+  --lg-lav-fg: #5566d0;
 }
 .ov-banner .guide-count {
   font-size: 11px;

@@ -1,4 +1,4 @@
-// First-run guide, notes window: step 4 and the stop prompt that follows it.
+// First-run guide, notes window: step 5 and the stop prompt that follows it.
 // Drawn as the notes window's own raised pill in its bottom bar (np-elevated,
 // the look of the "Natively stops in 1 minute" notice), just above the Stop
 // button, which the stop prompt lights. The window is no-activate on Windows

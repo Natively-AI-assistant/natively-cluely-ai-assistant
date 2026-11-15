@@ -1,4 +1,4 @@
-export type GuideStepId = 'start' | 'answer' | 'screenshot' | 'notepad' | 'stop' | 'notes' | 'plans' | 'keys';
+export type GuideStepId = 'start' | 'overlay' | 'answer' | 'screenshot' | 'notepad' | 'stop' | 'notes' | 'plans' | 'keys';
 export type GuideStatus = 'idle' | 'active' | 'skipped' | 'finished' | 'expired';
 export type GuideVariant = 'normal' | 'trial_out' | 'no_trial';
 export type GuideWindow = 'launcher' | 'overlay' | 'notes' | 'settings';
@@ -28,6 +28,7 @@ export type GuideEvent =
   | { type: 'screenshot_taken' }
   | { type: 'note_typed' }
   | { type: 'meeting_stopped' }
+  | { type: 'overlay_next' }
   | { type: 'notes_next' }
   | { type: 'trial_out' }
   | { type: 'trial_unavailable' }

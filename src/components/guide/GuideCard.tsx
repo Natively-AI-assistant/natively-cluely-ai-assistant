@@ -102,7 +102,7 @@ export const GuideCard: React.FC<GuideCardProps> = ({
               key={label}
               style={{
                 display: 'flex', alignItems: 'center', gap: 10, height: 32, padding: '0 10px', borderRadius: 10,
-                background: st === 'now' ? (dark ? 'rgba(124,92,255,0.14)' : 'rgba(124,92,255,0.08)') : 'transparent',
+                background: st === 'now' ? (dark ? 'rgba(168,184,255,0.12)' : 'rgba(120,138,240,0.10)') : 'transparent',
                 fontSize: 13, fontWeight: st === 'now' ? 600 : 500, color: st === 'todo' ? t.quiet : t.strong,
               }}
             >

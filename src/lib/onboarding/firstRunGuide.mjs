@@ -1,9 +1,10 @@
 /**
  * First-run guide rules (docs/superpowers/specs/2026-11-10-first-run-guide-design.md).
  *
- * Seven steps across four windows: the launcher (start, notes), the overlay
- * (answer, screenshot, stop), the notes window (notepad) and Settings (plans,
- * keys). The main process stores the state and every window reports what it
+ * Eight steps across four windows: the launcher (start, notes), the overlay
+ * (overlay, answer, screenshot, stop), the notes window (notepad) and Settings
+ * (plans, keys). The meeting overlay and the notepad are separate steps (Evin,
+ * 2026-11-15). The main process stores the state and every window reports what it
  * saw; this reducer is the only place that decides what that means, so two
  * windows reporting the same event advance the guide once.
  *
@@ -16,25 +17,26 @@ export const GUIDE_RESUME_MS = 7 * 24 * 60 * 60 * 1000;
 /** Brand-new users only: the first three launches, with no AI key of their own. */
 export const GUIDE_MAX_LAUNCH = 3;
 
-const STEPS = ['start', 'answer', 'screenshot', 'notepad', 'stop', 'notes', 'plans', 'keys'];
+const STEPS = ['start', 'overlay', 'answer', 'screenshot', 'notepad', 'stop', 'notes', 'plans', 'keys'];
 const STATUSES = ['idle', 'active', 'skipped', 'finished', 'expired'];
 const VARIANTS = ['normal', 'trial_out', 'no_trial'];
 const OUTCOMES = ['bought', 'own_keys', null];
 
-/** "N of 7": the stop prompt is the tail of the notepad step, not a step of its own. */
+/** "N of 8": the stop prompt is the tail of the notepad step, not a step of its own. */
 export const GUIDE_STEP_NUMBER = Object.freeze({
-  start: 1, answer: 2, screenshot: 3, notepad: 4, stop: 4, notes: 5, plans: 6, keys: 7,
+  start: 1, overlay: 2, answer: 3, screenshot: 4, notepad: 5, stop: 5, notes: 6, plans: 7, keys: 8,
 });
-export const GUIDE_STEP_COUNT = 7;
+export const GUIDE_STEP_COUNT = 8;
 
 /** Steps that happen during the first meeting, before Plans & Billing. */
-const BEFORE_PLANS = ['start', 'answer', 'screenshot', 'notepad', 'stop', 'notes'];
+const BEFORE_PLANS = ['start', 'overlay', 'answer', 'screenshot', 'notepad', 'stop', 'notes'];
 /** Steps where a meeting is running. */
-const IN_MEETING = ['answer', 'screenshot', 'notepad', 'stop'];
+const IN_MEETING = ['overlay', 'answer', 'screenshot', 'notepad', 'stop'];
 
 /** Linear advances: event type → [from step, to step]. */
 const ADVANCE = {
-  meeting_started: ['start', 'answer'],
+  meeting_started: ['start', 'overlay'],
+  overlay_next: ['overlay', 'answer'],
   answer_shown: ['answer', 'screenshot'],
   screenshot_taken: ['screenshot', 'notepad'],
   note_typed: ['notepad', 'stop'],
@@ -45,7 +47,7 @@ const ADVANCE = {
 /** Every event a window may report (main rejects anything else). */
 export const GUIDE_EVENT_TYPES = Object.freeze([
   'plans_closed', 'meeting_started', 'answer_shown', 'screenshot_taken', 'note_typed', 'meeting_stopped',
-  'notes_next', 'trial_out', 'trial_unavailable', 'plan_changed', 'own_keys', 'keys_done', 'skip', 'restart',
+  'overlay_next', 'notes_next', 'trial_out', 'trial_unavailable', 'plan_changed', 'own_keys', 'keys_done', 'skip', 'restart',
 ]);
 // 'meeting_saved' is main's own (electron/services/firstRunGuideStore.ts): a
 // window may not claim which meeting was saved, so it is not listed above.
@@ -82,6 +84,7 @@ export function windowForStep(step) {
     case 'start':
     case 'notes':
       return 'launcher';
+    case 'overlay':
     case 'answer':
     case 'screenshot':
     case 'stop':
@@ -118,6 +121,8 @@ export function reduceGuide(state, event, now) {
       // opens exactly that one; with nothing saved there are no notes to show.
       if (!IN_MEETING.includes(state.step) && state.step !== 'notes') return state;
       const id = typeof event.meetingId === 'string' && event.meetingId ? event.meetingId : null;
+      // A late "nothing saved" never throws away a meeting step 5 already holds.
+      if (!id && state.step === 'notes' && state.endedMeetingId) return state;
       return id
         ? (state.step === 'notes' && state.endedMeetingId === id ? state : move(state, { step: 'notes', endedMeetingId: id }, now))
         : move(state, { step: 'plans' }, now);
