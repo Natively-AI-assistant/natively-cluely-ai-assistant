@@ -1311,12 +1311,11 @@ export interface ElectronAPI {
   setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string; message?: string }>;
   getAutoAnswerAccess: () => Promise<{ available?: boolean; allowed: boolean; basis: 'pro' | 'sharing' | 'none'; uploads: boolean; consent: { version: number; grantedAt: string } | null; enabled: boolean }>;
   setAutoAnswerTrainingConsent: (granted: boolean) => Promise<{ success: boolean; error?: string }>;
-  deleteAutoAnswerSharedData: () => Promise<{ success: boolean; error?: string }>;
   onAutoAnswerAccessRequired: (callback: (info: { reason: string }) => void) => () => void;
   // The on-device Auto Answer model: paid download (API keys + Pro) and its before/after card.
-  getAutoAnswerModelStatus?: () => Promise<{ install: AutoAnswerModelInstall; savings: AutoAnswerModelSavings }>;
-  installAutoAnswerModel?: () => Promise<{ install: AutoAnswerModelInstall; savings: AutoAnswerModelSavings }>;
-  removeAutoAnswerModel?: () => Promise<{ install: AutoAnswerModelInstall; savings: AutoAnswerModelSavings }>;
+  getAutoAnswerModelStatus?: () => Promise<{ install: AutoAnswerModelInstall; savings: AutoAnswerModelSavings; judgeViaNatively?: boolean }>;
+  installAutoAnswerModel?: () => Promise<{ install: AutoAnswerModelInstall; savings: AutoAnswerModelSavings; judgeViaNatively?: boolean }>;
+  removeAutoAnswerModel?: () => Promise<{ install: AutoAnswerModelInstall; savings: AutoAnswerModelSavings; judgeViaNatively?: boolean }>;
   onAutoAnswerModelProgress?: (callback: (install: AutoAnswerModelInstall) => void) => () => void;
   getDirectAssistEnabled: () => Promise<boolean>;
   setDirectAssistEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;

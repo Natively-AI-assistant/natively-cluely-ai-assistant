@@ -4,7 +4,7 @@ import type { NativelyUsageResponse, NativelyPlansResponse } from '../src/types/
 import type { MeetingOutputsApi } from '../src/types/meetingOutputs';
 import type { ConnectorsApi } from '../src/types/connectors';
 import type { AutoAnswerModelInstall, AutoAnswerModelSavings } from './premium/autoAnswer';
-type AutoAnswerModelState = { install: AutoAnswerModelInstall; savings: AutoAnswerModelSavings };
+type AutoAnswerModelState = { install: AutoAnswerModelInstall; savings: AutoAnswerModelSavings; judgeViaNatively?: boolean };
 import { PAGE_CAPTURE_FALLBACK_CHANNEL, PAGE_CAPTURE_STARTED_CHANNEL, type PageCaptureFallbackNotice } from './services/pageCaptureFallback';
 import type { CalendarSourceId as CalendarSourceIdInfo, CalendarSourceStatus as CalendarSourceStatusInfo } from './services/calendar/providers/types';
 
@@ -1306,7 +1306,6 @@ interface ElectronAPI {
   setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string; message?: string }>;
   getAutoAnswerAccess: () => Promise<{ available: boolean; allowed: boolean; basis: 'pro' | 'sharing' | 'none'; uploads: boolean; consent: { version: number; grantedAt: string } | null; enabled: boolean }>;
   setAutoAnswerTrainingConsent: (granted: boolean) => Promise<{ success: boolean; error?: string }>;
-  deleteAutoAnswerSharedData: () => Promise<{ success: boolean; error?: string }>;
   onAutoAnswerAccessRequired: (callback: (info: { reason: string }) => void) => () => void;
   getAutoAnswerModelStatus: () => Promise<AutoAnswerModelState>;
   installAutoAnswerModel: () => Promise<AutoAnswerModelState>;
@@ -3606,7 +3605,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setAutoAnswerEnabled: (enabled: boolean) => ipcRenderer.invoke('set-auto-answer-enabled', enabled),
   getAutoAnswerAccess: () => ipcRenderer.invoke('auto-answer:get-access'),
   setAutoAnswerTrainingConsent: (granted: boolean) => ipcRenderer.invoke('auto-answer:set-training-consent', granted),
-  deleteAutoAnswerSharedData: () => ipcRenderer.invoke('auto-answer:delete-shared-data'),
   onAutoAnswerAccessRequired: (callback: (info: { reason: string }) => void) => {
     const subscription = (_: any, info: { reason: string }) => callback(info);
     ipcRenderer.on('auto-answer:access-required', subscription);

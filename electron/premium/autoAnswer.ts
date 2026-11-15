@@ -217,7 +217,6 @@ export interface TrainingUploader {
     stop(): void;
     flush(): Promise<void>;
     withdraw(): void;
-    requestDeletion(): Promise<{ success: boolean; error?: string }>;
 }
 
 // ─── The module ──────────────────────────────────────────────────────────────
@@ -277,7 +276,6 @@ export const UNAVAILABLE_AUTO_ANSWER: AutoAnswerPremium = Object.freeze({
     createTrainingUploader: (): TrainingUploader => ({
         meetingStarted: noop, noteAutoAnswerRan: noop, offerMeeting: noop, start: noop, stop: noop,
         flush: async () => { /* nothing to send */ }, withdraw: noop,
-        requestDeletion: async () => ({ success: true }),
     }),
     setTrainingMeetingSink: noop,
     offerTrainingMeeting: noop,

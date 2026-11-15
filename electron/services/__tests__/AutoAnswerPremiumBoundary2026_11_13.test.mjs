@@ -58,7 +58,7 @@ test('without premium: every object main.ts builds is safe to call', async () =>
   const up = m.createTrainingUploader({});
   up.meetingStarted(); up.noteAutoAnswerRan(); up.start(); up.stop(); up.withdraw();
   await up.flush();
-  assert.deepEqual(await up.requestDeletion(), { success: true });
+  assert.equal(up.requestDeletion, undefined, 'no delete-shared-data call (removed 2026-11-14)');
   assert.equal(m.acceptsLocalSpeechEndHint('soniox'), false);
   m.offerTrainingMeeting({ meetingId: 'm', startTime: 0, durationMs: 0, mode: null, transcript: [] });
 });

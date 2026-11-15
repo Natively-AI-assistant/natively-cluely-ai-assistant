@@ -7988,20 +7988,20 @@ export function initializeIpcHandlers(appState: AppState): void {
     return ok ? { success: true } : { success: false, error: 'Settings store is unavailable; the change was not saved.' };
   });
 
-  // Delete what this install already shared: queued files here, then the
-  // server's copies (DELETE /v1/training/meeting-transcripts). Also withdraws.
-  safeHandle('auto-answer:delete-shared-data', async () => {
-    appState.setAutoAnswerTrainingConsent(false);
-    return appState.trainingUploader().requestDeletion();
-  });
-
   // The Auto Answer model: a paid, private download for API keys and Pro
   // (premium/electron/autoAnswer/decider/deciderModelInstaller.ts), and its
   // before/after judge-call card (deciderSavings.ts, numbers only).
-  const autoAnswerModelState = () => ({
-    install: appState.deciderInstaller().status(),
-    savings: appState.deciderSavings().summary(),
-  });
+  // judgeViaNatively: Natively API is the selected AI (or the judge's only
+  // route), so the card's estimate says "Natively API" instead of a model
+  // name (Evin 2026-11-14), even when another key would judge first.
+  const autoAnswerModelState = () => {
+    const llm = appState.processingHelper?.getLLMHelper?.();
+    return {
+      install: appState.deciderInstaller().status(),
+      savings: appState.deciderSavings().summary(),
+      judgeViaNatively: llm?.getCurrentModelId?.() === 'natively' || llm?.judgeRunsOnNatively?.() === true,
+    };
+  };
   safeHandle('auto-answer-model:get-status', async () => autoAnswerModelState());
   safeHandle('auto-answer-model:install', async () => {
     const send = (install: unknown) => {

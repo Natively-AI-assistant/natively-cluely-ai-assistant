@@ -197,8 +197,8 @@ Auto Answer is part of Natively Pro. You can also use it **without Pro** if you 
 - **Never sent:** audio, screenshots, your notes, AI answers, meeting titles and calendar events.
 - **What we use it for:** only to train and test the models behind Auto Answer. We do not sell it, use it for advertising, or publish it. To label and train, we may process it with the service providers we use for that: Anthropic (Claude) to label examples and Modal to run training. Storage is in our database at Supabase (Tokyo region).
 - **Legal basis:** your consent for your own data. For the other people in the meeting, our legitimate interest in improving Auto Answer, with the safeguards above; you must tell them where the law requires it (Terms §10.1).
-- **How long we keep it:** until you delete it, and at most **2 years** from when we received it.
-- **Stopping and deleting:** turn off **Share transcripts to improve Auto Answer** in Settings › General. Nothing more is sent, and anything not yet sent is deleted from your device. **Delete shared transcripts** in the same place deletes everything already received from your installation. If you use Auto Answer without Pro, it stops when you stop sharing. You can also email us (§9).
+- **How long we keep it:** at most **2 years** from when we received it.
+- **Stopping and deleting:** turn off **Share transcripts to improve Auto Answer** in Settings › Intelligence. Nothing more is sent, and anything not yet sent is deleted from your device. If you use Auto Answer without Pro, it stops when you stop sharing. To have transcripts we already received deleted, email us (§9) with your licence key or the email you bought with, and we delete what we can match to you.
 
 ---
 

@@ -14205,6 +14205,29 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   /**
+   * True when the Auto Answer judge would run on Natively API: the first rung of
+   * generateJudgeVerdict that is configured is the Natively one. Mirrors that
+   * ladder without calling it: a dispatchable Fast Response pick (never
+   * 'natively': resolveFastModelFamily excludes it), then the user's own Gemini,
+   * Groq, OpenAI, DeepSeek or Claude key, and only then a Natively key.
+   * Settings › Auto Answer uses it to leave the reference model's name out of
+   * its cost estimate (Evin 2026-11-14): a Natively API user has no provider
+   * list price to compare against.
+   */
+  public judgeRunsOnNatively(): boolean {
+    if (!this.nativelyKey || this.isLocalOnlyMode) return false;
+    // A pick only takes the judge when its provider can run now (callFastModel
+    // otherwise falls through to the ladder below; review 2026-11-15).
+    const pick = this.fastModelId;
+    const family = pick ? this.resolveFastModelFamily(pick) : null;
+    if (pick && family && this.fastFamilyReady(family)) return false;
+    if (this.client) return false;
+    if (this.groqClient && !this._groqLocalDisabled) return false;
+    if (this.openaiClient || this.deepseekClient || this.claudeClient) return false;
+    return true;
+  }
+
+  /**
    * True when this turn routes through natively-api's SEQUENTIAL server-side
    * provider cascade (`${NATIVELY_API_URL}/v1/chat`) rather than straight to a
    * provider.
