@@ -317,6 +317,11 @@
 /* Phase-1 Settings-only accent override (dark mode), scoped via
    data-settings-theme so the rest of the app keeps the blue brand accent. */
 [data-settings-theme="periwinkle"] {
+  /* Dark Settings cards take the lighter surface the opacity card always had
+     (Evin 2026-11-15, option A), and the row icon tiles step up one shade so
+     they still read on it. Light mode resets both below. */
+  --bg-card: #27272A;
+  --bg-settings-tile: #2F2F34;
   --accent-primary: var(--periwinkle-300);
   --accent-hover: #DED4FD; /* not a canonical scale step — a dedicated lighter dark-mode hover tint */
   --accent-pressed: var(--periwinkle-400);
@@ -476,6 +481,8 @@
 /* Phase-1 Settings-only accent override (light mode), scoped via
    data-settings-theme so the rest of the app keeps the blue brand accent. */
 [data-theme='light'] [data-settings-theme="periwinkle"] {
+  --bg-card: #FBFBFD;
+  --bg-settings-tile: var(--bg-item-surface);
   --accent-primary: var(--periwinkle-600);
   --accent-hover: var(--periwinkle-700);
   --accent-pressed: var(--periwinkle-800);

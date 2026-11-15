@@ -396,7 +396,7 @@ export const SettingsRow: React.FC<{
   <div className="border-x border-transparent">
     <div className="flex items-center justify-between gap-4 px-4 py-3">
       <div className="flex items-center gap-4 min-w-0 flex-1">
-        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+        <div className="w-10 h-10 bg-bg-settings-tile rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
           {icon}
         </div>
         <div className="min-w-0">
