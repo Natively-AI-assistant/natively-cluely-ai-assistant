@@ -2183,7 +2183,7 @@ const SPEAKABLE_RENDERING_DIRECTIVE =
 const spokenFullDirective = (): string =>
   `LENGTH LIMIT: at most ${SPOKEN_FULL_PROMPT_MAX_WORDS} words (~45 seconds spoken) — a hard cap, not a target. This is a LIVE spoken answer: make the point completely, then stop — do not enumerate every angle. If your draft runs past ${SPOKEN_FULL_PROMPT_MAX_WORDS} words, cut whole branches, not adjectives.`;
 
-// A mode set to Shorter or Longer (2026-11-14). The system prompts carry their
+// The Answer length set to Shorter or Longer (2026-11-14). The system prompts carry their
 // own sentence counts ("2-4 sentences", "if it exceeds 4-5 sentences it is
 // WRONG"), written for Smart, so these lines say they replace them. They name
 // no story and ask for no example: on a behavioral question that wording made a
@@ -2200,7 +2200,7 @@ const spokenFullDirectiveFor = (length: 'shorter' | 'longer'): string => {
   const body = length === 'shorter'
     ? 'Make the one point that matters, then stop.'
     : 'Give the whole answer with its reasoning and context, then stop — stay speakable, no list of every angle.';
-  return `LENGTH LIMIT (this mode is set to ${lengthLabel(length)} answers): at most ${cap} words (~${seconds} seconds spoken) — a hard cap, not a target. This is a LIVE spoken answer. ${body} ${replacesClause(length)}`;
+  return `LENGTH LIMIT (the user chose ${lengthLabel(length)} answers): at most ${cap} words (~${seconds} seconds spoken) — a hard cap, not a target. This is a LIVE spoken answer. ${body} ${replacesClause(length)}`;
 };
 
 const shortBandDirectiveFor = (plan: AnswerPlan, length: 'shorter' | 'longer'): string => {
@@ -2209,18 +2209,18 @@ const shortBandDirectiveFor = (plan: AnswerPlan, length: 'shorter' | 'longer'): 
   const fit = length === 'shorter'
     ? 'Use fewer if fewer answers it.'
     : 'Use the room for substance, never filler or repetition, and keep it speakable.';
-  return `LENGTH (this mode is set to ${lengthLabel(length)} answers): aim for about ${t.seconds}s spoken — roughly ${t.min} to ${t.max} words (${t.guidance}). ${fit} Hard ceiling: never go past ${t.ceiling} words. ${replacesClause(length)}`;
+  return `LENGTH (the user chose ${lengthLabel(length)} answers): aim for about ${t.seconds}s spoken — roughly ${t.min} to ${t.max} words (${t.guidance}). ${fit} Hard ceiling: never go past ${t.ceiling} words. ${replacesClause(length)}`;
 };
 
 /**
- * The mode's Answer length for this turn. A Real-time prompt that asks for
+ * The Answer length for this turn (Settings › Overlay). A Real-time prompt that asks for
  * short answers in words ("keep it brief") outranks a Longer setting: the
  * written instruction is the more specific of the two, and a Longer line beside
  * it would contradict it. ("Answer in 100 words" and "be thorough" already
  * silence the app's line altogether: userInstructionsOverrideAppLength.)
  */
 const answerLengthForTurn = (pinnedModeId?: string | null): AnswerLength => {
-  const length = getRegisteredAnswerLength(pinnedModeId);
+  const length = getRegisteredAnswerLength();
   if (length !== 'longer') return length;
   try {
     const written = analyzeUserInstructions(getRegisteredUserInstructions(pinnedModeId ?? undefined));
@@ -2241,9 +2241,10 @@ const answerLengthForTurn = (pinnedModeId?: string | null): AnswerLength => {
 export const renderLengthDirectiveForPlan = (
   plan: AnswerPlan,
   /**
-   * `pinnedModeId`: the mode the turn was captured under (its Answer length
-   * applies even if the user switches mode mid-answer). `answerLength`: set it
-   * directly (tests); otherwise the mode's own setting is read.
+   * `pinnedModeId`: the mode the turn was captured under (its Real-time
+   * prompt is weighed against a Longer setting even if the user switches mode
+   * mid-answer). `answerLength`: set it directly (tests); otherwise the
+   * Settings › Overlay setting is read.
    */
   opts?: { pinnedModeId?: string | null; answerLength?: AnswerLength },
 ): string => {

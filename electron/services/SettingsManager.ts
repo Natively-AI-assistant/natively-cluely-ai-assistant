@@ -319,6 +319,9 @@ export interface AppSettings {
     /** Which screen the full-screenshot shortcut captures: 'overlay' (default),
      *  'cursor', or 'display:<id>' (electron/screenshotDisplay.ts). */
     screenshotDisplay?: string;
+    /** Settings › Overlay › Answer length (llm/answerLength.ts). Absent = Smart.
+     *  Shorter and Longer apply only with Pro or a trial. */
+    answerLength?: 'shorter' | 'smart' | 'longer';
     // When true (default) and the active mode is a technical / coding interview, prefer
     // direct vision LLM over structured-extract-then-answer for lowest latency.
     technicalInterviewVisionFirst?: boolean;

@@ -3680,11 +3680,14 @@ export class IntelligenceEngine extends EventEmitter {
                                 answerShape: evidence.answerShape,
                                 sourceOwner: evidence.sourceOwner,
                                 evidence,
-                                // Spoken answer: the mode's Answer length sets the target (Smart = 90).
+                                // Spoken answer: the Answer length setting sets the target (Smart = 90),
+                                // unless the mode's Real-time prompt sets a length: then it states none.
                                 maxAnswerWords: (() => {
                                     try {
+                                        const { registeredInstructionsSetLength } = require('./llm/userInstructionContract') as typeof import('./llm/userInstructionContract');
+                                        if (registeredInstructionsSetLength(snapshotModeInfo?.id ?? null)) return null;
                                         const { profileAnswerWordCap, getRegisteredAnswerLength } = require('./llm/answerLength') as typeof import('./llm/answerLength');
-                                        return profileAnswerWordCap(undefined, getRegisteredAnswerLength(snapshotModeInfo?.id ?? null));
+                                        return profileAnswerWordCap(undefined, getRegisteredAnswerLength());
                                     } catch { return 90; }
                                 })(),
                                 // Campaign-3 (fix/answer-policy-engine, 2026-07-19,
@@ -4512,7 +4515,7 @@ export class IntelligenceEngine extends EventEmitter {
                         defaultLengthDirective: (() => {
                             try {
                                 const { renderLengthDirectiveForPlan } = require('./llm/AnswerPlanner') as typeof import('./llm/AnswerPlanner');
-                                // The mode captured at t0 owns the Answer length too.
+                                // The mode captured at t0 owns the Real-time prompt the length is weighed against.
                                 return renderLengthDirectiveForPlan(answerPlan, { pinnedModeId: snapshotModeInfo?.id ?? null }) || undefined;
                             } catch { return undefined; /* length directive is best-effort */ }
                         })(),

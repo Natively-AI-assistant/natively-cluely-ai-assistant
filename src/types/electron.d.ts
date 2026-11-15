@@ -527,12 +527,12 @@ export interface ElectronAPI {
   onModeChanged: (callback: (data: { id: string | null; name: string | null; fileCount?: number; indexedCount?: number }) => void) => () => void
 
   // Modes
-  modesGetAll: () => Promise<Array<{ id: string; name: string; templateType: string; customContext: string; isActive: boolean; createdAt: string; referenceFileCount: number; answerLength?: 'shorter' | 'smart' | 'longer' }>>
+  modesGetAll: () => Promise<Array<{ id: string; name: string; templateType: string; customContext: string; isActive: boolean; createdAt: string; referenceFileCount: number }>>
   modesGetActive: () => Promise<{ id: string; name: string; templateType: string; customContext: string; isActive: boolean; createdAt: string } | null>
   modesCreate: (params: { name: string; templateType: string }) => Promise<{ success: boolean; mode?: any; error?: string }>
   modesGenerateFromBrief: (params: { brief: string; requiresGrounding?: boolean; templateHint?: string; key?: string; persist?: boolean }) => Promise<{ success: boolean; mode?: any; draft?: any; attempts?: number; issues?: any[]; persisted?: boolean; error?: string }>
   e2eInvoke: (channel: string, ...args: any[]) => Promise<any>
-  modesUpdate: (id: string, updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any; answerLength?: 'shorter' | 'smart' | 'longer' }) => Promise<{ success: boolean; error?: string; message?: string }>
+  modesUpdate: (id: string, updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any }) => Promise<{ success: boolean; error?: string; message?: string }>
   modesGetSourceContract: (modeId: string) => Promise<any>
   modesDelete: (id: string) => Promise<{ success: boolean; error?: string }>
   modesSetActive: (id: string | null) => Promise<{ success: boolean; error?: string }>
@@ -1334,6 +1334,9 @@ export interface ElectronAPI {
     displays: Array<{ id: number; number: number; name: string; width: number; height: number; primary: boolean }>;
   }>;
   setScreenshotDisplay: (preference: string) => Promise<{ success: boolean; error?: string }>;
+  /** Settings › Overlay › Answer length. get: what answers use now (Smart without Pro). */
+  getAnswerLength: () => Promise<{ value: 'shorter' | 'smart' | 'longer' }>;
+  setAnswerLength: (value: 'shorter' | 'smart' | 'longer') => Promise<{ success: boolean; error?: string; message?: string }>;
   cropperPickDisplay: () => void;
   cropperDrag: (active: boolean) => void;
   getScreenUnderstandingMode: () => Promise<'vision_first' | 'vision_only' | 'private_vision'>;

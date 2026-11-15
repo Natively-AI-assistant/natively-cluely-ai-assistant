@@ -506,7 +506,6 @@ export class DatabaseManager {
             // After the migrations (it alters `meetings`); not version-gated.
             this.ensureLiveMeetingSchema();
             this.ensureMeetingNotesSchema();
-            this.ensureModesAnswerLengthColumn();
             // Folders, tags, people, companies (organiseSchema.ts). Same rule:
             // idempotent and not behind user_version.
             ensureOrganiseSchema(this.db);
@@ -545,30 +544,6 @@ export class DatabaseManager {
      * Safe to call from anywhere after migration v11 created `modes`; it is
      * invoked from runMigrations immediately after the v23 block.
      */
-    /**
-     * modes.answer_length (2026-11-14): Shorter / Smart / Longer per mode.
-     *
-     * Not version-gated, for the reason ensureProfileOkfSentinelMode gives:
-     * other branches append user_version numbers in parallel, and a column
-     * behind a number another branch also claims could never be added. The
-     * check is one PRAGMA, and an existing column is left alone. Rows read as
-     * 'smart', which is how every mode answered before the column existed.
-     */
-    private ensureModesAnswerLengthColumn(): void {
-        if (!this.db) return;
-        try {
-            const cols = this.db.prepare("PRAGMA table_info('modes')").all() as Array<{ name: string }>;
-            if (cols.length === 0 || cols.some((c) => c.name === 'answer_length')) return;
-            this.db.exec(`ALTER TABLE modes ADD COLUMN answer_length TEXT NOT NULL DEFAULT 'smart'`);
-            console.log('[DatabaseManager] Added modes.answer_length');
-        } catch (e) {
-            // Never fatal: without the column every mode answers at Smart, and
-            // updateMode logs the failed write of a length (it logs, as for
-            // every other field) instead of keeping it.
-            console.error('[DatabaseManager] Failed to add modes.answer_length:', (e as Error)?.message || e);
-        }
-    }
-
     private ensureProfileOkfSentinelMode(): void {
         if (!this.db) return;
         try {
@@ -2307,7 +2282,7 @@ export class DatabaseManager {
         }
     }
 
-    public updateMode(id: string, updates: { name?: string; templateType?: string; customContext?: string; sourceContractJson?: string | null; answerLength?: string }): void {
+    public updateMode(id: string, updates: { name?: string; templateType?: string; customContext?: string; sourceContractJson?: string | null }): void {
         if (!this.db) return;
         try {
             if (updates.name !== undefined) {
@@ -2321,9 +2296,6 @@ export class DatabaseManager {
             }
             if (updates.sourceContractJson !== undefined) {
                 this.db.prepare('UPDATE modes SET source_contract_json = ? WHERE id = ?').run(updates.sourceContractJson, id);
-            }
-            if (updates.answerLength !== undefined) {
-                this.db.prepare('UPDATE modes SET answer_length = ? WHERE id = ?').run(updates.answerLength, id);
             }
         } catch (e) {
             console.error('[DatabaseManager] updateMode failed:', e);

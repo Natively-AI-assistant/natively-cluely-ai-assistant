@@ -1354,6 +1354,9 @@ interface ElectronAPI {
     displays: Array<{ id: number; number: number; name: string; width: number; height: number; primary: boolean }>;
   }>;
   setScreenshotDisplay: (preference: string) => Promise<{ success: boolean; error?: string }>;
+  /** Settings › Overlay › Answer length. get: what answers use now (Smart without Pro). */
+  getAnswerLength: () => Promise<{ value: 'shorter' | 'smart' | 'longer' }>;
+  setAnswerLength: (value: 'shorter' | 'smart' | 'longer') => Promise<{ success: boolean; error?: string; message?: string }>;
   cropperPickDisplay: () => void;
   cropperDrag: (active: boolean) => void;
   getScreenUnderstandingMode: () => Promise<'vision_first' | 'vision_only' | 'private_vision'>;
@@ -1454,7 +1457,7 @@ interface ElectronAPI {
   e2eInvoke?: (channel: string, ...args: any[]) => Promise<any>;
   modesUpdate: (
     id: string,
-    updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any; answerLength?: 'shorter' | 'smart' | 'longer' },
+    updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any },
   ) => Promise<{ success: boolean; error?: string }>;
   modesGetSourceContract: (modeId: string) => Promise<any>;
   modesBuildUserSourceContract: (input: {
@@ -3653,6 +3656,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   getScreenshotDisplay: () => ipcRenderer.invoke('get-screenshot-display'),
   setScreenshotDisplay: (preference: string) => ipcRenderer.invoke('set-screenshot-display', preference),
+  getAnswerLength: () => ipcRenderer.invoke('answer-length:get'),
+  setAnswerLength: (value: 'shorter' | 'smart' | 'longer') => ipcRenderer.invoke('answer-length:set', value),
   getScreenUnderstandingMode: () => ipcRenderer.invoke('get-screen-understanding-mode'),
   setScreenUnderstandingMode: (mode: 'vision_first' | 'vision_only' | 'private_vision') =>
     ipcRenderer.invoke('set-screen-understanding-mode', mode),
@@ -3762,7 +3767,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     : {}),
   modesUpdate: (
     id: string,
-    updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any; answerLength?: 'shorter' | 'smart' | 'longer' },
+    updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any },
   ) => ipcRenderer.invoke('modes:update', id, updates),
   modesGetSourceContract: (modeId: string) =>
     ipcRenderer.invoke('modes:get-source-contract', modeId),

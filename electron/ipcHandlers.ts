@@ -1082,6 +1082,16 @@ export function initializeIpcHandlers(appState: AppState): void {
   } catch (e: any) {
     console.warn('[IPC] Pro check for modes not wired:', e?.message || e);
   }
+  // The Answer length (Settings › Overlay) the length planner reads each turn
+  // (llm/answerLength.ts). Pro is checked on every read, like the modes above,
+  // so a lapsed licence answers at Smart at once.
+  try {
+    const { registerAnswerLengthProvider, effectiveAnswerLength } = require('./llm/answerLength') as typeof import('./llm/answerLength');
+    registerAnswerLengthProvider(() =>
+      effectiveAnswerLength(SettingsManager.getInstance().get('answerLength'), isProOrTrialActive()));
+  } catch (e: any) {
+    console.warn('[IPC] Answer length not wired, answers stay Smart:', e?.message || e);
+  }
   try {
     const { KnowledgeOrchestrator } = require('../premium/electron/knowledge/KnowledgeOrchestrator');
     KnowledgeOrchestrator.setProAccessCheck(isProOrTrialActive);
@@ -4464,12 +4474,15 @@ export function initializeIpcHandlers(appState: AppState): void {
                 contract: manualSourceContract,
                 evidence: evidenceRoute,
                 styleInstructions: formatAnswerPlanForPrompt(answerPlan, false),
-                // The mode's Answer length moves this on the live surface only,
-                // like the per-turn LENGTH line; the launcher keeps 90.
+                // The Answer length setting moves this on the live surface only,
+                // like the per-turn LENGTH line; the launcher keeps 90. A length
+                // in the mode's Real-time prompt wins on both: no target stated.
                 maxAnswerWords: (() => {
                   try {
+                    const { registeredInstructionsSetLength } = require('./llm/userInstructionContract') as typeof import('./llm/userInstructionContract');
+                    if (registeredInstructionsSetLength(manualActiveMode?.id ?? null)) return null;
                     const { profileAnswerWordCap, getRegisteredAnswerLength } = require('./llm/answerLength') as typeof import('./llm/answerLength');
-                    return profileAnswerWordCap(answerPlan.answerStyle, answerSurface === 'live' ? getRegisteredAnswerLength(manualActiveMode?.id ?? null) : 'smart');
+                    return profileAnswerWordCap(answerPlan.answerStyle, answerSurface === 'live' ? getRegisteredAnswerLength() : 'smart');
                   } catch { return answerPlan.answerStyle === 'detailed' ? 180 : 90; }
                 })(),
               });
@@ -6254,12 +6267,12 @@ export function initializeIpcHandlers(appState: AppState): void {
               // deterministic trimmer was REMOVED because it cropped the conclusion off long
               // answers — so we NEVER trim here, we only measure the answer for telemetry (the
               // coarse length class + word count). The answer text is left exactly as produced.
-              // Measured against the mode's Answer length, the target this path's
-              // <answer_contract> stated (formatAnswerPlanForPrompt reads the same mode).
+              // Measured against the Answer length setting, the target this path's
+              // <answer_contract> stated (formatAnswerPlanForPrompt reads the same setting).
               const measuredLength = (() => {
                 try {
                   const { getRegisteredAnswerLength } = require('./llm/answerLength') as typeof import('./llm/answerLength');
-                  return getRegisteredAnswerLength(manualActiveMode?.id ?? null);
+                  return getRegisteredAnswerLength();
                 } catch { return 'smart' as const; }
               })();
               const budget = applySpeakabilityBudget(fullResponse, answerPlan.answerType, answerPlan.answerStyle as any, message, isCodingChat, measuredLength);
@@ -9017,6 +9030,24 @@ export function initializeIpcHandlers(appState: AppState): void {
         win.webContents.send('provider-data-scopes-changed', merged);
       }
     });
+    return { success: true };
+  });
+
+  // Settings › Overlay › Answer length (llm/answerLength.ts). get answers with
+  // what answers use now: Smart without Pro, whatever is stored. Shorter and
+  // Longer are Pro; going back to Smart is turning it off, which stays free.
+  safeHandle('answer-length:get', async () => {
+    const { effectiveAnswerLength } = require('./llm/answerLength') as typeof import('./llm/answerLength');
+    return { value: effectiveAnswerLength(SettingsManager.getInstance().get('answerLength'), isProOrTrialActive()) };
+  });
+
+  safeHandle('answer-length:set', async (_, value: unknown) => {
+    const { isAnswerLength } = require('./llm/answerLength') as typeof import('./llm/answerLength');
+    if (!isAnswerLength(value)) return { success: false, error: 'invalid_value' };
+    if (value !== 'smart' && !isProOrTrialActive()) return proRefusal();
+    if (!SettingsManager.getInstance().set('answerLength', value)) {
+      return { success: false, error: 'settings_store_degraded' };
+    }
     return { success: true };
   });
 
@@ -20004,24 +20035,15 @@ export function initializeIpcHandlers(appState: AppState): void {
     async (
       _,
       id: string,
-      updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any; answerLength?: string },
+      updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any },
     ) => {
       try {
         const { ModesManager } = require('./services/ModesManager');
-        const { isAnswerLength } = require('./llm/answerLength') as typeof import('./llm/answerLength');
         const mgr = ModesManager.getInstance();
-        if (updates.answerLength !== undefined && !isAnswerLength(updates.answerLength)) {
-          return { success: false, error: 'invalid_answer_length' };
-        }
         // Gate: changing templateType to a non-general template requires pro.
         // Also gate if the existing mode is already non-general (editing a pro mode requires pro).
         if (!isProOrTrialActive()) {
           if (updates.templateType && updates.templateType !== 'general') {
-            return proRefusal();
-          }
-          // Shorter / Longer are Pro on every mode, General included. Going
-          // back to Smart is turning it off, which stays free.
-          if (updates.answerLength !== undefined && updates.answerLength !== 'smart') {
             return proRefusal();
           }
           const existing = mgr.getModes().find((m: any) => m.id === id);

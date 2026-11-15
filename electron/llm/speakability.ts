@@ -43,7 +43,7 @@ export const SPOKEN_FULL_MAX_WORDS = 180;
 export const SPOKEN_FULL_PROMPT_MAX_WORDS = 110;
 
 /**
- * The fuller-spoken-answer prompt cap for a mode's Answer length (2026-11-14).
+ * The fuller-spoken-answer prompt cap for the Answer length (2026-11-14).
  * Smart is SPOKEN_FULL_PROMPT_MAX_WORDS, unchanged.
  */
 export function spokenFullPromptMaxWords(length: AnswerLength = 'smart'): number {
@@ -53,13 +53,13 @@ export function spokenFullPromptMaxWords(length: AnswerLength = 'smart'): number
 }
 
 /**
- * The SPOKEN_SHORT measuring lines for a mode's Answer length (2026-11-14), so
- * telemetry reads a Longer answer of 130 words as on target, not over budget.
+ * The SPOKEN_SHORT measuring lines for the Answer length (2026-11-14), so
+ * telemetry reads a Longer answer of 180 words as on target, not over budget.
  * Smart is the constants above, unchanged.
  */
 export function spokenShortLimits(length: AnswerLength = 'smart'): { softMaxWords: number; hardMaxWords: number; hardMaxSeconds: number } {
   if (length === 'shorter') return { softMaxWords: 40, hardMaxWords: 50, hardMaxSeconds: 22 };
-  if (length === 'longer') return { softMaxWords: 150, hardMaxWords: 190, hardMaxSeconds: 82 };
+  if (length === 'longer') return { softMaxWords: 200, hardMaxWords: 230, hardMaxSeconds: 100 };
   return { softMaxWords: SOFT_MAX_WORDS, hardMaxWords: HARD_MAX_WORDS, hardMaxSeconds: HARD_MAX_SECONDS };
 }
 // Average speaking rate for an interview/meeting answer (words per minute).
@@ -244,7 +244,7 @@ const SHORT_BAND_TARGETS: Record<ShortLengthBand, ShortBandTarget> = {
   FULLER:   { min: 55, max: 85, seconds: 30, guidance: 'a slightly fuller answer — the point, a reason, and one concrete detail' },
 };
 
-// A mode's Answer length (2026-11-14) moves the same three bands. The question
+// The Answer length (2026-11-14) moves the same three bands. The question
 // still picks the band (a yes/no question stays the shortest of the three);
 // Shorter and Longer only change the numbers. `ceiling` is the hard line the
 // prompt states, which Smart derives as min(max x 1.25, HARD_MAX_WORDS).
@@ -262,8 +262,10 @@ const LONGER_BAND_TARGETS: Record<ShortLengthBand, LengthBandTarget> = {
   BRIEF:    { min: 40, max: 60,  seconds: 22, ceiling: 75,  guidance: 'the answer plus a line of context' },
   // "detail", never "example": Smart's FULLER says the same, and an asked-for
   // example on a behavioral turn is an invitation to invent one.
-  STANDARD: { min: 90, max: 120, seconds: 45, ceiling: 150, guidance: 'the point, a reason, and one concrete detail' },
-  FULLER:   { min: 120, max: 150, seconds: 60, ceiling: 190, guidance: 'the point, the reasoning, a concrete detail, and the trade-off' },
+  // Longer runs about 90 to 200 words (Evin 2026-11-15); a yes/no question
+  // (BRIEF above) stays short rather than padded to 90.
+  STANDARD: { min: 90, max: 140, seconds: 55, ceiling: 175, guidance: 'the point, a reason, and one concrete detail' },
+  FULLER:   { min: 140, max: 200, seconds: 80, ceiling: 220, guidance: 'the point, the reasoning, a concrete detail, and the trade-off' },
 };
 
 /**
@@ -276,7 +278,7 @@ export function shortBandTargetWords(band: ShortLengthBand, length: AnswerLength
   return SHORT_BAND_TARGETS[band];
 }
 
-/** The band for a Shorter or Longer mode, with its stated ceiling. */
+/** The band for a Shorter or Longer setting, with its stated ceiling. */
 export function lengthBandTarget(band: ShortLengthBand, length: 'shorter' | 'longer'): LengthBandTarget {
   return length === 'shorter' ? SHORTER_BAND_TARGETS[band] : LONGER_BAND_TARGETS[band];
 }
@@ -395,7 +397,7 @@ export function decideSpeakability(
     exceptionReason = `target:${target}${cause}`;
   }
 
-  // The mode's Answer length moves the measuring lines with the prompt's
+  // The Answer length moves the measuring lines with the prompt's
   // targets; Smart is the constants, unchanged.
   const limits = spokenShortLimits(answerLength);
   const overSoftTarget = wordCount > limits.softMaxWords;

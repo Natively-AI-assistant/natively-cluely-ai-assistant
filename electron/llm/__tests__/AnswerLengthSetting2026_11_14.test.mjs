@@ -1,7 +1,8 @@
 // electron/llm/__tests__/AnswerLengthSetting2026_11_14.test.mjs
 //
-// A mode's Answer length (Shorter / Smart / Longer), set beside the Real-time
-// prompt's Save in the Modes editor. What it must and must not do:
+// The Answer length (Shorter / Smart / Longer), one setting for the whole app
+// in Settings › Overlay (per mode in the Modes editor until 2026-11-15). What
+// it must and must not do:
 //   - Smart is the app as it was: the LENGTH line is byte-for-byte unchanged.
 //   - Shorter / Longer move the three spoken bands and the fuller-answer cap,
 //     and say they replace the system prompt's own sentence counts.
@@ -10,6 +11,7 @@
 //   - A length the user wrote into the Real-time prompt still wins: a number
 //     silences the app line, and "keep it brief" overrides Longer.
 //   - A broken or absent provider reads as Smart; it never breaks a turn.
+//   - Shorter and Longer apply only with Pro or a trial (effectiveAnswerLength).
 // Pure: no platform branches. Runs on the built dist-electron bundles.
 
 import { test, describe, afterEach } from 'node:test';
@@ -23,6 +25,7 @@ const { renderLengthDirectiveForPlan, formatAnswerPlanForPrompt, planAnswer } = 
 const speak = await import(dist('speakability.js'));
 const al = await import(dist('answerLength.js'));
 const uic = await import(dist('userInstructionContract.js'));
+const { buildProfileJitPrompt } = await import(dist('ProfileJitPromptBuilder.js'));
 
 const plan = (answerType, question, answerStyle) => ({ answerType, answerStyle, question });
 
@@ -52,7 +55,7 @@ describe('Smart is the app as it was', () => {
     assert.match(renderLengthDirectiveForPlan(STANDARD), /^LENGTH: aim for about 22s spoken — roughly 40 to 60 words/);
     assert.match(renderLengthDirectiveForPlan(STANDARD), /Hard ceiling: never go past 75 words/);
     assert.match(renderLengthDirectiveForPlan(SPOKEN_FULL), /^LENGTH LIMIT: at most 110 words \(~45 seconds spoken\)/);
-    assert.doesNotMatch(renderLengthDirectiveForPlan(STANDARD), /this mode is set to/);
+    assert.doesNotMatch(renderLengthDirectiveForPlan(STANDARD), /the user chose/);
   });
 });
 
@@ -61,14 +64,14 @@ describe('Shorter and Longer move the numbers', () => {
     ['shorter', STANDARD, 15, 35, 45],
     ['shorter', BRIEF, 10, 20, 25],
     ['shorter', FULLER, 25, 40, 50],
-    ['longer', STANDARD, 90, 120, 150],
+    ['longer', STANDARD, 90, 140, 175],
     ['longer', BRIEF, 40, 60, 75],
-    ['longer', FULLER, 120, 150, 190],
+    ['longer', FULLER, 140, 200, 220],
   ];
   for (const [length, p, min, max, ceiling] of cases) {
     test(`${length}: "${p.question}" → ${min}-${max} words, ceiling ${ceiling}`, () => {
       const d = renderLengthDirectiveForPlan(p, { answerLength: length });
-      assert.match(d, new RegExp(`this mode is set to ${length === 'shorter' ? 'Shorter' : 'Longer'} answers`));
+      assert.match(d, new RegExp(`the user chose ${length === 'shorter' ? 'Shorter' : 'Longer'} answers`));
       assert.match(d, new RegExp(`roughly ${min} to ${max} words`));
       assert.match(d, new RegExp(`never go past ${ceiling} words`));
     });
@@ -128,13 +131,23 @@ describe('the exemptions hold at every length', () => {
   }
 });
 
-describe('the mode\'s setting is read through the provider', () => {
-  test('the registered length applies, for the pinned mode', () => {
-    const seen = [];
-    al.registerAnswerLengthProvider((id) => { seen.push(id); return id === 'm-long' ? 'longer' : 'shorter'; });
-    assert.match(renderLengthDirectiveForPlan(STANDARD, { pinnedModeId: 'm-long' }), /roughly 90 to 120 words/);
+describe('the setting is read through the provider', () => {
+  test('the registered length applies whichever mode the turn is pinned to', () => {
+    al.registerAnswerLengthProvider(() => 'longer');
+    assert.match(renderLengthDirectiveForPlan(STANDARD, { pinnedModeId: 'm-any' }), /roughly 90 to 140 words/);
+    assert.match(renderLengthDirectiveForPlan(STANDARD), /roughly 90 to 140 words/);
+    al.registerAnswerLengthProvider(() => 'shorter');
     assert.match(renderLengthDirectiveForPlan(STANDARD), /roughly 15 to 35 words/);
-    assert.deepEqual(seen, ['m-long', undefined]);
+  });
+
+  test('Shorter and Longer need Pro or a trial; Smart and junk read as Smart either way', () => {
+    assert.equal(al.effectiveAnswerLength('longer', true), 'longer');
+    assert.equal(al.effectiveAnswerLength('shorter', true), 'shorter');
+    assert.equal(al.effectiveAnswerLength('longer', false), 'smart');
+    assert.equal(al.effectiveAnswerLength('shorter', false), 'smart');
+    assert.equal(al.effectiveAnswerLength('smart', false), 'smart');
+    assert.equal(al.effectiveAnswerLength(undefined, true), 'smart');
+    assert.equal(al.effectiveAnswerLength('huge', true), 'smart');
   });
 
   test('a throwing provider or a junk value reads as Smart', () => {
@@ -146,7 +159,7 @@ describe('the mode\'s setting is read through the provider', () => {
     assert.equal(al.getRegisteredAnswerLength(), 'smart');
   });
 
-  test('exempt turns never ask the provider (no mode read for code or stories)', () => {
+  test('exempt turns never ask the provider (no setting read for code or stories)', () => {
     let asked = 0;
     al.registerAnswerLengthProvider(() => { asked += 1; return 'longer'; });
     renderLengthDirectiveForPlan(plan('coding_question_answer', 'Solve two sum.'));
@@ -156,15 +169,41 @@ describe('the mode\'s setting is read through the provider', () => {
 });
 
 describe('the Real-time prompt still wins', () => {
+  // Evin 2026-11-15: "real time prompt user saying 500 words and in the answer
+  // size its like short or smart, in that scenario follow real time prompt".
+  test('"Answer in 500 words" in the prompt: no app length line at any setting', () => {
+    const real = planAnswer({ question: 'What is your return policy for opened items?', source: 'what_to_answer' });
+    for (const length of ['shorter', 'smart', 'longer']) {
+      al.registerAnswerLengthProvider(() => length);
+      uic.registerUserInstructionProvider(null);
+      assert.match(formatAnswerPlanForPrompt(real), /LENGTH/, `precondition: ${length} states a length`);
+      uic.registerUserInstructionProvider(() => 'Answer in 500 words.');
+      assert.equal(uic.registeredInstructionsSetLength(), true);
+      assert.doesNotMatch(formatAnswerPlanForPrompt(real), /LENGTH|Hard ceiling|words \(/, length);
+    }
+    uic.registerUserInstructionProvider(null);
+    assert.equal(uic.registeredInstructionsSetLength(), false);
+  });
+
+  test('profile answers state no word target when the prompt sets the length', () => {
+    const base = { question: 'Tell me about your last role.', answerType: 'profile_answer', evidence: { items: [], checkedSources: [] } };
+    assert.match(buildProfileJitPrompt({ ...base, maxAnswerWords: 90 }).userPrompt, /target <= 90 words/);
+    const deferred = buildProfileJitPrompt({ ...base, maxAnswerWords: null }).userPrompt;
+    assert.doesNotMatch(deferred, /target <=/);
+    assert.match(deferred, /Take its length from the user's own instructions/);
+    assert.match(buildProfileJitPrompt(base).userPrompt, /target <= 90 words/, 'absent still means 90');
+  });
+
+
   test('a number in the prompt silences the app line at Shorter and Longer alike', () => {
     const real = planAnswer({ question: 'What is your return policy for opened items?', source: 'what_to_answer' });
     for (const length of ['shorter', 'longer']) {
       al.registerAnswerLengthProvider(() => length);
       uic.registerUserInstructionProvider(null);
-      assert.match(formatAnswerPlanForPrompt(real), /this mode is set to/, `precondition: ${length} rides the legacy contract`);
+      assert.match(formatAnswerPlanForPrompt(real), /the user chose/, `precondition: ${length} rides the legacy contract`);
       uic.registerUserInstructionProvider(() => 'Answer in 100 words.');
       const contract = formatAnswerPlanForPrompt(real);
-      assert.doesNotMatch(contract, /this mode is set to|Hard ceiling/, length);
+      assert.doesNotMatch(contract, /the user chose|Hard ceiling/, length);
     }
   });
 
@@ -179,20 +218,21 @@ describe('the Real-time prompt still wins', () => {
   test('a prompt that says nothing about length leaves Longer in force', () => {
     uic.registerUserInstructionProvider(() => 'Senior backend role at a payments company. Focus on Go.');
     al.registerAnswerLengthProvider(() => 'longer');
-    assert.match(renderLengthDirectiveForPlan(STANDARD), /roughly 90 to 120 words/);
+    assert.match(renderLengthDirectiveForPlan(STANDARD), /roughly 90 to 140 words/);
   });
 });
 
 describe('the other places length is set', () => {
-  test('profile answers: 50 / 90 / 160 words, and "in detail" keeps 180', () => {
+  test('profile answers: 50 / 90 / 200 words, and "in detail" keeps 180 (200 at Longer)', () => {
     assert.equal(al.profileAnswerWordCap(undefined, 'shorter'), 50);
     assert.equal(al.profileAnswerWordCap(undefined, 'smart'), 90);
-    assert.equal(al.profileAnswerWordCap(undefined, 'longer'), 160);
-    for (const length of ['shorter', 'smart', 'longer']) assert.equal(al.profileAnswerWordCap('detailed', length), 180);
+    assert.equal(al.profileAnswerWordCap(undefined, 'longer'), 200);
+    for (const length of ['shorter', 'smart']) assert.equal(al.profileAnswerWordCap('detailed', length), 180);
+    assert.equal(al.profileAnswerWordCap('detailed', 'longer'), 200);
   });
 
-  test('telemetry measures against the mode\'s length: 130 words is on target for Longer only', () => {
-    const text = Array.from({ length: 130 }, (_, i) => `word${i}`).join(' ') + '.';
+  test('telemetry measures against the set length: 180 words is on target for Longer only', () => {
+    const text = Array.from({ length: 180 }, (_, i) => `word${i}`).join(' ') + '.';
     const smart = speak.decideSpeakability(text, 'general_meeting_answer', undefined, 'What would you ask me?', false);
     const longer = speak.decideSpeakability(text, 'general_meeting_answer', undefined, 'What would you ask me?', false, 'longer');
     assert.equal(smart.overBudget, true);

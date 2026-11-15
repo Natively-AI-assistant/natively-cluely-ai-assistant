@@ -1038,6 +1038,21 @@ export const getRegisteredUserInstructions = (pinnedModeId?: string): string | n
   }
 };
 
+/**
+ * Does the Real-time prompt of the pinned (or active) mode set the answer's
+ * length ("answer in 500 words", "be thorough")? Then every length the app
+ * states itself stands down: the per-turn LENGTH line, Settings › Overlay's
+ * Answer length, and the profile answer's word target (Evin 2026-11-15:
+ * "follow real time prompt"). Never throws; unknown reads as no.
+ */
+export const registeredInstructionsSetLength = (pinnedModeId?: string | null): boolean => {
+  try {
+    return userInstructionsOverrideAppLength(analyzeUserInstructions(getRegisteredUserInstructions(pinnedModeId ?? undefined)));
+  } catch {
+    return false;
+  }
+};
+
 // ── observability ──────────────────────────────────────────────────────────
 
 export interface UserInstructionDelivery {
