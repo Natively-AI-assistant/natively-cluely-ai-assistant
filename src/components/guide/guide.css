@@ -15,13 +15,13 @@
 [data-guide-lit] {
   position: relative;
   z-index: 2;
-  /* #A8B8FF; a deeper periwinkle on a light page, where the pale one vanishes. */
-  --guide-ring: 168, 184, 255;
+  /* Option D (2026-11-15): white on a dark page, near-black on a light one. */
+  --guide-ring: 255, 255, 255;
   box-shadow: 0 0 0 1.5px rgb(var(--guide-ring)), 0 0 0 4px rgba(var(--guide-ring), 0.16), 0 0 16px rgba(var(--guide-ring), 0.26) !important;
   animation: guideLit 2.6s ease-in-out infinite;
 }
 
-[data-theme='light'] [data-guide-lit] { --guide-ring: 120, 138, 240; }
+[data-theme='light'] [data-guide-lit] { --guide-ring: 29, 29, 31; }
 
 /* The tip grows out of its arrow (transform-origin is set at the arrow),
    critically damped: no overshoot. */
@@ -58,64 +58,64 @@
    light mode light glass with dark ink. The one accent is periwinkle ice. */
 .guide-tip,
 .guide-pill {
-  --gt-ink: var(--text-primary);
-  /* White at set strengths: the app's greys sink on glass. */
+  /* Evin picked option D (2026-11-15, from five drawn over real screenshots):
+     clear glass with no colour. Thin graphite glass that lets the page's own
+     colour through the blur, white ink, and the action in plain white (light
+     mode: near-black), like Apple's monochrome tips. Earlier tries, lavender
+     glass and a violet Next, were "so bad". */
   --gt-ink: rgba(255, 255, 255, 0.95);
-  --gt-ink-2: rgba(255, 255, 255, 0.74);
-  --gt-ink-3: rgba(255, 255, 255, 0.5);
-  --gt-accent: #C4B3FB; /* --periwinkle-300, the dark-mode accent */
-  --gt-on-accent: #14162a;
-  --gt-wash: rgba(168, 184, 255, 0.13);
-  --gt-hair: rgba(255, 255, 255, 0.14);
+  --gt-ink-2: rgba(255, 255, 255, 0.76);
+  --gt-ink-3: rgba(255, 255, 255, 0.52);
+  --gt-accent: #ffffff;
+  --gt-on-accent: #111113;
+  --gt-wash: rgba(255, 255, 255, 0.1);
+  --gt-hair: rgba(255, 255, 255, 0.06);
   --gt-shadow: 0 18px 44px -14px rgba(0, 0, 0, 0.7), 0 2px 10px rgba(0, 0, 0, 0.3);
-  /* The glass (GuideGlass.tsx). Evin, 2026-11-15, on a lavender tint: "this
-     ui is so bad, think carefully and choose the color". Lavender over the
-     #151515 launcher turned to mud and swallowed the lavender Next. So the
-     card is the app's own card graphite (#27272A, --bg-card) as frosted glass,
-     with a neutral rim, and colour goes on one thing only: the action. */
-  --gt-tint: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0) 40%), rgba(39, 39, 42, 0.66);
-  --gt-frost: blur(30px) saturate(1.5);
-  --cta-edge-hi: rgba(255, 255, 255, 0.42);
-  --cta-edge-mid: rgba(255, 255, 255, 0.12);
+  --gt-tint: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 45%), rgba(28, 28, 30, 0.4);
+  --gt-frost: blur(22px) saturate(1.5);
+  --cta-edge-hi: rgba(255, 255, 255, 0.55);
+  --cta-edge-mid: rgba(255, 255, 255, 0.14);
   --cta-edge-lo: rgba(255, 255, 255, 0.04);
   --cta-bevel-a: rgba(255, 255, 255, 0.16);
   --cta-bevel-b: rgba(255, 255, 255, 0.08);
-  /* Next: solid periwinkle (#7C5CFF, --periwinkle-500 = the switches), white
-     label, through LiquidGlassButton's own --lg-lav-* hooks. */
-  --lg-lav-bg: rgba(124, 92, 255, 0.94);
-  --lg-lav-hover: rgba(140, 112, 255, 0.98);
-  --lg-lav-fg: #ffffff;
-  --lg-lav-rim: rgba(255, 255, 255, 0.5);
-  --lg-lav-under: rgba(40, 20, 110, 0.35);
-  --lg-lav-drop: rgba(20, 10, 60, 0.3);
-  --lg-lav-glow: rgba(124, 92, 255, 0.4);
-  --guide-accent: 168, 184, 255;
+  /* Next: plain white, near-black label, through LiquidGlassButton's own
+     --lg-lav-* hooks. */
+  --lg-lav-bg: #ffffff;
+  --lg-lav-hover: rgba(255, 255, 255, 0.86);
+  --lg-lav-fg: #111113;
+  --lg-lav-rim: rgba(255, 255, 255, 0.9);
+  --lg-lav-under: rgba(0, 0, 0, 0.18);
+  --lg-lav-drop: rgba(0, 0, 0, 0.25);
+  --lg-lav-glow: rgba(0, 0, 0, 0.3);
+  --guide-accent: 255, 255, 255;
   color: var(--gt-ink);
   -webkit-font-smoothing: antialiased;
 }
 [data-theme='light'] .guide-tip,
 [data-theme='light'] .guide-pill {
-  --gt-ink-2: var(--text-secondary);
-  --gt-ink-3: var(--text-tertiary);
+  --gt-ink: #1d1d1f;
+  --gt-ink-2: rgba(29, 29, 31, 0.7);
+  --gt-ink-3: rgba(29, 29, 31, 0.46);
+  --gt-accent: #1d1d1f;
   --gt-on-accent: #ffffff;
-  --gt-wash: rgba(79, 95, 214, 0.09);
-  --gt-hair: rgba(20, 22, 42, 0.1);
+  --gt-wash: rgba(29, 29, 31, 0.07);
+  --gt-hair: rgba(20, 22, 42, 0.08);
   --gt-shadow: 0 18px 44px -16px rgba(20, 24, 60, 0.28), 0 2px 10px rgba(20, 24, 60, 0.08);
-  --gt-ink: var(--text-primary);
-  --gt-tint: linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 40%), rgba(255, 255, 255, 0.72);
-  --gt-frost: blur(30px) saturate(1.6);
+  --gt-tint: linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 45%), rgba(255, 255, 255, 0.48);
+  --gt-frost: blur(22px) saturate(1.6);
   --cta-edge-hi: rgba(255, 255, 255, 0.95);
   --cta-edge-mid: rgba(255, 255, 255, 0.4);
   --cta-edge-lo: rgba(20, 22, 42, 0.06);
-  --gt-accent: #6D4AE8; /* --periwinkle-600, the light-mode accent */
-  --lg-lav-bg: rgba(109, 74, 232, 0.96);
-  --lg-lav-hover: rgba(122, 88, 240, 1);
-  --lg-lav-under: rgba(40, 20, 110, 0.3);
-  --lg-lav-drop: rgba(60, 30, 150, 0.18);
-  --lg-lav-glow: rgba(109, 74, 232, 0.32);
   --cta-bevel-a: rgba(255, 255, 255, 0.85);
   --cta-bevel-b: rgba(255, 255, 255, 0.5);
-  --guide-accent: 79, 95, 214;
+  --lg-lav-bg: #1d1d1f;
+  --lg-lav-hover: rgba(29, 29, 31, 0.86);
+  --lg-lav-fg: #ffffff;
+  --lg-lav-rim: rgba(255, 255, 255, 0.18);
+  --lg-lav-under: rgba(0, 0, 0, 0.2);
+  --lg-lav-drop: rgba(0, 0, 0, 0.12);
+  --lg-lav-glow: rgba(0, 0, 0, 0.25);
+  --guide-accent: 29, 29, 31;
 }
 
 .guide-tip { box-sizing: border-box; }

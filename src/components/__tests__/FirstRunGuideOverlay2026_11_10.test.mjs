@@ -51,7 +51,7 @@ test('the overlay steps are OverlayBanners in the guide tone, one line under the
 
 // Evin, 2026-11-15: "use softer periwinkle ice color as accent". No purple left
 // anywhere in the guide.
-test('the guide accent is a soft periwinkle ice, not the old purple', () => {
+test('the guide is option D: clear glass, no colour, never the old purple', () => {
   for (const f of ['src/components/guide/guide.css', 'src/components/guide/GuideCard.tsx',
     'src/components/guide/OverlayGuide.tsx', 'src/components/guide/NotesGuide.tsx', 'src/components/guide/LauncherGuide.tsx',
     'src/components/guide/SettingsGuide.tsx']) {
@@ -59,7 +59,10 @@ test('the guide accent is a soft periwinkle ice, not the old purple', () => {
     assert.ok(!/7C5CFF|124, ?92, ?255|B9A6FF|6A4FE0|3d2a9e|ece6ff/i.test(src), `${f} has no old purple`);
   }
   const css = read('src/components/guide/guide.css');
-  assert.ok(css.includes('--gt-accent: #a8b8ff;') && css.includes('--guide-ring: 168, 184, 255;'), 'periwinkle ice in dark, and the lit ring');
+  // Evin picked D of five (2026-11-15): monochrome. White in dark, near-black in light.
+  assert.ok(css.includes('--gt-accent: #ffffff;') && css.includes('--guide-ring: 255, 255, 255;'), 'white accent and ring in dark');
+  assert.ok(css.includes('--gt-accent: #1d1d1f;') && css.includes('--guide-ring: 29, 29, 31;'), 'near-black in light');
+  assert.ok(css.includes('--lg-lav-bg: #ffffff;') && css.includes('--lg-lav-fg: #111113;'), 'Next is white with a dark label');
 });
 
 // Evin, 2026-11-15: the meeting overlay and the notepad are separate steps.
@@ -92,9 +95,9 @@ test('the launcher and Settings steps are a tip that points at its control', () 
   const glassCss = read('src/components/guide/guide.css');
   assert.ok(/backdrop-filter: var\(--gt-frost\)/.test(glassCss) && (glassCss.match(/--gt-tint:/g) || []).length === 2, 'frosted, with a tint per theme');
   // Seen live: at a 62% tint a card's text read through the tip. Frosted.
-  assert.ok(/--gt-frost: blur\(26px\)/.test(glassCss), 'the tip body is frosted, not clear');
+  assert.ok(/--gt-frost: blur\(22px\)/.test(glassCss), 'the tip body is frosted, not clear');
   assert.ok(c.includes('<LiquidGlassButton variant="lavender"'), 'the action is the app glass button');
-  assert.ok(css.includes('--gt-ink: var(--text-primary);'), 'the app inks, so the theme carries');
+  assert.ok(css.includes('--gt-ink: rgba(255, 255, 255, 0.95);') && css.includes('--gt-ink: #1d1d1f;'), 'ink set per theme: white on dark glass, near-black on light');
   const lg = read('src/components/guide/LauncherGuide.tsx');
   assert.ok(lg.includes('<GuideGlass radius={22} />') && lg.includes('<LiquidGlassButton variant="lavender"'), 'the Continue pill is the same glass');
   // Evin: "stop using generic icons or logos".
