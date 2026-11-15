@@ -1,0 +1,358 @@
+/* First-run guide (docs/superpowers/specs/2026-11-10-first-run-guide-design.md).
+   The real control the guide points at wears a periwinkle-ice ring (Evin, 2026-11-15) and a soft glow on
+   the element itself: the overlay is zoomed, so a measured cut-out lands in the
+   wrong place there. */
+
+/* ── Motion ─────────────────────────────────────────────────────────────────
+   Evin, 2026-11-15: "i want apple like animations". On the transitions.dev
+   token scale (values are literals; the token each stands for is named), with
+   Apple's popover feel: a surface grows out of what it points at on a
+   critically damped spring (no overshoot), and gets out of the way faster
+   than it came.
+
+   What plays:
+    - a tip arriving ......... grows from its arrow: scale 0.96 and 6px up to
+                               rest on the iOS sheet curve, 320ms; its glass
+                               fades in layer by layer, then the title, body
+                               and footer rise in, 40ms apart
+    - a step done ............ "Done" swaps in with a 2px blur and the check
+                               draws itself
+    - a tip leaving .......... 160ms back toward its arrow and out, then the
+                               next step's surface arrives (useGuide sets
+                               data-guide-leaving on <html> for that beat)
+    - the Continue pill ...... rises 8px from the bottom edge, leaves the
+                               same way, quicker
+    - the lit control ........ a focus ring that closes in on it, as macOS
+                               draws one, breathes twice, then holds still
+
+   The glass rule (see .guide-glass): never fade or blur a box that holds the
+   frost. Chromium makes it the frost's backdrop root, and the glass shows
+   clear until the fade ends (seen live). The surface moves by transform only;
+   each glass layer, which owns its backdrop-filter, fades itself. */
+.guide-tip,
+.guide-pill {
+  --g-open: 320ms;                                  /* between --duration-fast and -slow: a popover */
+  --g-spring: cubic-bezier(0.32, 0.72, 0, 1);       /* iOS sheet: a damped spring as a curve */
+  --g-close: 160ms;                                 /* --duration-quick: close */
+  --g-out: cubic-bezier(0.22, 1, 0.36, 1);          /* --ease-smooth-out */
+  --g-stagger: 40ms;                                /* --duration-stagger */
+  transition: transform var(--g-close) var(--g-out);
+}
+
+@keyframes guideIn {
+  from { opacity: 0; transform: translateY(4px) scale(0.98); filter: blur(3px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+@keyframes guideTipGrow { from { transform: translateY(-6px) scale(0.96); } }
+@keyframes guidePillRise { from { transform: translateY(8px) scale(0.96); } }
+@keyframes guideFade { from { opacity: 0; } }
+@keyframes guideShadowIn { from { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0), 0 0 0 0 rgba(0, 0, 0, 0); } }
+/* #18 texts reveal, at a tip's scale: 4px, 2px blur. */
+@keyframes guideTextIn { from { opacity: 0; transform: translateY(4px); filter: blur(2px); } }
+@keyframes guideDraw { to { stroke-dashoffset: 0; } }
+
+/* backwards, never both: a fill that outlives the entrance keeps an effect on
+   the tip, and Chromium then stops the glass's backdrop blur there. */
+.guide-tip.guide-enter { animation: guideTipGrow var(--g-open) var(--g-spring) backwards; }
+.guide-pill.guide-enter { animation: guidePillRise var(--g-open) var(--g-spring) backwards; }
+:is(.guide-tip, .guide-pill).guide-enter :is(.guide-glass-frost, .guide-glass-lens, .glass-cta__bevel, .glass-cta__sheen, .glass-cta__edge),
+.guide-tip.guide-enter .guide-tip-arrow {
+  animation: guideFade 220ms ease-out backwards;
+}
+:is(.guide-tip, .guide-pill).guide-enter .guide-glass { animation: guideShadowIn var(--g-open) var(--g-out) backwards; }
+.guide-tip.guide-enter .guide-tip-inner > *,
+.guide-pill.guide-enter .guide-pill-row {
+  animation: guideTextIn 360ms var(--g-out) backwards;
+  animation-delay: 60ms;
+}
+.guide-tip.guide-enter .guide-tip-inner > :nth-child(2) { animation-delay: calc(60ms + var(--g-stagger)); }
+.guide-tip.guide-enter .guide-tip-inner > :nth-child(3) { animation-delay: calc(60ms + 2 * var(--g-stagger)); }
+
+/* Leaving: back toward the arrow (the pill, toward the edge), quick and quiet. */
+:is(.guide-tip, .guide-pill) :is(.guide-glass-frost, .guide-glass-lens, .glass-cta__bevel, .glass-cta__sheen, .glass-cta__edge, .guide-tip-arrow, .guide-tip-inner, .guide-pill-row) {
+  transition: opacity var(--g-close) ease-out;
+}
+:is(.guide-tip, .guide-pill) .guide-glass { transition: box-shadow var(--g-close) ease-out; }
+[data-guide-leaving] .guide-tip { transform: translateY(-4px) scale(0.97); }
+[data-guide-leaving] .guide-pill { transform: translateY(6px) scale(0.97); }
+[data-guide-leaving] :is(.guide-tip, .guide-pill) :is(.guide-glass-frost, .guide-glass-lens, .glass-cta__bevel, .glass-cta__sheen, .glass-cta__edge, .guide-tip-arrow, .guide-tip-inner, .guide-pill-row) { opacity: 0; }
+[data-guide-leaving] :is(.guide-tip, .guide-pill) .guide-glass { box-shadow: none; }
+
+/* A step done: the status swaps in, the check draws (#10 success check, quieter). */
+.guide-tip-status.is-done { animation: guideTextIn 200ms var(--g-out, ease-out) backwards; }
+:is(.guide-tip-status.is-done, .guide-done-check) svg :is(path, polyline),
+svg.guide-done-check :is(path, polyline) {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: guideDraw 320ms cubic-bezier(0.22, 1, 0.36, 1) 80ms forwards;
+}
+
+/* The notepad pill (NotesGuide.tsx): its words swap per step; it leaves with the tip's beat. */
+.guide-notes-pill { transition: opacity 160ms ease-out, transform 160ms cubic-bezier(0.22, 1, 0.36, 1); }
+.guide-notes-swap { animation: guideTextIn 300ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+[data-guide-leaving] .guide-notes-pill { opacity: 0; transform: translateY(4px) scale(0.98); }
+
+/* The lit control. No !important: an important box-shadow outranks the
+   animation, so the old pulse never played. An id-weight :not() wins over the
+   control's own class styles instead (it only ever adds a ring). */
+@keyframes guideLitIn {
+  from { box-shadow: 0 0 0 10px rgba(var(--guide-ring), 0), 0 0 0 14px rgba(var(--guide-ring), 0), 0 0 28px rgba(var(--guide-ring), 0); }
+}
+@keyframes guideLit {
+  50% { box-shadow: 0 0 0 1.5px rgb(var(--guide-ring)), 0 0 0 6px rgba(var(--guide-ring), 0.1), 0 0 22px rgba(var(--guide-ring), 0.3); }
+}
+[data-guide-lit] {
+  position: relative;
+  z-index: 2;
+  /* Option D (2026-11-15): white on a dark page, near-black on a light one. */
+  --guide-ring: 255, 255, 255;
+}
+[data-theme='light'] [data-guide-lit] { --guide-ring: 29, 29, 31; }
+[data-guide-lit]:not(#\#) {
+  box-shadow: 0 0 0 1.5px rgb(var(--guide-ring)), 0 0 0 4px rgba(var(--guide-ring), 0.16), 0 0 16px rgba(var(--guide-ring), 0.26);
+  animation:
+    guideLitIn 520ms cubic-bezier(0.22, 1, 0.36, 1),
+    guideLit 2.8s ease-in-out 520ms 2;
+}
+
+.guide-skip {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  transition: opacity 150ms ease-out;
+}
+@media (hover: hover) {
+  .guide-skip:hover { opacity: 0.75; }
+}
+
+/* The tip (GuideCard.tsx) and the Continue pill (LauncherGuide.tsx), after
+   Apple's TipKit popover, in Natively's own liquid glass (GlassSurface, the
+   meeting page's Ask bar lens; the tint per theme is set in the component).
+   Inks are the app's own tokens, so dark mode is dark glass with light ink and
+   light mode light glass with dark ink. The one accent is periwinkle ice. */
+.guide-tip,
+.guide-pill {
+  /* Evin picked option D (2026-11-15, from five drawn over real screenshots):
+     clear glass with no colour. Thin graphite glass that lets the page's own
+     colour through the blur, white ink, and the action in plain white (light
+     mode: near-black), like Apple's monochrome tips. Earlier tries, lavender
+     glass and a violet Next, were "so bad". */
+  --gt-ink: rgba(255, 255, 255, 0.95);
+  --gt-ink-2: rgba(255, 255, 255, 0.76);
+  --gt-ink-3: rgba(255, 255, 255, 0.52);
+  --gt-accent: #ffffff;
+  --gt-on-accent: #111113;
+  --gt-wash: rgba(255, 255, 255, 0.1);
+  --gt-hair: rgba(255, 255, 255, 0.06);
+  --gt-shadow: 0 18px 44px -14px rgba(0, 0, 0, 0.7), 0 2px 10px rgba(0, 0, 0, 0.3);
+  --gt-tint: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 45%), rgba(28, 28, 30, 0.4);
+  --gt-frost: blur(22px) saturate(1.5);
+  --cta-edge-hi: rgba(255, 255, 255, 0.55);
+  --cta-edge-mid: rgba(255, 255, 255, 0.14);
+  --cta-edge-lo: rgba(255, 255, 255, 0.04);
+  --cta-bevel-a: rgba(255, 255, 255, 0.16);
+  --cta-bevel-b: rgba(255, 255, 255, 0.08);
+  /* Next: plain white, near-black label, through LiquidGlassButton's own
+     --lg-lav-* hooks. */
+  --lg-lav-bg: #ffffff;
+  --lg-lav-hover: rgba(255, 255, 255, 0.86);
+  --lg-lav-fg: #111113;
+  --lg-lav-rim: rgba(255, 255, 255, 0.9);
+  --lg-lav-under: rgba(0, 0, 0, 0.18);
+  --lg-lav-drop: rgba(0, 0, 0, 0.25);
+  --lg-lav-glow: rgba(0, 0, 0, 0.3);
+  --guide-accent: 255, 255, 255;
+  color: var(--gt-ink);
+  -webkit-font-smoothing: antialiased;
+}
+[data-theme='light'] .guide-tip,
+[data-theme='light'] .guide-pill {
+  --gt-ink: #1d1d1f;
+  --gt-ink-2: rgba(29, 29, 31, 0.7);
+  --gt-ink-3: rgba(29, 29, 31, 0.46);
+  --gt-accent: #1d1d1f;
+  --gt-on-accent: #ffffff;
+  --gt-wash: rgba(29, 29, 31, 0.07);
+  --gt-hair: rgba(20, 22, 42, 0.08);
+  --gt-shadow: 0 18px 44px -16px rgba(20, 24, 60, 0.28), 0 2px 10px rgba(20, 24, 60, 0.08);
+  --gt-tint: linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 45%), rgba(255, 255, 255, 0.48);
+  --gt-frost: blur(22px) saturate(1.6);
+  --cta-edge-hi: rgba(255, 255, 255, 0.95);
+  --cta-edge-mid: rgba(255, 255, 255, 0.4);
+  --cta-edge-lo: rgba(20, 22, 42, 0.06);
+  --cta-bevel-a: rgba(255, 255, 255, 0.85);
+  --cta-bevel-b: rgba(255, 255, 255, 0.5);
+  --lg-lav-bg: #1d1d1f;
+  --lg-lav-hover: rgba(29, 29, 31, 0.86);
+  --lg-lav-fg: #ffffff;
+  --lg-lav-rim: rgba(255, 255, 255, 0.18);
+  --lg-lav-under: rgba(0, 0, 0, 0.2);
+  --lg-lav-drop: rgba(0, 0, 0, 0.12);
+  --lg-lav-glow: rgba(0, 0, 0, 0.25);
+  --guide-accent: 29, 29, 31;
+}
+
+.guide-tip { box-sizing: border-box; }
+.guide-tip-shell,
+.guide-pill-shell { position: relative; }
+.guide-tip-shell { border-radius: 18px; }
+.guide-pill-shell { border-radius: 22px; height: 44px; }
+.guide-tip-inner,
+.guide-pill-row { position: relative; z-index: 1; }
+
+/* GuideGlass: frost + tint, the refracting lens, then the 2.0 bevel, sheen
+   and lit edge (LiquidGlassCta.css), all under the content. */
+.guide-glass {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  box-shadow: var(--gt-shadow);
+}
+.guide-glass-frost {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--gt-tint);
+  -webkit-backdrop-filter: var(--gt-frost);
+  backdrop-filter: var(--gt-frost);
+}
+/* The lens brings no fill or shadow of its own: the frost is the fill. */
+.guide-glass .guide-glass-lens.glass-surface--svg,
+[data-theme='light'] .guide-glass .guide-glass-lens.glass-surface--svg,
+.guide-glass .guide-glass-lens.glass-surface--fallback {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+/* On a card of sentences the CTA's corner bloom is too bright; keep a hint. */
+.guide-glass .glass-cta__sheen { opacity: 0.35; }
+[data-theme='light'] .guide-glass .glass-cta__sheen { opacity: 0.6; }
+.guide-tip-inner { padding: 14px 14px 12px 16px; }
+
+/* The arrow: a frosted sliver of the same tint (a 9px lens would only smear). */
+.guide-tip-arrow {
+  position: absolute;
+  top: -8px;
+  width: 18px; height: 9px;
+  clip-path: path('M0 9 C5 9 7 1 9 1 C11 1 13 9 18 9 Z');
+  background: var(--gt-tint);
+  -webkit-backdrop-filter: var(--gt-frost);
+  backdrop-filter: var(--gt-frost);
+}
+
+.guide-tip-title {
+  font-size: 15px; line-height: 20px; font-weight: 600; letter-spacing: -0.012em;
+}
+.guide-tip-body {
+  margin-top: 2px; font-size: 13px; line-height: 18px; color: var(--gt-ink-2);
+}
+
+.guide-tip-close {
+  width: 24px; height: 24px; flex: 0 0 24px; margin: -3px -4px 0 0;
+  border-radius: 999px; border: 0; padding: 0; background: transparent;
+  display: grid; place-items: center; color: var(--gt-ink-3); cursor: pointer;
+  transition: background-color 150ms ease-out, color 150ms ease-out;
+}
+@media (hover: hover) {
+  .guide-tip-close:hover { background: var(--gt-wash); color: var(--gt-ink); }
+}
+.guide-tip-close:focus-visible,
+.guide-pill .guide-skip:focus-visible { outline: 2px solid var(--gt-accent); outline-offset: 2px; }
+
+/* The checklist (step 8): aligned under the title, not under the icon. */
+.guide-tip-list { margin: 10px 0 0 0; display: flex; flex-direction: column; gap: 2px; }
+.guide-tip-row {
+  display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 8px; margin: 0 -8px;
+  border-radius: 8px; font-size: 13px; color: var(--gt-ink);
+}
+.guide-tip-row.is-todo { color: var(--gt-ink-2); }
+.guide-tip-row.is-now { background: var(--gt-wash); font-weight: 600; }
+.guide-tip-hint { margin-left: auto; flex-shrink: 0; font-size: 12px; font-weight: 500; color: var(--gt-ink-3); }
+.guide-tip-row.is-now .guide-tip-hint { color: var(--gt-accent); }
+.guide-tick {
+  width: 16px; height: 16px; flex: 0 0 16px; border-radius: 999px;
+  display: grid; place-items: center; box-sizing: border-box;
+  border: 1.5px solid var(--gt-ink-3);
+}
+.is-now > .guide-tick { border-color: var(--gt-accent); }
+.is-done > .guide-tick { border: 0; background: var(--gt-accent); color: var(--gt-on-accent); }
+
+/* Footer: the quiet count, then the one action or the status. */
+.guide-tip-foot {
+  margin-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px;
+}
+.guide-tip-count { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--gt-ink-3); }
+.guide-tip-status { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 500; color: var(--gt-ink-2); }
+.guide-tip-status.is-done { gap: 5px; color: var(--gt-accent); }
+/* Waiting for the user: a soft breathing dot. */
+.guide-wait-dot {
+  width: 6px; height: 6px; border-radius: 999px; flex: 0 0 6px;
+  background: rgb(var(--guide-accent));
+  animation: guideWait 1.8s ease-in-out infinite;
+}
+@keyframes guideWait { 50% { opacity: 0.35; } }
+
+/* The step's control is off screen: one floating pill. */
+.guide-pill-row {
+  height: 100%; display: flex; align-items: center; gap: 14px; padding: 0 6px 0 16px;
+}
+.guide-pill .guide-skip { font-size: 12.5px; color: var(--gt-ink-3); }
+
+/* Stop's countdown in the first guide meeting (TopPill, NotesWindow): each
+   second swaps in (#04 text swap, 150ms, 4px, 2px blur). Locked Stop is dimmed. */
+.guide-stop-count { display: inline-block; animation: guideTextIn 150ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+[data-stop-locked], [aria-disabled='true'][data-guide='notes-stop'] { cursor: default; opacity: 0.75; }
+
+/* Reduced motion: fades stay (they say what changed), nothing moves or blurs. */
+@media (prefers-reduced-motion: reduce) {
+  [data-guide-lit]:not(#\#) { animation: none; }
+  .guide-wait-dot { animation: none; }
+  @keyframes guideIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes guideTipGrow { from { transform: none; } }
+  @keyframes guidePillRise { from { transform: none; } }
+  @keyframes guideTextIn { from { opacity: 0; } }
+  .guide-stop-count { animation: none; }
+  [data-guide-leaving] :is(.guide-tip, .guide-pill, .guide-notes-pill) { transform: none; }
+  :is(.guide-tip-status.is-done, .guide-done-check) svg :is(path, polyline),
+  svg.guide-done-check :is(path, polyline) { animation: none; stroke-dashoffset: 0; }
+}
+
+/* The overlay's guide banner (OverlayGuide.tsx): ui/OverlayBanner in a
+   soft periwinkle-ice tone. The repeated class outranks every theme scope in
+   OverlayBanner.css (the liquid-glass + light one is (0,3,0)). */
+.ov-banner.ov-banner.ov-banner[data-tone='guide'] {
+  --ovb-cta-tone: 168, 184, 255;
+  --ovb-cta-fg: #eef1ff;
+  --ovb-cta-fill: 0.3;
+  --ovb-cta-fill-hover: 0.44;
+}
+.ov-banner.ov-banner.ov-banner[data-tone='guide'] .lg-button.lg-badge.ov-banner-mark {
+  --lg-lav-fg: #c3cdff;
+}
+[data-theme='light'] .ov-banner.ov-banner.ov-banner[data-tone='guide'] {
+  --ovb-cta-tone: 120, 138, 240;
+  --ovb-cta-fg: #34428f;
+  --ovb-cta-fill: 0.22;
+  --ovb-cta-fill-hover: 0.34;
+}
+[data-theme='light'] .ov-banner.ov-banner.ov-banner[data-tone='guide'] .lg-button.lg-badge.ov-banner-mark {
+  --lg-lav-fg: #5566d0;
+}
+.ov-banner .guide-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--overlay-text-primary) 55%, transparent);
+  padding: 0 2px;
+  white-space: nowrap;
+}
+.ov-banner .guide-key-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  column-gap: 14px;
+  row-gap: 4px;
+}

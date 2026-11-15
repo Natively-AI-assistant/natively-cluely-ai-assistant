@@ -214,9 +214,11 @@ export const HelpSettings: React.FC<{
     onOpenModes?: () => void;
     /** Hands Settings over to Profile Intelligence. */
     onOpenProfile?: () => void;
+    /** Starts the first-run guide again from step 1 and closes Settings. */
+    onShowGuide?: () => void;
     /** Injectable for the harness and tests; defaults to the running OS. */
     platform?: string;
-}> = ({ onNavigate, onOpenModes, onOpenProfile, platform = currentHelpPlatform() }) => {
+}> = ({ onNavigate, onOpenModes, onOpenProfile, onShowGuide, platform = currentHelpPlatform() }) => {
     const t = useT();
     const tones = useSettingsTones();
     const { shortcuts } = useShortcuts();
@@ -239,6 +241,7 @@ export const HelpSettings: React.FC<{
             <HelpPane
                 platform={platform}
                 onNavigate={onNavigate}
+                onShowGuide={onShowGuide}
                 onOpenModes={onOpenModes}
                 onOpenProfile={onOpenProfile}
                 shortcuts={shortcuts}
@@ -277,10 +280,11 @@ const HelpPane: React.FC<{
     onNavigate?: (tab: string) => void;
     onOpenModes?: () => void;
     onOpenProfile?: () => void;
+    onShowGuide?: () => void;
     shortcuts: ShortcutConfig;
     t: (text: string) => string;
     tones: ReturnType<typeof useSettingsTones>;
-}> = ({ platform, onNavigate, onOpenModes, onOpenProfile, shortcuts, t, tones }) => {
+}> = ({ platform, onNavigate, onOpenModes, onOpenProfile, onShowGuide, shortcuts, t, tones }) => {
     const facts = getPlatformFacts(platform);
     const rowCopy = getRowCopy(platform);
     const permissions = getPermissions(platform);
@@ -1141,6 +1145,16 @@ const HelpPane: React.FC<{
                         description={t('Video · 9 min. Opens on YouTube.')}
                         control={<GoButton label={t('Watch')} onClick={openDemoVideo} />}
                     />
+                    {/* The first-run guide, again: one real meeting, step by step
+                        (components/guide). */}
+                    {onShowGuide && (
+                        <SettingsRow
+                            icon={<NativelyGlyph />}
+                            title={t('Show the guide again')}
+                            description={t('Walks you through your first meeting, one step at a time.')}
+                            control={<GoButton label={t('Start')} onClick={onShowGuide} />}
+                        />
+                    )}
                 </div>
                 <SettingsMotionReady.Provider value={setupReady}>
                 {showMeter && (

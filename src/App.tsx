@@ -19,6 +19,8 @@ import type { TrialUsage, TrialLimits } from './types/nativelyUsage';
 import { FreeTrialModal }       from "./components/trial/FreeTrialModal"
 import { usageForEndedCard }    from "./lib/trial/endedTrialUsage.mjs"
 import { OrchestratorProvider, OrchestratedToasterHost, setUserState as setOrchestratorUserState, emitOrchestratorEvent } from "./components/onboarding/OrchestratedToasterHost"
+import { LauncherGuide } from "./components/guide/LauncherGuide"
+import { dispatchGuide, useGuide } from "./components/guide/useGuide"
 // NOTE: explicit `.ts` extension is load-bearing. Vite's default resolver
 // tries `.mjs` before `.ts` (see DEFAULT_EXTENSIONS in vite/dist/node/constants.js),
 // and this directory also has an `orchestrator.mjs` companion (kept for
@@ -356,6 +358,11 @@ const App: React.FC = () => {
     setIsSettingsOpen(false);
     setLauncherRequest({ kind: 'meeting', id, seq: Date.now() });
   }, []);
+  // The first-run guide's step 8: Settings closed, the Launcher back on Home.
+  const openLauncherHome = useCallback(() => {
+    setIsSettingsOpen(false);
+    setLauncherRequest({ kind: 'home', seq: Date.now() });
+  }, []);
   // The notes window's "Open meeting" after Stop (main sends it to the launcher only).
   useEffect(() => {
     const off = window.electronAPI?.onLauncherOpenMeeting?.((id) => { if (id) openLauncherMeeting(id); });
@@ -531,6 +538,26 @@ const App: React.FC = () => {
     && !showTrialExpiredModal && !trialEndedDue && !orchState?.activeToasterId;
   const claimUpdateSlot = useCallback((force?: boolean) => (orch ? orch.claimExternalCard('update', { force }) : true), [orch]);
   const releaseUpdateSlot = useCallback(() => { orch?.releaseExternalCard('update'); }, [orch]);
+  // First-run guide (components/guide/LauncherGuide.tsx). While it runs it holds
+  // the card slot, so no other card opens over it, and the trial-ended card
+  // waits: the guide jumps to its plans step, which says the same thing in
+  // place. The card is only deferred, so it still opens if the guide ends
+  // with the trial still over.
+  const guide = useGuide();
+  const guideHoldsScreen = (isLauncherWindow || isDefault) && guide.state?.status === 'active';
+  useEffect(() => {
+    if (!orch || !guideHoldsScreen) return;
+    // The slot may be taken (an update card, or the trial-ended flag not yet
+    // cleared): keep asking each time the orchestrator changes until it is ours.
+    let held = orch.claimExternalCard('first_run_guide', { force: true });
+    const off = held ? undefined : orch.subscribe(() => {
+      if (!held) held = orch.claimExternalCard('first_run_guide', { force: true });
+    });
+    return () => { off?.(); orch.releaseExternalCard('first_run_guide'); };
+  }, [orch, guideHoldsScreen]);
+  useEffect(() => {
+    if (guideHoldsScreen && (showTrialExpiredModal || trialEndedDue)) dispatchGuide({ type: 'trial_out' });
+  }, [guideHoldsScreen, showTrialExpiredModal, trialEndedDue]);
   // ── Card scheduler inputs (toaster policy) ──────────────────────────────
   // What decides which card is relevant (keys, plan, profile, JD, trial,
   // extension, quota) is read live and re-read whenever it can have changed;
@@ -610,8 +637,8 @@ const App: React.FC = () => {
   // The Trial ended card owns the screen while it is open.
   useEffect(() => {
     if (!isLauncherWindow && !isDefault) return;
-    setOrchestratorUserState({ trialEndedOpen: showTrialExpiredModal || trialEndedDue });
-  }, [showTrialExpiredModal, trialEndedDue, isLauncherWindow, isDefault]);
+    setOrchestratorUserState({ trialEndedOpen: (showTrialExpiredModal || trialEndedDue) && !guideHoldsScreen });
+  }, [showTrialExpiredModal, trialEndedDue, guideHoldsScreen, isLauncherWindow, isDefault]);
 
   // Start the onboarding orchestrator (launcher window only). Stages are
   // registered lazily; the drain loop only runs while foreground + homepage
@@ -1567,10 +1594,14 @@ const App: React.FC = () => {
             <OrchestratedToasterHost onOpenSettings={openSettingsExclusive} onOpenProfile={openProfileExclusive} />
           </OrchestratorProvider>
         )}
+        {/* The first-run guide's launcher steps (1 and 5), after the Plans card. */}
+        {!isolateOnboarding && showWelcome === false && (isLauncherWindow || isDefault) && (
+          <LauncherGuide onOpenSettings={openSettingsExclusive} onOpenMeeting={openLauncherMeeting} onShowHome={openLauncherHome} />
+        )}
 
 
         {/* Post-trial upgrade modal — shown when trial expires */}
-        {!isolateModals && (isLauncherWindow || isDefault) && showTrialExpiredModal && (
+        {!isolateModals && (isLauncherWindow || isDefault) && showTrialExpiredModal && !guideHoldsScreen && (
           <FreeTrialModal
             // activeTrial is already cleared when the card opens: the last
             // figures seen, never zeros (src/lib/trial/endedTrialUsage.mjs).

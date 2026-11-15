@@ -102,6 +102,8 @@ export interface AppSettings {
     notesWindowState?: { x: number; y: number; width: number; height: number; open: boolean; layout?: number };
     /** What a meeting opens: the overlay or the notepad (utils/meetingSurface.ts). */
     meetingSurface?: 'overlay' | 'notepad';
+    /** The meeting surface the user had when the first-run guide started; put back when it ends. */
+    guideSurfaceBefore?: 'overlay' | 'notepad' | null;
     // Direct Assist is the opt-in, single-provider answer path. It deliberately
     // bypasses meeting retrieval and the legacy answer-orchestration pipeline.
     // Keep the persisted default OFF during rollout; the operator kill switch
@@ -334,6 +336,9 @@ export interface AppSettings {
     // still missing, and when last; it stops returning at launch after that
     // (src/lib/permissionsCardPolicy.mjs). Cleared once everything is granted.
     permissionsCard?: { dismissals: number; lastDismissedAt: number | null };
+    // The first-run guide (src/lib/onboarding/firstRunGuide.mjs): which step a
+    // new user is on, across the launcher, overlay, notes window and Settings.
+    firstRunGuide?: import('../../src/lib/onboarding/firstRunGuide.mjs').GuideState;
     // The trialStartedAt of the free trial whose profile data the expiry wipe
     // already removed, so the wipe runs once per trial however many windows or
     // launches notice the expiry (ipcHandlers.ts settleExpiredTrial).

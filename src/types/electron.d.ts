@@ -1368,6 +1368,10 @@ export interface ElectronAPI {
   /** The permissions card's closes while a permission is missing (src/lib/permissionsCardPolicy.mjs). */
   permissionsCardGet: () => Promise<{ dismissals: number; lastDismissedAt: number | null }>;
   permissionsCardRecord: (event: 'dismissed' | 'granted') => Promise<{ success: boolean; error?: string; record?: { dismissals: number; lastDismissedAt: number | null } }>;
+  /** First-run guide (src/lib/onboarding/firstRunGuide.mjs): state lives in main, every window follows it. */
+  guideGet: () => Promise<import('../lib/onboarding/firstRunGuide.mjs').GuideState>;
+  guideDispatch: (event: import('../lib/onboarding/firstRunGuide.mjs').GuideEvent) => Promise<import('../lib/onboarding/firstRunGuide.mjs').GuideState>;
+  onGuideChanged: (cb: (state: import('../lib/onboarding/firstRunGuide.mjs').GuideState) => void) => () => void;
   /** First-launch shortcut tour: taught shortcuts become practice presses. */
   onboardingSetShortcutTour: (active: boolean) => Promise<{ success: boolean }>;
   onOnboardingTourShortcut: (callback: (actionId: string) => void) => () => void;

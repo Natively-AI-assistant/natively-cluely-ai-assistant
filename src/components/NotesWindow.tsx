@@ -8,6 +8,8 @@ import { useLastTimeRecap } from './assist/useLastTimeRecap';
 import { shouldBlockFocus, shouldFireStealthTapStart } from '../lib/overlayStealthFocusGuards.mjs';
 import { editCommand, editShortcutLetter, paste } from '../lib/stealthEdit.mjs';
 import { NotesEditor, type NotesEditorHandle } from './notes/NotesEditor';
+import { useNotesGuide } from './guide/NotesGuide';
+import { useGuideStopLock } from './guide/useGuide';
 import { NotesHeading, type HeadingInfo } from './notes/NotesHeading';
 import { NotesEnhanced, type NotesEnhancedHandle } from './notes/NotesEnhanced';
 import { NoteTemplateGallery } from './notes/NoteTemplateGallery';
@@ -224,6 +226,12 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     const enhancedRef = useRef<NotesEnhancedHandle>(null);
     const answerScrollRef = useRef<HTMLDivElement>(null);
     const editorRef = useRef<NotesEditorHandle>(null);
+    // The first-run guide's notepad step (guide/NotesGuide.tsx).
+    const notesGuide = useNotesGuide();
+    const stopLock = useGuideStopLock();
+    // runRecipe is declared before the guide's callbacks settle; read the latest.
+    const guideRecipeRunRef = useRef(notesGuide.onRecipeRun);
+    guideRecipeRunRef.current = notesGuide.onRecipeRun;
     const askRef = useRef<HTMLInputElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
     const transcriptRef = useRef<HTMLDivElement>(null);
@@ -466,12 +474,13 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     const commit = useCallback((next: string) => {
         setText(next);
         window.electronAPI?.liveNotesSetText?.(next);
+        notesGuide.onTyped(next);
         const now = Date.now();
         if (phase === 'live' && now - lastTypingPing.current > TYPING_PING_MS) {
             lastTypingPing.current = now;
             window.electronAPI?.meetingAutoStopTyping?.();
         }
-    }, [phase]);
+    }, [phase, notesGuide.onTyped]);
 
     // The answer streams to this window only (the handler replies to its sender).
     useEffect(() => {
@@ -570,6 +579,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     const runRecipe = useCallback((recipe: NoteRecipe, extra = '') => {
         if (turnsRef.current.some((t) => t.status === 'streaming')) return;
         npTrack('recipe', recipe.id);
+        guideRecipeRunRef.current();
         setAllRecipes(false);
         setAsk('');
         setRecentRecipes(rememberRecipe(recipe.id));
@@ -946,6 +956,9 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     // After Stop the notepad keeps Ask (Granola's chat on a finished note), without the listening pill.
     const askBar = phase === 'live' || (phase === 'ended' && !!meetingId && !preview);
     const askOpen = askBar && askEngaged;
+    // First-run guide step 10: Ask opened. Also when the step arrives with Ask
+    // already open (opened early, or during step 9's done hold).
+    useEffect(() => { if (askOpen && phase === 'live') notesGuide.onAskOpened(); }, [askOpen, phase, notesGuide.live, notesGuide.onAskOpened]);
     const bars = useMemo(() => (level === null || paused ? null : listeningBarHeights(level * 3.2)), [level, paused]);
     // The floating panel: what fills it, kept on through the closing spring, and how tall.
     const panelKind: 'transcript' | 'ask' | null = phase === 'live' ? (showTranscript ? 'transcript' : askOpen ? 'ask' : null) : askOpen ? 'ask' : null;
@@ -1056,9 +1069,12 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
             )}
             <button
                 type="button"
-                aria-label="Stop transcript"
-                title="Stop transcript"
-                onClick={() => { npTrack('stopped'); void window.electronAPI?.endMeeting?.(); }}
+                aria-label={stopLock.seconds > 0 ? stopLock.label : 'Stop transcript'}
+                title={stopLock.seconds > 0 ? stopLock.label : 'Stop transcript'}
+                aria-disabled={stopLock.seconds > 0 || undefined}
+                data-guide="notes-stop"
+                // The guide's first meeting holds Stop 15 s (useGuideStopLock; main refuses it too).
+                onClick={() => { if (stopLock.seconds > 0) return; npTrack('stopped'); void window.electronAPI?.endMeeting?.(); }}
                 // The mic's mirror: a 24px round end (concentric with the pill's 28px end). At
                 // 34.5px wide that curve took most of the button and hovered as a lopsided blob,
                 // so Stop takes 2.5px from the mic's right padding (37px): the pill keeps its
@@ -1068,7 +1084,11 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                 className="h-full shrink-0 flex items-center pl-[8px] pr-[13px] rounded-l-lg rounded-r-3xl transition-colors duration-75 np-wash"
                 style={ink('--np-stop')}
             >
-                <span className="w-4 h-4 flex items-center justify-center"><span className="w-3 h-3 rounded-[2.6px] bg-current" /></span>
+                <span className="w-4 h-4 flex items-center justify-center">
+                    {stopLock.seconds > 0
+                        ? <span key={stopLock.seconds} className="guide-stop-count text-[11px] font-semibold tabular-nums leading-none">{stopLock.seconds}</span>
+                        : <span className="w-3 h-3 rounded-[2.6px] bg-current" />}
+                </span>
             </button>
         </>
     );
@@ -1368,6 +1388,9 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                                 </button>
                             </div>
                         )}
+                        {/* The first-run guide's notepad steps, 9 to 12 (guide/NotesGuide.tsx),
+                            just above the Stop button; the auto-stop notice wins. */}
+                        {phase === 'live' && stopsAt === null && notesGuide.node}
                         {phase === 'live' && problem && stopsAt === null && (
                             <p className="px-2 text-center text-balance text-[12px] leading-4" style={ink('--np-ink-secondary')} role="status">{problem}</p>
                         )}
@@ -1597,6 +1620,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                                     ) : contentKind === 'ask' ? (
                                         /* Granola's recipe row: two recipes, All recipes at the end, 24px chips of 12px. */
                                         <motion.div
+                                            data-guide="notes-recipes"
                                             className="relative px-4 pt-[7px] pb-[3px] flex items-center gap-0.5"
                                             aria-label="Recipes"
                                             initial={{ opacity: 0, y: 4 }}
@@ -1691,6 +1715,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                                                 )}
                                             </AnimatePresence>
                                             <motion.form
+                                                data-guide="notes-ask"
                                                 className={`np-ask ${askOpen ? '' : 'np-elevated np-glow '}[grid-area:1/1] w-full min-w-0 h-14 flex items-center rounded-[28px]`}
                                                 inert={showTranscript}
                                                 aria-hidden={showTranscript || undefined}

@@ -5,6 +5,7 @@ export type OverlayBannerId =
   | 'audio-stuck'
   | 'stt-warning'
   | 'ambient-mic'
+  | 'guide'
   | 'trial'
   | 'auto-answer-access'
   | 'auto-stop'

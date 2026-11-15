@@ -1521,6 +1521,7 @@ import { decideOpenAtLoginDefault } from './utils/openAtLoginDefault'
 import { shouldOpenExternally } from './utils/windowOpenPolicy'
 import { ensureNativeModuleAbi } from './utils/nativeModuleGuard'
 import { getPackMeetingClock } from './services/packs/packClockWiring'
+import { applyGuideEvent, guideScreenshotTaken } from './services/firstRunGuideStore'
 
 // Opt-in only: this trace writes allowlisted process metadata and IPC byte estimates
 // for a copied-profile native OOM investigation. It is inert unless explicitly enabled.
@@ -4142,6 +4143,8 @@ export class AppState {
 
   /** The surface the running meeting started on (startMeeting). */
   private meetingSurface: MeetingSurface = DEFAULT_MEETING_SURFACE;
+  /** Where the running meeting opened (the first-run guide draws its steps there). */
+  public getMeetingSurface(): MeetingSurface { return this.meetingSurface; }
 
   /**
    * The launcher's "Meeting ongoing" (set-window-mode 'overlay' mid-meeting):
@@ -8772,6 +8775,8 @@ export class AppState {
         const meetingId = stopResult?.meetingId ?? null;
         // The notes window says its notes are going into the meeting notes.
         try { this.liveNotes.meetingEnded(meetingId); } catch { /* the window keeps its text */ }
+        // The first-run guide's step 5 opens exactly this meeting (services/firstRunGuideStore.ts).
+        try { applyGuideEvent({ type: 'meeting_saved', meetingId }); } catch (e) { console.warn('[Main] guide not told about the saved meeting:', (e as Error)?.message); }
 
         // 5. RAG cleanup — same logic as before, just inside the BG IIFE.
         if (meetingId) {
@@ -9631,6 +9636,7 @@ export class AppState {
   private async captureScreenAndProcess(): Promise<void> {
     const screenshotPath = await this.takeScreenshot(false);
     const preview = await this.getImagePreview(screenshotPath);
+    guideScreenshotTaken();
     // Ensure the window is visible so the user can see the response without stealing focus
     this.showMainWindow(true);
     // win.focus() can cause macOS to re-activate the app. Re-hide the dock

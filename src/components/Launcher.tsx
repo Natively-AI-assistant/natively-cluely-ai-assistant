@@ -57,6 +57,8 @@ interface Meeting {
  */
 export type LauncherRequest =
     | { kind: 'search'; seq: number }
+    // The first-run guide's step 8 (Start Natively again): back to Home.
+    | { kind: 'home'; seq: number }
     | { kind: 'meeting'; id: string; seq: number }
     // The calendar reminder's "Running late" (main: assist/reminderDraftWindow):
     // back to the list, with that event's draft open.
@@ -470,6 +472,11 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
         if (!request || request.seq === handledRequest.current) return;
         handledRequest.current = request.seq;
         if (request.kind === 'search') setSearchOpenRequest(request.seq);
+        else if (request.kind === 'home') {
+            setSelectedMeeting(null);
+            setSelectedMomentMs(null);
+            setIsGlobalChatOpen(false);
+        }
         else if (request.kind === 'reminder-draft') {
             setSelectedMeeting(null);
             setSelectedMomentMs(null);
@@ -1124,6 +1131,7 @@ const Launcher: React.FC<LauncherProps> = ({ request, onStartMeeting, onOpenSett
                                                     analytics.trackCommandExecuted('start_natively_cta');
                                                 }
                                             }}
+                                            data-guide="start"
                                             className="launcher-cta relative overflow-hidden text-white px-6 py-3 rounded-full font-celeb font-medium tracking-normal flex items-center justify-center gap-3 backdrop-blur-xl shrink-0"
                                             // Hover, press and the shadow all live in LauncherCta.css. Only the
                                             // bloom colour is set here: no inline `transition`, which would

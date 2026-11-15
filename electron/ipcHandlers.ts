@@ -13,6 +13,9 @@ import { openInNotepadBlockReason, resumeBlockReason } from './services/meeting/
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import { resolveMacScreenStatus } from '../src/lib/permissionAttentionPolicy.mjs';
 import { applyPermissionsCardEvent, normalizePermissionsCardRecord } from '../src/lib/permissionsCardPolicy.mjs';
+import { guideFactsFromSources } from '../src/lib/onboarding/firstRunGuide.mjs';
+import { configureGuideStore, dispatchGuideFromWindow, getGuideState, guideScreenshotTaken, guideStopLockedMs, guideSurfaceSet } from './services/firstRunGuideStore';
+import { DEMO_VIDEO_URL, demoFilmOpenOptions } from '../src/lib/demoVideoUrl';
 import { hasOwnAiKey, resolveExpiredTrial } from '../src/lib/trialPolicy.mjs';
 import { CARDS, OUTCOMES } from '../src/lib/cards/cardPolicy.mjs';
 import { TRIAL_CAMPAIGN, TRIAL_PROMO_ID, runTrialCampaignReset } from '../src/lib/trialCampaign.mjs';
@@ -1735,6 +1738,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       (pillWin && !pillWin.isDestroyed() && pillWin.webContents.id === event.sender.id) ||
       (toggleWin && !toggleWin.isDestroyed() && toggleWin.webContents.id === event.sender.id);
     if (!fromAux || !action?.type) return;
+    if (action.type === 'end-meeting' && guideStopLockedMs() > 0) {
+      console.log('[Guide] Stop from the pill held: the first meeting is still in its 15 s');
+      return;
+    }
     await routeOverlayUiAction(action, {
       endMeeting: () => appState.endMeeting(),
       forwardToOverlay: (a) => helper.forwardOverlayUiAction(a),
@@ -1809,6 +1816,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const preview = await appState.getImagePreview(screenshotPath);
       // Make the upload JPEG now, while the user types, not when they send.
       prewarmPreparedJpeg(screenshotPath);
+      guideScreenshotTaken();
       return { path: screenshotPath, preview };
     } catch (error) {
       // console.error("Error taking screenshot:", error)
@@ -1846,6 +1854,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const screenshotPath = await appState.takeSelectiveScreenshot();
       const preview = await appState.getImagePreview(screenshotPath);
       prewarmPreparedJpeg(screenshotPath);
+      guideScreenshotTaken();
       return { path: screenshotPath, preview };
     } catch (error) {
       // EC-04 fix: cast unknown error to Error before accessing .message
@@ -9442,6 +9451,61 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true, record };
   });
 
+  // First-run guide (docs/superpowers/specs/2026-11-10-first-run-guide-design.md).
+  // Main owns the state so the launcher, overlay, notes window and Settings stay
+  // on one step; each window reports what it saw and the reducer decides. An
+  // event that changes nothing (two windows seeing the same meeting stop) is
+  // neither saved nor broadcast. Main supplies what a window cannot know
+  // (services/firstRunGuideStore.ts): a running trial's placeholder Natively
+  // key is not a purchase, and whether and where a meeting runs comes from AppState.
+  configureGuideStore({
+    meetingActive: () => appState.getIsMeetingActive(),
+    factsProvider: () => {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      return guideFactsFromSources({
+        nativelyKey: cm.getNativelyApiKey(),
+        trialSentinel: TRIAL_SENTINEL_KEY,
+        licensed: isLicensed(),
+        hasOwnAiKey: hasOwnAiKey(cm.getAllCredentials(), { codexReady: codexRouteReady() }),
+      });
+    },
+    meetingSurface: () => appState.getMeetingSurface(),
+    // Two meetings (Evin, 2026-11-15): the first is the overlay's, the second
+    // the notepad's, picked by the user in Settings › Overlay at step 7. The
+    // guide sets the overlay as it starts and, when it ends, puts back what
+    // the user had before ("Put the overlay back": the overlay, for a new user).
+    onGuideStart: () => {
+      const sm = SettingsManager.getInstance();
+      if (sm.get('guideSurfaceBefore') == null) sm.set('guideSurfaceBefore', normalizeMeetingSurface(sm.get('meetingSurface')));
+      sm.set('meetingSurface', 'overlay');
+    },
+    onGuideEnd: () => {
+      const sm = SettingsManager.getInstance();
+      sm.set('meetingSurface', normalizeMeetingSurface(sm.get('guideSurfaceBefore') ?? 'overlay'));
+      sm.set('guideSurfaceBefore', null);
+    },
+    // Step 7 with the notepad already chosen: nothing to switch, go on.
+    onEnterStep: (step) => {
+      if (step === 'surface' && normalizeMeetingSurface(SettingsManager.getInstance().get('meetingSurface')) === 'notepad') guideSurfaceSet('notepad');
+    },
+    // Step 2: the demo film plays in the user's browser (Evin, 2026-11-15), so
+    // there is a voice asking questions for the meeting to hear and answer. The
+    // browser, not the app: the app's own sound is left out of system-audio
+    // capture on macOS (sck.rs excludes the current process), and a visible,
+    // user-watched view is the only kind YouTube counts. shell.openExternal is
+    // the same on macOS and Windows; on macOS the browser stays behind
+    // (demoFilmOpenOptions). A browser that blocks autoplay: the overlay asks
+    // the user to press play (OverlayGuide, DEMO_FILM_QUIET_MS).
+    onFirstMeetingStarted: () => {
+      shell.openExternal(DEMO_VIDEO_URL, demoFilmOpenOptions(process.platform)).catch((e) => console.warn('[Guide] demo film did not open:', e?.message));
+    },
+  });
+  safeHandle('guide:get', async () => getGuideState());
+  // Validated against GUIDE_EVENT_TYPES; then reduced, saved and broadcast
+  // ('guide:changed') to every window.
+  safeHandle('guide:dispatch', async (_, event: unknown) => dispatchGuideFromWindow(event));
+
   // First-launch shortcut tour: route the shortcuts it teaches to the calling
   // renderer as practice presses (AppState.setShortcutTour). Bound to the
   // sender, and dropped automatically when that renderer reloads or dies.
@@ -16072,6 +16136,12 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('end-meeting', async () => {
+    // The first guide meeting's Stop waits out its 15 s (guideStopLockedMs).
+    const lockedMs = guideStopLockedMs();
+    if (lockedMs > 0) {
+      console.log(`[Guide] Stop held: ${Math.ceil(lockedMs / 1000)} s of the first meeting left`);
+      return { success: false, code: 'guide_stop_locked', lockedMs };
+    }
     try {
       await appState.endMeeting();
       return { success: true };
@@ -17857,6 +17927,8 @@ export function initializeIpcHandlers(appState: AppState): void {
     const before = normalizeMeetingSurface(SettingsManager.getInstance().get('meetingSurface'));
     if (!SettingsManager.getInstance().set('meetingSurface', surface)) return { success: false, error: 'settings_store_degraded' };
     try { funnelTelemetry.meetingSurfaceSet(before, surface); } catch { /* analytics only */ }
+    // First-run guide step 7 asks for the notepad.
+    guideSurfaceSet(surface);
     return { success: true };
   });
   safeHandle('live-notes:get-state', async () => appState.getLiveNotes().getState());
