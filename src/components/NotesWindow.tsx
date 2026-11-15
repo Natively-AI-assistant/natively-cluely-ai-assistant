@@ -9,6 +9,7 @@ import { shouldBlockFocus, shouldFireStealthTapStart } from '../lib/overlaySteal
 import { editCommand, editShortcutLetter, paste } from '../lib/stealthEdit.mjs';
 import { NotesEditor, type NotesEditorHandle } from './notes/NotesEditor';
 import { useNotesGuide } from './guide/NotesGuide';
+import { useGuideStopLock } from './guide/useGuide';
 import { NotesHeading, type HeadingInfo } from './notes/NotesHeading';
 import { NotesEnhanced, type NotesEnhancedHandle } from './notes/NotesEnhanced';
 import { NoteTemplateGallery } from './notes/NoteTemplateGallery';
@@ -227,6 +228,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     const editorRef = useRef<NotesEditorHandle>(null);
     // The first-run guide's notepad step (guide/NotesGuide.tsx).
     const notesGuide = useNotesGuide();
+    const stopLock = useGuideStopLock();
     // runRecipe is declared before the guide's callbacks settle; read the latest.
     const guideRecipeRunRef = useRef(notesGuide.onRecipeRun);
     guideRecipeRunRef.current = notesGuide.onRecipeRun;
@@ -1067,10 +1069,12 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
             )}
             <button
                 type="button"
-                aria-label="Stop transcript"
-                title="Stop transcript"
+                aria-label={stopLock.seconds > 0 ? stopLock.label : 'Stop transcript'}
+                title={stopLock.seconds > 0 ? stopLock.label : 'Stop transcript'}
+                aria-disabled={stopLock.seconds > 0 || undefined}
                 data-guide="notes-stop"
-                onClick={() => { npTrack('stopped'); void window.electronAPI?.endMeeting?.(); }}
+                // The guide's first meeting holds Stop 15 s (useGuideStopLock; main refuses it too).
+                onClick={() => { if (stopLock.seconds > 0) return; npTrack('stopped'); void window.electronAPI?.endMeeting?.(); }}
                 // The mic's mirror: a 24px round end (concentric with the pill's 28px end). At
                 // 34.5px wide that curve took most of the button and hovered as a lopsided blob,
                 // so Stop takes 2.5px from the mic's right padding (37px): the pill keeps its
@@ -1080,7 +1084,11 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                 className="h-full shrink-0 flex items-center pl-[8px] pr-[13px] rounded-l-lg rounded-r-3xl transition-colors duration-75 np-wash"
                 style={ink('--np-stop')}
             >
-                <span className="w-4 h-4 flex items-center justify-center"><span className="w-3 h-3 rounded-[2.6px] bg-current" /></span>
+                <span className="w-4 h-4 flex items-center justify-center">
+                    {stopLock.seconds > 0
+                        ? <span key={stopLock.seconds} className="guide-stop-count text-[11px] font-semibold tabular-nums leading-none">{stopLock.seconds}</span>
+                        : <span className="w-3 h-3 rounded-[2.6px] bg-current" />}
+                </span>
             </button>
         </>
     );

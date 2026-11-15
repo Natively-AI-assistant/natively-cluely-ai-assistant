@@ -83,7 +83,7 @@ test("laid out like Granola's: neutral with pastel accents, serif title, Today +
   assert.match(page, /liveNotesMeetingInfo/);
   assert.match(read('src/components/notes/NotesEditor.tsx'), /Placeholder\.configure\(\{ placeholder: 'Write notes' \}\)/);
   assert.match(page, /notes-listening-bars/);
-  assert.match(page, /aria-label="Stop transcript"[\s\S]{0,200}endMeeting/);
+  assert.match(page, /aria-label=\{[^}]*'Stop transcript'\}[\s\S]{0,500}endMeeting/);
   // Pause moved into the ⋯ menu; a paused pill reads Resume.
   assert.match(page, /role="menu"[\s\S]*togglePause\(\)[\s\S]*Pause transcription/);
   assert.match(page, /\{paused && \([\s\S]{0,200}onClick=\{togglePause\}[\s\S]{0,200}Resume/);

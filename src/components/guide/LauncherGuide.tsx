@@ -146,8 +146,8 @@ export const LauncherGuide: React.FC<Props> = ({ onOpenSettings, onOpenMeeting, 
         stepId="start"
         title={tr('Start your first meeting.')}
         body={coverage === 'plan'
-          ? tr('Your plan covers it. Join your call first, or start now.')
-          : tr('Your free trial covers it. Join your call first, or start now.')}
+          ? tr('Your plan covers it. Start now: the Natively demo plays in your browser so you can watch it work.')
+          : tr('Your free trial covers it. Start now: the Natively demo plays in your browser so you can watch it work.')}
         waiting={tr('Waiting for you')}
         done={justDone}
         onSkip={skip}

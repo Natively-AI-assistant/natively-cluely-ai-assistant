@@ -16,7 +16,12 @@ export interface GuideState {
   updatedAt: number | null;
   /** The meeting main saved when a guide meeting ended (its notes step opens it). */
   endedMeetingId: string | null;
+  /** Until when the first guide meeting's Stop is locked (epoch ms; guideStopLockLeft). */
+  stopLockUntil: number | null;
 }
+
+export declare const GUIDE_STOP_LOCK_MS: number;
+export declare function guideStopLockLeft(state: GuideState | null | undefined, now: number): number;
 
 export interface GuideFacts {
   hasOwnAiKey: boolean;

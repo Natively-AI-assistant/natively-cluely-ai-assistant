@@ -14,7 +14,8 @@ import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import { resolveMacScreenStatus } from '../src/lib/permissionAttentionPolicy.mjs';
 import { applyPermissionsCardEvent, normalizePermissionsCardRecord } from '../src/lib/permissionsCardPolicy.mjs';
 import { guideFactsFromSources } from '../src/lib/onboarding/firstRunGuide.mjs';
-import { configureGuideStore, dispatchGuideFromWindow, getGuideState, guideScreenshotTaken, guideSurfaceSet } from './services/firstRunGuideStore';
+import { configureGuideStore, dispatchGuideFromWindow, getGuideState, guideScreenshotTaken, guideStopLockedMs, guideSurfaceSet } from './services/firstRunGuideStore';
+import { DEMO_VIDEO_URL } from '../src/lib/demoVideoUrl';
 import { hasOwnAiKey, resolveExpiredTrial } from '../src/lib/trialPolicy.mjs';
 import { CARDS, OUTCOMES } from '../src/lib/cards/cardPolicy.mjs';
 import { TRIAL_CAMPAIGN, TRIAL_PROMO_ID, runTrialCampaignReset } from '../src/lib/trialCampaign.mjs';
@@ -1737,6 +1738,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       (pillWin && !pillWin.isDestroyed() && pillWin.webContents.id === event.sender.id) ||
       (toggleWin && !toggleWin.isDestroyed() && toggleWin.webContents.id === event.sender.id);
     if (!fromAux || !action?.type) return;
+    if (action.type === 'end-meeting' && guideStopLockedMs() > 0) {
+      console.log('[Guide] Stop from the pill held: the first meeting is still in its 15 s');
+      return;
+    }
     await routeOverlayUiAction(action, {
       endMeeting: () => appState.endMeeting(),
       forwardToOverlay: (a) => helper.forwardOverlayUiAction(a),
@@ -9484,6 +9489,15 @@ export function initializeIpcHandlers(appState: AppState): void {
     onEnterStep: (step) => {
       if (step === 'surface' && normalizeMeetingSurface(SettingsManager.getInstance().get('meetingSurface')) === 'notepad') guideSurfaceSet('notepad');
     },
+    // Step 2: the demo film plays in the user's browser (Evin, 2026-11-15), so
+    // there is a voice asking questions for the meeting to hear and answer. The
+    // browser, not the app: the app's own sound is left out of system-audio
+    // capture on macOS (sck.rs excludes the current process), and a visible,
+    // user-watched view is the only kind YouTube counts. shell.openExternal is
+    // the same on macOS and Windows.
+    onFirstMeetingStarted: () => {
+      shell.openExternal(DEMO_VIDEO_URL).catch((e) => console.warn('[Guide] demo film did not open:', e?.message));
+    },
   });
   safeHandle('guide:get', async () => getGuideState());
   // Validated against GUIDE_EVENT_TYPES; then reduced, saved and broadcast
@@ -16120,6 +16134,12 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('end-meeting', async () => {
+    // The first guide meeting's Stop waits out its 15 s (guideStopLockedMs).
+    const lockedMs = guideStopLockedMs();
+    if (lockedMs > 0) {
+      console.log(`[Guide] Stop held: ${Math.ceil(lockedMs / 1000)} s of the first meeting left`);
+      return { success: false, code: 'guide_stop_locked', lockedMs };
+    }
     try {
       await appState.endMeeting();
       return { success: true };

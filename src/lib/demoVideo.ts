@@ -7,7 +7,8 @@
 // through the renderer and would play inside a window that can be hidden from
 // screen share. The thumbnail ships in src/assets so nothing loads from YouTube
 // until the user asks for the video.
-export const DEMO_VIDEO_URL = 'https://youtu.be/Ha_ZiwG5Kwc';
+import { DEMO_VIDEO_URL } from './demoVideoUrl';
+export { DEMO_VIDEO_URL };
 
 /**
  * Open the film from a link outside its card (Welcome, Setup & Help). Once it

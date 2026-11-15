@@ -8,6 +8,7 @@ import { BrowserWindow } from 'electron';
 import { SettingsManager } from './SettingsManager';
 import {
   GUIDE_EVENT_TYPES,
+  guideStopLockLeft,
   normalizeGuideState,
   reconcileGuide,
   reduceGuide,
@@ -27,6 +28,8 @@ type GuideStoreDeps = {
   onGuideStart?: () => void;
   /** The guide ended (finished or skipped): the overlay goes back (Evin, 2026-11-15). */
   onGuideEnd?: () => void;
+  /** The guide's first meeting started (step 1 -> 2): the demo film opens. */
+  onFirstMeetingStarted?: () => void;
 };
 
 let deps: GuideStoreDeps = {
@@ -112,11 +115,26 @@ export function applyGuideEvent(event: GuideEvent | { type: 'surface_notepad' })
   try {
     if (began) deps.onGuideStart?.();
     if (ended) deps.onGuideEnd?.();
+    if (event.type === 'meeting_started' && current.step === 'start' && next.status === 'active') deps.onFirstMeetingStarted?.();
     if (next.status === 'active' && next.step !== current.step) deps.onEnterStep?.(next.step);
   } catch (e) {
     console.warn('[Guide] step hand-off failed:', (e as Error)?.message);
   }
   return saved;
+}
+
+/**
+ * How long the user's Stop is still locked, in ms (0 = it works). The first
+ * guide meeting's 15 s (GUIDE_STOP_LOCK_MS), while the demo film plays. Only
+ * the user's Stop asks this: auto-stop, quit and the app's own teardown never
+ * do. Never throws: an unreadable guide never locks Stop.
+ */
+export function guideStopLockedMs(): number {
+  try {
+    return guideStopLockLeft(read(Date.now()).state, Date.now());
+  } catch {
+    return 0;
+  }
 }
 
 /**

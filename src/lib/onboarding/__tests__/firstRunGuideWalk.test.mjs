@@ -110,3 +110,43 @@ test('a late save never ends the meeting that is running, and a late meeting-1 s
   const s7 = at('start2');
   assert.equal(reduceGuide(s7, { type: 'meeting_saved', meetingId: 'm-1' }, NOW), s7, 'not once the notepad is picked');
 });
+
+// Evin, 2026-11-15: the first meeting plays the demo film and Stop waits 15 s.
+import { GUIDE_STOP_LOCK_MS, guideStopLockLeft, normalizeGuideState } from '../firstRunGuide.mjs';
+import { readFileSync } from 'node:fs';
+
+test('the first guide meeting locks Stop for 15 s; the second never does; skipping unlocks', () => {
+  const m1 = reduceGuide(at('start'), { type: 'meeting_started', surface: 'overlay' }, NOW);
+  assert.equal(m1.stopLockUntil, NOW + GUIDE_STOP_LOCK_MS);
+  assert.equal(guideStopLockLeft(m1, NOW), 15_000);
+  assert.equal(guideStopLockLeft(m1, NOW + 14_999), 1);
+  assert.equal(guideStopLockLeft(m1, NOW + 15_000), 0, 'unlocked on time');
+  const n1 = reduceGuide(at('start'), { type: 'meeting_started', surface: 'notepad' }, NOW);
+  assert.equal(guideStopLockLeft(n1, NOW), 15_000, 'a first meeting in the notepad is locked too');
+  const m2 = reduceGuide(at('start2', { stopLockUntil: NOW + GUIDE_STOP_LOCK_MS }), { type: 'meeting_started' }, NOW);
+  assert.equal(guideStopLockLeft(m2, NOW), 0, 'meeting 2 is never locked');
+  assert.equal(guideStopLockLeft(reduceGuide(m1, { type: 'skip' }, NOW), NOW), 0, 'skip unlocks at once');
+  assert.equal(guideStopLockLeft({ ...m1, stopLockUntil: NOW + 10 * 60_000 }, NOW), GUIDE_STOP_LOCK_MS, 'never longer than 15 s');
+  assert.equal(guideStopLockLeft(null, NOW), 0);
+});
+
+test('a stored lock survives a restart, and a bad one is dropped without losing the guide', () => {
+  const m1 = reduceGuide(at('start'), { type: 'meeting_started' }, NOW);
+  assert.equal(normalizeGuideState(m1, NOW).stopLockUntil, m1.stopLockUntil);
+  const bad = normalizeGuideState({ ...m1, stopLockUntil: 'soon' }, NOW);
+  assert.equal(bad.stopLockUntil, null); assert.equal(bad.step, 'overlay');
+  assert.equal(normalizeGuideState({ ...m1, stopLockUntil: undefined }, NOW).stopLockUntil, null, 'saved before the field');
+});
+
+test('main refuses the user\'s Stop while locked, opens the film at the first meeting, and never locks auto-stop', () => {
+  const ipc = readFileSync(new URL('../../../../electron/ipcHandlers.ts', import.meta.url), 'utf8');
+  const end = ipc.slice(ipc.indexOf("safeHandle('end-meeting'"), ipc.indexOf("safeHandle('end-meeting'") + 600);
+  assert.ok(end.indexOf('guideStopLockedMs()') > -1 && end.indexOf('guideStopLockedMs()') < end.indexOf('appState.endMeeting()'), 'end-meeting checks the lock first');
+  const pill = ipc.slice(ipc.indexOf("safeHandle('overlay-ui-action'"), ipc.indexOf("safeHandle('overlay-ui-action'") + 1200);
+  assert.ok(/action\.type === 'end-meeting' && guideStopLockedMs\(\) > 0/.test(pill), 'the pill\'s Stop too');
+  assert.ok(ipc.includes('onFirstMeetingStarted') && ipc.includes('shell.openExternal(DEMO_VIDEO_URL)'), 'the film opens in the browser');
+  const main = readFileSync(new URL('../../../../electron/main.ts', import.meta.url), 'utf8');
+  assert.ok(!main.includes('guideStopLocked'), 'auto-stop, quit and teardown never ask the lock');
+  const store = readFileSync(new URL('../../../../electron/services/firstRunGuideStore.ts', import.meta.url), 'utf8');
+  assert.ok(store.includes("event.type === 'meeting_started' && current.step === 'start' && next.status === 'active'"), 'only the first meeting opens it');
+});

@@ -132,8 +132,11 @@ const ROWS: Record<string, Row> = {
   // ── First-run guide (components/guide) ──
   'Your first meeting': ['Ваша первая встреча', '你的第一场会议', 'はじめての会議', 'Tu primera reunión'],
   'Start your first meeting.': ['Начните свою первую встречу.', '开始你的第一场会议。', 'はじめての会議を開始しましょう。', 'Empieza tu primera reunión.'],
-  'Your free trial covers it. Join your call first, or start now.': ['Бесплатный пробный период это покрывает. Сначала подключитесь к звонку или начните сейчас.', '免费试用已包含。先加入通话，或现在就开始。', '無料トライアルで使えます。先に通話に参加するか、今すぐ開始してください。', 'Tu prueba gratuita lo cubre. Únete primero a tu llamada o empieza ahora.'],
-  'Your plan covers it. Join your call first, or start now.': ['Ваш тариф это покрывает. Сначала подключитесь к звонку или начните сейчас.', '你的套餐已包含。先加入通话，或现在就开始。', 'ご利用のプランで使えます。先に通話に参加するか、今すぐ開始してください。', 'Tu plan lo cubre. Únete primero a tu llamada o empieza ahora.'],
+  // Step 1: the first meeting plays the demo film in the browser (Evin, 2026-11-15).
+  'Your free trial covers it. Start now: the Natively demo plays in your browser so you can watch it work.': ['Бесплатный пробный период это покрывает. Начните сейчас: демо Natively откроется в браузере, и вы увидите, как он работает.', '免费试用已包含。现在就开始：Natively 演示会在浏览器中播放，让你看看它如何工作。', '無料トライアルで使えます。今すぐ開始すると、Natively のデモがブラウザで再生され、動く様子を見られます。', 'Tu prueba gratuita lo cubre. Empieza ahora: la demo de Natively se reproduce en tu navegador para que veas cómo funciona.'],
+  'Your plan covers it. Start now: the Natively demo plays in your browser so you can watch it work.': ['Ваш тариф это покрывает. Начните сейчас: демо Natively откроется в браузере, и вы увидите, как он работает.', '你的套餐已包含。现在就开始：Natively 演示会在浏览器中播放，让你看看它如何工作。', 'ご利用のプランで使えます。今すぐ開始すると、Natively のデモがブラウザで再生され、動く様子を見られます。', 'Tu plan lo cubre. Empieza ahora: la demo de Natively se reproduce en tu navegador para que veas cómo funciona.'],
+  // The first meeting's Stop, locked for 15 s while the demo plays (TopPill, NotesWindow).
+  'Stop unlocks in {n} s': ['Остановить можно через {n} с', '{n} 秒后可停止', '{n} 秒後に停止できます', 'Podrás detener en {n} s'],
   'Waiting for you': ['Ждём вас', '等你操作', '操作を待っています', 'Esperándote'],
   'Skip guide': ['Пропустить гид', '跳过引导', 'ガイドをスキップ', 'Saltar guía'],
   '{n} of {total}': ['{n} из {total}', '{n}/{total}', '{n}/{total}', '{n} de {total}'],

@@ -37,6 +37,18 @@ export const GUIDE_STEP_NUMBER = Object.freeze({
 });
 export const GUIDE_STEP_COUNT = 14;
 
+/** The first guide meeting's Stop stays locked this long, while the demo film
+ *  plays in the browser (Evin, 2026-11-15: "dont let him close the app for 15
+ *  seconds"). Skipping the guide unlocks it at once. */
+export const GUIDE_STOP_LOCK_MS = 15_000;
+
+/** How long Stop stays locked from `now` (0 = unlocked). Only while the guide
+ *  runs; capped, so a clock moved backwards can never lock it for longer. */
+export function guideStopLockLeft(state, now) {
+  if (!state || state.status !== 'active' || typeof state.stopLockUntil !== 'number') return 0;
+  return Math.max(0, Math.min(GUIDE_STOP_LOCK_MS, state.stopLockUntil - now));
+}
+
 /** Steps before Plans & Billing (a missing trial jumps from any of them). */
 const BEFORE_PLANS = STEPS.slice(0, STEPS.indexOf('plans'));
 /** Steps where meeting 1 (the overlay) runs, and meeting 2 (the notepad). */
@@ -68,7 +80,7 @@ export const GUIDE_EVENT_TYPES = Object.freeze([
 // meeting was saved, or that the setting changed, so they are not listed above.
 
 export function emptyGuideState() {
-  return { status: 'idle', step: 'start', variant: 'normal', outcome: null, startedAt: null, updatedAt: null, endedMeetingId: null };
+  return { status: 'idle', step: 'start', variant: 'normal', outcome: null, startedAt: null, updatedAt: null, endedMeetingId: null, stopLockUntil: null };
 }
 
 const isTime = (v) => v === null || (typeof v === 'number' && Number.isFinite(v));
@@ -78,12 +90,14 @@ export function normalizeGuideState(raw, now) {
   const { status, step, variant, outcome, startedAt, updatedAt } = raw;
   // Saved before the field existed: no meeting recorded.
   const endedMeetingId = raw.endedMeetingId === undefined ? null : raw.endedMeetingId;
+  // A bad lock is dropped, never the guide: it only ever unlocks.
+  const stopLockUntil = typeof raw.stopLockUntil === 'number' && Number.isFinite(raw.stopLockUntil) ? raw.stopLockUntil : null;
   if (!STATUSES.includes(status) || !STEPS.includes(step) || !VARIANTS.includes(variant)
     || !OUTCOMES.includes(outcome) || !isTime(startedAt) || !isTime(updatedAt)
     || !(endedMeetingId === null || (typeof endedMeetingId === 'string' && endedMeetingId.length > 0))) {
     return emptyGuideState();
   }
-  const state = { status, step, variant, outcome, startedAt, updatedAt, endedMeetingId };
+  const state = { status, step, variant, outcome, startedAt, updatedAt, endedMeetingId, stopLockUntil };
   if (status === 'active' && typeof updatedAt === 'number' && now - updatedAt > GUIDE_RESUME_MS) {
     return { ...state, status: 'expired' };
   }
@@ -143,7 +157,9 @@ export function reduceGuide(state, event, now) {
       // rather than drawing in a window that is not on screen.
       if (state.step !== 'start' && state.step !== 'start2') return state;
       const surface = event.surface === 'overlay' || event.surface === 'notepad' ? event.surface : (state.step === 'start' ? 'overlay' : 'notepad');
-      return move(state, { step: surface === 'notepad' ? 'notepad' : 'overlay' }, now);
+      // The first meeting: the demo film plays and Stop waits 15 s (GUIDE_STOP_LOCK_MS).
+      const stopLockUntil = state.step === 'start' ? now + GUIDE_STOP_LOCK_MS : null;
+      return move(state, { step: surface === 'notepad' ? 'notepad' : 'overlay', stopLockUntil }, now);
     }
     case 'meeting_stopped':
       if (MEETING_1.includes(state.step)) return move(state, { step: 'notes' }, now);

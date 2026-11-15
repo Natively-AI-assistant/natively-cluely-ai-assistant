@@ -3,6 +3,8 @@
 // report what this window saw. Rules live in src/lib/onboarding/firstRunGuide.mjs.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GuideEvent, GuideState } from '../../lib/onboarding/firstRunGuide.mjs';
+import { guideStopLockLeft } from '../../lib/onboarding/firstRunGuide.mjs';
+import { useT } from '../../i18n';
 import { guideKeys } from '../../lib/onboarding/guideKeys.mjs';
 import { isMac, isWindows } from '../../utils/platformUtils';
 
@@ -91,6 +93,33 @@ export function useGuide(): { state: GuideState | null; justDone: boolean; dispa
 }
 
 /** The guide is running and on one of these steps. */
+/**
+ * The first guide meeting's Stop lock, for a Stop button to show (main
+ * refuses the Stop itself: ipcHandlers end-meeting). Read straight from the
+ * broadcasts, not through useGuide's done hold, so the button locks the moment
+ * the meeting starts. `seconds` is 0 when Stop works.
+ */
+export function useGuideStopLock(): { seconds: number; label: string } {
+  const tr = useT();
+  const [until, setUntil] = useState<GuideState | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    let alive = true;
+    window.electronAPI?.guideGet?.().then((s) => { if (alive && s) setUntil(s); }).catch(() => {});
+    const off = window.electronAPI?.onGuideChanged?.((s) => { if (s) { setUntil(s); setNow(Date.now()); } });
+    return () => { alive = false; off?.(); };
+  }, []);
+  const left = guideStopLockLeft(until, now);
+  useEffect(() => {
+    if (left <= 0) return;
+    // Wakes on each whole second left, then once more to unlock.
+    const t = setTimeout(() => setNow(Date.now()), (left % 1000) || 1000);
+    return () => clearTimeout(t);
+  }, [left]);
+  const seconds = Math.ceil(left / 1000);
+  return { seconds, label: seconds > 0 ? tr('Stop unlocks in {n} s').replace('{n}', String(seconds)) : '' };
+}
+
 export function guideOn(state: GuideState | null, ...steps: GuideState['step'][]): boolean {
   return !!state && state.status === 'active' && steps.includes(state.step);
 }
