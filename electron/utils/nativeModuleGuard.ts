@@ -120,6 +120,7 @@ export function ensureNativeModuleAbi(): void {
   }
 
   console.warn('[NativeModuleGuard] Rebuild complete — relaunching Electron.');
+  try { require('./lifecycleTracker').LifecycleTracker.getInstance().markRestart('native-module-rebuild'); } catch { /* best-effort */ }
   app.relaunch();
   app.exit(0);
 }

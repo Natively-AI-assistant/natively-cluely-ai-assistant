@@ -91,3 +91,35 @@ test('Cmd+B re-expand respects a detached chat and re-reads the container', () =
   assert.ok(effect.includes('isAutoScrollSuppressed()'));
   assert.ok(effect.includes('scrollContainerRef.current'));
 });
+
+// #723: a held chat stays held through answers the reader did not start (Auto
+// Answer streams in through queueToken with no placeholder of its own), and
+// every answer the user starts lifts the hold. Every quick action, the
+// What to Answer hotkey and main's manual start open their stream through
+// prepareIntelligenceStreamPlaceholder; Direct Assist through beginDirectAssist.
+test('an answer the user starts lifts the hold before its stream opens', () => {
+  const placeholder = between(code, 'const prepareIntelligenceStreamPlaceholder = useCallback(', '[flushToken, pinAnswerPanel, resumeAutoScroll]');
+  assert.ok(placeholder.indexOf('resumeAutoScroll()') < placeholder.indexOf('streamingMsgIdRef.current = placeholderId'));
+  const direct = between(code, 'const beginDirectAssist = useCallback(', 'settleDirectAssistIncomplete, resumeAutoScroll]);');
+  assert.ok(direct.indexOf('resumeAutoScroll()') < direct.indexOf('streamingMsgIdRef.current = placeholderId'));
+});
+
+test('an Auto Answer token never lifts the hold', () => {
+  const queue = between(code, 'const queueToken = useCallback(', 'const flushToken');
+  assert.ok(!queue.includes('resumeAutoScroll()'));
+  assert.ok(!queue.includes('scrollToLatest()'));
+});
+
+test('a new meeting and a cleared chat start following again', () => {
+  const reset = between(code, 'window.electronAPI.onSessionReset((payload) => {', 'setMessages([]);');
+  assert.ok(reset.includes('resumeAutoScroll()'));
+  const clear = between(code, 'const resetChatState = useCallback(', '}, [cancelActiveChatStream, resumeAutoScroll]);');
+  assert.ok(clear.includes('resumeAutoScroll()'));
+});
+
+// Apple: smooth scrolling is off under Reduce Motion (macOS Reduce motion,
+// Windows Show animations off — both drive prefers-reduced-motion).
+test('the jump-to-latest pill jumps instantly when Reduce Motion is on', () => {
+  const jump = between(code, 'const handleJumpToLatest = useCallback(', '}, [resumeAutoScroll]);');
+  assert.match(jump, /behavior: prefersReducedMotionRef\.current \? 'auto' : 'smooth'/);
+});

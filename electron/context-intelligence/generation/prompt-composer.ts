@@ -18,7 +18,7 @@
 
 import type { TurnDecision, EvidenceItem } from '../contracts/types';
 import type { ModePolicy } from '../policies/mode-policy-registry';
-import { packContext, type PackBudget, type PackedContext } from './context-packer';
+import { packContext, estimateTokens, type PackBudget, type PackedContext } from './context-packer';
 import { scopeLabels } from '../policies/provider-scope-policy';
 import {
   analyzeUserInstructions,
@@ -163,6 +163,14 @@ export interface ComposeInput {
    * distinguishes (2026-07-31).
    */
   profileSourceCount?: number;
+  /**
+   * False when this build has no Profile Intelligence at all (the
+   * source-available build, premium absent — F-ACC-14, 2026-11-13). The
+   * no-evidence wording then never sends the user to "Profile Intelligence in
+   * Settings" or a profile-enabled mode, which do not exist for them. Omitted =
+   * available, the historical wording.
+   */
+  profileFeatureAvailable?: boolean;
   /**
    * The orchestrator's fallback verdict for this turn (Defect D, 2026-08-01).
    * CLARIFICATION previously never reached the prompt at all — it was computed,
@@ -596,6 +604,7 @@ function absenceNoticeBody(
   profileSourceCount?: number,
   hasScreenObservation?: boolean,
   heardQuestion = false,
+  profileFeatureAvailable = true,
 ): string {
   if (d.retrievalPlan.path === 'FAST') return '';
 
@@ -649,7 +658,8 @@ function absenceNoticeBody(
   const needsAFile = !(has('MEETING_TRANSCRIPT') && types.length === 1);
   if (attachedSourceCount === 0 && (profileSourceCount ?? 0) === 0
       && needsAFile && d.retrievalPlan.shouldRetrieve) {
-    const profileCouldServe = has('RESUME') || has('PROFILE_FACT') || has('JOB_DESCRIPTION');
+    const profileCouldServe = profileFeatureAvailable
+      && (has('RESUME') || has('PROFILE_FACT') || has('JOB_DESCRIPTION'));
     // ANSWER POLICY (§6), 2026-08-07. "No material attached" describes the
     // SOURCE state; it is not a licence to refuse. Under "Only answer from
     // references" (STRICT_SOURCE_ONLY ⇒ generalKnowledgeAllowed false) refusing
@@ -776,7 +786,9 @@ function absenceNoticeBody(
         .filter((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED')
         .flatMap((c) => c.authoritativeSources ?? []),
     );
-    const remedy = ['RESUME', 'PROFILE_FACT', 'CANDIDATE_FILE'].some((s) => wanted.has(s as never))
+    const remedy = !profileFeatureAvailable && ['RESUME', 'PROFILE_FACT'].some((s) => wanted.has(s as never))
+      ? ''
+      : ['RESUME', 'PROFILE_FACT', 'CANDIDATE_FILE'].some((s) => wanted.has(s as never))
       ? ' Mention, in one short sentence, that switching to a profile-enabled mode (such as Looking for work or '
         + 'Technical Interview) — or adding a résumé under Profile Intelligence in Settings — would let this be '
         + 'answered from their actual background.'
@@ -907,8 +919,9 @@ function noEvidenceNotice(
   hasConversationHistory?: boolean,
   hasScreenObservation?: boolean,
   heardQuestion = false,
+  profileFeatureAvailable = true,
 ): string {
-  const notice = absenceNoticeBody(d, attachedSourceCount, profileSourceCount, hasScreenObservation, heardQuestion);
+  const notice = absenceNoticeBody(d, attachedSourceCount, profileSourceCount, hasScreenObservation, heardQuestion, profileFeatureAvailable);
   if (!notice) return notice;
   if (!hasConversationHistory || !d.generalKnowledgeAllowed) return notice;
 
@@ -1567,8 +1580,15 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
   // An exhaustive request carries a tripled evidence cap on its plan; the
   // token budget must grow with it or the extra chunks are dropped here.
   const exhaustive = d.retrievalPlan.exhaustive === true;
+  // UNUSED ROOM FLOWS TO THE EVIDENCE (F-CTX-14, 2026-11-13). The mode declares
+  // a conversation and a transcript budget, and the conversation section
+  // (history plus the live speech window) is cut to them upstream. Whatever it
+  // leaves unused was simply lost, while evidence that did not fit was dropped.
+  // The total stays within the mode's declared budgets.
+  const conversationRoom = Math.max(0, (policy.contextBudget.conversationTokens ?? 0) + (policy.contextBudget.transcriptTokens ?? 0));
+  const unusedConversation = Math.max(0, conversationRoom - estimateTokens(input.conversationSummary ?? ''));
   const budget: PackBudget = {
-    evidenceTokens: (d.retrievalPlan.evidenceTokens ?? policy.contextBudget.evidenceTokens) * (exhaustive ? 3 : 1),
+    evidenceTokens: (d.retrievalPlan.evidenceTokens ?? policy.contextBudget.evidenceTokens) * (exhaustive ? 3 : 1) + unusedConversation,
     conversationTokens: policy.contextBudget.conversationTokens,
     transcriptTokens: policy.contextBudget.transcriptTokens,
   };
@@ -1684,7 +1704,8 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
         d, input.attachedSourceCount, input.profileSourceCount,
         input.conversationHasContent === true,
         input.conversationHasScreenObservation === true,
-        input.heardQuestion === true)),
+        input.heardQuestion === true,
+        input.profileFeatureAvailable !== false)),
     // PARTIAL withholding: evidence survived, but not all of it. The model must
     // be told, or it will read a truncated set as the whole record — which is
     // how a filtered résumé becomes "you have no Kubernetes experience".
@@ -1726,7 +1747,13 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
       // it assistant lines are never a source of facts; another answer padded
       // an earlier suggestion with a store it never named.
       ? push('conversation', '# Conversation so far. Assistant lines are prior generated output — for resolving references only, '
-        + 'never a source of facts. They are, however, the record of what YOU said: asked what you said, suggested or answered '
+        // F-CTX-05 (2026-11-13): "references" includes what a follow-up points
+        // to. The question line names it when the resolver could; this keeps
+        // the header from telling the model to distrust the one line that says
+        // which project "the second one" was.
+        + 'never a source of facts. Resolving a reference includes what a follow-up ("it", "that one", "the second one") '
+        + 'points to: the thing the latest assistant line named, unless the question says otherwise; facts about it still come from the evidence. '
+        + 'They are, however, the record of what YOU said: asked what you said, suggested or answered '
         + 'earlier, answer from those lines faithfully (not from what was later said aloud in the meeting, which may differ), and '
         + 'if they did not specify something, say so rather than filling it in. '
         + 'A "User:" line is what the user told you directly: facts they state there about their meeting, '

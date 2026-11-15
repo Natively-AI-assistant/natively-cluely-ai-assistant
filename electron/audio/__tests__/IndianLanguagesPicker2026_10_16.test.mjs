@@ -109,7 +109,7 @@ describe('Deepgram: never connect with a language the model refuses', () => {
     const s = src('src/components/SettingsOverlay.tsx');
     const cap = s.slice(s.indexOf('const deepgramLanguageCapability = useMemo'), s.indexOf('}, [sttProvider, sttModels.deepgram, availableLanguages]);'));
     assert.match(cap, /sttModelRejectsLanguage\('deepgram', model, /);
-    assert.match(s, /const showsAutoFallback = !showsEnglishFallback && sttProvider === 'deepgram' && storedLanguageUnsupported;/);
+    assert.match(s, /const showsAutoFallback = !showsEnglishFallback && \(\s*\(sttProvider === 'deepgram' && storedLanguageUnsupported\)/);
     assert.match(s, /const showsEnglishFallback = \(languageLocked \|\| deepgramEnglishOnly\)/);
   });
 });

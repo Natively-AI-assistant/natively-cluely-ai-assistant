@@ -526,7 +526,12 @@ describe('evidence-execution-repair: EvidenceResolver wiring identity (a524329 r
     assert.ok(calls.find(c => c.via === 'executeCustomProvider'), 'the provider must be dispatched — the turn is answered');
   });
 
-  test('resolver throws → governed turn refuses without legacy retrieval or provider dispatch', async () => {
+  // ALWAYS ANSWER (owner, 2026-09-07) reached this site with F-ACC-13 (2026-11-13):
+  // a resolver failure leaves an EMPTY refusal pack, and a refusal pack no longer
+  // short-circuits to the canned 'not in the uploaded material' line (that line
+  // would claim the material was searched). The turn still never falls back to
+  // legacy retrieval; it is answered with no document evidence.
+  test('resolver throws → governed turn never uses legacy retrieval; answered with an empty pack', async () => {
     resolveCalls = 0;
     resolveArgsSeen = null;
     throwOnResolve = true;
@@ -561,8 +566,7 @@ describe('evidence-execution-repair: EvidenceResolver wiring identity (a524329 r
     assert.equal(resolveCalls, 1, 'resolver must have been attempted once');
     assert.equal(hybridLegacyCalls, 0, 'a governed resolver failure must never fall back to legacy hybrid retrieval');
     assert.equal(lexicalLegacyCalls, 0, 'a governed resolver failure must never fall back to legacy lexical retrieval');
-    const dispatched = calls.find(c => c.via === 'executeCustomProvider');
-    assert.equal(dispatched, undefined, 'a governed resolver failure must return deterministic refusal before provider dispatch');
+    assert.ok(calls.find(c => c.via === 'executeCustomProvider'), 'the refusal policy answers rather than refusing on a failed resolver');
   });
 
   // Evidence-execution-repair (2026-07-12) — regression guard for a SECOND,

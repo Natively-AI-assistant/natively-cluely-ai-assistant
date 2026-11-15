@@ -3,6 +3,8 @@ import type { SkillUploadPayload } from './services/skills/SkillValidator';
 import type { NativelyUsageResponse, NativelyPlansResponse } from '../src/types/nativelyUsage';
 import type { MeetingOutputsApi } from '../src/types/meetingOutputs';
 import type { ConnectorsApi } from '../src/types/connectors';
+import type { AutoAnswerModelInstall, AutoAnswerModelSavings } from './premium/autoAnswer';
+type AutoAnswerModelState = { install: AutoAnswerModelInstall; savings: AutoAnswerModelSavings; judgeViaNatively?: boolean };
 import { PAGE_CAPTURE_FALLBACK_CHANNEL, PAGE_CAPTURE_STARTED_CHANNEL, type PageCaptureFallbackNotice } from './services/pageCaptureFallback';
 import type { CalendarSourceId as CalendarSourceIdInfo, CalendarSourceStatus as CalendarSourceStatusInfo } from './services/calendar/providers/types';
 
@@ -285,6 +287,7 @@ interface ElectronAPI {
   /** The plan catalog — allowances and prices, straight from the server, so the
    *  plan table never carries its own copy of numbers the server enforces. */
   getNativelyPlans: () => Promise<NativelyPlansResponse>;
+  resendNativelyKey: (email: string) => Promise<{ ok: boolean; message?: string; error?: string }>;
   getStoredCredentials: () => Promise<{
     /** Any AI route of the user's own (trialPolicy.hasOwnAiKey: custom and cURL providers count). */
     hasOwnAiKey?: boolean;
@@ -719,7 +722,7 @@ interface ElectronAPI {
     callback: (data: { answer: string; question: string; confidence: number; sourceLabel?: string; generationId?: number; stopReason?: string }) => void,
   ) => () => void;
   onIntelligenceSuggestedAnswerDiscard: (
-    callback: (data: { reason: string }) => void,
+    callback: (data: { reason: string; generationId?: number }) => void,
   ) => () => void;
   onIntelligenceCodeVerified: (
     callback: (data: { question: string; passed: number; total: number; language: string }) => void,
@@ -1300,7 +1303,14 @@ interface ElectronAPI {
   getMeetingAudioCapture: () => Promise<{ withoutAudio: boolean }>;
   onMeetingAudioCapture: (callback: (data: { withoutAudio: boolean }) => void) => () => void;
   getAutoAnswerEnabled: () => Promise<boolean>;
-  setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string; message?: string }>;
+  getAutoAnswerAccess: () => Promise<{ available: boolean; allowed: boolean; basis: 'pro' | 'sharing' | 'none'; uploads: boolean; consent: { version: number; grantedAt: string } | null; enabled: boolean }>;
+  setAutoAnswerTrainingConsent: (granted: boolean) => Promise<{ success: boolean; error?: string }>;
+  onAutoAnswerAccessRequired: (callback: (info: { reason: string }) => void) => () => void;
+  getAutoAnswerModelStatus: () => Promise<AutoAnswerModelState>;
+  installAutoAnswerModel: () => Promise<AutoAnswerModelState>;
+  removeAutoAnswerModel: () => Promise<AutoAnswerModelState>;
+  onAutoAnswerModelProgress: (callback: (install: AutoAnswerModelInstall) => void) => () => void;
   getDirectAssistEnabled: () => Promise<boolean>;
   setDirectAssistEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   onDirectAssistEnabledChanged: (callback: (enabled: boolean) => void) => () => void;
@@ -1344,6 +1354,9 @@ interface ElectronAPI {
     displays: Array<{ id: number; number: number; name: string; width: number; height: number; primary: boolean }>;
   }>;
   setScreenshotDisplay: (preference: string) => Promise<{ success: boolean; error?: string }>;
+  /** Settings › Overlay › Answer length. get: what answers use now (Smart without Pro). */
+  getAnswerLength: () => Promise<{ value: 'shorter' | 'smart' | 'longer' }>;
+  setAnswerLength: (value: 'shorter' | 'smart' | 'longer') => Promise<{ success: boolean; error?: string; message?: string }>;
   cropperPickDisplay: () => void;
   cropperDrag: (active: boolean) => void;
   getScreenUnderstandingMode: () => Promise<'vision_first' | 'vision_only' | 'private_vision'>;
@@ -2001,6 +2014,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }) => ipcRenderer.invoke('review:update-testimonial', payload),
   getNativelyUsage: (force?: boolean) => ipcRenderer.invoke('get-natively-usage', force ? { force: true } : undefined),
   getNativelyPlans: () => ipcRenderer.invoke('get-natively-plans'),
+  resendNativelyKey: (email: string) => ipcRenderer.invoke('resend-natively-key', email),
   getStoredCredentials: () => ipcRenderer.invoke('get-stored-credentials'),
   // R-10 resolution flow: ambiguous credential stores (names + last-4 only).
   getAmbiguousCredentialStores: () => ipcRenderer.invoke('credentials:get-ambiguous-stores'),
@@ -2660,7 +2674,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Orphaned-scaffold fix: drop the open what-to-answer scaffold row when a
   // stream ends with no final answer (superseded / declined / errored).
   onIntelligenceSuggestedAnswerDiscard: (
-    callback: (data: { reason: string }) => void,
+    callback: (data: { reason: string; generationId?: number }) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('intelligence-suggested-answer-discard', subscription);
@@ -3596,6 +3610,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   getAutoAnswerEnabled: () => ipcRenderer.invoke('get-auto-answer-enabled'),
   setAutoAnswerEnabled: (enabled: boolean) => ipcRenderer.invoke('set-auto-answer-enabled', enabled),
+  getAutoAnswerAccess: () => ipcRenderer.invoke('auto-answer:get-access'),
+  setAutoAnswerTrainingConsent: (granted: boolean) => ipcRenderer.invoke('auto-answer:set-training-consent', granted),
+  onAutoAnswerAccessRequired: (callback: (info: { reason: string }) => void) => {
+    const subscription = (_: any, info: { reason: string }) => callback(info);
+    ipcRenderer.on('auto-answer:access-required', subscription);
+    return () => { ipcRenderer.removeListener('auto-answer:access-required', subscription); };
+  },
+  getAutoAnswerModelStatus: () => ipcRenderer.invoke('auto-answer-model:get-status'),
+  installAutoAnswerModel: () => ipcRenderer.invoke('auto-answer-model:install'),
+  removeAutoAnswerModel: () => ipcRenderer.invoke('auto-answer-model:remove'),
+  onAutoAnswerModelProgress: (callback: (install: AutoAnswerModelInstall) => void) => {
+    const subscription = (_: Electron.IpcRendererEvent, install: AutoAnswerModelInstall) => callback(install);
+    ipcRenderer.on('auto-answer-model:progress', subscription);
+    return () => { ipcRenderer.removeListener('auto-answer-model:progress', subscription); };
+  },
   getDirectAssistEnabled: () => ipcRenderer.invoke('get-direct-assist-enabled'),
   setDirectAssistEnabled: (enabled: boolean) => ipcRenderer.invoke('set-direct-assist-enabled', enabled),
   onDirectAssistEnabledChanged: (callback: (enabled: boolean) => void) => {
@@ -3631,6 +3660,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   getScreenshotDisplay: () => ipcRenderer.invoke('get-screenshot-display'),
   setScreenshotDisplay: (preference: string) => ipcRenderer.invoke('set-screenshot-display', preference),
+  getAnswerLength: () => ipcRenderer.invoke('answer-length:get'),
+  setAnswerLength: (value: 'shorter' | 'smart' | 'longer') => ipcRenderer.invoke('answer-length:set', value),
   getScreenUnderstandingMode: () => ipcRenderer.invoke('get-screen-understanding-mode'),
   setScreenUnderstandingMode: (mode: 'vision_first' | 'vision_only' | 'private_vision') =>
     ipcRenderer.invoke('set-screen-understanding-mode', mode),

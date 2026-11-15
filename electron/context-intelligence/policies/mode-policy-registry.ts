@@ -527,3 +527,50 @@ export function profileIntelligenceEligibility(templateType: unknown): ProfileIn
 export function isProfileIntelligenceAllowed(templateType: unknown): boolean {
   return profileIntelligenceEligibility(templateType).allowed;
 }
+
+/** The two fields of a mode's source contract (services/modeSourceContract) V3 reads. */
+export interface ModeSourceContractInput {
+  sourceAuthority: string;
+  origin: string;
+}
+
+const REFERENCE_FIRST_AUTHORITIES: ReadonlySet<string> = new Set([
+  'reference_files_only', 'reference_files_primary', 'reference_files_plus_transcript',
+]);
+
+/**
+ * Apply the mode's source contract to its policy (F-ACC-05, 2026-11-13).
+ *
+ * The contract the user chose ("answer from my reference files first") was
+ * honoured by the legacy path but was not a V3 input, so Technical Interview —
+ * whose policy ranks the résumé first and the reference files fifth — kept
+ * reading the résumé as the source it exists to answer from.
+ *
+ * Only a DELIBERATE contract counts: a template seed (`origin:
+ * 'default_new_mode'`) stamps reference-files-primary on every non-interview
+ * mode and must not change anything (the same rule as
+ * strictDocumentGroundedFromContract). When a deliberate contract puts the
+ * reference files first and the mode does not already rank them first, they are
+ * promoted to the top priority and treated as the material the conversation is
+ * about. Every other case returns the policy unchanged.
+ */
+export function applyModeSourceContract(policy: ModePolicy, contract: ModeSourceContractInput | null | undefined): ModePolicy {
+  if (!contract || contract.origin === 'default_new_mode') return policy;
+  if (!REFERENCE_FIRST_AUTHORITIES.has(contract.sourceAuthority)) return policy;
+  if (!policy.retrievalPolicy.enabled) return policy;
+  const allowed = policy.allowedSourceTypes.includes('REFERENCE_FILE')
+    ? policy.allowedSourceTypes
+    : [...policy.allowedSourceTypes, 'REFERENCE_FILE' as SourceType];
+  const priorities = Object.values(policy.sourcePriorities).filter((n): n is number => typeof n === 'number');
+  const top = priorities.length ? Math.min(...priorities) : 1;
+  const ref = policy.sourcePriorities.REFERENCE_FILE;
+  const othersAtTop = Object.entries(policy.sourcePriorities)
+    .some(([k, n]) => k !== 'REFERENCE_FILE' && n === top);
+  if (ref === top && !othersAtTop && allowed === policy.allowedSourceTypes) return policy;
+  return {
+    ...policy,
+    allowedSourceTypes: allowed,
+    sourcePriorities: { ...policy.sourcePriorities, REFERENCE_FILE: top - 1 },
+    attachedMaterialIsPrimary: true,
+  };
+}

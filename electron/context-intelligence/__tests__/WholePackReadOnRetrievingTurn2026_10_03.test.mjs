@@ -65,11 +65,17 @@ describe('decide(): the plan makes room for the whole pack on a turn that retrie
     const baseTokens = Math.max(MODE_POLICIES['call-center'].contextBudget.evidenceTokens, MULTI_FILE_EVIDENCE.tokens);
     assert.ok((d.retrievalPlan.evidenceTokens ?? 0) >= baseTokens + PACK_TOKENS + WHOLE_PACK_ITEM_OVERHEAD * PACK.length, String(d.retrievalPlan.evidenceTokens));
   });
-  test('a pack larger than the threshold changes nothing in the plan', () => {
+  // 2026-11-14 (F-LAT-09): a pack past the threshold is retrieved with the larger
+  // LARGE_PACK_EVIDENCE_TOKENS budget instead of the bare policy budget
+  // (PackPromptGrowsSmoothly2026_11_13), and never with room for the whole pack.
+  test('a pack larger than the threshold gets the large-pack retrieval budget, not room for the whole pack', async () => {
+    const { LARGE_PACK_EVIDENCE_TOKENS } = await import(pathToFileURL(path.resolve(process.cwd(), 'dist-electron/electron/context-intelligence/retrieval/mode-retrieval-port.js')).href);
     const big = decide(req('call-center', Q, { attachedCorpusTokens: WHOLE_PACK_MAX_TOKENS + 1 }));
     const none = decide(req('call-center', Q, { attachedCorpusTokens: null }));
-    assert.equal(big.retrievalPlan.maximumAcceptedEvidence, none.retrievalPlan.maximumAcceptedEvidence);
-    assert.equal(big.retrievalPlan.evidenceTokens, none.retrievalPlan.evidenceTokens);
+    assert.ok(big.retrievalPlan.evidenceTokens >= LARGE_PACK_EVIDENCE_TOKENS, String(big.retrievalPlan.evidenceTokens));
+    assert.ok(big.retrievalPlan.evidenceTokens < WHOLE_PACK_MAX_TOKENS, String(big.retrievalPlan.evidenceTokens));
+    assert.ok(big.retrievalPlan.evidenceTokens > (none.retrievalPlan.evidenceTokens ?? 0));
+    assert.ok(big.retrievalPlan.maximumAcceptedEvidence >= none.retrievalPlan.maximumAcceptedEvidence);
   });
   test('a small corpus keeps exactly the plan it had', () => {
     const d = decide(req('team-meet', "What's the crash-free bar?", { attachedSourceCount: 1, attachedCorpusTokens: 180 }));

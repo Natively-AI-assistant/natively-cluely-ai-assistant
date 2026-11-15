@@ -1,4 +1,5 @@
 // Ported logic
+use super::loopback_target::{loopback_targets, LoopbackRole};
 use super::stop_signal::StopSignal;
 use crate::audio_config::RING_BUFFER_SAMPLES;
 use anyhow::Result;
@@ -105,13 +106,14 @@ impl SpeakerStream {
     }
 }
 
-// LIMITATION: We currently only capture from the eMultimedia/eConsole default
-// render device (or a user-specified id). Many VoIP apps (Zoom, Teams, Discord,
-// Meet) route audio to the eCommunications default — which the user can configure
-// independently in Sound Settings. Loopback on the multimedia-default captures
-// nothing while the meeting plays through the comms-default device. Adding
-// eCommunications support requires raw windows-rs IMMDeviceEnumerator since
-// wasapi 0.13 has no Role API. Tracked for follow-up.
+// Which endpoint the loopback binds to: the user-specified id, else the
+// eMultimedia/eConsole default (as always), else — new 2026-11-13, F-PLT-01 —
+// the eCommunications default, read through raw windows-rs
+// IMMDeviceEnumerator since wasapi 0.13 has no Role API. Order and de-dup
+// live in loopback_target.rs (pure, unit-tested). Many VoIP apps (Zoom,
+// Teams, Discord, Meet) play on the eCommunications default; while the
+// console default works the capture still starts there, and JS
+// (outputRouteMismatch.mjs) moves it when the meeting is heard elsewhere.
 fn find_device_by_id(direction: &Direction, device_id: &str) -> Option<wasapi::Device> {
     let collection = DeviceCollection::new(direction).ok()?;
     let count = collection.get_nbr_devices().ok()?;
@@ -301,23 +303,9 @@ impl SpeakerInput {
     ) -> Result<()> {
         // Held for the whole loop: every COM object below lives on this thread.
         let _com = ComGuard::enter();
-        let init_result = (|| -> Result<_> {
-            // Resolve target render device. If the saved device_id is stale
-            // (unplugged, renamed, fresh install with leftover settings) we
-            // must NOT panic — fall through to the default. If even that
-            // errors, propagate via ? so init_tx surfaces the failure to JS
-            // instead of letting the thread die silently and leaving callers
-            // with a fake 44100Hz stream that never produces samples.
-            let device = match device_id.as_deref() {
-                Some(id) if !id.is_empty() => match find_device_by_id(&Direction::Render, id) {
-                    Some(d) => d,
-                    None => get_default_device(&Direction::Render)
-                        .map_err(|e| anyhow::anyhow!("device '{}' not found and default lookup failed: {}", id, e))?,
-                },
-                _ => get_default_device(&Direction::Render)
-                    .map_err(|e| anyhow::anyhow!("default render device unavailable: {}", e))?,
-            };
-
+        // Bring up loopback on one render device: everything that can fail
+        // before the first sample.
+        let init_on = |device: wasapi::Device| -> Result<_> {
             let mut audio_client = device
                 .get_iaudioclient()
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
@@ -387,6 +375,53 @@ impl SpeakerInput {
             };
 
             Ok((h_event, render_client, actual_rate, audio_client, session_notification))
+        };
+
+        // Resolve the target render device and bring it up, trying each
+        // endpoint loopback_targets() lists in turn: a saved device_id that is
+        // stale (unplugged, renamed, fresh install with leftover settings)
+        // falls through to the eConsole default as before, and when that is
+        // missing or cannot start, to the eCommunications default (F-PLT-01).
+        // We must NOT panic; if none starts, the error goes out via init_tx so
+        // JS sees the failure instead of a thread that died silently and a
+        // fake 44100Hz stream that never produces samples.
+        let init_result = (|| -> Result<_> {
+            let console_id = get_default_device(&Direction::Render)
+                .ok()
+                .and_then(|d| d.get_id().ok());
+            let comms_id = default_communications_device_uid();
+            let targets = loopback_targets(device_id.as_deref(), console_id.as_deref(), comms_id.as_deref());
+            if targets.is_empty() {
+                return Err(anyhow::anyhow!("default render device unavailable (no console or communications default)"));
+            }
+            let mut failures: Vec<String> = Vec::new();
+            for target in &targets {
+                let device = match target.role {
+                    // Exactly the device the capture always used.
+                    LoopbackRole::Console => get_default_device(&Direction::Render).ok(),
+                    LoopbackRole::Explicit | LoopbackRole::Communications => {
+                        find_device_by_id(&Direction::Render, &target.id)
+                    }
+                };
+                let Some(device) = device else {
+                    failures.push(format!("{:?} device '{}' not found", target.role, target.id));
+                    continue;
+                };
+                match init_on(device) {
+                    Ok(ready) => {
+                        if !failures.is_empty() {
+                            eprintln!(
+                                "[SystemAudio-WASAPI] capturing the {:?} device after: {}",
+                                target.role,
+                                failures.join("; ")
+                            );
+                        }
+                        return Ok(ready);
+                    }
+                    Err(e) => failures.push(format!("{:?} device '{}': {}", target.role, target.id, e)),
+                }
+            }
+            Err(anyhow::anyhow!("no render device could be captured: {}", failures.join("; ")))
         })();
 
         match init_result {

@@ -317,6 +317,11 @@
 /* Phase-1 Settings-only accent override (dark mode), scoped via
    data-settings-theme so the rest of the app keeps the blue brand accent. */
 [data-settings-theme="periwinkle"] {
+  /* Dark Settings cards take the lighter surface the opacity card always had
+     (Evin 2026-11-15, option A), and the row icon tiles step up one shade so
+     they still read on it. Light mode resets both below. */
+  --bg-card: #27272A;
+  --bg-settings-tile: #2F2F34;
   --accent-primary: var(--periwinkle-300);
   --accent-hover: #DED4FD; /* not a canonical scale step — a dedicated lighter dark-mode hover tint */
   --accent-pressed: var(--periwinkle-400);
@@ -476,6 +481,8 @@
 /* Phase-1 Settings-only accent override (light mode), scoped via
    data-settings-theme so the rest of the app keeps the blue brand accent. */
 [data-theme='light'] [data-settings-theme="periwinkle"] {
+  --bg-card: #FBFBFD;
+  --bg-settings-tile: var(--bg-item-surface);
   --accent-primary: var(--periwinkle-600);
   --accent-hover: var(--periwinkle-700);
   --accent-pressed: var(--periwinkle-800);
@@ -8878,12 +8885,13 @@ html[data-platform="linux"][data-window="launcher"] body {
    and a soft light ring replaces the coloured one. Removing the indicator
    outright is not an option — this is a text field, and keyboard users need to
    see where focus landed. */
+/* Focus: the edge brightens, nothing outside it (no grey halo), same as the
+   "Lost your key?" pill above it. */
 .natively-key-input:focus {
   outline: none !important;
   border-color: rgba(255, 255, 255, 0.30) !important;
   box-shadow:
-    inset 0 2px 5px rgba(0, 0, 0, 0.50),
-    0 0 0 2px rgba(255, 255, 255, 0.10) !important;
+    inset 0 2px 5px rgba(0, 0, 0, 0.50) !important;
 }
 
 [data-theme='light'] .natively-key-input {
@@ -8897,8 +8905,7 @@ html[data-platform="linux"][data-window="launcher"] body {
 [data-theme='light'] .natively-key-input:focus {
   border-color: rgba(0, 0, 0, 0.34) !important;
   box-shadow:
-    inset 0 2px 4px rgba(0, 0, 0, 0.06),
-    0 0 0 2px rgba(0, 0, 0, 0.09) !important;
+    inset 0 2px 4px rgba(0, 0, 0, 0.06) !important;
 }
 
 /* Last, and at (0,3,0): the per-theme rules above use the `border` shorthand,
@@ -9192,6 +9199,157 @@ html[data-platform="linux"][data-window="launcher"] body {
    clears AA on both, so a second declaration would only be a second thing to
    keep in sync. The specular top hairline is dropped with it — that highlight
    is what made the chip read as a lit glass surface. */
+
+/* ── 3b. "Bought a key but no email?": the resend pill ──────────────────
+   One capsule under the card (src/components/settings/KeyResendHelp.tsx),
+   built only from materials this tab already has:
+     sent         a quiet glass chip: .lg-chip's edge in the Activate
+                  periwinkle on a faint fill
+     open         the capsule as a recessed WELL, the key field's own
+                  recipe (.natively-key-input), holding the address and a
+                  round .natively-key-cta send button
+   A label is a chip and a field is a well, here and everywhere on this tab.
+   The capsule's resize is framer `layout`; nothing here transitions size. */
+.natively-key-resend {
+  --lg-chip-tint: #5C65DB;
+  background: rgba(255, 255, 255, 0.035);
+  transition: background-color 150ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+[data-theme='light'] .natively-key-resend { background: rgba(0, 0, 0, 0.028); }
+
+.natively-key-resend[data-state='open'] {
+  width: 100%;
+  background: linear-gradient(180deg, #161618 0%, #1C1C1F 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.55),
+    inset 0 2px 5px rgba(0, 0, 0, 0.50),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+}
+/* Focus: the edge brightens, nothing outside it (no grey halo). */
+.natively-key-resend[data-state='open']:focus-within {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.30),
+    inset 0 2px 5px rgba(0, 0, 0, 0.50);
+}
+[data-theme='light'] .natively-key-resend[data-state='open'] {
+  background: linear-gradient(180deg, #EFEFF1 0%, #FDFDFD 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.12),
+    inset 0 2px 4px rgba(0, 0, 0, 0.06),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.9);
+}
+[data-theme='light'] .natively-key-resend[data-state='open']:focus-within {
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.34),
+    inset 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+/* sent: one line of 11px copy, 6px × 14px inside the capsule. */
+.natively-key-resend-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 6px 14px 6px 11px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-tertiary);
+  text-align: left;
+  text-wrap: balance;
+}
+.natively-key-resend-icon { flex-shrink: 0; color: var(--text-tertiary); opacity: 0.85; }
+
+/* The trigger: grey 12px text at the right of the card's heading row, the
+   heading's own size, one step quieter. No underline: it sits in a heading
+   row, not in a sentence. Brightens on hover; holds the secondary ink while the
+   pill is open, as a pressed state. A 4px × 2px pad (cancelled by margin)
+   gives the click and the focus ring some room. */
+.natively-key-resend-link {
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  font-size: 12px;
+  line-height: 1.375;
+  color: var(--text-tertiary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 150ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.natively-key-resend-link[aria-expanded='true'] { color: var(--text-secondary); }
+@media (hover: hover) and (pointer: fine) {
+  .natively-key-resend-link:hover { color: var(--text-primary); }
+}
+.natively-key-resend-link:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(163, 170, 245, 0.45);
+}
+@media (prefers-reduced-motion: reduce) {
+  .natively-key-resend-link { transition: none; }
+}
+
+/* Sent: a small emerald disc, the Activate button's `done` green. */
+.natively-key-resend-check {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #047857;
+  color: #FFFFFF;
+}
+
+/* open: [mail] [address ............] [×] (→) */
+.natively-key-resend-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 5px 0 12px;
+}
+.natively-key-resend-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  background: transparent;
+  border: 0;
+  outline: none;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+.natively-key-resend-input::placeholder { color: var(--text-tertiary); }
+
+.natively-key-resend-dismiss {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  color: var(--text-tertiary);
+  transition: color 150ms cubic-bezier(0.23, 1, 0.32, 1), background-color 150ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .natively-key-resend-dismiss:hover { color: var(--text-primary); background: rgba(255, 255, 255, 0.06); }
+  [data-theme='light'] .natively-key-resend-dismiss:hover { background: rgba(0, 0, 0, 0.05); }
+}
+.natively-key-resend-dismiss:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18); }
+
+/* The send button is .natively-key-cta (idle / ready / saving), sized to sit
+   inside the well with 4px of well showing round it. */
+.natively-key-resend-send {
+  display: grid !important;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+@media (prefers-contrast: more) {
+  .natively-key-resend { box-shadow: inset 0 0 0 1px currentColor; }
+}
 
 /* ── 4. Supporting copy ───────────────────────────────────────────────────
    These used to override the global text tokens because a tinted plaque

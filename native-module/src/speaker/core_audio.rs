@@ -434,7 +434,7 @@ mod tests {
     fn buf(channels: u32, data: &mut [f32]) -> cat::AudioBuf {
         cat::AudioBuf {
             number_channels: channels,
-            data_bytes_size: (data.len() * std::mem::size_of::<f32>()) as u32,
+            data_bytes_size: std::mem::size_of_val(data) as u32,
             data: data.as_mut_ptr() as *mut u8,
         }
     }

@@ -108,6 +108,22 @@ export function ownStopFailure(reason) {
   return null;
 }
 
+/**
+ * The notice data for a live (What to Answer / Auto Answer) answer that ended
+ * early, from its stop reason. Natively's own stops as ownStopFailure; and a
+ * provider that broke off after the answer had started, which that path
+ * cannot name (the final carries no provider), says what the user saw: the
+ * rest stopped arriving. Without it such an answer read as finished
+ * (pipeline forensics 2026-11-13, F-ACC-01).
+ *
+ * @param {string | undefined | null} reason
+ * @returns {{ partial: true, code: 'OUTPUT_LIMIT' | 'OUTPUT_REPETITION' | 'OUTPUT_STALLED', provider: '' } | null}
+ */
+export function liveAnswerStopFailure(reason) {
+  if (reason === 'provider_failed_after_first_token') return { partial: true, code: 'OUTPUT_STALLED', provider: '' };
+  return ownStopFailure(reason);
+}
+
 /** The label of the one action a notice can offer. Worded here so the
  *  translation tables are checked against a single list. */
 export const DIRECT_ASSIST_OPEN_PROVIDERS = 'Open AI Providers';

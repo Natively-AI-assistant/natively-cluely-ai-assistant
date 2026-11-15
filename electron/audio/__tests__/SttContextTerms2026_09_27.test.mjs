@@ -55,6 +55,12 @@ test('Natively: context_terms in the legacy frame only; the relay frame is the r
 
 test('main sets the terms at meeting start from the same name the judge uses', () => {
   const main = read('electron/main.ts');
-  assert.match(main, /this\.autoAnswerUsage\.meetingStarted\(\);[\s\S]{0,200}setSttContextTerms\(nameTerms\(this\.currentUserName\(\)\)\)/);
+  // Order within the same method, not a character distance: other meeting-start
+  // work (the pack clock, 2026-11-07) sits between the two and is fine there.
+  const started = main.indexOf('this.autoAnswerUsage.meetingStarted();');
+  assert.ok(started >= 0, 'meeting start marks Auto Answer usage');
+  const set = main.indexOf('setSttContextTerms(nameTerms(this.currentUserName()))', started);
+  assert.ok(set > started, 'the name terms are set after it');
+  assert.doesNotMatch(main.slice(started, set), /\n {2}\}\n/, 'and in the same method');
   assert.match(main, /userName: \(\) => this\.currentUserName\(\)/);
 });

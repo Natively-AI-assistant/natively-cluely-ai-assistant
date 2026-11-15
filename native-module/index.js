@@ -600,6 +600,7 @@ module.exports.readCallTree = nativeBinding.readCallTree
 module.exports.requestCalendarAccess = nativeBinding.requestCalendarAccess
 module.exports.screenCaptureDisplaysAvailable = nativeBinding.screenCaptureDisplaysAvailable
 module.exports.setForeignWindowsCaptureExcluded = nativeBinding.setForeignWindowsCaptureExcluded
+module.exports.takeNativeCaptureLog = nativeBinding.takeNativeCaptureLog
 module.exports.validateDodoKey = nativeBinding.validateDodoKey
 module.exports.verifyDodoKey = nativeBinding.verifyDodoKey
 module.exports.verifyGumroadKey = nativeBinding.verifyGumroadKey

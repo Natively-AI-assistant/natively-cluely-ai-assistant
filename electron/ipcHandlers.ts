@@ -1084,6 +1084,16 @@ export function initializeIpcHandlers(appState: AppState): void {
   } catch (e: any) {
     console.warn('[IPC] Pro check for modes not wired:', e?.message || e);
   }
+  // The Answer length (Settings › Overlay) the length planner reads each turn
+  // (llm/answerLength.ts). Pro is checked on every read, like the modes above,
+  // so a lapsed licence answers at Smart at once.
+  try {
+    const { registerAnswerLengthProvider, effectiveAnswerLength } = require('./llm/answerLength') as typeof import('./llm/answerLength');
+    registerAnswerLengthProvider(() =>
+      effectiveAnswerLength(SettingsManager.getInstance().get('answerLength'), isProOrTrialActive()));
+  } catch (e: any) {
+    console.warn('[IPC] Answer length not wired, answers stay Smart:', e?.message || e);
+  }
   try {
     const { KnowledgeOrchestrator } = require('../premium/electron/knowledge/KnowledgeOrchestrator');
     KnowledgeOrchestrator.setProAccessCheck(isProOrTrialActive);
@@ -2719,7 +2729,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               defaultLengthDirective: answerSurface === 'live' ? (() => {
                 try {
                   const { renderLengthDirectiveForPlan } = require('./llm/AnswerPlanner') as typeof import('./llm/AnswerPlanner');
-                  return v3Plan ? renderLengthDirectiveForPlan(v3Plan) || undefined : undefined;
+                  return v3Plan ? renderLengthDirectiveForPlan(v3Plan, { pinnedModeId: modeInfo?.id ?? null }) || undefined : undefined;
                 } catch { return undefined; }
               })() : undefined,
               modeTemplateType: rawMode,
@@ -4466,7 +4476,17 @@ export function initializeIpcHandlers(appState: AppState): void {
                 contract: manualSourceContract,
                 evidence: evidenceRoute,
                 styleInstructions: formatAnswerPlanForPrompt(answerPlan, false),
-                maxAnswerWords: answerPlan.answerStyle === 'detailed' ? 180 : 90,
+                // The Answer length setting moves this on the live surface only,
+                // like the per-turn LENGTH line; the launcher keeps 90. A length
+                // in the mode's Real-time prompt wins on both: no target stated.
+                maxAnswerWords: (() => {
+                  try {
+                    const { registeredInstructionsSetLength } = require('./llm/userInstructionContract') as typeof import('./llm/userInstructionContract');
+                    if (registeredInstructionsSetLength(manualActiveMode?.id ?? null)) return null;
+                    const { profileAnswerWordCap, getRegisteredAnswerLength } = require('./llm/answerLength') as typeof import('./llm/answerLength');
+                    return profileAnswerWordCap(answerPlan.answerStyle, answerSurface === 'live' ? getRegisteredAnswerLength() : 'smart');
+                  } catch { return answerPlan.answerStyle === 'detailed' ? 180 : 90; }
+                })(),
               });
               const profileJitBlock = `${profileJitPrompt.systemPrompt}\n\n${profileJitPrompt.userPrompt}`;
               context = context ? `${profileJitBlock}\n\n${context}` : profileJitBlock;
@@ -6249,8 +6269,16 @@ export function initializeIpcHandlers(appState: AppState): void {
               // deterministic trimmer was REMOVED because it cropped the conclusion off long
               // answers — so we NEVER trim here, we only measure the answer for telemetry (the
               // coarse length class + word count). The answer text is left exactly as produced.
-              const budget = applySpeakabilityBudget(fullResponse, answerPlan.answerType, answerPlan.answerStyle as any, message, isCodingChat);
-              piTelemetry.emit('pi_context_policy_applied', { answerType: answerPlan.answerType, via: 'speakability_measured', speakabilityClass: budget.speakability_class, markerCount: budget.spoken_word_count });
+              // Measured against the Answer length setting, the target this path's
+              // <answer_contract> stated (formatAnswerPlanForPrompt reads the same setting).
+              const measuredLength = (() => {
+                try {
+                  const { getRegisteredAnswerLength } = require('./llm/answerLength') as typeof import('./llm/answerLength');
+                  return getRegisteredAnswerLength();
+                } catch { return 'smart' as const; }
+              })();
+              const budget = applySpeakabilityBudget(fullResponse, answerPlan.answerType, answerPlan.answerStyle as any, message, isCodingChat, measuredLength);
+              piTelemetry.emit('pi_context_policy_applied', { answerType: answerPlan.answerType, via: 'speakability_measured', speakabilityClass: budget.speakability_class, markerCount: budget.spoken_word_count, answerLength: measuredLength });
               // Visible scaffold in a DEFAULT-style answer (user didn't ask for
               // structure): compress to the speakable form. detectAnswerStyle
               // already ran inside planAnswer (answerStyle on the plan).
@@ -7635,6 +7663,9 @@ export function initializeIpcHandlers(appState: AppState): void {
   // already-running process until the app is relaunched.
   safeHandle('restart-app', () => {
     console.log('[IPC] restart-app requested');
+    // app.exit skips before-quit: say it was a restart, or the next launch
+    // reads this run as one that vanished (app_run_ended).
+    try { require('./utils/lifecycleTracker').LifecycleTracker.getInstance().markRestart('restart-app'); } catch { /* best-effort */ }
     app.relaunch();
     app.exit(0);
   });
@@ -7955,7 +7986,76 @@ export function initializeIpcHandlers(appState: AppState): void {
     return appState.getAutoAnswerEnabled();
   });
 
+  // Who may run Auto Answer, and whether this user's meetings are shared
+  // (autoAnswerAccess.ts). basis 'pro' | 'sharing' | 'none'.
+  safeHandle('auto-answer:get-access', async () => {
+    const SettingsManager = require('./services/SettingsManager').SettingsManager;
+    const consent = SettingsManager.getInstance().get('autoAnswerTrainingConsent') ?? null;
+    const access = appState.getAutoAnswerAccess();
+    return { available: appState.isAutoAnswerAvailable(), allowed: access.allowed, basis: access.basis, uploads: access.uploads, consent, enabled: appState.getAutoAnswerEnabled() };
+  });
+
+  // Agree to share (free users: unlocks Auto Answer; Pro: the opt-in), or withdraw.
+  // Withdrawing for a free user leaves the toggle as it is but Auto Answer stops
+  // (isAutoAnswerActive), and nothing more is uploaded.
+  safeHandle('auto-answer:set-training-consent', async (_, granted: boolean) => {
+    const ok = appState.setAutoAnswerTrainingConsent(Boolean(granted));
+    return ok ? { success: true } : { success: false, error: 'Settings store is unavailable; the change was not saved.' };
+  });
+
+  // The Auto Answer model: a paid, private download for API keys and Pro
+  // (premium/electron/autoAnswer/decider/deciderModelInstaller.ts), and its
+  // before/after judge-call card (deciderSavings.ts, numbers only).
+  // judgeViaNatively: Natively API is the selected AI (or the judge's only
+  // route), so the card's estimate says "Natively API" instead of a model
+  // name (Evin 2026-11-14), even when another key would judge first.
+  const autoAnswerModelState = () => {
+    const llm = appState.processingHelper?.getLLMHelper?.();
+    return {
+      install: appState.deciderInstaller().status(),
+      savings: appState.deciderSavings().summary(),
+      judgeViaNatively: llm?.getCurrentModelId?.() === 'natively' || llm?.judgeRunsOnNatively?.() === true,
+    };
+  };
+  safeHandle('auto-answer-model:get-status', async () => autoAnswerModelState());
+  safeHandle('auto-answer-model:install', async () => {
+    const send = (install: unknown) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send('auto-answer-model:progress', install);
+      }
+    };
+    const result = await appState.deciderInstaller().install(send);
+    if (result.state === 'installed') {
+      appState.deciderSavings().markInstalled();
+      appState.resetAutoAnswerDecider();
+    }
+    return autoAnswerModelState();
+  });
+  safeHandle('auto-answer-model:remove', async () => {
+    // Stop the worker first: Windows will not delete a graph a process still has open.
+    appState.resetAutoAnswerDecider();
+    const installer = appState.deciderInstaller();
+    installer.remove();
+    if (installer.installedDir()) {
+      await new Promise((r) => setTimeout(r, 3500)); // the utility process's stop grace (deciderUtilityHost.ts)
+      installer.remove();
+    }
+    if (!installer.installedDir()) appState.deciderSavings().markRemoved();
+    return autoAnswerModelState();
+  });
+
   safeHandle('set-auto-answer-enabled', async (_, enabled: boolean) => {
+    // Auto Answer is Pro or trial, or free with training-data sharing
+    // (premium/electron/autoAnswer/autoAnswerAccess.ts). Switching off is always free.
+    if (enabled) {
+      const access = appState.getAutoAnswerAccess();
+      if (!access.allowed && access.error === 'auto_answer_unavailable') {
+        return { success: false, error: access.error, message: 'Auto Answer is not part of this build.' };
+      }
+      if (!access.allowed) {
+        return { success: false, error: access.error, message: 'Auto Answer is part of Natively Pro. You can also use it for free by sharing the transcripts of meetings where it runs.' };
+      }
+    }
     const persisted = appState.setAutoAnswerEnabled(Boolean(enabled));
     return persisted
       ? { success: true }
@@ -8932,6 +9032,24 @@ export function initializeIpcHandlers(appState: AppState): void {
         win.webContents.send('provider-data-scopes-changed', merged);
       }
     });
+    return { success: true };
+  });
+
+  // Settings › Overlay › Answer length (llm/answerLength.ts). get answers with
+  // what answers use now: Smart without Pro, whatever is stored. Shorter and
+  // Longer are Pro; going back to Smart is turning it off, which stays free.
+  safeHandle('answer-length:get', async () => {
+    const { effectiveAnswerLength } = require('./llm/answerLength') as typeof import('./llm/answerLength');
+    return { value: effectiveAnswerLength(SettingsManager.getInstance().get('answerLength'), isProOrTrialActive()) };
+  });
+
+  safeHandle('answer-length:set', async (_, value: unknown) => {
+    const { isAnswerLength } = require('./llm/answerLength') as typeof import('./llm/answerLength');
+    if (!isAnswerLength(value)) return { success: false, error: 'invalid_value' };
+    if (value !== 'smart' && !isProOrTrialActive()) return proRefusal();
+    if (!SettingsManager.getInstance().set('answerLength', value)) {
+      return { success: false, error: 'settings_store_degraded' };
+    }
     return { success: true };
   });
 
@@ -12800,6 +12918,29 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // "Didn't get your key? Email it again" (Plans & Billing). The server sends
+  // the key to the address on file and never returns it, answering the same
+  // whether or not a key exists; it allows 5 tries per network per hour. No key
+  // required: the person asking is exactly the one who has no key yet.
+  safeHandle('resend-natively-key', async (_event, email: unknown) => {
+    const address = typeof email === 'string' ? email.trim() : '';
+    if (!address || address.length > 254 || !address.includes('@')) return { ok: false, error: 'invalid_email' };
+    try {
+      const res = await fetch(`${NATIVELY_API_BASE}/keys/resend`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: address }),
+        signal: AbortSignal.timeout(10000),
+      });
+      const body = (await res.json().catch(() => ({}))) as any;
+      if (res.status === 429) return { ok: false, error: 'rate_limited' };
+      if (!res.ok) return { ok: false, error: body?.error || 'request_failed' };
+      return { ok: true, message: typeof body?.message === 'string' ? body.message : undefined };
+    } catch (error: any) {
+      return { ok: false, error: 'network_error' };
+    }
+  });
+
   safeHandle('get-natively-usage', async (_event, opts?: { force?: boolean }) => {
     // Hoisted out of try so the catch block's stale-cache lookup can reach it.
     let key: string | undefined;
@@ -14635,7 +14776,10 @@ export function initializeIpcHandlers(appState: AppState): void {
               resolve(result);
             };
 
-            const ws = new WebSocket('wss://stt-rt.soniox.com/transcribe-websocket');
+            // Key in the upgrade header, not the config frame (refused there from 2027-01-15).
+            const ws = new WebSocket('wss://stt-rt.soniox.com/transcribe-websocket', {
+              headers: { Authorization: `Bearer ${apiKey}` },
+            });
 
             // Hard connect timeout — server unreachable
             const connectTimeout = setTimeout(() => {
@@ -14646,8 +14790,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               clearTimeout(connectTimeout);
               ws.send(
                 JSON.stringify({
-                  api_key: apiKey,
-                  model: 'stt-rt-v5',
+                  model: require('./audio/sttModelCatalog').SONIOX_RT_MODEL,
                   audio_format: 'pcm_s16le',
                   sample_rate: 16000,
                   num_channels: 1,
@@ -20187,6 +20330,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       try { _manualCodingState.clearAllSessions(); } catch { /* non-fatal */ }
 
       ModesManager.getInstance().setActiveMode(id);
+      // Speech Auto Answer holds for the next ask was heard under the old mode:
+      // it must not prefix the new mode's first question (F-CTX-03, 2026-11-13).
+      try { appState.onAutoAnswerModeChanged?.(); } catch { /* non-fatal */ }
       // Supersede in-flight LIVE answers too (the abort loop above only covers
       // manual chat streams): a WTA generation planned under the old mode must
       // not finalize into a UI now showing the new one.

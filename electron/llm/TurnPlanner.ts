@@ -465,3 +465,28 @@ export function planTurn(input: TurnPlanInput): TurnPlan {
     reasonCode: `turnPlanner:${reason}`,
   };
 }
+
+/**
+ * The seeder leash on its own (F-ACC-12, 2026-11-13): may an anti-fabrication
+ * seeder put the candidate's background into a turn whose retrieval came back
+ * empty? Exactly planTurn's `answerDirectives.seedCandidateBackground` — profile
+ * and JD questions only — for callers that seed outside planTurn (premium
+ * KnowledgeOrchestrator's zero-node experience pack). Availability is taken as
+ * "profile loaded", since a seeder only runs when there is one. Never throws; a
+ * failure does not seed.
+ */
+export function seedsCandidateBackground(
+  input: { question: string; answerType?: string | null; intent?: string | null } | null | undefined,
+): boolean {
+  try {
+    if (!input) return false;
+    return planTurn({
+      question: input.question || '',
+      answerType: input.answerType ?? null,
+      intent: input.intent ?? null,
+      availability: { hasReferenceFiles: false, hasProfileFacts: true, hasJobDescription: true, hasLiveTranscript: true },
+    }).answerDirectives.seedCandidateBackground === true;
+  } catch {
+    return false;
+  }
+}

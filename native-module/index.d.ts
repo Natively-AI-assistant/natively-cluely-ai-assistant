@@ -197,6 +197,12 @@ export interface CallTreeWindow {
   nodes: Array<CallTreeNode>
 }
 
+export interface NativeCaptureLogLine {
+  /** Wall-clock ms since the Unix epoch when the line was written. */
+  atMs: number
+  message: string
+}
+
 export interface OutputDevicePeak {
   id: string
   peak: number
@@ -218,6 +224,9 @@ export interface OutputRouteProbe {
  * probe as "no evidence".
  */
 export declare function probeOutputRoutes(): Promise<OutputRouteProbe>
+
+/** Returns and clears the buffered capture lifecycle lines, oldest first. */
+export declare function takeNativeCaptureLog(): Array<NativeCaptureLogLine>
 
 /**
  * Event payload delivered to the JS callback. Crossing the V8 boundary is

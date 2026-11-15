@@ -20,6 +20,16 @@ import { nextVoiceEpoch, voiceIdFromLabel } from './sttDiarization';
  * provider (SONIOX_SILENCE_TAIL_MS), same mechanism (PR 599).
  */
 export const NATIVELY_SILENCE_TAIL_MS = 1200;
+
+/**
+ * Meeting end: how long finish() waits for the server's `finished` (its own
+ * limit is 2.5 s, plus a 120 ms settle and the network). A provider holds its
+ * final until it hears silence, so closing the socket right after someone
+ * spoke lost that sentence whole (measured 2026-11-10 on the real services:
+ * stop 150 ms after the last word, Soniox and Deepgram returned nothing).
+ * Asked to flush, they return it in 0.4-0.55 s.
+ */
+export const NATIVELY_FINISH_WAIT_MS = 3_000;
 import {
     resolveRelaySession as defaultResolveRelaySession,
     buildFallbackChain,
@@ -199,6 +209,12 @@ export class NativelyProSTT extends EventEmitter {
     // tear the stream down: before 2026-10-16 every auto-mode Soniox session paid a
     // reconnect ~3 s in, and a wrong early guess then stayed pinned for the session.
     private connectedProvider: string | null = null;
+    // The server said it understands {type:'finish'} (its `connected` frame has
+    // `finish: true`). An older server reads every text frame as AUDIO, so
+    // without the flag finish() sends nothing.
+    private serverFinishes = false;
+    // finish() sent and `finished` not back yet: until this time (epoch ms).
+    private finishUntil = 0;
     // Dead-link detection. The relay pings every 25 s and the ws library answers the
     // pongs itself, but nothing here noticed when the pings STOPPED: a laptop that
     // changed networks kept "listening" into a half-open socket until TCP gave up
@@ -435,8 +451,31 @@ export class NativelyProSTT extends EventEmitter {
         this.silenceTail.start();
     }
 
-    /** No-op — Natively API server finalizes via VAD; no client-side flush available */
+    /** No-op — Natively API server finalizes via VAD; no client-side flush available.
+     *  (Mid-meeting callers use this: Answer flushes the mic. The end-of-stream
+     *  flush is finish(), which a stream must not get while it keeps going.) */
     public finalize(): void {}
+
+    /**
+     * The audio has ended (meeting end, dictation end): ask the server to get
+     * the provider's last finals out now, before stop() closes the socket.
+     * Returns true when a request went out; hasPendingWork() is then true until
+     * the server answers `finished` or NATIVELY_FINISH_WAIT_MS passes.
+     */
+    public finish(): boolean {
+        this.silenceTail.cancel();   // the flush finalises; synthetic silence after it would only add audio
+        const ws = this.ws;
+        if (!this.isActive || !this.isConnected || !this.serverFinishes || !ws || ws.readyState !== WebSocket.OPEN) return false;
+        if (this.hasPendingWork()) return true;
+        try { ws.send(JSON.stringify({ type: 'finish' })); } catch { return false; }
+        this.finishUntil = Date.now() + NATIVELY_FINISH_WAIT_MS;
+        return true;
+    }
+
+    /** A finish() is waiting on the server (its last finals may still arrive). */
+    public hasPendingWork(): boolean {
+        return this.finishUntil > Date.now() && this.ws?.readyState === WebSocket.OPEN;
+    }
 
     public setCredentials(_path: string): void {}
 
@@ -475,6 +514,7 @@ export class NativelyProSTT extends EventEmitter {
 
     public stop(): void {
         this.isActive         = false;
+        this.finishUntil      = 0;
         this.silenceTail.cancel();
         this._chunksSent      = 0;
         this.intentionalClose = false;  // Reset so a subsequent start() can reconnect normally
@@ -704,10 +744,17 @@ export class NativelyProSTT extends EventEmitter {
                 return;
                 }
 
+                if (msg.type === 'finished') {
+                    this.finishUntil = 0;
+                    console.log(`[NativelyProSTT:${this.channel}] Finished (${typeof msg.reason === 'string' ? msg.reason : 'done'})`);
+                    return;
+                }
+
                 if (msg.status === 'connected') {
                     this.isConnecting = false;
                     this.isConnected  = true;
                     this.connectedProvider = typeof msg.provider === 'string' ? msg.provider : null;
+                    this.serverFinishes = msg.finish === true;
                     this.startLivenessWatch(ws);
                     console.log(`[NativelyProSTT] Connected via ${msg.provider}`);
                     // Relay telemetry: a successful auth on the current rung. We
@@ -839,6 +886,8 @@ export class NativelyProSTT extends EventEmitter {
             this.isConnecting = false;
             this.isConnected  = false;
             this.connectedProvider = null;
+            this.serverFinishes = false;
+            this.finishUntil = 0;   // nothing more can arrive on this socket
             this.stopLivenessWatch();
             if (this.ws === ws) this.ws = null;
             console.log(`[NativelyProSTT] Connection closed (code ${code})`);
@@ -1262,6 +1311,8 @@ export class NativelyProSTT extends EventEmitter {
         this.isConnected  = false;
         this.isConnecting = false;
         this.connectedProvider = null;
+        this.serverFinishes = false;
+        this.finishUntil = 0;
         this.stopLivenessWatch();
 
         // Clear every owned timer here, not just at stop()/start() boundaries.

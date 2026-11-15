@@ -161,6 +161,18 @@ export function materialHasNoDocuments(material: string): boolean {
   return !/<evidence\b/.test(String(material ?? ''));
 }
 /**
+ * ONLY WHEN DOCUMENTS ARE ATTACHED (2026-11-13, owner's decision after the live
+ * pipeline forensics, F-LAT-04): the pass was 43 of 103 answer-sized calls on a
+ * spoken General meeting and held the finished state ~0.9 s after the last
+ * word. It now runs on turns whose material carries evidence (reference files,
+ * profile), where a wrong fact costs most. The accepted cost: the 2026-10-01
+ * spoken-General gain without documents (judged 8.53 -> 8.80, hard fails 5 -> 1)
+ * is given up. NATIVELY_CLAIM_VERIFIER_NO_DOCS=1 restores it for a comparison.
+ */
+export function claimVerifierRunsWithoutDocuments(): boolean {
+  return process.env.NATIVELY_CLAIM_VERIFIER_NO_DOCS === '1';
+}
+/**
  * LIST, THEN REWRITE (2026-10-01). Asked only to "output the revised reply",
  * the edit model left the claims the external judge capped most often:
  * "Twice a year sounds manageable", "I'd be looking at a few weeks rather than
@@ -291,6 +303,35 @@ Change as little as possible. If nothing needs changing, the revised reply is th
 /** The part of the verifier's message after the answer call's own (inherited) message. */
 export function claimVerifierDraftMessage(draftBody: string): string {
   return `DRAFT REPLY:\n${String(draftBody ?? '').trim()}`;
+}
+
+/**
+ * The pass as the TAIL of the answer's own call (2026-11-10), for the prompt cache.
+ *
+ * The pass used to run under its own system prompt, with the answer's user
+ * message replayed after it. A provider prompt cache (DeepSeek, Gemini) bills
+ * the start of a prompt it saw on a recent call at ~2% of the normal rate, but
+ * only an IDENTICAL start counts, and a different system prompt comes first.
+ * So the pass re-paid in full for material the answer had sent a second
+ * earlier: about 20% of all DeepSeek streamed prompt tokens in production.
+ *
+ * Now the call is the answer's system prompt and user message, unchanged, and
+ * this block after them: the verifier's instructions, then the draft after
+ * the last "---" line (the instructions say where to find it). Checked on 8
+ * live-answer scenarios with a planted unsupported claim, 4 runs each,
+ * deepseek-flash: the claim left the rewrite 32/32 in both shapes; the rails
+ * accepted the edit 26/32 vs 22/32; the claim survived into the shipped text
+ * 6/32 vs 10/32; the supported fact kept 29/32 vs 30/32. On the last 3 hours
+ * of real prompt sizes the pass's billed input falls ~75%.
+ * NATIVELY_CLAIM_VERIFIER_SHARED_PREFIX=0 restores the old shape.
+ */
+export function claimVerifierInlineMessage(verifierSystemPrompt: string, draftBody: string): string {
+  return `# Verification pass — not a question to answer\nYour role for this message only: ${verifierSystemPrompt}\n\n---\n${claimVerifierDraftMessage(draftBody)}`;
+}
+
+/** Whether the live pass rides on the answer's own prompt (see claimVerifierInlineMessage). */
+export function claimVerifierSharesAnswerPrefix(env: Record<string, string | undefined> = process.env): boolean {
+  return env.NATIVELY_CLAIM_VERIFIER_SHARED_PREFIX !== '0';
 }
 
 /**

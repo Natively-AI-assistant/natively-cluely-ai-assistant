@@ -15,8 +15,12 @@ export function buildDirectWhatToSayPayload({
   interviewerRequest,
   dynamicPromptInstruction,
   hasScreenshots,
+  customScreenshotPrompt,
 }) {
   const speech = typeof interviewerRequest === 'string' ? interviewerRequest.trim() : '';
+  const custom = typeof customScreenshotPrompt === 'string' && customScreenshotPrompt.trim().length > 0
+    ? customScreenshotPrompt.trim()
+    : '';
   const instruction = typeof dynamicPromptInstruction === 'string'
     && dynamicPromptInstruction.trim().length > 0
     ? dynamicPromptInstruction
@@ -25,7 +29,7 @@ export function buildDirectWhatToSayPayload({
   if (hasScreenshots) {
     return {
       source: 'screenshot',
-      currentRequest: instruction || DEFAULT_SCREENSHOT_REQUEST,
+      currentRequest: instruction || custom || DEFAULT_SCREENSHOT_REQUEST,
       transcript: speech || undefined,
     };
   }

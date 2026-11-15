@@ -4,6 +4,10 @@
 // are sold (Settings › Plans & Billing, the end-of-trial card), so the choice
 // looks and behaves the same in both.
 //
+// Settings › Plans & Billing passes a third option, Hourly, first: it swaps the
+// row of plans for the two Pro packs, as the website's pricing page does
+// (2026-11-10). The end-of-trial card keeps the two.
+//
 // It is Overlay's two-way switch (.surface-switch / .surface-switch-thumb in
 // index.css, already themed for light and dark): a radiogroup with one thumb
 // that slides under the picked label. Arrow keys move the choice.
@@ -11,14 +15,25 @@ import React from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { YEARLY_MONTHS_FREE, type BillingCycle } from '../../lib/apiPlans.mjs';
 
-const BILLING_CYCLES: ReadonlyArray<{ id: BillingCycle; label: string }> = [
+export type SwitchOption<T extends string> = { id: T; label: string };
+
+const BILLING_CYCLES: ReadonlyArray<SwitchOption<BillingCycle>> = [
   { id: 'monthly', label: 'Monthly' },
   { id: 'yearly', label: 'Yearly' },
 ];
 
-interface Props {
-  value: BillingCycle;
-  onChange: (next: BillingCycle) => void;
+/** What Plans & Billing shows: the packs (Hourly) or the plans, billed monthly or yearly. */
+export type PlansView = 'hourly' | BillingCycle;
+export const PLANS_VIEWS: ReadonlyArray<SwitchOption<PlansView>> = [
+  { id: 'hourly', label: 'Hourly' },
+  ...BILLING_CYCLES,
+];
+
+interface Props<T extends string> {
+  value: T;
+  onChange: (next: T) => void;
+  /** The choices, in order. Monthly / Yearly when left out. */
+  options?: ReadonlyArray<SwitchOption<T>>;
   /** Row alignment: centred in Settings, left-aligned in a card's text column. */
   align?: 'center' | 'start';
   /** "Yearly: 2 months free" beside the switch. Settings hides it (its price
@@ -26,13 +41,20 @@ interface Props {
   showNote?: boolean;
 }
 
-export function BillingCycleSwitch({ value, onChange, align = 'center', showNote = true }: Props) {
+export function BillingCycleSwitch<T extends string = BillingCycle>({
+  value,
+  onChange,
+  options = BILLING_CYCLES as unknown as ReadonlyArray<SwitchOption<T>>,
+  align = 'center',
+  showNote = true,
+}: Props<T>) {
   const reduceMotion = useReducedMotion();
-  const index = Math.max(0, BILLING_CYCLES.findIndex((c) => c.id === value));
+  const count = options.length;
+  const index = Math.max(0, options.findIndex((c) => c.id === value));
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
-    const next = BILLING_CYCLES[e.key === 'ArrowRight' ? 1 : 0].id;
+    const next = options[Math.min(count - 1, Math.max(0, index + (e.key === 'ArrowRight' ? 1 : -1)))].id;
     onChange(next);
     (e.currentTarget.querySelector(`[data-cycle="${next}"]`) as HTMLElement | null)?.focus();
   };
@@ -42,17 +64,18 @@ export function BillingCycleSwitch({ value, onChange, align = 'center', showNote
         role="radiogroup"
         aria-label="Billing"
         onKeyDown={onKeyDown}
-        className="surface-switch relative grid grid-cols-2 p-1 rounded-full"
+        className="surface-switch relative grid p-1 rounded-full"
+        style={{ gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` }}
       >
         <motion.div
           aria-hidden="true"
           className="surface-switch-thumb absolute top-1 bottom-1 left-1 rounded-full"
-          style={{ width: 'calc(50% - 4px)' }}
+          style={{ width: `calc((100% - 8px) / ${count})` }}
           initial={false}
           animate={{ x: `${index * 100}%` }}
           transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 30 }}
         />
-        {BILLING_CYCLES.map(({ id, label }) => (
+        {options.map(({ id, label }) => (
           <button
             key={id}
             type="button"

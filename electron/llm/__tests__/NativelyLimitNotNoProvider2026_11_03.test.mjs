@@ -33,9 +33,9 @@ const sliceOf = (start, len = 4000) => {
 test('the streamed answer that nothing could give fails with the Natively limit while it holds', () => {
   const inner = src.slice(src.indexOf('private async * _streamChatInner('), src.indexOf('private async * streamWithNatively('));
   assert.ok(inner.length > 1000, 'found _streamChatInner');
-  assert.ok(inner.includes('throw this.exhaustedChainError();'), 'the last line of the chain');
+  assert.ok(inner.includes('throw this.exhaustedChainError(lastProviderError);'), 'the last line of the chain');
   assert.ok(!inner.includes('throw new Error(this.noProviderAvailableMessage());'), 'not the bare no-provider sentence');
-  const helper = sliceOf('private exhaustedChainError(): Error {', 400);
+  const helper = sliceOf('private exhaustedChainError(lastProviderError?: unknown): Error {', 400);
   assert.match(helper, /this\.nativelyLimit && this\.nativelyQuotaBlockedUntil > Date\.now\(\)/);
   assert.match(helper, /nativelyLimitErrorMessage\(this\.nativelyLimit\)/);
 });

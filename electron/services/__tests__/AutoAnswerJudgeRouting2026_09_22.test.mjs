@@ -94,6 +94,9 @@ describe('main.ts host wiring', () => {
   test('the controller signal is forwarded to generateJudgeVerdict', () => {
     const MAIN = read('electron/main.ts');
     assert.match(MAIN, /judgeCandidate: async \(req, signal\) =>/);
-    assert.match(MAIN, /generateJudgeVerdict\(buildJudgePrompt\(req\), \{ signal \}\)/);
+    // The prompt comes from the premium module (electron/premium/autoAnswer.ts) and is
+    // counted for the savings card before it is sent.
+    assert.match(MAIN, /const prompt = autoAnswer\.buildJudgePrompt\(req\);/);
+    assert.match(MAIN, /generateJudgeVerdict\(prompt, \{ signal \}\)/);
   });
 });

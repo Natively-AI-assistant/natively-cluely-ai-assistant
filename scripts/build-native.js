@@ -8,6 +8,12 @@ const nativeModulePath = path.join(__dirname, '..', 'native-module');
 // sweep skips these; everything else matching '.node.stale-' is swept freely.
 const RESCUE_MARKER = '.rescue-last-good';
 const buildAllMacTargets = process.env.NATIVELY_BUILD_ALL_MAC_ARCHES === '1';
+const { resolveNativeFeatures, napiFeatureArgs } = require(path.join(__dirname, 'lib', 'native-features.cjs'));
+const nativeFeatures = resolveNativeFeatures(process.env);
+const featureArgs = napiFeatureArgs(nativeFeatures);
+if (nativeFeatures.length > 0) {
+  console.warn(`\n*** DEV-ONLY native features: ${nativeFeatures.join(', ')}. Do not package or ship this build. ***\n`);
+}
 
 // Ensure Cargo binary directory (~/.cargo/bin) is in PATH if cargo is installed there
 const cargoBinDir = path.join(os.homedir(), '.cargo', 'bin');
@@ -167,7 +173,7 @@ if (os.platform() === 'darwin') {
       MACOSX_DEPLOYMENT_TARGET: process.env.MACOSX_DEPLOYMENT_TARGET || MACOS_DEPLOYMENT_TARGET,
       ...(clangLibPath ? { LIBRARY_PATH: clangLibPath } : {}),
     };
-    runCommand(`npx napi build --platform --target ${target} --release`, extraEnv);
+    runCommand(`npx napi build --platform --target ${target} --release${featureArgs}`, extraEnv);
   }
 
   // Fix hardcoded absolute paths in .node binaries, then pad the string table
@@ -264,7 +270,7 @@ if (os.platform() === 'darwin') {
   }
 
   try {
-    runCommand('npx napi build --platform --release');
+    runCommand(`npx napi build --platform --release${featureArgs}`);
     // Verified INSIDE the try, before the stale copies are swept. napi can exit
     // 0 and still not leave the artifact this platform/arch expects — a
     // toolchain that silently falls back to ia32, or a target-triple rename,

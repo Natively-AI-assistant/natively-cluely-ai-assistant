@@ -18,14 +18,14 @@ import type {
   RetrievalPlan, ClaimRequirement, SourceType, Answerability, ClaimType,
 } from '../contracts/types';
 import { freezeTurnDecision } from '../contracts/types';
-import { resolveModePolicy, generalKnowledgeAllowed, type ModePolicy } from '../policies/mode-policy-registry';
+import { resolveModePolicy, generalKnowledgeAllowed, applyModeSourceContract, type ModePolicy, type ModeSourceContractInput } from '../policies/mode-policy-registry';
 import { resolveAnswerPolicy, type AnswerPolicy } from '../policies/answer-policy';
 import { CLAIM_AUTHORITY, claimAuthority } from '../policies/source-authority-policy';
 import { isRetrievalFixEnabled } from '../contracts/retrieval-flags';
 import { classifyTurn, isBareFollowUp, stripSttFillers, isProspectiveJobQuestion } from '../question/turn-classifier';
 import type { AnswerTrace, RetrievalAttemptTrace } from '../observability/answer-trace';
 import { mergeRewrittenEvidence, type QueryRewriter, type QueryRewriteOutcome } from '../retrieval/llm-query-rewrite';
-import { SMALL_CORPUS_MAX_TOKENS, WHOLE_PACK_MAX_TOKENS } from '../retrieval/mode-retrieval-port';
+import { SMALL_CORPUS_MAX_TOKENS, WHOLE_PACK_MAX_TOKENS, LARGE_PACK_EVIDENCE_TOKENS, LARGE_PACK_ACCEPTED_EVIDENCE } from '../retrieval/mode-retrieval-port';
 import { PROFILE_WHOLE_MAX_TOKENS } from '../retrieval/profile-retrieval-port';
 
 export interface AnswerRequest {
@@ -106,6 +106,13 @@ export interface AnswerRequest {
    * mode's files, so source isolation is unchanged.
    */
   extraAllowedSourceTypes?: SourceType[];
+
+  /**
+   * The mode's source contract (F-ACC-05): a DELIBERATE reference-files-first
+   * choice promotes the reference files above the mode's own first source. See
+   * applyModeSourceContract. Absent → the mode policy alone, as before.
+   */
+  modeSourceContract?: ModeSourceContractInput | null;
 
   /**
    * The caller wants this turn's evidence for a prompt of its own and is not a
@@ -263,6 +270,7 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
   if (extra.length) {
     policy = { ...policy, allowedSourceTypes: [...policy.allowedSourceTypes, ...extra] };
   }
+  policy = applyModeSourceContract(policy, req.modeSourceContract);
 
   const q = resolveQuestion(req);
 
@@ -398,6 +406,12 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     && typeof req.attachedCorpusTokens === 'number'
     && req.attachedCorpusTokens > SMALL_CORPUS_MAX_TOKENS && req.attachedCorpusTokens <= WHOLE_PACK_MAX_TOKENS;
   const packFiles = wholePack ? Math.max(1, req.attachedSourceCount ?? 1) : 0;
+  // A pack LARGER than the whole-pack size is retrieved with the larger
+  // LARGE_PACK_EVIDENCE_TOKENS budget (F-LAT-09, measured 2026-11-14: more of
+  // the needed passages than the policy's 1,600-2,400 tokens); the accepted-item
+  // floor rises with it or the budget could not be filled.
+  const largePack = retrieves && req.hasAttachedDocuments === true && req.profileOnlyDocuments !== true
+    && typeof req.attachedCorpusTokens === 'number' && req.attachedCorpusTokens > WHOLE_PACK_MAX_TOKENS;
   // The résumé and the job description, each handed over whole by the profile
   // port (PROFILE_WHOLE_MAX_TOKENS), ride on top in the same way: one item per
   // document, the budget grown by their size, and the pack keeps its own room.
@@ -406,9 +420,9 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
   const wholeAnswers = retrieves && answersFit;
   const wholeAnswersTokens = wholeAnswers ? ownAnswersTokens : 0;
   const profileDocs = (wholeProfile ? (req.profileWhole as { docs: number }).docs : 0) + (wholeAnswers ? 1 : 0);
-  const acceptedBase = (multiFile
+  const acceptedBase = Math.max(multiFile
     ? Math.max(policy.retrievalPolicy.maximumAcceptedEvidence, MULTI_FILE_EVIDENCE.accepted)
-    : policy.retrievalPolicy.maximumAcceptedEvidence) + packFiles + profileDocs;
+    : policy.retrievalPolicy.maximumAcceptedEvidence, largePack ? LARGE_PACK_ACCEPTED_EVIDENCE : 0) + packFiles + profileDocs;
 
   // A source-primary turn reads the reference files, plus the meeting when one
   // is live (the meeting rule above would otherwise have been the whole plan).
@@ -486,10 +500,11 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     maximumAcceptedEvidence: acceptedBase * (cls.exhaustive && cls.shouldRetrieve ? 3 : 1),
     // A whole small corpus must fit next to the meeting's evidence, or the
     // packer drops the file outright (it skips an item that does not fit).
-    ...(multiFile || (smallCorpus && retrieves) || wholePack || wholeProfile || wholeAnswers
+    ...(multiFile || (smallCorpus && retrieves) || wholePack || largePack || wholeProfile || wholeAnswers
       ? { evidenceTokens: Math.max(
         policy.contextBudget.evidenceTokens,
         multiFile ? MULTI_FILE_EVIDENCE.tokens : 0,
+        largePack ? LARGE_PACK_EVIDENCE_TOKENS : 0,
         smallCorpus && retrieves ? (req.attachedCorpusTokens as number) + SMALL_CORPUS_EVIDENCE_HEADROOM : 0,
       ) + (wholePack ? (req.attachedCorpusTokens as number) + WHOLE_PACK_ITEM_OVERHEAD * packFiles : 0)
         + (wholeProfile ? (req.profileWhole as { tokens: number }).tokens : 0)
@@ -931,9 +946,18 @@ export function evaluateAnswerability(
     (req.authoritativeSources ?? []).some((s) => plannedTypes.has(s));
   const family = (req: ClaimRequirement): string =>
     plannable(req) && String(req.claimType).startsWith('JOB_') ? 'job' : 'user';
+  // ONE clause, ONE key (F-ACC-03, 2026-11-13). The classifier records a
+  // claim's clause from its LOWER-CASED question, while a claim without a
+  // clause falls back to the resolved question as asked — so one clause was
+  // two subjects that differed only in case. In a live meeting the reference
+  // file satisfied the document claim and the meeting claim sat alone in the
+  // other group: a fact in the pack read PARTIAL (P2-s16b, "What is the
+  // retention window for raw spans in Orion?"). Case, spacing and the closing
+  // punctuation never make a different subject.
+  const subjectKey = (s: string): string => s.toLowerCase().replace(/\s+/g, ' ').replace(/[\s?!.]+$/, '').trim();
   const bySubject = new Map<string, typeof required>();
   for (const req of required) {
-    const subject = `${req.subject ?? decision.resolvedQuestion} ${family(req)}`;
+    const subject = `${subjectKey(req.subject ?? decision.resolvedQuestion)} ${family(req)}`;
     if (!bySubject.has(subject)) bySubject.set(subject, []);
     bySubject.get(subject)!.push(req);
   }

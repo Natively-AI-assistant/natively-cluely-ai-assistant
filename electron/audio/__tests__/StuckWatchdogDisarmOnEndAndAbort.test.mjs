@@ -73,6 +73,21 @@ test('wireSystemCapture attaches __disarmStuckWatchdog on the capture instance',
   );
 });
 
+test('wireSystemCapture disarms the watchdog when the capture errors (#729 follow-up)', () => {
+  // An error ends the native thread and emits no 'stop'. Seen live with
+  // injected init failures: after recovery gave up, the armed watchdog logged
+  // "produced 0 chunks in 12s - treating as initial silence" over the dead
+  // capture. Mic is excluded on purpose: a CPAL error keeps its thread running.
+  assert.ok(
+    /capture\.on\(\s*['"]error['"]\s*,\s*disarmStuckWatchdog\s*\)/.test(wireSystemBody),
+    'BUG: wireSystemCapture must disarm the stuck watchdog on the capture\'s error event.',
+  );
+  assert.ok(
+    !/capture\.on\(\s*['"]error['"]\s*,\s*disarmStuckWatchdog\s*\)/.test(wireMicBody),
+    'the mic keeps capturing after a CPAL error; its watchdog must stay armed',
+  );
+});
+
 test('wireMicCapture attaches __disarmStuckWatchdog on the capture instance', () => {
   assert.ok(
     /\(\s*capture\s+as\s+any\s*\)\.\s*__disarmStuckWatchdog\s*=\s*disarmStuckWatchdog/.test(wireMicBody),

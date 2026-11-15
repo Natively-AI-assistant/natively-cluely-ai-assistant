@@ -180,7 +180,7 @@ test('late legacy provider, RAG, phone and intelligence events cannot mix into a
     'window.electronAPI.onRAGStreamError((data: { error: string }) => {',
     'window.electronAPI.onIntelligenceSuggestedAnswerToken((data) => {',
     'window.electronAPI.onIntelligenceSuggestedAnswer((data) => {',
-    'window.electronAPI.onIntelligenceSuggestedAnswerDiscard?.(() => {',
+    'window.electronAPI.onIntelligenceSuggestedAnswerDiscard?.((data) => {', // F-CTX-09: carries generationId
     'window.electronAPI.onIntelligenceTokenBatch((data) => {',
     'window.electronAPI.onIntelligenceManualResult((data) => {',
   ];

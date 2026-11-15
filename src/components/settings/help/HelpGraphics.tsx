@@ -102,7 +102,7 @@ export const PermissionsFigure: React.FC<{ platform: HelpPlatform }> = ({ platfo
 
 const FlowStage: React.FC<{ icon: React.ReactNode; title: string; detail: string }> = ({ icon, title, detail }) => (
   <div className="flex flex-col items-center text-center min-w-0">
-    <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+    <div className="w-10 h-10 bg-bg-settings-tile rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
       {icon}
     </div>
     {/* One line each: a stage is a label, not a sentence (the column is ~115px). */}

@@ -19,13 +19,26 @@
 import { EventEmitter } from 'events';
 import { getSttContextTerms } from './sttContextTerms';
 import WebSocket from 'ws';
-import { RECOGNITION_LANGUAGES } from '../config/languages';
+import { RECOGNITION_LANGUAGES, sttProviderRejectsLanguage } from '../config/languages';
+import { SONIOX_RT_MODEL } from './sttModelCatalog';
 import { streamingStttWsOptions } from './dnsHelpers';
 import { shouldReviveExhaustedReconnect, DEFAULT_REVIVE_COOLDOWN_MS } from './sttReconnectPolicy.mjs';
 import { RealtimeSilenceTail } from './realtimeSilenceTail';
 import { nextVoiceEpoch, runsByVoice } from './sttDiarization';
 
 const SONIOX_WEBSOCKET_URL = 'wss://stt-rt.soniox.com/transcribe-websocket';
+
+/**
+ * The key goes in the WebSocket upgrade's Authorization header, never in the
+ * config frame: Soniox deprecated api_key there and refuses connections that
+ * send it only there from 2027-01-15 (a config key that differs from the
+ * header key is a 400). Measured 2026-11-12: same handshake time, and a bad
+ * key still upgrades and then fails in-band with 401 unauthenticated, so the
+ * error handling below is unchanged.
+ */
+export function sonioxAuthHeaders(apiKey: string): Record<string, string> {
+    return { Authorization: `Bearer ${apiKey}` };
+}
 const RECONNECT_BASE_DELAY_MS = 1000;
 const RECONNECT_MAX_DELAY_MS = 30000;
 // Cap reconnect attempts so a flapping network can't drive a tight WS
@@ -46,7 +59,7 @@ const KEEPALIVE_INTERVAL_MS = 5000;
 // (soniox.com/docs/stt/rt/endpoint-detection, "Recommended Configuration"):
 // level 2 + sensitivity 0.3 + a 1500 ms cap. The defaults (0, 0.0, 2000 ms)
 // are tuned for dictation, not for answering a question the moment it ends.
-// Both tuning knobs are v5-only; the model below is stt-rt-v5.
+// Both tuning knobs need stt-rt-v5 or later; the model is SONIOX_RT_MODEL (stt-rt-v6).
 export const SONIOX_ENDPOINT_TUNING = {
     endpoint_latency_adjustment_level: 2,
     endpoint_sensitivity: 0.3,
@@ -211,8 +224,17 @@ export class SonioxStreamingSTT extends EventEmitter {
                 console.warn(`[SonioxStreaming] Unknown language key: ${key} — keeping ${previous ?? 'auto'}`);
                 return;
             }
-            this.languageCode = config.iso639;
-            console.log(`[SonioxStreaming] Language hint set to ${this.languageCode} (strict)`);
+            if (sttProviderRejectsLanguage('soniox', key)) {
+                // Soniox answers this hint with a 400 that ends the session
+                // (Nepali, 2026-11-15). Settings hides it under Soniox; this
+                // covers a language stored earlier, so the meeting still
+                // transcribes on auto-detect.
+                this.languageCode = undefined;
+                console.warn(`[SonioxStreaming] Soniox has no ${config.iso639} — using auto-detect`);
+            } else {
+                this.languageCode = config.iso639;
+                console.log(`[SonioxStreaming] Language hint set to ${this.languageCode} (strict)`);
+            }
         }
 
         if (this.languageCode !== previous && this.isActive) {
@@ -245,7 +267,7 @@ export class SonioxStreamingSTT extends EventEmitter {
      *     strict flag. The flag is accepted (no error, no session kill) and has
      *     no observable effect on the real-time model. It is kept because it
      *     costs nothing and is the forward-compatible spelling — NOT because
-     *     the pin is enforced. On stt-rt-v5 a pinned language biases accuracy;
+     *     the pin is enforced (re-measured on stt-rt-v6 2026-11-12: still inert). On stt-rt-v5/v6 a pinned language biases accuracy;
      *     it does not restrict recognition. The relay's other providers
      *     (Chirp2 languageCodes, ElevenLabs language_code, Deepgram pinned
      *     mode) DO restrict.
@@ -254,9 +276,9 @@ export class SonioxStreamingSTT extends EventEmitter {
      *     to lose.
      */
     private buildConfigFrame(): Record<string, unknown> {
+        // No api_key: the key is in the upgrade header (sonioxAuthHeaders).
         const config: Record<string, unknown> = {
-            api_key: this.apiKey,
-            model: 'stt-rt-v5',
+            model: SONIOX_RT_MODEL,
             audio_format: 'pcm_s16le',
             sample_rate: this.sampleRate,
             num_channels: this.numChannels,
@@ -445,7 +467,7 @@ export class SonioxStreamingSTT extends EventEmitter {
         // streamingStttWsOptions: forces IPv4-only DNS lookup (sidesteps Node's
         // macOS dual-stack ENOTFOUND on IPv4-only CNAME chains) and caps the
         // TLS+upgrade handshake at 15s. See dnsHelpers.ts.
-        this.ws = new WebSocket(SONIOX_WEBSOCKET_URL, streamingStttWsOptions() as any);
+        this.ws = new WebSocket(SONIOX_WEBSOCKET_URL, streamingStttWsOptions({ headers: sonioxAuthHeaders(this.apiKey) }) as any);
 
         // F-203: identity guard. stop() does not detach listeners and
         // scheduleRestart()/setSampleRate()/setRecognitionLanguage() do a

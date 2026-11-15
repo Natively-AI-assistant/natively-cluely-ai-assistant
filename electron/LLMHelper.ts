@@ -45,7 +45,8 @@ import {
   DEFAULT_TEXT_FALLBACK_CONFIG,
   type TextStreamProvider,
 } from "./llm/textStreamFallback"
-import { isPermanentKeyError } from "./llm/providerErrorClassifier"
+import { isPermanentKeyError, PROVIDERS_EXHAUSTED_CODE } from "./llm/providerErrorClassifier"
+import { guardProviderOpen, ProviderCircuitBreaker, sdkRetryOptions, TurnCallBudget } from "./llm/providerCallBudget"
 import { telemetryService } from "./services/telemetry/TelemetryService"
 import {
   ollamaVisionFromShow,
@@ -58,7 +59,16 @@ import { assertProviderDataScopes, getDeniedDataScopes, routeWithScopeFallback, 
 // Outbound-scope vocabulary shared with Context Intelligence V3. ONE mapping of
 // SourceType → privacy toggle: a second copy here is how the two layers would
 // drift into disagreeing about what a `<evidence source_type="RESUME">` block is.
+import type { PromptAssemblyResult } from "./premium/contracts"
 import { applyEnvScopeDenials, sourceTypesForScopes, dataScopeForSourceType, dataScopesForEvidenceMarkup, scopeLabels, DENY_PROVIDER_SCOPES_ENV } from "./context-intelligence/policies/provider-scope-policy"
+// Premium Profile Intelligence blocks (F-BND-04 / A5 D7, 2026-11-13). The
+// legacy scope regexes key on `<candidate_` / `<user_context`; these premium
+// blocks (the target job, salary estimate, company dossier, pivots, mock hints,
+// culture map, negotiation state, the résumé JIT request) matched nothing, so a
+// "Profile & history" denial sent them anyway. All are derived from the
+// user's profile, so all are `profile_history`.
+const PREMIUM_PROFILE_BLOCK_RE = /<(?:target_job|target_job_context|salary_intelligence|company_research|gap_pivot_scripts|mock_question_hint|culture_alignment|live_negotiation_state|profile_jit_evidence_request)\b/i;
+const PREMIUM_PROFILE_BLOCK_STRIP_RE = /<(target_job|target_job_context|salary_intelligence|company_research|gap_pivot_scripts|mock_question_hint|culture_alignment|live_negotiation_state|profile_jit_evidence_request)\b[\s\S]*?<\/\1>\s*/gi;
 // Screen-understanding enforcement (private_vision / vision_only). Lives in
 // LLMHelper so EVERY screenshot-bearing path is covered, not the one IPC
 // handler that used to read the enum.
@@ -212,6 +222,16 @@ const CLAUDE_MODEL = "claude-sonnet-4-6"
 // judge budget for the ladder beneath. The variance here is real and the deeper
 // lever is prompt size: JUDGE_PROMPT_RULES alone is 7420 chars of the ~12.2k
 // total, so trimming the boilerplate would buy more than any timeout tuning.
+/**
+ * A non-streaming Natively answer that may be long (chatWithGemini: the
+ * follow-up email, the suggestion path). The server lets a JSON DeepSeek
+ * answer run up to 30 s (natively-api DEEPSEEK_JSON_CAP_MS) so a long one is
+ * not thrown away; generateWithNatively's 8 s default hung up first. Live,
+ * 10-12 Nov: 180 requests in 50 h cancelled at 7.8-7.9 s while DeepSeek was
+ * still writing (body read aborted), paid for and lost; a Natively-only user
+ * has no other provider for chatWithGemini to fall back to.
+ */
+export const NATIVELY_LONG_TEXT_TIMEOUT_MS = 30_000
 const FAST_MODEL_JUDGE_RUNG_TIMEOUT_MS = 1800
 /** OpenRouter's judge model: the small tier Natively's decision route also runs. */
 export const OPENROUTER_JUDGE_MODEL = 'openrouter/google/gemini-3.1-flash-lite'
@@ -1139,6 +1159,8 @@ export class LLMHelper {
     if (!args) return null;
     const retried = [...args] as Parameters<LLMHelper['streamChat']>;
     retried[7] = signal;
+    // The regeneration is the same turn: it spends that turn's call budget (F-LAT-10).
+    if (signal) this.callBudget().alias(signal, key);
     return retried;
   }
 
@@ -1201,6 +1223,7 @@ export class LLMHelper {
     if (/<reference_file|<active_mode_retrieved_context|mode_retrieval/i.test(context)) scopes.push('reference_files');
     if (/<meeting_history|USER-PROVIDED PERSONA CONTEXT|<user_context|<candidate_|<active_mode_custom_instructions/i.test(context)) scopes.push('profile_history');
     if (/<post_call_summary|meeting summary|silent meeting summarizer|silent meeting note-taker/i.test(context)) scopes.push('post_call_summary');
+    if (PREMIUM_PROFILE_BLOCK_RE.test(context)) scopes.push('profile_history');
     // Context Intelligence V3 evidence markup. The patterns above are the
     // LEGACY tag vocabulary; V3 has been the default answer path since
     // 2026-07-30 and packs every source as `<evidence source_type="…">`, which
@@ -1216,6 +1239,7 @@ export class LLMHelper {
     if (/<reference_file|<active_mode_retrieved_context|mode_retrieval/i.test(message)) scopes.push('reference_files');
     if (/<meeting_history|USER-PROVIDED PERSONA CONTEXT|<user_context|<candidate_|<active_mode_custom_instructions/i.test(message)) scopes.push('profile_history');
     if (/<post_call_summary/i.test(message)) scopes.push('post_call_summary');
+    if (PREMIUM_PROFILE_BLOCK_RE.test(message)) scopes.push('profile_history');
     // V3 evidence markup — see inferContextScopes. A V3 prompt carries its
     // evidence in the MESSAGE (context is undefined), so this is the branch
     // that actually fires on the default path.
@@ -1250,7 +1274,8 @@ export class LLMHelper {
         .replace(/<user_context\b[\s\S]*?<\/user_context>\s*/gi, '')
         .replace(/<active_mode_custom_instructions\b[\s\S]*?<\/active_mode_custom_instructions>\s*/gi, '')
         .replace(/<candidate_[a-z0-9_:-]+\b[\s\S]*?<\/candidate_[a-z0-9_:-]+>\s*/gi, '')
-        .replace(/<meeting_history\b[\s\S]*?<\/meeting_history>\s*/gi, '');
+        .replace(/<meeting_history\b[\s\S]*?<\/meeting_history>\s*/gi, '')
+        .replace(PREMIUM_PROFILE_BLOCK_STRIP_RE, '');
     }
     if (deniedScopes.includes('post_call_summary')) {
       scrubbed = scrubbed.replace(/<post_call_summary\b[\s\S]*?<\/post_call_summary>\s*/gi, '');
@@ -3121,6 +3146,19 @@ export class LLMHelper {
    * delay comes from the same decaying max the adaptive ceiling uses; a second
    * latency statistic for one provider is the recurring mistake in this area.
    */
+  // Lazily materialised, like textHealth: suites drive this class on
+  // Object.create(LLMHelper.prototype) instances that never run initialisers.
+  private _turnCallBudget?: TurnCallBudget;
+  private _providerBreaker?: ProviderCircuitBreaker;
+  private callBudget(): TurnCallBudget {
+    if (!this._turnCallBudget) this._turnCallBudget = new TurnCallBudget();
+    return this._turnCallBudget;
+  }
+  private providerBreakerFor(): ProviderCircuitBreaker {
+    if (!this._providerBreaker) this._providerBreaker = new ProviderCircuitBreaker();
+    return this._providerBreaker;
+  }
+
   private hedgeDelayForBudget(budgetMs: number): number {
     // The Active Model's own measurement: this runs inside its rung, which is
     // reached only when no Background Model answered the turn.
@@ -3166,7 +3204,7 @@ export class LLMHelper {
     }
     // Dynamic, like every other liveDeadlines use in this file — a static
     // import here closes a module cycle.
-    const { totalHardTimeoutMs } = await import('./llm/liveDeadlines');
+    const { totalHardTimeoutMs, loneProviderHedgeDelayMs } = await import('./llm/liveDeadlines');
     // The Active Model's rung, so its own endpoint class and measurement — the
     // public predicates follow a Background Model pick, which did not answer.
     const budgetMs = totalHardTimeoutMs({
@@ -3211,11 +3249,28 @@ export class LLMHelper {
     // of two unrelated constants, not a guarantee, and it would break silently
     // the day either one moves. Decide from what actually survived.
     if (fittedSpares.length === 0) primaryTtftMs = budgetMs;
-    const hedging = fittedSpares.length === 0;
+    // Per-turn call budget + per-family breaker (forensics 2026-11-13, F-LAT-10;
+    // ADR-003). Keyed on the turn's own abort signal: speculation, prefetch and
+    // the answer each carry one, and a regeneration shares its turn's (replayed
+    // with the same signal, or aliased in retryAnswerCall). Every call below is
+    // charged to it and gets no SDK-internal retries.
+    const turnKey: object = opts.abortSignal ?? {};
+    const budget = this.callBudget();
+    const breaker = this.providerBreakerFor();
+    const guard = (family: string, name: string, open: (sig: AbortSignal) => AsyncGenerator<string, void, unknown>) =>
+      guardProviderOpen({ family, name, turnKey, budget, breaker, outerSignal: opts.abortSignal, open });
+    for (let i = 0; i < fittedSpares.length; i++) {
+      const spare = fittedSpares[i];
+      const spareOpen = spare.open;
+      fittedSpares[i] = { ...spare, open: (sig, attempt) => guard(spare.id, spare.name, (s) => spareOpen(s, attempt))(sig) };
+    }
+    // A hedge is the turn's second call; with fewer than two left it would only
+    // be refused, so it is not armed at all.
+    const hedging = fittedSpares.length === 0 && budget.remaining(turnKey) >= 2;
     const primary: TextStreamProvider = {
       id: opts.id, name: opts.name, isLocal: false, priority: 0,
       ttftTimeoutMs: primaryTtftMs,
-      open: (sig) => opts.open(sig),
+      open: guard(opts.id, opts.name, (sig) => opts.open(sig)),
     };
     if (hedging) {
       // A distinct id so the primary's own breaker does not suppress its hedge.
@@ -3226,7 +3281,7 @@ export class LLMHelper {
       primary.hedgeWith = {
         id: `${opts.id}#hedge`,
         name: `${opts.name} (parallel retry)`,
-        open: (sig) => opts.open(sig),
+        open: guard(opts.id, `${opts.name} (parallel retry)`, (sig) => opts.open(sig)),
       };
     }
 
@@ -3243,24 +3298,49 @@ export class LLMHelper {
     // unconditionally, so without this the whole turn throws rather than merely
     // losing its health tracking.
     if (!this.textHealth) this.textHealth = new Map();
-    yield* runStreamingTextFallback(
-      [primary, ...fittedSpares],
-      this.textHealth,
-      {
-        ...DEFAULT_TEXT_FALLBACK_CONFIG,
-        // One attempt per rung: the hedge is already a second concurrent call,
-        // and maxAttempts 2 would make a single-provider turn four billed
-        // requests before the chain even ends.
-        maxAttempts: 1,
-        ttftTimeoutMs: budgetMs,
-        hedgeEnabled: hedging,
-        hedgeDelayDefaultMs: this.hedgeDelayForBudget(budgetMs),
-        hedgeDelayMinMs: Math.round(budgetMs * 0.4),
-        hedgeDelayMaxMs: Math.round(budgetMs * 0.9),
-      },
-      {},
-      opts.abortSignal,
-    );
+    // Post-commit failures must REACH this method. The shared engine's default
+    // is to end the stream silently when the committed provider dies, which
+    // read as a complete answer: forensics 2026-11-13 (F-ACC-01) replayed
+    // "Raw spans are kept for 14" and "…When a node joins or" shown and stored
+    // as finished answers. With rethrowAfterCommit the engine still never
+    // switches providers mid-answer; it only tells us, and the turn ends with
+    // the truncation marker that _streamChatTracked turns into the outcome.
+    const loneHedgeMs = loneProviderHedgeDelayMs(budgetMs, this.observedLatencyFor(this.activeAnswerLatencyKey()));
+    const commit = { emitted: false };
+    try {
+      yield* this.trackCommit(runStreamingTextFallback(
+        [primary, ...fittedSpares],
+        this.textHealth,
+        {
+          ...DEFAULT_TEXT_FALLBACK_CONFIG,
+          // One attempt per rung: the hedge is already a second concurrent call,
+          // and maxAttempts 2 would make a single-provider turn four billed
+          // requests before the chain even ends.
+          maxAttempts: 1,
+          ttftTimeoutMs: budgetMs,
+          hedgeEnabled: hedging,
+          // The lone provider's only failover, so it fires at a first-useful
+          // point (F-LAT-03): 4 s unmeasured instead of 9 s, and just above the
+          // endpoint's own slowest first token once measured. The same number is
+          // the floor, so the engine's EWMA (~p50) can only push it later.
+          hedgeDelayDefaultMs: loneHedgeMs,
+          hedgeDelayMinMs: loneHedgeMs,
+          hedgeDelayMaxMs: Math.max(loneHedgeMs, Math.round(budgetMs * 0.9)),
+          rethrowAfterCommit: true,
+        },
+        {},
+        opts.abortSignal,
+      ), commit);
+    } catch (e: any) {
+      if (commit.emitted) {
+        // A cancel is not a truncation: end quietly, as before.
+        if (opts.abortSignal?.aborted) return;
+        console.warn(`[LLMHelper] ${opts.name} failed AFTER first token — ending stream as incomplete: ${e?.message || e}`);
+        yield LLMHelper.TRUNCATION_SENTINEL;
+        return;
+      }
+      throw e;
+    }
   }
 
   /**
@@ -3965,10 +4045,22 @@ export class LLMHelper {
   }
 
   /** The error for an answer nothing could give: the Natively limit while it
-   *  holds, else "no provider". */
-  private exhaustedChainError(): Error {
+   *  holds; else, when at least one provider was actually tried, "the providers
+   *  failed" (carrying the last provider's own error); else "no provider".
+   *
+   *  Forensics 2026-11-13 (F-ACC-10): a chain whose configured providers all
+   *  failed (an outage, a DNS failure) ended here as "No AI provider
+   *  configured", and the user — keys and all — was told to add one. */
+  private exhaustedChainError(lastProviderError?: unknown): Error {
     if (this.nativelyLimit && this.nativelyQuotaBlockedUntil > Date.now()) {
       return new Error(nativelyLimitErrorMessage(this.nativelyLimit));
+    }
+    if (lastProviderError != null) {
+      const err: any = new Error('All configured AI providers failed to answer.');
+      err.code = PROVIDERS_EXHAUSTED_CODE;
+      err.cause = lastProviderError;
+      err.firstProviderError = lastProviderError;
+      return err;
     }
     return new Error(this.noProviderAvailableMessage());
   }
@@ -4851,7 +4943,7 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           // Recruiter utterances reach the tracker exclusively via the STT path in main.ts.
           this.knowledgeOrchestrator.feedForDepthScoring(message);
 
-          const knowledgeResult = await this.knowledgeOrchestrator.processQuestion(message);
+          const knowledgeResult: PromptAssemblyResult | null = await this.knowledgeOrchestrator.processQuestion(message);
 
           // Identity recall (intro/name questions) passes through regardless of mode
           // compatibility — factual retrieval, not persona injection, so mode gating is
@@ -5321,7 +5413,7 @@ let isMultimodal = !!(imagePaths?.length);
         const nativelyKey = CredentialsManager.getInstance().getNativelyApiKey();
         if (nativelyKey) {
           try {
-            return await this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudImagePaths);
+            return await this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudImagePaths, { timeoutMs: NATIVELY_LONG_TEXT_TIMEOUT_MS });
           } catch (err: any) {
             console.warn('[LLMHelper] Natively API failed in chatWithGemini, falling back to Gemini:', err.message);
             // Fall through to smart dynamic fallback below
@@ -5437,7 +5529,7 @@ let isMultimodal = !!(imagePaths?.length);
         if (routedProvider.status !== 'available') continue;
         switch (routedProvider.provider) {
           case 'natively':
-            providers.push({ name: routedProvider.name, execute: () => this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined) });
+            providers.push({ name: routedProvider.name, execute: () => this.generateWithNatively(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined, { timeoutMs: NATIVELY_LONG_TEXT_TIMEOUT_MS }) });
             break;
           case 'groq':
             if (cloudIsMultimodal) {
@@ -6461,12 +6553,30 @@ let isMultimodal = !!(imagePaths?.length);
     // its controller's). Only the Natively rung and the preferFast pick take it
     // mid-call; the others finish their in-flight request, then the ladder stops
     // instead of trying the next rung or rotation. An aborted call never resolves.
-    opts?: { preferFast?: boolean; signal?: AbortSignal },
+    //
+    // `opts.dataScopes` (F-BND-04, 2026-11-13): the cloud data scopes the
+    // MESSAGE carries. Premium generation (JIT intro, salary, coaching, company
+    // research, résumé/JD extraction) declares `profile_history`; a denied scope
+    // routes to the local model or the call fails — the message IS the profile,
+    // so there is nothing to strip and still send.
+    opts?: { preferFast?: boolean; signal?: AbortSignal; dataScopes?: ProviderDataScope[] },
   ): Promise<string> {
     const signal = opts?.signal;
     const aborted = () => signal?.aborted === true;
     const abortError = () => Object.assign(new Error('structured generation aborted: superseded or cancelled'), { name: 'AbortError' });
     if (aborted()) throw abortError();
+    if (opts?.dataScopes?.length) {
+      const deniedStructured = getDeniedDataScopes(opts.dataScopes, this.getProviderScopePolicy());
+      if (deniedStructured.length > 0) {
+        const ollamaAvailable = this.useOllama && await this.ensureOllamaModelSelected();
+        for (const scope of deniedStructured) this.logScopeFallback(scope, ollamaAvailable ? 'routing' : 'omitting');
+        if (ollamaAvailable) return this.processResponse(await this.callOllama(message));
+        throw Object.assign(
+          new Error(`Not sent: a privacy setting keeps this data off cloud providers (Settings > AI Providers > Privacy — cloud data scopes: ${scopeLabels(deniedStructured)}).`),
+          { name: 'ProviderScopeDenied' },
+        );
+      }
+    }
 
     type ProviderAttempt = { name: string; execute: () => Promise<string> };
     const providers: ProviderAttempt[] = [];
@@ -7554,7 +7664,7 @@ let isMultimodal = !!(imagePaths?.length);
     const client = this.fluxionOpenAIClient;
     if (!client) throw new Error('Sidrune client not initialized');
     const messages = await this.buildOpenRouterMessages(userMessage, systemPrompt, imagePaths);
-    const stream = await client.chat.completions.create({ model, messages, stream: true }, { signal: abortSignal }) as any;
+    const stream = await client.chat.completions.create({ model, messages, stream: true }, { signal: abortSignal, ...sdkRetryOptions(abortSignal) }) as any;
     try {
       for await (const chunk of stream) {
         if (abortSignal?.aborted) return;
@@ -7757,7 +7867,7 @@ let isMultimodal = !!(imagePaths?.length);
     try {
       stream = await client.chat.completions.create(
         { model, messages, stream: true, ...this.agentRouterOpenAIParams(model, opts, [systemPrompt, userMessage, (imagePaths ?? []).join('|')]) } as any,
-        { signal: abortSignal },
+        { signal: abortSignal, ...sdkRetryOptions(abortSignal) },
       );
     } catch (e: any) {
       if (abortSignal?.aborted) return;
@@ -10224,7 +10334,7 @@ let isMultimodal = !!(imagePaths?.length);
         this.knowledgeOrchestrator.feedForDepthScoring(message);
 
         _stage('processQuestion START');
-        const knowledgeResult = await this.knowledgeOrchestrator.processQuestion(message);
+        const knowledgeResult: PromptAssemblyResult | null = await this.knowledgeOrchestrator.processQuestion(message);
         _stage('processQuestion DONE');
         // Issue #272: gate ALL premium-intercept side-effects (coaching, intro
         // shortcut, prompt/context injection) by active mode. The depth scorer
@@ -10239,7 +10349,7 @@ let isMultimodal = !!(imagePaths?.length);
           const { isJitFinalAnswerEnforced } = require('./intelligence/intelligenceFlags');
           // A bare social greeting ("hi") is not a factual answer — keep its
           // instant canned reply even under the full-JIT law.
-          if (isJitFinalAnswerEnforced() && !(knowledgeResult as any)?.isBareGreeting) {
+          if (isJitFinalAnswerEnforced() && !knowledgeResult?.isBareGreeting) {
             // FULL-JIT LAW: do not emit the AOT-precomputed intro/identity as the
             // final answer. Demote it to EVIDENCE (a candidate_identity_fact
             // block) and fall through so the provider writes the answer just-in-
@@ -11049,12 +11159,23 @@ let isMultimodal = !!(imagePaths?.length);
         // universe. Dispatch for either attached pixels or request-scoped
         // browser DOM/screen OCR; the WTA govern block draws the same line.
         const { declineYieldsToAttachedImages: _declineYieldsLLM } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+        // F-ACC-13 (2026-11-13): the same refusal policy the coordinator sites
+        // apply. A refusal pack that does not govern dispatches to the model.
+        const { packGovernsGeneration } = require('./intelligence/context-os/refusalPolicy') as typeof import('./intelligence/context-os/refusalPolicy');
+        const _refusalYieldsLLM = pack.answerPolicy === 'refuse_insufficient_evidence'
+          && !packGovernsGeneration({
+            answerPolicy: pack.answerPolicy,
+            sourceAuthority: _cog.modeSnapshot?.sourceAuthority ?? null,
+            hasReferenceFiles: true,
+          });
         if (_declineYieldsLLM({
           answerPolicy: pack.answerPolicy,
           hasAttachedImages: Boolean(imagePaths?.length),
           hasScreenText: routeOptions?.hasScreenText === true,
         })) {
           console.log('[CONTEXT-OS] text-evidence decline yields to current-screen context — dispatching with visual evidence');
+        } else if (_refusalYieldsLLM) {
+          console.log('[CONTEXT-OS] refusal pack does not govern (refusal policy) — dispatching to the model');
         } else {
         if (pack.answerPolicy === 'ask_clarification') {
           const { recordContextOsBenchmarkAudit } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
@@ -11848,6 +11969,9 @@ let isMultimodal = !!(imagePaths?.length);
     // winner does not change answer STYLE — only who serves it. Multimodal with
     // images keeps the dedicated Groq-multimodal path (vision is handled by the
     // separate vision fallback when a vision model is selected).
+    // The last provider error seen on the way down, so an exhausted chain can say
+    // "the providers failed" rather than "none is configured" (F-ACC-10).
+    let lastProviderError: unknown = null;
     if (this.currentModelId === 'natively') {
       // Bug found during Phase 2 harness investigation (2026-07-27): this gate
       // used to check CredentialsManager.getNativelyApiKey() directly, which
@@ -11993,7 +12117,10 @@ let isMultimodal = !!(imagePaths?.length);
             },
           }));
           try {
-            yield* this.trackCommit(runStreamingTextFallback(instrumented, this.textHealth, DEFAULT_TEXT_FALLBACK_CONFIG, {}, abortSignal), commit);
+            // rethrowAfterCommit: the catch below assumed the engine throws when
+            // the committed rung dies, but its default is a silent return — the
+            // partial answer then read as complete (forensics 2026-11-13, F-ACC-01).
+            yield* this.trackCommit(runStreamingTextFallback(instrumented, this.textHealth, { ...DEFAULT_TEXT_FALLBACK_CONFIG, rethrowAfterCommit: true }, {}, abortSignal), commit);
             return;
           } catch (raceErr: any) {
             // runStreamingTextFallback is commit-point-safe INTERNALLY (it never
@@ -12005,10 +12132,13 @@ let isMultimodal = !!(imagePaths?.length);
             // already read. This is the primary text path, so it is the site
             // where that would happen most often.
             if (commit.emitted) {
+              // A cancel is not a truncation: end quietly, as before.
+              if (abortSignal?.aborted) return;
               console.warn('[LLMHelper] Text TTFT race failed AFTER first token — ending stream rather than appending a second answer:', raceErr?.message);
               yield LLMHelper.TRUNCATION_SENTINEL;
               return;
             }
+            lastProviderError = raceErr;
             console.warn('[LLMHelper] Text TTFT race exhausted, falling through to Gemini:', raceErr?.message);
             telemetryService.track({ name: 'provider_error', durationMs: Date.now() - raceStart, properties: { path: 'text', stage: 'race_exhausted' } });
             // Fall through to the Gemini block below as the final safety net.
@@ -12071,6 +12201,7 @@ let isMultimodal = !!(imagePaths?.length);
           yield LLMHelper.TRUNCATION_SENTINEL;
           return;
         }
+        lastProviderError = e;
         console.warn('[LLMHelper] Gemini cascade failed pre-commit — falling through to next provider:', e?.message || e);
         // fall through to the Natively last-resort below
       }
@@ -12090,6 +12221,7 @@ let isMultimodal = !!(imagePaths?.length);
           yield LLMHelper.TRUNCATION_SENTINEL;
           return;
         }
+        lastProviderError = e;
         console.warn('[LLMHelper] Natively last-resort fallback failed:', e.message);
       }
     }
@@ -12134,6 +12266,7 @@ let isMultimodal = !!(imagePaths?.length);
           yield LLMHelper.TRUNCATION_SENTINEL;
           return;
         }
+        lastProviderError = e;
         console.warn(`[LLMHelper] Configured custom last-resort failed: ${e?.message || e}`);
       } finally {
         // Restore — never leave a non-active customProvider on the instance,
@@ -12143,7 +12276,7 @@ let isMultimodal = !!(imagePaths?.length);
       }
     }
 
-    throw this.exhaustedChainError();
+    throw this.exhaustedChainError(lastProviderError);
   }
 
   /**
@@ -12754,7 +12887,7 @@ let isMultimodal = !!(imagePaths?.length);
     require('./llm/providerPayloadCapture').captureProviderPayload({
       provider: 'openai', classification: 'sdk_request_object_before_serialization', payload: request,
     });
-    const stream = await this.openaiClient.chat.completions.create(request, { signal: abortSignal });
+    const stream = await this.openaiClient.chat.completions.create(request, { signal: abortSignal, ...sdkRetryOptions(abortSignal) });
 
     try {
       for await (const chunk of stream) {
@@ -12801,7 +12934,8 @@ let isMultimodal = !!(imagePaths?.length);
     require('./llm/providerPayloadCapture').captureProviderPayload({
       provider: 'claude', classification: 'sdk_request_object_before_serialization', payload: request,
     });
-    const stream = this.claudeClient.messages.stream(request);
+    // No SDK-internal retries when the fallback engine owns this call (F-LAT-10).
+    const stream = this.claudeClient.messages.stream(request, sdkRetryOptions(abortSignal));
     const onAbort = () => { try { stream.abort(); } catch {} };
     abortSignal?.addEventListener('abort', onAbort, { once: true });
     try {
@@ -12854,7 +12988,7 @@ let isMultimodal = !!(imagePaths?.length);
         seed: interactiveSeedFor('deepseek', [model, systemPrompt, userMessage, (imagePaths ?? []).join('|')]), // DeepSeek is OpenAI-compatible and honors seed
         max_tokens: this.getDeepseekMaxOutput(model),
         ...DEEPSEEK_NO_THINKING, // else the first token waits out the default reasoning
-      }, { signal: abortSignal });
+      }, { signal: abortSignal, ...sdkRetryOptions(abortSignal) });
     } catch (err: any) {
       // Hard-trip on billing/quota/auth failures so we don't burn 3 chain rotations
       // re-attempting a 402 every few seconds. Mirrors Gemini's markRateCooled for
@@ -12911,7 +13045,7 @@ let isMultimodal = !!(imagePaths?.length);
     require('./llm/providerPayloadCapture').captureProviderPayload({
       provider: 'litellm', classification: 'sdk_request_object_before_serialization', payload: request,
     });
-    const stream = await this.litellmClient.chat.completions.create(request, { signal: abortSignal });
+    const stream = await this.litellmClient.chat.completions.create(request, { signal: abortSignal, ...sdkRetryOptions(abortSignal) });
 
     try {
       for await (const chunk of stream) {
@@ -12958,7 +13092,7 @@ let isMultimodal = !!(imagePaths?.length);
     // widening it to `any` loses the `stream: true` overload's iterability.
     const stream = await (async () => {
       try {
-        return await this.ninerouterClient!.chat.completions.create(request, { signal: abortSignal });
+        return await this.ninerouterClient!.chat.completions.create(request, { signal: abortSignal, ...sdkRetryOptions(abortSignal) });
       } catch (e: any) {
         // Rewrite before it leaves the adapter. 9Router relays its upstream's
         // status, so the raw text is a nested JSON blob naming a provider the
@@ -13010,7 +13144,7 @@ let isMultimodal = !!(imagePaths?.length);
       const content: any[] = [{ type: 'text', text: userMessage }, ...await this.buildOpenAiImageParts(imagePaths)];
       messages.push({ role: 'user', content });
     } else messages.push({ role: 'user', content: userMessage });
-    const stream = await this.createNvidiaNimCompletion({ model, messages, stream: true }, { signal: abortSignal });
+    const stream = await this.createNvidiaNimCompletion({ model, messages, stream: true }, { signal: abortSignal, ...sdkRetryOptions(abortSignal) });
     try { for await (const chunk of stream) { if (abortSignal?.aborted) return; const content = chunk.choices[0]?.delta?.content; if (content) yield content; } }
     finally { if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort(); }
   }
@@ -13024,7 +13158,7 @@ let isMultimodal = !!(imagePaths?.length);
     const model = this.openrouterWireModel(modelId || this.currentModelId);
     const messages = await this.buildOpenRouterMessages(userMessage, systemPrompt, imagePaths);
     if (abortSignal?.aborted) return;
-    const stream = await client.chat.completions.create({ model, messages, stream: true }, { signal: abortSignal }) as any;
+    const stream = await client.chat.completions.create({ model, messages, stream: true }, { signal: abortSignal, ...sdkRetryOptions(abortSignal) }) as any;
     try {
       for await (const chunk of stream) {
         if (abortSignal?.aborted) return;
@@ -13367,10 +13501,21 @@ let isMultimodal = !!(imagePaths?.length);
     // let the caller fall through to a DIFFERENT provider, instead of burning
     // latency on two more doomed calls. Transient errors (429 rate, 503 overload,
     // timeout, 5xx) still walk lite→flash→pro normally.
-    const cfg: VisionFallbackConfig = { ...DEFAULT_TEXT_FALLBACK_CONFIG, stopChainOnError: isPermanentKeyError };
+    // rethrowAfterCommit: the caller's `geminiYielded` branch turns a rung that
+    // dies mid-answer into the truncation marker; the engine's default silent
+    // return never reached it (forensics 2026-11-13, F-ACC-01).
+    const cfg: VisionFallbackConfig = { ...DEFAULT_TEXT_FALLBACK_CONFIG, stopChainOnError: isPermanentKeyError, rethrowAfterCommit: true };
 
     const ordered = orderTextByHealth(providers, this.textHealth, Date.now());
-    yield* runStreamingTextFallback(ordered, this.textHealth, cfg, {}, abortSignal);
+    try {
+      yield* runStreamingTextFallback(ordered, this.textHealth, cfg, {}, abortSignal);
+    } catch (e) {
+      // A caller cancel mid-answer ends quietly, as it did before the flag:
+      // the engine now rethrows the aborted read, and the caller's catch
+      // rethrows any error under an aborted signal.
+      if (abortSignal?.aborted) return;
+      throw e;
+    }
   }
 
   // --- OLLAMA STREAMING (uses /api/chat with proper messages array) ---
@@ -14057,6 +14202,29 @@ let isMultimodal = !!(imagePaths?.length);
     // No pick: the Codex fast ladder no longer runs ahead of the Active Model
     // (it is only a fallback), so fast mode alone no longer makes a turn Codex's.
     return this.isCodexAvailable() && this.isCodexCliModel(this.currentModelId);
+  }
+
+  /**
+   * True when the Auto Answer judge would run on Natively API: the first rung of
+   * generateJudgeVerdict that is configured is the Natively one. Mirrors that
+   * ladder without calling it: a dispatchable Fast Response pick (never
+   * 'natively': resolveFastModelFamily excludes it), then the user's own Gemini,
+   * Groq, OpenAI, DeepSeek or Claude key, and only then a Natively key.
+   * Settings › Auto Answer uses it to leave the reference model's name out of
+   * its cost estimate (Evin 2026-11-14): a Natively API user has no provider
+   * list price to compare against.
+   */
+  public judgeRunsOnNatively(): boolean {
+    if (!this.nativelyKey || this.isLocalOnlyMode) return false;
+    // A pick only takes the judge when its provider can run now (callFastModel
+    // otherwise falls through to the ladder below; review 2026-11-15).
+    const pick = this.fastModelId;
+    const family = pick ? this.resolveFastModelFamily(pick) : null;
+    if (pick && family && this.fastFamilyReady(family)) return false;
+    if (this.client) return false;
+    if (this.groqClient && !this._groqLocalDisabled) return false;
+    if (this.openaiClient || this.deepseekClient || this.claudeClient) return false;
+    return true;
   }
 
   /**
@@ -15909,20 +16077,23 @@ let isMultimodal = !!(imagePaths?.length);
     }
 
     // ATTEMPT 1: Natively API (if configured — first in chain)
-    // Inner fetch timeout: caller's timeoutMs, default 8s (AbortSignal.timeout in
-    // generateWithNatively). Outer safety net: timeoutMs + 5s (default 10s when the
-    // caller passes no opts, so uninvolved callers are unaffected) — the extra slack
-    // covers JSON parsing and any overhead after the fetch resolves, mirroring the
-    // headroom generateWithNatively's own OVERALL_DEADLINE_MS gives the body read.
+    // Inner fetch timeout: caller's timeoutMs, default NATIVELY_LONG_TEXT_TIMEOUT_MS.
+    // Outer safety net: timeoutMs + 5s — the extra slack covers JSON parsing and
+    // any overhead after the fetch resolves, mirroring the headroom
+    // generateWithNatively's own OVERALL_DEADLINE_MS gives the body read. The
+    // default was generateWithNatively's 8 s, which hung up on a long summary the
+    // server was still writing (it allows a JSON DeepSeek answer 30 s); only this
+    // rung's default changes, the other rungs keep theirs.
     if (this.hasNatively()) {
       try {
         console.log(`[LLMHelper] Attempting Natively API for summary...`);
+        const nativelySummaryTimeoutMs = opts?.timeoutMs || NATIVELY_LONG_TEXT_TIMEOUT_MS;
         const text = await this.withTimeout(
           this.generateWithNatively(`Context:\n${context}`, systemPrompt, undefined, {
             ...(opts?.purpose ? { purpose: opts.purpose } : {}),
-            ...(opts?.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
+            timeoutMs: nativelySummaryTimeoutMs,
           }),
-          opts?.timeoutMs ? opts.timeoutMs + 5000 : 10000,
+          nativelySummaryTimeoutMs + 5000,
           'Natively Summary'
         );
         if (text.trim().length > 0) {

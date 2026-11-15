@@ -120,6 +120,9 @@ const buildOptions = {
     // verified empirically by removing it and rebuilding clean, and by
     // confirming no first-party file imports onnxruntime-common directly.)
     'onnxruntime-node',
+    // The Auto Answer decider's own runtime (onnxruntime-node 1.24.3 under an npm alias),
+    // loaded only inside the decider's utility process. See deciderRuntime.ts.
+    'onnxruntime-node-decider',
     // Heavy native ESM modules with `import.meta.url`-dependent init. Keeping
     // them external lets Node's loader give them a real `import.meta.url`,
     // which the bundled version can't (esbuild's CJS target sets

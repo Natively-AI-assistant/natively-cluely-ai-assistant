@@ -44,7 +44,15 @@ export type TranscriptOrigin = 'stt' | 'manual_chat' | 'assistant' | 'system_ins
 // context. Defined in its own module so the other formatter can share it.
 import { TYPED_TURN_LABEL } from './llm/typedTurnLabel';
 import { insertSortedByTimestamp } from './audio/sttGapRecovery';
+import { isCodingContinuation } from './llm/codingFollowup';
 export { TYPED_TURN_LABEL };
+
+// The interviewer turning to a new problem (#738). Only explicit turns: "the main
+// problem with that approach is…" is a critique, not a new problem.
+const MOVE_ON_TO_NEW_PROBLEM_RE = /\b(?:mov(?:e|ing)|go(?:ing)?|jump(?:ing)?|switch(?:ing)?|turn(?:ing)?)\s+on\s*to\s+(?:the\s+|a\s+|our\s+|your\s+)?(?:next|main|new|another|different|second|third|final|last|actual)\s+(?:problem|question|exercise|challenge|task|one)\b|\bhere(?:'s|\s+is)\s+(?:the|your|a|our)\s+(?:next|new|second|third|final|main)\s+(?:problem|question|exercise|challenge)\b|^\W*(?:(?:ok(?:ay)?|alright|all right|great|cool|good|so|now)[\s,.!]+)*(?:the\s+)?next\s+(?:problem|question|exercise|challenge)\b/i;
+// A question about the candidate, not a problem to solve: "Have you used Kafka
+// before?", "How long have you been using Python?", "Tell me about yourself."
+const CANDIDATE_QUESTION_RE = /\bhow(?:'s|\s+is|\s+was|\s+has)\s+your\s+(?:day|week|weekend|morning|afternoon|evening)\b|\b(?:have|did|do)\s+you\s+(?:ever\s+)?(?:use[ds]?|work(?:ed)?|buil[dt]|writ(?:e|ten)|wrote|done|tried|had|seen|enjoy|like)\b|\bhow\s+long\s+have\s+you\b|\btell\s+me\s+(?:about|a\s+bit\s+about)\s+(?:yourself|you|your|a\s+time)\b|\b(?:your|you\s+had)\s+(?:experience|background|weekend|last\s+(?:job|role|project|company)|previous\s+(?:job|role|project|company)|current\s+(?:job|role|project|company))\b|\bat\s+work\b|\bwalk\s+me\s+through\s+your\b/i;
 
 export interface TranscriptSegment {
     marker?: string;
@@ -269,9 +277,30 @@ export class SessionTracker {
     // reset); expires on its own after a quiet half hour.
     private activeDesign = createActiveDesignState();
 
-    // Rolling buffer for multi-segment interviewer question detection
+    // The interviewer's CURRENT statement, for problems stated over several
+    // segments. It ends when the candidate replies, after a long pause, or on an
+    // ask about the problem or about the candidate — so the stored problem is the
+    // statement, not every interviewer line of the last five minutes (#739: one
+    // "Have you used Kafka before?" turned "show the solution in python" into an
+    // experience answer).
     private recentInterviewerBuffer: { text: string; timestamp: number }[] = [];
+    // The stored problem came from the statement now in the buffer: a later line
+    // of the same statement extends it; an ask does not.
+    private statementHoldsProblem = false;
+    // What the interviewer said after the stored problem, statement by statement
+    // (asks and questions about the candidate excluded). A follow-up quotes it next
+    // to the problem, so a newer problem the detector missed reaches the model as
+    // the newer one instead of being hidden behind the older (#738). The app does
+    // not guess which is current; the model reads them in order.
+    private statementsAfterProblem: { seq: number; text: string; at: number }[] = [];
+    private statementSeq = 0;
+    private static readonly SAID_AFTER_MAX_STATEMENTS = 4;
+    private static readonly SAID_AFTER_MAX_CHARS = 700;
     private static readonly INTERVIEWER_BUFFER_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+    private static readonly STATEMENT_GAP_MS = 90 * 1000;
+    // Candidate lines this short are acknowledgements ("okay", "mhm, got it"),
+    // said while the interviewer is still stating the problem.
+    private static readonly CANDIDATE_ACK_MAX_WORDS = 3;
     // Screenshot-detected question stays sticky for 3 min before transcript can override
     private static readonly SCREENSHOT_STALE_MS = 3 * 60 * 1000;
 
@@ -320,6 +349,7 @@ export class SessionTracker {
             this.detectedCodingQuestion = trimmed;
             this.codingQuestionSource = source;
             this.codingQuestionSetAt = now;
+            this.statementsAfterProblem = [];
             console.log(`[SessionTracker] Coding question stored`, { source, length: trimmed.length });
             return;
         }
@@ -329,6 +359,7 @@ export class SessionTracker {
             this.detectedCodingQuestion = trimmed;
             this.codingQuestionSource = source;
             this.codingQuestionSetAt = now;
+            this.statementsAfterProblem = [];
             console.log(`[SessionTracker] Coding question updated via screenshot`, { length: trimmed.length });
             return;
         }
@@ -342,6 +373,7 @@ export class SessionTracker {
             this.detectedCodingQuestion = trimmed;
             this.codingQuestionSource = source;
             this.codingQuestionSetAt = now;
+            this.statementsAfterProblem = [];
             console.log(`[SessionTracker] Coding question updated via transcript`, { source: this.codingQuestionSource, stale: isStale, length: trimmed.length });
         } else {
             console.log(`[SessionTracker] Transcript question ignored — screenshot question is recent (< ${SessionTracker.SCREENSHOT_STALE_MS / 1000}s)`);
@@ -352,11 +384,35 @@ export class SessionTracker {
         return { question: this.detectedCodingQuestion, source: this.codingQuestionSource, setAt: this.codingQuestionSetAt };
     }
 
+    /**
+     * The coding problem a coding continuation ("show the solution in python") is
+     * about, with what the interviewer said after it, or null when no problem is
+     * stored within maxAgeMs. `saidAfter` is newest-last and bounded; it can hold
+     * a newer problem the detector did not recognise, or talk about this one.
+     */
+    getActiveCodingProblem(maxAgeMs: number, now: number = Date.now()): { question: string; source: 'screenshot' | 'transcript'; setAt: number; saidAfter: string[] } | null {
+        const question = this.detectedCodingQuestion;
+        const source = this.codingQuestionSource;
+        const setAt = this.codingQuestionSetAt;
+        if (!question || !source || setAt === null || now - setAt > maxAgeMs) return null;
+        const saidAfter: string[] = [];
+        let chars = 0;
+        for (let i = this.statementsAfterProblem.length - 1; i >= 0; i--) {
+            const text = this.statementsAfterProblem[i].text;
+            if (saidAfter.length > 0 && chars + text.length > SessionTracker.SAID_AFTER_MAX_CHARS) break;
+            saidAfter.unshift(text.length > SessionTracker.SAID_AFTER_MAX_CHARS ? `…${text.slice(-SessionTracker.SAID_AFTER_MAX_CHARS)}` : text);
+            chars += text.length;
+        }
+        return { question, source, setAt, saidAfter };
+    }
+
     clearCodingQuestion(): void {
         this.detectedCodingQuestion = null;
         this.codingQuestionSource = null;
         this.codingQuestionSetAt = null;
         this.recentInterviewerBuffer = [];
+        this.statementHoldsProblem = false;
+        this.statementsAfterProblem = [];
     }
 
     /**
@@ -374,6 +430,8 @@ export class SessionTracker {
         this.codingQuestionSource = null;
         this.codingQuestionSetAt = null;
         this.recentInterviewerBuffer = [];
+        this.statementHoldsProblem = false;
+        this.statementsAfterProblem = [];
         this.lastAssistantMessage = null;
         this.assistantResponseHistory = [];
         this.lastInterimInterviewer = null;
@@ -385,19 +443,32 @@ export class SessionTracker {
      * Heuristic to decide if an interviewer statement looks like a coding question.
      * Requires ≥2 of the signal patterns and minimum length to avoid false positives
      * on casual conversation ("can you implement X?" → yes, "sounds good!" → no).
+     *
+     * Issue #737: a problem as an interviewer actually SAYS it ("Service A encrypts
+     * and Service B decrypts. Rotate the active key at the top of every hour.
+     * Retain at least five key versions…", "Implement an LRU cache with get and
+     * put.", "how would you go about building that?") matched at most one group.
+     * The verbs now take their spoken forms, and two groups cover what a spoken
+     * spec is made of: the thing to build and its constraints. Still two groups:
+     * "Do you write Python at work?" stays one. Questions about the candidate never
+     * reach this test (see handleTranscript).
      */
     private looksLikeCodingQuestion(text: string): boolean {
-        if (text.length < 50) return false;
+        return text.length >= 30 && SessionTracker.codingSignalCount(text) >= 2;
+    }
+
+    private static codingSignalCount(text: string): number {
         const patterns = [
-            /\b(implement|write|code|solve|design|build|create)\b/i,
+            /\b(implement(?:s|ed|ing)?|writ(?:e|es|ing)|cod(?:e|es|ing)|solv(?:e|es|ing)|design(?:s|ing)?|build(?:s|ing)?|creat(?:e|es|ing))\b/i,
             /\b(given\s+(an?|the)\s+(array|string|list|tree|graph|matrix|number|integer|node|linked list|stack|queue|heap))\b/i,
             /\b(return|find\s+(all|the|a|any)|count|check\s+if|determine|calculate|maximize|minimize|sort)\b/i,
             /\b(function|method|algorithm|data structure|class)\b/i,
             /\b(O\(n\)|time complexity|space complexity|optimal|efficient|brute force)\b/i,
-            /\b(two sum|three sum|binary search|dynamic programming|BFS|DFS|palindrome|anagram|substring|subarray|rotation)\b/i,
+            /\b(two sum|three sum|binary search|dynamic programming|BFS|DFS|palindrome|anagram|substring|subarray|rotat(?:e|es|ion))\b/i,
+            /\b(microservices?|services?|apis?|endpoints?|lru|cache|linked list|hash ?(?:map|table|set)|trie|iterator|rate limiter|parser|encrypt\w*|decrypt\w*)\b/i,
+            /\b(at (?:least|most) (?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|k|n)|every (?:second|minute|hour|day|\d+)|get and put)\b/i,
         ];
-        const matchCount = patterns.filter(p => p.test(text)).length;
-        return matchCount >= 2;
+        return patterns.filter(p => p.test(text)).length;
     }
 
     // ============================================
@@ -654,26 +725,84 @@ export class SessionTracker {
                 this.lastInterimInterviewer = segment;
             } else {
                 this.lastInterimInterviewer = null;
-
-                // Add segment to rolling buffer and evict old entries
-                this.recentInterviewerBuffer.push({ text: segment.text, timestamp: segment.timestamp });
-                const bufferCutoff = Date.now() - SessionTracker.INTERVIEWER_BUFFER_WINDOW_MS;
-                this.recentInterviewerBuffer = this.recentInterviewerBuffer.filter(e => e.timestamp >= bufferCutoff);
-
-                // Test single segment first; if no match, test accumulated recent turns
-                // (interviewer may state a problem across multiple speech segments)
-                if (this.looksLikeCodingQuestion(segment.text)) {
-                    this.setCodingQuestion(segment.text, 'transcript');
-                } else if (this.recentInterviewerBuffer.length > 1) {
-                    const combinedText = this.recentInterviewerBuffer.map(e => e.text).join(' ');
-                    if (this.looksLikeCodingQuestion(combinedText)) {
-                        this.setCodingQuestion(combinedText, 'transcript');
-                    }
-                }
+                this.trackInterviewerStatement(segment);
             }
+        } else if (segment.final && segment.speaker === 'user'
+            && segment.text.trim().split(/\s+/).length > SessionTracker.CANDIDATE_ACK_MAX_WORDS) {
+            // The candidate replied: the interviewer's statement is over.
+            this.endInterviewerStatement();
         }
 
         return this.addTranscript(segment);
+    }
+
+    private endInterviewerStatement(): void {
+        this.recentInterviewerBuffer = [];
+        this.statementHoldsProblem = false;
+        this.statementSeq++;
+    }
+
+    /** Detect a coding problem in the interviewer's current statement (one final segment). */
+    private trackInterviewerStatement(segment: TranscriptSegment): void {
+        const text = segment.text.trim();
+        if (!text) return;
+
+        // "Let us move on to the main problem." The old problem is done with, even
+        // when the new one is stated in words the detector misses (#738: a warm-up
+        // stayed "active" and "show the solution in python" was rewritten onto it).
+        if (MOVE_ON_TO_NEW_PROBLEM_RE.test(text)) {
+            if (this.detectedCodingQuestion !== null) {
+                console.log('[SessionTracker] Coding question cleared: the interviewer moved on', { source: this.codingQuestionSource });
+            }
+            this.detectedCodingQuestion = null;
+            this.codingQuestionSource = null;
+            this.codingQuestionSetAt = null;
+            this.statementsAfterProblem = [];
+            this.endInterviewerStatement();
+        }
+
+        const last = this.recentInterviewerBuffer[this.recentInterviewerBuffer.length - 1];
+        if (last && segment.timestamp - last.timestamp > SessionTracker.STATEMENT_GAP_MS) this.endInterviewerStatement();
+        const bufferCutoff = Date.now() - SessionTracker.INTERVIEWER_BUFFER_WINDOW_MS;
+        this.recentInterviewerBuffer = this.recentInterviewerBuffer.filter(e => e.timestamp >= bufferCutoff);
+
+        // A question about the candidate is never part of a problem, and ends it.
+        if (CANDIDATE_QUESTION_RE.test(text)) {
+            this.endInterviewerStatement();
+            return;
+        }
+        // An ask about the problem ("show the solution in python") ends it too. It
+        // may be a whole new problem itself ("Now write a function that reverses a
+        // linked list in place."), or complete one nothing has been stored for yet
+        // ("Given an array of integers." + "Can you solve it in O(n)?"), but it
+        // never extends one already stored.
+        if (isCodingContinuation(text)) {
+            if (this.looksLikeCodingQuestion(text)) {
+                this.setCodingQuestion(text, 'transcript');
+            } else if (!this.statementHoldsProblem && this.recentInterviewerBuffer.length > 0) {
+                const combined = [...this.recentInterviewerBuffer.map(e => e.text), text].join(' ');
+                if (this.looksLikeCodingQuestion(combined)) this.setCodingQuestion(combined, 'transcript');
+            }
+            this.endInterviewerStatement();
+            return;
+        }
+
+        this.recentInterviewerBuffer.push({ text, timestamp: segment.timestamp });
+        // The whole statement is stored: its opening lines ("Service A encrypts and
+        // Service B decrypts.") are part of the problem even when a later line is
+        // the one that passes.
+        const combined = this.recentInterviewerBuffer.map(e => e.text).join(' ');
+        if (this.looksLikeCodingQuestion(text) || (this.recentInterviewerBuffer.length > 1 && this.looksLikeCodingQuestion(combined))) {
+            this.setCodingQuestion(combined, 'transcript');
+            this.statementHoldsProblem = this.codingQuestionSource === 'transcript' && this.detectedCodingQuestion === combined;
+        } else if (!this.statementHoldsProblem && combined.split(/\s+/).length >= 4) {
+            // Not a problem the detector recognises: kept as said after the stored
+            // one ("Okay." and other one-word lines are not worth quoting).
+            const last = this.statementsAfterProblem[this.statementsAfterProblem.length - 1];
+            if (last && last.seq === this.statementSeq) last.text = combined;
+            else this.statementsAfterProblem.push({ seq: this.statementSeq, text: combined, at: Date.now() });
+            if (this.statementsAfterProblem.length > SessionTracker.SAID_AFTER_MAX_STATEMENTS) this.statementsAfterProblem.shift();
+        }
     }
 
     // ============================================
@@ -1232,6 +1361,8 @@ export class SessionTracker {
         this.codingQuestionSource = null;
         this.codingQuestionSetAt = null;
         this.recentInterviewerBuffer = [];
+        this.statementHoldsProblem = false;
+        this.statementsAfterProblem = [];
         this.activeDesign.clear();
         this.pendingDiagramRepairs = [];
         this.lastRepairedAnswer = null;

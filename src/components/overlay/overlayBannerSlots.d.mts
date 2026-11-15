@@ -7,6 +7,7 @@ export type OverlayBannerId =
   | 'ambient-mic'
   | 'guide'
   | 'trial'
+  | 'auto-answer-access'
   | 'auto-stop'
   | 'last-time'
   | 'capture-fallback'

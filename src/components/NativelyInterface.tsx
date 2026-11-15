@@ -8,6 +8,7 @@ import {
   Copy,
   Check,
   Clock,
+  Sparkles,
   Crop,
   Globe,
   HelpCircle,
@@ -328,8 +329,9 @@ import {
   pinnedViewportBudget,
   type OverlayResizeDirection,
 } from '../lib/overlayCustomSize.mjs';
-import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch, resolveChatStreamSurfaceError, isStaleDesktopChatEvent } from '../lib/chatStreamGuard.mjs';
+import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch, resolveChatStreamSurfaceError, isStaleDesktopChatEvent, shouldApplyLiveAnswerDiscard } from '../lib/chatStreamGuard.mjs';
 import { buildDirectWhatToSayPayload } from '../lib/directAssistWhatToSayPayload.mjs';
+import { resolveScreenshotPromptText, getScreenshotPresetPrompt } from '../lib/screenshotPrompt';
 import { chatFailureFromError, isProviderFailureSentence } from '../lib/chatFailure.mjs';
 import {
   CHAT_HINTS,
@@ -340,6 +342,7 @@ import {
   directAssistFailureText,
   directAssistNoticeView,
   ownStopFailure,
+  liveAnswerStopFailure,
   type DirectAssistAnswerFailure,
   type DirectAssistFallbackHop,
   type DirectAssistFallbackNotice,
@@ -1531,6 +1534,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // meeting starts: the clock re-sends it on that meeting's first tick if the
   // pack is still empty. 'hours_used' | 'window_closed' | 'ended'.
   const [packEndedReason, setPackEndedReason] = useState<string | null>(null);
+  // Auto Answer was on but is paused: it is Pro, or free with transcript
+  // sharing (premium/electron/autoAnswer/autoAnswerAccess.ts). Main sends
+  // this once at meeting start; the close holds for the meeting.
+  const [autoAnswerAccessNotice, setAutoAnswerAccessNotice] = useState(false);
   // A local model is slower than speech (main: `behind` on stt-status,
   // 2026-11-09). Its text still comes, later and later, so it is advice with a
   // close, said once per meeting; it used to count as a reconnect and flash
@@ -1915,7 +1922,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // at that instant). Declared once here rather than duplicated inline at
   // both call sites.
   const isAutoScrollSuppressed = useCallback(
-    () => isAutoScrollSuppressedFor(autoScrollSuppressedForMsgIdRef.current, streamingMsgIdRef.current),
+    () => isAutoScrollSuppressedFor(autoScrollSuppressedForMsgIdRef.current),
     [],
   );
 
@@ -1929,10 +1936,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // frame. Arming keys suppression to the live stream, or to the idle sentinel
   // when nothing is streaming (see suppressionKeyForArm).
   const armAutoScrollInterrupt = useCallback(() => {
-    const alreadySuppressed = isAutoScrollSuppressedFor(
-      autoScrollSuppressedForMsgIdRef.current,
-      streamingMsgIdRef.current,
-    );
+    const alreadySuppressed = isAutoScrollSuppressedFor(autoScrollSuppressedForMsgIdRef.current);
     const streamingId = streamingMsgIdRef.current;
     autoScrollSuppressedForMsgIdRef.current = suppressionKeyForArm(streamingId);
     // Stop the width/height-transition sticky-bottom pin from re-fighting the
@@ -1984,7 +1988,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const followStreamBottom = useCallback(() => {
     const c = scrollContainerRef.current;
     if (!c) return;
-    if (isAutoScrollSuppressedFor(autoScrollSuppressedForMsgIdRef.current, streamingMsgIdRef.current)) return;
+    if (isAutoScrollSuppressedFor(autoScrollSuppressedForMsgIdRef.current)) return;
     const max = c.scrollHeight - c.clientHeight;
     if (detectExternalUpwardScroll({ scrollTop: c.scrollTop, lastScrollTop: lastScrollTopRef.current, maxScroll: max, viewportResized: noteViewportResize(c) })) {
       armAutoScrollInterrupt();
@@ -2004,16 +2008,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // scroll on the very next frame, and scrollIntoView doesn't hand that back
   // synchronously the same way.
   //
-  // Suppression: once the scroll handler below detects the user scrolled
-  // up mid-stream, it arms autoScrollSuppressedForMsgIdRef with the id of
-  // the message that was streaming at the time. While that id is still the
-  // one actively streaming (or the stream it belonged to has just finalized
-  // — streamingMsgIdRef.current briefly goes null on finalize, one commit
-  // before this effect's own re-run for that same message, see
-  // commitStreamingFlush), we withhold the scroll write so completion
-  // doesn't yank the view out from under a user who's still reading. A
-  // genuinely NEW message carries a different (non-null) streaming id, so
-  // suppression naturally lifts without any explicit "new message" handling.
+  // Suppression: once the user scrolls up, armAutoScrollInterrupt arms
+  // autoScrollSuppressedForMsgIdRef and we withhold the scroll write until
+  // something hands control back (resumeAutoScroll): scrolling back to the
+  // bottom, the pill, or an answer the user starts. A new stream alone does
+  // not lift it, so an Auto Answer the reader did not ask for leaves the view
+  // where it is (#723).
   useEffect(() => {
     if (messages.length === 0) return;
     const c = scrollContainerRef.current;
@@ -5373,11 +5373,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // "Jump to latest" pill click handler — the ONE place `behavior: 'smooth'`
   // is used for this scroll container. The per-frame streaming chase (step 4)
   // stays a direct scrollTop write; smooth-scrolling every frame would
-  // restart the animation each time and never reach bottom.
+  // restart the animation each time and never reach bottom. Under Reduce
+  // Motion (macOS) / animations off (Windows) it jumps instead, as Apple asks.
   const handleJumpToLatest = useCallback(() => {
     resumeAutoScroll();
     const c = scrollContainerRef.current;
-    if (c) c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
+    if (c) c.scrollTo({ top: c.scrollHeight, behavior: prefersReducedMotionRef.current ? 'auto' : 'smooth' });
   }, [resumeAutoScroll]);
 
   // "Show me the newest thing": the user just sent something, or otherwise
@@ -5391,7 +5392,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     resumeAutoScroll();
     const settle = () => {
       const c = scrollContainerRef.current;
-      if (!c || isAutoScrollSuppressedFor(autoScrollSuppressedForMsgIdRef.current, streamingMsgIdRef.current)) return;
+      if (!c || isAutoScrollSuppressedFor(autoScrollSuppressedForMsgIdRef.current)) return;
       c.scrollTop = c.scrollHeight - c.clientHeight;
       lastScrollTopRef.current = c.scrollTop;
     };
@@ -5667,14 +5668,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Main sends this only with the server's reason ('hours_used' |
     // 'window_closed'); a reasonless one is not a pack and is ignored.
     const offEnded = window.electronAPI?.onPackEnded?.(({ reason }) => { if (reason) setPackEndedReason(reason); });
-    const offReset = window.electronAPI?.onSessionReset?.(() => setPackEndedReason(null));
+    const offAutoAnswerAccess = window.electronAPI?.onAutoAnswerAccessRequired?.(() => setAutoAnswerAccessNotice(true));
+    const offReset = window.electronAPI?.onSessionReset?.(() => { setPackEndedReason(null); setAutoAnswerAccessNotice(false); });
     // Hours added mid-meeting (a top-up adds them to the same key) bring Pro
     // back; the notice goes with it rather than staying until the next meeting.
-    const offLicence = window.electronAPI?.onLicenseStatusChanged?.(({ isPremium }) => { if (isPremium) setPackEndedReason(null); });
+    const offLicence = window.electronAPI?.onLicenseStatusChanged?.(({ isPremium }) => { if (isPremium) { setPackEndedReason(null); setAutoAnswerAccessNotice(false); } });
     // The clock saw the hours come back (also when a lifetime licence kept Pro
     // on, so no licence change arrives).
     const offRenewed = window.electronAPI?.onPackRenewed?.(() => setPackEndedReason(null));
-    return () => { offEnded?.(); offReset?.(); offLicence?.(); offRenewed?.(); };
+    return () => { offEnded?.(); offAutoAnswerAccess?.(); offReset?.(); offLicence?.(); offRenewed?.(); };
   }, []);
 
   // Session Reset Listener - Clears UI when a NEW meeting starts
@@ -5686,6 +5688,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       chatStreamIdRef.current = null;
       chatStreamSourceRef.current = null;
       requestStartTimeRef.current = null;
+      // A hold left over from the last meeting must not carry into this one.
+      resumeAutoScroll();
       setMessages([]);
       eagerCodeExpansionHoldRef.current = false;
       answerPanelPinnedRef.current = false;
@@ -7439,6 +7443,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     chatStreamSourceRef.current = null;
     forceFinalizeStaleRagStream();
     flushToken();
+    // Every Direct Assist turn is one the user started (hotkey, Answer now, a
+    // send): follow it even if the chat was held for reading (#723).
+    resumeAutoScroll();
 
     const requestId = createDirectAssistRequestId();
     const placeholderId = genMessageId();
@@ -7504,7 +7511,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         message: '',
       });
     }
-  }, [flushToken, forceFinalizeStaleRagStream, settleDirectAssistFailure, settleDirectAssistIncomplete]);
+  }, [flushToken, forceFinalizeStaleRagStream, settleDirectAssistFailure, settleDirectAssistIncomplete, resumeAutoScroll]);
 
   const cancelActiveChatStream = useCallback(() => {
     // Stop also stops diagram repairs: any in flight is cancelled, and the
@@ -7555,13 +7562,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     cancelActiveChatStream();
     diagramRepairBlockedRef.current.clear();
     previousDiagramRef.current = null;
+    resumeAutoScroll();
     setMessages([]);
     answerPanelPinnedRef.current = false;
     setAnswerPanelPinned(false);
     lastManualSubmitRef.current = null;
     manualSubmitInFlightRef.current = false;
     directAssistHistoryRef.current = [];
-  }, [cancelActiveChatStream]);
+  }, [cancelActiveChatStream, resumeAutoScroll]);
 
   const finalizeStreamingByIntent = useCallback(
     (intent: string, text: string) => {
@@ -7693,6 +7701,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         cancelAnimationFrame(tokenBufRef.current.raf);
         tokenBufRef.current.raf = null;
       }
+      // Only answers the user started open a placeholder (quick actions, the
+      // What to Answer hotkey, main's manual start). Auto Answer streams in
+      // through queueToken without one and keeps a held chat held (#723).
+      resumeAutoScroll();
       const placeholderId = genMessageId();
       streamingMsgIdRef.current = placeholderId;
       streamingIntentRef.current = intent;
@@ -7712,7 +7724,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         prepareIntelligenceStreamPlaceholderMessages(prev, intent, placeholderId),
       );
     },
-    [flushToken, pinAnswerPanel],
+    [flushToken, pinAnswerPanel, resumeAutoScroll],
   );
 
   // A quick action that failed before a single word arrived leaves its
@@ -7954,7 +7966,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // An answer Natively stopped itself says so under the text (2026-10-04),
         // like a typed one. Attached to the live row before the finalize, which
         // keeps the row's other fields.
-        const ownStop = ownStopFailure((data as { stopReason?: string }).stopReason);
+        // Since 2026-11-13 also a provider that broke off mid-answer (F-ACC-01).
+        const ownStop = liveAnswerStopFailure((data as { stopReason?: string }).stopReason);
         const liveRowId = streamingIntentRef.current === 'what_to_answer' ? streamingMsgIdRef.current : null;
         if (ownStop && liveRowId != null) {
           setMessages((prev) => prev.map((m) => (m.id === liveRowId ? { ...m, failure: ownStop } : m)));
@@ -7970,9 +7983,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Clear streaming refs FIRST (same ordering rationale as the null-feedback
     // path) so a late token batch can't append onto a row we're removing.
     cleanups.push(
-      window.electronAPI.onIntelligenceSuggestedAnswerDiscard?.(() => {
+      window.electronAPI.onIntelligenceSuggestedAnswerDiscard?.((data) => {
         if (activeDirectAssistRef.current) return;
         if (legacyIntelligenceTombstonedRef.current) return;
+        // A late discard from a replaced run must not clear the newer answer's
+        // row: the row is found by intent, not by generation (F-CTX-09).
+        if (!shouldApplyLiveAnswerDiscard(liveAnswerGenIdRef.current, data?.generationId)) return;
         setIsProcessing(false);
         if (streamingNodeRef.current) streamingNodeRef.current.innerHTML = '';
         streamingNodeRef.current = null;
@@ -8402,13 +8418,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     if (currentAttachments.length > 0) {
       setAttachedContext([]);
-      // Show the attached image in chat FIRST — question card must appear before AI response
+      const promptText = resolveScreenshotPromptText();
+      // Show the attached image in chat FIRST: question card must appear before AI response
       setMessages((prev) => [
         ...prev,
         {
           id: questionCardId,
           role: 'user',
-          text: 'What should I say about this?',
+          text: promptText,
           hasScreenshot: true,
           screenshotPreview: currentAttachments[0].preview,
           screenshotPreviews: currentAttachments.map((a) => a.preview).filter(Boolean),
@@ -8465,11 +8482,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           .join('  ·  ')
           .trim()
           .slice(-8192);
+        const customPrompt = getScreenshotPresetPrompt();
         const hasScreenshots = currentAttachments.length > 0;
         const directWhatToSayPayload = buildDirectWhatToSayPayload({
           interviewerRequest,
           dynamicPromptInstruction,
           hasScreenshots,
+          customScreenshotPrompt: customPrompt || undefined,
         });
         await beginDirectAssist({
           source: directWhatToSayPayload.source,
@@ -8570,10 +8589,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         console.debug(`[DOM Context] Forwarding captured active-tab DOM structure (${domContext.length} chars)`);
       }
 
+      const customPrompt = currentAttachments.length > 0 ? getScreenshotPresetPrompt() : undefined;
+      const effectiveInstruction = dynamicPromptInstruction || customPrompt;
       const options =
-        dynamicPromptInstruction || domContext
+        effectiveInstruction || domContext
           ? {
-              ...(dynamicPromptInstruction ? { promptInstruction: dynamicPromptInstruction } : {}),
+              ...(effectiveInstruction ? { promptInstruction: effectiveInstruction } : {}),
               ...(domContext ? { domContext } : {}),
               ...(domContextEnvelope ? { domContextEnvelope } : {}),
             }
@@ -8898,7 +8919,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const currentAttachments = attachedContext;
     if (currentAttachments.length > 0) {
       setAttachedContext([]);
-      // Show the attached image in chat FIRST — question card must appear before AI response
+      // Show the attached image in chat FIRST: question card must appear before AI response
       setMessages((prev) => [
         ...prev,
         {
@@ -11753,6 +11774,7 @@ Provide only the answer, nothing else.`;
     'ambient-mic': showAmbientMicNotice,
     guide: overlayGuide.wants,
     trial: !!trial.banner,
+    'auto-answer-access': autoAnswerAccessNotice,
     'auto-stop': autoStop.stopsAt !== null,
     'last-time': !!lastTime.recap,
     'capture-fallback': !!captureFallback,
@@ -12303,6 +12325,29 @@ Provide only the answer, nothing else.`;
                       onClick={() => window.electronAPI?.openSettingsTab?.('audio')}
                     >
                       {t('Open Settings')}
+                    </OverlayBannerButton>
+                  }
+                />
+              )}
+              </ChromeFold>
+
+              {/* Auto Answer was on but is paused: it is now Pro, or free when
+                  the user shares the transcripts of meetings where it runs
+                  (autoAnswerAccess.ts). Opens Settings › General, where the
+                  consent sheet explains exactly what is shared. */}
+              <ChromeFold show={autoAnswerAccessNotice && bannerSlots.has('auto-answer-access')} overlayVisible={isExpanded} requestHeightMotion={requestChromeHeightMotion} innerClassName="pt-3 pb-1" testId="fold-auto-answer-access">
+              {autoAnswerAccessNotice && (
+                <OverlayBanner
+                  className="mx-4"
+                  tone="warning"
+                  icon={<Sparkles strokeWidth={2.2} />}
+                  title={t('Auto Answer is paused')}
+                  message={t('Auto Answer is now part of Natively Pro. Keep it free by sharing meeting transcripts to improve it, or get Pro.')}
+                  onDismiss={() => setAutoAnswerAccessNotice(false)}
+                  dismissLabel={t('Dismiss')}
+                  actions={
+                    <OverlayBannerButton variant="primary" onClick={() => { setAutoAnswerAccessNotice(false); window.electronAPI?.openSettingsTab?.('general'); }}>
+                      {t('Choose')}
                     </OverlayBannerButton>
                   }
                 />

@@ -835,7 +835,57 @@ export interface ResolvedReference {
     | 'SCOPE_CHANGED'
     // 2026-09-11: "repeat the number" resolved to the most recent answer in the
     // ring that actually carries one, not to the immediately previous answer.
-    | 'VALUE_RECALL_FROM_HISTORY';
+    | 'VALUE_RECALL_FROM_HISTORY'
+    // F-CTX-05 (2026-11-13): the previous question named nothing ("the second
+    // one on your resume", "a project you're proud of"); its ANSWER did.
+    | 'RESOLVED_FROM_PREVIOUS_ANSWER';
+}
+
+/** Words an answer commonly opens with that are capitalised only because they start it. */
+const ANSWER_OPENERS = new Set(['the', 'a', 'an', 'sure', 'yes', 'yeah', 'no', 'well', 'okay', 'ok', 'right', 'honestly',
+  'absolutely', 'great', 'good', 'we', 'it', 'its', 'my', 'our', 'at', 'in', 'on', 'for', 'when', 'while', 'after',
+  'before', 'during', 'there', 'here', 'one', 'first', 'second', 'third', 'both', 'each', 'every', 'they', 'he', 'she',
+  'you', 'i', 'i\'d', 'i\'m', 'that', 'this', 'these', 'those', 'definitely', 'certainly', 'actually', 'basically',
+  'mostly', 'mainly', 'primarily', 'thanks', 'thank', 'hi', 'hello', 'over', 'from', 'with', 'by', 'as', 'to', 'if']);
+
+/**
+ * The entity the previous ANSWER named first, when the previous QUESTION named
+ * none of its own (F-CTX-05, 2026-11-13).
+ *
+ * P2-s05: "Okay. What about the second one on your resume?" → "The second is
+ * Atlas Search, a Python relevance pipeline." → "And how did you test it?" went
+ * out as a follow-up to the QUESTION, which names nothing; only the answer says
+ * which project "the second one" is, and the evidence held both. The answer is
+ * still never evidence: this is a POINTER, used to say what the follow-up is
+ * about and to steer retrieval at it; facts about it come from the evidence.
+ *
+ * Conservative on purpose — a wrong referent redirects retrieval:
+ *  - only when the previous question had no entity of its own (a question that
+ *    named "Kafka" keeps Kafka, whatever the answer mentioned first);
+ *  - only the answer recorded for THAT question (the ring entry whose question
+ *    matches previousQuestion), never an older or a mis-paired one;
+ *  - only the first sentence, and only a capitalised name or identifier.
+ */
+export function previousAnswerReferent(state: ConversationState | null): string | undefined {
+  const pq = state?.previousQuestion?.trim();
+  if (!state || !pq) return undefined;
+  if (extractEntities(pq).length > 0) return undefined;
+  const norm = (t: string) => t.replace(/…$/, '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const want = norm(pq);
+  let answer: string | undefined;
+  for (let i = (state.turns?.length ?? 0) - 1; i >= 0; i--) {
+    const tq = norm(state.turns[i].q);
+    if (tq && (tq === want || (state.turns[i].q.endsWith('…') && want.startsWith(tq)))) { answer = state.turns[i].a; break; }
+  }
+  if (!answer?.trim()) return undefined;
+  const first = answer.trim().split(/(?<=[.!?;])\s+/)[0] ?? '';
+  for (const m of first.matchAll(/\b([A-Z][A-Za-z0-9]{2,}(?:\s+[A-Z][A-Za-z0-9]{2,})?|[a-z]+[A-Z]\w+)\b/g)) {
+    const token = m[1];
+    const head = token.split(/\s+/)[0].toLowerCase();
+    if (STOP.has(head) || SENTENCE_STARTERS.has(head) || ANSWER_OPENERS.has(head)) continue;
+    return token;
+  }
+  return undefined;
 }
 
 // "can you repeat the number" / "what was the percentage again" / "remind me
@@ -995,6 +1045,20 @@ export function resolveReference(
   // current question always takes precedence over inherited state.
   if (!pronoun && !rephrase && extractEntities(q).length > 0) {
     return { resolved: q, usedState: false, reason: 'CURRENT_QUESTION_CONTAINS_EXPLICIT_ENTITY' };
+  }
+
+  // The previous ANSWER named what this follow-up is about when the previous
+  // question named nothing (F-CTX-05). Not for a personal pronoun (people bind
+  // to the person slot only) and not for a rephrase request, which is about
+  // how to say the previous answer, not about a thing it named.
+  if (!personal && !rephrase && (pronoun || bare || fragment)) {
+    const fromAnswer = previousAnswerReferent(state);
+    if (fromAnswer) {
+      return {
+        resolved: `${q} (referring to: ${fromAnswer}, named in the previous answer)`,
+        usedState: true, referent: fromAnswer, reason: 'RESOLVED_FROM_PREVIOUS_ANSWER',
+      };
+    }
   }
 
   // Personal pronouns resolve ONLY to a person; everything else resolves to

@@ -1,0 +1,18 @@
+// Type-check for premium/electron/autoAnswer. CHECK-ONLY, like ./tsconfig.json.
+//
+// Auto Answer moved from electron/intelligence/autoAnswer into the premium
+// submodule on 2026-11-13. It was written and checked against this repo's full
+// `strict`, so it keeps that here rather than the looser settings
+// ./tsconfig.premium-check.json applies to the rest of premium (which excludes
+// it). Run by `npm run typecheck:premium`.
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "../premium/electron/autoAnswer/**/*.ts"
+  ],
+  // Overridden, not inherited: ./tsconfig.json excludes "../premium/**".
+  "exclude": [
+    "db/seedDemo.ts",
+    "db/test-db.ts"
+  ]
+}

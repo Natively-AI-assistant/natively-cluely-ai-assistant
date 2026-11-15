@@ -22,6 +22,7 @@
 
 import type { AnswerType } from './AnswerPlanner';
 import type { AnswerStyle } from './answerStyle';
+import type { AnswerLength } from './answerLength';
 
 // Spoken-length thresholds. Soft target 45-85 words; SPOKEN_SHORT hard ceiling 100 words / 35s.
 export const SOFT_MIN_WORDS = 45;
@@ -40,6 +41,27 @@ export const SPOKEN_FULL_MAX_WORDS = 180;
 // 118-141 words against a ~30-second product target. The 180 above stays the
 // telemetry / never-trim ceiling; only what the model is told changes.
 export const SPOKEN_FULL_PROMPT_MAX_WORDS = 110;
+
+/**
+ * The fuller-spoken-answer prompt cap for the Answer length (2026-11-14).
+ * Smart is SPOKEN_FULL_PROMPT_MAX_WORDS, unchanged.
+ */
+export function spokenFullPromptMaxWords(length: AnswerLength = 'smart'): number {
+  if (length === 'shorter') return 70;
+  if (length === 'longer') return 200;
+  return SPOKEN_FULL_PROMPT_MAX_WORDS;
+}
+
+/**
+ * The SPOKEN_SHORT measuring lines for the Answer length (2026-11-14), so
+ * telemetry reads a Longer answer of 180 words as on target, not over budget.
+ * Smart is the constants above, unchanged.
+ */
+export function spokenShortLimits(length: AnswerLength = 'smart'): { softMaxWords: number; hardMaxWords: number; hardMaxSeconds: number } {
+  if (length === 'shorter') return { softMaxWords: 40, hardMaxWords: 50, hardMaxSeconds: 22 };
+  if (length === 'longer') return { softMaxWords: 200, hardMaxWords: 230, hardMaxSeconds: 100 };
+  return { softMaxWords: SOFT_MAX_WORDS, hardMaxWords: HARD_MAX_WORDS, hardMaxSeconds: HARD_MAX_SECONDS };
+}
 // Average speaking rate for an interview/meeting answer (words per minute).
 const WORDS_PER_MINUTE = 140;
 
@@ -222,9 +244,43 @@ const SHORT_BAND_TARGETS: Record<ShortLengthBand, ShortBandTarget> = {
   FULLER:   { min: 55, max: 85, seconds: 30, guidance: 'a slightly fuller answer — the point, a reason, and one concrete detail' },
 };
 
-/** Target words/seconds for a SPOKEN_SHORT band. All maxes stay within SOFT_MAX_WORDS (85). */
-export function shortBandTargetWords(band: ShortLengthBand): ShortBandTarget {
+// The Answer length (2026-11-14) moves the same three bands. The question
+// still picks the band (a yes/no question stays the shortest of the three);
+// Shorter and Longer only change the numbers. `ceiling` is the hard line the
+// prompt states, which Smart derives as min(max x 1.25, HARD_MAX_WORDS).
+export interface LengthBandTarget extends ShortBandTarget {
+  /** The prompt's "never go past" line. */ ceiling: number;
+}
+
+const SHORTER_BAND_TARGETS: Record<ShortLengthBand, LengthBandTarget> = {
+  BRIEF:    { min: 10, max: 20, seconds: 8,  ceiling: 25, guidance: 'one short sentence — the answer and nothing else' },
+  STANDARD: { min: 15, max: 35, seconds: 12, ceiling: 45, guidance: 'one or two sentences — the point, no lead-in' },
+  FULLER:   { min: 25, max: 40, seconds: 15, ceiling: 50, guidance: 'two sentences — the point and the one reason that matters' },
+};
+
+const LONGER_BAND_TARGETS: Record<ShortLengthBand, LengthBandTarget> = {
+  BRIEF:    { min: 40, max: 60,  seconds: 22, ceiling: 75,  guidance: 'the answer plus a line of context' },
+  // "detail", never "example": Smart's FULLER says the same, and an asked-for
+  // example on a behavioral turn is an invitation to invent one.
+  // Longer runs about 90 to 200 words (Evin 2026-11-15); a yes/no question
+  // (BRIEF above) stays short rather than padded to 90.
+  STANDARD: { min: 90, max: 140, seconds: 55, ceiling: 175, guidance: 'the point, a reason, and one concrete detail' },
+  FULLER:   { min: 140, max: 200, seconds: 80, ceiling: 220, guidance: 'the point, the reasoning, a concrete detail, and the trade-off' },
+};
+
+/**
+ * Target words/seconds for a SPOKEN_SHORT band. With no length (or Smart) every
+ * max stays within SOFT_MAX_WORDS (85), exactly as before the setting existed.
+ */
+export function shortBandTargetWords(band: ShortLengthBand, length: AnswerLength = 'smart'): ShortBandTarget {
+  if (length === 'shorter') return SHORTER_BAND_TARGETS[band];
+  if (length === 'longer') return LONGER_BAND_TARGETS[band];
   return SHORT_BAND_TARGETS[band];
+}
+
+/** The band for a Shorter or Longer setting, with its stated ceiling. */
+export function lengthBandTarget(band: ShortLengthBand, length: 'shorter' | 'longer'): LengthBandTarget {
+  return length === 'shorter' ? SHORTER_BAND_TARGETS[band] : LONGER_BAND_TARGETS[band];
 }
 
 // BRIEF signals: the question is answered in a sentence or two — yes/no, a bare factual recall,
@@ -314,6 +370,7 @@ export function decideSpeakability(
   answerStyle: AnswerStyle | undefined,
   question: string,
   isCoding = false,
+  answerLength: AnswerLength = 'smart',
 ): SpeakabilityDecision {
   const wordCount = countSpokenWordsExcludingCode(text);
   const seconds = estimateSpeakSeconds(text);
@@ -340,8 +397,11 @@ export function decideSpeakability(
     exceptionReason = `target:${target}${cause}`;
   }
 
-  const overSoftTarget = wordCount > SOFT_MAX_WORDS;
-  const overBudget = target === 'SPOKEN_SHORT' && (wordCount > HARD_MAX_WORDS || seconds > HARD_MAX_SECONDS);
+  // The Answer length moves the measuring lines with the prompt's
+  // targets; Smart is the constants, unchanged.
+  const limits = spokenShortLimits(answerLength);
+  const overSoftTarget = wordCount > limits.softMaxWords;
+  const overBudget = target === 'SPOKEN_SHORT' && (wordCount > limits.hardMaxWords || seconds > limits.hardMaxSeconds);
 
   return { wordCount, seconds, target, overBudget, overSoftTarget, exception, exceptionReason };
 }
@@ -475,6 +535,7 @@ export function applySpeakabilityBudget(
   answerStyle: AnswerStyle | undefined,
   question: string,
   isCoding = false,
+  answerLength: AnswerLength = 'smart',
 ): {
   text: string;
   changed: boolean;
@@ -486,7 +547,7 @@ export function applySpeakabilityBudget(
   /** Coarse marker for telemetry (spec's speakability_class). No raw content. */
   speakability_class: SpeakabilityClass;
 } {
-  const decision = decideSpeakability(text, answerType, answerStyle, question, isCoding);
+  const decision = decideSpeakability(text, answerType, answerStyle, question, isCoding, answerLength);
   return {
     text,                                  // verbatim — never trimmed
     changed: false,

@@ -1663,20 +1663,32 @@ const RETRY_TEMPLATES: ReadonlyArray<(topic: string) => string> = [
 ];
 
 // Topic = a short noun-ish tail of the question. Conservative: strip leading
-// question scaffolding, keep ≤5 words, drop if anything sensitive/odd remains.
+// question scaffolding, keep ≤6 words, drop if anything sensitive/odd remains.
+//
+// Every scaffold alternation is WHOLE-WORD and longest-first (forensics
+// 2026-11-13, F-ACC-02): `( do| does)` with no boundary matched " do" inside
+// "What does UDP…", and the outage line read "about es udp give up compared".
+// A cut that lands on a connector ("…for raw") drops the connector rather than
+// ending mid-phrase.
 const TOPIC_STOP_RE = /\b(salary|compensation|pay|offer|equity)\b/i;
+const TOPIC_MAX_WORDS = 6;
+const TOPIC_DANGLING_RE = /^(for|of|to|the|a|an|and|or|in|on|at|by|from|with|without|into|about|between|than|versus|vs|compared|during|when|while|if|as)$/i;
 const extractRetryTopic = (question: string): string => {
   const q = (question || '').trim().replace(/\?+$/, '');
   if (!q || q.length < 8 || q.length > 160) return '';
   if (TOPIC_STOP_RE.test(q)) return ''; // never echo comp topics back
   const stripped = q
-    .replace(/^(so|well|okay|ok|now|and|but|um|uh)[,\s]+/i, '')
-    .replace(/^(can|could|would|will|do|does|did|are|is|was|were|have|has|had)\s+you\s+/i, '')
-    .replace(/^(tell me|talk|walk me through|explain|describe)( (about|to me about|through))?\s*/i, '')
-    .replace(/^(what|how|why|when|where|who)('s| is| are| was| were| do| does| did| about)?\s*/i, '')
+    .replace(/^(so|well|okay|ok|now|and|but|um|uh)\b[,\s]+/i, '')
+    .replace(/^(could|would|will|does|did|do|are|is|was|were|have|has|had|can)\s+you\s+/i, '')
+    .replace(/^(tell me|talk|walk me through|explain|describe)\b( (about|to me about|through)\b)?\s*/i, '')
+    .replace(/^(what|how|why|when|where|who)\b(?:'s\b|\s+(?:about|were|does|are|was|did|do|is)\b)?\s*/i, '')
     .trim();
   if (!stripped) return '';
-  const words = stripped.split(/\s+/).slice(0, 5);
+  const all = stripped.split(/\s+/);
+  const words = all.slice(0, TOPIC_MAX_WORDS);
+  if (all.length > TOPIC_MAX_WORDS) {
+    while (words.length > 1 && TOPIC_DANGLING_RE.test(words[words.length - 1].replace(/[.,;:!]+$/, ''))) words.pop();
+  }
   if (words.length < 1) return '';
   const topic = words.join(' ').replace(/[.,;:!]+$/, '');
   // Reject anything that isn't a clean short noun phrase (review 2026-06-12):

@@ -105,7 +105,7 @@ export interface ResolveDiagramRequestInput {
    * string (even an empty one) lets a calculation report inputs that were
    * stated nowhere; absent means the conversation is unknown.
    */
-  material?: string | null;
+  material?: string | null | (() => string | null | undefined);
   /**
    * The resolved built-in mode template (from the mode policy registry — never
    * a mode's display name), or 'custom'. Absent / unknown keeps the pre-catalog

@@ -18,7 +18,7 @@
  *
  * Platform-neutral: pure data and logic, identical on macOS and Windows.
  */
-import { RECOGNITION_LANGUAGES, PARAKEET_ONLY_LANGUAGE_KEYS, normalizeSttLanguageKey } from '../config/languages';
+import { RECOGNITION_LANGUAGES, PARAKEET_ONLY_LANGUAGE_KEYS, normalizeSttLanguageKey, sttProviderRejectsLanguage } from '../config/languages';
 
 export interface LanguageSupportDeps {
     /** The model a provider would use for this channel (CredentialsManager.getSttModel), for the english-only check. */
@@ -65,6 +65,9 @@ export function sttCandidateSupportsLanguage(providerId: string, languageKey: st
     // A few languages are verified only on the local Parakeet model; no cloud
     // provider was confirmed for them, so a non-local candidate cannot have them.
     if (PARAKEET_ONLY_LANGUAGE_KEYS.has(key)) return false;
+
+    // A cloud provider measured to refuse this language (Soniox and Nepali).
+    if (sttProviderRejectsLanguage(providerId, key)) return false;
 
     // Otherwise the provider is unrestricted for this language as far as we know.
     return true;

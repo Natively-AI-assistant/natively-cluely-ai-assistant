@@ -83,6 +83,8 @@ export function directAssistFailureText(
 
 export function ownStopFailure(reason: string | undefined | null): { partial: true; code: 'OUTPUT_LIMIT' | 'OUTPUT_REPETITION' | 'OUTPUT_STALLED'; provider: '' } | null;
 
+export function liveAnswerStopFailure(reason: string | undefined | null): { partial: true; code: 'OUTPUT_LIMIT' | 'OUTPUT_REPETITION' | 'OUTPUT_STALLED'; provider: '' } | null;
+
 export type ChatNoteKind = 'late' | 'stopped' | 'superseded' | 'noneYet';
 /** A quiet note about an answer. `question` is the late answer's own question. */
 export interface ChatNote {

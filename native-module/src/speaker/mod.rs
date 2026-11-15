@@ -4,6 +4,10 @@
 /// be surfaced instead of read as silence.
 pub mod stop_signal;
 
+/// Which render endpoint the Windows loopback binds to (pure, tested on every
+/// platform; only windows.rs uses it).
+pub mod loopback_target;
+
 #[cfg(target_os = "macos")]
 pub mod audio_capture_permission;
 #[cfg(target_os = "macos")]

@@ -66,6 +66,8 @@ function runBuildNative({ buildSucceeds, artifactWritten = ARTIFACT, linkCheck =
 
   const fakeRequire = (id) => {
     if (String(id).endsWith('native-link-checks.cjs')) return stubLinkChecks(linkCheck);
+    // Pure env check with its own tests (native-features.test.mjs).
+    if (String(id).endsWith('native-features.cjs')) return require('../lib/native-features.cjs');
     if (id === 'os' || id === 'node:os') return fakeOs;
     if (id === 'child_process' || id === 'node:child_process') return fakeChildProcess;
     return require(id);
@@ -205,6 +207,7 @@ test('a rescue copy survives the next run\'s stale sweep', () => {
   };
   const fakeRequire = (id) => {
     if (String(id).endsWith('native-link-checks.cjs')) return stubLinkChecks();
+    if (String(id).endsWith('native-features.cjs')) return require('../lib/native-features.cjs');
     if (id === 'os' || id === 'node:os') return fakeOs;
     if (id === 'child_process' || id === 'node:child_process') return fakeChildProcess;
     return require(id);

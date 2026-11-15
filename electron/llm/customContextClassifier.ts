@@ -23,7 +23,7 @@
 
 import type { AnswerType } from './AnswerPlanner';
 import {
-  analyzeUserInstructions, hasFactSignature, isDirectiveShaped, isFirstPersonFact,
+  analyzeUserInstructions, hasFactSignature, isBareLanguageName, isDirectiveShaped, isFirstPersonFact,
   parseInstructionLines, splitInstructionClauses, USER_INSTRUCTIONS_MAX_CHARS,
 } from './userInstructionContract';
 
@@ -304,6 +304,10 @@ const carriesContent = (t: string): boolean =>
 const isDirectiveSentence = (text: string, lenient = true): boolean => {
   const t = (text || '').trim();
   if (!t || t.length > FORMAT_DIRECTIVE_SENTENCE_MAX_CHARS || carriesContent(t)) return false;
+  // A bare language name cut out of a sentence is an item of what it was cut
+  // from: "Python 7 years (main), Java 3, some Go" gave up "Java 3", and every
+  // coding turn was told "Write ALL code in Java" (issue #740).
+  if (!lenient && isBareLanguageName(t)) return false;
   const a = analyzeUserInstructions(t);
   if (a.length || a.bindsProgrammingLanguage || a.layout) return true;
   if (isDirectiveShaped(t)) return true;

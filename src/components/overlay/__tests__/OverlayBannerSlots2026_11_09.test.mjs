@@ -56,6 +56,7 @@ test('every banner fold in the overlay goes through the picker', () => {
     'fold-audio-warning': /show=\{audioWarningSlotted\}/,
     'fold-last-time': /bannerSlots\.has\('last-time'\)/,
     'fold-trial-notice': /bannerSlots\.has\('trial'\)/,
+    'fold-auto-answer-access': /bannerSlots\.has\('auto-answer-access'\)/,
     'fold-auto-stop': /bannerSlots\.has\('auto-stop'\)/,
     'fold-ambient-mic': /bannerSlots\.has\('ambient-mic'\)/,
     'fold-stt-not-configured': /bannerSlots\.has\('stt-not-configured'\)/,

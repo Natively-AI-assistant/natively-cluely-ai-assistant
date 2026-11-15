@@ -111,3 +111,7 @@ strip = false
 
 [profile.release.package.natively-audio]
 strip = "debuginfo"
+
+[features]
+# Dev-only: see src/fault_injection.rs. Never enabled for shipped builds.
+fault-injection = []

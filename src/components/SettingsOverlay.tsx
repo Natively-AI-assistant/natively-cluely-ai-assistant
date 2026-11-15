@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useLayoutEffect, useCallback } from 'react';
 import { LANG_NATIVE_NAMES, useLanguage, useT } from '../i18n';
+import { AutoAnswerAccessDialog, AutoAnswerModelCard, AutoAnswerStopSharingDialog } from '../premium';
 import { CalendarSettings } from './settings/CalendarSettings';
 import { ConnectionsSettings } from './settings/ConnectionsSettings';
 import packageJson from '../../package.json';
@@ -10,7 +11,7 @@ import {
     ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Download, Settings, Activity, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff,
     Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Boxes, Languages, Volume2, KeyRound, Loader2, CornerDownRight, PanelBottomClose, Maximize2, TriangleAlert, MicOff,
-    Plug, AppWindow
+    Plug, AppWindow, HardDriveDownload, Share2
 } from 'lucide-react';
 import { AutoAnswerIcon } from './AutoAnswerIcon';
 import { HiCreditCard } from 'react-icons/hi2';
@@ -50,7 +51,7 @@ import { useConfirmDialog } from './ui/ConfirmDialog';
 import { ModelSelectorLabel } from './ui/ModelSelectorLabel';
 import { MODEL_SELECTOR_WIDTH } from './ui/modelSelectorLabelText';
 import { Disclosure, DisclosureChevron } from './ui/AccordionSection';
-import { Presence, SETTINGS_CARD, SettingsMenu, SettingsMotionReady } from './settings/SettingsRow';
+import { Presence, SETTINGS_CARD, SettingsMenu, SettingsMotionReady, SettingsRow, SettingsSwitch } from './settings/SettingsRow';
 import { ProfileVisualizer } from '../premium';
 import GlassEffectLayer from './ui/GlassEffectLayer';
 import { GenieModal } from './ui/GenieModal';
@@ -108,7 +109,7 @@ const DISGUISE_TILE_RESTING = {
 import { NVIDIA_NIM_STT_MODELS, DEFAULT_NVIDIA_NIM_STT_MODEL, allowedLanguageKeysForNvidiaModel } from '../../electron/audio/nvidiaNimSttModels';
 import { STT_MODEL_CATALOG, isEnglishOnlySttModel, sttModelRejectsLanguage, type SttModelProvider } from '../../electron/audio/sttModelCatalog';
 import { isDefaultOpenAiSttBase } from '../../electron/audio/openaiSttBaseUrl';
-import { isRecognitionLanguageOffered, PARAKEET_ONLY_LANGUAGE_KEYS } from '../../electron/config/languages';
+import { isRecognitionLanguageOffered, PARAKEET_ONLY_LANGUAGE_KEYS, sttProviderRejectsLanguage } from '../../electron/config/languages';
 import { SettingsGuide } from './guide/SettingsGuide';
 import { dispatchGuide } from './guide/useGuide';
 
@@ -786,6 +787,45 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [exportResult, setExportResult] = useState<string | null>(null);
     const [ambientChatEnabled, setAmbientChatEnabled] = useState(false);
     const [autoAnswerEnabled, setAutoAnswerEnabled] = useState(false);
+    // Auto Answer is Pro, or free with transcript sharing (autoAnswerAccess.ts).
+    const [autoAnswerAccess, setAutoAnswerAccess] = useState<{ basis: 'pro' | 'sharing' | 'none'; uploads: boolean } | null>(null);
+    // False in builds without the premium submodule: the Auto Answer rows are hidden.
+    const [autoAnswerAvailable, setAutoAnswerAvailable] = useState(true);
+    /** Bumped by the first turn-on: Intelligence scrolls to its Auto Answer section once, then resets it. */
+    const [autoAnswerFocus, setAutoAnswerFocus] = useState(0);
+    const [autoAnswerDialog, setAutoAnswerDialog] = useState<null | 'free' | 'pro' | 'intro'>(null);
+    /** The first turn-on shows the conditions, then opens Intelligence › Auto Answer (Evin 2026-11-15).
+     *  A per-install flag in this renderer's storage: losing it only shows the card again. */
+    const AUTO_ANSWER_INTRO_KEY = 'natively.autoAnswer.introSeen.v1';
+    const autoAnswerIntroSeen = () => { try { return localStorage.getItem(AUTO_ANSWER_INTRO_KEY) === '1'; } catch { return false; } };
+    const markAutoAnswerIntroSeen = () => { try { localStorage.setItem(AUTO_ANSWER_INTRO_KEY, '1'); } catch { /* shows again next time */ } };
+    const openAutoAnswerSection = () => { setActiveTab('intelligence'); setAutoAnswerFocus((n) => n + 1); };
+    const [autoAnswerDialogBusy, setAutoAnswerDialogBusy] = useState(false);
+    const refreshAutoAnswerAccess = useCallback(() => {
+        window.electronAPI?.getAutoAnswerAccess?.().then((a) => { if (a) { setAutoAnswerAvailable(a.available !== false); setAutoAnswerAccess({ basis: a.basis, uploads: a.uploads }); setAutoAnswerEnabled(a.enabled); } }).catch(() => { });
+    }, []);
+    /** The sharing switch: off → ask (consent dialog); on → the stop card (AutoAnswerStopSharingDialog),
+     *  "Keep sharing" by default, for Pro and free alike (Evin 2026-11-15). */
+    const [stopSharingOpen, setStopSharingOpen] = useState(false);
+    const [stopSharingBusy, setStopSharingBusy] = useState(false);
+    const toggleAutoAnswerSharing = () => {
+        if (!autoAnswerAccess) return;
+        if (!autoAnswerAccess.uploads) { setAutoAnswerDialog('pro'); return; }
+        setStopSharingOpen(true);
+    };
+    const stopAutoAnswerSharing = async () => {
+        setStopSharingBusy(true);
+        try {
+            const r = await window.electronAPI?.setAutoAnswerTrainingConsent?.(false);
+            if (r && !r.success) console.error('[Settings] Sharing not stopped:', r.error);
+        } catch (err) {
+            console.error('[Settings] Exception stopping sharing:', err);
+        } finally {
+            setStopSharingBusy(false);
+            setStopSharingOpen(false);
+            refreshAutoAnswerAccess();
+        }
+    };
     const [meetingRetention, setMeetingRetention] = useState<'forever' | '7d' | '30d' | 'never'>('forever');
     const [codeVerification, setCodeVerification] = useState(false);
     const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
@@ -814,6 +854,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             window.electronAPI?.getUsageStatistics?.().then((v) => setUsageStatistics(v !== false)).catch(() => { });
             window.electronAPI?.getAmbientChatEnabled?.().then(setAmbientChatEnabled).catch(() => { });
             window.electronAPI?.getAutoAnswerEnabled?.().then(setAutoAnswerEnabled).catch(() => { });
+            refreshAutoAnswerAccess();
             window.electronAPI?.getCodeVerification?.().then((v) => setCodeVerification(v === true)).catch(() => { });
             window.electronAPI?.getMeetingRetention?.().then(setMeetingRetention).catch(() => { });
         }
@@ -1455,7 +1496,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
     const allowedLanguageKeySet = localLanguageCapability?.allowedKeys ?? nvidiaLanguageCapability ?? deepgramLanguageCapability ?? appleLanguageCapability ?? null;
     const isLanguageEntryAllowed = (key: string) =>
-        isRecognitionLanguageOffered(key, localLanguageCapability?.allowedKeys ?? null, allowedLanguageKeySet);
+        isRecognitionLanguageOffered(key, localLanguageCapability?.allowedKeys ?? null, allowedLanguageKeySet, sttProvider);
 
     // Helper to get unique groups (restricted to what the active model accepts)
     const languageGroups = Array.from(new Set(
@@ -1502,7 +1543,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     // A multilingual Deepgram model sends `multi` for a stored language it has
     // no model for (DeepgramStreamingSTT.connectLanguage), so that is shown as
     // the Auto Detect it gets rather than a value missing from the list.
-    const showsAutoFallback = !showsEnglishFallback && sttProvider === 'deepgram' && storedLanguageUnsupported;
+    // Soniox does the same for a language it refuses (Nepali), and the Natively
+    // API relay turns that refusal into auto-detect.
+    const showsAutoFallback = !showsEnglishFallback && (
+        (sttProvider === 'deepgram' && storedLanguageUnsupported)
+        || sttProviderRejectsLanguage(sttProvider, recognitionLanguage)
+    );
     const displayedSttGroup = showsEnglishFallback ? 'English' : showsAutoFallback ? 'Auto' : selectedSttGroup;
     const displayedRecognitionLanguage = showsEnglishFallback ? 'english-us' : showsAutoFallback ? 'auto' : recognitionLanguage;
 
@@ -2274,7 +2320,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         <div
             id="opacity-slider-card"
             style={isPreviewingOpacity ? { visibility: 'visible', position: 'relative', zIndex: 9999 } : {}}
-            className={`${isLight ? 'bg-bg-card' : 'bg-bg-item-surface'} rounded-xl p-5 border border-border-subtle`}
+            className="bg-bg-card rounded-xl p-5 border border-border-subtle"
         >
             <div className="flex items-center justify-between mb-3">
                 <label className="flex items-center gap-2 text-xs font-medium text-text-secondary uppercase tracking-wide">
@@ -2337,6 +2383,59 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             {confirmDialog}
             {/* The first-run guide's Settings steps (6 and 7), while Settings is open. */}
             {isOpen && <SettingsGuide />}
+            <AutoAnswerStopSharingDialog
+                open={stopSharingOpen}
+                busy={stopSharingBusy}
+                freeBySharing={autoAnswerAccess?.basis === 'sharing'}
+                onOpenChange={(o: boolean) => { if (!o) setStopSharingOpen(false); }}
+                onStop={stopAutoAnswerSharing}
+                onUpgrade={() => { setStopSharingOpen(false); setActiveTab('plans'); }}
+            />
+            <AutoAnswerAccessDialog
+                open={autoAnswerDialog !== null}
+                proOptIn={autoAnswerDialog === 'pro'}
+                busy={autoAnswerDialogBusy}
+                onOpenChange={(o: boolean) => { if (!o) setAutoAnswerDialog(null); }}
+                onUpgrade={() => { setAutoAnswerDialog(null); setActiveTab('plans'); }}
+                intro={autoAnswerDialog === 'intro'}
+                sharingOn={autoAnswerAccess?.uploads === true}
+                onTurnOn={async () => {
+                    setAutoAnswerDialogBusy(true);
+                    let on = false;
+                    let lostAccess = false;
+                    try {
+                        const r = await window.electronAPI?.setAutoAnswerEnabled?.(true);
+                        on = r?.success === true;
+                        // Access changed since Settings opened (trial ended, licence lapsed): the
+                        // share-or-upgrade card, as the switch does.
+                        lostAccess = r?.error === 'auto_answer_access_required';
+                        if (!on) console.error('[Settings] Auto Answer not turned on:', r?.error ?? 'unavailable');
+                    } catch (err) {
+                        console.error('[Settings] Exception turning Auto Answer on:', err);
+                    } finally {
+                        setAutoAnswerDialogBusy(false);
+                        setAutoAnswerDialog(lostAccess ? 'free' : null);
+                        refreshAutoAnswerAccess();
+                    }
+                    if (on) { setAutoAnswerEnabled(true); markAutoAnswerIntroSeen(); openAutoAnswerSection(); }
+                }}
+                onShare={async () => {
+                    setAutoAnswerDialogBusy(true);
+                    try {
+                        const c = await window.electronAPI?.setAutoAnswerTrainingConsent?.(true);
+                        if (c?.success && autoAnswerDialog === 'free') {
+                            const r = await window.electronAPI?.setAutoAnswerEnabled?.(true);
+                            if (r && !r.success) console.error('[Settings] Auto Answer not turned on:', r.error);
+                            // The sharing card carried the conditions: first time on, show its section.
+                            else if (!autoAnswerIntroSeen()) { markAutoAnswerIntroSeen(); openAutoAnswerSection(); }
+                        }
+                    } finally {
+                        setAutoAnswerDialogBusy(false);
+                        setAutoAnswerDialog(null);
+                        refreshAutoAnswerAccess();
+                    }
+                }}
+            />
             {/* Settings pours out of, and back into, the bottom of the window
                 like every other popup (GenieModal). */}
             <GenieModal
@@ -2564,7 +2663,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 {/* Detectable / Undetectable */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                        <div className="w-10 h-10 bg-bg-settings-tile rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             {/* The row's state, in all three places it shows: the glyph
                                                                 cross-fades, title and sentence swap (Presence). */}
                                                             <Presence kind="icon" id={isUndetectable ? 'undetectable' : 'detectable'} slotClassName="w-5 h-5">
@@ -2620,7 +2719,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 {/* Open at Login */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                        <div className="w-10 h-10 bg-bg-settings-tile rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <Power size={20} />
                                                         </div>
                                                         <div>
@@ -2647,7 +2746,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 {isWindows && (
                                                     <div className="flex items-center justify-between px-4 py-3">
                                                         <div className="flex items-center gap-4">
-                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                            <div className="w-10 h-10 bg-bg-settings-tile rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                                 <Keyboard size={20} />
                                                             </div>
                                                             <div>
@@ -2678,10 +2777,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     </div>
                                                 )}
 
-                                                {/* Auto Answer */}
+                                                {/* Auto Answer (premium/electron/autoAnswer; absent from builds without premium) */}
+                                                {autoAnswerAvailable && (
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                        <div className="w-10 h-10 bg-bg-settings-tile rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <AutoAnswerIcon size={20} />
                                                         </div>
                                                         <div>
@@ -2694,18 +2794,32 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <LiquidGlassBadge variant="sky">{t('Beta')}</LiquidGlassBadge>
                                                             </div>
                                                             <p className="text-xs text-text-secondary mt-0.5">{t('Answers appear as soon as the interviewer finishes a question')}</p>
+                                                            {/* No Pro-or-share line here: the access card says it when the switch is pressed (Evin 2026-11-15). */}
+                                                            {/* The model and sharing rows live in Intelligence, with no link here (Evin 2026-11-15);
+                                                                the first turn-on opens that section once. */}
+                                                            {/* Stopping sharing lives only in Intelligence › Auto Answer (its switch,
+                                                                which opens the stop-sharing card); no shortcut here (Evin 2026-11-15). */}
                                                         </div>
                                                     </div>
                                                     <SettingsToggle
-                                                        checked={autoAnswerEnabled}
+                                                        checked={autoAnswerEnabled && autoAnswerAccess?.basis !== 'none'}
                                                         label={t('Auto Answer')}
                                                         onChange={async () => {
                                                             const previous = autoAnswerEnabled;
                                                             const newState = !previous;
+                                                            // Free and not sharing: ask first (share or upgrade), never flip.
+                                                            if (newState && autoAnswerAccess?.basis === 'none') { setAutoAnswerDialog('free'); return; }
+                                                            // First turn-on: the conditions card, which turns it on itself.
+                                                            if (newState && !autoAnswerIntroSeen()) { setAutoAnswerDialog('intro'); return; }
                                                             setAutoAnswerEnabled(newState); // Optimistic update
                                                             try {
                                                                 const result = await window.electronAPI?.setAutoAnswerEnabled?.(newState);
-                                                                if (result && !result.success) {
+                                                                if (result && !result.success && result.error === 'auto_answer_access_required') {
+                                                                    // Access changed since Settings opened (trial ended, licence lapsed).
+                                                                    setAutoAnswerEnabled(previous);
+                                                                    refreshAutoAnswerAccess();
+                                                                    setAutoAnswerDialog('free');
+                                                                } else if (result && !result.success) {
                                                                     // Rollback on explicit failure (settings store degraded)
                                                                     setAutoAnswerEnabled(previous);
                                                                     console.error('[Settings] Failed to set Auto Answer:', result.error);
@@ -2718,11 +2832,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         className={autoAnswerEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
                                                     />
                                                 </div>
+                                                )}
 
                                                 {/* Ambient AI Chat */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                        <div className="w-10 h-10 bg-bg-settings-tile rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <MicOff size={20} />
                                                         </div>
                                                         <div>
@@ -2745,7 +2860,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 {/* Theme */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                        <div className="w-10 h-10 bg-bg-settings-tile rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <Palette size={20} />
                                                         </div>
                                                         <div>
@@ -2807,7 +2922,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 {/* Language */}
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                        <div className="w-10 h-10 bg-bg-settings-tile rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <Globe size={20} />
                                                         </div>
                                                         <div>
@@ -2873,7 +2988,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     buttons, which sit on their tile's centre line. */}
                                                 <div className="flex items-center justify-between gap-4 px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                        <div className="w-10 h-10 bg-bg-settings-tile rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <BadgeCheck size={20} />
                                                         </div>
                                                         <div>
@@ -2950,7 +3065,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     {/* Meeting Retention */}
                                                     <div className="flex items-start justify-between px-4 py-3 gap-4">
                                                         <div className="flex items-start gap-4">
-                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                            <div className="w-10 h-10 bg-bg-settings-tile rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                                 <Shield size={20} />
                                                             </div>
                                                             <div className="flex-1">
@@ -2973,7 +3088,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     {/* Mouse Passthrough Toggle — Adapted from public PR #113 */}
                                                     <div className="flex items-center justify-between px-4 py-3">
                                                         <div className="flex items-center gap-4">
-                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                            <div className="w-10 h-10 bg-bg-settings-tile rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                                 <PointerOff size={20} />
                                                             </div>
                                                             <div>
@@ -2998,7 +3113,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     {/* Genie animation — off uses the plain fade and keeps no pictures of popups */}
                                                     <div className="flex items-center justify-between px-4 py-3">
                                                         <div className="flex items-center gap-4">
-                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                            <div className="w-10 h-10 bg-bg-settings-tile rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                                 <PanelBottomClose size={20} />
                                                             </div>
                                                             <div>
@@ -3019,7 +3134,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     {/* Keep overlay size — off: the overlay narrows again and each answer starts from the automatic size */}
                                                     <div className="flex items-center justify-between px-4 py-3">
                                                         <div className="flex items-center gap-4">
-                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                            <div className="w-10 h-10 bg-bg-settings-tile rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                                 <Maximize2 size={20} />
                                                             </div>
                                                             <div>
@@ -3040,7 +3155,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     {/* Code Verification — runs LLM-generated code against test cases + one-shot correction */}
                                                     <div className="flex items-center justify-between px-4 py-3">
                                                         <div className="flex items-center gap-4">
-                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                            <div className="w-10 h-10 bg-bg-settings-tile rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                                 <Code2 size={20} />
                                                             </div>
                                                             <div>
@@ -3066,7 +3181,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     {/* Interviewer Transcript */}
                                                     <div className="flex items-center justify-between px-4 py-3">
                                                         <div className="flex items-center gap-4">
-                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                            <div className="w-10 h-10 bg-bg-settings-tile rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                                 <MessageSquare size={20} />
                                                             </div>
                                                             <div>
@@ -3090,7 +3205,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     {/* Usage statistics */}
                                                     <div className="flex items-center justify-between px-4 py-3">
                                                         <div className="flex items-center gap-4">
-                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                            <div className="w-10 h-10 bg-bg-settings-tile rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                                 <Activity size={20} />
                                                             </div>
                                                             <div>
@@ -3121,7 +3236,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     {/* Debug Logging */}
                                                     <div className="flex items-center justify-between px-4 py-3">
                                                         <div className="flex items-center gap-4">
-                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                            <div className="w-10 h-10 bg-bg-settings-tile rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                                 <Terminal size={20} />
                                                             </div>
                                                             <div>
@@ -3188,7 +3303,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         header into one folder and reveals it. */}
                                                     <div className="flex items-center justify-between px-4 py-3">
                                                         <div className="flex items-center gap-4">
-                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                            <div className="w-10 h-10 bg-bg-settings-tile rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                                 <Download size={20} />
                                                             </div>
                                                             <div>
@@ -3236,7 +3351,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                     </div>
 
                                     {/* Process Disguise */}
-                                    <div className={`${isLight ? 'bg-bg-card' : 'bg-bg-item-surface'} rounded-xl p-5 border border-border-subtle`}>
+                                    <div className="bg-bg-card rounded-xl p-5 border border-border-subtle">
                                         <div className="flex flex-col gap-1 mb-3">
                                             <div className="flex items-center gap-2">
                                                 <h3 className="settings-heading text-text-primary">{t('Process Disguise')}</h3>
@@ -3605,7 +3720,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             { id: 'nvidia_nim', label: 'Nvidia Nim', badge: hasStoredNvidiaNimKey ? 'Saved' : null, desc: t('Low-latency Nemotron / Parakeet streaming ASR'), color: 'green', icon: <BrandMark provider="nvidia_nim" />, neutralTile: true },
                                                             { id: 'openai', label: 'OpenAI Whisper', badge: hasStoredSttOpenaiKey ? 'Saved' : null, desc: t('OpenAI-compatible Whisper API'), color: 'green', icon: <BrandMark provider="openai" />, neutralTile: true },
                                                             { id: 'deepgram', label: 'Deepgram', badge: hasStoredDeepgramKey ? 'Saved' : null, desc: `${STT_MODEL_CATALOG.deepgram.models.find((m) => m.id === sttModels.deepgram)?.label ?? 'Nova-3'} · ${t('300 ms endpointing')}`, color: 'purple', icon: <BrandMark provider="deepgram" />, neutralTile: true },
-                                                            { id: 'elevenlabs', label: 'ElevenLabs Scribe', badge: hasStoredElevenLabsKey ? 'Saved' : null, desc: t('Scribe v2 Realtime API'), color: 'teal', icon: <BrandMark provider="elevenlabs" />, neutralTile: true },
+                                                            { id: 'elevenlabs', label: 'ElevenLabs Scribe', badge: hasStoredElevenLabsKey ? 'Saved' : null, desc: t('Scribe v3 Realtime API'), color: 'teal', icon: <BrandMark provider="elevenlabs" />, neutralTile: true },
                                                             { id: 'azure', label: 'Azure Speech', badge: hasStoredAzureKey ? 'Saved' : null, desc: t('Microsoft Cognitive Services STT'), color: 'cyan', icon: <BrandMark provider="azure" />, neutralTile: true },
                                                             { id: 'ibmwatson', label: 'IBM Watson', badge: hasStoredIbmWatsonKey ? 'Saved' : null, desc: t('IBM Watson cloud STT service'), color: 'indigo', icon: <BrandMark provider="ibmwatson" />, neutralTile: true },
                                                             /* Soniox has no licence-compatible mark, so its monogram reproduces the brand's
@@ -4456,7 +4571,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             <div className="rounded-xl border border-border-subtle bg-bg-card">
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                        <div className="w-10 h-10 bg-bg-settings-tile rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <MicOff size={20} />
                                                         </div>
                                                         <div>
@@ -4486,7 +4601,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             <div className="rounded-xl border border-border-subtle bg-bg-card">
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                        <div className="w-10 h-10 bg-bg-settings-tile rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
                                                             <Mic size={20} />
                                                         </div>
                                                         <div>
@@ -4572,7 +4687,31 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                             )}
 
                             {isIntelligenceTab(activeTab) && (
-                                <IntelligenceSettings />
+                                <IntelligenceSettings
+                                    autoAnswerFocus={autoAnswerFocus}
+                                    onAutoAnswerFocused={() => setAutoAnswerFocus(0)}
+                                    autoAnswer={autoAnswerAvailable && autoAnswerAccess && autoAnswerAccess.basis !== 'none' ? (
+                                        <>
+                                            <AutoAnswerModelCard icon={<HardDriveDownload size={20} />} />
+                                            {/* Transcript sharing (autoAnswerAccess.ts): opt-in with Pro,
+                                                what keeps Auto Answer free for a free user. */}
+                                            <SettingsRow
+                                                icon={<Share2 size={20} />}
+                                                title={t('Share transcripts to improve Auto Answer')}
+                                                description={autoAnswerAccess.basis === 'sharing'
+                                                    ? t('Auto Answer is free while this is on. Turning it off stops Auto Answer unless you have Pro.')
+                                                    : t('Optional with Pro. Only meetings where Auto Answer runs.')}
+                                                control={
+                                                    <SettingsSwitch
+                                                        checked={autoAnswerAccess.uploads}
+                                                        label={t('Share transcripts to improve Auto Answer')}
+                                                        onChange={toggleAutoAnswerSharing}
+                                                    />
+                                                }
+                                            />
+                                        </>
+                                    ) : null}
+                                />
                             )}
 
                             {activeTab === 'help' && (

@@ -1,3 +1,7 @@
+
+// cidre's define_obj_type! transmutes a reference to a pointer inside its
+// expansion; the lint can't be scoped to the macro call, only to the file.
+#![allow(clippy::useless_transmute)]
 // ScreenCaptureKit-based system audio capture
 // Uses cidre 0.11.10 API with correct class registration and inner state
 
@@ -97,7 +101,7 @@ impl sc::stream::OutputImpl for AudioHandler {
                     let byte_count = buffer.data_bytes_size as usize;
 
                     // Validate sample format (must be f32 aligned)
-                    if byte_count == 0 || byte_count % 4 != 0 {
+                    if byte_count == 0 || !byte_count.is_multiple_of(4) {
                         continue;
                     }
 

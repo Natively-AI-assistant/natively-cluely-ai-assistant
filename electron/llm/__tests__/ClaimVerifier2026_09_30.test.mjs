@@ -423,6 +423,10 @@ describe('where the pass sits in the what-to-answer pipeline', () => {
     assert.match(body, /cv\.runClaimVerifier\(\{/);
     // 2026-10-03: the pass asks for its own, larger cap on the inherited prompt (ClaimVerifierSeesWholePrompt2026_10_03).
     assert.match(body, /this\.repairCallArgs\(opts\.turnKey, cv\.claimVerifierDraftMessage\(body\), signal, system, \[\], cv\.CLAIM_VERIFIER_MATERIAL_MAX_CHARS\)/);
+    // 2026-11-10: by default the pass keeps the answer's system prompt and puts its own instructions after the
+    // replayed message, so the provider's prompt cache reuses the answer's prefix (claimVerifierInlineMessage).
+    assert.match(body, /this\.repairCallArgs\(opts\.turnKey, cv\.claimVerifierInlineMessage\(system, body\), signal, undefined, \[\], cv\.CLAIM_VERIFIER_MATERIAL_MAX_CHARS\)/);
+    assert.match(body, /const shared = canReplay && cv\.claimVerifierSharesAnswerPrefix\(\)/);
     assert.match(body, /cv\.claimVerifierSystemPrompt\(opts\.modeId, 'spoken', \{ noDocuments: cv\.materialHasNoDocuments\(opts\.material\) \}\)/);
     assert.ok(CLAIM_VERIFIER_BUDGET_MS >= 2000 && CLAIM_VERIFIER_BUDGET_MS <= 5000);
   });

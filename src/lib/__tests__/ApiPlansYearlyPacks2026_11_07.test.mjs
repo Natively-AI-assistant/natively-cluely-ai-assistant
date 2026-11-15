@@ -122,9 +122,15 @@ test('the Plans tab reads every checkout link from CHECKOUT_URLS, none hardcoded
 test('Monthly is the default; a yearly key opens on Yearly and only matches Yearly', () => {
   assert.match(settingsCode, /usageCache\?\.billing_period === 'yearly' \? 'yearly' : 'monthly'/);
   assert.match(settingsCode, /keyCycle === billingCycle/);
-  // The switch is bound to billingCycle and its onChange still sets it (it
-  // also tells plans_visit the person switched, 2026-11-09).
-  assert.match(settingsCode, /<BillingCycleSwitch value=\{billingCycle\} onChange=\{\(next\) => \{ plansVisit\.cycleSwitched\(next\); setBillingCycle\(next\); \}\} showNote=\{false\} align="start" \/>/);
+  // The switch is Hourly | Monthly | Yearly (2026-11-10): Monthly and Yearly
+  // still set billingCycle and tell plans_visit the person switched; Hourly
+  // shows the packs in the plans' place.
+  assert.match(settingsCode, /<BillingCycleSwitch value=\{plansView\} onChange=\{choosePlansView\} options=\{PLANS_VIEWS\} showNote=\{false\} align="start" \/>/);
+  assert.match(settingsCode, /plansVisit\.cycleSwitched\(next\);\s*setBillingCycle\(next\);/);
+  assert.match(settingsCode, /const \[packsView, setPacksView\] = useState<boolean>\(\(\) => isPackPlan\(usageCache\?\.plan\)\)/);
+  assert.match(settingsCode, /\{packsView \? \([\s\S]*?<ProPacks [\s\S]*?\) : \([\s\S]*?<PlanRail>/);
+  const views = stripComments(read('components/ui/BillingCycleSwitch.tsx'));
+  assert.match(views, /\{ id: 'hourly', label: 'Hourly' \},\s*\.\.\.BILLING_CYCLES/);
   const sw = stripComments(read('components/ui/BillingCycleSwitch.tsx'));
   assert.match(sw, /role="radiogroup"[\s\S]*?aria-label="Billing"/);
   assert.ok(sw.includes('surface-switch'), "Overlay's two-way switch, not a new control");

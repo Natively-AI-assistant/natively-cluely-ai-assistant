@@ -492,13 +492,8 @@ impl SilenceSuppressor {
             return true;
         };
 
-        match self.vad.is_voice_segment(&self.vad_buf[..target]) {
-            Ok(is_voice) => is_voice,
-            Err(_) => {
-                // On VAD error, fall back to RMS-only (don't block audio)
-                true
-            }
-        }
+        // On VAD error, fall back to RMS-only (don't block audio).
+        self.vad.is_voice_segment(&self.vad_buf[..target]).unwrap_or(true)
     }
 
     /// Get statistics
@@ -547,7 +542,7 @@ fn calculate_rms(samples: &[i16]) -> f32 {
         .map(|&s| (s as f64) * (s as f64))
         .sum();
 
-    let count = (samples.len() + 3) / 4;
+    let count = samples.len().div_ceil(4);
     (sum_of_squares / count as f64).sqrt() as f32
 }
 

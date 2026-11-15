@@ -732,3 +732,6 @@ agent-browser.json
 /spotlightArrowsHarness.html
 /thinkingDotHarness.html
 /trialCardHarness.html
+
+# Auto Answer decider graph: a paid, private download (userData), never in the repo or installer
+resources/models/auto-answer-decider/*.onnx
