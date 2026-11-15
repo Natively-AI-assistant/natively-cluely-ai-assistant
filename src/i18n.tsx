@@ -13,6 +13,7 @@ import { AMBIENT_CHAT_RU, AMBIENT_CHAT_ZH, AMBIENT_CHAT_JA, AMBIENT_CHAT_ES } fr
 import { STT_STATUS_RU, STT_STATUS_ZH, STT_STATUS_JA, STT_STATUS_ES } from './i18n.sttStatus';
 import { SCREENSHOT_SCREEN_RU, SCREENSHOT_SCREEN_ZH, SCREENSHOT_SCREEN_JA, SCREENSHOT_SCREEN_ES } from './i18n.screenshotScreen';
 import { SCREENSHOT_QUESTION_RU, SCREENSHOT_QUESTION_ZH, SCREENSHOT_QUESTION_JA, SCREENSHOT_QUESTION_ES } from './i18n.screenshotQuestion';
+import { ANSWER_LENGTH_RU, ANSWER_LENGTH_ZH, ANSWER_LENGTH_JA, ANSWER_LENGTH_ES } from './i18n.answerLength';
 import { KEY_RESEND_RU, KEY_RESEND_ZH, KEY_RESEND_JA, KEY_RESEND_ES } from './i18n.keyResend';
 
 // ─── Lightweight in-house i18n ────────────────────────────────────────────────
@@ -64,6 +65,7 @@ const RU: Record<string, string> = {
     ...STT_STATUS_RU,
     ...SCREENSHOT_SCREEN_RU,
     ...SCREENSHOT_QUESTION_RU,
+    ...ANSWER_LENGTH_RU,
     ...KEY_RESEND_RU,
     // ── Settings sidebar / navigation ──
     'General': 'Основные',
@@ -315,6 +317,7 @@ const ZH: Record<string, string> = {
     ...STT_STATUS_ZH,
     ...SCREENSHOT_SCREEN_ZH,
     ...SCREENSHOT_QUESTION_ZH,
+    ...ANSWER_LENGTH_ZH,
     ...KEY_RESEND_ZH,
     'Language': '语言',
     'English': '英语',
@@ -341,6 +344,7 @@ const JA: Record<string, string> = {
     ...STT_STATUS_JA,
     ...SCREENSHOT_SCREEN_JA,
     ...SCREENSHOT_QUESTION_JA,
+    ...ANSWER_LENGTH_JA,
     ...KEY_RESEND_JA,
     'Language': '言語',
     'English': '英語',
@@ -366,6 +370,7 @@ const ES: Record<string, string> = {
     ...STT_STATUS_ES,
     ...SCREENSHOT_SCREEN_ES,
     ...SCREENSHOT_QUESTION_ES,
+    ...ANSWER_LENGTH_ES,
     ...KEY_RESEND_ES,
     'Language': 'Idioma',
     'English': 'Inglés',
