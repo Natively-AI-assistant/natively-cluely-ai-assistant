@@ -29,10 +29,14 @@
   from { opacity: 0; transform: translateY(-4px) scale(0.94); }
   to { opacity: 1; transform: none; }
 }
-.guide-tip.guide-enter { animation: guideTipIn 260ms cubic-bezier(0.23, 1, 0.32, 1) both; }
+/* backwards, never both: a fill that outlives the fade keeps an opacity effect
+   on the tip, and Chromium then stops the glass's backdrop blur at the tip, so
+   the page behind read straight through it (seen live 2026-11-15). The end
+   state is the element's own style, so nothing needs holding. */
+.guide-tip.guide-enter { animation: guideTipIn 260ms cubic-bezier(0.23, 1, 0.32, 1) backwards; }
 
 .guide-enter {
-  animation: guideIn 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  animation: guideIn 220ms cubic-bezier(0.23, 1, 0.32, 1) backwards;
 }
 
 .guide-skip {
@@ -55,8 +59,9 @@
 .guide-tip,
 .guide-pill {
   --gt-ink: var(--text-primary);
-  --gt-ink-2: var(--text-secondary);
-  --gt-ink-3: var(--text-tertiary);
+  /* On the lavender glass the app's greys sink; white at set strengths. */
+  --gt-ink-2: rgba(255, 255, 255, 0.8);
+  --gt-ink-3: rgba(255, 255, 255, 0.58);
   --gt-accent: #a8b8ff;
   --gt-on-accent: #14162a;
   --gt-wash: rgba(168, 184, 255, 0.13);
@@ -77,6 +82,8 @@
 }
 [data-theme='light'] .guide-tip,
 [data-theme='light'] .guide-pill {
+  --gt-ink-2: var(--text-secondary);
+  --gt-ink-3: var(--text-tertiary);
   --gt-accent: #4f5fd6;
   --gt-on-accent: #ffffff;
   --gt-wash: rgba(79, 95, 214, 0.09);
