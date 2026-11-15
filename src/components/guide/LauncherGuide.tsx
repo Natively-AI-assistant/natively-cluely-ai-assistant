@@ -25,6 +25,8 @@ const STEP_ANCHOR: Partial<Record<string, string>> = {
 const SETTINGS_TAB: Partial<Record<string, string>> = { surface: 'overlay', plans: 'plans', keys: 'ai-providers' };
 /** How long a step's control may be off screen before the way back shows. */
 const OFF_SCREEN_MS = 1200;
+/** How long a notes step waits for main's saved meeting before offering to go on. */
+const NO_NOTES_MS = 8000;
 
 interface Props {
   onOpenSettings: (tab: string) => void;
@@ -115,13 +117,17 @@ export const LauncherGuide: React.FC<Props> = ({ onOpenSettings, onOpenMeeting, 
   const [offScreen, setOffScreen] = useState(false);
   useEffect(() => {
     setOffScreen(false);
-    if (!anchor || anchorRect || (onNotes && !endedMeetingId)) return;
-    const timer = setTimeout(() => setOffScreen(true), OFF_SCREEN_MS);
+    if (!anchor || anchorRect) return;
+    // A notes step with no saved meeting (the save failed, or the app quit
+    // between Stop and the save) has nothing to open: after a wait for the
+    // save, the way back moves the guide on instead of leaving nothing on screen.
+    const timer = setTimeout(() => setOffScreen(true), onNotes && !endedMeetingId ? NO_NOTES_MS : OFF_SCREEN_MS);
     return () => clearTimeout(timer);
   }, [anchor, anchorRect, onNotes, endedMeetingId]);
   const resume = () => {
     const tab = step ? SETTINGS_TAB[step] : undefined;
-    if (onNotes && endedMeetingId) onOpenMeeting(endedMeetingId);
+    if (onNotes && !endedMeetingId) dispatch({ type: 'notes_next' });
+    else if (onNotes) onOpenMeeting(endedMeetingId!);
     else if (step === 'start2') onShowHome();
     else if (tab) onOpenSettings(tab);
   };

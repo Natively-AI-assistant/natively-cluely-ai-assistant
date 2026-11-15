@@ -143,3 +143,11 @@ test('step 5 lights the Stop button in the top pill window', () => {
   assert.ok(aux.includes(`useGuideLit(guideOn(guide.state, 'stop') && !guide.justDone ? '[data-guide="overlay-stop"]' : null);`));
   assert.ok(aux.includes("import './guide/guide.css';"), 'the ring style loads in that window');
 });
+
+// A notes step whose saved meeting never came (save failed, or a quit between
+// Stop and the save) must not leave nothing on screen: the way back moves on.
+test('a notes step with no saved meeting offers to go on', () => {
+  const l = read('src/components/guide/LauncherGuide.tsx');
+  assert.ok(l.includes('onNotes && !endedMeetingId ? NO_NOTES_MS : OFF_SCREEN_MS'), 'waits for the save, then offers the way on');
+  assert.ok(l.includes("if (onNotes && !endedMeetingId) dispatch({ type: 'notes_next' });"), 'and the way on passes the notes step');
+});
