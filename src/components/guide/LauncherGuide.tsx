@@ -6,8 +6,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '../../i18n';
 import { trialEventFromLocal } from '../../lib/onboarding/firstRunGuide.mjs';
-import { LavenderButton, useWelcomeTheme } from '../onboarding/welcomeShared';
-import { GuideCard } from './GuideCard';
+import { GUIDE_PRIMARY_BTN, GuideCard } from './GuideCard';
 import { guideOn, useAnchorRect, useGuide } from './useGuide';
 
 /** The control each launcher-side step points at (steps 6 and 7 live in Settings, in this window). */
@@ -140,19 +139,17 @@ export const LauncherGuide: React.FC<Props> = ({ onOpenSettings, onOpenMeeting }
   return null;
 };
 
+/** The guide's step is off screen: one floating pill, the card's own parts. */
 const ContinueGuide: React.FC<{ label: string; skipLabel: string; onContinue: () => void; onSkip: () => void }> = ({
   label, skipLabel, onContinue, onSkip,
-}) => {
-  const t = useWelcomeTheme();
-  return createPortal(
-    <div
-      className="guide-enter"
-      data-guide-card="continue"
-      style={{ position: 'fixed', left: '50%', bottom: 20, transform: 'translateX(-50%)', zIndex: 2147483001, display: 'flex', alignItems: 'center', gap: 12 }}
-    >
-      <LavenderButton t={t} height={34} labelSize={13} onClick={onContinue}>{label}</LavenderButton>
-      <button type="button" className="guide-skip" style={{ fontSize: 12, color: t.faint }} onClick={onSkip}>{skipLabel}</button>
-    </div>,
-    document.body,
-  );
-};
+}) => createPortal(
+  <div
+    className="guide-enter guide-card bg-bg-card border border-border-subtle rounded-full pl-4 pr-1.5 py-1.5 flex items-center gap-3"
+    data-guide-card="continue"
+    style={{ position: 'fixed', left: '50%', bottom: 20, transform: 'translateX(-50%)', zIndex: 2147483001 }}
+  >
+    <button type="button" className="guide-skip text-[12px] text-text-tertiary" onClick={onSkip}>{skipLabel}</button>
+    <button type="button" className={`${GUIDE_PRIMARY_BTN} rounded-full`} onClick={onContinue}>{label}</button>
+  </div>,
+  document.body,
+);

@@ -1,14 +1,21 @@
 // First-run guide: the floating card for the launcher and Settings. It sits
 // next to the real control (lit with data-guide-lit) and draws nothing while
 // that control is not on screen, so it never points at empty space.
+//
+// Built from Settings' own parts (Evin, 2026-11-15: the dot-and-pill progress
+// "looks horrendous"): the card tokens (bg-bg-card, border-border-subtle, the
+// text-text-* inks, all theme-aware), Settings' button shape (SETTINGS_BTN_BASE)
+// and the "N of 8" count the overlay banner and the notepad pill use. The one
+// accent is the guide's soft periwinkle ice.
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Keycaps, LavenderButton, WELCOME_FONT, useWelcomeTheme } from '../onboarding/welcomeShared';
+import { Check } from 'lucide-react';
+import { Keycaps, useWelcomeTheme } from '../onboarding/welcomeShared';
+import { SETTINGS_BTN_BASE } from '../settings/SettingsRow';
 import { useT } from '../../i18n';
 import { GUIDE_STEP_COUNT, GUIDE_STEP_NUMBER } from '../../lib/onboarding/firstRunGuide.mjs';
 import type { GuideStepId } from '../../lib/onboarding/firstRunGuide.mjs';
 import { useAnchorRect, useGuideLit } from './useGuide';
-import { GUIDE_ACCENT, GuideStatusDot, guideAccentText } from './guideStyle';
 import './guide.css';
 
 export type GuideListRow = [label: string, state: 'done' | 'now' | 'todo', hint?: string];
@@ -37,6 +44,9 @@ export interface GuideCardProps {
   onSkip?: () => void;
 }
 
+/** The guide's one filled button: Settings' button shape in periwinkle ice. */
+export const GUIDE_PRIMARY_BTN = `${SETTINGS_BTN_BASE} guide-primary-btn border-transparent`;
+
 const CARD_HEIGHT_GUESS = 190;
 
 export const GuideCard: React.FC<GuideCardProps> = ({
@@ -45,112 +55,85 @@ export const GuideCard: React.FC<GuideCardProps> = ({
 }) => {
   const t = useWelcomeTheme();
   const tr = useT();
-  const dark = t.bg === '#161618';
   const rect = useAnchorRect(anchor);
   useGuideLit(lit && rect ? anchor : null);
   if (!rect) return null;
 
-  const step = GUIDE_STEP_NUMBER[stepId];
+  const count = tr('{n} of {total}')
+    .replace('{n}', String(GUIDE_STEP_NUMBER[stepId]))
+    .replace('{total}', String(GUIDE_STEP_COUNT));
   const vw = window.innerWidth;
   let left = rect.left + rect.width / 2 - width / 2 + dx;
-  let top = place === 'below' ? rect.bottom + 14 : rect.top - 14 - CARD_HEIGHT_GUESS;
+  let top = place === 'below' ? rect.bottom + 12 : rect.top - 12 - CARD_HEIGHT_GUESS;
   top += dy;
   left = Math.max(12, Math.min(vw - width - 12, left));
   top = Math.max(12, top);
 
-  const card: React.CSSProperties = {
-    position: 'fixed', left, top, width, zIndex: 2147483001, boxSizing: 'border-box',
-    padding: '16px 16px 14px', borderRadius: 18,
-    background: dark ? 'rgba(22,22,24,0.94)' : 'rgba(255,255,255,0.96)',
-    backdropFilter: 'blur(24px) saturate(160%)', WebkitBackdropFilter: 'blur(24px) saturate(160%)',
-    boxShadow: dark
-      ? 'inset 0 0 0 1px rgba(255,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.06), 0 24px 60px -20px rgba(0,0,0,0.75)'
-      : 'inset 0 0 0 1px rgba(11,16,32,0.08), 0 24px 60px -24px rgba(40,30,80,0.35)',
-    border: '1px solid transparent',
-    color: t.strong, fontFamily: WELCOME_FONT, WebkitFontSmoothing: 'antialiased',
-  };
-
   // Portalled to <body>: a transformed ancestor (Settings and the launcher
   // animate theirs) would otherwise move a position:fixed card off its anchor.
   return createPortal(
-    <div className="guide-enter" style={card} role="dialog" aria-label={title} data-guide-card={stepId}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.02em', color: guideAccentText(dark) }}>{eyebrow}</span>
-        <span
-          style={{ display: 'inline-flex', gap: 4 }}
-          aria-label={tr('Step {n} of {total}').replace('{n}', String(step)).replace('{total}', String(GUIDE_STEP_COUNT))}
-        >
-          {Array.from({ length: GUIDE_STEP_COUNT }, (_, i) => (
-            <i
-              key={i}
-              className="guide-dot"
-              style={{
-                width: i + 1 === step ? 14 : 5, height: 5, borderRadius: 3,
-                background: i + 1 <= step ? GUIDE_ACCENT : (dark ? 'rgba(255,255,255,0.14)' : 'rgba(11,16,32,0.12)'),
-              }}
-            />
-          ))}
-        </span>
+    <div
+      className="guide-enter guide-card bg-bg-card border border-border-subtle rounded-2xl p-4 pb-3.5 text-text-primary"
+      style={{ position: 'fixed', left, top, width, zIndex: 2147483001, boxSizing: 'border-box' }}
+      role="dialog"
+      aria-label={title}
+      data-guide-card={stepId}
+    >
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-[12px] leading-4 font-medium text-text-tertiary truncate">{eyebrow}</span>
+        <span className="shrink-0 text-[12px] leading-4 tabular-nums text-text-tertiary" aria-label={count}>{count}</span>
       </div>
-      <div style={{ marginTop: 8, fontSize: 16, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.25 }}>{title}</div>
-      <div style={{ marginTop: 5, fontSize: 13, lineHeight: 1.45, color: t.body }}>{body}</div>
+      <div className="mt-2 text-[15px] leading-5 font-semibold tracking-[-0.01em]">{title}</div>
+      <div className="mt-1 text-[13px] leading-[19px] text-text-secondary">{body}</div>
 
       {list && (
-        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <ul className="mt-3 flex flex-col gap-0.5">
           {list.map(([label, st, hint]) => (
-            <div
+            <li
               key={label}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10, height: 32, padding: '0 10px', borderRadius: 10,
-                background: st === 'now' ? (dark ? 'rgba(168,184,255,0.12)' : 'rgba(120,138,240,0.10)') : 'transparent',
-                fontSize: 13, fontWeight: st === 'now' ? 600 : 500, color: st === 'todo' ? t.quiet : t.strong,
-              }}
+              className={`flex items-center gap-2.5 h-8 px-2 rounded-lg text-[13px] ${st === 'now' ? 'guide-row-now font-medium' : ''} ${st === 'todo' ? 'text-text-secondary' : 'text-text-primary'}`}
             >
-              <span
-                aria-hidden
-                style={{
-                  width: 16, height: 16, borderRadius: 8, flex: '0 0 16px', display: 'grid', placeItems: 'center', boxSizing: 'border-box',
-                  background: st === 'done' ? GUIDE_ACCENT : 'transparent',
-                  border: st === 'done' ? 'none' : `1.5px solid ${st === 'now' ? GUIDE_ACCENT : (dark ? 'rgba(255,255,255,0.22)' : 'rgba(11,16,32,0.2)')}`,
-                }}
-              >
-                {st === 'done' && (
-                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
-                )}
+              <span aria-hidden className={`guide-tick ${st === 'done' ? 'is-done' : st === 'now' ? 'is-now' : ''}`}>
+                {st === 'done' && <Check className="w-2.5 h-2.5" strokeWidth={3.5} />}
               </span>
-              <span>{label}</span>
-              {st === 'done' && <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>{tr('Done')}</span>}
+              <span className="min-w-0 truncate">{label}</span>
+              {st === 'done' && <span className="sr-only">{tr('Done')}</span>}
               {hint && (
-                <span style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 500, color: st === 'now' ? guideAccentText(dark) : t.faint }}>{hint}</span>
+                <span className={`ml-auto shrink-0 text-[12px] ${st === 'now' ? 'guide-accent-ink' : 'text-text-tertiary'}`}>{hint}</span>
               )}
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
       {keys && (
-        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="mt-3 flex flex-col gap-2">
           {keys.map((k, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-              <span style={{ fontSize: 12.5, color: t.quiet }}>{keyLabels?.[i] ?? ''}</span>
+            <div key={i} className="flex items-center justify-between gap-2.5">
+              <span className="text-[12px] text-text-secondary">{keyLabels?.[i] ?? ''}</span>
               <Keycaps t={t} keys={k} pressed={done} />
             </div>
           ))}
         </div>
       )}
 
-      <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 32, gap: 12 }}>
+      <div className="mt-3.5 flex items-center justify-between gap-3 min-h-[30px]">
         {onSkip && !done ? (
-          <button type="button" className="guide-skip" style={{ fontSize: 12, color: t.faint }} onClick={onSkip}>{tr('Skip guide')}</button>
+          <button type="button" className="guide-skip text-[12px] text-text-tertiary" onClick={onSkip}>{tr('Skip guide')}</button>
         ) : <span />}
         {done ? (
-          <GuideStatusDot dark={dark} done label={tr('Done')} />
-        ) : action ? (
-          <span style={{ opacity: action.disabled ? 0.45 : 1, pointerEvents: action.disabled ? 'none' : undefined }} aria-disabled={action.disabled || undefined}>
-            <LavenderButton t={t} height={32} labelSize={13} onClick={action.onClick}>{action.label}</LavenderButton>
+          <span role="status" className="inline-flex items-center gap-1.5 text-[12px] font-medium guide-accent-ink">
+            <Check className="w-3.5 h-3.5" strokeWidth={2.6} />{tr('Done')}
           </span>
+        ) : action ? (
+          <button type="button" className={GUIDE_PRIMARY_BTN} disabled={action.disabled} onClick={action.onClick}>
+            {action.label}
+          </button>
         ) : waiting ? (
-          <GuideStatusDot dark={dark} label={waiting} />
+          <span role="status" className="inline-flex items-center gap-2 text-[12px] text-text-secondary">
+            <i className="guide-wait-dot" aria-hidden />
+            {waiting}
+          </span>
         ) : null}
       </div>
     </div>,

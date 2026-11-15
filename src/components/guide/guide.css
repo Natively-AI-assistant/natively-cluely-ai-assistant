@@ -39,13 +39,64 @@
   .guide-skip:hover { opacity: 0.75; }
 }
 
-.guide-dot {
-  transition: width 250ms cubic-bezier(0.23, 1, 0.32, 1);
+/* The floating card and the Continue pill (GuideCard.tsx, LauncherGuide.tsx):
+   Settings' card tokens, a lift so they read as floating over the page. */
+.guide-card {
+  --guide-accent: 168, 184, 255;     /* #A8B8FF, periwinkle ice */
+  --guide-accent-ink: #c3cdff;
+  /* A hairline edge: Settings' border token is transparent in dark. */
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07), 0 20px 48px -16px rgba(0, 0, 0, 0.7), 0 2px 8px rgba(0, 0, 0, 0.25);
+  -webkit-font-smoothing: antialiased;
 }
+[data-theme='light'] .guide-card {
+  --guide-accent: 120, 138, 240;
+  --guide-accent-ink: #4c5bc4;
+  box-shadow: 0 20px 48px -18px rgba(30, 36, 80, 0.28), 0 2px 8px rgba(30, 36, 80, 0.08);
+}
+.guide-accent-ink { color: var(--guide-accent-ink); }
+
+/* Settings' button shape, filled with the accent, dark ink on it. */
+.guide-primary-btn {
+  background: rgb(var(--guide-accent));
+  color: #14172e;
+}
+@media (hover: hover) {
+  .guide-primary-btn:not(:disabled):hover { background: rgba(var(--guide-accent), 0.86); }
+}
+[data-theme='light'] .guide-primary-btn { color: #fff; }
+/* Not yet: Settings' plain neutral button, not a faded accent. */
+.guide-primary-btn:disabled,
+[data-theme='light'] .guide-primary-btn:disabled {
+  opacity: 1;
+  background: var(--bg-component);
+  border-color: var(--border-subtle);
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+/* Checklist: the row to do now, and the tick circles. */
+.guide-row-now { background: rgba(var(--guide-accent), 0.1); }
+.guide-tick {
+  width: 16px; height: 16px; flex: 0 0 16px; border-radius: 999px;
+  display: grid; place-items: center; box-sizing: border-box;
+  border: 1.5px solid rgba(255, 255, 255, 0.24);
+}
+[data-theme='light'] .guide-tick { border-color: rgba(11, 16, 32, 0.22); }
+.guide-tick.is-now { border-color: rgb(var(--guide-accent)); }
+.guide-tick.is-done { border: 0; background: rgb(var(--guide-accent)); color: #14172e; }
+[data-theme='light'] .guide-tick.is-done { color: #fff; }
+
+/* Waiting for the user: a soft breathing dot. */
+.guide-wait-dot {
+  width: 6px; height: 6px; border-radius: 999px; flex: 0 0 6px;
+  background: rgb(var(--guide-accent));
+  animation: guideWait 1.8s ease-in-out infinite;
+}
+@keyframes guideWait { 50% { opacity: 0.35; } }
 
 @media (prefers-reduced-motion: reduce) {
   [data-guide-lit] { animation: none !important; }
-  .guide-dot { transition: none; }
+  .guide-wait-dot { animation: none; }
   @keyframes guideIn {
     from { opacity: 0; }
     to { opacity: 1; }
