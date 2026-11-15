@@ -1,5 +1,60 @@
 # Changelog
 
+## [3.2.0] - 2026-11-15
+
+Eleven days of work since v3.1.0: a smarter Auto Answer, faster screenshot answers, Answer length, every answer on your phone, and Natively plans by the month, the year or the hour. Full notes: [v3.2.0](docs/releases/v3.2.0.md).
+
+### Added
+
+- **Smarter Auto Answer** — an on-device model decides which questions are meant for you. Its settings are in Settings → Intelligence (the switch stays in General), with a card the first time you turn it on and one when you stop sharing.
+- **Answer length** — Shorter, Smart or Longer answers, one setting in Settings → Overlay for every mode. Shorter and Longer are Pro.
+- **Every answer on your phone** — each overlay answer (buttons, Auto Answer, Direct Assist, spoken follow-ups) streams word by word to the paired phone.
+- **Screenshot question** — choose what a screenshot asks when you type nothing, in Settings → Overlay (#726).
+- **Newer speech models** — BYOK Soniox stt-rt-v6 and ElevenLabs Scribe v3, and Nepali in the language picker where the provider supports it (#736).
+- **Yearly plans and packs** — Natively plans can be paid yearly (two months free). One-time Light ($5, 2 hours within 7 days) and Heavy ($10, 5 hours within 14 days) packs include Pro, with a meeting clock. Plans & Billing has an Hourly, Monthly and Yearly switch, and Unlock Pro opens a plans page inside the panel.
+- **Lost your key** — "Bought a key but no email?" sends the key again, from the activation card in Plans & Billing, in English, Russian, Chinese, Japanese and Spanish.
+- **Keep overlay size** — Settings → General → Advanced, on by default: the overlay keeps its size between answers.
+
+### Changed
+
+- **Auto Answer** is part of Natively Pro, or free when you share the transcripts of the meetings where it runs (scrubbed on your device). It now lives in the premium module.
+- **Connectors** are part of Natively Pro (the free trial includes them), and Pro locks when a licence or trial ends.
+- **Pro Yearly** is $30 against a struck $39 during the seasonal sale.
+- **Open at login** is on by default for fresh installs.
+
+### Improved
+
+- **Screenshot answers** — the first word arrives in about 4 s instead of about 10 s, and screenshots are remembered in typed chat, What to answer, Code hint, Brainstorm, your own buttons and phone questions.
+- **Auto Answer** — waits for announced lists and scenarios, answers back-to-back questions in one answer, never answers a bare transition, and spends fewer judge calls.
+- **Live answers** — follow the Real-time prompt, skills and Cue Cards on every path, carry the source badge their evidence earns, and resolve a follow-up against the previous answer.
+- **Speed** — the answer path warms up at meeting start, small talk gets no speculative answer, the claim verifier runs only with documents attached, and the question goes last so the prompt cache reuses the rest.
+- **Search** — heard questions also search files with the on-device embedder.
+- **Banners and cards** — one full-window card per launch, calmer meeting banners, the auto-stop warning above every other banner, and notices that wait their turn.
+- **Calendar** — reminders refresh themselves and fire only when right, one offer per call.
+- **Packs** — a pack that has ended says so, and the meeting resumes after a top-up.
+- **Look** — lavender accent with periwinkle switches, every Settings title in Inter Semibold, darker Settings cards in dark mode, Liquid Glass Unlock Pro.
+
+### Fixed
+
+- **Overlay** keeps your place when an answer you didn't ask for arrives (#723).
+- **Coding questions** — "show it in python" keeps the right problem (#737, #738, #739), and "Java 3" is no longer read as a language rule (#740).
+- **System audio** restarts after a failed init (#729); on Windows, capture falls back to the communications output when loopback can't use the console default.
+- **Speech** — speaker bleed on the mic no longer counts as the user, no silent Google fallback when the chosen provider has no key, Natively speech keeps the sentence spoken just before Stop, and questions heard around an STT outage reach Auto Answer once.
+- **Local speech models** switch without a restart, and rewritten partials no longer stay on the transcript bar.
+- **Timeouts** — long Natively answers get 30 s instead of 8 s; an exhausted provider chain says the providers failed, not "none set up".
+- **Chat** — a question typed while an answer streams is sent, and the replaced stream's late tokens are dropped.
+- **Screenshot question** field keeps spaces and reaches the overlay.
+- **Privacy** — question and answer text leave the trace logs, and premium generation honours the Profile & history scope.
+
+### Technical
+
+- Auto Answer's on-device decider is a paid download (Natively API key or Pro), not in the repo or installer: int8 on onnxruntime 1.24.3 in a utility process (Windows x64/arm64, Apple Silicon on macOS 14+), 4-bit on onnxruntime 1.22 in a worker thread (Intel Macs, macOS 13).
+- The core/premium boundary is typed and tested for drift; the source-available build knows it has no profile feature.
+- Per-turn LLM call budget and per-provider circuit breaker; live judge and answer calls get priority over background compiles.
+- app_run_ended telemetry records how the previous run ended.
+- Native fault-injection code stays out of the shipped .node.
+- Electron 43.7.7 and Node 22.13 or later, unchanged.
+
 ## [3.1.0] - 2026-11-04
 
 Includes 3.0.0 (2026-11-01). Five weeks of work since v2.9.2: a meeting notepad, your own overlay buttons, Connectors, notes you can share as a link, follow-ups in your style, and Resume for a meeting that has ended. Full notes: [v3.1.0](docs/releases/v3.1.0.md) · [v3.0.0](docs/releases/v3.0.0.md).

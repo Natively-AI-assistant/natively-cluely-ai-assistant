@@ -9,9 +9,9 @@ If you’re looking for a hosted desktop recording API, consider checking out [R
 
 **The best free alternative to Cluely, Final Round AI, LockedIn AI, and Interview Coder.**
 <br/>
-**Same UI as Cluely. More features. $0 for personal/non-commercial use. Source available. No data breaches.**
+**Same UI as Cluely. More features. Ready in a minute with no API keys, or $0 for personal use with your own. Source available. No data breaches.**
 <br/>
-**Now with the most advanced stealth of any tool we compare, Visual Answers that draw the system design for you, and an interface built to feel native on your Mac.**
+**The most advanced stealth of any tool we compare, Visual Answers that draw the system design for you, and, new in 3.2, a smarter Auto Answer and screenshot answers about twice as fast.**
 <br/>
 
 ## Sponsored by Sidrune AI
@@ -62,7 +62,7 @@ If you’re looking for a hosted desktop recording API, consider checking out [R
 [![Telegram Chat](https://img.shields.io/badge/Telegram-Chat-229ED9?style=flat-square&logo=telegram&logoColor=white)](https://t.me/nativelyaichat)
 [![LinkedIn Company](https://img.shields.io/badge/LinkedIn-Company-0077B5?style=flat-square&logo=linkedin&logoColor=white)](https://www.linkedin.com/company/nativley-ai)
 
-> **Competitors charge $20–$149/month, store your data on their servers, and one already breached 83,000 users.** Natively costs $0, runs locally, and has never had a data breach. Your keys, your models, your machine.
+> **Competitors charge $20–$149/month, keep your transcripts on their servers, and one already breached 83,000 users.** Natively works the moment you install it: a 30-minute free trial starts with your first meeting, no API keys needed, and Natively plans start at $8/month or a one-time $5 pack. Prefer your own keys or local models? That is free for personal use. Either way your meetings and notes are stored on your device, and Natively has never had a data breach.
 
 <p align="center">
   <a href="https://heynatively.com">
@@ -101,7 +101,7 @@ brew install --cask Natively-AI-assistant/tap/natively
 
 ## The Free-for-Personal-Use, Source-Available Cluely Clone
 
-Natively started as a pixel-perfect recreation of Cluely's interface — then kept going. If you've used Cluely, you already know how to use Natively. Same overlay, same workflow, same shortcuts. Except it's free for personal, educational, research, and non-commercial use, source-available, runs locally, supports any LLM, and has never breached a single user's data.
+Natively started as a pixel-perfect recreation of Cluely's interface — then kept going. If you've used Cluely, you already know how to use Natively. Same overlay, same workflow, same shortcuts. Except it's free for personal, educational, research, and non-commercial use, source-available, keeps your meetings on your device, works out of the box with a Natively plan or with any LLM you bring, and has never breached a single user's data.
 
 > Looking for a **free personal-use Cluely alternative**? A **source-available Cluely clone**? You found it.
 
@@ -124,14 +124,16 @@ Natively started as a pixel-perfect recreation of Cluely's interface — then ke
 
 While other tools act as simple API wrappers, Natively is a complete, native intelligence system designed specifically for high-stakes meetings and interviews.
 
+- **Ready in a Minute, No API Keys:** Install, start a meeting, and Natively answers. A 30-minute free trial starts on its own the first time, and a [Natively plan](#natively-plans-ready-to-use-no-api-keys) (from $8/month, or a one-time $5 pack) gives you AI, live transcription and web search on one key. Switch to your own keys or local models whenever you like.
 - **Native Audio Capture (<500ms):** Built with Rust and Zero-Copy ABI transfers, bypassing generic web-audio limitations for ultra-low latency.
 - **Local Whisper STT (On-Device):** 100% on-device speech-to-text using optimized ONNX models (Moonshine-tiny, Moonshine-base, Whisper-large-v3-turbo, distil-large-v3, Parakeet CTC 0.6B, and Parakeet TDT 0.6B v3 for 25 languages). Uses hardware acceleration (CoreML/Metal GPU on Apple Silicon, DirectML on Windows, quantized int8 on CPU) with zero cloud fees or data exposure.
 - **Apple Speech STT (On-Device):** On macOS 26, Natively can transcribe through Apple's `SpeechAnalyzer` and `SpeechTranscriber` without an API key or sending audio to a speech provider.
 - **Dual-Channel Intelligence:** Distinct pipelines for system audio (what they say) and your microphone (what you dictate) ensuring perfect transcription without room noise.
 - **The Most Advanced Stealth We Compare:** Hidden from screen shares, the Dock and the taskbar, disguised in the process list, with tooltips, dialogs and notifications kept out of the share too. Hardened release after release, and best-effort like any stealth.
-- **Auto Answer (Beta):** Answers appear on their own the moment the other person finishes a question — Natively decides whether an answer is actually wanted and stays silent when it isn't. Off by default.
+- **Auto Answer:** Answers appear on their own the moment the other person finishes a question. In 3.2 an on-device model decides whether the question is meant for you, and Natively stays silent when it isn't. Off by default; part of Pro, or free when you share those meetings' transcripts to improve it.
+- **Answer Length:** Shorter, Smart or Longer answers, set once for every mode (Shorter and Longer are Pro).
 - **Visual Answers:** System designs, flows and charts, drawn live inside the answer, in any mode.
-- **Phone Mirror 2.0:** Follow the meeting from your phone, with the live transcript, answers as they stream in, and photos sent back to the desktop.
+- **Phone Mirror 2.0:** Follow the meeting from your phone, with the live transcript, every overlay answer (Auto Answer included) streaming in as it is written, and photos sent back to the desktop.
 - **Notepad:** Type your own notes while Natively listens, run recipes like "What did I miss" or "List my todos", and Ask questions that read the whole meeting.
 - **Your Own Overlay Buttons:** Describe a button in plain sentences and Natively turns it into an overlay action beside the built-in ones.
 - **Connectors and Share Links:** Send notes to Gmail, Slack, Notion, Zapier, webhooks and your CRM, share a meeting as a link, and get a follow-up email written in your own style.
@@ -143,7 +145,7 @@ While other tools act as simple API wrappers, Natively is a complete, native int
 - **Embeddings and Rerankers, Your Choice:** Gemini, OpenAI, Voyage AI, Jina AI or local models decide what your search finds.
 - **Reference Files:** Deeply integrate PDFs, DOCX, and TXT files as real-time context.
 - **Rich Dashboard:** A full UI to manage, search, and export your history—not just a floating window.
-- **Fully Offline Capable:** Don't trust the cloud? Run Natively 100% offline using local Ollama models and local Whisper STT.
+- **Fully Offline, If You Want It:** Rather nothing left your machine? Run Natively 100% offline with local Ollama models and local Whisper STT.
 
 ---
 
@@ -151,7 +153,7 @@ While other tools act as simple API wrappers, Natively is a complete, native int
 
 1. **Cluely** had a data breach in mid-2025 that exposed 83,000 users' personal info, transcripts, and screenshots. Natively keeps your transcripts, screenshots and keys on your machine and has never had a breach.
 2. **Final Round AI** costs $149/month and its taskbar icon is visible to proctoring software. Natively is free for personal/non-commercial use, source-available, and includes its full stealth feature set at no cost.
-3. **LockedIn AI** charges $55 to $70 a month and locks you into their cloud LLM with no local option. Natively lets you use any model (GPT, Claude, Gemini, Llama) or go fully offline with Ollama.
+3. **LockedIn AI** charges $55 to $70 a month and locks you into their cloud LLM with no local option. Natively lets you use any model (GPT, Claude, Gemini, Llama), go fully offline with Ollama, or skip setup entirely with a Natively plan.
 4. **Interview Coder** is a paid tool for the coding round only. Natively disguises its process on macOS and Windows, keeps tooltips, dialogs and notifications out of screen shares, covers behavioral and system design rounds too, and is free for personal use.
 
 ---
@@ -183,9 +185,9 @@ This demo shows **a complete live meeting scenario**:
 
 ---
 
-## The Stealthiest Free Interview Copilot: Why Natively Leads in 3.0
+## The Stealthiest Free Interview Copilot: Why Natively Leads in 3.2
 
-With 2.9, Natively stopped being "the free Cluely clone" and became the tool to beat. 3.0 adds a notepad and the tools that carry your notes out of the meeting. Five things set it apart from Interview Coder, Cluely, Final Round AI and LockedIn AI.
+With 2.9, Natively stopped being "the free Cluely clone" and became the tool to beat. 3.0 added a notepad and the tools that carry your notes out of the meeting. 3.2 makes it ready from the first minute, with no keys to set up, a smarter Auto Answer and faster screenshot answers. Six things set it apart from Interview Coder, Cluely, Final Round AI and LockedIn AI.
 
 ### 1. The most advanced stealth of any tool we compare
 
@@ -224,9 +226,18 @@ Natively is designed to feel like it belongs on your Mac, and the same design ru
 
 In our opinion it is the best-looking and smoothest app in the category. Try it for five minutes and judge for yourself.
 
-### 4. New in 3.0: notes that keep up and leave the meeting with you
+### 4. New in 3.2: ready from the first minute, and faster in the moment
 
-Natively 3.0 adds a notepad and the tools that carry your notes out of the meeting:
+- **No setup to start.** The free trial starts on its own at your first meeting, with Natively's own AI and transcription, so there is no key to paste. Keep going with a [Natively plan or a one-time pack](#natively-plans-ready-to-use-no-api-keys), or switch to your own keys any time in **Settings → AI Providers**.
+- **Smarter Auto Answer.** An on-device model decides which questions are meant for you, so Auto Answer answers those and stays quiet for the rest.
+- **Screenshot answers about twice as fast.** The first word arrives in about 4 seconds instead of about 10, and you choose the question a screenshot asks when you type nothing, in **Settings → Overlay**.
+- **Answer length.** Shorter, Smart or Longer answers, set once in **Settings → Overlay** for every mode.
+- **Every answer on your phone.** Each overlay answer, Auto Answer included, streams live to your paired phone.
+- **Newer speech models.** Soniox v6 and ElevenLabs Scribe v3 with your own key, and Nepali in the language picker.
+
+### 5. Since 3.0: notes that keep up and leave the meeting with you
+
+Natively 3.0 added a notepad and the tools that carry your notes out of the meeting:
 
 - **Notepad:** type your own notes while Natively listens, with a live transcript beside them. Recipes such as "What did I miss", "Write tldr" and "List my todos" run from a chip or from "/" in Ask, and Ask reads the whole meeting once it ends.
 - **Your own overlay buttons:** describe a button in plain sentences (what it does, what to read, how the answer looks) and it joins the overlay beside Recap and Follow-up questions. Pick the five buttons the overlay shows.
@@ -234,9 +245,9 @@ Natively 3.0 adds a notepad and the tools that carry your notes out of the meeti
 - **Share notes as a link:** one link to a meeting's notes and transcript.
 - **Follow-ups in your style:** a compose sheet writes the follow-up email in your tone when you click, set per mode.
 
-### 5. Free where the others charge
+### 6. Free where the others charge, and ready when you don't want to set anything up
 
-Final Round AI is $149 a month. LockedIn AI is $55 to $70 a month. Cluely starts at $20 a month and sells screen-share invisibility as a separate, higher-priced tier. Interview Coder is paid. Natively is free for personal use with your own keys, and every stealth feature above is included.
+Final Round AI is $149 a month. LockedIn AI is $55 to $70 a month. Cluely starts at $20 a month and sells screen-share invisibility as a separate, higher-priced tier. Interview Coder is paid. Natively is free for personal use with your own keys, and every stealth feature above is included. If you would rather not manage keys at all, Natively plans start at $8 a month, or $5 for a one-time pack, with AI, transcription and web search ready the moment you paste the key.
 
 ---
 
@@ -244,7 +255,8 @@ Final Round AI is $149 a month. LockedIn AI is $55 to $70 a month. Cluely starts
 
 | Feature                   | Natively                   | Cluely               | Pluely     | LockedIn AI      | Final Round AI         |
 | :------------------------ | :------------------------- | :------------------- | :--------- | :--------------- | :--------------------- |
-| **Price**                 | ✅ Free (BYOK)             | ⚠️ $20/mo            | ✅ Free    | ❌ $55–70/mo     | ❌ $149/mo             |
+| **Price**                 | ✅ Free (BYOK) or from $8/mo | ⚠️ $20/mo          | ✅ Free    | ❌ $55–70/mo     | ❌ $149/mo             |
+| **Ready to use, no API keys** | ✅ Free trial + Natively plans | ✅ Yes        | ⚠️         | ✅ Yes           | ✅ Yes                 |
 | **Source license**         | Personal-use source license | ❌                   | ✅         | ❌               | ❌                     |
 | **Local data / private**  | ✅ Yes                     | ❌ Cloud servers     | ✅ Yes     | ❌ Cloud servers | ❌ Cloud servers       |
 | **Any LLM (BYOK)**        | ✅ Yes                     | ❌ Vendor-locked     | ⚠️ Limited | ❌ Vendor-locked | ❌ Vendor-locked       |
@@ -274,7 +286,7 @@ Final Round AI is $149 a month. LockedIn AI is $55 to $70 a month. Cluely starts
 | **Your Own Overlay Buttons** | ✅ Plain sentences      | ❌                   | ❌         | ❌               | ❌                     |
 | **Connectors (Gmail, Slack, Notion, CRMs)** | ✅ 11 + webhooks | ⚠️ Slack, Notion | ❌   | ❌               | ❌                     |
 | **Local MCP Server**      | ✅ Yes                     | ❌                   | ❌         | ❌               | ❌                     |
-| **Hands-Free Auto Answer**| ✅ Beta                    | ❌                   | ❌         | ❌               | ❌                     |
+| **Hands-Free Auto Answer**| ✅ On-device decider       | ❌                   | ❌         | ❌               | ❌                     |
 | **Browser Page Capture**  | ✅ Chrome extension        | ❌                   | ❌         | ❌               | ❌                     |
 | **JD Role Insight**       | ✅ Pro                     | ❌                   | ❌         | ⚠️ Limited       | ⚠️ Limited             |
 | **9 Built-in Modes**      | ✅ Yes                     | ⚠️ Limited           | ❌         | ❌               | ⚠️ Limited             |
@@ -307,7 +319,7 @@ Cluely also sells its screen-share invisibility as a separate, higher-priced tie
 
 LockedIn AI is the most expensive tool in the category at $55–70/month. It locks you into a single cloud LLM with no option for local inference. Every transcript and response passes through their servers.
 
-Natively supports every major model (Gemini, GPT, Claude, Groq) via bring-your-own-key, and offers 100% offline mode through Ollama. You pay only for the API tokens you actually use — or pay nothing at all by running Llama 3 locally. No subscription, no vendor lock-in.
+Natively supports every major model (Gemini, GPT, Claude, Groq) via bring-your-own-key, offers 100% offline mode through Ollama, and has its own ready-to-use plans from $8/month ($80/year) for anyone who doesn't want to manage keys. Use your own keys and pay only for the tokens you use, run Llama locally for nothing, or pick a plan. No lock-in either way.
 
 ### vs Final Round AI — $149/month and visible to proctors
 
@@ -327,7 +339,8 @@ Interview Coder is a paid tool focused on the coding round, and process-level hi
 
 |                                    |    Natively    | Interview Coder |
 | :--------------------------------- | :------------: | :-------------: |
-| **Price**                          | ✅ Free (BYOK) |     ❌ Paid     |
+| **Price**                          | ✅ Free (BYOK) or from $8/mo |     ❌ Paid     |
+| **Ready to use, no API keys**      | ✅ Natively plans |       ✅        |
 | **Source license**                   | Personal-use source license |       ❌        |
 | **Works on LeetCode / HackerRank** |       ✅       |       ✅        |
 | **Screenshot + OCR analysis**      |       ✅       |       ✅        |
@@ -352,7 +365,6 @@ Parakeet AI offers basic live meeting assistance but has no persistent memory, n
 ### Where we're not there yet
 
 - **No Linux support** — we are actively looking for maintainers to help bring Natively to Linux
-- **API key setup overhead** — you need to bring your own API keys (or install Ollama), which adds initial setup friction compared to all-in-one cloud tools
 - **No built-in mock interview mode** — Final Round AI has dedicated mock interview practice; Natively focuses on live, real-time assistance
 
 ---
@@ -374,7 +386,7 @@ Natively works as a **free, undetectable AI coding interview assistant** for sta
 **How it works:**
 
 1. Screenshot the problem with a single shortcut
-2. Natively OCRs the question and sends it to your chosen AI (GPT, Claude, Gemini, or local Ollama)
+2. Natively OCRs the question and sends it to your AI: Natively's own on a plan or the free trial, or GPT, Claude, Gemini or local Ollama with your own setup
 3. Response appears in the invisible overlay — never on screen share
 
 > ⚠️ **Important:** Natively is not designed to bypass dedicated proctoring software like **Pearson VUE**, **ProctorU**, or **Respondus Lockdown Browser**. These run at the OS level and are a different category entirely. For standard online coding assessments without dedicated proctoring software, Natively's stealth mode is built to stay out of sight, on a best-effort basis.
@@ -399,16 +411,22 @@ Natively works as a **free, undetectable AI coding interview assistant** for sta
 
 ---
 
-## Natively API (Hosted Tier)
+## Natively Plans: Ready to Use, No API Keys
 
-**Stop managing four separate services. One key. Zero configuration.**
+**Install, start a meeting, done. One key covers AI, live transcription and web search.**
 
-Are you managing separate accounts for your AI reasoning, live transcription, fast inference, and web search? Juggling multiple API keys, rate limits, and invoices across completely different categories of tools is unnecessary overhead. Natively API replaces all of those categories with **one flat subscription**.
+You don't need accounts with OpenAI, Google Cloud or Deepgram, keys to paste, or models to pick. Natively runs on its own AI and speech out of the box:
 
-Under the hood, Natively API connects you to the absolute best models for the optimal user experience:
+1. **Try it free.** The first time you start a meeting with no AI set up, a 30-minute free trial starts on its own and the overlay tells you. No card, no key.
+2. **Pick a plan.** Monthly, yearly (two months free), or a one-time pack if you only need a few hours.
+3. **Paste one key.** It arrives by email. Paste it once in **Settings → Plans & Billing**, and AI, transcription and web search all work. Nothing else to configure.
 
-- **Backend AI Models**: Claude, OpenAI, Gemini, and Groq.
-- **Premium STT Models**: Google Chirp 2/3, ElevenLabs Scribe v2, and Deepgram Nova-3.
+Your meetings, transcripts and notes are still stored on your device. Requests pass through Natively's servers to the AI and speech providers, and their content is not stored ([PRIVACY.md §4.4](PRIVACY.md)). You can switch to your own keys or local models at any time.
+
+Under the hood, Natively plans connect you to leading models:
+
+- **AI models**: Claude, OpenAI, Gemini and Groq.
+- **Real-time speech**: Soniox, ElevenLabs Scribe and Deepgram.
 
 ### 4 Categories → 1 Key
 
@@ -419,23 +437,33 @@ Under the hood, Natively API connects you to the absolute best models for the op
 - **Real-Time Transcription (Deepgram/Google STT):** separate key + quota
 - **Web Search & Research (Tavily/Perplexity):** yet another subscription
 
-**Replaced by Natively API:**
+**Replaced by a Natively plan:**
 
 - **AI chat, transcription & web search** — all included
-- **One flat subscription.** Zero surprise bills. Starts at $8/mo.
+- **One flat price.** Zero surprise bills. From $8/month, $80/year, or a one-time $5 pack.
 - **Single key.** Zero rotation. Zero configuration.
 
-### API Plan Comparison
+### Plan Comparison
 
-| Feature                               | Standard ($8/mo) | Pro ($15/mo) | Max ($25/mo) | Ultra ($35/mo) |
-| :------------------------------------ | :--------------- | :----------- | :----------- | :------------- |
-| **All-in-One Cloud AI Access**        | ✅ Yes           | ✅ Yes       | ✅ Yes       | ✅ Yes         |
-| **Real-Time Transcription**           | ✅ Yes           | ✅ Yes       | ✅ Yes       | ✅ Yes         |
-| **Included Natively Pro Desktop App** | ❌ No            | ✅ Yes       | ✅ Yes       | ✅ Yes         |
-| **Premium Support**                   | ❌ No            | ✅ Yes       | ✅ Yes       | ✅ Yes         |
-| **Higher Monthly Quotas**             | ❌ No            | ✅ Yes       | ✅ Yes       | ✅ Yes         |
+| Feature                               | Standard | Pro | Max | Ultra |
+| :------------------------------------ | :------- | :-- | :-- | :---- |
+| **Monthly**                           | $8       | $15 | $25 | $35   |
+| **Yearly (two months free)**          | $80      | $150 | $250 | $350 |
+| **AI, transcription & web search**    | ✅ Yes   | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Natively Pro included**             | ❌ No    | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Premium Support**                   | ❌ No    | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Higher Monthly Quotas**             | ❌ No    | ✅ Yes | ✅ Yes | ✅ Yes |
 
-**Don't start the long way.** Skip the 20-minute manual setup. One Natively subscription skips all of it — AI, transcription, and web search are ready immediately.
+### One-Time Packs (no subscription)
+
+For a single interview week or a few calls. Each pack is Natively Pro plus AI, transcription and web search, until the meeting hours or the days run out, whichever comes first.
+
+| Pack           | Price | Meeting time | Use within | Includes |
+| :------------- | :---- | :----------- | :--------- | :------- |
+| **Light pack** | $5    | 2 hours      | 7 days     | Natively Pro + AI, transcription & web search |
+| **Heavy pack** | $10   | 5 hours      | 14 days    | Natively Pro + AI, transcription & web search |
+
+**Don't start the long way.** Skip the 20-minute manual setup. One Natively plan skips all of it: AI, transcription and web search are ready immediately. Yearly plans and packs are in the app under **Settings → Plans & Billing**.
 
 <p align="center">
   <a href="https://checkout.dodopayments.com/buy/pdt_0NbFixGmD8CSeawb5qvVl">
@@ -452,11 +480,20 @@ Under the hood, Natively API connects you to the absolute best models for the op
   </a>
 </p>
 
+<p align="center">
+  <a href="https://checkout.dodopayments.com/buy/pdt_0NrMWztmLVYzyt4L9SQJd">
+    <img src="https://img.shields.io/badge/Light_Pack-$5_one--time-22c55e?style=for-the-badge&logo=fastapi&logoColor=white" />
+  </a>
+  <a href="https://checkout.dodopayments.com/buy/pdt_0NrMX0EGK6xaJYhsWRIla">
+    <img src="https://img.shields.io/badge/Heavy_Pack-$10_one--time-16a34a?style=for-the-badge&logo=fastapi&logoColor=white" />
+  </a>
+</p>
+
 ---
 
 ## Natively Pro
 
-While Natively is **free for personal, educational, research, and non-commercial use**, we also offer a **Pro Edition** (available as **Lifetime or Yearly** subscriptions) designed specifically for power users and job seekers. Purchasing a Pro license gives you an edge in the job market, all while directly supporting the continued development of Natively.
+While Natively is **free for personal, educational, research, and non-commercial use**, we also offer a **Pro Edition**, **Yearly at $30** (list $39) or **Lifetime at $60** (list $79), designed specifically for power users and job seekers. Pro is also included with the Pro, Max and Ultra plans and with both packs. Purchasing a Pro license gives you an edge in the job market, all while directly supporting the continued development of Natively.
 
 ### Free vs Pro Feature Comparison
 
@@ -468,7 +505,9 @@ While Natively is **free for personal, educational, research, and non-commercial
 | **Real-Time Speech-to-Text (<500ms)**               |      ✅       |      ✅      |
 | **Multi-Key API Pools & Key Rotation**              |      ✅       |      ✅      |
 | **Profile Intelligence Router (v3)**                |      ✅       |      ✅      |
-| **Auto Answer (Beta)**                              |      ✅       |      ✅      |
+| **Auto Answer (on-device decider)**                 | With transcript sharing |      ✅      |
+| **Answer Length: Smart**                            |      ✅       |      ✅      |
+| **Answer Length: Shorter & Longer**                 |      ❌       |      ✅      |
 | **Browser Companion & Page Capture (Chrome)**       |      ✅       |      ✅      |
 | **9 Built-in Modes (incl. Seminar, Call Center)**   |      ✅       |      ✅      |
 | **Skills — Upload & Manage Custom Personas**        |      ✅       |      ✅      |
@@ -511,45 +550,51 @@ While Natively is **free for personal, educational, research, and non-commercial
   </a>
 </p>
 
-### What's New in v3.1.0 (Latest Release)
+### What's New in v3.2.0 (Latest Release)
 
-**Pick up where you left off.** Resume a saved meeting, a chat that carries on after Resume, a Compare that clears the losing version, and a 9-minute setup film.
+**Ready from the first minute.** A smarter Auto Answer, screenshot answers about twice as fast, Answer length, every answer on your phone, and Natively plans by the month, the year or the hour.
 
 #### New
 
 | Feature | What it does |
 | :------ | :----------- |
-| **Resume a meeting** | Record more into a meeting that has already ended, and it stays one meeting. Resume is on the meeting page for overlay meetings and in the notepad for notepad meetings, and at Stop the notes are rewritten over the whole meeting. |
-| **Chat carries on after Resume** | The overlay reopens with the meeting's earlier answers, so the conversation picks up where it stopped. |
-| **Same speaker after Resume** | Someone who talks again after a Resume can come back as a new Speaker N. The meeting page asks "Same as Lars?" and one click gives them the saved name. |
-| **Open a meeting in the notepad** | A notepad button on the meeting page opens the notepad on that saved meeting, with its notes. |
-| **Setup & demo film** | A 9-minute film from setup to a live meeting, from the Welcome screen, **Settings → Setup & Help** or the card on Home. |
+| **Smarter Auto Answer** | An on-device model decides which questions are meant for you, so Auto Answer answers those and stays quiet for the rest. Its settings moved to **Settings → Intelligence**; the switch stays in General. Part of Pro, or free when you share those meetings' transcripts to improve it. |
+| **Faster screenshot answers** | The first word of a screenshot answer arrives in about 4 seconds instead of about 10. Choose the question a screenshot asks when you type nothing in **Settings → Overlay → Screenshot question**. |
+| **Answer length** | Shorter, Smart or Longer answers, one setting in **Settings → Overlay** for every mode. Shorter and Longer are Pro. |
+| **Every answer on your phone** | Each overlay answer (buttons, Auto Answer, Direct Assist and spoken follow-ups) streams word by word to your paired phone. |
+| **Newer speech models** | Soniox v6 and ElevenLabs Scribe v3 with your own key, and Nepali in the language picker where the provider supports it. |
+| **Plans by the month, the year or the hour** | Natively plans can be paid yearly (two months free), and one-time Light ($5, 2 hours within 7 days) and Heavy ($10, 5 hours within 14 days) packs include Pro. Plans & Billing has an Hourly, Monthly and Yearly switch. |
+| **Lost your key?** | "Bought a key but no email?" sends your key again, from the activation card in Plans & Billing. |
 
 #### Improved
 
-- **Compare.** Picking a winner deletes the losing version and its tab. An older winner becomes the meeting's notes, and "About the same" keeps both.
-- **Free trial.** The trial ends when its AI allowance runs out as well as at 30 minutes, warns about two answers before, and a refused answer says the trial ended instead of "check your API keys".
-- **Backup speech.** When your provider stops your key for quota, the banner says so and names the provider transcribing in the meantime.
-- **Local speech models** say why they stopped: not enough memory (with the measured figures), not downloaded, or stopped.
-- **Pro lifetime** is $60, with $79 struck through during a named sale.
-- **Settings.** Ambient AI Chat is back in General, and Do not save meetings moves under Advanced. Meeting notes fade out under the pinned header.
+- **Auto Answer** waits for announced lists and scenarios, answers back-to-back questions in one answer, and never answers a bare transition.
+- **Live answers** follow the Real-time prompt, skills and Cue Cards on every path, show the source badge their evidence earns, and read a follow-up against the previous answer.
+- **Speed.** The answer path warms up when the meeting starts, small talk gets no early answer, and more of each prompt is reused from the cache.
+- **Screen memory.** Screenshots are remembered in typed chat, What to answer, Code hint, Brainstorm, your own buttons and phone questions. Keep overlay size (Settings → General → Advanced, on by default) holds the overlay's size between answers.
+- **Search.** Questions you hear also search your files with the on-device embedder.
+- **Banners and cards.** One full-window card per launch, calmer meeting banners, and the auto-stop warning shows above the rest.
+- **Calendar.** Reminders refresh themselves and fire only when they should, with one offer per call.
+- **Packs.** Natively says when a pack has ended, and the meeting resumes after a top-up.
+- **Open at login** is on by default for fresh installs.
+- **Look.** A lavender accent with periwinkle switches, every Settings title in Inter Semibold, and darker Settings cards in dark mode.
 
 #### Fixed
 
-- **Speech language.** Auto follows the speaker for the whole meeting on Natively speech, instead of locking onto the first language it heard.
-- **Garbled transcripts.** English no longer comes back as nonsense in another alphabet on microphones whose audio could not be converted to 16 kHz.
-- **Windows notepad.** The notes window takes clicks again after a second notepad meeting.
-- **Overlay.** A banner whose text changed twice quickly no longer goes blank, and light-mode code blocks lose the white bar behind each line.
-- **Free trial.** The end-of-trial card shows what the trial used instead of zeros.
-- **Local models.** A memory reading the OS fails to take no longer blocks every local model.
-- **Debug log.** Opening Natively while it is already running no longer wipes the running app's log.
+- **Overlay** keeps your place when an answer you didn't ask for arrives (#723).
+- **Coding questions.** "Show it in python" keeps the right problem, and "Java 3" is no longer read as a language rule (#737–#740).
+- **System audio** restarts after a failed start (#729). On Windows, capture falls back to the communications output when loopback can't use the default device.
+- **Speech.** Speaker sound leaking into the microphone no longer counts as you, there is no silent Google fallback when your chosen provider has no key, and Natively speech keeps the sentence spoken just before Stop.
+- **Local speech models** switch without a restart, and a local model's rewritten partials no longer stay on the transcript bar.
+- **Timeouts.** Long Natively answers get 30 seconds instead of stopping at 8, and a failed provider chain says the providers failed instead of "none set up".
+- **Typed questions** sent while an answer streams are sent instead of ignored, and the screenshot question field keeps its spaces.
 
 #### Platform
 
-- The native audio module builds on macOS 27 with Xcode 27, and the shipped module is stripped as before on macOS and Windows.
-- Electron 43.7.7 and Node 22.13 or later, unchanged from 3.0.0.
+- Auto Answer's on-device model is downloaded in **Settings → Intelligence**, not shipped in the installer.
+- Electron 43.7.7 and Node 22.13 or later, unchanged from 3.1.0.
 
-> 📄 **[Read the full v3.1.0 release notes →](docs/releases/v3.1.0.md)** · [v3.0.0 release notes](docs/releases/v3.0.0.md)
+> 📄 **[Read the full v3.2.0 release notes →](docs/releases/v3.2.0.md)** · [v3.1.0 release notes](docs/releases/v3.1.0.md) · [v3.0.0 release notes](docs/releases/v3.0.0.md)
 
 ## Table of Contents
 
@@ -557,14 +602,16 @@ While Natively is **free for personal, educational, research, and non-commercial
 - [What Users Are Saying](#what-users-are-saying)
 - [Why Natively?](#why-natively)
 - [4 things to know](#4-things-you-should-know-before-choosing-an-interview-ai)
-- [Why Natively leads in 3.0](#the-stealthiest-free-interview-copilot-why-natively-leads-in-30)
+- [Why Natively leads in 3.2](#the-stealthiest-free-interview-copilot-why-natively-leads-in-32)
 - [Demo](#demo)
 - [Full comparison](#full-comparison-natively-vs-cluely-vs-final-round-ai-vs-lockedin-ai-vs-interview-coder)
 - [Why Natively wins](#why-natively-wins)
 - [AI Coding Assistant](#free-ai-coding-interview-assistant-undetectable-on-leetcode-hackerrank--coderpad)
+- [Natively Plans (no API keys)](#natively-plans-ready-to-use-no-api-keys)
 - [Natively Pro](#natively-pro)
-- [What's New in v3.1.0](#whats-new-in-v310-latest-release)
+- [What's New in v3.2.0](#whats-new-in-v320-latest-release)
 - [Privacy & Security](#privacy--security-core-design-principle)
+- [Get started in a minute](#get-started-in-a-minute)
 - [Installation](#installation-developers--contributors)
 - [AI Providers](#ai-providers)
 - [Key Features](#key-features)
@@ -602,14 +649,17 @@ It provides:
 
 All while remaining **invisible, fast, and privacy-first**.
 
+It works the moment you install it, on a free trial and then a Natively plan, with nothing to set up. Or bring your own keys and local models, free for personal use.
+
 ---
 
 ## Privacy & Security (Core Design Principle)
 
 - Source-available under the Natively Personal Use Source License v1.0
-- Bring Your Own Keys (BYOK)
-- Local AI option (Ollama)
-- All data stored locally
+- Meetings, transcripts, notes and screenshots stored on your device
+- Two ways to run the AI:
+  - **A Natively plan or the free trial:** requests pass through Natively's servers to the AI and speech providers, and their content is not stored
+  - **Your own keys or local models:** requests go straight from your device to the provider you chose, or never leave it with Ollama and on-device speech
 - Feature-usage statistics that never contain what you say, see or type, with a switch to turn them off (see [PRIVACY.md](PRIVACY.md))
 - No hidden uploads
 
@@ -618,6 +668,16 @@ You explicitly control:
 - What runs locally
 - What uses cloud AI
 - Which providers are enabled
+
+---
+
+## Get Started in a Minute
+
+1. **Download** Natively for [macOS or Windows](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases/latest), or on macOS run `brew install --cask Natively-AI-assistant/tap/natively`.
+2. **Start a meeting.** With no AI set up, a 30-minute free trial starts on its own, with Natively's AI and transcription. No keys, no card.
+3. **Keep going** with a [Natively plan or pack](#natively-plans-ready-to-use-no-api-keys) by pasting the key you get by email in **Settings → Plans & Billing**, or add your own keys or a local model in **Settings → AI Providers**.
+
+The steps below are only for building Natively from source.
 
 ---
 
@@ -652,32 +712,35 @@ You explicitly control:
 
 ### AI Credentials & Speech Providers
 
-**Natively is 100% free to use with your own keys.**  
-Connect **any** speech provider and **any** LLM. No subscriptions, no markups, no hidden fees. All keys are stored locally.
+**No keys needed to start.** The free trial and [Natively plans](#natively-plans-ready-to-use-no-api-keys) include AI and transcription, with nothing to configure.
+
+**Prefer your own?** Natively is 100% free for personal use with your own keys. Connect **any** speech provider and **any** LLM. No subscriptions, no markups, no hidden fees. Your keys are stored locally.
 
 ### Speech-to-Text Providers
 
+- **Natively** (No API Key) - _Included with the free trial and Natively plans_
 - **Apple Speech** (No API Key) - _On-device transcription on macOS 26+_
 - **Local models** (No API Key) - _Whisper, Moonshine and Parakeet on your device, including Parakeet TDT for 25 languages and Parakeet v2 for English, which runs on the Neural Engine on Apple Silicon Macs with macOS 14+_
-- **Soniox** (API Key) - _Ultra-fast, highly accurate streaming STT (recommended)_
+- **Soniox** (API Key) - _Ultra-fast, highly accurate streaming STT on stt-rt-v6 (recommended)_
 - **NVIDIA Riva / NIM** (API Key) - _Nine streaming models, including multilingual Nemotron and Parakeet_
 - **Qwen** (API Key) - _Realtime streaming speech recognition_
 - **Google Cloud Speech-to-Text** (Service Account)
 - **Groq** (API Key)
 - **OpenAI Whisper** (API Key)
 - **Deepgram** (API Key)
-- **ElevenLabs** (API Key)
+- **ElevenLabs** (API Key) - _Scribe v3_
 - **Azure Speech Services** (API Key + Region)
 - **IBM Watson** (API Key + Region)
 
 Apple Speech requires a Mac running macOS 26 or later. Select **Apple Speech** in Audio settings and choose a recognition language. On first use, macOS may download the corresponding speech asset from Apple; the initial startup can therefore take longer and requires a network connection. Once the asset is installed, transcription runs on the device. Language availability is determined by macOS.
 
-### AI Engine Support (Bring Your Own Key)
+### AI Engine Support
 
-Connect Natively to **any** leading model or local inference engine.
+Use Natively's own AI with no setup, or connect **any** leading model or local inference engine with your own key.
 
 | Provider                     | Best For                                                    |
 | :--------------------------- | :---------------------------------------------------------- |
+| **Natively AI**              | No key to set up: included with the free trial and plans.   |
 | **Gemini 3.1 / 3.8 Series**  | Recommended (and the default): 2M-token context & low cost. |
 | **OpenAI (GPT-5.4 & o3)**    | High reasoning capabilities.                                |
 | **Anthropic (Claude 4.6)**   | Coding & complex nuanced tasks.                             |
@@ -690,7 +753,7 @@ Connect Natively to **any** leading model or local inference engine.
 | **Ollama / LocalAI**         | 100% Offline & Private (No API keys needed).                |
 | **OpenAI-Compatible**        | Connect to _any_ custom endpoint (vLLM, LM Studio, etc.)    |
 
-> **Note:** You only need ONE speech provider to get started. Use **Apple Speech** for on-device transcription on macOS 26+, or **Google STT**, **Groq**, or **Deepgram** for fast cloud transcription.
+> **Note:** With a Natively plan or the free trial you need no speech provider at all. With your own setup you only need ONE. Use **Apple Speech** for on-device transcription on macOS 26+, or **Google STT**, **Groq**, or **Deepgram** for fast cloud transcription.
 
 ---
 
@@ -829,6 +892,7 @@ This runs: Vite build → TypeScript compile → native module build → electro
 
 - Real-time speech-to-text (**<500ms latency**)
 - **Fast Response Mode**: Quicker text responses from your Background Model, or from the fastest available provider.
+- **Answer Length**: Shorter, Smart or Longer answers, one setting in **Settings → Overlay** for every mode (Shorter and Longer are Pro).
 - **Multilingual Support**: Choose from various response languages, and set speech recognition matching specific accents and dialects.
 - **Anti-Chatbot / Human Persona System**: Refined system prompts and negative constraints ensure responses are concise, conversational, and indistinguishable from a real candidate (no robotic preambles or lectures).
 - Context-aware Memory (RAG) for Past Meetings
@@ -838,14 +902,16 @@ This runs: Vite build → TypeScript compile → native module build → electro
 - **TinyPrompts™ Engine**: Specialized prompt architecture for local SLMs (4B-8B params), ensuring instruction following and reasoning parity with cloud models on local hardware.
 - **Dynamic Note Templates**: AI automatically generates structured meeting notes based on your active persona mode (e.g., Tech Interview follow-ups vs Sales action items).
 
-### Auto Answer (Beta) — Hands-Free Responses
+### Auto Answer — Hands-Free Responses
 
-Natively can answer without being asked. When the other person finishes a question, an LLM judge decides whether it is genuinely a question aimed at you — and either answers it or stays silent.
+Natively can answer without being asked. When the other person finishes a question, an on-device model (new in 3.2) and an AI judge decide whether it is genuinely a question aimed at you, and Natively either answers it or stays silent.
 
 - **No prompt, no button.** Nothing to dismiss and nothing to click; the answer is simply there.
 - **Knows when to stay quiet.** Rhetorical asides, questions aimed at someone else, and restatements of something already answered are ignored.
+- **Waits for the whole question.** Announced lists and scenarios are heard out, and back-to-back questions get one answer that covers both.
 - **Speaker-aware.** It reads speaker labels and splits the conversation by voice, so your own thinking-out-loud doesn't trigger an answer.
-- **Off by default.** Turn it on in **Settings → General**.
+- **Off by default.** Turn it on in **Settings → General**; its model and sharing settings are in **Settings → Intelligence**.
+- **Pro, or free with sharing.** Auto Answer is part of Natively Pro. Without Pro you can use it by sharing the transcripts of the meetings where it runs, scrubbed of emails, links and numbers on your device, to help it learn.
 
 ### Visual Answers: Diagrams and Charts in the Answer
 
@@ -875,6 +941,9 @@ A Chrome extension that hands the page you're on to Natively.
 - **Hardware-Accelerated Transitions**: Polished, custom cubic-bezier tweens handle UI growth smoothly, preserving candidate stealth and presentation quality.
 - Invisible overlay never appears on screen share or recordings
 - Multiple screenshot support for multi-part problems
+- **About twice as fast in 3.2:** the first word of a screenshot answer arrives in about 4 seconds instead of about 10
+- **Your screenshot question:** choose what a screenshot asks when you type nothing, in **Settings → Overlay**
+- **Screen memory everywhere:** screenshots are remembered in typed chat, What to answer, Code hint, Brainstorm, your own buttons and phone questions
 - **Reads images:** each model has an Auto, On or Off setting for screenshots, and your selected model reads your screenshot first when it can
 - Smart fallback to another vision model if the first one fails
 
@@ -914,7 +983,7 @@ Create local `SKILL.md` files to give the AI specialized instructions for any ta
 
 ### Seamless Integrations & Sync
 
-- **Phone Mirror 2.0:** Follow the meeting from your phone, with the live transcript, answers as they stream in, and photos sent back to the desktop. Set it up in **Settings → Companion**.
+- **Phone Mirror 2.0:** Follow the meeting from your phone, with the live transcript, every overlay answer (Auto Answer, Direct Assist and your buttons included) streaming in word by word, and photos sent back to the desktop. Set it up in **Settings → Companion**.
 - **Calendar Sync:** Connect Google Calendar and each meeting is linked to its event, notes name the people who spoke, and a follow-up email is drafted when you ask.
 - **Connectors (Pro):** Send notes to Gmail, Slack, Notion, Zapier, webhooks, HubSpot, Salesforce, Attio, Affinity and Pipedrive, with browser sign-in and auto-send rules. A local MCP server and API let your own tools read your meetings. Notes go from your computer to the service, never through our servers. In **Settings → Connectors**. Connectors are part of Natively Pro (the free trial includes them). Their code lives in this repo, not the premium module, so you can read it, report issues and send pull requests for any connector.
 - **Share Notes as a Link:** Send anyone a link to a meeting's notes and transcript, from the meeting's Share menu.
@@ -959,7 +1028,7 @@ Natively understands that _listening_ to a meeting and _talking_ to an AI are di
 - **Process Disguise (Masquerading):** Instantly change the app to look like Terminal, System Settings, Activity Monitor, or other harmless utilities to completely evade detection during screen sharing.
 - **Security Hardening**: API keys are scrubbed from memory on app quit and credentials manager overwrites key data before disposal.
 - **API Rate Limiting**: Token-bucket algorithm (burst/refill) to prevent 429 errors on free-tier providers.
-- **Local-Only Processing:** All data stays on your machine.
+- **Stored on Your Machine:** Meetings, transcripts, notes and screenshots live in a local database, whichever AI you use.
 
 ---
 
@@ -992,7 +1061,10 @@ timeline
         Auto Answer : ✅ Hands-Free Answering (Beta)
         Browser : ✅ Chrome Companion Extension
         Notes : ✅ Rebuilt Meeting Notes
-        Trial : ✅ 10-Minute Free Trial
+        Trial : ✅ 30-Minute Free Trial, No Keys
+        Plans : ✅ Natively Plans, Yearly & Packs
+        Decider : ✅ On-Device Auto Answer Model
+        Length : ✅ Answer Length
         Visual Answers : ✅ Live Diagrams & Charts
         Phone : ✅ Phone Mirror 2.0
         Calendar : ✅ Calendar Sync
@@ -1043,7 +1115,7 @@ timeline
 
 ## Architecture Overview
 
-Natively processes audio, screen context, and user input locally, maintains a rolling context window, and sends only the required prompt data to the selected AI provider (local or cloud).
+Natively processes audio, screen context, and user input locally, maintains a rolling context window, and sends only the required prompt data to the selected AI provider: local, a cloud provider with your key, or Natively's own AI on a plan.
 
 No raw audio, screenshots, or transcripts are stored or transmitted unless explicitly enabled by the user.
 
@@ -1104,7 +1176,6 @@ This project does not encourage misuse or deception.
 ## Known Limitations
 
 - Linux support is limited and actively looking for maintainers
-- Initial setup requires bringing your own API keys or installing Ollama
 - No built-in mock interview mode (focus is on live, real-time assistance)
 
 ---
@@ -1158,7 +1229,11 @@ Commercial license requests: sales@heynatively.com · https://heynatively.com
 
 #### Is Natively really free?
 
-Yes for personal, educational, research, and non-commercial use. Natively is source-available under a personal-use source license. You only pay for what you use by bringing your own API keys (Gemini, OpenAI, Anthropic, etc.), or use it **100% free** by connecting to a local Ollama instance. Commercial use requires a separate written license.
+Yes for personal, educational, research, and non-commercial use. Natively is source-available under a personal-use source license. Bring your own API keys (Gemini, OpenAI, Anthropic, etc.) and pay only for what you use, or use it **100% free** with a local Ollama instance. If you'd rather not set anything up, a 30-minute free trial starts with your first meeting, and [Natively plans](#natively-plans-ready-to-use-no-api-keys) start at $8/month, $80/year, or a one-time $5 pack. Commercial use requires a separate written license.
+
+#### Do I need API keys?
+
+No. Install Natively and start a meeting: with no AI set up, a 30-minute free trial starts on its own, using Natively's own AI and transcription. After that, a Natively plan or pack gives you AI, live transcription and web search on one key that you paste once. Bringing your own keys or running local models is optional, for anyone who prefers it.
 
 #### Does Natively work with Zoom, Teams, and Google Meet?
 
@@ -1178,7 +1253,7 @@ Simply install **Ollama**, run a model (e.g., `ollama run llama3`), and Natively
 
 #### What is Auto Answer, and is it on by default?
 
-Auto Answer (Beta) responds without you asking. When the other person finishes a question, Natively judges whether it's genuinely aimed at you and either answers or stays silent — rhetorical asides and questions meant for someone else are ignored. It is **off by default**; enable it in **Settings → General**.
+Auto Answer responds without you asking. When the other person finishes a question, an on-device model and an AI judge decide whether it's genuinely aimed at you, and Natively either answers or stays silent: rhetorical asides and questions meant for someone else are ignored. It is **off by default**; enable it in **Settings → General**. It is part of Natively Pro, or free when you share the transcripts of the meetings where it runs.
 
 #### Do I need the browser extension?
 
@@ -1186,7 +1261,7 @@ No — it's optional. It adds one thing: pressing **⌘/Ctrl+Y** hands the page 
 
 #### How does Natively compare to Cluely?
 
-Cluely is a $20/month cloud-based tool that stores all data on their servers. In mid-2025, Cluely suffered a data breach that exposed personal information, transcripts, and screenshots of 83,000 users. Natively is free for personal/non-commercial use, source-available, and stores everything locally. It supports any LLM (not just one vendor), offers local AI via Ollama, and has battle-tested stealth mode. Natively has never had a data breach because there is no server to breach.
+Cluely is a $20/month cloud-based tool that stores all data on their servers. In mid-2025, Cluely suffered a data breach that exposed personal information, transcripts, and screenshots of 83,000 users. Natively is free for personal/non-commercial use with your own keys, ready to use with no keys from $8/month, source-available, and stores your meetings on your device. It supports any LLM (not just one vendor), offers local AI via Ollama, and has battle-tested stealth mode. Natively has never had a data breach, and your transcripts are not kept on our servers to be breached (unless you choose to share them to improve Auto Answer).
 
 #### Is stealth mode actually undetectable?
 
@@ -1214,7 +1289,7 @@ For standard online assessments (LeetCode, HackerRank, CoderPad, etc.), Natively
 
 #### Is Natively a free alternative to Interview Coder?
 
-Yes. Natively covers what Interview Coder is known for (screenshot OCR, real-time coding help, an invisible overlay and a process-level disguise) and adds behavioral interview support, Visual Answers for system design, local RAG memory, and any-LLM BYOK. Free for personal use.
+Yes. Natively covers what Interview Coder is known for (screenshot OCR, real-time coding help, an invisible overlay and a process-level disguise) and adds behavioral interview support, Visual Answers for system design, local RAG memory, and a choice of a ready-to-use plan or any LLM you bring. Free for personal use with your own keys.
 
 #### Is Natively stealthier than Interview Coder?
 
@@ -1226,7 +1301,7 @@ Yes. Visual Answers draws system designs, flowcharts, sequence diagrams, ER diag
 
 #### What is the best free alternative to Cluely, Interview Coder and Final Round AI?
 
-Natively is free for personal use with your own API keys, stores your data on your machine, works with any LLM or fully offline with Ollama, and includes its full stealth feature set, Visual Answers and meeting notes at no cost.
+Natively is free for personal use with your own API keys, or ready in a minute with no keys on a 30-minute free trial and plans from $8/month. It stores your meetings on your machine, works with any LLM or fully offline with Ollama, and includes its full stealth feature set, Visual Answers and meeting notes at no cost.
 
 ---
 
@@ -1244,7 +1319,7 @@ Natively is a free-for-personal-use, source-available alternative to:
 | **Metaview**        | Automated meeting notes — source-available and locally stored                       |
 | **Otter.ai**        | Transcription and meeting summaries — without cloud storage                         |
 | **Fireflies.ai**    | Meeting recorder and AI notetaker — fully local storage                             |
-| **Teal**            | Job search and interview assistant — fully local and free                           |
+| **Teal**            | Job search and interview assistant — your data on your device, free for personal use |
 
 ---
 
