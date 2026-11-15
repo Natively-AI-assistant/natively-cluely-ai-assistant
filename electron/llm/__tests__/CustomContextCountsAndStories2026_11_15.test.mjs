@@ -50,6 +50,10 @@ describe('pay and pricing are still withheld', () => {
     'The outage cost us $2M in ARR.',
     'After the incident I got a raise to $150k.',
     'Our list price is $50/seat.',
+    // Review 2026-11-15: a plural after a figure is not always a count.
+    'I make 500k pesos a year.',
+    'My offer is 300k dirhams.',
+    'They pay 90k francs.',
   ]) {
     test(`sensitive: "${line}"`, () => {
       const c = classifyCustomContext(line);

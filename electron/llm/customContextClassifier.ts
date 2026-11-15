@@ -84,15 +84,21 @@ const MONEY_AMOUNT_RE =
   // every live turn. No real amount is longer than 25 characters.
   /(?:[$₹€£]\s?\d[\d,.]{0,24}|(?<![\w.,])\d[\d,.]{0,24}\s?(?:k\b|m\b|mm\b|lpa\b|lakhs?\b|cr\b|crores?\b|usd\b|inr\b|million\b|\/(?:seat|user|month|mo|year|yr|seat\/mo)))/i;
 
+// Words that make a figure pay: "I make 500k pesos a year", "my offer is 300k
+// dirhams". A sentence with one of these never has its figures read as counts.
+const EARNINGS_RE = /\b(?:make|makes|making|made\s+\$|earn\w*|paid|pay|payout|package|offer\w*|raise|hike|per\s+(?:year|annum|month|hour)|a\s+year|\/(?:yr|year|mo|month|hr|hour))\b/i;
+
 // A number with a k/M/million unit and no currency sign is a COUNT when a counted
 // noun follows it: "about 40M deliveries a day", "100k users", "5M downloads"
 // (#744). "185k base", "320k TC", "2m per year" are still amounts. Plurals that
-// are money ("50k shares", "10k dollars") stay amounts.
+// are money ("50k shares", "10k dollars", "300k dirhams") stay amounts, and so
+// does any figure in a sentence about pay (EARNINGS_RE).
 const COUNT_UNIT_RE = /(?<![\w.,$₹€£])\d[\d,.]{0,24}\s?(?:k|m|mm|million)\s+([A-Za-z][A-Za-z-]*)/gi;
-const MONEY_PLURAL_RE = /^(?:dollars|bucks|rupees|euros|pounds|shares|units|options|grants|rsus|credits|coins|tokens|points)$/i;
+const MONEY_PLURAL_RE = /^(?:dollars|bucks|rupees|euros|pounds|pesos|dirhams|riyals|rials|francs|rands|reais|ringgits|rupiahs|lire|liras|kronas|kronor|kroner|zlotys|dinars|shekels|nairas|cedis|shillings|takas|bahts|dongs|wons|yuans|renminbis|quids|grand|shares|units|options|grants|rsus|credits|coins|tokens|points)$/i;
 const isCountedNoun = (word: string): boolean => /^[a-z][a-z-]*[a-z]s$/i.test(word) && !MONEY_PLURAL_RE.test(word);
 const hasMoneyAmount = (text: string): boolean => {
   if (!MONEY_AMOUNT_RE.test(text)) return false;
+  if (EARNINGS_RE.test(text)) return true;
   // Remove the counts, then look again: anything left is an amount.
   const withoutCounts = text.replace(COUNT_UNIT_RE, (m: string, noun: string) => (isCountedNoun(noun) ? ` ${noun}` : m));
   return MONEY_AMOUNT_RE.test(withoutCounts);
@@ -107,7 +113,6 @@ const isSensitive = (chunk: string): boolean => SENSITIVE_RE.test(chunk) || hasM
 // SENTENCE qualifies, never a whole chunk, so a salary sentence beside it is
 // still withheld; and only when nothing in it names pay, pricing or strategy.
 const INCIDENT_RE = /\b(?:incident|outage|post-?mortem|rolled\s+(?:it\s+)?back|roll-?back|misconfigur\w*|root\s+cause|downtime|sev[- ]?[0-4]|hotfix(?:ed)?|double-(?:applied|charged|billed|counted|sent)|refund(?:ed|s)?)\b/i;
-const EARNINGS_RE = /\b(?:make|makes|making|made\s+\$|earn\w*|paid|pay|payout|package|offer\w*|raise|hike|per\s+(?:year|annum|month|hour)|a\s+year|\/(?:yr|year|mo|month|hr|hour))\b/i;
 const isIncidentCost = (sentence: string): boolean =>
   INCIDENT_RE.test(sentence) && !SENSITIVE_RE.test(sentence) && !EARNINGS_RE.test(sentence);
 
