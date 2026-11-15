@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import Module, { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -30,7 +30,7 @@ const hasPremium = fs.existsSync(PREMIUM);
 
 describe('Gumroad verify answers', { skip: !hasPremium && 'premium module not built' }, () => {
   let classify;
-  before(async () => { ({ classifyGumroadVerify: classify } = await import(POLICY)); });
+  before(async () => { ({ classifyGumroadVerify: classify } = await import(pathToFileURL(POLICY).href)); });
   const ok = (purchase = {}) => ({ success: true, purchase: { refunded: false, chargebacked: false, disputed: false, dispute_won: false, subscription_ended_at: null, subscription_failed_at: null, ...purchase } });
 
   test('a clean purchase is active', () => {
@@ -77,7 +77,7 @@ describe('LicenseManager: Gumroad re-check and the Natively API payment hold', {
       if (typeof request === 'string' && request.endsWith('.node')) return nativeStub;
       return originalResolve.call(this, request, ...rest);
     };
-    ({ LicenseManager } = await import(PREMIUM));
+    ({ LicenseManager } = await import(pathToFileURL(PREMIUM).href));
   });
   after(() => {
     Module._resolveFilename = originalResolve;

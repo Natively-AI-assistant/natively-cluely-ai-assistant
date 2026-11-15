@@ -181,6 +181,9 @@ describe('the selector window', () => {
     displays = THREE;
     cursor = { x: 100, y: 100 };
     const { helper, sent } = shownHelper({ x: -1280, y: 0, width: 5760, height: 1440 });
+    // Every screen covered, on any platform (the mixed-scale Windows plan
+    // covers one screen; asserted above).
+    helper.planCoverage = () => ({ bounds: { x: -1280, y: 0, width: 5760, height: 1440 }, displayId: null });
     const selection = helper.showCropper(2000);
     const reset = sent.find(([ch]) => ch === 'reset-cropper');
     assert.deepEqual(reset?.[1], { hudPosition: { x: 2560, y: 32 } });

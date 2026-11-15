@@ -250,7 +250,7 @@ describe('the Privacy panel\'s "local vision available" indicator', () => {
 
 // ── 2. The Ollama model writes the after-the-answer screen record ────────────
 
-const { getScreenUnderstandingService, OLLAMA_RECORD_BUDGET_MS } = require(dist('services/screen/ScreenUnderstandingService.js'));
+const { getScreenUnderstandingService, OLLAMA_RECORD_BUDGET_MS, CLOUD_RECORD_PER_PROVIDER_MS } = require(dist('services/screen/ScreenUnderstandingService.js'));
 const { composeScreenDescription } = require(dist('services/screen/screenDescription.js'));
 const SYSTEM = 'Extract what is on the screen.';
 
@@ -388,9 +388,18 @@ describe('the screen record through the service', () => {
     const again = await ask('transcribe');
     assert.equal(again.status, 'available', 'the failed record was served from memory instead of being tried again');
     assert.match(composeScreenDescription(again), /E4012/);
+    // A record that SUCCEEDED is remembered one layer up (2026-11-06): the
+    // service's cache matched PERCEPTUALLY, so a screen that only looked like
+    // the last one got the old screen's text. transcribeScreenForMemory now
+    // looks the screenshot's exact bytes up in the description store before
+    // it asks the service for a record at all; the service reads again.
     const chatsAfterRecord = ollama.chats().length;
     assert.equal((await ask('transcribe')).status, 'available');
-    assert.equal(ollama.chats().length, chatsAfterRecord, 'a record that SUCCEEDED is remembered: no second request for the same screen');
+    assert.equal(ollama.chats().length, chatsAfterRecord + 1, 'the service does not cache a record (screenTranscription.ts does, by exact bytes)');
+    const st = fs.readFileSync(new URL('../screen/screenTranscription.ts', import.meta.url), 'utf8');
+    const body = st.slice(st.indexOf('export async function transcribeScreenForMemory('));
+    assert.ok(body.indexOf('getScreenshotDescription(sha)') > 0 && body.indexOf('getScreenshotDescription(sha)') < body.indexOf('getScreenUnderstandingService().understand('),
+      'a screenshot already described is served from the description store, before any record request');
     // The pre-pass keeps remembering a failure: retrying it would add its wait to every answer.
     cloudKeys(['gemini']);
     let cloudCalls = 0;
@@ -422,8 +431,11 @@ describe('the screen record through the service', () => {
     assert.equal(result.providerUsed, 'ollama');
     // (A few milliseconds short of the full 45 s: what is left of the stage's deadline.)
     assert.ok(armed.some((ms) => ms > 40_000 && ms <= OLLAMA_RECORD_BUDGET_MS), `no attempt was armed with the record budget: ${armed}`);
+    // The record's cloud rungs have their own budget too (2026-11-06,
+    // CLOUD_RECORD_PER_PROVIDER_MS): nobody waits for the record, and the
+    // pre-pass's 6 s cut every cloud record off before it finished.
     const cloudAttempts = armed.filter((ms) => ms <= 40_000);
-    assert.ok(cloudAttempts.length > 0 && cloudAttempts.every((ms) => ms <= 6000), `a cloud attempt was armed past the 6 s pre-pass budget: ${armed}`);
+    assert.ok(cloudAttempts.length > 0 && cloudAttempts.every((ms) => ms <= CLOUD_RECORD_PER_PROVIDER_MS), `a cloud attempt was armed past its record budget: ${armed}`);
   });
   test('an Ollama ANSWER cancels a record still in flight: the answer is not queued behind it, and nothing is kept', async () => {
     // The fake serves one chat at a time, as a daemon does for one model: while

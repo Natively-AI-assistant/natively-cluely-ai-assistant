@@ -155,6 +155,10 @@ function makeWindow({ clampTo = null, initial } = {}) {
 
 async function runShowCropper(win) {
   const helper = new CropperWindowHelper();
+  // The every-screen plan these tests are about. On Windows with mixed scale
+  // factors the real plan covers only the screen under the mouse (2026-10-29,
+  // planCropperCoverage), so without this the Windows run tested that instead.
+  helper.planCoverage = () => ({ bounds: { ...COMBINED }, displayId: null });
   helper.cropperWindow = win;
   const errors = [];
   const origError = console.error;
