@@ -30,8 +30,8 @@ export type GuideEvent =
   | { type: 'meeting_stopped' }
   | { type: 'overlay_next' }
   | { type: 'notes_next' }
-  | { type: 'trial_out' }
-  | { type: 'trial_unavailable' }
+  | { type: 'trial_out'; facts?: GuideFacts }
+  | { type: 'trial_unavailable'; facts?: GuideFacts }
   /** Main replaces the facts with its own (services/firstRunGuideStore.ts). */
   | { type: 'plan_changed'; facts?: GuideFacts }
   | { type: 'own_keys' }

@@ -66,3 +66,8 @@ test('entering step 5 hands the meeting from the overlay to the notepad, in main
   assert.ok(!ov.includes('openedForStep'), 'no renderer-side auto-open');
   assert.ok(ov.includes("if (guideOn(state, 'stop') && !notesOpen)"), 'the stop prompt is the notepad\'s when it is open');
 });
+
+test('main judges the trial events with its own facts, like plan_changed', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'electron/services/firstRunGuideStore.ts'), 'utf8');
+  assert.ok(/event\.type === 'trial_out' \|\| event\.type === 'trial_unavailable'/.test(src), 'trial events get facts');
+});

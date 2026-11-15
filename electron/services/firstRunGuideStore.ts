@@ -69,6 +69,9 @@ export function applyGuideEvent(event: GuideEvent | { type: 'meeting_saved'; mee
     // Main decides what was bought: a running trial's placeholder key is not
     // a purchase (guideFactsFromSources), whatever a window believes.
     reduced = reduceGuide(current, { type: 'plan_changed', facts: deps.factsProvider() }, now);
+  } else if (event.type === 'trial_out' || event.type === 'trial_unavailable') {
+    // No trial only matters to someone with no paid plan: main says which.
+    reduced = reduceGuide(current, { type: event.type, facts: deps.factsProvider() }, now);
   } else {
     reduced = reduceGuide(current, event as GuideEvent, now);
   }

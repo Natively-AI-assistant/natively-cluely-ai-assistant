@@ -128,9 +128,12 @@ export function reduceGuide(state, event, now) {
         : move(state, { step: 'plans' }, now);
     }
     case 'trial_out':
-      return BEFORE_PLANS.includes(state.step) ? move(state, { step: 'plans', variant: 'trial_out' }, now) : state;
-    case 'trial_unavailable':
-      return BEFORE_PLANS.includes(state.step) ? move(state, { step: 'plans', variant: 'no_trial' }, now) : state;
+    case 'trial_unavailable': {
+      // A paid Natively key covers the meeting: no trial is no reason to leave
+      // the walk (main attaches its own facts; Evin hit this 2026-11-15).
+      if (!BEFORE_PLANS.includes(state.step) || event.facts?.hasNativelyKey) return state;
+      return move(state, { step: 'plans', variant: event.type === 'trial_out' ? 'trial_out' : 'no_trial' }, now);
+    }
     case 'plan_changed': {
       if (state.step !== 'plans' || !event.facts) return state;
       if (event.facts.hasNativelyKey) return move(state, { status: 'finished', outcome: 'bought' }, now);

@@ -155,3 +155,19 @@ test('GUIDE_EVENT_TYPES lists every event the reducer understands (main validate
   assert.deepEqual([...GUIDE_EVENT_TYPES].sort(), ['answer_shown', 'keys_done', 'meeting_started', 'meeting_stopped', 'note_typed',
     'notes_next', 'overlay_next', 'own_keys', 'plan_changed', 'plans_closed', 'restart', 'screenshot_taken', 'skip', 'trial_out', 'trial_unavailable']);
 });
+
+// Evin, 2026-11-15, on a Natively API profile whose free trial was used long
+// ago: "all the steps are showing done so i cant really go through the steps".
+// Step 1 learned "no trial" and jumped to Plans, where the paid key finished
+// the guide. A paid plan covers the meeting, so no trial is not a reason to move.
+test('a paid Natively key keeps the walk: no trial is not a reason to jump to plans', () => {
+  const paid = { hasOwnAiKey: false, hasNativelyKey: true, isPremium: true, launchCount: 1 };
+  const s = started();
+  assert.equal(reduceGuide(s, { type: 'trial_unavailable', facts: paid }, T), s);
+  assert.equal(reduceGuide(s, { type: 'trial_out', facts: paid }, T), s);
+  const unpaid = { hasOwnAiKey: false, hasNativelyKey: false, isPremium: false, launchCount: 1 };
+  assert.deepEqual(
+    [reduceGuide(s, { type: 'trial_unavailable', facts: unpaid }, T).step, reduceGuide(s, { type: 'trial_out', facts: unpaid }, T).step],
+    ['plans', 'plans'],
+  );
+});
