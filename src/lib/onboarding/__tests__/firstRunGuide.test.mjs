@@ -19,7 +19,12 @@ const facts = { hasOwnAiKey: false, hasNativelyKey: false, isPremium: false, lau
 const T = 1_000;
 const started = () => reduceGuide(emptyGuideState(), { type: 'plans_closed', facts }, T);
 const walk = (s, ...types) => types.reduce((acc, type) => reduceGuide(acc, { type }, T), s);
-const atPlans = () => walk(started(), 'meeting_started', 'overlay_next', 'answer_shown', 'screenshot_taken', 'note_typed', 'meeting_stopped', 'notes_next');
+// Evin, 2026-11-15: two meetings. The first in the overlay and its notes; then
+// Settings › Overlay to pick the notepad; the second in the notepad (type, Ask,
+// a recipe) and its notes; then Plans & Billing and keys.
+const MEETING_1 = ['meeting_started', 'overlay_next', 'answer_shown', 'screenshot_taken', 'meeting_stopped', 'notes_next'];
+const MEETING_2 = ['surface_notepad', 'meeting_started', 'note_typed', 'ask_opened', 'recipe_run', 'meeting_stopped', 'notes_next'];
+const atPlans = () => walk(started(), ...MEETING_1, ...MEETING_2);
 
 test('plans_closed starts an eligible new user at start', () => {
   const s = started();
@@ -37,10 +42,11 @@ test('a Natively key bought from the Plans card still gets the guide', () => {
   assert.equal(reduceGuide(emptyGuideState(), { type: 'plans_closed', facts: { ...facts, hasNativelyKey: true, isPremium: true } }, T).status, 'active');
 });
 
-test('happy path start→overlay→answer→screenshot→notepad→stop→notes→plans', () => {
+test('happy path: the overlay meeting, its notes, the switch, the notepad meeting, its notes, plans', () => {
   let s = started();
-  for (const [type, want] of [['meeting_started', 'overlay'], ['overlay_next', 'answer'], ['answer_shown', 'screenshot'], ['screenshot_taken', 'notepad'],
-    ['note_typed', 'stop'], ['meeting_stopped', 'notes'], ['notes_next', 'plans']]) {
+  for (const [type, want] of [['meeting_started', 'overlay'], ['overlay_next', 'answer'], ['answer_shown', 'screenshot'], ['screenshot_taken', 'stop'],
+    ['meeting_stopped', 'notes'], ['notes_next', 'surface'], ['surface_notepad', 'start2'], ['meeting_started', 'notepad'],
+    ['note_typed', 'ask'], ['ask_opened', 'recipe'], ['recipe_run', 'stop2'], ['meeting_stopped', 'notes2'], ['notes_next', 'plans']]) {
     s = reduceGuide(s, { type }, T + 5);
     assert.equal(s.step, want, type);
     assert.equal(s.updatedAt, T + 5);
@@ -54,10 +60,17 @@ test('duplicate events are no-ops (same object back)', () => {
   assert.equal(reduceGuide(s, { type: 'plans_closed', facts }, T + 1), s);
 });
 
-test('meeting_stopped mid-meeting jumps to notes', () => {
+test('meeting_stopped mid-meeting jumps to that meeting\'s notes', () => {
   for (const at of [['meeting_started'], ['meeting_started', 'overlay_next'], ['meeting_started', 'overlay_next', 'answer_shown'], ['meeting_started', 'overlay_next', 'answer_shown', 'screenshot_taken']]) {
     assert.equal(reduceGuide(walk(started(), ...at), { type: 'meeting_stopped' }, T).step, 'notes', at.join(','));
   }
+  const second = walk(started(), ...MEETING_1, 'surface_notepad', 'meeting_started');
+  for (const at of [[], ['note_typed'], ['note_typed', 'ask_opened'], ['note_typed', 'ask_opened', 'recipe_run']]) {
+    assert.equal(reduceGuide(walk(second, ...at), { type: 'meeting_stopped' }, T).step, 'notes2', at.join(','));
+  }
+  // Between the meetings there is nothing to stop.
+  const between = walk(started(), ...MEETING_1);
+  assert.equal(reduceGuide(between, { type: 'meeting_stopped' }, T), between);
   // Before any meeting started there is nothing to stop.
   const s = started();
   assert.equal(reduceGuide(s, { type: 'meeting_stopped' }, T), s);
@@ -134,16 +147,27 @@ test('normalize: >7 days since update → expired; ≤7 days → unchanged; garb
 });
 
 // Evin, 2026-11-15: the meeting overlay and the notepad are separate steps.
-test('GUIDE_STEP_NUMBER: overlay is its own step 2, notepad and stop are both 5, keys is 8', () => {
-  assert.deepEqual(GUIDE_STEP_NUMBER, { start: 1, overlay: 2, answer: 3, screenshot: 4, notepad: 5, stop: 5, notes: 6, plans: 7, keys: 8 });
-  assert.equal(GUIDE_STEP_COUNT, 8);
+test('GUIDE_STEP_NUMBER: 14 steps; plans and own keys share the last', () => {
+  assert.deepEqual(GUIDE_STEP_NUMBER, {
+    start: 1, overlay: 2, answer: 3, screenshot: 4, stop: 5, notes: 6, surface: 7,
+    start2: 8, notepad: 9, ask: 10, recipe: 11, stop2: 12, notes2: 13, plans: 14, keys: 14,
+  });
+  assert.equal(GUIDE_STEP_COUNT, 14);
 });
 
 test('windowForStep maps every step', () => {
   assert.deepEqual(
-    ['start', 'overlay', 'answer', 'screenshot', 'notepad', 'stop', 'notes', 'plans', 'keys'].map(windowForStep),
-    ['launcher', 'overlay', 'overlay', 'overlay', 'notes', 'overlay', 'launcher', 'settings', 'settings'],
+    ['start', 'overlay', 'answer', 'screenshot', 'stop', 'notes', 'surface', 'start2', 'notepad', 'ask', 'recipe', 'stop2', 'notes2', 'plans', 'keys'].map(windowForStep),
+    ['launcher', 'overlay', 'overlay', 'overlay', 'overlay', 'launcher', 'settings', 'launcher', 'notes', 'notes', 'notes', 'notes', 'launcher', 'settings', 'settings'],
   );
+});
+
+test('the switch moves on only from its own step, and only to the notepad', () => {
+  const at = walk(started(), ...MEETING_1);
+  assert.equal(at.step, 'surface');
+  assert.equal(reduceGuide(at, { type: 'surface_notepad' }, T).step, 'start2');
+  const early = started();
+  assert.equal(reduceGuide(early, { type: 'surface_notepad' }, T), early);
 });
 
 test('unknown events are no-ops', () => {
@@ -153,8 +177,9 @@ test('unknown events are no-ops', () => {
 });
 
 test('GUIDE_EVENT_TYPES lists every event the reducer understands (main validates against it)', () => {
-  assert.deepEqual([...GUIDE_EVENT_TYPES].sort(), ['answer_shown', 'keys_done', 'meeting_started', 'meeting_stopped', 'note_typed',
-    'notes_next', 'overlay_next', 'own_keys', 'plan_changed', 'plans_closed', 'restart', 'screenshot_taken', 'skip', 'trial_out', 'trial_unavailable']);
+  // surface_notepad and meeting_saved are main's own: a window may not claim them.
+  assert.deepEqual([...GUIDE_EVENT_TYPES].sort(), ['answer_shown', 'ask_opened', 'keys_done', 'meeting_started', 'meeting_stopped', 'note_typed',
+    'notes_next', 'overlay_next', 'own_keys', 'plan_changed', 'plans_closed', 'recipe_run', 'restart', 'screenshot_taken', 'skip', 'trial_out', 'trial_unavailable']);
 });
 
 // Evin, 2026-11-15, on a Natively API profile whose free trial was used long

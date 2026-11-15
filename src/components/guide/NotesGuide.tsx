@@ -1,8 +1,10 @@
-// First-run guide, notes window: step 5 and the stop prompt that follows it.
-// Drawn as the notes window's own raised pill in its bottom bar (np-elevated,
-// the look of the "Natively stops in 1 minute" notice), just above the Stop
-// button, which the stop prompt lights. The window is no-activate on Windows
-// (PR #709) and sits beside the user's call: nothing here takes focus.
+// First-run guide, notes window: meeting 2, the notepad's (Evin, 2026-11-15:
+// "shown how recipes and meeting notepad work"). Step 9 types a line, step 10
+// opens Ask, step 11 runs a recipe, step 12 stops so the notes follow. Drawn as
+// the notes window's own raised pill in its bottom bar (np-elevated, the look of
+// the "Natively stops in 1 minute" notice), lighting the control each step is
+// about. The window is no-activate on Windows (PR #709) and sits beside the
+// user's call: nothing here takes focus.
 import React, { useCallback, useRef } from 'react';
 import { Check, X } from 'lucide-react';
 import { useT } from '../../i18n';
@@ -12,24 +14,54 @@ import './guide.css';
 
 const ink = (v: string): React.CSSProperties => ({ color: `var(${v})` });
 
-export function useNotesGuide(): { node: React.ReactNode; onTyped: (next: string) => void } {
+type NotesStep = 'notepad' | 'ask' | 'recipe' | 'stop2';
+
+/** The control each step lights. */
+const LIT: Record<NotesStep, string | null> = {
+  notepad: null,
+  ask: '[data-guide="notes-ask"]',
+  recipe: '[data-guide="notes-recipes"]',
+  stop2: '[data-guide="notes-stop"]',
+};
+
+export interface NotesGuide {
+  node: React.ReactNode;
+  /** The notes text changed (step 9 moves on at the first real line). */
+  onTyped: (next: string) => void;
+  /** Ask opened (step 10). */
+  onAskOpened: () => void;
+  /** A recipe ran, from a chip, All recipes or "/" (step 11). */
+  onRecipeRun: () => void;
+}
+
+export function useNotesGuide(): NotesGuide {
   const tr = useT();
   const { state, justDone, dispatch } = useGuide();
-  const onNotepad = guideOn(state, 'notepad') && !justDone;
-  const onNotepadRef = useRef(onNotepad);
-  onNotepadRef.current = onNotepad;
-  const onStop = guideOn(state, 'stop') && !justDone;
-  useGuideLit(onStop ? '[data-guide="notes-stop"]' : null);
+  const step: NotesStep | null = (['notepad', 'ask', 'recipe', 'stop2'] as const).find((s) => guideOn(state, s)) ?? null;
+  const live = step && !justDone ? step : null;
+  const liveRef = useRef(live);
+  liveRef.current = live;
+  useGuideLit(live ? LIT[live] : null);
 
-  // The first real line typed moves the guide on; once is enough (the reducer
-  // ignores repeats, this just keeps keystrokes off IPC).
+  // Each moves the guide once (the reducer ignores repeats; this keeps
+  // keystrokes and re-renders off IPC).
   const onTyped = useCallback((next: string) => {
-    if (!onNotepadRef.current || !next.trim()) return;
-    onNotepadRef.current = false;
+    if (liveRef.current !== 'notepad' || !next.trim()) return;
+    liveRef.current = null;
     dispatch({ type: 'note_typed' });
   }, [dispatch]);
+  const onAskOpened = useCallback(() => {
+    if (liveRef.current !== 'ask') return;
+    liveRef.current = null;
+    dispatch({ type: 'ask_opened' });
+  }, [dispatch]);
+  const onRecipeRun = useCallback(() => {
+    if (liveRef.current !== 'recipe') return;
+    liveRef.current = null;
+    dispatch({ type: 'recipe_run' });
+  }, [dispatch]);
 
-  const pill = (stepId: 'notepad' | 'stop', title: string, body: string) => {
+  const pill = (stepId: NotesStep, title: string, body: string) => {
     const count = tr('{n} of {total}')
       .replace('{n}', String(GUIDE_STEP_NUMBER[stepId]))
       .replace('{total}', String(GUIDE_STEP_COUNT));
@@ -64,10 +96,14 @@ export function useNotesGuide(): { node: React.ReactNode; onTyped: (next: string
   };
 
   let node: React.ReactNode = null;
-  if (guideOn(state, 'notepad')) {
+  if (step === 'notepad') {
     node = pill('notepad', tr('Write while you talk.'), tr('Jot a line. It goes into your meeting notes.'));
-  } else if (guideOn(state, 'stop')) {
-    node = pill('stop', tr('Stop the meeting when you’re ready.'), tr('Natively writes up your notes as soon as it stops.'));
+  } else if (step === 'ask') {
+    node = pill('ask', tr('Ask about the meeting.'), tr('Click Ask anything. It knows everything said so far.'));
+  } else if (step === 'recipe') {
+    node = pill('recipe', tr('Try a recipe.'), tr('Recipes are ready-made asks. Pick one, or type / to see them all.'));
+  } else if (step === 'stop2') {
+    node = pill('stop2', tr('Stop the meeting when you’re ready.'), tr('Natively writes up your notes as soon as it stops.'));
   }
-  return { node, onTyped };
+  return { node, onTyped, onAskOpened, onRecipeRun };
 }

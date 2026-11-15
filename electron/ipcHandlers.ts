@@ -14,7 +14,7 @@ import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import { resolveMacScreenStatus } from '../src/lib/permissionAttentionPolicy.mjs';
 import { applyPermissionsCardEvent, normalizePermissionsCardRecord } from '../src/lib/permissionsCardPolicy.mjs';
 import { guideFactsFromSources } from '../src/lib/onboarding/firstRunGuide.mjs';
-import { configureGuideStore, dispatchGuideFromWindow, getGuideState, guideScreenshotTaken } from './services/firstRunGuideStore';
+import { configureGuideStore, dispatchGuideFromWindow, getGuideState, guideScreenshotTaken, guideSurfaceSet } from './services/firstRunGuideStore';
 import { hasOwnAiKey, resolveExpiredTrial } from '../src/lib/trialPolicy.mjs';
 import { CARDS, OUTCOMES } from '../src/lib/cards/cardPolicy.mjs';
 import { TRIAL_CAMPAIGN, TRIAL_PROMO_ID, runTrialCampaignReset } from '../src/lib/trialCampaign.mjs';
@@ -9466,11 +9466,14 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasOwnAiKey: hasOwnAiKey(cm.getAllCredentials(), { codexReady: codexRouteReady() }),
       });
     },
-    // Step 5 is the notepad on its own: the overlay steps are done (main.ts).
-    // After the overlay's one-second green tick (useGuide's hold), if still there.
+    // Two meetings (Evin, 2026-11-15): the first is the overlay's, the second
+    // the notepad's, picked by the user in Settings › Overlay at step 7. The
+    // guide sets the overlay as it starts and puts it back when it ends.
+    onGuideStart: () => { SettingsManager.getInstance().set('meetingSurface', 'overlay'); },
+    onGuideEnd: () => { SettingsManager.getInstance().set('meetingSurface', 'overlay'); },
+    // Step 7 with the notepad already chosen: nothing to switch, go on.
     onEnterStep: (step) => {
-      if (step !== 'notepad') return;
-      setTimeout(() => { const g = getGuideState(); if (g.status === 'active' && g.step === 'notepad') appState.showNotepadForGuide(); }, 1000);
+      if (step === 'surface' && normalizeMeetingSurface(SettingsManager.getInstance().get('meetingSurface')) === 'notepad') guideSurfaceSet('notepad');
     },
   });
   safeHandle('guide:get', async () => getGuideState());
@@ -17893,6 +17896,8 @@ export function initializeIpcHandlers(appState: AppState): void {
     const before = normalizeMeetingSurface(SettingsManager.getInstance().get('meetingSurface'));
     if (!SettingsManager.getInstance().set('meetingSurface', surface)) return { success: false, error: 'settings_store_degraded' };
     try { funnelTelemetry.meetingSurfaceSet(before, surface); } catch { /* analytics only */ }
+    // First-run guide step 7 asks for the notepad.
+    guideSurfaceSet(surface);
     return { success: true };
   });
   safeHandle('live-notes:get-state', async () => appState.getLiveNotes().getState());

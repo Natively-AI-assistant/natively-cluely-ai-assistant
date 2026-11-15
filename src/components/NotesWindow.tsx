@@ -227,6 +227,9 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     const editorRef = useRef<NotesEditorHandle>(null);
     // The first-run guide's notepad step (guide/NotesGuide.tsx).
     const notesGuide = useNotesGuide();
+    // runRecipe is declared before the guide's callbacks settle; read the latest.
+    const guideRecipeRunRef = useRef(notesGuide.onRecipeRun);
+    guideRecipeRunRef.current = notesGuide.onRecipeRun;
     const askRef = useRef<HTMLInputElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
     const transcriptRef = useRef<HTMLDivElement>(null);
@@ -574,6 +577,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     const runRecipe = useCallback((recipe: NoteRecipe, extra = '') => {
         if (turnsRef.current.some((t) => t.status === 'streaming')) return;
         npTrack('recipe', recipe.id);
+        guideRecipeRunRef.current();
         setAllRecipes(false);
         setAsk('');
         setRecentRecipes(rememberRecipe(recipe.id));
@@ -950,6 +954,8 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     // After Stop the notepad keeps Ask (Granola's chat on a finished note), without the listening pill.
     const askBar = phase === 'live' || (phase === 'ended' && !!meetingId && !preview);
     const askOpen = askBar && askEngaged;
+    // First-run guide step 10: Ask opened.
+    useEffect(() => { if (askOpen && phase === 'live') notesGuide.onAskOpened(); }, [askOpen, phase, notesGuide.onAskOpened]);
     const bars = useMemo(() => (level === null || paused ? null : listeningBarHeights(level * 3.2)), [level, paused]);
     // The floating panel: what fills it, kept on through the closing spring, and how tall.
     const panelKind: 'transcript' | 'ask' | null = phase === 'live' ? (showTranscript ? 'transcript' : askOpen ? 'ask' : null) : askOpen ? 'ask' : null;
@@ -1373,7 +1379,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                                 </button>
                             </div>
                         )}
-                        {/* The first-run guide's notepad and stop steps (guide/NotesGuide.tsx),
+                        {/* The first-run guide's notepad steps, 9 to 12 (guide/NotesGuide.tsx),
                             just above the Stop button; the auto-stop notice wins. */}
                         {phase === 'live' && stopsAt === null && notesGuide.node}
                         {phase === 'live' && problem && stopsAt === null && (
@@ -1605,6 +1611,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                                     ) : contentKind === 'ask' ? (
                                         /* Granola's recipe row: two recipes, All recipes at the end, 24px chips of 12px. */
                                         <motion.div
+                                            data-guide="notes-recipes"
                                             className="relative px-4 pt-[7px] pb-[3px] flex items-center gap-0.5"
                                             aria-label="Recipes"
                                             initial={{ opacity: 0, y: 4 }}
@@ -1699,6 +1706,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                                                 )}
                                             </AnimatePresence>
                                             <motion.form
+                                                data-guide="notes-ask"
                                                 className={`np-ask ${askOpen ? '' : 'np-elevated np-glow '}[grid-area:1/1] w-full min-w-0 h-14 flex items-center rounded-[28px]`}
                                                 inert={showTranscript}
                                                 aria-hidden={showTranscript || undefined}

@@ -1,7 +1,8 @@
-// First-run guide, launcher window: step 1 (Start Natively) and step 6 (the
-// finished meeting), the meeting and trial events the guide moves on, and the
-// hand-off to Settings for steps 6 and 7. The overlay, notes window and Settings
-// draw their own steps (src/components/guide/*).
+// First-run guide, launcher window: the two Starts (step 1, the overlay
+// meeting; step 8, the notepad meeting), the two finished meetings (steps 6
+// and 13), the meeting and trial events the guide moves on, and the hand-off
+// to Settings (step 7, Settings › Overlay; the last step, Plans or keys). The
+// overlay, notes window and Settings draw their own steps (src/components/guide/*).
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '../../i18n';
@@ -12,21 +13,28 @@ import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { guideOn, useAnchorRect, useGuide } from './useGuide';
 
-/** The control each launcher-side step points at (steps 6 and 7 live in Settings, in this window). */
+/** The control each launcher-side step points at (Settings opens in this window). */
 const STEP_ANCHOR: Partial<Record<string, string>> = {
   notes: '[data-guide="meeting-tabs"]',
+  surface: '[data-guide="surface-switch"]',
+  start2: '[data-guide="start"]',
+  notes2: '[data-guide="meeting-tabs"]',
   plans: '[data-guide="nav-plans"]',
   keys: '[data-guide="nav-ai-providers"]',
 };
+/** The Settings tab each Settings-side step opens. */
+const SETTINGS_TAB: Partial<Record<string, string>> = { surface: 'overlay', plans: 'plans', keys: 'ai-providers' };
 /** How long a step's control may be off screen before the way back shows. */
 const OFF_SCREEN_MS = 1200;
 
 interface Props {
   onOpenSettings: (tab: string) => void;
   onOpenMeeting: (id: string) => void;
+  /** Settings closed and the Launcher back on Home (step 8's Start button). */
+  onShowHome: () => void;
 }
 
-export const LauncherGuide: React.FC<Props> = ({ onOpenSettings, onOpenMeeting }) => {
+export const LauncherGuide: React.FC<Props> = ({ onOpenSettings, onOpenMeeting, onShowHome }) => {
   const tr = useT();
   const { state, justDone, dispatch } = useGuide();
   const active = state?.status === 'active';
@@ -68,25 +76,35 @@ export const LauncherGuide: React.FC<Props> = ({ onOpenSettings, onOpenMeeting }
     return () => { off?.(); };
   }, [active, dispatch]);
 
-  // Step 5: open the meeting main saved when the first meeting ended
+  // Steps 6 and 13: open the meeting main saved when a guide meeting ended
   // (meeting_saved), once per meeting.
+  const onNotes = step === 'notes' || step === 'notes2';
   const endedMeetingId = state?.endedMeetingId ?? null;
   const openedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (step !== 'notes' || justDone || !endedMeetingId || openedFor.current === endedMeetingId) return;
+    if (!onNotes || justDone || !endedMeetingId || openedFor.current === endedMeetingId) return;
     openedFor.current = endedMeetingId;
     onOpenMeeting(endedMeetingId);
-  }, [step, justDone, endedMeetingId, onOpenMeeting]);
+  }, [onNotes, justDone, endedMeetingId, onOpenMeeting]);
 
-  // Steps 7 and 8 live in Settings: open the right tab once per step.
+  // Settings-side steps: open the right tab once per step.
   const openedSettings = useRef<string | null>(null);
   useEffect(() => {
-    if ((step !== 'plans' && step !== 'keys') || justDone) return;
+    const tab = step ? SETTINGS_TAB[step] : undefined;
+    if (!tab || justDone) return;
     const key = `${step}:${state?.updatedAt ?? 0}`;
     if (openedSettings.current === key) return;
     openedSettings.current = key;
-    onOpenSettings(step === 'plans' ? 'plans' : 'ai-providers');
+    onOpenSettings(tab);
   }, [step, justDone, state?.updatedAt, onOpenSettings]);
+
+  // Step 8: Settings closed, back on Home where Start Natively is, once.
+  const homeFor = useRef<number | null>(null);
+  useEffect(() => {
+    if (step !== 'start2' || justDone || homeFor.current === (state?.updatedAt ?? 0)) return;
+    homeFor.current = state?.updatedAt ?? 0;
+    onShowHome();
+  }, [step, justDone, state?.updatedAt, onShowHome]);
 
   const skip = () => dispatch({ type: 'skip' });
 
@@ -98,14 +116,15 @@ export const LauncherGuide: React.FC<Props> = ({ onOpenSettings, onOpenMeeting }
   const [offScreen, setOffScreen] = useState(false);
   useEffect(() => {
     setOffScreen(false);
-    if (!anchor || anchorRect || (step === 'notes' && !endedMeetingId)) return;
+    if (!anchor || anchorRect || (onNotes && !endedMeetingId)) return;
     const timer = setTimeout(() => setOffScreen(true), OFF_SCREEN_MS);
     return () => clearTimeout(timer);
-  }, [anchor, anchorRect, step, endedMeetingId]);
+  }, [anchor, anchorRect, onNotes, endedMeetingId]);
   const resume = () => {
-    if (step === 'notes' && endedMeetingId) onOpenMeeting(endedMeetingId);
-    else if (step === 'plans') onOpenSettings('plans');
-    else if (step === 'keys') onOpenSettings('ai-providers');
+    const tab = step ? SETTINGS_TAB[step] : undefined;
+    if (onNotes && endedMeetingId) onOpenMeeting(endedMeetingId);
+    else if (step === 'start2') onShowHome();
+    else if (tab) onOpenSettings(tab);
   };
 
   if (guideOn(state, 'start')) {
@@ -133,6 +152,36 @@ export const LauncherGuide: React.FC<Props> = ({ onOpenSettings, onOpenMeeting }
         stepId="notes"
         title={tr('Your meeting, written up.')}
         body={tr('The summary and the full transcript are saved here. Find them any time on Home.')}
+        action={{ label: tr('Next'), onClick: () => dispatch({ type: 'notes_next' }) }}
+        done={justDone}
+        onSkip={skip}
+      />
+    );
+  }
+
+  if (guideOn(state, 'start2')) {
+    return (
+      <GuideCard
+        anchor='[data-guide="start"]'
+        width={330}
+        stepId="start2"
+        title={tr('Start Natively again.')}
+        body={tr('This time your meeting opens in the notepad.')}
+        waiting={tr('Waiting for you')}
+        done={justDone}
+        onSkip={skip}
+      />
+    );
+  }
+
+  if (guideOn(state, 'notes2')) {
+    return (
+      <GuideCard
+        anchor='[data-guide="meeting-tabs"]'
+        width={340}
+        stepId="notes2"
+        title={tr('Your notepad meeting, written up.')}
+        body={tr('Your notes, the summary and Ask’s answers are saved together. Find them any time on Home.')}
         action={{ label: tr('Next'), onClick: () => dispatch({ type: 'notes_next' }) }}
         done={justDone}
         onSkip={skip}

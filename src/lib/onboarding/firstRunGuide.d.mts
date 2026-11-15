@@ -1,4 +1,8 @@
-export type GuideStepId = 'start' | 'overlay' | 'answer' | 'screenshot' | 'notepad' | 'stop' | 'notes' | 'plans' | 'keys';
+export type GuideStepId =
+  | 'start' | 'overlay' | 'answer' | 'screenshot' | 'stop' | 'notes'
+  | 'surface'
+  | 'start2' | 'notepad' | 'ask' | 'recipe' | 'stop2' | 'notes2'
+  | 'plans' | 'keys';
 export type GuideStatus = 'idle' | 'active' | 'skipped' | 'finished' | 'expired';
 export type GuideVariant = 'normal' | 'trial_out' | 'no_trial';
 export type GuideWindow = 'launcher' | 'overlay' | 'notes' | 'settings';
@@ -10,7 +14,7 @@ export interface GuideState {
   outcome: 'bought' | 'own_keys' | null;
   startedAt: number | null;
   updatedAt: number | null;
-  /** The meeting main saved when the first meeting ended (step 5 opens it). */
+  /** The meeting main saved when a guide meeting ended (its notes step opens it). */
   endedMeetingId: string | null;
 }
 
@@ -30,6 +34,10 @@ export type GuideEvent =
   | { type: 'meeting_stopped' }
   | { type: 'overlay_next' }
   | { type: 'notes_next' }
+  | { type: 'ask_opened' }
+  | { type: 'recipe_run' }
+  /** Main's own: the meeting surface was set to the notepad (step 7). */
+  | { type: 'surface_notepad' }
   | { type: 'trial_out'; facts?: GuideFacts }
   | { type: 'trial_unavailable'; facts?: GuideFacts }
   /** Main replaces the facts with its own (services/firstRunGuideStore.ts). */

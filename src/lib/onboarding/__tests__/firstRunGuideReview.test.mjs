@@ -11,9 +11,11 @@ const T = 1_000;
 const facts = { hasOwnAiKey: false, hasNativelyKey: false, isPremium: false, launchCount: 1 };
 const walk = (s, ...types) => types.reduce((acc, type) => reduceGuide(acc, { type }, T), s);
 const started = () => reduceGuide(emptyGuideState(), { type: 'restart' }, T);
-const atStop = () => walk(started(), 'meeting_started', 'overlay_next', 'answer_shown', 'screenshot_taken', 'note_typed');
+const atStop = () => walk(started(), 'meeting_started', 'overlay_next', 'answer_shown', 'screenshot_taken');
 const atNotes = () => walk(atStop(), 'meeting_stopped');
-const atPlans = () => walk(atNotes(), 'notes_next');
+const atStop2 = () => walk(atNotes(), 'notes_next', 'surface_notepad', 'meeting_started', 'note_typed', 'ask_opened', 'recipe_run');
+const atNotes2 = () => walk(atStop2(), 'meeting_stopped');
+const atPlans = () => walk(atNotes2(), 'notes_next');
 
 // Critical 1: a running trial stores a placeholder Natively key; it is not a purchase.
 test('the trial placeholder key is not a Natively key', () => {
@@ -34,8 +36,13 @@ test('meeting_saved records the ended meeting; with none, step 5 is skipped', ()
   const early = reduceGuide(atStop(), { type: 'meeting_saved', meetingId: 'm-42' }, T);
   assert.deepEqual([early.step, early.endedMeetingId], ['notes', 'm-42']);
   const none = reduceGuide(atNotes(), { type: 'meeting_saved', meetingId: null }, T);
-  assert.equal(none.step, 'plans', 'nothing was saved, so there are no notes to show');
-  assert.equal(reduceGuide(atPlans(), { type: 'meeting_saved', meetingId: 'm-9' }, T).endedMeetingId, null, 'a later meeting does not touch step 6');
+  assert.equal(none.step, 'surface', 'nothing was saved, so on to the switch');
+  // The notepad meeting: its own notes step, else on to Plans.
+  const second = reduceGuide(atStop2(), { type: 'meeting_saved', meetingId: 'm-43' }, T);
+  assert.deepEqual([second.step, second.endedMeetingId], ['notes2', 'm-43']);
+  assert.equal(reduceGuide(atNotes2(), { type: 'meeting_saved', meetingId: null }, T).step, 'plans');
+  const plans = atPlans();
+  assert.equal(reduceGuide(plans, { type: 'meeting_saved', meetingId: 'm-9' }, T), plans, 'a later meeting does not touch the guide');
   assert.equal(started().endedMeetingId, null);
   assert.equal(emptyGuideState().endedMeetingId, null);
 });
@@ -58,6 +65,10 @@ test('reconcile at launch: an in-meeting step with no meeting goes to the notes 
   for (const s of [walk(started(), 'meeting_started'), atStop()]) {
     assert.equal(reconcileGuide(s, { meetingActive: false, atLaunch: true }, T).step, 'notes');
   }
+  assert.equal(reconcileGuide(atStop2(), { meetingActive: false, atLaunch: true }, T).step, 'notes2');
+  // Step 8 during a meeting moves to the notepad, as step 1 moves to the overlay.
+  const s2 = walk(atNotes(), 'notes_next', 'surface_notepad');
+  assert.equal(reconcileGuide(s2, { meetingActive: true, atLaunch: false }, T).step, 'notepad');
   const mid = walk(started(), 'meeting_started');
   assert.equal(reconcileGuide(mid, { meetingActive: false, atLaunch: false }, T), mid, 'only at launch: a stop is reported by the launcher');
   assert.equal(reconcileGuide(mid, { meetingActive: true, atLaunch: true }, T), mid);
@@ -94,6 +105,6 @@ test('meeting_saved with no id leaves a notes step that already has its meeting'
   const withMeeting = reduceGuide(walk(atStop(), 'meeting_stopped'), { type: 'meeting_saved', meetingId: 'm1' }, T);
   assert.deepEqual([withMeeting.step, withMeeting.endedMeetingId], ['notes', 'm1']);
   assert.equal(reduceGuide(withMeeting, { type: 'meeting_saved', meetingId: null }, T + 1), withMeeting);
-  // Nothing saved at all still moves on to Plans.
-  assert.equal(reduceGuide(walk(atStop(), 'meeting_stopped'), { type: 'meeting_saved', meetingId: null }, T).step, 'plans');
+  // Nothing saved at all still moves on (to the switch, after the first meeting).
+  assert.equal(reduceGuide(walk(atStop(), 'meeting_stopped'), { type: 'meeting_saved', meetingId: null }, T).step, 'surface');
 });

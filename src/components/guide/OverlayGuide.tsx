@@ -1,14 +1,13 @@
-// First-run guide, overlay window: step 2 (the meeting overlay itself), step 3
-// (What to answer) and step 4 (screenshots). Step 5 is the notepad alone: main
-// hides the overlay and opens it (main.ts showNotepadForGuide). Should the user
-// bring the overlay back, it offers "Open notepad" or the stop prompt while the
-// notepad is closed, never beside it. Each is the
+// First-run guide, overlay window: meeting 1 (Evin, 2026-11-15: the first
+// meeting is the overlay's, the second the notepad's). Step 2 (the meeting
+// overlay itself), step 3 (What to answer), step 4 (screenshots) and step 5
+// (stop, so its notes follow). Each is the
 // overlay's own banner (ui/OverlayBanner.tsx) in a periwinkle guide tone, in a
 // banner fold of NativelyInterface.tsx: the overlay grows to hold it and the
 // banner picker can hold it back for a fault. It never takes focus: the user's
 // call stays in front.
 import React, { useEffect, useState } from 'react';
-import { AppWindow, Camera, Check, CircleStop, NotebookPen, Pencil } from 'lucide-react';
+import { AppWindow, Camera, Check, CircleStop, Pencil } from 'lucide-react';
 import { useT } from '../../i18n';
 import { GUIDE_STEP_COUNT, GUIDE_STEP_NUMBER } from '../../lib/onboarding/firstRunGuide.mjs';
 import type { GuideStepId } from '../../lib/onboarding/firstRunGuide.mjs';
@@ -27,16 +26,6 @@ export function useOverlayGuide(): { wants: boolean; node: React.ReactNode } {
   const step = active ? state!.step : null;
   const keysFor = useGuideKeys(step === 'answer' || step === 'screenshot');
   useGuideLit(step === 'answer' && !justDone ? '[data-guide="what-to-answer"]' : null);
-
-  // Whether the notes window is open: step 5 is drawn there when it is.
-  const [notesOpen, setNotesOpen] = useState(false);
-  useEffect(() => {
-    if (!active) return;
-    let alive = true;
-    window.electronAPI?.notesWindowIsOpen?.().then((open) => { if (alive) setNotesOpen(!!open); }).catch(() => {});
-    const off = window.electronAPI?.onNotesWindowVisibility?.((open) => setNotesOpen(!!open));
-    return () => { alive = false; off?.(); };
-  }, [active]);
 
   // Has anyone said anything yet? Until then step 3 says how to get a question.
   const [heard, setHeard] = useState(false);
@@ -146,22 +135,7 @@ export function useOverlayGuide(): { wants: boolean; node: React.ReactNode } {
     };
   }
 
-  if (guideOn(state, 'notepad') && !notesOpen) {
-    return {
-      wants: true,
-      node: banner(
-        'notepad',
-        <NotebookPen strokeWidth={2.2} />,
-        tr('Write while you talk.'),
-        tr('Jot a line. It goes into your meeting notes.'),
-        <OverlayBannerButton variant="primary" onClick={() => { void window.electronAPI?.notesWindowToggle?.(); }}>
-          {tr('Open notepad')}
-        </OverlayBannerButton>,
-      ),
-    };
-  }
-
-  if (guideOn(state, 'stop') && !notesOpen) {
+  if (guideOn(state, 'stop')) {
     return {
       wants: true,
       node: banner(

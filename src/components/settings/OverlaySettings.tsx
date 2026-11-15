@@ -451,6 +451,7 @@ const SurfaceSwitch: React.FC<{ value: Surface; onChange: (s: Surface) => void; 
     return (
         <div className="flex justify-center">
             <div
+                data-guide="surface-switch"
                 role="radiogroup"
                 aria-label={t('What meetings open')}
                 onKeyDown={onKeyDown}

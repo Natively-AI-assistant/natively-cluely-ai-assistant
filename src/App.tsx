@@ -358,6 +358,11 @@ const App: React.FC = () => {
     setIsSettingsOpen(false);
     setLauncherRequest({ kind: 'meeting', id, seq: Date.now() });
   }, []);
+  // The first-run guide's step 8: Settings closed, the Launcher back on Home.
+  const openLauncherHome = useCallback(() => {
+    setIsSettingsOpen(false);
+    setLauncherRequest({ kind: 'home', seq: Date.now() });
+  }, []);
   // The notes window's "Open meeting" after Stop (main sends it to the launcher only).
   useEffect(() => {
     const off = window.electronAPI?.onLauncherOpenMeeting?.((id) => { if (id) openLauncherMeeting(id); });
@@ -1591,7 +1596,7 @@ const App: React.FC = () => {
         )}
         {/* The first-run guide's launcher steps (1 and 5), after the Plans card. */}
         {!isolateOnboarding && showWelcome === false && (isLauncherWindow || isDefault) && (
-          <LauncherGuide onOpenSettings={openSettingsExclusive} onOpenMeeting={openLauncherMeeting} />
+          <LauncherGuide onOpenSettings={openSettingsExclusive} onOpenMeeting={openLauncherMeeting} onShowHome={openLauncherHome} />
         )}
 
 

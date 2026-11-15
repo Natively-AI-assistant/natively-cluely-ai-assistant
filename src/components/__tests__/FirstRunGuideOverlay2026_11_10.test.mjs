@@ -22,7 +22,7 @@ test('OverlayGuide reports answers and screenshots and teaches the real keys', (
   const g = read('src/components/guide/OverlayGuide.tsx');
   for (const s of ["type: 'answer_shown'", "type: 'screenshot_taken'", 'onIntelligenceSuggestedAnswer', 'onIntelligenceManualResult',
     'onScreenshotTaken', 'onScreenshotAttached', "'chat:whatToAnswer'", "'general:take-screenshot'", "'general:selective-screenshot'",
-    '[data-guide="what-to-answer"]', 'notesWindowToggle', "'Not on a call? Play any interview video, or ask a question out loud.'",
+    '[data-guide="what-to-answer"]', "'Not on a call? Play any interview video, or ask a question out loud.'",
     "'They just asked you something.'", "'Show Natively your screen.'", "'Stop the meeting when you’re ready.'"]) {
     assert.ok(g.includes(s), s);
   }
@@ -104,3 +104,25 @@ test('the launcher and Settings steps are a tip that points at its control', () 
   }
   assert.ok(!fs.existsSync(path.join(ROOT, 'src/components/guide/guideStyle.tsx')), 'the old accent module is gone');
 });
+
+// Meeting 2 is the notepad's: type, Ask, a recipe, stop. Each lights the real
+// control and moves on from what the notes window really did.
+test('the notepad steps light Ask, the recipes and Stop, and move on from the real thing', () => {
+  const g = read('src/components/guide/NotesGuide.tsx');
+  for (const s of ['[data-guide="notes-ask"]', '[data-guide="notes-recipes"]', '[data-guide="notes-stop"]',
+    "type: 'note_typed'", "type: 'ask_opened'", "type: 'recipe_run'"]) assert.ok(g.includes(s), s);
+  const w = read('src/components/NotesWindow.tsx');
+  assert.ok(w.includes('data-guide="notes-ask"') && w.includes('data-guide="notes-recipes"'), 'the anchors exist');
+  assert.ok(/npTrack\('recipe', recipe\.id\);\n\s+guideRecipeRunRef\.current\(\);/.test(w), 'every recipe run reports, chip, All recipes or /');
+  assert.ok(w.includes("if (askOpen && phase === 'live') notesGuide.onAskOpened();"), 'Ask opening reports');
+  assert.ok(read('src/components/settings/OverlaySettings.tsx').includes('data-guide="surface-switch"'), 'step 7 points at the switch');
+});
+
+test('the launcher has the second Start and the notepad meeting\'s notes, and goes Home for it', () => {
+  const l = read('src/components/guide/LauncherGuide.tsx');
+  for (const s of ['stepId="start2"', 'stepId="notes2"', "surface: 'overlay'", 'onShowHome();']) assert.ok(l.includes(s), s);
+  const launcher = read('src/components/Launcher.tsx');
+  assert.ok(launcher.includes("| { kind: 'home'; seq: number }") && launcher.includes("request.kind === 'home'"));
+  assert.ok(read('src/App.tsx').includes('onShowHome={openLauncherHome}'));
+});
+

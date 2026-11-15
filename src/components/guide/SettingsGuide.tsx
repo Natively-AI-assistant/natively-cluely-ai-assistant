@@ -1,5 +1,6 @@
-// First-run guide, Settings: step 7 (Plans & Billing) and step 8 (the user's
-// own keys). Step 6 reads the real trial status so it never says more than is
+// First-run guide, Settings: step 7 (Settings › Overlay: pick the notepad for
+// meeting 2) and the last step (Plans & Billing, or the user's own keys).
+// Plans reads the real trial status so it never says more than is
 // true; buying a plan or saving keys moves the guide on by itself
 // (src/lib/onboarding/firstRunGuide.mjs decides what each purchase means).
 import React, { useCallback, useEffect, useState } from 'react';
@@ -13,6 +14,7 @@ type TrialLeft = { ms: number | null; over: boolean };
 export const SettingsGuide: React.FC = () => {
   const tr = useT();
   const { state, justDone, dispatch } = useGuide();
+  const onSurface = guideOn(state, 'surface');
   const onPlans = guideOn(state, 'plans');
   const onKeys = guideOn(state, 'keys');
   const finishedBought = state?.status === 'finished' && state.outcome === 'bought';
@@ -81,6 +83,23 @@ export const SettingsGuide: React.FC = () => {
   }, [finishedBought, state?.updatedAt]);
 
   const skip = () => dispatch({ type: 'skip' });
+
+  // Step 7: picking Notepad on the switch moves the guide (main hears the
+  // setting change itself: firstRunGuideStore guideSurfaceSet).
+  if (onSurface) {
+    return (
+      <GuideCard
+        anchor='[data-guide="surface-switch"]'
+        width={320}
+        stepId="surface"
+        title={tr('Now try the notepad.')}
+        body={tr('Pick Notepad. Your next meeting opens there: write while you talk, and Ask with recipes.')}
+        waiting={tr('Waiting for you')}
+        done={justDone}
+        onSkip={skip}
+      />
+    );
+  }
 
   if (thanks) {
     return (

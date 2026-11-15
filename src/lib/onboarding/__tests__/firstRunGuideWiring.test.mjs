@@ -46,25 +46,21 @@ test('the renderer ElectronAPI type declares the guide calls', () => {
 // other is shown". Steps 2-4 are the overlay; step 5 is the notepad ALONE: main
 // switches the running meeting to the notepad surface (the overlay held hidden,
 // as a notepad meeting starts), the same path on macOS and Windows.
-test('entering step 5 hands the meeting from the overlay to the notepad, in main', () => {
+// Evin, 2026-11-15: two meetings. Meeting 1 is the overlay's; at step 7 the
+// user picks the notepad in Settings › Overlay; meeting 2 is the notepad's.
+// The old step-5 hand-off (main hid the overlay mid-meeting) is gone.
+test('two meetings: the overlay first, the notepad picked in Settings, the overlay put back', () => {
   const store = read('electron/services/firstRunGuideStore.ts');
-  assert.ok(/onEnterStep\?: \(step: GuideStepId\) => void/.test(store), 'the store tells main which step it entered');
-  assert.ok(/next\.step !== current\.step[\s\S]{0,120}deps\.onEnterStep\?\.\(next\.step\)/.test(store), 'only on a real step change');
+  assert.ok(/export function guideSurfaceSet\(surface: 'overlay' \| 'notepad'\): void/.test(store), 'main hears the switch');
+  assert.ok(store.includes("g.step === 'surface') applyGuideEvent({ type: 'surface_notepad' })"), 'only step 7, only the notepad');
+  assert.ok(/if \(began\) deps\.onGuideStart\?\.\(\);/.test(store) && /if \(ended\) deps\.onGuideEnd\?\.\(\);/.test(store));
   const ipc = read('electron/ipcHandlers.ts');
-  const hook = ipc.slice(ipc.indexOf('onEnterStep: (step) => {'), ipc.indexOf('onEnterStep: (step) => {') + 260);
-  assert.ok(hook.includes("if (step !== 'notepad') return;"));
-  assert.ok(hook.includes("setTimeout(() => { const g = getGuideState(); if (g.status === 'active' && g.step === 'notepad') appState.showNotepadForGuide(); }, 1000);"), 'after the tick, only if still on step 5 (not skipped)');
-  const main = read('electron/main.ts');
-  const fn = main.slice(main.indexOf('public showNotepadForGuide(): void {'), main.indexOf('public showNotepadForGuide(): void {') + 900);
-  assert.ok(fn.length > 100, 'showNotepadForGuide exists');
-  assert.ok(fn.includes('if (!this.isMeetingActive) return;'), 'only during a meeting');
-  assert.ok(fn.includes("this.meetingSurface = 'notepad';"), '"Meeting ongoing" then brings back the notepad');
-  assert.ok(fn.includes("this.windowHelper.setWindowMode('overlay', true, { hidden: true });"), 'the overlay is held hidden, as a notepad meeting');
-  assert.ok(fn.includes('this.notesWindowHelper.open({ activate: false });'), 'the notepad opens without taking focus');
-  // The overlay no longer opens the notepad itself, and never draws a step the notepad is showing.
-  const ov = read('src/components/guide/OverlayGuide.tsx');
-  assert.ok(!ov.includes('openedForStep'), 'no renderer-side auto-open');
-  assert.ok(ov.includes("if (guideOn(state, 'stop') && !notesOpen)"), 'the stop prompt is the notepad\'s when it is open');
+  assert.ok(ipc.includes("onGuideStart: () => { SettingsManager.getInstance().set('meetingSurface', 'overlay'); },"), 'meeting 1 is the overlay');
+  assert.ok(ipc.includes("onGuideEnd: () => { SettingsManager.getInstance().set('meetingSurface', 'overlay'); },"), 'the overlay goes back at the end');
+  const setter = ipc.slice(ipc.indexOf("safeHandle('meeting-surface:set'"), ipc.indexOf("safeHandle('meeting-surface:set'") + 700);
+  assert.ok(setter.includes('guideSurfaceSet(surface);'), 'the Settings switch reports to the guide');
+  assert.ok(!read('electron/main.ts').includes('showNotepadForGuide'), 'no mid-meeting hand-off');
+  assert.ok(!read('src/components/guide/OverlayGuide.tsx').includes('notesWindowToggle'), 'the overlay no longer opens the notepad');
 });
 
 test('main judges the trial events with its own facts, like plan_changed', () => {

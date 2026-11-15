@@ -19,8 +19,12 @@ type GuideStoreDeps = {
   meetingActive: () => boolean;
   /** Facts from main's own sources: a window's facts are never trusted. */
   factsProvider: () => GuideFacts;
-  /** A step was entered (main moves windows for it: step 5 is the notepad alone). */
+  /** A step was entered. */
   onEnterStep?: (step: GuideStepId) => void;
+  /** The guide started (or restarted): meeting 1 is the overlay's. */
+  onGuideStart?: () => void;
+  /** The guide ended (finished or skipped): the overlay goes back (Evin, 2026-11-15). */
+  onGuideEnd?: () => void;
 };
 
 let deps: GuideStoreDeps = {
@@ -61,7 +65,7 @@ export function getGuideState(): GuideState {
 }
 
 /** An event from a window (validated) or from main itself. */
-export function applyGuideEvent(event: GuideEvent | { type: 'meeting_saved'; meetingId: string | null }): GuideState {
+export function applyGuideEvent(event: GuideEvent | { type: 'meeting_saved'; meetingId: string | null } | { type: 'surface_notepad' }): GuideState {
   const now = Date.now();
   const { state: current } = read(now);
   let reduced: GuideState;
@@ -83,8 +87,15 @@ export function applyGuideEvent(event: GuideEvent | { type: 'meeting_saved'; mee
   // One line per real move, so a support log shows how the guide got where it is.
   if (next !== current) console.log(`[Guide] ${event.type}: ${current.step}/${current.status} -> ${next.step}/${next.status}`);
   const saved = save(current, next);
-  if (next.status === 'active' && next.step !== current.step) {
-    try { deps.onEnterStep?.(next.step); } catch (e) { console.warn('[Guide] step hand-off failed:', (e as Error)?.message); }
+  if (saved !== next) return saved;
+  const began = next.status === 'active' && (current.status !== 'active' || event.type === 'restart');
+  const ended = current.status === 'active' && next.status !== 'active';
+  try {
+    if (began) deps.onGuideStart?.();
+    if (ended) deps.onGuideEnd?.();
+    if (next.status === 'active' && next.step !== current.step) deps.onEnterStep?.(next.step);
+  } catch (e) {
+    console.warn('[Guide] step hand-off failed:', (e as Error)?.message);
   }
   return saved;
 }
@@ -102,6 +113,20 @@ export function guideScreenshotTaken(): void {
     if (g.status === 'active' && g.step === 'screenshot') applyGuideEvent({ type: 'screenshot_taken' });
   } catch (e) {
     console.warn('[Guide] screenshot not reported:', (e as Error)?.message);
+  }
+}
+
+/**
+ * The meeting surface was set (Settings › Overlay's switch, meeting-surface:set).
+ * Step 7 asks for the notepad, so picking it moves the guide to step 8. Main's
+ * own event: a window may not claim the setting changed. Never throws.
+ */
+export function guideSurfaceSet(surface: 'overlay' | 'notepad'): void {
+  try {
+    const g = read(Date.now()).state;
+    if (surface === 'notepad' && g.status === 'active' && g.step === 'surface') applyGuideEvent({ type: 'surface_notepad' });
+  } catch (e) {
+    console.warn('[Guide] surface not reported:', (e as Error)?.message);
   }
 }
 
