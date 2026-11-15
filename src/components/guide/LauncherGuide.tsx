@@ -25,8 +25,10 @@ const STEP_ANCHOR: Partial<Record<string, string>> = {
 const SETTINGS_TAB: Partial<Record<string, string>> = { surface: 'overlay', plans: 'plans', keys: 'ai-providers' };
 /** How long a step's control may be off screen before the way back shows. */
 const OFF_SCREEN_MS = 1200;
-/** How long a notes step waits for main's saved meeting before offering to go on. */
-const NO_NOTES_MS = 8000;
+/** How long a notes step waits for main's saved meeting before offering to go on.
+ *  Past endMeeting's own waits (STT finals up to ~5 s, then the save); a save
+ *  that still lands later brings step 6 back (the reducer's late-save rule). */
+const NO_NOTES_MS = 20_000;
 
 interface Props {
   onOpenSettings: (tab: string) => void;

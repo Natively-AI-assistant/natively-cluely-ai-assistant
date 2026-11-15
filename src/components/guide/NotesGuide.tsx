@@ -26,6 +26,8 @@ const LIT: Record<NotesStep, string | null> = {
 
 export interface NotesGuide {
   node: React.ReactNode;
+  /** The step this window is waiting on (null in the done hold, or none). */
+  live: NotesStep | null;
   /** The notes text changed (step 9 moves on at the first real line). */
   onTyped: (next: string) => void;
   /** Ask opened (step 10). */
@@ -105,5 +107,5 @@ export function useNotesGuide(): NotesGuide {
   } else if (step === 'stop2') {
     node = pill('stop2', tr('Stop the meeting when you’re ready.'), tr('Natively writes up your notes as soon as it stops.'));
   }
-  return { node, onTyped, onAskOpened, onRecipeRun };
+  return { node, live, onTyped, onAskOpened, onRecipeRun };
 }

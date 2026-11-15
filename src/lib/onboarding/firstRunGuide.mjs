@@ -46,7 +46,6 @@ const IN_MEETING = [...MEETING_1, ...MEETING_2];
 
 /** Linear advances: event type → [from step, to step] pairs. */
 const ADVANCE = {
-  meeting_started: [['start', 'overlay'], ['start2', 'notepad']],
   overlay_next: [['overlay', 'answer']],
   answer_shown: [['answer', 'screenshot']],
   screenshot_taken: [['screenshot', 'stop']],
@@ -136,6 +135,16 @@ export function reduceGuide(state, event, now) {
   switch (event.type) {
     case 'skip':
       return move(state, { status: 'skipped' }, now);
+    case 'meeting_started': {
+      // Steps follow where the meeting really opened (main attaches the
+      // running meeting's surface): a notepad meeting draws in the notes
+      // window, an overlay one in the overlay. Restarted mid notepad meeting,
+      // or switched back to the overlay before step 8, the guide follows it
+      // rather than drawing in a window that is not on screen.
+      if (state.step !== 'start' && state.step !== 'start2') return state;
+      const surface = event.surface === 'overlay' || event.surface === 'notepad' ? event.surface : (state.step === 'start' ? 'overlay' : 'notepad');
+      return move(state, { step: surface === 'notepad' ? 'notepad' : 'overlay' }, now);
+    }
     case 'meeting_stopped':
       if (MEETING_1.includes(state.step)) return move(state, { step: 'notes' }, now);
       if (MEETING_2.includes(state.step)) return move(state, { step: 'notes2' }, now);
@@ -144,6 +153,13 @@ export function reduceGuide(state, event, now) {
       // Main saved the meeting that just ended (main.ts endMeeting). Its notes
       // step opens exactly that one; with nothing saved there are no notes to
       // show, so the guide goes on (to the switch, or after meeting 2 to Plans).
+      // A save that lands while a meeting runs is the previous meeting's, late
+      // (main says whether one runs): it is never the end of this one.
+      if (event.meetingActive) return state;
+      const late = typeof event.meetingId === 'string' && event.meetingId ? event.meetingId : null;
+      // Meeting 1's save, after the user went on without it (the launcher's
+      // way on, LauncherGuide NO_NOTES_MS): its notes are still worth showing.
+      if (late && state.step === 'surface' && !state.endedMeetingId) return move(state, { step: 'notes', endedMeetingId: late }, now);
       const first = MEETING_1.includes(state.step) || state.step === 'notes';
       const second = MEETING_2.includes(state.step) || state.step === 'notes2';
       if (!first && !second) return state;
@@ -158,7 +174,8 @@ export function reduceGuide(state, event, now) {
     case 'trial_unavailable': {
       // A paid Natively key covers the meeting: no trial is no reason to leave
       // the walk (main attaches its own facts; Evin hit this 2026-11-15).
-      if (!BEFORE_PLANS.includes(state.step) || event.facts?.hasNativelyKey) return state;
+      // Nor is it for someone on their own AI keys: those run the meeting.
+      if (!BEFORE_PLANS.includes(state.step) || event.facts?.hasNativelyKey || event.facts?.hasOwnAiKey) return state;
       return move(state, { step: 'plans', variant: event.type === 'trial_out' ? 'trial_out' : 'no_trial' }, now);
     }
     case 'plan_changed': {
@@ -200,9 +217,9 @@ export function guideFactsFromSources({ nativelyKey, trialSentinel, licensed, ha
  * or crashed mid-meeting) moves to the notes step, since no stop will come.
  * Returns the same object when nothing changes.
  */
-export function reconcileGuide(state, { meetingActive, atLaunch }, now) {
+export function reconcileGuide(state, { meetingActive, atLaunch, surface }, now) {
   if (!state || state.status !== 'active') return state;
-  if (meetingActive && (state.step === 'start' || state.step === 'start2')) return reduceGuide(state, { type: 'meeting_started' }, now);
+  if (meetingActive && (state.step === 'start' || state.step === 'start2')) return reduceGuide(state, { type: 'meeting_started', surface }, now);
   if (atLaunch && !meetingActive && IN_MEETING.includes(state.step)) return reduceGuide(state, { type: 'meeting_stopped' }, now);
   return state;
 }
@@ -210,7 +227,7 @@ export function reconcileGuide(state, { meetingActive, atLaunch }, now) {
 /** Below this much trial time the trial reads as "almost used up". */
 const ALMOST_GONE_MS = 15 * 60 * 1000;
 
-/** Step 6's title: never more than the trial status shows (English; callers translate). */
+/** Step 14's title: never more than the trial status shows (English; callers translate). */
 export function planStepTitle({ variant, remainingMs, expired }) {
   if (variant === 'no_trial') return 'Your free trial isn’t available on this device.';
   if (variant === 'trial_out' || expired || remainingMs === 0) return 'Your free trial is used up.';

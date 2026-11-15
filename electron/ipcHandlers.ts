@@ -9450,10 +9450,9 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Main owns the state so the launcher, overlay, notes window and Settings stay
   // on one step; each window reports what it saw and the reducer decides. An
   // event that changes nothing (two windows seeing the same meeting stop) is
-  // neither saved nor broadcast.
-  // First-run guide (services/firstRunGuideStore.ts): main supplies what a
-  // window cannot know. A running trial's placeholder Natively key is not a
-  // purchase, and whether a meeting runs comes from AppState.
+  // neither saved nor broadcast. Main supplies what a window cannot know
+  // (services/firstRunGuideStore.ts): a running trial's placeholder Natively
+  // key is not a purchase, and whether and where a meeting runs comes from AppState.
   configureGuideStore({
     meetingActive: () => appState.getIsMeetingActive(),
     factsProvider: () => {
@@ -9466,11 +9465,21 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasOwnAiKey: hasOwnAiKey(cm.getAllCredentials(), { codexReady: codexRouteReady() }),
       });
     },
+    meetingSurface: () => appState.getMeetingSurface(),
     // Two meetings (Evin, 2026-11-15): the first is the overlay's, the second
     // the notepad's, picked by the user in Settings › Overlay at step 7. The
-    // guide sets the overlay as it starts and puts it back when it ends.
-    onGuideStart: () => { SettingsManager.getInstance().set('meetingSurface', 'overlay'); },
-    onGuideEnd: () => { SettingsManager.getInstance().set('meetingSurface', 'overlay'); },
+    // guide sets the overlay as it starts and, when it ends, puts back what
+    // the user had before ("Put the overlay back": the overlay, for a new user).
+    onGuideStart: () => {
+      const sm = SettingsManager.getInstance();
+      if (sm.get('guideSurfaceBefore') == null) sm.set('guideSurfaceBefore', normalizeMeetingSurface(sm.get('meetingSurface')));
+      sm.set('meetingSurface', 'overlay');
+    },
+    onGuideEnd: () => {
+      const sm = SettingsManager.getInstance();
+      sm.set('meetingSurface', normalizeMeetingSurface(sm.get('guideSurfaceBefore') ?? 'overlay'));
+      sm.set('guideSurfaceBefore', null);
+    },
     // Step 7 with the notepad already chosen: nothing to switch, go on.
     onEnterStep: (step) => {
       if (step === 'surface' && normalizeMeetingSurface(SettingsManager.getInstance().get('meetingSurface')) === 'notepad') guideSurfaceSet('notepad');

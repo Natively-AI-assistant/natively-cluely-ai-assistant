@@ -55,8 +55,13 @@ test('two meetings: the overlay first, the notepad picked in Settings, the overl
   assert.ok(store.includes("g.step === 'surface') applyGuideEvent({ type: 'surface_notepad' })"), 'only step 7, only the notepad');
   assert.ok(/if \(began\) deps\.onGuideStart\?\.\(\);/.test(store) && /if \(ended\) deps\.onGuideEnd\?\.\(\);/.test(store));
   const ipc = read('electron/ipcHandlers.ts');
-  assert.ok(ipc.includes("onGuideStart: () => { SettingsManager.getInstance().set('meetingSurface', 'overlay'); },"), 'meeting 1 is the overlay');
-  assert.ok(ipc.includes("onGuideEnd: () => { SettingsManager.getInstance().set('meetingSurface', 'overlay'); },"), 'the overlay goes back at the end');
+  assert.ok(ipc.includes("if (sm.get('guideSurfaceBefore') == null) sm.set('guideSurfaceBefore', normalizeMeetingSurface(sm.get('meetingSurface')));"), 'the user\'s own choice is kept');
+  assert.ok(ipc.includes("sm.set('meetingSurface', 'overlay');"), 'meeting 1 is the overlay');
+  assert.ok(ipc.includes("sm.set('meetingSurface', normalizeMeetingSurface(sm.get('guideSurfaceBefore') ?? 'overlay'));"), 'and it goes back at the end');
+  assert.ok(ipc.includes('meetingSurface: () => appState.getMeetingSurface(),'), 'main says where the meeting opened');
+  assert.ok(store.includes("if ((raw as { status?: unknown }).status === 'active') {") && store.includes('deps.onGuideEnd?.();'), 'an expired guide also puts it back');
+  assert.ok(store.includes("meetingActive: deps.meetingActive() }, now);"), 'a save says whether a meeting runs');
+  assert.ok(/plans_closed[\s\S]{0,400}deps\.factsProvider\(\)/.test(store), 'whether the guide starts uses main\'s facts');
   const setter = ipc.slice(ipc.indexOf("safeHandle('meeting-surface:set'"), ipc.indexOf("safeHandle('meeting-surface:set'") + 700);
   assert.ok(setter.includes('guideSurfaceSet(surface);'), 'the Settings switch reports to the guide');
   assert.ok(!read('electron/main.ts').includes('showNotepadForGuide'), 'no mid-meeting hand-off');

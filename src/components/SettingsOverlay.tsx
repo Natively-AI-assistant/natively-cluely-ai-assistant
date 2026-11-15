@@ -2381,7 +2381,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     return (
         <>
             {confirmDialog}
-            {/* The first-run guide's Settings steps (6 and 7), while Settings is open. */}
+            {/* The first-run guide's Settings steps (7, and 14), while Settings is open. */}
             {isOpen && <SettingsGuide />}
             <AutoAnswerStopSharingDialog
                 open={stopSharingOpen}

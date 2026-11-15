@@ -19,7 +19,7 @@ export const SettingsGuide: React.FC = () => {
   const onKeys = guideOn(state, 'keys');
   const finishedBought = state?.status === 'finished' && state.outcome === 'bought';
 
-  // Step 6: a plan bought here, or keys added. Main judges what changed from
+  // Step 14: a plan bought here, or keys added. Main judges what changed from
   // its own sources (a running trial's placeholder key is not a purchase).
   const report = useCallback(() => {
     dispatch({ type: 'plan_changed' });
@@ -31,7 +31,7 @@ export const SettingsGuide: React.FC = () => {
     return () => { offs.forEach((off) => off?.()); };
   }, [onPlans, report]);
 
-  // Step 6: what is really left of the trial.
+  // Step 14: what is really left of the trial.
   const [trial, setTrial] = useState<TrialLeft | null>(null);
   useEffect(() => {
     if (!onPlans) return;
@@ -46,7 +46,7 @@ export const SettingsGuide: React.FC = () => {
     return () => { alive = false; };
   }, [onPlans]);
 
-  // Step 7: tick each setting as it is saved.
+  // Step 14 (own keys): tick each setting as it is saved.
   const [setup, setSetup] = useState({ ai: false, stt: false, retrieval: false });
   useEffect(() => {
     if (!onKeys) return;
@@ -73,7 +73,7 @@ export const SettingsGuide: React.FC = () => {
     return () => { alive = false; off?.(); clearInterval(timer); };
   }, [onKeys]);
 
-  // A plan bought at step 7: say thanks on the same card, then go.
+  // A plan bought at step 14: say thanks on the same card, then go.
   const [thanks, setThanks] = useState(false);
   useEffect(() => {
     if (!finishedBought || !state?.updatedAt || Date.now() - state.updatedAt > 10_000) return;

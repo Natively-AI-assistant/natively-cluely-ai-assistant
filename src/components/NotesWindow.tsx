@@ -954,8 +954,9 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     // After Stop the notepad keeps Ask (Granola's chat on a finished note), without the listening pill.
     const askBar = phase === 'live' || (phase === 'ended' && !!meetingId && !preview);
     const askOpen = askBar && askEngaged;
-    // First-run guide step 10: Ask opened.
-    useEffect(() => { if (askOpen && phase === 'live') notesGuide.onAskOpened(); }, [askOpen, phase, notesGuide.onAskOpened]);
+    // First-run guide step 10: Ask opened. Also when the step arrives with Ask
+    // already open (opened early, or during step 9's done hold).
+    useEffect(() => { if (askOpen && phase === 'live') notesGuide.onAskOpened(); }, [askOpen, phase, notesGuide.live, notesGuide.onAskOpened]);
     const bars = useMemo(() => (level === null || paused ? null : listeningBarHeights(level * 3.2)), [level, paused]);
     // The floating panel: what fills it, kept on through the closing spring, and how tall.
     const panelKind: 'transcript' | 'ask' | null = phase === 'live' ? (showTranscript ? 'transcript' : askOpen ? 'ask' : null) : askOpen ? 'ask' : null;

@@ -27,7 +27,8 @@ export interface GuideFacts {
 
 export type GuideEvent =
   | { type: 'plans_closed'; facts: GuideFacts }
-  | { type: 'meeting_started' }
+  /** surface: where the meeting opened; main attaches it (firstRunGuideStore). */
+  | { type: 'meeting_started'; surface?: 'overlay' | 'notepad' }
   | { type: 'answer_shown' }
   | { type: 'screenshot_taken' }
   | { type: 'note_typed' }
@@ -46,7 +47,8 @@ export type GuideEvent =
   | { type: 'keys_done' }
   | { type: 'skip' }
   | { type: 'restart' }
-  | { type: 'meeting_saved'; meetingId: string | null };
+  /** meetingActive: a meeting runs as the save lands (so the save is a late one). */
+  | { type: 'meeting_saved'; meetingId: string | null; meetingActive?: boolean };
 
 export const GUIDE_EVENT_TYPES: readonly GuideEvent['type'][];
 export const GUIDE_RESUME_MS: number;
@@ -65,7 +67,7 @@ export function guideFactsFromSources(sources: {
   hasOwnAiKey?: boolean;
   launchCount?: number;
 }): GuideFacts;
-export function reconcileGuide(state: GuideState, ctx: { meetingActive: boolean; atLaunch: boolean }, now: number): GuideState;
+export function reconcileGuide(state: GuideState, ctx: { meetingActive: boolean; atLaunch: boolean; surface?: 'overlay' | 'notepad' }, now: number): GuideState;
 export function planStepTitle(input: { variant: GuideVariant; remainingMs: number | null; expired: boolean }): string;
 export function trialEventFromLocal(local: { hasToken?: boolean; trialClaimed?: boolean; expired?: boolean } | null | undefined): 'trial_out' | 'trial_unavailable' | null;
 export function startCoverage(input?: { trial?: { hasToken?: boolean; expired?: boolean; trialClaimed?: boolean } | null; hasNativelyKey?: boolean }): 'trial' | 'plan';

@@ -4143,6 +4143,8 @@ export class AppState {
 
   /** The surface the running meeting started on (startMeeting). */
   private meetingSurface: MeetingSurface = DEFAULT_MEETING_SURFACE;
+  /** Where the running meeting opened (the first-run guide draws its steps there). */
+  public getMeetingSurface(): MeetingSurface { return this.meetingSurface; }
 
   /**
    * The launcher's "Meeting ongoing" (set-window-mode 'overlay' mid-meeting):

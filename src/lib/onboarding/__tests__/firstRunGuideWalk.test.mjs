@@ -15,7 +15,11 @@ const EVENTS = [
   { type: 'trial_unavailable', facts: FACTS },
   { type: 'plan_changed', facts: { ...FACTS, hasNativelyKey: true } },
   { type: 'plan_changed', facts: { ...FACTS, isPremium: true } },
+  { type: 'meeting_started', surface: 'overlay' },
+  { type: 'meeting_started', surface: 'notepad' },
+  { type: 'trial_out', facts: { ...FACTS, hasOwnAiKey: true } },
   // main's own
+  { type: 'meeting_saved', meetingId: 'm-1', meetingActive: true },
   { type: 'meeting_saved', meetingId: 'm-1' },
   { type: 'meeting_saved', meetingId: null },
   { type: 'surface_notepad' },
@@ -24,7 +28,7 @@ const key = (s) => `${s.status}/${s.step}/${s.variant}/${s.endedMeetingId ? 'id'
 const next = (s) => {
   const out = EVENTS.map((e) => reduceGuide(s, e, NOW));
   // main's reconcile, at launch and on restart, with and without a meeting
-  for (const meetingActive of [true, false]) for (const atLaunch of [true, false]) out.push(reconcileGuide(s, { meetingActive, atLaunch }, NOW));
+  for (const meetingActive of [true, false]) for (const atLaunch of [true, false]) for (const surface of [undefined, 'overlay', 'notepad']) out.push(reconcileGuide(s, { meetingActive, atLaunch, surface }, NOW));
   return out;
 };
 
@@ -80,4 +84,29 @@ test('the happy path visits all 14 numbered steps in order', () => {
   assert.deepEqual(order, ['start', 'overlay', 'answer', 'screenshot', 'stop', 'notes', 'surface', 'start2', 'notepad', 'ask', 'recipe', 'stop2', 'notes2', 'plans']);
   assert.equal(s.status, 'finished');
   assert.deepEqual(order.map((x) => GUIDE_STEP_NUMBER[x]), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+});
+
+// Code review, 2026-11-15.
+const at = (step, extra = {}) => ({ status: 'active', step, variant: 'normal', outcome: null, startedAt: NOW, updatedAt: NOW, endedMeetingId: null, ...extra });
+
+test('no trial does not send someone on their own AI keys to Plans', () => {
+  assert.equal(reduceGuide(at('start'), { type: 'trial_out', facts: { ...FACTS, hasOwnAiKey: true } }, NOW).step, 'start');
+  assert.equal(reduceGuide(at('start'), { type: 'trial_out', facts: FACTS }, NOW).step, 'plans');
+});
+
+test('steps follow where the meeting really opened', () => {
+  assert.equal(reduceGuide(at('start'), { type: 'meeting_started', surface: 'notepad' }, NOW).step, 'notepad', 'a notepad meeting at step 1 is taught in the notepad');
+  assert.equal(reduceGuide(at('start2'), { type: 'meeting_started', surface: 'overlay' }, NOW).step, 'overlay', 'switched back to the overlay at step 8');
+  assert.equal(reduceGuide(at('start'), { type: 'meeting_started' }, NOW).step, 'overlay', 'no surface: the old default');
+  assert.equal(reduceGuide(at('start2'), { type: 'meeting_started' }, NOW).step, 'notepad');
+  assert.equal(reconcileGuide(at('start'), { meetingActive: true, atLaunch: false, surface: 'notepad' }, NOW).step, 'notepad', 'restarted mid notepad meeting');
+});
+
+test('a late save never ends the meeting that is running, and a late meeting-1 save brings its notes back', () => {
+  const s = at('notepad');
+  assert.equal(reduceGuide(s, { type: 'meeting_saved', meetingId: 'm-1', meetingActive: true }, NOW), s, 'meeting 1 saved while meeting 2 runs');
+  const back = reduceGuide(at('surface'), { type: 'meeting_saved', meetingId: 'm-1' }, NOW);
+  assert.equal(back.step, 'notes'); assert.equal(back.endedMeetingId, 'm-1');
+  const s7 = at('start2');
+  assert.equal(reduceGuide(s7, { type: 'meeting_saved', meetingId: 'm-1' }, NOW), s7, 'not once the notepad is picked');
 });

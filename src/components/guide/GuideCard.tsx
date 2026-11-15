@@ -6,7 +6,7 @@
 // Apple's TipKit popover and the coach tips of top apps (Appllama: eToro Delta,
 // GoPro Quik, Pump Club): an arrow joins the tip to its control; a bold title,
 // one line, one action, and a plain ✕ that skips the guide. No kicker label, no
-// progress widget: a quiet "N of 8" beside the action.
+// progress widget: a quiet "N of 14" beside the action.
 // Then: "stop using generic icons or logos" (no step icon), "why dark mode not
 // having a dark mode" (the tip follows the app's theme), and "use expo liquid
 // glass": Expo's Liquid Glass is React Native only, so the tip is Natively's own

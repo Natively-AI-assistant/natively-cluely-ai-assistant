@@ -121,7 +121,7 @@ test('the notepad steps light Ask, the recipes and Stop, and move on from the re
   const w = read('src/components/NotesWindow.tsx');
   assert.ok(w.includes('data-guide="notes-ask"') && w.includes('data-guide="notes-recipes"'), 'the anchors exist');
   assert.ok(/npTrack\('recipe', recipe\.id\);\n\s+guideRecipeRunRef\.current\(\);/.test(w), 'every recipe run reports, chip, All recipes or /');
-  assert.ok(w.includes("if (askOpen && phase === 'live') notesGuide.onAskOpened();"), 'Ask opening reports');
+  assert.ok(w.includes("[askOpen, phase, notesGuide.live, notesGuide.onAskOpened]"), 'Ask opening reports, also when step 10 arrives with Ask open');
   assert.ok(read('src/components/settings/OverlaySettings.tsx').includes('data-guide="surface-switch"'), 'step 7 points at the switch');
 });
 

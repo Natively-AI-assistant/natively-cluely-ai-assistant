@@ -17,6 +17,8 @@ import type { GuideEvent, GuideFacts, GuideState, GuideStepId } from '../../src/
 type GuideStoreDeps = {
   /** Whether a meeting is running right now (AppState.getIsMeetingActive). */
   meetingActive: () => boolean;
+  /** Where the running meeting opened (AppState.getMeetingSurface). */
+  meetingSurface?: () => 'overlay' | 'notepad';
   /** Facts from main's own sources: a window's facts are never trusted. */
   factsProvider: () => GuideFacts;
   /** A step was entered. */
@@ -57,19 +59,36 @@ function read(now: number): { raw: unknown; state: GuideState } {
 export function getGuideState(): GuideState {
   const now = Date.now();
   const { raw, state } = read(now);
-  const next = reconcileGuide(state, { meetingActive: deps.meetingActive(), atLaunch: !launchReconciled }, now);
+  const next = reconcileGuide(state, { meetingActive: deps.meetingActive(), atLaunch: !launchReconciled, surface: deps.meetingSurface?.() }, now);
   launchReconciled = true;
   if (next !== state) return save(state, next);
-  if (raw && state.status !== (raw as { status?: unknown }).status) SettingsManager.getInstance().set('firstRunGuide', state);
+  if (raw && state.status !== (raw as { status?: unknown }).status) {
+    SettingsManager.getInstance().set('firstRunGuide', state);
+    // Left a week and expired: it ended, so its setting changes go back too.
+    if ((raw as { status?: unknown }).status === 'active') {
+      try { deps.onGuideEnd?.(); } catch (e) { console.warn('[Guide] end hand-off failed:', (e as Error)?.message); }
+    }
+  }
   return state;
 }
 
 /** An event from a window (validated) or from main itself. */
-export function applyGuideEvent(event: GuideEvent | { type: 'meeting_saved'; meetingId: string | null } | { type: 'surface_notepad' }): GuideState {
+export function applyGuideEvent(event: GuideEvent | { type: 'surface_notepad' }): GuideState {
   const now = Date.now();
   const { state: current } = read(now);
   let reduced: GuideState;
-  if (event.type === 'plan_changed') {
+  if (event.type === 'meeting_started') {
+    // Where the meeting really opened is main's to say.
+    reduced = reduceGuide(current, { type: 'meeting_started', surface: deps.meetingSurface?.() }, now);
+  } else if (event.type === 'meeting_saved') {
+    // A save landing while a meeting runs is the previous meeting's.
+    reduced = reduceGuide(current, { type: 'meeting_saved', meetingId: event.meetingId, meetingActive: deps.meetingActive() }, now);
+  } else if (event.type === 'plans_closed') {
+    // Whether the guide starts: keys and plan from main's own sources, never
+    // a window's (its caches may not have loaded). The window's launch count stays.
+    const own = deps.factsProvider();
+    reduced = reduceGuide(current, { type: 'plans_closed', facts: { ...own, launchCount: Number(event.facts?.launchCount) || own.launchCount } }, now);
+  } else if (event.type === 'plan_changed') {
     // Main decides what was bought: a running trial's placeholder key is not
     // a purchase (guideFactsFromSources), whatever a window believes.
     reduced = reduceGuide(current, { type: 'plan_changed', facts: deps.factsProvider() }, now);
@@ -82,7 +101,7 @@ export function applyGuideEvent(event: GuideEvent | { type: 'meeting_saved'; mee
   // Started (or restarted) while a meeting already runs: step 2, not a Start
   // button that reads "Meeting ongoing".
   const next = event.type === 'restart' || event.type === 'plans_closed'
-    ? reconcileGuide(reduced, { meetingActive: deps.meetingActive(), atLaunch: false }, now)
+    ? reconcileGuide(reduced, { meetingActive: deps.meetingActive(), atLaunch: false, surface: deps.meetingSurface?.() }, now)
     : reduced;
   // One line per real move, so a support log shows how the guide got where it is.
   if (next !== current) console.log(`[Guide] ${event.type}: ${current.step}/${current.status} -> ${next.step}/${next.status}`);
