@@ -303,6 +303,19 @@ svg.guide-done-check :is(path, polyline) {
 }
 .guide-pill .guide-skip { font-size: 12.5px; color: var(--gt-ink-3); }
 
+/* Step 9 (NotesGuide): the empty page's "Write notes" placeholder is where to
+   jot, so it takes the page's accent and breathes, and the line under it
+   underlines the spot. CSS only: ProseMirror owns that DOM, so the guide never
+   touches the paragraph itself. Gone at the first letter (the placeholder is). */
+@keyframes guideWriteBreathe { 50% { opacity: 0.55; } }
+.notepad .guide-write .notes-editor p.is-editor-empty:first-child::before {
+  color: var(--np-accent);
+  font-weight: 500;
+  text-decoration: underline 1.5px dashed;
+  text-underline-offset: 5px;
+  animation: guideWriteBreathe 2.4s ease-in-out infinite;
+}
+
 /* Stop's countdown in the first guide meeting (TopPill, NotesWindow): each
    second swaps in (#04 text swap, 150ms, 4px, 2px blur). Locked Stop is dimmed. */
 .guide-stop-count { display: inline-block; animation: guideTextIn 150ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
@@ -317,6 +330,7 @@ svg.guide-done-check :is(path, polyline) {
   @keyframes guidePillRise { from { transform: none; } }
   @keyframes guideTextIn { from { opacity: 0; } }
   .guide-stop-count { animation: none; }
+  .notepad .guide-write .notes-editor p.is-editor-empty:first-child::before { animation: none; }
   [data-guide-leaving] :is(.guide-tip, .guide-pill, .guide-notes-pill) { transform: none; }
   :is(.guide-tip-status.is-done, .guide-done-check) svg :is(path, polyline),
   svg.guide-done-check :is(path, polyline) { animation: none; stroke-dashoffset: 0; }

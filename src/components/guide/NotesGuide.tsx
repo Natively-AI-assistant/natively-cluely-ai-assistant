@@ -100,13 +100,15 @@ export function useNotesGuide(): NotesGuide {
 
   let node: React.ReactNode = null;
   if (step === 'notepad') {
-    node = pill('notepad', tr('Write while you talk.'), tr('Jot a line. It goes into your meeting notes.'));
+    // Evin, 2026-11-15: "where to jot is confusing". It names the spot, which glows (guide-write).
+    node = pill('notepad', tr('Write while you talk.'), tr('Click “Write notes” at the top of the page and type a line.'));
   } else if (step === 'ask') {
     node = pill('ask', tr('Ask about the meeting.'), tr('Click Ask anything. It knows everything said so far.'));
   } else if (step === 'recipe') {
     node = pill('recipe', tr('Try a recipe.'), tr('Recipes are ready-made asks. Pick one, or type / to see them all.'));
   } else if (step === 'stop2') {
-    node = pill('stop2', tr('Stop the meeting when you’re ready.'), tr('Natively writes up your notes as soon as it stops.'));
+    // It names the button: the ✕ at the top closes the window, not the meeting.
+    node = pill('stop2', tr('Stop the meeting when you’re ready.'), tr('Press the stop button ■ in the bar at the bottom. Natively writes up your notes.'));
   }
   return { node, live, onTyped, onAskOpened, onRecipeRun };
 }

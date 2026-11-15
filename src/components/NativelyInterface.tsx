@@ -1478,7 +1478,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const t = useT();
   const [isExpanded, setIsExpanded] = useState(true);
   // The first-run guide's overlay steps (guide/OverlayGuide.tsx): a banner fold below.
-  const overlayGuide = useOverlayGuide();
+  // Its step 3 presses What to answer itself once the demo film's question is
+  // complete; the same handler as the chip and the shortcut (handlersRef, below).
+  const overlayGuide = useOverlayGuide({ whatToAnswer: () => handlersRef.current.handleWhatToSay() });
   // The free trial that starts by itself with a meeting: what to say about it.
   const trial = useOverlayTrial();
   // The automatic stop's "stops in 1 minute" notice, and typing reported to main.

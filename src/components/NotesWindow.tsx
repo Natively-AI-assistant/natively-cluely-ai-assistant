@@ -956,6 +956,9 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     // After Stop the notepad keeps Ask (Granola's chat on a finished note), without the listening pill.
     const askBar = phase === 'live' || (phase === 'ended' && !!meetingId && !preview);
     const askOpen = askBar && askEngaged;
+    // The listening pill (with Stop) folds away while Ask is open, except on the
+    // guide's stop step, which points at Stop.
+    const foldListening = askOpen && notesGuide.live !== 'stop2';
     // First-run guide step 10: Ask opened. Also when the step arrives with Ask
     // already open (opened early, or during step 9's done hold).
     useEffect(() => { if (askOpen && phase === 'live') notesGuide.onAskOpened(); }, [askOpen, phase, notesGuide.live, notesGuide.onAskOpened]);
@@ -1363,7 +1366,8 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                         hookTyping={typingHere('notes')}
                         onEngage={engage('notes')}
                         onTemplate={phase !== 'ended' && !preview ? onSlashTemplate : undefined}
-                        className="min-h-full px-8 pt-[19px] pb-36"
+                        // Step 9 (guide): the empty page's "Write notes" glows, so where to jot is plain (guide.css).
+                        className={`min-h-full px-8 pt-[19px] pb-36${notesGuide.live === 'notepad' ? ' guide-write' : ''}`}
                     />
                     </>
                 )}
@@ -1657,15 +1661,18 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
                                     <div className="flex w-full items-end gap-2">
                                         {/* The listening pill folds away to the left as Ask opens, so Ask
                                             widens instead of jumping; clipped only while folded or folding. */}
+                                        {/* Step 12 of the first-run guide keeps it: the recipe that step 11
+                                            ran left Ask open, and the step points at Stop (Evin, 2026-11-15:
+                                            "where to close the notepad meeting isnt shown"). */}
                                         {phase === 'live' && <motion.div
                                             className="shrink-0 rounded-[28px]"
-                                            inert={askOpen}
-                                            aria-hidden={askOpen || undefined}
+                                            inert={foldListening}
+                                            aria-hidden={foldListening || undefined}
                                             initial={false}
-                                            animate={askOpen
+                                            animate={foldListening
                                                 ? { width: 0, opacity: 0, marginRight: -8, overflow: 'hidden' }
                                                 : { width: 'auto', opacity: 1, marginRight: 0, transitionEnd: { overflow: 'visible' } }}
-                                            transition={askOpen ? ROW_OPEN : ROW_CLOSE}
+                                            transition={foldListening ? ROW_OPEN : ROW_CLOSE}
                                         >
                                             <div className={`np-elevated${panelKind ? ' np-flat' : ''} h-14 w-max flex items-center gap-1 p-1 rounded-[28px]`}>
                                                 {listeningControls}

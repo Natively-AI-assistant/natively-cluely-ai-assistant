@@ -26,3 +26,8 @@ export function demoFilmOpenOptions(platform: string): { activate?: boolean } {
 /** How long the first guide meeting may stay silent before the overlay asks
  *  the user to press play (a browser that blocked the film's autoplay). */
 export const DEMO_FILM_QUIET_MS = 8_000;
+
+/** How long the demo film plays (from the first words heard) before the guide
+ *  presses What to answer itself, so the film's question is complete when the
+ *  answer is written (Evin, 2026-11-15). */
+export const DEMO_FILM_ANSWER_AFTER_MS = 15_000;

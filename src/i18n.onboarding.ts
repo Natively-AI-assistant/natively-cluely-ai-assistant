@@ -139,6 +139,7 @@ const ROWS: Record<string, Row> = {
   // The film's autoplay was blocked: nothing heard 8 s in (OverlayGuide).
   'No sound yet? Press play on the Natively demo in your browser.': ['Звука пока нет? Нажмите «Воспроизвести» в демо Natively в браузере.', '还没有声音？请在浏览器中播放 Natively 演示。', 'まだ音が聞こえませんか？ブラウザで Natively のデモを再生してください。', '¿Aún sin sonido? Pulsa reproducir en la demo de Natively en tu navegador.'],
   'Open the demo': ['Открыть демо', '打开演示', 'デモを開く', 'Abrir la demo'],
+  'Press the stop button ■ in the bar at the bottom. Natively writes up your notes.': ['Нажмите кнопку остановки ■ в панели внизу. Natively составит заметки.', '点击底部栏中的停止按钮 ■。Natively 会整理好你的笔记。', '下のバーにある停止ボタン ■ を押してください。Natively がノートをまとめます。', 'Pulsa el botón de parar ■ en la barra de abajo. Natively redacta tus notas.'],
   'Stop unlocks in {n} s': ['Остановить можно через {n} с', '{n} 秒后可停止', '{n} 秒後に停止できます', 'Podrás detener en {n} s'],
   'Waiting for you': ['Ждём вас', '等你操作', '操作を待っています', 'Esperándote'],
   'Skip guide': ['Пропустить гид', '跳过引导', 'ガイドをスキップ', 'Saltar guía'],
@@ -168,7 +169,7 @@ const ROWS: Record<string, Row> = {
   'Press the stop button ■ in the bar at the top. Natively writes up your notes.': ['Нажмите кнопку остановки ■ на панели сверху. Natively оформит ваши заметки.', '按顶部栏中的停止按钮 ■。Natively 会整理好你的笔记。', '上のバーの停止ボタン ■ を押してください。Natively がメモをまとめます。', 'Pulsa el botón de detener ■ en la barra superior. Natively redacta tus notas.'],
   'Write while you talk.': ['Пишите, пока говорите.', '边聊边记。', '話しながら書きましょう。', 'Escribe mientras hablas.'],
   'Open notepad': ['Открыть блокнот', '打开记事本', 'メモ帳を開く', 'Abrir bloc de notas'],
-  'Jot a line. It goes into your meeting notes.': ['Запишите строчку. Она попадёт в заметки о встрече.', '写一行。它会进入你的会议笔记。', '一行書いてください。会議メモに入ります。', 'Escribe una línea. Irá a tus notas de la reunión.'],
+  'Click “Write notes” at the top of the page and type a line.': ['Нажмите «Write notes» вверху страницы и напишите строку.', '点击页面顶部的“Write notes”，写下一行。', 'ページ上部の「Write notes」をクリックして、一行書いてください。', 'Haz clic en «Write notes» en la parte superior de la página y escribe una línea.'],
   'Stop the meeting when you’re ready.': ['Остановите встречу, когда будете готовы.', '准备好后结束会议。', '準備ができたら会議を終了してください。', 'Detén la reunión cuando quieras.'],
   'Natively writes up your notes as soon as it stops.': ['Natively составит заметки сразу после остановки.', '会议一结束，Natively 就会整理好笔记。', '終了するとすぐに Natively がメモをまとめます。', 'Natively redacta tus notas en cuanto se detiene.'],
   'Meeting notes': ['Заметки о встрече', 'Meeting notes', '会議メモ', 'Meeting notes'],
