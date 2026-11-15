@@ -16229,6 +16229,10 @@ let isMultimodal = !!(imagePaths?.length);
       }
     }
 
+    // A dead Gemini key (invalid/expired/billing) fails every model on it: one such
+    // failure ends the whole Gemini cascade. Retrying it was 11 requests per call.
+    let geminiKeyDead = false;
+
     // ATTEMPT 3: Gemini Flash-Lite (cheapest/fastest — leads the Gemini cascade).
     // 3 attempts with linear backoff before dropping to full Flash.
     if (this.client) {
@@ -16246,6 +16250,7 @@ let isMultimodal = !!(imagePaths?.length);
           }
         } catch (e: any) {
           console.warn(`[LLMHelper] ⚠️ Gemini Flash-Lite attempt ${attempt}/3 failed: ${e.message}`);
+          if (isPermanentKeyError(e)) { geminiKeyDead = true; break; }
           if (attempt < 3) {
             await new Promise(r => setTimeout(r, 1000 * attempt)); // Linear backoff
           }
@@ -16253,8 +16258,8 @@ let isMultimodal = !!(imagePaths?.length);
       }
 
       // ATTEMPT 4: Gemini Flash (with 2 retries = 3 attempts total)
-      console.log(`[LLMHelper] ⚠️ Flash-Lite exhausted. Switching to Gemini Flash...`);
-      for (let attempt = 1; attempt <= 3; attempt++) {
+      if (!geminiKeyDead) console.log(`[LLMHelper] ⚠️ Flash-Lite exhausted. Switching to Gemini Flash...`);
+      for (let attempt = 1; attempt <= 3 && !geminiKeyDead; attempt++) {
         try {
           const text = await this.withTimeout(
             this.generateWithFlash(contents),
@@ -16267,6 +16272,7 @@ let isMultimodal = !!(imagePaths?.length);
           }
         } catch (e: any) {
           console.warn(`[LLMHelper] ⚠️ Gemini Flash attempt ${attempt}/3 failed: ${e.message}`);
+          if (isPermanentKeyError(e)) { geminiKeyDead = true; break; }
           if (attempt < 3) {
             await new Promise(r => setTimeout(r, 1000 * attempt)); // Linear backoff
           }
@@ -16277,10 +16283,12 @@ let isMultimodal = !!(imagePaths?.length);
     }
 
     // ATTEMPT 5: Gemini Pro
-    console.log(`[LLMHelper] ⚠️ Flash exhausted. Switching to Gemini Pro for robust retry...`);
     const maxProRetries = 5;
 
-    if (this.client) {
+    if (geminiKeyDead) {
+      console.warn(`[LLMHelper] Gemini key rejected (invalid, expired or billing) — skipping the rest of the Gemini summary cascade.`);
+    } else if (this.client) {
+      console.log(`[LLMHelper] ⚠️ Flash exhausted. Switching to Gemini Pro for robust retry...`);
       for (let attempt = 1; attempt <= maxProRetries; attempt++) {
         try {
           console.log(`[LLMHelper] 🔄 Gemini Pro Attempt ${attempt}/${maxProRetries}...`);
@@ -16306,6 +16314,7 @@ let isMultimodal = !!(imagePaths?.length);
           }
         } catch (e: any) {
           console.warn(`[LLMHelper] ⚠️ Gemini Pro attempt ${attempt} failed: ${e.message}`);
+          if (isPermanentKeyError(e)) break;
           // Aggressive backoff for Pro: 2s, 4s, 8s, 16s, 32s
           const backoff = 2000 * Math.pow(2, attempt - 1);
           console.log(`[LLMHelper] Waiting ${backoff}ms before next retry...`);
