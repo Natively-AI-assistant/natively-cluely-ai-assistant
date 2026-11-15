@@ -7,6 +7,9 @@ import { createPortal } from 'react-dom';
 import { useT } from '../../i18n';
 import { trialEventFromLocal } from '../../lib/onboarding/firstRunGuide.mjs';
 import { GuideCard } from './GuideCard';
+import GlassSurface from '../../ui-components/GlassSurface';
+import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
+import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { guideOn, useAnchorRect, useGuide } from './useGuide';
 
 /** The control each launcher-side step points at (steps 6 and 7 live in Settings, in this window). */
@@ -135,17 +138,42 @@ export const LauncherGuide: React.FC<Props> = ({ onOpenSettings, onOpenMeeting }
   return null;
 };
 
-/** The guide's step is off screen: one floating pill, the tip's own surface. */
+/** The guide's step is off screen: one floating pill in the tip's liquid glass. */
 const ContinueGuide: React.FC<{ label: string; skipLabel: string; onContinue: () => void; onSkip: () => void }> = ({
   label, skipLabel, onContinue, onSkip,
-}) => createPortal(
-  <div
-    className="guide-enter guide-pill"
-    data-guide-card="continue"
-    style={{ position: 'fixed', left: '50%', bottom: 20, transform: 'translateX(-50%)', zIndex: 2147483001 }}
-  >
-    <button type="button" className="guide-skip" onClick={onSkip}>{skipLabel}</button>
-    <button type="button" className="guide-pill-action" onClick={onContinue}>{label}</button>
-  </div>,
-  document.body,
-);
+}) => {
+  const light = useResolvedTheme() === 'light';
+  return createPortal(
+    <div
+      className="guide-enter guide-pill"
+      data-guide-card="continue"
+      style={{ position: 'fixed', left: '50%', bottom: 20, transform: 'translateX(-50%)', zIndex: 2147483001 }}
+    >
+      <GlassSurface
+        width="auto"
+        height={44}
+        borderRadius={22}
+        borderWidth={0.25}
+        blur={4}
+        brightness={60}
+        opacity={0.9}
+        distortionScale={light ? -24 : -52}
+        redOffset={0}
+        greenOffset={0}
+        blueOffset={0}
+        yChannel="B"
+        displace={0.5}
+        tint={light ? 'rgba(255, 255, 255, 0.66)' : 'rgba(39, 39, 42, 0.62)'}
+        saturation={light ? 1.2 : 1.4}
+        className="guide-pill-glass"
+        contentClassName="glass-surface__content--bare"
+      >
+        <div className="guide-pill-row">
+          <button type="button" className="guide-skip" onClick={onSkip}>{skipLabel}</button>
+          <LiquidGlassButton variant="lavender" className="lg-sm" onClick={onContinue}>{label}</LiquidGlassButton>
+        </div>
+      </GlassSurface>
+    </div>,
+    document.body,
+  );
+};

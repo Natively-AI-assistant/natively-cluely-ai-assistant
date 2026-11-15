@@ -4,15 +4,21 @@
 //
 // Evin, 2026-11-15: "i didnt like the ui of the guide, redesign it". Modelled on
 // Apple's TipKit popover and the coach tips of top apps (Appllama: eToro Delta,
-// GoPro Quik, Pump Club): an arrow joins the tip to its control; the surface is
-// inverted against the page (a periwinkle-ice tip on the dark app, an ink tip on
-// the light one) so it reads as a tip, not as more app; a tinted icon, a bold
-// title, one line, one action, and a plain ✕ that skips the guide. No kicker
-// label, no progress widget: a quiet "N of 8" beside the action.
+// GoPro Quik, Pump Club): an arrow joins the tip to its control; a bold title,
+// one line, one action, and a plain ✕ that skips the guide. No kicker label, no
+// progress widget: a quiet "N of 8" beside the action.
+// Then: "stop using generic icons or logos" (no step icon), "why dark mode not
+// having a dark mode" (the tip follows the app's theme), and "use expo liquid
+// glass": Expo's Liquid Glass is React Native only, so the tip is Natively's own
+// liquid glass, ui-components/GlassSurface, the refracting lens the meeting
+// page's Ask bar uses, with the Ask bar's own tuning per theme; its one action
+// is the app's LiquidGlassButton.
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Check, FileText, KeyRound, Play, Sparkles, X } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { Check, X } from 'lucide-react';
+import GlassSurface from '../../ui-components/GlassSurface';
+import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
+import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { useT } from '../../i18n';
 import { GUIDE_STEP_COUNT, GUIDE_STEP_NUMBER } from '../../lib/onboarding/firstRunGuide.mjs';
 import type { GuideStepId } from '../../lib/onboarding/firstRunGuide.mjs';
@@ -41,22 +47,22 @@ export interface GuideCardProps {
   onSkip?: () => void;
 }
 
-const STEP_ICON: Partial<Record<GuideStepId, LucideIcon>> = {
-  start: Play,
-  notes: FileText,
-  plans: Sparkles,
-  keys: KeyRound,
-};
-
 const GAP = 10;      // control → arrow tip
 const ARROW = 8;     // arrow height
 const EDGE = 12;     // window margin
 const ARROW_INSET = 22;
 
+// The meeting page's Ask bar glass (MeetingDetails.tsx ASK_BAR_*), per theme.
+const GLASS = {
+  dark: { tint: 'rgba(39, 39, 42, 0.62)', distortion: -52, saturation: 1.4 },
+  light: { tint: 'rgba(255, 255, 255, 0.66)', distortion: -24, saturation: 1.2 },
+} as const;
+
 export const GuideCard: React.FC<GuideCardProps> = ({
   anchor, width = 320, dx = 0, stepId, title, body, list, waiting, action, done, lit = true, onSkip,
 }) => {
   const tr = useT();
+  const glass = GLASS[useResolvedTheme() === 'light' ? 'light' : 'dark'];
   const rect = useAnchorRect(anchor);
   useGuideLit(lit && rect ? anchor : null);
   if (!rect) return null;
@@ -64,7 +70,6 @@ export const GuideCard: React.FC<GuideCardProps> = ({
   const count = tr('{n} of {total}')
     .replace('{n}', String(GUIDE_STEP_NUMBER[stepId]))
     .replace('{total}', String(GUIDE_STEP_COUNT));
-  const Icon = done ? Check : (STEP_ICON[stepId] ?? Sparkles);
 
   // Below the control, centred on it, kept inside the window; the arrow
   // follows the control's centre wherever the tip lands.
@@ -84,55 +89,74 @@ export const GuideCard: React.FC<GuideCardProps> = ({
       aria-label={title}
       data-guide-card={stepId}
     >
-      <svg className="guide-tip-arrow" style={{ left: arrowX - 9 }} width="18" height={ARROW} viewBox={`0 0 18 ${ARROW}`} aria-hidden>
-        <path d={`M0 ${ARROW} C5 ${ARROW} 7 0 9 0 C11 0 13 ${ARROW} 18 ${ARROW} Z`} />
-      </svg>
+      <div className="guide-tip-arrow" style={{ left: arrowX - 9, background: glass.tint }} aria-hidden />
+      <GlassSurface
+        width="100%"
+        height="auto"
+        borderRadius={18}
+        borderWidth={0.12}
+        blur={4}
+        brightness={60}
+        opacity={0.9}
+        distortionScale={glass.distortion}
+        redOffset={0}
+        greenOffset={0}
+        blueOffset={0}
+        yChannel="B"
+        displace={0.5}
+        tint={glass.tint}
+        saturation={glass.saturation}
+        className="guide-tip-glass"
+        contentClassName="glass-surface__content--bare"
+      >
+        <div className="guide-tip-inner">
+          <div className="flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="guide-tip-title">{title}</div>
+              <div className="guide-tip-body">{body}</div>
+            </div>
+            {onSkip && !done && (
+              <button type="button" className="guide-tip-close" onClick={onSkip} aria-label={tr('Skip guide')} title={tr('Skip guide')}>
+                <X className="w-3.5 h-3.5" strokeWidth={2} />
+              </button>
+            )}
+          </div>
 
-      <div className="flex items-start gap-3">
-        <span className={`guide-tip-icon ${done ? 'is-done' : ''}`} aria-hidden>
-          <Icon className="w-[15px] h-[15px]" strokeWidth={2.2} />
-        </span>
-        <div className="min-w-0 flex-1 pt-px">
-          <div className="guide-tip-title">{title}</div>
-          <div className="guide-tip-body">{body}</div>
-        </div>
-        {onSkip && !done && (
-          <button type="button" className="guide-tip-close" onClick={onSkip} aria-label={tr('Skip guide')} title={tr('Skip guide')}>
-            <X className="w-3.5 h-3.5" strokeWidth={2} />
-          </button>
-        )}
-      </div>
+          {list && (
+            <ul className="guide-tip-list">
+              {list.map(([label, st, hint]) => (
+                <li key={label} className={`guide-tip-row is-${st}`}>
+                  <span aria-hidden className="guide-tick">
+                    {st === 'done' && <Check className="w-2.5 h-2.5" strokeWidth={3.5} />}
+                  </span>
+                  <span className="min-w-0 truncate">{label}</span>
+                  {st === 'done' && <span className="sr-only">{tr('Done')}</span>}
+                  {hint && <span className="guide-tip-hint">{hint}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
 
-      {list && (
-        <ul className="guide-tip-list">
-          {list.map(([label, st, hint]) => (
-            <li key={label} className={`guide-tip-row is-${st}`}>
-              <span aria-hidden className="guide-tick">
-                {st === 'done' && <Check className="w-2.5 h-2.5" strokeWidth={3.5} />}
+          <div className="guide-tip-foot">
+            <span className="guide-tip-count" aria-label={count}>{count}</span>
+            {done ? (
+              <span role="status" className="guide-tip-status is-done">
+                <Check className="w-3.5 h-3.5" strokeWidth={2.6} aria-hidden />
+                {tr('Done')}
               </span>
-              <span className="min-w-0 truncate">{label}</span>
-              {st === 'done' && <span className="sr-only">{tr('Done')}</span>}
-              {hint && <span className="guide-tip-hint">{hint}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <div className="guide-tip-foot">
-        <span className="guide-tip-count" aria-label={count}>{count}</span>
-        {done ? (
-          <span role="status" className="guide-tip-status">{tr('Done')}</span>
-        ) : action ? (
-          <button type="button" className="guide-tip-action" disabled={action.disabled} onClick={action.onClick}>
-            {action.label}
-          </button>
-        ) : waiting ? (
-          <span role="status" className="guide-tip-status is-waiting">
-            <i className="guide-wait-dot" aria-hidden />
-            {waiting}
-          </span>
-        ) : null}
-      </div>
+            ) : action ? (
+              <LiquidGlassButton variant="lavender" className="lg-sm" disabled={action.disabled} onClick={action.onClick}>
+                {action.label}
+              </LiquidGlassButton>
+            ) : waiting ? (
+              <span role="status" className="guide-tip-status is-waiting">
+                <i className="guide-wait-dot" aria-hidden />
+                {waiting}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </GlassSurface>
     </div>,
     document.body,
   );

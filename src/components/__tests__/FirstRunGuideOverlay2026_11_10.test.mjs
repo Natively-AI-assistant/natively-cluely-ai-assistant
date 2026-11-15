@@ -59,7 +59,7 @@ test('the guide accent is a soft periwinkle ice, not the old purple', () => {
     assert.ok(!/7C5CFF|124, ?92, ?255|B9A6FF|6A4FE0|3d2a9e|ece6ff/i.test(src), `${f} has no old purple`);
   }
   const css = read('src/components/guide/guide.css');
-  assert.ok(css.includes('--gt-accent: #a8b8ff;') && css.includes('--guide-ring: 168, 184, 255;'), 'periwinkle ice on ink, and the lit ring');
+  assert.ok(css.includes('--gt-accent: #a8b8ff;') && css.includes('--guide-ring: 168, 184, 255;'), 'periwinkle ice in dark, and the lit ring');
 });
 
 // Evin, 2026-11-15: the meeting overlay and the notepad are separate steps.
@@ -83,8 +83,17 @@ test('the launcher and Settings steps are a tip that points at its control', () 
   assert.ok(c.includes("aria-label={tr('Skip guide')}"), 'the ✕ skips the guide');
   assert.ok(c.includes('disabled={action.disabled}'), 'a real disabled button');
   const css = read('src/components/guide/guide.css');
-  assert.ok(/\.guide-tip,\n\.guide-pill \{\n  --gt-bg: #eef1ff;/.test(css), 'an ice tip on the dark app');
-  assert.ok(/\[data-theme='light'\] \.guide-tip,\n\[data-theme='light'\] \.guide-pill \{\n  --gt-bg: #1d1f2e;/.test(css), 'an ink tip on the light app');
+  // Evin: "why dark mode not having a dark mode" and "use expo liquid glass":
+  // the app's own refracting glass, dark in dark mode, light in light mode.
+  assert.ok(c.includes("import GlassSurface from '../../ui-components/GlassSurface';"), 'the tip is liquid glass');
+  assert.ok(c.includes("tint: 'rgba(39, 39, 42, 0.62)'") && c.includes("tint: 'rgba(255, 255, 255, 0.66)'"), 'dark glass in dark mode, light glass in light mode');
+  assert.ok(c.includes('<LiquidGlassButton variant="lavender"'), 'the action is the app glass button');
+  assert.ok(css.includes('--gt-ink: var(--text-primary);'), 'the app inks, so the theme carries');
+  const lg = read('src/components/guide/LauncherGuide.tsx');
+  assert.ok(lg.includes('<GlassSurface') && lg.includes('<LiquidGlassButton variant="lavender"'), 'the Continue pill is the same glass');
+  // Evin: "stop using generic icons or logos".
+  assert.ok(!/lucide-react'/.test(c) || /import \{ Check, X \} from 'lucide-react';/.test(c), 'only the done tick and the close');
+  assert.ok(!c.includes('STEP_ICON') && !css.includes('.guide-tip-icon'), 'no step icon');
   assert.ok(css.includes('.guide-tip.guide-enter { animation: guideTipIn'), 'it grows out of its arrow');
   for (const f of ['src/components/guide/GuideCard.tsx', 'src/components/guide/LauncherGuide.tsx', 'src/components/guide/SettingsGuide.tsx']) {
     const src = read(f);

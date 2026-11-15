@@ -48,62 +48,50 @@
 }
 
 /* The tip (GuideCard.tsx) and the Continue pill (LauncherGuide.tsx), after
-   Apple's TipKit popover: inverted against the page so it reads as a tip, not
-   as more app. On the dark app a periwinkle-ice tip with ink text; on the light
-   app an ink tip with ice text. One accent: the guide's periwinkle. */
+   Apple's TipKit popover, in Natively's own liquid glass (GlassSurface, the
+   meeting page's Ask bar lens; the tint per theme is set in the component).
+   Inks are the app's own tokens, so dark mode is dark glass with light ink and
+   light mode light glass with dark ink. The one accent is periwinkle ice. */
 .guide-tip,
 .guide-pill {
-  --gt-bg: #eef1ff;
-  --gt-ink: #14162a;
-  --gt-ink-2: #474c68;
-  --gt-ink-3: #7d82a0;
-  --gt-accent: #4f5fd6;          /* periwinkle, deep enough on ice */
-  --gt-on-accent: #ffffff;
-  --gt-wash: rgba(79, 95, 214, 0.1);
-  --gt-hair: rgba(20, 22, 42, 0.1);
-  --gt-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 18px 44px -14px rgba(0, 0, 0, 0.65), 0 2px 10px rgba(0, 0, 0, 0.3);
-  /* the accent the breathing dot and the ticks take */
-  --guide-accent: 79, 95, 214;
+  --gt-ink: var(--text-primary);
+  --gt-ink-2: var(--text-secondary);
+  --gt-ink-3: var(--text-tertiary);
+  --gt-accent: #a8b8ff;
+  --gt-on-accent: #14162a;
+  --gt-wash: rgba(168, 184, 255, 0.13);
+  --gt-hair: rgba(255, 255, 255, 0.14);
+  --gt-shadow: 0 18px 44px -14px rgba(0, 0, 0, 0.7), 0 2px 10px rgba(0, 0, 0, 0.3);
+  --guide-accent: 168, 184, 255;
   color: var(--gt-ink);
-  background: var(--gt-bg);
-  box-shadow: var(--gt-shadow);
   -webkit-font-smoothing: antialiased;
 }
 [data-theme='light'] .guide-tip,
 [data-theme='light'] .guide-pill {
-  --gt-bg: #1d1f2e;
-  --gt-ink: #f4f5ff;
-  --gt-ink-2: #b9bdd6;
-  --gt-ink-3: #8a8fab;
-  --gt-accent: #a8b8ff;          /* periwinkle ice on ink */
-  --gt-on-accent: #14162a;
-  --gt-wash: rgba(168, 184, 255, 0.12);
-  --gt-hair: rgba(255, 255, 255, 0.1);
-  --gt-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 18px 44px -16px rgba(20, 24, 60, 0.45), 0 2px 10px rgba(20, 24, 60, 0.15);
-  --guide-accent: 168, 184, 255;
+  --gt-accent: #4f5fd6;
+  --gt-on-accent: #ffffff;
+  --gt-wash: rgba(79, 95, 214, 0.09);
+  --gt-hair: rgba(20, 22, 42, 0.1);
+  --gt-shadow: 0 18px 44px -16px rgba(20, 24, 60, 0.28), 0 2px 10px rgba(20, 24, 60, 0.08);
+  --guide-accent: 79, 95, 214;
 }
 
-.guide-tip {
-  box-sizing: border-box;
-  border-radius: 16px;
-  padding: 14px 14px 12px;
+.guide-tip { box-sizing: border-box; }
+.guide-tip-glass,
+.guide-pill-glass {
+  box-shadow: inset 0 0 0 1px var(--gt-hair), var(--gt-shadow);
 }
+.guide-tip-inner { padding: 14px 14px 12px 16px; }
+
+/* The arrow: a frosted sliver of the same tint (a 9px lens would only smear). */
 .guide-tip-arrow {
   position: absolute;
   top: -8px;
-  fill: var(--gt-bg);
-  filter: drop-shadow(0 -1px 0 rgba(0, 0, 0, 0.04));
+  width: 18px; height: 9px;
+  clip-path: path('M0 9 C5 9 7 1 9 1 C11 1 13 9 18 9 Z');
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
 }
-
-/* TipKit's tinted symbol: the step's icon on a soft accent disc. */
-.guide-tip-icon {
-  width: 30px; height: 30px; flex: 0 0 30px; border-radius: 9px;
-  display: grid; place-items: center;
-  background: var(--gt-wash);
-  color: var(--gt-accent);
-}
-.guide-tip-icon.is-done { background: rgba(47, 184, 102, 0.14); color: #1f9d55; }
-[data-theme='light'] .guide-tip-icon.is-done { color: #5fd38d; }
 
 .guide-tip-title {
   font-size: 15px; line-height: 20px; font-weight: 600; letter-spacing: -0.012em;
@@ -122,13 +110,12 @@
   .guide-tip-close:hover { background: var(--gt-wash); color: var(--gt-ink); }
 }
 .guide-tip-close:focus-visible,
-.guide-tip-action:focus-visible,
-.guide-pill button:focus-visible { outline: 2px solid var(--gt-accent); outline-offset: 2px; }
+.guide-pill .guide-skip:focus-visible { outline: 2px solid var(--gt-accent); outline-offset: 2px; }
 
 /* The checklist (step 8): aligned under the title, not under the icon. */
-.guide-tip-list { margin: 10px 0 0 42px; display: flex; flex-direction: column; gap: 2px; }
+.guide-tip-list { margin: 10px 0 0 0; display: flex; flex-direction: column; gap: 2px; }
 .guide-tip-row {
-  display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 8px; margin-left: -8px;
+  display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 8px; margin: 0 -8px;
   border-radius: 8px; font-size: 13px; color: var(--gt-ink);
 }
 .guide-tip-row.is-todo { color: var(--gt-ink-2); }
@@ -145,29 +132,11 @@
 
 /* Footer: the quiet count, then the one action or the status. */
 .guide-tip-foot {
-  margin: 12px 0 0 42px; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px;
+  margin-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px;
 }
 .guide-tip-count { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--gt-ink-3); }
 .guide-tip-status { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 500; color: var(--gt-ink-2); }
-.guide-tip-action,
-.guide-pill-action {
-  height: 28px; padding: 0 14px; border: 0; border-radius: 999px; cursor: pointer;
-  font-size: 13px; font-weight: 600; letter-spacing: -0.005em;
-  background: var(--gt-accent); color: var(--gt-on-accent);
-  transition: filter 150ms ease-out, transform 120ms ease-out, background-color 150ms ease-out, color 150ms ease-out;
-}
-@media (hover: hover) {
-  .guide-tip-action:not(:disabled):hover,
-  .guide-pill-action:hover { filter: brightness(1.08); }
-}
-.guide-tip-action:not(:disabled):active,
-.guide-pill-action:active { transform: scale(0.97); }
-/* Not yet (Done before an AI provider): a quiet outline, still readable. */
-.guide-tip-action:disabled {
-  cursor: default; background: transparent; color: var(--gt-ink-3);
-  box-shadow: inset 0 0 0 1px var(--gt-hair);
-}
-
+.guide-tip-status.is-done { gap: 5px; color: var(--gt-accent); }
 /* Waiting for the user: a soft breathing dot. */
 .guide-wait-dot {
   width: 6px; height: 6px; border-radius: 999px; flex: 0 0 6px;
@@ -177,16 +146,14 @@
 @keyframes guideWait { 50% { opacity: 0.35; } }
 
 /* The step's control is off screen: one floating pill. */
-.guide-pill {
-  display: flex; align-items: center; gap: 14px;
-  padding: 6px 6px 6px 16px; border-radius: 999px;
+.guide-pill-row {
+  height: 100%; display: flex; align-items: center; gap: 14px; padding: 0 6px 0 16px;
 }
 .guide-pill .guide-skip { font-size: 12.5px; color: var(--gt-ink-3); }
 
 @media (prefers-reduced-motion: reduce) {
   [data-guide-lit] { animation: none !important; }
   .guide-wait-dot { animation: none; }
-  .guide-tip-action:active, .guide-pill-action:active { transform: none; }
   @keyframes guideIn {
     from { opacity: 0; }
     to { opacity: 1; }
