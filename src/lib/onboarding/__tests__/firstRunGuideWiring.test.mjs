@@ -71,3 +71,22 @@ test('main judges the trial events with its own facts, like plan_changed', () =>
   const src = fs.readFileSync(path.join(ROOT, 'electron/services/firstRunGuideStore.ts'), 'utf8');
   assert.ok(/event\.type === 'trial_out' \|\| event\.type === 'trial_unavailable'/.test(src), 'trial events get facts');
 });
+
+// Evin, 2026-11-15: "at this stage when i do any of the screenshot it should
+// detect and move to next phase its not". ⌘H and ⌘⇧H go overlay -> invoke ->
+// main and return the image directly; no screenshot-taken event is ever sent,
+// so the overlay's listeners never heard them. Main moves step 4 itself.
+test('every screenshot the user takes moves step 4, told by main', () => {
+  const ipc = read('electron/ipcHandlers.ts');
+  for (const ch of ['take-screenshot', 'take-selective-screenshot']) {
+    const at = ipc.indexOf(`safeHandle('${ch}'`);
+    assert.ok(at > 0, ch);
+    const body = ipc.slice(at, ipc.indexOf('safeHandle(', at + 10));
+    assert.ok(body.includes('guideScreenshotTaken()'), `${ch} tells the guide`);
+  }
+  const main = read('electron/main.ts');
+  const cap = main.slice(main.indexOf('private async captureScreenAndProcess'), main.indexOf('private async captureScreenAndProcess') + 1500);
+  assert.ok(cap.includes('guideScreenshotTaken()'), 'capture-and-answer tells the guide');
+  const store = read('electron/services/firstRunGuideStore.ts');
+  assert.ok(/export function guideScreenshotTaken\(\)/.test(store), 'one helper in the store');
+});

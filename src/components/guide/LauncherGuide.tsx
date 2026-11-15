@@ -5,7 +5,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '../../i18n';
-import { trialEventFromLocal } from '../../lib/onboarding/firstRunGuide.mjs';
+import { startCoverage, trialEventFromLocal } from '../../lib/onboarding/firstRunGuide.mjs';
 import { GuideCard } from './GuideCard';
 import GlassSurface from '../../ui-components/GlassSurface';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
@@ -44,13 +44,18 @@ export const LauncherGuide: React.FC<Props> = ({ onOpenSettings, onOpenMeeting }
   // No trial to cover the meeting: used up, already claimed on this device, or
   // the automatic start failed. Step 1 must not promise one; go to the plans
   // step. Asked of main each time, not read from a cache that may not be filled yet.
+  // Step 1's line says what covers the meeting: a running trial, else a paid key.
+  const [coverage, setCoverage] = useState<'trial' | 'plan'>('trial');
   useEffect(() => {
     if (step !== 'start') return;
     let alive = true;
-    window.electronAPI?.getLocalTrial?.()
-      .then((local) => {
+    const api = window.electronAPI;
+    Promise.all([api?.getLocalTrial?.().catch(() => null), api?.getStoredCredentials?.().catch(() => null)])
+      .then(([local, creds]) => {
+        if (!alive) return;
+        setCoverage(startCoverage({ trial: local ?? null, hasNativelyKey: !!creds?.hasNativelyKey }));
         const ev = trialEventFromLocal(local);
-        if (alive && ev) dispatch({ type: ev });
+        if (ev) dispatch({ type: ev });
       })
       .catch(() => {});
     return () => { alive = false; };
@@ -110,7 +115,9 @@ export const LauncherGuide: React.FC<Props> = ({ onOpenSettings, onOpenMeeting }
         width={330}
         stepId="start"
         title={tr('Start your first meeting.')}
-        body={tr('Your free trial covers it. Join your call first, or start now.')}
+        body={coverage === 'plan'
+          ? tr('Your plan covers it. Join your call first, or start now.')
+          : tr('Your free trial covers it. Join your call first, or start now.')}
         waiting={tr('Waiting for you')}
         done={justDone}
         onSkip={skip}
@@ -162,8 +169,8 @@ const ContinueGuide: React.FC<{ label: string; skipLabel: string; onContinue: ()
         greenOffset={0}
         blueOffset={0}
         yChannel="B"
-        displace={0.5}
-        tint={light ? 'rgba(255, 255, 255, 0.66)' : 'rgba(39, 39, 42, 0.62)'}
+        displace={14}
+        tint={light ? 'rgba(255, 255, 255, 0.86)' : 'rgba(36, 36, 41, 0.86)'}
         saturation={light ? 1.2 : 1.4}
         className="guide-pill-glass"
         contentClassName="glass-surface__content--bare"

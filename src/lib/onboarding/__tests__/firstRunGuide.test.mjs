@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  startCoverage,
   GUIDE_EVENT_TYPES,
   GUIDE_RESUME_MS,
   GUIDE_STEP_COUNT,
@@ -170,4 +171,14 @@ test('a paid Natively key keeps the walk: no trial is not a reason to jump to pl
     [reduceGuide(s, { type: 'trial_unavailable', facts: unpaid }, T).step, reduceGuide(s, { type: 'trial_out', facts: unpaid }, T).step],
     ['plans', 'plans'],
   );
+});
+
+// Step 1 never promises a trial to someone it does not cover: a paid
+// Natively key whose trial is over reads "Your plan covers it".
+test('step 1 says what covers the meeting: the running trial, else a paid key', () => {
+  assert.equal(startCoverage({ trial: { hasToken: true, expired: false }, hasNativelyKey: true }), 'trial');
+  assert.equal(startCoverage({ trial: { hasToken: true, expired: true }, hasNativelyKey: true }), 'plan');
+  assert.equal(startCoverage({ trial: { hasToken: false, trialClaimed: true }, hasNativelyKey: true }), 'plan');
+  assert.equal(startCoverage({ trial: { hasToken: false }, hasNativelyKey: false }), 'trial');
+  assert.equal(startCoverage({ trial: null, hasNativelyKey: false }), 'trial');
 });

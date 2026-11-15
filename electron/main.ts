@@ -1521,7 +1521,7 @@ import { decideOpenAtLoginDefault } from './utils/openAtLoginDefault'
 import { shouldOpenExternally } from './utils/windowOpenPolicy'
 import { ensureNativeModuleAbi } from './utils/nativeModuleGuard'
 import { getPackMeetingClock } from './services/packs/packClockWiring'
-import { applyGuideEvent } from './services/firstRunGuideStore'
+import { applyGuideEvent, guideScreenshotTaken } from './services/firstRunGuideStore'
 
 // Opt-in only: this trace writes allowlisted process metadata and IPC byte estimates
 // for a copied-profile native OOM investigation. It is inert unless explicitly enabled.
@@ -9648,6 +9648,7 @@ export class AppState {
   private async captureScreenAndProcess(): Promise<void> {
     const screenshotPath = await this.takeScreenshot(false);
     const preview = await this.getImagePreview(screenshotPath);
+    guideScreenshotTaken();
     // Ensure the window is visible so the user can see the response without stealing focus
     this.showMainWindow(true);
     // win.focus() can cause macOS to re-activate the app. Re-hide the dock

@@ -86,7 +86,9 @@ test('the launcher and Settings steps are a tip that points at its control', () 
   // Evin: "why dark mode not having a dark mode" and "use expo liquid glass":
   // the app's own refracting glass, dark in dark mode, light in light mode.
   assert.ok(c.includes("import GlassSurface from '../../ui-components/GlassSurface';"), 'the tip is liquid glass');
-  assert.ok(c.includes("tint: 'rgba(39, 39, 42, 0.62)'") && c.includes("tint: 'rgba(255, 255, 255, 0.66)'"), 'dark glass in dark mode, light glass in light mode');
+  assert.ok(c.includes("tint: 'rgba(36, 36, 41, 0.86)'") && c.includes("tint: 'rgba(255, 255, 255, 0.86)'"), 'dark glass in dark mode, light glass in light mode');
+  // Seen live: at a 62% tint a card's text read through the tip. Frosted.
+  assert.ok(c.includes('displace={14}'), 'the tip body is frosted, not clear');
   assert.ok(c.includes('<LiquidGlassButton variant="lavender"'), 'the action is the app glass button');
   assert.ok(css.includes('--gt-ink: var(--text-primary);'), 'the app inks, so the theme carries');
   const lg = read('src/components/guide/LauncherGuide.tsx');

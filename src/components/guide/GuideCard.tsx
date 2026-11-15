@@ -52,10 +52,13 @@ const ARROW = 8;     // arrow height
 const EDGE = 12;     // window margin
 const ARROW_INSET = 22;
 
-// The meeting page's Ask bar glass (MeetingDetails.tsx ASK_BAR_*), per theme.
+// The meeting page's Ask bar glass (MeetingDetails.tsx ASK_BAR_*), per theme,
+// frosted harder: the Ask bar holds one short line, the tip holds sentences
+// over busy cards, and the 62% tint let a card's text read through (seen live
+// 2026-11-15). The rim still refracts; the body is frost, as Apple's tips are.
 const GLASS = {
-  dark: { tint: 'rgba(39, 39, 42, 0.62)', distortion: -52, saturation: 1.4 },
-  light: { tint: 'rgba(255, 255, 255, 0.66)', distortion: -24, saturation: 1.2 },
+  dark: { tint: 'rgba(36, 36, 41, 0.86)', distortion: -52, saturation: 1.5 },
+  light: { tint: 'rgba(255, 255, 255, 0.86)', distortion: -24, saturation: 1.3 },
 } as const;
 
 export const GuideCard: React.FC<GuideCardProps> = ({
@@ -103,7 +106,7 @@ export const GuideCard: React.FC<GuideCardProps> = ({
         greenOffset={0}
         blueOffset={0}
         yChannel="B"
-        displace={0.5}
+        displace={14}
         tint={glass.tint}
         saturation={glass.saturation}
         className="guide-tip-glass"

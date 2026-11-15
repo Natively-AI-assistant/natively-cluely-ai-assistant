@@ -14,7 +14,7 @@ import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import { resolveMacScreenStatus } from '../src/lib/permissionAttentionPolicy.mjs';
 import { applyPermissionsCardEvent, normalizePermissionsCardRecord } from '../src/lib/permissionsCardPolicy.mjs';
 import { guideFactsFromSources } from '../src/lib/onboarding/firstRunGuide.mjs';
-import { configureGuideStore, dispatchGuideFromWindow, getGuideState } from './services/firstRunGuideStore';
+import { configureGuideStore, dispatchGuideFromWindow, getGuideState, guideScreenshotTaken } from './services/firstRunGuideStore';
 import { hasOwnAiKey, resolveExpiredTrial } from '../src/lib/trialPolicy.mjs';
 import { CARDS, OUTCOMES } from '../src/lib/cards/cardPolicy.mjs';
 import { TRIAL_CAMPAIGN, TRIAL_PROMO_ID, runTrialCampaignReset } from '../src/lib/trialCampaign.mjs';
@@ -1811,6 +1811,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const preview = await appState.getImagePreview(screenshotPath);
       // Make the upload JPEG now, while the user types, not when they send.
       prewarmPreparedJpeg(screenshotPath);
+      guideScreenshotTaken();
       return { path: screenshotPath, preview };
     } catch (error) {
       // console.error("Error taking screenshot:", error)
@@ -1848,6 +1849,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const screenshotPath = await appState.takeSelectiveScreenshot();
       const preview = await appState.getImagePreview(screenshotPath);
       prewarmPreparedJpeg(screenshotPath);
+      guideScreenshotTaken();
       return { path: screenshotPath, preview };
     } catch (error) {
       // EC-04 fix: cast unknown error to Error before accessing .message

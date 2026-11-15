@@ -60,3 +60,4 @@ export function guideFactsFromSources(sources: {
 export function reconcileGuide(state: GuideState, ctx: { meetingActive: boolean; atLaunch: boolean }, now: number): GuideState;
 export function planStepTitle(input: { variant: GuideVariant; remainingMs: number | null; expired: boolean }): string;
 export function trialEventFromLocal(local: { hasToken?: boolean; trialClaimed?: boolean; expired?: boolean } | null | undefined): 'trial_out' | 'trial_unavailable' | null;
+export function startCoverage(input?: { trial?: { hasToken?: boolean; expired?: boolean; trialClaimed?: boolean } | null; hasNativelyKey?: boolean }): 'trial' | 'plan';

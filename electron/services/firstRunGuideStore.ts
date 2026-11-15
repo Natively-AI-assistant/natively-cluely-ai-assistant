@@ -89,6 +89,22 @@ export function applyGuideEvent(event: GuideEvent | { type: 'meeting_saved'; mee
   return saved;
 }
 
+/**
+ * A screenshot the user took (⌘H, ⌘⇧H, capture-and-answer): step 4 moves on.
+ * Those go overlay -> invoke -> main and return the image directly, so no
+ * screenshot event ever reaches a window; main tells the guide (Evin,
+ * 2026-11-15: "when i do any of the screenshot it should detect"). Never
+ * throws: a screenshot must not fail because of the guide.
+ */
+export function guideScreenshotTaken(): void {
+  try {
+    const g = read(Date.now()).state;
+    if (g.status === 'active' && g.step === 'screenshot') applyGuideEvent({ type: 'screenshot_taken' });
+  } catch (e) {
+    console.warn('[Guide] screenshot not reported:', (e as Error)?.message);
+  }
+}
+
 /** guide:dispatch: only the events a window may report. */
 export function dispatchGuideFromWindow(event: unknown): GuideState {
   const type = (event as { type?: unknown } | null)?.type;

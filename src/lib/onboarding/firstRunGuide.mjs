@@ -195,3 +195,14 @@ export function trialEventFromLocal(local) {
   if (local.trialClaimed && !local.hasToken) return 'trial_unavailable';
   return null;
 }
+
+/**
+ * What covers the first meeting, for step 1's line: a running trial, else a
+ * paid Natively key. A fresh install has neither yet: its trial starts with
+ * the meeting. Never promise a trial a paid user does not have (2026-11-15).
+ */
+export function startCoverage({ trial, hasNativelyKey } = {}) {
+  const trialRunning = !!trial && !!trial.hasToken && !trial.expired;
+  if (trialRunning) return 'trial';
+  return hasNativelyKey ? 'plan' : 'trial';
+}

@@ -133,6 +133,7 @@ const ROWS: Record<string, Row> = {
   'Your first meeting': ['Ваша первая встреча', '你的第一场会议', 'はじめての会議', 'Tu primera reunión'],
   'Start your first meeting.': ['Начните свою первую встречу.', '开始你的第一场会议。', 'はじめての会議を開始しましょう。', 'Empieza tu primera reunión.'],
   'Your free trial covers it. Join your call first, or start now.': ['Бесплатный пробный период это покрывает. Сначала подключитесь к звонку или начните сейчас.', '免费试用已包含。先加入通话，或现在就开始。', '無料トライアルで使えます。先に通話に参加するか、今すぐ開始してください。', 'Tu prueba gratuita lo cubre. Únete primero a tu llamada o empieza ahora.'],
+  'Your plan covers it. Join your call first, or start now.': ['Ваш тариф это покрывает. Сначала подключитесь к звонку или начните сейчас.', '你的套餐已包含。先加入通话，或现在就开始。', 'ご利用のプランで使えます。先に通話に参加するか、今すぐ開始してください。', 'Tu plan lo cubre. Únete primero a tu llamada o empieza ahora.'],
   'Waiting for you': ['Ждём вас', '等你操作', '操作を待っています', 'Esperándote'],
   'Skip guide': ['Пропустить гид', '跳过引导', 'ガイドをスキップ', 'Saltar guía'],
   '{n} of {total}': ['{n} из {total}', '{n}/{total}', '{n}/{total}', '{n} de {total}'],
