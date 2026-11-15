@@ -17,7 +17,7 @@ import {
     FollowUpQuestionsLLM, WhatToAnswerLLM,
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
     AssistantResponse as LLMAssistantResponse, classifyIntent, hasQuestionSignal, planNextAssistantAction, PlannerDecision,
-    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCompleteShortAnswer, detectExplicitCodingContract, isCodingContinuation, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, isScaffoldRegenerationEligible, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
+    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCompleteShortAnswer, detectExplicitCodingContract, isCodingContinuation, withActiveCodingProblem, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, isScaffoldRegenerationEligible, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
     isLiveSessionMemoryEnabled, resolveLiveFollowup, toMemoryMode, toSurface, effectiveMemoryMode,
     resolveLiveSessionMemoryConfig, piTelemetry, ageBucket,
     buildContextRoute, summarizeContextRoute, shouldThrottleTrigger,
@@ -2929,20 +2929,19 @@ export class IntelligenceEngine extends EventEmitter {
             // asked next went out carrying "(follow-up to the coding problem…)".
             let askAsHeard: string | undefined;
             try {
-                const activeCoding = this.session.getDetectedCodingQuestion();
-                const problem = activeCoding.question?.trim() ?? '';
+                const activeCoding = this.session.getActiveCodingProblem(IntelligenceEngine.ACTIVE_CODING_PROBLEM_MAX_AGE_MS);
+                const problem = activeCoding?.question.trim() ?? '';
                 const latestAsk = (question || extractedQuestion.latestQuestion || '').trim();
-                const fresh = activeCoding.setAt != null && Date.now() - activeCoding.setAt <= IntelligenceEngine.ACTIVE_CODING_PROBLEM_MAX_AGE_MS;
-                if (problem && fresh && latestAsk && latestAsk.toLowerCase() !== problem.toLowerCase() && isCodingContinuation(latestAsk)) {
+                if (activeCoding && problem && latestAsk && latestAsk.toLowerCase() !== problem.toLowerCase() && isCodingContinuation(latestAsk)) {
                     const inWindow = preparedTranscript.toLowerCase().includes(problem.slice(0, 60).toLowerCase());
                     if (!inWindow) preparedTranscript = `[INTERVIEWER]: ${problem}\n${preparedTranscript}`;
                     if (!question) {
                         askAsHeard = latestAsk;
-                        extractedQuestion.latestQuestion = `${latestAsk} (follow-up to the coding problem: "${problem}")`;
+                        extractedQuestion.latestQuestion = withActiveCodingProblem(latestAsk, problem, activeCoding.saidAfter);
                         extractedQuestion.isFollowUp = true;
                     }
                     trace.mark('repair_used', { reason: 'active_coding_problem', spliced: !inWindow, source: activeCoding.source });
-                    console.log('[IntelligenceEngine] coding continuation resolved against the active coding problem', { spliced: !inWindow, source: activeCoding.source, ageMs: Date.now() - (activeCoding.setAt ?? Date.now()) });
+                    console.log('[IntelligenceEngine] coding continuation resolved against the active coding problem', { spliced: !inWindow, source: activeCoding.source, ageMs: Date.now() - activeCoding.setAt, saidAfterStatements: activeCoding.saidAfter.length });
                 }
             } catch { /* keep extractor result */ }
             trace.mark('latest_question_extracted', {

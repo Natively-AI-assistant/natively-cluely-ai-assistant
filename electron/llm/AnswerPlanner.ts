@@ -1,6 +1,7 @@
 import type { IntentResult } from './PlannerDecision';
 import type { ExtractedQuestion } from './transcriptQuestionExtractor';
 import { CODING_CONTRACT, CODING_CONTRACT_IMPL, CODING_VERIFICATION_INSTRUCTION, CODING_SHAPE_CONTRACTS, type CodingShape } from './codingContract';
+import { isActiveCodingProblemFollowUp } from './codingFollowup';
 import { detectAnswerStyle, type AnswerStyle } from './answerStyle';
 import { classifyTargetSpeakability, classifyShortBand, shortBandTargetWords, lengthBandTarget, spokenFullPromptMaxWords, HARD_MAX_WORDS, SPOKEN_FULL_PROMPT_MAX_WORDS } from './speakability';
 import { getRegisteredAnswerLength, type AnswerLength } from './answerLength';
@@ -1643,6 +1644,13 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
 
   if (!question) {
     answerType = 'unknown_answer';
+  } else if (isActiveCodingProblemFollowUp(question)) {
+    // "show the solution in python (follow-up to the coding problem: …)": the
+    // engine resolved a coding continuation against the active coding problem.
+    // That IS the route; the problem's own words never re-route it (#737: a spec
+    // with no coding verbs went general; #739: an interviewer line inside it
+    // went skill_experience).
+    answerType = includesAny(textNoTechStack, DSA_PATTERNS) ? 'dsa_question_answer' : 'coding_question_answer';
   } else if (wantsSourceEvidence) {
     answerType = 'source_code_evidence_answer';
   } else if (wantsProjectLink) {

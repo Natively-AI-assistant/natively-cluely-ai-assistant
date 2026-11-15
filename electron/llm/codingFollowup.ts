@@ -241,6 +241,23 @@ function isLanguageRequest(question: string): boolean {
 const DIRECT_ACTION_RE =
   /^(?:(?:ok(?:ay)?|so|now|and|please)[,.!]?\s+)*(?:(?:can|could)\s+you\s+)?(?:implement|write|code|solve)\s+(?:this|it|that|the\s+(?:solution|same|above))(?:\s+(?:now|please|again))?\s*[?.!]*$/i;
 
+// The note What to Answer appends when a coding continuation is resolved
+// against the session's active coding problem (issue #539). The planner reads
+// the note as the routing decision it is (issues #737, #739): the problem text
+// is the subject, not the question, so its words ("Have you used …", a spec with
+// no coding verbs) must not pick the answer type.
+// `saidAfter` is what the interviewer said after the problem was stated. It is
+// quoted, not judged: when it states a newer problem the detector missed, the model
+// is told to answer that one (#738), instead of the app asserting the older.
+const ACTIVE_CODING_PROBLEM_NOTE_RE = / \(follow-up to the coding problem: "[\s\S]*\)$/;
+export function withActiveCodingProblem(ask: string, problem: string, saidAfter: readonly string[] = []): string {
+  if (saidAfter.length === 0) return `${ask} (follow-up to the coding problem: "${problem}")`;
+  return `${ask} (follow-up to the coding problem: "${problem}"; the interviewer said after it: "${saidAfter.join(' ')}" — if that states a different problem, this is about that one)`;
+}
+export function isActiveCodingProblemFollowUp(question: string | null | undefined): boolean {
+  return ACTIVE_CODING_PROBLEM_NOTE_RE.test(question || '');
+}
+
 export function isCodingContinuation(question: string): boolean {
   const q = lc(question);
   if (!q) return false;
