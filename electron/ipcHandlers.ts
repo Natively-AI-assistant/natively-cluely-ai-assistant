@@ -9468,6 +9468,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         trialSentinel: TRIAL_SENTINEL_KEY,
         licensed: isLicensed(),
         hasOwnAiKey: hasOwnAiKey(cm.getAllCredentials(), { codexReady: codexRouteReady() }),
+        // First users only: someone with a meeting of their own is not one.
+        hasMeetings: DatabaseManager.getInstance().hasOwnMeeting(),
       });
     },
     meetingSurface: () => appState.getMeetingSurface(),

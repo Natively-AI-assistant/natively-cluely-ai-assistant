@@ -336,26 +336,28 @@ svg.guide-done-check :is(path, polyline) {
   svg.guide-done-check :is(path, polyline) { animation: none; stroke-dashoffset: 0; }
 }
 
-/* The overlay's guide banner (OverlayGuide.tsx): ui/OverlayBanner in a
-   soft periwinkle-ice tone. The repeated class outranks every theme scope in
-   OverlayBanner.css (the liquid-glass + light one is (0,3,0)). */
+/* The overlay's guide banner (OverlayGuide.tsx): ui/OverlayBanner in the
+   guide's option D (Evin, 2026-11-15), as the tips: monochrome, white on a
+   dark overlay and near-black on a light one, no periwinkle. The repeated
+   class outranks every theme scope in OverlayBanner.css (the liquid-glass +
+   light one is (0,3,0)). */
 .ov-banner.ov-banner.ov-banner[data-tone='guide'] {
-  --ovb-cta-tone: 168, 184, 255;
-  --ovb-cta-fg: #eef1ff;
-  --ovb-cta-fill: 0.3;
-  --ovb-cta-fill-hover: 0.44;
+  --ovb-cta-tone: 255, 255, 255;
+  --ovb-cta-fg: #ffffff;
+  --ovb-cta-fill: 0.16;
+  --ovb-cta-fill-hover: 0.26;
 }
 .ov-banner.ov-banner.ov-banner[data-tone='guide'] .lg-button.lg-badge.ov-banner-mark {
-  --lg-lav-fg: #c3cdff;
+  --lg-lav-fg: rgba(255, 255, 255, 0.92);
 }
 [data-theme='light'] .ov-banner.ov-banner.ov-banner[data-tone='guide'] {
-  --ovb-cta-tone: 120, 138, 240;
-  --ovb-cta-fg: #34428f;
-  --ovb-cta-fill: 0.22;
-  --ovb-cta-fill-hover: 0.34;
+  --ovb-cta-tone: 29, 29, 31;
+  --ovb-cta-fg: #1d1d1f;
+  --ovb-cta-fill: 0.08;
+  --ovb-cta-fill-hover: 0.14;
 }
 [data-theme='light'] .ov-banner.ov-banner.ov-banner[data-tone='guide'] .lg-button.lg-badge.ov-banner-mark {
-  --lg-lav-fg: #5566d0;
+  --lg-lav-fg: #1d1d1f;
 }
 .ov-banner .guide-count {
   font-size: 11px;

@@ -28,7 +28,11 @@ export interface GuideFacts {
   hasNativelyKey: boolean;
   isPremium: boolean;
   launchCount: number;
+  /** A meeting of the user's own is saved (not the seeded demo): not a new user. Main's to say. */
+  hasMeetings?: boolean;
 }
+
+export declare const GUIDE_DONE_HOLD_MS: number;
 
 export type GuideEvent =
   | { type: 'plans_closed'; facts: GuideFacts }
@@ -70,6 +74,7 @@ export function guideFactsFromSources(sources: {
   trialSentinel: string;
   licensed?: boolean;
   hasOwnAiKey?: boolean;
+  hasMeetings?: boolean;
   launchCount?: number;
 }): GuideFacts;
 export function reconcileGuide(state: GuideState, ctx: { meetingActive: boolean; atLaunch: boolean; surface?: 'overlay' | 'notepad' }, now: number): GuideState;

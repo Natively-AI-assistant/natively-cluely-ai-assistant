@@ -9664,6 +9664,7 @@ export class AppState {
     const overlay = () => this.windowHelper?.getOverlayWindow?.() ?? this.getMainWindow();
     try {
       const screenshotPath = await this.takeScreenshot(false);
+      guideScreenshotTaken();
       const preview = shot.claimed ? '' : await this.getImagePreview(screenshotPath);
       // Decided after the last await: a claim can arrive during either one.
       const inOverlay = shot.deliverToOverlay();
@@ -10008,6 +10009,7 @@ export class AppState {
           try {
             const screenshotPath = await this.takeScreenshot()
             const preview = await this.getImagePreview(screenshotPath)
+            guideScreenshotTaken()
             const mainWindow = this.getMainWindow()
             this.sendToWindow(mainWindow, 'screenshot-taken', {
               path: screenshotPath,

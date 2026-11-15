@@ -172,3 +172,35 @@ test('8 s of silence in the first meeting asks the user to press play, with a wa
   assert.equal(g.split("tr('No sound yet? Press play").length - 1, 2, 'steps 2 and 3 both say it');
   assert.ok(g.includes('openExternal?.(DEMO_VIDEO_URL)'), 'Open the demo brings it forward');
 });
+
+// Evin, 2026-11-15: "only show this for first users and users clicking through
+// the setup and help guide again".
+import { isGuideEligible, guideFactsFromSources } from '../firstRunGuide.mjs';
+
+test('the guide starts by itself only for a brand-new user; Setup & Help restarts it for anyone', () => {
+  const fresh = { hasOwnAiKey: false, hasNativelyKey: false, isPremium: false, launchCount: 1, hasMeetings: false };
+  assert.equal(isGuideEligible(fresh), true);
+  assert.equal(isGuideEligible({ ...fresh, hasMeetings: true }), false, 'a meeting of their own: not new, whatever the launch count says');
+  assert.equal(isGuideEligible({ ...fresh, launchCount: 4 }), false);
+  assert.equal(isGuideEligible({ ...fresh, hasOwnAiKey: true }), false);
+  const idle = { status: 'idle', step: 'start', variant: 'normal', outcome: null, startedAt: null, updatedAt: null, endedMeetingId: null, stopLockUntil: null };
+  assert.equal(reduceGuide(idle, { type: 'plans_closed', facts: { ...fresh, hasMeetings: true } }, NOW), idle, 'an existing user never gets it from the Plans card');
+  for (const status of ['idle', 'skipped', 'finished', 'expired']) {
+    const s = reduceGuide({ ...idle, status }, { type: 'restart' }, NOW);
+    assert.equal(s.status, 'active'); assert.equal(s.step, 'start', `restart from ${status}`);
+  }
+  assert.equal(guideFactsFromSources({ trialSentinel: 'x', hasMeetings: true }).hasMeetings, true);
+  const ipc = readFileSync(new URL('../../../../electron/ipcHandlers.ts', import.meta.url), 'utf8');
+  assert.ok(ipc.includes('hasMeetings: DatabaseManager.getInstance().hasOwnMeeting()'), 'main says, not a window');
+  const db = readFileSync(new URL('../../../../electron/db/DatabaseManager.ts', import.meta.url), 'utf8');
+  assert.ok(db.includes("SELECT 1 FROM meetings WHERE id != 'demo-meeting' LIMIT 1"), 'the seeded demo does not count');
+  const help = readFileSync(new URL('../../../components/SettingsOverlay.tsx', import.meta.url), 'utf8');
+  assert.ok(/onShowGuide=\{\(\) => \{ dispatchGui[^}]*restart/.test(help), 'Setup & Help: Start restarts it');
+});
+
+test('layout is followed on change, not every frame for the whole guide', () => {
+  const g = readFileSync(new URL('../../../components/guide/useGuide.ts', import.meta.url), 'utf8');
+  assert.equal((g.match(/requestAnimationFrame\(/g) || []).length, 2, 'one frame loop, inside followLayout');
+  assert.ok(g.includes('function followLayout(') && g.includes('new MutationObserver(burst)'));
+  assert.ok(!/attributeFilter:[^\]]*data-guide-lit/.test(g), 'lighting a control never wakes it');
+});

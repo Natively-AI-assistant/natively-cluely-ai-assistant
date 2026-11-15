@@ -36,10 +36,13 @@ export interface NotesGuide {
   onRecipeRun: () => void;
 }
 
-export function useNotesGuide(): NotesGuide {
+/** `off`: a preview of the page (Settings › Overlay draws one, in the
+ *  launcher): it never draws the guide, lights nothing and moves nothing. Its
+ *  sample Ask counted as step 10 on the real meeting (seen live 2026-11-15). */
+export function useNotesGuide({ off = false }: { off?: boolean } = {}): NotesGuide {
   const tr = useT();
   const { state, justDone, dispatch } = useGuide();
-  const step: NotesStep | null = (['notepad', 'ask', 'recipe', 'stop2'] as const).find((s) => guideOn(state, s)) ?? null;
+  const step: NotesStep | null = off ? null : (['notepad', 'ask', 'recipe', 'stop2'] as const).find((s) => guideOn(state, s)) ?? null;
   const live = step && !justDone ? step : null;
   const liveRef = useRef(live);
   liveRef.current = live;

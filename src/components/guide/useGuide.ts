@@ -3,14 +3,14 @@
 // report what this window saw. Rules live in src/lib/onboarding/firstRunGuide.mjs.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GuideEvent, GuideState } from '../../lib/onboarding/firstRunGuide.mjs';
-import { guideStopLockLeft } from '../../lib/onboarding/firstRunGuide.mjs';
+import { GUIDE_DONE_HOLD_MS, guideStopLockLeft } from '../../lib/onboarding/firstRunGuide.mjs';
 import { useT } from '../../i18n';
 import { guideKeys } from '../../lib/onboarding/guideKeys.mjs';
 import { isMac, isWindows } from '../../utils/platformUtils';
 
 export type { GuideEvent, GuideState, GuideStepId } from '../../lib/onboarding/firstRunGuide.mjs';
 
-const DONE_MS = 1000;
+const DONE_MS = GUIDE_DONE_HOLD_MS;
 /** The leaving beat at the end of the hold (guide.css: --g-close). */
 const LEAVE_MS = 160;
 
@@ -139,10 +139,64 @@ export function useGuideKeys(enabled: boolean): (id: string) => string[] {
   return useCallback((id: string) => guideKeys(bindings, id, PLATFORM), [bindings]);
 }
 
+/** How long layout is followed frame by frame after something moved. */
+const FOLLOW_MS = 600;
+/** The slow check while nothing seems to move (a control can still appear). */
+const IDLE_CHECK_MS = 1000;
+
+/**
+ * Calls `tick` now, then every frame only while the page may be moving: for
+ * FOLLOW_MS after a DOM change, a resize, a scroll or a CSS transition or
+ * animation starting or ending, and once a second otherwise. The tip, its
+ * arrow and the lit ring used to read layout every frame for as long as the
+ * guide ran (three loops at once on the launcher); this spends frames only
+ * where something moves. The guide's own data-guide-lit is not watched, so
+ * lighting a control never wakes it.
+ */
+function followLayout(tick: () => void): () => void {
+  let raf = 0;
+  let until = 0;
+  const frame = () => {
+    raf = 0;
+    tick();
+    if (performance.now() < until) raf = requestAnimationFrame(frame);
+  };
+  const burst = () => {
+    until = performance.now() + FOLLOW_MS;
+    if (!raf) raf = requestAnimationFrame(frame);
+  };
+  const mo = new MutationObserver(burst);
+  mo.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['class', 'style', 'hidden', 'open', 'aria-hidden', 'aria-expanded', 'data-state'],
+  });
+  const events = ['resize', 'scroll', 'transitionrun', 'transitionend', 'animationstart', 'animationend'] as const;
+  events.forEach((e) => window.addEventListener(e, burst, true));
+  const idle = setInterval(tick, IDLE_CHECK_MS);
+  tick();
+  burst();
+  return () => {
+    if (raf) cancelAnimationFrame(raf);
+    mo.disconnect();
+    events.forEach((e) => window.removeEventListener(e, burst, true));
+    clearInterval(idle);
+  };
+}
+
+/** The first visible match of `selector`, or null. */
+function firstVisible(selector: string): Element | null {
+  return [...document.querySelectorAll(selector)].find((e) => {
+    const r = e.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  }) ?? null;
+}
+
 /**
  * Light up the real control: `data-guide-lit` on the first visible match of
- * `selector`, and on nothing else. Followed every frame, because the control
- * can mount, move or re-render under the guide. null clears it.
+ * `selector`, and on nothing else. Followed as the page changes, because the
+ * control can mount, move or re-render under the guide. null clears it.
  */
 export function useGuideLit(selector: string | null): void {
   useEffect(() => {
@@ -150,33 +204,23 @@ export function useGuideLit(selector: string | null): void {
       document.querySelectorAll('[data-guide-lit]').forEach((el) => { if (el !== keep) el.removeAttribute('data-guide-lit'); });
     };
     if (!selector) { clear(); return; }
-    let raf = 0;
-    const tick = () => {
-      const el = [...document.querySelectorAll(selector)].find((e) => {
-        const r = e.getBoundingClientRect();
-        return r.width > 0 && r.height > 0;
-      }) ?? null;
+    const stop = followLayout(() => {
+      const el = firstVisible(selector);
       clear(el);
       if (el && !el.hasAttribute('data-guide-lit')) el.setAttribute('data-guide-lit', '');
-      raf = requestAnimationFrame(tick);
-    };
-    tick();
-    return () => { cancelAnimationFrame(raf); clear(); };
+    });
+    return () => { stop(); clear(); };
   }, [selector]);
 }
 
-/** The anchor's box, followed every frame; null while it is not on screen. */
+/** The anchor's box, followed as the page changes; null while it is not on screen. */
 export function useAnchorRect(selector: string | null): DOMRect | null {
   const [rect, setRect] = useState<DOMRect | null>(null);
   useEffect(() => {
     if (!selector) { setRect(null); return; }
-    let raf = 0;
     let last = '';
-    const tick = () => {
-      const el = [...document.querySelectorAll(selector)].find((e) => {
-        const r = e.getBoundingClientRect();
-        return r.width > 0 && r.height > 0;
-      });
+    return followLayout(() => {
+      const el = firstVisible(selector);
       let r = el ? el.getBoundingClientRect() : null;
       // Covered (Settings or a dialog over it): no anchor, so no card pointing
       // at something the user cannot see. The guide's own card does not count.
@@ -186,10 +230,7 @@ export function useAnchorRect(selector: string | null): DOMRect | null {
       }
       const key = r ? `${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.width)},${Math.round(r.height)}` : '';
       if (key !== last) { last = key; setRect(r); }
-      raf = requestAnimationFrame(tick);
-    };
-    tick();
-    return () => cancelAnimationFrame(raf);
+    });
   }, [selector]);
   return rect;
 }

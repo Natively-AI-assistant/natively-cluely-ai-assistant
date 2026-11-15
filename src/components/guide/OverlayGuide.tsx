@@ -96,16 +96,8 @@ export function useOverlayGuide(opts: { whatToAnswer?: () => void } = {}): { wan
     return () => { offs.forEach((off) => off?.()); };
   }, [step, justDone, dispatch]);
 
-  // Step 4 moves on with either screenshot.
-  useEffect(() => {
-    if (step !== 'screenshot' || justDone) return;
-    const done = () => dispatch({ type: 'screenshot_taken' });
-    const offs = [
-      window.electronAPI?.onScreenshotTaken?.(done),
-      window.electronAPI?.onScreenshotAttached?.(done),
-    ];
-    return () => { offs.forEach((off) => off?.()); };
-  }, [step, justDone, dispatch]);
+  // Step 4 moves on with either screenshot: main says so (guideScreenshotTaken,
+  // on every capture path), so no window listens as well.
 
   const banner = (
     stepId: GuideStepId,

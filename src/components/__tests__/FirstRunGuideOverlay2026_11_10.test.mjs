@@ -20,8 +20,14 @@ test('the overlay has a guide fold, asks the picker for it, and marks What to an
 
 test('OverlayGuide reports answers and screenshots and teaches the real keys', () => {
   const g = read('src/components/guide/OverlayGuide.tsx');
-  for (const s of ["type: 'answer_shown'", "type: 'screenshot_taken'", 'onIntelligenceSuggestedAnswer', 'onIntelligenceManualResult',
-    'onScreenshotTaken', 'onScreenshotAttached', "'chat:whatToAnswer'", "'general:take-screenshot'", "'general:selective-screenshot'",
+  // Screenshots: main reports every capture path (guideScreenshotTaken), so the
+  // window no longer listens too (2026-11-15: one source, not two).
+  assert.ok(!g.includes('onScreenshotTaken') && !g.includes('onScreenshotAttached'), 'no second listener');
+  const main = read('electron/main.ts');
+  assert.ok((main.match(/guideScreenshotTaken\(\)/g) || []).length >= 3, 'capture-and-process, the tray and the formula fallback');
+  assert.ok((read('electron/ipcHandlers.ts').match(/guideScreenshotTaken\(\)/g) || []).length >= 2, 'take-screenshot and take-selective-screenshot');
+  for (const s of ["type: 'answer_shown'", 'onIntelligenceSuggestedAnswer', 'onIntelligenceManualResult',
+    "'chat:whatToAnswer'", "'general:take-screenshot'", "'general:selective-screenshot'",
     '[data-guide="what-to-answer"]', "'Not on a call? Play any interview video, or ask a question out loud.'",
     "'They just asked you something.'", "'Show Natively your screen.'", "'Stop the meeting when you’re ready.'"]) {
     assert.ok(g.includes(s), s);
@@ -45,7 +51,9 @@ test('the overlay steps are OverlayBanners in the guide tone, one line under the
   const b = read('src/components/ui/OverlayBanner.tsx');
   assert.ok(/OverlayBannerTone = 'warning' \| 'error' \| 'ok' \| 'guide'/.test(b));
   const css = read('src/components/guide/guide.css');
-  assert.ok(/\[data-tone='guide'\]/.test(css) && /168, 184, 255/.test(css), 'the guide tone is periwinkle ice');
+  // Option D (Evin, 2026-11-15), as the tips: monochrome, no periwinkle.
+  assert.ok(/\[data-tone='guide'\]/.test(css) && css.includes('--ovb-cta-tone: 255, 255, 255;') && css.includes('--ovb-cta-tone: 29, 29, 31;'), 'the guide tone is option D');
+  assert.ok(!css.includes('168, 184, 255') && !css.includes('120, 138, 240'), 'the old periwinkle is gone');
   assert.ok(/\[data-theme='light'\][^{]*\[data-tone='guide'\]/.test(css), 'and has a light-theme mark');
 });
 

@@ -227,7 +227,7 @@ const NotesWindow: React.FC<{ preview?: NotesWindowPreview }> = ({ preview }) =>
     const answerScrollRef = useRef<HTMLDivElement>(null);
     const editorRef = useRef<NotesEditorHandle>(null);
     // The first-run guide's notepad step (guide/NotesGuide.tsx).
-    const notesGuide = useNotesGuide();
+    const notesGuide = useNotesGuide({ off: !!preview });
     const stopLock = useGuideStopLock();
     // runRecipe is declared before the guide's callbacks settle; read the latest.
     const guideRecipeRunRef = useRef(notesGuide.onRecipeRun);

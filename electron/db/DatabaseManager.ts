@@ -4643,6 +4643,21 @@ export class DatabaseManager {
         }
     }
 
+    /**
+     * Whether the user has a meeting of their own (anything but the seeded
+     * demo). The first-run guide starts by itself only for someone with none.
+     * Unreadable: true, so a database fault never starts the guide for an
+     * existing user.
+     */
+    public hasOwnMeeting(): boolean {
+        if (!this.db) return true;
+        try {
+            return !!this.db.prepare(`SELECT 1 FROM meetings WHERE id != 'demo-meeting' LIMIT 1`).get();
+        } catch {
+            return true;
+        }
+    }
+
     public getRecentMeetings(limit: number = 50): Meeting[] {
         if (!this.db) return [];
 

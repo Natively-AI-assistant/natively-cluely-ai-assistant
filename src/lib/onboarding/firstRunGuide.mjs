@@ -37,6 +37,11 @@ export const GUIDE_STEP_NUMBER = Object.freeze({
 });
 export const GUIDE_STEP_COUNT = 14;
 
+/** A finished step stays on screen this long, marked done, before the next
+ *  shows (useGuide). The windows report a step only while its card is up, so
+ *  one click never finishes two steps (NotesGuide's liveRef). */
+export const GUIDE_DONE_HOLD_MS = 1000;
+
 /** The first guide meeting's Stop stays locked this long, while the demo film
  *  plays in the browser (Evin, 2026-11-15: "dont let him close the app for 15
  *  seconds"), then 30 s so there is time to try things (Evin, same day).
@@ -105,8 +110,14 @@ export function normalizeGuideState(raw, now) {
   return state;
 }
 
+/** Who the guide starts for by itself: brand-new users only (Evin, 2026-11-15:
+ *  "only show this for first users and users clicking through the setup and
+ *  help guide again"). An early launch, no own AI key, and no meeting of their
+ *  own yet (the seeded demo meeting does not count), so an existing user whose
+ *  launch count reads low after an update never gets it. Setup & Help's Start
+ *  is 'restart', which runs it for anyone. */
 export function isGuideEligible(facts) {
-  return !!facts && !facts.hasOwnAiKey && Number(facts.launchCount) <= GUIDE_MAX_LAUNCH;
+  return !!facts && !facts.hasOwnAiKey && !facts.hasMeetings && Number(facts.launchCount) <= GUIDE_MAX_LAUNCH;
 }
 
 export function windowForStep(step) {
@@ -218,9 +229,10 @@ export function reduceGuide(state, event, now) {
  * trial stores a placeholder Natively key (TRIAL_SENTINEL_KEY): that is not a
  * purchase, so it never counts as one.
  */
-export function guideFactsFromSources({ nativelyKey, trialSentinel, licensed, hasOwnAiKey, launchCount = 0 } = {}) {
+export function guideFactsFromSources({ nativelyKey, trialSentinel, licensed, hasOwnAiKey, hasMeetings, launchCount = 0 } = {}) {
   return {
     hasOwnAiKey: !!hasOwnAiKey,
+    hasMeetings: !!hasMeetings,
     hasNativelyKey: typeof nativelyKey === 'string' && nativelyKey.length > 0 && nativelyKey !== trialSentinel,
     isPremium: !!licensed,
     launchCount: Number(launchCount) || 0,

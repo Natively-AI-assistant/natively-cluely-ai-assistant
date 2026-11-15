@@ -13,7 +13,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 test('the notes window draws the guide in its bottom bar and reports the first line typed', () => {
   const w = read('src/components/NotesWindow.tsx');
-  assert.ok(w.includes('useNotesGuide()'));
+  assert.ok(w.includes('useNotesGuide({ off: !!preview })'), 'previews never run the guide');
   // Beside the meeting's own status, above the Stop pill; the auto-stop notice wins.
   assert.ok(w.includes("{phase === 'live' && stopsAt === null && notesGuide.node}"));
   assert.ok(!w.includes("{phase !== 'ended' && notesGuide.node}"), 'no longer a block above the editor');
