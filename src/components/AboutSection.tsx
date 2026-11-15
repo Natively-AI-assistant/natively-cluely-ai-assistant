@@ -3,11 +3,12 @@ import { createPortal } from 'react-dom';
 import { useT } from '../i18n';
 import {
     Github, Twitter, Linkedin, Instagram, Send, Star, Bug, Mail, Heart,
-    NotebookPen, Pin, Plug, Link,
+    AlignLeft, Smartphone, Camera, AudioLines,
     LayoutGrid, Search, FileText, PlayCircle,
     HardDrive, Sliders, Lock, ArrowRight, Check, HandCoins,
 } from 'lucide-react';
 import { ProfileIntelligenceIcon } from './ProfileIntelligenceIcon';
+import { AutoAnswerIcon } from './AutoAnswerIcon';
 import evinProfile from '../assets/evin.png';
 // Each platform's own app icon: the Liquid Glass render macOS shows in the Dock
 // (assets/icons/mac/dock-icon.png) and the Windows icon (assets/icons/png), at
@@ -70,12 +71,20 @@ interface AboutItem { title: string; body: string; badge?: string; Icon: AboutIc
 // style (meeting header compose sheet; style per mode in Modes Manager).
 // Undetectable is deliberately not claimed here: the owner won't promise it.
 // Nothing here needs the Companion extension.
+// 3.2 (2026-11-15), from the commits since v3.1.0: Auto Answer's on-device
+// decider (589f1c5a, rows in Settings › Intelligence since 4d4ba426), Answer
+// length (98b827c0, one global row in Settings › Overlay), every overlay
+// answer streamed to the paired phone (43f099d7), faster screenshot answers
+// (3eef9657: first word 9.7 s -> 4.1 s measured 2026-11-06) together with the
+// screenshot question (#726, Settings › Overlay "Screenshot question"), and BYOK Soniox
+// stt-rt-v6 / ElevenLabs Scribe v3 plus Nepali (a5b063f9, #736; the speech
+// provider and its key live in Settings › Audio).
 const WHATS_NEW: AboutItem[] = [
-    { title: 'Notepad', body: 'Notes with recipes, a live transcript and Ask for the whole meeting.', Icon: NotebookPen },
-    { title: 'Your own overlay buttons', body: 'Describe a button in plain sentences and Natively builds it. In Overlay.', Icon: Pin },
-    { title: 'Connectors', body: 'Gmail, Slack, Notion, Zapier, CRMs and webhooks. In Connectors.', Icon: Plug },
-    { title: 'Share notes as a link', body: 'Send anyone a link to a meeting’s notes. In the Share menu.', Icon: Link },
-    { title: 'Follow-ups in your style', body: 'One click writes the follow-up email in your tone, per mode.', Icon: Mail },
+    { title: 'Smarter Auto Answer', body: 'An on-device model decides which questions to answer. In Intelligence.', Icon: AutoAnswerIcon },
+    { title: 'Faster screenshot answers', body: 'Answers start about twice as fast, and you choose the question. In Overlay.', Icon: Camera },
+    { title: 'Answer length', body: 'Shorter, Smart or Longer answers, for every mode. In Overlay.', Icon: AlignLeft },
+    { title: 'Answers on your phone', body: 'Every overlay answer streams live to your paired phone.', Icon: Smartphone },
+    { title: 'Newer speech models', body: 'Soniox v6, ElevenLabs Scribe v3 and Nepali. In Audio.', Icon: AudioLines },
 ];
 
 // Compressed 2026-09-25 at the owner's request. Not numbered: they are not a
