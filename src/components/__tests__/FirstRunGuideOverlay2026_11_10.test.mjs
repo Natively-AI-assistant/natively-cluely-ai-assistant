@@ -58,7 +58,8 @@ test('the guide accent is a soft periwinkle ice, not the old purple', () => {
     const src = read(f);
     assert.ok(!/7C5CFF|124, ?92, ?255|B9A6FF|6A4FE0|3d2a9e|ece6ff/i.test(src), `${f} has no old purple`);
   }
-  assert.ok(read('src/components/guide/guide.css').includes('--guide-accent: 168, 184, 255;     /* #A8B8FF, periwinkle ice */'));
+  const css = read('src/components/guide/guide.css');
+  assert.ok(css.includes('--gt-accent: #a8b8ff;') && css.includes('--guide-ring: 168, 184, 255;'), 'periwinkle ice on ink, and the lit ring');
 });
 
 // Evin, 2026-11-15: the meeting overlay and the notepad are separate steps.
@@ -69,17 +70,26 @@ test('step 2 is the meeting overlay itself, with Next', () => {
   // Step 5's hand-off to the notepad is main's (firstRunGuideWiring.test.mjs).
 });
 
-// Evin, 2026-11-15, on the card's dot-and-pill progress: "this looks horrendous".
-// The card is Settings' own parts: its card tokens, its button shape, and the
-// same "N of 8" count as the overlay banner and the notepad pill.
-test('the floating card is built from Settings parts, with a plain step count', () => {
+// Evin, 2026-11-15: the dot-and-pill progress "looks horrendous", then "i didnt
+// like the ui of the guide, redesign it". The launcher and Settings steps are a
+// TipKit-style tip: an arrow to the control, a surface inverted against the page,
+// icon + title + one line + one action, a ✕ that skips, a quiet "N of 8".
+test('the launcher and Settings steps are a tip that points at its control', () => {
   const c = read('src/components/guide/GuideCard.tsx');
-  assert.ok(!c.includes('guide-dot') && !/Array\.from\(\{ length: GUIDE_STEP_COUNT/.test(c), 'no progress dots');
+  assert.ok(c.includes('className="guide-tip-arrow"'), 'an arrow joins the tip to its control');
+  assert.ok(/arrowX = Math\.max\(ARROW_INSET, Math\.min\(width - ARROW_INSET, centre - left\)\)/.test(c), 'the arrow follows the control, not the tip');
   assert.ok(c.includes("tr('{n} of {total}')"), 'the count the other surfaces use');
-  for (const s of ['bg-bg-card', 'border-border-subtle', 'text-text-secondary', 'text-text-tertiary', "from '../settings/SettingsRow'"]) assert.ok(c.includes(s), s);
-  assert.ok(c.includes('disabled={action.disabled}'), 'a real disabled button, not a faded span');
-  for (const f of ['src/components/guide/GuideCard.tsx', 'src/components/guide/LauncherGuide.tsx']) {
-    assert.ok(!read(f).includes('LavenderButton'), `${f}: no onboarding lavender button`);
+  assert.ok(!c.includes('eyebrow') && !c.includes('guide-dot') && !/length: GUIDE_STEP_COUNT/.test(c), 'no kicker label, no dots');
+  assert.ok(c.includes("aria-label={tr('Skip guide')}"), 'the ✕ skips the guide');
+  assert.ok(c.includes('disabled={action.disabled}'), 'a real disabled button');
+  const css = read('src/components/guide/guide.css');
+  assert.ok(/\.guide-tip,\n\.guide-pill \{\n  --gt-bg: #eef1ff;/.test(css), 'an ice tip on the dark app');
+  assert.ok(/\[data-theme='light'\] \.guide-tip,\n\[data-theme='light'\] \.guide-pill \{\n  --gt-bg: #1d1f2e;/.test(css), 'an ink tip on the light app');
+  assert.ok(css.includes('.guide-tip.guide-enter { animation: guideTipIn'), 'it grows out of its arrow');
+  for (const f of ['src/components/guide/GuideCard.tsx', 'src/components/guide/LauncherGuide.tsx', 'src/components/guide/SettingsGuide.tsx']) {
+    const src = read(f);
+    assert.ok(!src.includes('LavenderButton'), `${f}: no onboarding lavender button`);
+    assert.ok(!/eyebrow=|place="below"|\bdy=\{/.test(src), `${f}: no old card props`);
   }
   assert.ok(!fs.existsSync(path.join(ROOT, 'src/components/guide/guideStyle.tsx')), 'the old accent module is gone');
 });

@@ -87,10 +87,8 @@ export const SettingsGuide: React.FC = () => {
       <GuideCard
         anchor='[data-guide="nav-plans"]'
         width={290}
-        dx={30}
-        dy={150}
+        dx={60}
         stepId="plans"
-        eyebrow={tr('Natively Pro')}
         title={tr('Thanks. You’re all set.')}
         body={tr('Your plan covers the AI and speech-to-text. Start a meeting any time.')}
         lit={false}
@@ -110,10 +108,8 @@ export const SettingsGuide: React.FC = () => {
       <GuideCard
         anchor='[data-guide="nav-plans"]'
         width={290}
-        dx={30}
-        dy={150}
+        dx={60}
         stepId="plans"
-        eyebrow={tr('Free trial')}
         title={title}
         body={`${left}${tr('Pick a plan on the right to keep Natively Pro. Or use your own AI keys, free.')}`}
         action={{ label: tr('Use my own keys'), onClick: () => dispatch({ type: 'own_keys' }) }}
@@ -134,11 +130,9 @@ export const SettingsGuide: React.FC = () => {
     return (
       <GuideCard
         anchor='[data-guide="nav-ai-providers"]'
-        width={300}
-        dx={30}
-        dy={110}
+        width={320}
+        dx={60}
         stepId="keys"
-        eyebrow={tr('Your own keys')}
         title={tr('Set up Natively your way.')}
         body={tr('An AI provider is all you need. Speech-to-text and retrieval make it better.')}
         list={rows}

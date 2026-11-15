@@ -6,7 +6,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '../../i18n';
 import { trialEventFromLocal } from '../../lib/onboarding/firstRunGuide.mjs';
-import { GUIDE_PRIMARY_BTN, GuideCard } from './GuideCard';
+import { GuideCard } from './GuideCard';
 import { guideOn, useAnchorRect, useGuide } from './useGuide';
 
 /** The control each launcher-side step points at (steps 6 and 7 live in Settings, in this window). */
@@ -104,10 +104,8 @@ export const LauncherGuide: React.FC<Props> = ({ onOpenSettings, onOpenMeeting }
     return (
       <GuideCard
         anchor='[data-guide="start"]'
-        place="below"
         width={330}
         stepId="start"
-        eyebrow={tr('Your first meeting')}
         title={tr('Start your first meeting.')}
         body={tr('Your free trial covers it. Join your call first, or start now.')}
         waiting={tr('Waiting for you')}
@@ -121,10 +119,8 @@ export const LauncherGuide: React.FC<Props> = ({ onOpenSettings, onOpenMeeting }
     return (
       <GuideCard
         anchor='[data-guide="meeting-tabs"]'
-        place="below"
         width={340}
         stepId="notes"
-        eyebrow={tr('Meeting notes')}
         title={tr('Your meeting, written up.')}
         body={tr('The summary and the full transcript are saved here. Find them any time on Home.')}
         action={{ label: tr('Next'), onClick: () => dispatch({ type: 'notes_next' }) }}
@@ -139,17 +135,17 @@ export const LauncherGuide: React.FC<Props> = ({ onOpenSettings, onOpenMeeting }
   return null;
 };
 
-/** The guide's step is off screen: one floating pill, the card's own parts. */
+/** The guide's step is off screen: one floating pill, the tip's own surface. */
 const ContinueGuide: React.FC<{ label: string; skipLabel: string; onContinue: () => void; onSkip: () => void }> = ({
   label, skipLabel, onContinue, onSkip,
 }) => createPortal(
   <div
-    className="guide-enter guide-card bg-bg-card border border-border-subtle rounded-full pl-4 pr-1.5 py-1.5 flex items-center gap-3"
+    className="guide-enter guide-pill"
     data-guide-card="continue"
     style={{ position: 'fixed', left: '50%', bottom: 20, transform: 'translateX(-50%)', zIndex: 2147483001 }}
   >
-    <button type="button" className="guide-skip text-[12px] text-text-tertiary" onClick={onSkip}>{skipLabel}</button>
-    <button type="button" className={`${GUIDE_PRIMARY_BTN} rounded-full`} onClick={onContinue}>{label}</button>
+    <button type="button" className="guide-skip" onClick={onSkip}>{skipLabel}</button>
+    <button type="button" className="guide-pill-action" onClick={onContinue}>{label}</button>
   </div>,
   document.body,
 );

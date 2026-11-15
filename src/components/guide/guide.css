@@ -23,6 +23,14 @@
 
 [data-theme='light'] [data-guide-lit] { --guide-ring: 120, 138, 240; }
 
+/* The tip grows out of its arrow (transform-origin is set at the arrow),
+   critically damped: no overshoot. */
+@keyframes guideTipIn {
+  from { opacity: 0; transform: translateY(-4px) scale(0.94); }
+  to { opacity: 1; transform: none; }
+}
+.guide-tip.guide-enter { animation: guideTipIn 260ms cubic-bezier(0.23, 1, 0.32, 1) both; }
+
 .guide-enter {
   animation: guideIn 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
@@ -39,52 +47,126 @@
   .guide-skip:hover { opacity: 0.75; }
 }
 
-/* The floating card and the Continue pill (GuideCard.tsx, LauncherGuide.tsx):
-   Settings' card tokens, a lift so they read as floating over the page. */
-.guide-card {
-  --guide-accent: 168, 184, 255;     /* #A8B8FF, periwinkle ice */
-  --guide-accent-ink: #c3cdff;
-  /* A hairline edge: Settings' border token is transparent in dark. */
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07), 0 20px 48px -16px rgba(0, 0, 0, 0.7), 0 2px 8px rgba(0, 0, 0, 0.25);
+/* The tip (GuideCard.tsx) and the Continue pill (LauncherGuide.tsx), after
+   Apple's TipKit popover: inverted against the page so it reads as a tip, not
+   as more app. On the dark app a periwinkle-ice tip with ink text; on the light
+   app an ink tip with ice text. One accent: the guide's periwinkle. */
+.guide-tip,
+.guide-pill {
+  --gt-bg: #eef1ff;
+  --gt-ink: #14162a;
+  --gt-ink-2: #474c68;
+  --gt-ink-3: #7d82a0;
+  --gt-accent: #4f5fd6;          /* periwinkle, deep enough on ice */
+  --gt-on-accent: #ffffff;
+  --gt-wash: rgba(79, 95, 214, 0.1);
+  --gt-hair: rgba(20, 22, 42, 0.1);
+  --gt-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 18px 44px -14px rgba(0, 0, 0, 0.65), 0 2px 10px rgba(0, 0, 0, 0.3);
+  /* the accent the breathing dot and the ticks take */
+  --guide-accent: 79, 95, 214;
+  color: var(--gt-ink);
+  background: var(--gt-bg);
+  box-shadow: var(--gt-shadow);
   -webkit-font-smoothing: antialiased;
 }
-[data-theme='light'] .guide-card {
-  --guide-accent: 120, 138, 240;
-  --guide-accent-ink: #4c5bc4;
-  box-shadow: 0 20px 48px -18px rgba(30, 36, 80, 0.28), 0 2px 8px rgba(30, 36, 80, 0.08);
+[data-theme='light'] .guide-tip,
+[data-theme='light'] .guide-pill {
+  --gt-bg: #1d1f2e;
+  --gt-ink: #f4f5ff;
+  --gt-ink-2: #b9bdd6;
+  --gt-ink-3: #8a8fab;
+  --gt-accent: #a8b8ff;          /* periwinkle ice on ink */
+  --gt-on-accent: #14162a;
+  --gt-wash: rgba(168, 184, 255, 0.12);
+  --gt-hair: rgba(255, 255, 255, 0.1);
+  --gt-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 18px 44px -16px rgba(20, 24, 60, 0.45), 0 2px 10px rgba(20, 24, 60, 0.15);
+  --guide-accent: 168, 184, 255;
 }
-.guide-accent-ink { color: var(--guide-accent-ink); }
 
-/* Settings' button shape, filled with the accent, dark ink on it. */
-.guide-primary-btn {
-  background: rgb(var(--guide-accent));
-  color: #14172e;
+.guide-tip {
+  box-sizing: border-box;
+  border-radius: 16px;
+  padding: 14px 14px 12px;
+}
+.guide-tip-arrow {
+  position: absolute;
+  top: -8px;
+  fill: var(--gt-bg);
+  filter: drop-shadow(0 -1px 0 rgba(0, 0, 0, 0.04));
+}
+
+/* TipKit's tinted symbol: the step's icon on a soft accent disc. */
+.guide-tip-icon {
+  width: 30px; height: 30px; flex: 0 0 30px; border-radius: 9px;
+  display: grid; place-items: center;
+  background: var(--gt-wash);
+  color: var(--gt-accent);
+}
+.guide-tip-icon.is-done { background: rgba(47, 184, 102, 0.14); color: #1f9d55; }
+[data-theme='light'] .guide-tip-icon.is-done { color: #5fd38d; }
+
+.guide-tip-title {
+  font-size: 15px; line-height: 20px; font-weight: 600; letter-spacing: -0.012em;
+}
+.guide-tip-body {
+  margin-top: 2px; font-size: 13px; line-height: 18px; color: var(--gt-ink-2);
+}
+
+.guide-tip-close {
+  width: 24px; height: 24px; flex: 0 0 24px; margin: -3px -4px 0 0;
+  border-radius: 999px; border: 0; padding: 0; background: transparent;
+  display: grid; place-items: center; color: var(--gt-ink-3); cursor: pointer;
+  transition: background-color 150ms ease-out, color 150ms ease-out;
 }
 @media (hover: hover) {
-  .guide-primary-btn:not(:disabled):hover { background: rgba(var(--guide-accent), 0.86); }
+  .guide-tip-close:hover { background: var(--gt-wash); color: var(--gt-ink); }
 }
-[data-theme='light'] .guide-primary-btn { color: #fff; }
-/* Not yet: Settings' plain neutral button, not a faded accent. */
-.guide-primary-btn:disabled,
-[data-theme='light'] .guide-primary-btn:disabled {
-  opacity: 1;
-  background: var(--bg-component);
-  border-color: var(--border-subtle);
-  color: var(--text-secondary);
-  cursor: default;
-}
+.guide-tip-close:focus-visible,
+.guide-tip-action:focus-visible,
+.guide-pill button:focus-visible { outline: 2px solid var(--gt-accent); outline-offset: 2px; }
 
-/* Checklist: the row to do now, and the tick circles. */
-.guide-row-now { background: rgba(var(--guide-accent), 0.1); }
+/* The checklist (step 8): aligned under the title, not under the icon. */
+.guide-tip-list { margin: 10px 0 0 42px; display: flex; flex-direction: column; gap: 2px; }
+.guide-tip-row {
+  display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 8px; margin-left: -8px;
+  border-radius: 8px; font-size: 13px; color: var(--gt-ink);
+}
+.guide-tip-row.is-todo { color: var(--gt-ink-2); }
+.guide-tip-row.is-now { background: var(--gt-wash); font-weight: 600; }
+.guide-tip-hint { margin-left: auto; flex-shrink: 0; font-size: 12px; font-weight: 500; color: var(--gt-ink-3); }
+.guide-tip-row.is-now .guide-tip-hint { color: var(--gt-accent); }
 .guide-tick {
   width: 16px; height: 16px; flex: 0 0 16px; border-radius: 999px;
   display: grid; place-items: center; box-sizing: border-box;
-  border: 1.5px solid rgba(255, 255, 255, 0.24);
+  border: 1.5px solid var(--gt-ink-3);
 }
-[data-theme='light'] .guide-tick { border-color: rgba(11, 16, 32, 0.22); }
-.guide-tick.is-now { border-color: rgb(var(--guide-accent)); }
-.guide-tick.is-done { border: 0; background: rgb(var(--guide-accent)); color: #14172e; }
-[data-theme='light'] .guide-tick.is-done { color: #fff; }
+.is-now > .guide-tick { border-color: var(--gt-accent); }
+.is-done > .guide-tick { border: 0; background: var(--gt-accent); color: var(--gt-on-accent); }
+
+/* Footer: the quiet count, then the one action or the status. */
+.guide-tip-foot {
+  margin: 12px 0 0 42px; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px;
+}
+.guide-tip-count { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--gt-ink-3); }
+.guide-tip-status { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 500; color: var(--gt-ink-2); }
+.guide-tip-action,
+.guide-pill-action {
+  height: 28px; padding: 0 14px; border: 0; border-radius: 999px; cursor: pointer;
+  font-size: 13px; font-weight: 600; letter-spacing: -0.005em;
+  background: var(--gt-accent); color: var(--gt-on-accent);
+  transition: filter 150ms ease-out, transform 120ms ease-out, background-color 150ms ease-out, color 150ms ease-out;
+}
+@media (hover: hover) {
+  .guide-tip-action:not(:disabled):hover,
+  .guide-pill-action:hover { filter: brightness(1.08); }
+}
+.guide-tip-action:not(:disabled):active,
+.guide-pill-action:active { transform: scale(0.97); }
+/* Not yet (Done before an AI provider): a quiet outline, still readable. */
+.guide-tip-action:disabled {
+  cursor: default; background: transparent; color: var(--gt-ink-3);
+  box-shadow: inset 0 0 0 1px var(--gt-hair);
+}
 
 /* Waiting for the user: a soft breathing dot. */
 .guide-wait-dot {
@@ -94,9 +176,17 @@
 }
 @keyframes guideWait { 50% { opacity: 0.35; } }
 
+/* The step's control is off screen: one floating pill. */
+.guide-pill {
+  display: flex; align-items: center; gap: 14px;
+  padding: 6px 6px 6px 16px; border-radius: 999px;
+}
+.guide-pill .guide-skip { font-size: 12.5px; color: var(--gt-ink-3); }
+
 @media (prefers-reduced-motion: reduce) {
   [data-guide-lit] { animation: none !important; }
   .guide-wait-dot { animation: none; }
+  .guide-tip-action:active, .guide-pill-action:active { transform: none; }
   @keyframes guideIn {
     from { opacity: 0; }
     to { opacity: 1; }
