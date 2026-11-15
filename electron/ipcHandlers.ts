@@ -15,7 +15,7 @@ import { resolveMacScreenStatus } from '../src/lib/permissionAttentionPolicy.mjs
 import { applyPermissionsCardEvent, normalizePermissionsCardRecord } from '../src/lib/permissionsCardPolicy.mjs';
 import { guideFactsFromSources } from '../src/lib/onboarding/firstRunGuide.mjs';
 import { configureGuideStore, dispatchGuideFromWindow, getGuideState, guideScreenshotTaken, guideStopLockedMs, guideSurfaceSet } from './services/firstRunGuideStore';
-import { DEMO_VIDEO_URL } from '../src/lib/demoVideoUrl';
+import { DEMO_VIDEO_URL, demoFilmOpenOptions } from '../src/lib/demoVideoUrl';
 import { hasOwnAiKey, resolveExpiredTrial } from '../src/lib/trialPolicy.mjs';
 import { CARDS, OUTCOMES } from '../src/lib/cards/cardPolicy.mjs';
 import { TRIAL_CAMPAIGN, TRIAL_PROMO_ID, runTrialCampaignReset } from '../src/lib/trialCampaign.mjs';
@@ -9494,9 +9494,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     // browser, not the app: the app's own sound is left out of system-audio
     // capture on macOS (sck.rs excludes the current process), and a visible,
     // user-watched view is the only kind YouTube counts. shell.openExternal is
-    // the same on macOS and Windows.
+    // the same on macOS and Windows; on macOS the browser stays behind
+    // (demoFilmOpenOptions). A browser that blocks autoplay: the overlay asks
+    // the user to press play (OverlayGuide, DEMO_FILM_QUIET_MS).
     onFirstMeetingStarted: () => {
-      shell.openExternal(DEMO_VIDEO_URL).catch((e) => console.warn('[Guide] demo film did not open:', e?.message));
+      shell.openExternal(DEMO_VIDEO_URL, demoFilmOpenOptions(process.platform)).catch((e) => console.warn('[Guide] demo film did not open:', e?.message));
     },
   });
   safeHandle('guide:get', async () => getGuideState());

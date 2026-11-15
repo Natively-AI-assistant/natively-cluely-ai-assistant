@@ -144,9 +144,30 @@ test('main refuses the user\'s Stop while locked, opens the film at the first me
   assert.ok(end.indexOf('guideStopLockedMs()') > -1 && end.indexOf('guideStopLockedMs()') < end.indexOf('appState.endMeeting()'), 'end-meeting checks the lock first');
   const pill = ipc.slice(ipc.indexOf("safeHandle('overlay-ui-action'"), ipc.indexOf("safeHandle('overlay-ui-action'") + 1200);
   assert.ok(/action\.type === 'end-meeting' && guideStopLockedMs\(\) > 0/.test(pill), 'the pill\'s Stop too');
-  assert.ok(ipc.includes('onFirstMeetingStarted') && ipc.includes('shell.openExternal(DEMO_VIDEO_URL)'), 'the film opens in the browser');
+  assert.ok(ipc.includes('onFirstMeetingStarted') && ipc.includes('shell.openExternal(DEMO_VIDEO_URL, '), 'the film opens in the browser');
   const main = readFileSync(new URL('../../../../electron/main.ts', import.meta.url), 'utf8');
   assert.ok(!main.includes('guideStopLocked'), 'auto-stop, quit and teardown never ask the lock');
   const store = readFileSync(new URL('../../../../electron/services/firstRunGuideStore.ts', import.meta.url), 'utf8');
   assert.ok(store.includes("event.type === 'meeting_started' && current.step === 'start' && next.status === 'active'"), 'only the first meeting opens it');
+});
+
+// The two risks Evin asked fixed (2026-11-15): a blocked autoplay, and the
+// film taking the front.
+import { DEMO_FILM_QUIET_MS, demoFilmOpenOptions } from '../../demoVideoUrl.ts';
+
+test('the film opens behind on macOS; Windows opens it plainly (no such option there)', () => {
+  assert.deepEqual(demoFilmOpenOptions('darwin'), { activate: false });
+  assert.deepEqual(demoFilmOpenOptions('win32'), {});
+  assert.deepEqual(demoFilmOpenOptions('linux'), {});
+  const ipc = readFileSync(new URL('../../../../electron/ipcHandlers.ts', import.meta.url), 'utf8');
+  assert.ok(ipc.includes('shell.openExternal(DEMO_VIDEO_URL, demoFilmOpenOptions(process.platform))'));
+});
+
+test('8 s of silence in the first meeting asks the user to press play, with a way to the film', () => {
+  assert.equal(DEMO_FILM_QUIET_MS, 8_000);
+  const g = readFileSync(new URL('../../../components/guide/OverlayGuide.tsx', import.meta.url), 'utf8');
+  assert.ok(g.includes("const listening = step === 'overlay' || step === 'answer';"), 'listens from step 2');
+  assert.ok(g.includes('state.stopLockUntil - GUIDE_STOP_LOCK_MS'), 'timed from the first meeting\'s start, so only a meeting that opened the film');
+  assert.equal(g.split("tr('No sound yet? Press play").length - 1, 2, 'steps 2 and 3 both say it');
+  assert.ok(g.includes('openExternal?.(DEMO_VIDEO_URL)'), 'Open the demo brings it forward');
 });

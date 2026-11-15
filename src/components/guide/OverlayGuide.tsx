@@ -9,10 +9,11 @@
 import React, { useEffect, useState } from 'react';
 import { AppWindow, Camera, Check, CircleStop, Pencil } from 'lucide-react';
 import { useT } from '../../i18n';
-import { GUIDE_STEP_COUNT, GUIDE_STEP_NUMBER } from '../../lib/onboarding/firstRunGuide.mjs';
+import { GUIDE_STEP_COUNT, GUIDE_STEP_NUMBER, GUIDE_STOP_LOCK_MS } from '../../lib/onboarding/firstRunGuide.mjs';
 import type { GuideStepId } from '../../lib/onboarding/firstRunGuide.mjs';
 import { OverlayBanner, OverlayBannerButton } from '../ui/OverlayBanner';
 import { guideOn, useGuide, useGuideKeys, useGuideLit } from './useGuide';
+import { DEMO_FILM_QUIET_MS, DEMO_VIDEO_URL } from '../../lib/demoVideoUrl';
 import './guide.css';
 
 const Keys: React.FC<{ keys: string[] }> = ({ keys }) => (
@@ -28,14 +29,36 @@ export function useOverlayGuide(): { wants: boolean; node: React.ReactNode } {
   useGuideLit(step === 'answer' && !justDone ? '[data-guide="what-to-answer"]' : null);
 
   // Has anyone said anything yet? Until then step 3 says how to get a question.
+  // Listened for from step 2, as the demo film starts with the meeting; any
+  // words count, interim too: they prove the film (or a voice) is coming through.
+  const listening = step === 'overlay' || step === 'answer';
   const [heard, setHeard] = useState(false);
   useEffect(() => {
-    if (step !== 'answer' || heard) return;
+    if (!listening || heard) return;
     const off = window.electronAPI?.onNativeAudioTranscript?.((tx) => {
-      if (tx?.final && tx.text?.trim()) setHeard(true);
+      if (tx?.text?.trim()) setHeard(true);
     });
     return () => { off?.(); };
-  }, [step, heard]);
+  }, [listening, heard]);
+
+  // The first meeting opened the demo film (main, at step 1 -> 2; its Stop
+  // lock is stamped at the same moment). Still nothing heard 8 s in: the
+  // browser most likely blocked autoplay, so the banner asks for a press on
+  // play, with a button that brings the film forward.
+  const filmFrom = typeof state?.stopLockUntil === 'number' ? state.stopLockUntil - GUIDE_STOP_LOCK_MS : null;
+  const [quiet, setQuiet] = useState(false);
+  useEffect(() => {
+    setQuiet(false);
+    if (!listening || heard || filmFrom === null) return;
+    const t = setTimeout(() => setQuiet(true), Math.max(0, filmFrom + DEMO_FILM_QUIET_MS - Date.now()));
+    return () => clearTimeout(t);
+  }, [listening, heard, filmFrom]);
+  const pressPlay = quiet && !heard;
+  const openFilm = (
+    <OverlayBannerButton variant="secondary" onClick={() => { void window.electronAPI?.openExternal?.(DEMO_VIDEO_URL); }}>
+      {tr('Open the demo')}
+    </OverlayBannerButton>
+  );
 
   // Step 3 moves on when an answer arrives, from the keys or the button.
   useEffect(() => {
@@ -97,10 +120,15 @@ export function useOverlayGuide(): { wants: boolean; node: React.ReactNode } {
         'overlay',
         <AppWindow strokeWidth={2.2} />,
         tr('This is your meeting overlay.'),
-        tr('Answers, screenshots and chat show up here, over your call.'),
-        <OverlayBannerButton variant="primary" onClick={() => dispatch({ type: 'overlay_next' })}>
-          {tr('Next')}
-        </OverlayBannerButton>,
+        pressPlay
+          ? tr('No sound yet? Press play on the Natively demo in your browser.')
+          : tr('Answers, screenshots and chat show up here, over your call.'),
+        <>
+          {pressPlay && openFilm}
+          <OverlayBannerButton variant="primary" onClick={() => dispatch({ type: 'overlay_next' })}>
+            {tr('Next')}
+          </OverlayBannerButton>
+        </>,
       ),
     };
   }
@@ -114,8 +142,13 @@ export function useOverlayGuide(): { wants: boolean; node: React.ReactNode } {
         tr('They just asked you something.'),
         heard
           ? tr('Press the keys. Natively writes your reply from the conversation.')
-          : tr('Not on a call? Play any interview video, or ask a question out loud.'),
-        <Keys keys={keysFor('chat:whatToAnswer')} />,
+          : pressPlay
+            ? tr('No sound yet? Press play on the Natively demo in your browser.')
+            : tr('Not on a call? Play any interview video, or ask a question out loud.'),
+        <>
+          {pressPlay && openFilm}
+          <Keys keys={keysFor('chat:whatToAnswer')} />
+        </>,
       ),
     };
   }
