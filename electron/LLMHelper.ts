@@ -16012,7 +16012,8 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   public async generateMeetingSummary(systemPrompt: string, context: string, groqSystemPrompt?: string, opts?: MeetingSummaryCallOpts): Promise<string> {
-    console.log(`[LLMHelper] generateMeetingSummary called. Context length: ${context.length}`);    // Short-circuit on empty/whitespace context. With no transcript content to
+    console.log(`[LLMHelper] generateMeetingSummary called. Context length: ${context.length}`);
+    // Short-circuit on empty/whitespace context. With no transcript content to
     // summarise, the provider fallback chain (Natively → Codex → Groq → Gemini
     // Flash-Lite → Flash → Pro) burns up to ~10 minutes of wall-clock time on retries
     // for a result that will be discarded by the caller anyway. The caller
