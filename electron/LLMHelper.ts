@@ -265,10 +265,10 @@ const CODEX_FAST_MIN_BUDGET_MS = 3000
 // Background Model: resolveFastModelFamily() does not return it, so the picker
 // cannot offer it and callFastModel never sees it.
 type FastModelFamily = 'openai' | 'groq' | 'gemini' | 'deepseek' | 'claude' | 'codex' | 'natively'
-  | 'openrouter' | 'litellm' | 'nvidia_nim' | 'ninerouter' | 'fluxion' | 'agentrouter'
+  | 'openrouter' | 'requesty' | 'litellm' | 'nvidia_nim' | 'ninerouter' | 'fluxion' | 'agentrouter'
 // Background Model families on an endpoint the user supplies — the same set
 // activeModelIsUserEndpoint() names for an Active Model.
-const FAST_PICK_USER_ENDPOINT_FAMILIES: ReadonlySet<FastModelFamily> = new Set(['litellm', 'nvidia_nim', 'openrouter', 'fluxion', 'ninerouter', 'agentrouter'])
+const FAST_PICK_USER_ENDPOINT_FAMILIES: ReadonlySet<FastModelFamily> = new Set(['litellm', 'nvidia_nim', 'openrouter', 'requesty', 'fluxion', 'ninerouter', 'agentrouter'])
 /** Per-call overrides for streamWithAgentRouter (the fast-model seam's small cap and temperature 0). */
 type AgentRouterCallOptions = { maxTokens?: number; temperature?: number }
 const OPENAI_JUDGE_MODEL = "gpt-5.5"
@@ -5721,6 +5721,9 @@ let isMultimodal = !!(imagePaths?.length);
     // properly needs per-gateway clients plus routing-prefix stripping; until
     // then they resolve to no family rather than leak. MUST stay first.
     if (this.isOpenRouterModel(modelId)) return 'openrouter';
+    // `requesty/anthropic/claude-*` would otherwise be claimed by the Claude
+    // predicate and sent to Anthropic on the user's own key.
+    if (this.isRequestyModel(modelId)) return 'requesty';
     if (this.isLiteLLMModel(modelId)) return 'litellm';
     if (this.isNvidiaNimModel(modelId)) return 'nvidia_nim';
     if (this.isNinerouterModel(modelId)) return 'ninerouter';
@@ -5793,6 +5796,7 @@ let isMultimodal = !!(imagePaths?.length);
       // fast_mode rides on groqFastTextMode, which is on whenever this runs.
       case 'natively': stream = this.streamWithNatively(userContent, skipSystemPrompt ? undefined : baseSystemPrompt, undefined, abortSignal); break;
       case 'openrouter': stream = this.streamWithOpenRouter(userContent, openaiShaped, undefined, abortSignal, modelId); break;
+      case 'requesty': stream = this.streamWithRequesty(userContent, openaiShaped, undefined, abortSignal, modelId); break;
       case 'litellm': stream = this.streamWithLiteLLM(userContent, openaiShaped, undefined, abortSignal, modelId); break;
       case 'nvidia_nim': stream = this.streamWithNvidiaNim(userContent, openaiShaped, undefined, abortSignal, modelId); break;
       case 'ninerouter': stream = this.streamWithNinerouter(userContent, openaiShaped, undefined, abortSignal, modelId); break;
@@ -5815,6 +5819,7 @@ let isMultimodal = !!(imagePaths?.length);
       case 'codex': return this.isCodexAvailable();
       case 'natively': return this.hasNatively();
       case 'openrouter': return !!this.openrouterClient;
+      case 'requesty': return !!this.requestyClient;
       case 'litellm': return !!this.litellmClient;
       case 'nvidia_nim': return !!this.nvidiaNimClient;
       case 'ninerouter': return !!this.ninerouterClient;
@@ -5988,7 +5993,7 @@ let isMultimodal = !!(imagePaths?.length);
     } catch {
       return true;
     }
-    const optIn = listFamily === 'litellm' || listFamily === 'openrouter' || listFamily === 'ninerouter';
+    const optIn = listFamily === 'litellm' || listFamily === 'openrouter' || listFamily === 'ninerouter' || listFamily === 'requesty';
     return optIn ? list.includes(id) : (list.length === 0 || list.includes(id));
   }
 
@@ -6176,6 +6181,7 @@ let isMultimodal = !!(imagePaths?.length);
     // every candidate utterance, so it stays on the fastest model rather than
     // whatever slower one the user picked.
     if (family === 'agentrouter') return this.hasAgentRouterCredential() ? this.agentRouterAutoModel(AGENTROUTER_JUDGE_MODEL) : null;
+    if (family === 'requesty') return this.requestyClient ? this.currentModelId : null;
     if (family === 'ninerouter') return this.ninerouterClient ? this.currentModelId : null;
     if (family === 'nvidia_nim') return this.nvidiaNimClient ? this.currentModelId : null;
     if (family === 'litellm') return this.litellmClient ? this.currentModelId : null;
@@ -9677,7 +9683,7 @@ let isMultimodal = !!(imagePaths?.length);
     // every one of those seats ("only when it is the model the user picked").
     const localSelection = this.useOllama || !!this.customProvider || !!this.activeCurlProvider;
     if (localSelection) {
-      const SELECTED_ONLY = new Set(['litellm', 'nvidia_nim', 'ninerouter', 'openrouter', 'fluxion', 'agentrouter']);
+      const SELECTED_ONLY = new Set(['litellm', 'nvidia_nim', 'ninerouter', 'openrouter', 'requesty', 'fluxion', 'agentrouter']);
       for (let i = cloud.length - 1; i >= 0; i--) if (SELECTED_ONLY.has(cloud[i].id)) cloud.splice(i, 1);
     }
 
@@ -15236,7 +15242,7 @@ let isMultimodal = !!(imagePaths?.length);
 
   /** Providers the one-time test can ask. The rest are decided by their route, their own table, or /api/show. */
   private static readonly VISION_TESTABLE: ReadonlySet<string> = new Set(
-    ['openai', 'claude', 'gemini', 'deepseek', 'nvidia_nim', 'openrouter', 'fluxion', 'agentrouter', 'litellm', 'ninerouter'],
+    ['openai', 'claude', 'gemini', 'deepseek', 'nvidia_nim', 'openrouter', 'requesty', 'fluxion', 'agentrouter', 'litellm', 'ninerouter'],
   );
 
   public enableVisionProbing(): void { this.visionProbingEnabled = true; }

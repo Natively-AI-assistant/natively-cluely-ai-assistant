@@ -9937,6 +9937,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     // lightweight-embedding warning while a LiteLLM-only user was reported as
     // having OpenRouter configured.
     cm.getOpenrouterApiKey?.() ? 'openrouter' : null,
+    cm.getRequestyApiKey?.() ? 'requesty' : null,
     cm.getLitellmApiKey?.() ? 'litellm' : null,
     ].filter(Boolean);
 
@@ -12235,6 +12236,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         await refreshRuntimeDefaultIfUnavailable();
         broadcastCredentialsChanged();
       }
+      triggerLiveCatalogRefresh('requesty', normalizedKey);
       return { success: true };
     } catch (error: any) { return { success: false, error: error.message }; }
   });

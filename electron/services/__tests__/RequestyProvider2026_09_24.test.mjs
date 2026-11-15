@@ -81,12 +81,12 @@ describe('the requesty/ prefix is classified BEFORE the vendor catch-alls', () =
   });
 
   test('LLMHelper picks the provider for a direct request before the vendor predicates', () => {
-    const start = llm.indexOf("if (selected === 'natively') provider = 'natively';");
+    const start = llm.indexOf("if (selected === 'natively') return { provider: 'natively', model: selected };");
     assert.ok(start >= 0, 'the direct-assist provider selection chain should exist');
-    const chain = llm.slice(start, start + 2000);
+    const chain = llm.slice(start, start + 3000);
     const at = chain.indexOf('isRequestyModel(selected)');
     assert.ok(at >= 0, 'the chain must classify Requesty models');
-    for (const needle of ['isGroqModel(selected)', 'isOpenAiModel(selected)']) {
+    for (const needle of ['isGroqModel(selected)', 'isOpenAiModel(selected)', 'isClaudeModel(selected)']) {
       assert.ok(at < chain.indexOf(needle), `isRequestyModel must be tested before ${needle}`);
     }
   });

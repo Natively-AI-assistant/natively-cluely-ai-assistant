@@ -685,7 +685,7 @@ function selectionIsLocal(): boolean {
 export function selectionRung(): { id: string; key: string } | null {
   const selection = readActiveSelection();
   if (!selection) return null;
-  const GATEWAYS = ['litellm', 'nvidia_nim', 'openrouter', 'fluxion', 'agentrouter', 'ninerouter', 'deepseek'];
+  const GATEWAYS = ['litellm', 'nvidia_nim', 'openrouter', 'requesty', 'fluxion', 'agentrouter', 'ninerouter', 'deepseek'];
   const id = GATEWAYS.includes(selection.provider) ? selection.provider
     : selection.provider === 'custom' || selection.provider === 'curl' ? selection.provider
     : null;
