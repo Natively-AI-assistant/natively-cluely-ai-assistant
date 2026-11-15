@@ -9,6 +9,16 @@ import { isMac, isWindows } from '../../utils/platformUtils';
 export type { GuideEvent, GuideState, GuideStepId } from '../../lib/onboarding/firstRunGuide.mjs';
 
 const DONE_MS = 1000;
+/** The leaving beat at the end of the hold (guide.css: --g-close). */
+const LEAVE_MS = 160;
+
+/** Count of guides in this document mid-leave: <html data-guide-leaving> while any is. */
+let leavingCount = 0;
+function markLeaving(on: boolean): void {
+  leavingCount = Math.max(0, leavingCount + (on ? 1 : -1));
+  if (leavingCount > 0) document.documentElement.setAttribute('data-guide-leaving', '');
+  else document.documentElement.removeAttribute('data-guide-leaving');
+}
 
 /** Report an event to main. Safe to call from any window, any number of times. */
 export function dispatchGuide(event: GuideEvent): void {
@@ -18,34 +28,51 @@ export function dispatchGuide(event: GuideEvent): void {
 /**
  * The guide as this window should draw it. When the step moves on, the step
  * that was just finished stays on screen for a second marked done (`justDone`),
- * then the next one shows.
+ * leaves (the last 160 ms, <html data-guide-leaving>: guide.css), then the next
+ * one shows. A skip leaves at once, with no "Done".
  */
 export function useGuide(): { state: GuideState | null; justDone: boolean; dispatch: (e: GuideEvent) => void } {
   const [shown, setShown] = useState<GuideState | null>(null);
   const [justDone, setJustDone] = useState(false);
   const shownRef = useRef<GuideState | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const leaving = useRef(false);
+
+  const setLeaving = useCallback((on: boolean) => {
+    if (leaving.current === on) return;
+    leaving.current = on;
+    markLeaving(on);
+  }, []);
 
   const accept = useCallback((next: GuideState | null | undefined) => {
     if (!next) return;
     const prev = shownRef.current;
     if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+    if (leaveTimer.current) { clearTimeout(leaveTimer.current); leaveTimer.current = null; }
     const advanced = !!prev && prev.status === 'active' && (next.step !== prev.step || next.status !== 'active');
-    if (advanced) {
-      // Hold the finished step, marked done, then show where the guide went.
-      setJustDone(true);
-      timer.current = setTimeout(() => {
-        timer.current = null;
-        shownRef.current = next;
-        setShown(next);
-        setJustDone(false);
-      }, DONE_MS);
+    const show = () => {
+      timer.current = null;
+      shownRef.current = next;
+      setShown(next);
+      setJustDone(false);
+      setLeaving(false);
+    };
+    if (advanced && next.status === 'skipped') {
+      // Skipped: nothing was done, so no tick; it just gets out of the way.
+      setLeaving(true);
+      timer.current = setTimeout(show, LEAVE_MS);
       return;
     }
-    shownRef.current = next;
-    setShown(next);
-    setJustDone(false);
-  }, []);
+    if (advanced) {
+      // Hold the finished step marked done, let it leave, then show where the guide went.
+      setJustDone(true);
+      leaveTimer.current = setTimeout(() => { leaveTimer.current = null; setLeaving(true); }, DONE_MS - LEAVE_MS);
+      timer.current = setTimeout(show, DONE_MS);
+      return;
+    }
+    show();
+  }, [setLeaving]);
 
   useEffect(() => {
     let alive = true;
@@ -55,8 +82,10 @@ export function useGuide(): { state: GuideState | null; justDone: boolean; dispa
       alive = false;
       off?.();
       if (timer.current) clearTimeout(timer.current);
+      if (leaveTimer.current) clearTimeout(leaveTimer.current);
+      setLeaving(false);
     };
-  }, [accept]);
+  }, [accept, setLeaving]);
 
   return { state: shown, justDone, dispatch: dispatchGuide };
 }

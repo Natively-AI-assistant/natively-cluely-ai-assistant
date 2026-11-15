@@ -208,16 +208,15 @@ const ContinueGuide: React.FC<{ label: string; skipLabel: string; onContinue: ()
   label, skipLabel, onContinue, onSkip,
 }) => {
   return createPortal(
-    <div
-      className="guide-enter guide-pill"
-      data-guide-card="continue"
-      style={{ position: 'fixed', left: '50%', bottom: 20, transform: 'translateX(-50%)', zIndex: 2147483001 }}
-    >
-      <div className="guide-pill-shell">
-        <GuideGlass radius={22} />
-        <div className="guide-pill-row">
-          <button type="button" className="guide-skip" onClick={onSkip}>{skipLabel}</button>
-          <LiquidGlassButton variant="lavender" className="lg-sm" onClick={onContinue}>{label}</LiquidGlassButton>
+    // Centred by the row, not a translateX: the pill's own transform is its motion (guide.css).
+    <div style={{ position: 'fixed', left: 0, right: 0, bottom: 20, display: 'flex', justifyContent: 'center', pointerEvents: 'none', zIndex: 2147483001 }}>
+      <div className="guide-enter guide-pill" data-guide-card="continue" style={{ pointerEvents: 'auto', transformOrigin: '50% 100%' }}>
+        <div className="guide-pill-shell">
+          <GuideGlass radius={22} />
+          <div className="guide-pill-row">
+            <button type="button" className="guide-skip" onClick={onSkip}>{skipLabel}</button>
+            <LiquidGlassButton variant="lavender" className="lg-sm" onClick={onContinue}>{label}</LiquidGlassButton>
+          </div>
         </div>
       </div>
     </div>,

@@ -69,13 +69,14 @@ export function useNotesGuide(): NotesGuide {
       .replace('{total}', String(GUIDE_STEP_COUNT));
     return (
       <div
-        className="guide-enter np-elevated rounded-[20px] pl-4 pr-1.5 py-1.5 flex items-center gap-3"
+        className="guide-enter guide-notes-pill np-elevated rounded-[20px] pl-4 pr-1.5 py-1.5 flex items-center gap-3"
         role="status"
         data-guide-strip={stepId}
       >
-        <div className="min-w-0 flex-1 py-0.5">
+        {/* Keyed by step: the words swap in when the pill moves on (guide.css). */}
+        <div key={stepId} className="guide-notes-swap min-w-0 flex-1 py-0.5">
           <p className="text-[13px] leading-[18px] font-medium flex items-center gap-1.5" style={ink('--np-ink')}>
-            {justDone && <Check className="w-3.5 h-3.5 shrink-0" strokeWidth={2.4} style={ink('--np-accent')} aria-label={tr('Done')} />}
+            {justDone && <Check className="guide-done-check w-3.5 h-3.5 shrink-0" strokeWidth={2.4} style={ink('--np-accent')} aria-label={tr('Done')} />}
             <span className="min-w-0">{title}</span>
           </p>
           <p className="text-[12px] leading-4" style={ink('--np-ink-secondary')}>{body}</p>

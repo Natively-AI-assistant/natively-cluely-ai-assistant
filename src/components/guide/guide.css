@@ -3,40 +3,116 @@
    the element itself: the overlay is zoomed, so a measured cut-out lands in the
    wrong place there. */
 
+/* ── Motion ─────────────────────────────────────────────────────────────────
+   Evin, 2026-11-15: "i want apple like animations". On the transitions.dev
+   token scale (values are literals; the token each stands for is named), with
+   Apple's popover feel: a surface grows out of what it points at on a
+   critically damped spring (no overshoot), and gets out of the way faster
+   than it came.
+
+   What plays:
+    - a tip arriving ......... grows from its arrow: scale 0.96 and 6px up to
+                               rest on the iOS sheet curve, 320ms; its glass
+                               fades in layer by layer, then the title, body
+                               and footer rise in, 40ms apart
+    - a step done ............ "Done" swaps in with a 2px blur and the check
+                               draws itself
+    - a tip leaving .......... 160ms back toward its arrow and out, then the
+                               next step's surface arrives (useGuide sets
+                               data-guide-leaving on <html> for that beat)
+    - the Continue pill ...... rises 8px from the bottom edge, leaves the
+                               same way, quicker
+    - the lit control ........ a focus ring that closes in on it, as macOS
+                               draws one, breathes twice, then holds still
+
+   The glass rule (see .guide-glass): never fade or blur a box that holds the
+   frost. Chromium makes it the frost's backdrop root, and the glass shows
+   clear until the fade ends (seen live). The surface moves by transform only;
+   each glass layer, which owns its backdrop-filter, fades itself. */
+.guide-tip,
+.guide-pill {
+  --g-open: 320ms;                                  /* between --duration-fast and -slow: a popover */
+  --g-spring: cubic-bezier(0.32, 0.72, 0, 1);       /* iOS sheet: a damped spring as a curve */
+  --g-close: 160ms;                                 /* --duration-quick: close */
+  --g-out: cubic-bezier(0.22, 1, 0.36, 1);          /* --ease-smooth-out */
+  --g-stagger: 40ms;                                /* --duration-stagger */
+  transition: transform var(--g-close) var(--g-out);
+}
+
 @keyframes guideIn {
   from { opacity: 0; transform: translateY(4px) scale(0.98); filter: blur(3px); }
   to { opacity: 1; transform: none; filter: none; }
 }
+@keyframes guideTipGrow { from { transform: translateY(-6px) scale(0.96); } }
+@keyframes guidePillRise { from { transform: translateY(8px) scale(0.96); } }
+@keyframes guideFade { from { opacity: 0; } }
+@keyframes guideShadowIn { from { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0), 0 0 0 0 rgba(0, 0, 0, 0); } }
+/* #18 texts reveal, at a tip's scale: 4px, 2px blur. */
+@keyframes guideTextIn { from { opacity: 0; transform: translateY(4px); filter: blur(2px); } }
+@keyframes guideDraw { to { stroke-dashoffset: 0; } }
 
-@keyframes guideLit {
-  50% { box-shadow: 0 0 0 1.5px rgb(var(--guide-ring)), 0 0 0 6px rgba(var(--guide-ring), 0.12), 0 0 22px rgba(var(--guide-ring), 0.34); }
+/* backwards, never both: a fill that outlives the entrance keeps an effect on
+   the tip, and Chromium then stops the glass's backdrop blur there. */
+.guide-tip.guide-enter { animation: guideTipGrow var(--g-open) var(--g-spring) backwards; }
+.guide-pill.guide-enter { animation: guidePillRise var(--g-open) var(--g-spring) backwards; }
+:is(.guide-tip, .guide-pill).guide-enter :is(.guide-glass-frost, .guide-glass-lens, .glass-cta__bevel, .glass-cta__sheen, .glass-cta__edge),
+.guide-tip.guide-enter .guide-tip-arrow {
+  animation: guideFade 220ms ease-out backwards;
+}
+:is(.guide-tip, .guide-pill).guide-enter .guide-glass { animation: guideShadowIn var(--g-open) var(--g-out) backwards; }
+.guide-tip.guide-enter .guide-tip-inner > *,
+.guide-pill.guide-enter .guide-pill-row {
+  animation: guideTextIn 360ms var(--g-out) backwards;
+  animation-delay: 60ms;
+}
+.guide-tip.guide-enter .guide-tip-inner > :nth-child(2) { animation-delay: calc(60ms + var(--g-stagger)); }
+.guide-tip.guide-enter .guide-tip-inner > :nth-child(3) { animation-delay: calc(60ms + 2 * var(--g-stagger)); }
+
+/* Leaving: back toward the arrow (the pill, toward the edge), quick and quiet. */
+:is(.guide-tip, .guide-pill) :is(.guide-glass-frost, .guide-glass-lens, .glass-cta__bevel, .glass-cta__sheen, .glass-cta__edge, .guide-tip-arrow, .guide-tip-inner, .guide-pill-row) {
+  transition: opacity var(--g-close) ease-out;
+}
+:is(.guide-tip, .guide-pill) .guide-glass { transition: box-shadow var(--g-close) ease-out; }
+[data-guide-leaving] .guide-tip { transform: translateY(-4px) scale(0.97); }
+[data-guide-leaving] .guide-pill { transform: translateY(6px) scale(0.97); }
+[data-guide-leaving] :is(.guide-tip, .guide-pill) :is(.guide-glass-frost, .guide-glass-lens, .glass-cta__bevel, .glass-cta__sheen, .glass-cta__edge, .guide-tip-arrow, .guide-tip-inner, .guide-pill-row) { opacity: 0; }
+[data-guide-leaving] :is(.guide-tip, .guide-pill) .guide-glass { box-shadow: none; }
+
+/* A step done: the status swaps in, the check draws (#10 success check, quieter). */
+.guide-tip-status.is-done { animation: guideTextIn 200ms var(--g-out, ease-out) backwards; }
+:is(.guide-tip-status.is-done, .guide-done-check) svg :is(path, polyline),
+svg.guide-done-check :is(path, polyline) {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: guideDraw 320ms cubic-bezier(0.22, 1, 0.36, 1) 80ms forwards;
 }
 
+/* The notepad pill (NotesGuide.tsx): its words swap per step; it leaves with the tip's beat. */
+.guide-notes-pill { transition: opacity 160ms ease-out, transform 160ms cubic-bezier(0.22, 1, 0.36, 1); }
+.guide-notes-swap { animation: guideTextIn 300ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+[data-guide-leaving] .guide-notes-pill { opacity: 0; transform: translateY(4px) scale(0.98); }
+
+/* The lit control. No !important: an important box-shadow outranks the
+   animation, so the old pulse never played. An id-weight :not() wins over the
+   control's own class styles instead (it only ever adds a ring). */
+@keyframes guideLitIn {
+  from { box-shadow: 0 0 0 10px rgba(var(--guide-ring), 0), 0 0 0 14px rgba(var(--guide-ring), 0), 0 0 28px rgba(var(--guide-ring), 0); }
+}
+@keyframes guideLit {
+  50% { box-shadow: 0 0 0 1.5px rgb(var(--guide-ring)), 0 0 0 6px rgba(var(--guide-ring), 0.1), 0 0 22px rgba(var(--guide-ring), 0.3); }
+}
 [data-guide-lit] {
   position: relative;
   z-index: 2;
   /* Option D (2026-11-15): white on a dark page, near-black on a light one. */
   --guide-ring: 255, 255, 255;
-  box-shadow: 0 0 0 1.5px rgb(var(--guide-ring)), 0 0 0 4px rgba(var(--guide-ring), 0.16), 0 0 16px rgba(var(--guide-ring), 0.26) !important;
-  animation: guideLit 2.6s ease-in-out infinite;
 }
-
 [data-theme='light'] [data-guide-lit] { --guide-ring: 29, 29, 31; }
-
-/* The tip grows out of its arrow (transform-origin is set at the arrow),
-   critically damped: no overshoot. */
-@keyframes guideTipIn {
-  from { opacity: 0; transform: translateY(-4px) scale(0.94); }
-  to { opacity: 1; transform: none; }
-}
-/* backwards, never both: a fill that outlives the fade keeps an opacity effect
-   on the tip, and Chromium then stops the glass's backdrop blur at the tip, so
-   the page behind read straight through it (seen live 2026-11-15). The end
-   state is the element's own style, so nothing needs holding. */
-.guide-tip.guide-enter { animation: guideTipIn 260ms cubic-bezier(0.23, 1, 0.32, 1) backwards; }
-
-.guide-enter {
-  animation: guideIn 220ms cubic-bezier(0.23, 1, 0.32, 1) backwards;
+[data-guide-lit]:not(#\#) {
+  box-shadow: 0 0 0 1.5px rgb(var(--guide-ring)), 0 0 0 4px rgba(var(--guide-ring), 0.16), 0 0 16px rgba(var(--guide-ring), 0.26);
+  animation:
+    guideLitIn 520ms cubic-bezier(0.22, 1, 0.36, 1),
+    guideLit 2.8s ease-in-out 520ms 2;
 }
 
 .guide-skip {
@@ -227,13 +303,17 @@
 }
 .guide-pill .guide-skip { font-size: 12.5px; color: var(--gt-ink-3); }
 
+/* Reduced motion: fades stay (they say what changed), nothing moves or blurs. */
 @media (prefers-reduced-motion: reduce) {
-  [data-guide-lit] { animation: none !important; }
+  [data-guide-lit]:not(#\#) { animation: none; }
   .guide-wait-dot { animation: none; }
-  @keyframes guideIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
+  @keyframes guideIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes guideTipGrow { from { transform: none; } }
+  @keyframes guidePillRise { from { transform: none; } }
+  @keyframes guideTextIn { from { opacity: 0; } }
+  [data-guide-leaving] :is(.guide-tip, .guide-pill, .guide-notes-pill) { transform: none; }
+  :is(.guide-tip-status.is-done, .guide-done-check) svg :is(path, polyline),
+  svg.guide-done-check :is(path, polyline) { animation: none; stroke-dashoffset: 0; }
 }
 
 /* The overlay's guide banner (OverlayGuide.tsx): ui/OverlayBanner in a

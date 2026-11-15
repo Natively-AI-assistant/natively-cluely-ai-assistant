@@ -103,7 +103,7 @@ test('the launcher and Settings steps are a tip that points at its control', () 
   // Evin: "stop using generic icons or logos".
   assert.ok(!/lucide-react'/.test(c) || /import \{ Check, X \} from 'lucide-react';/.test(c), 'only the done tick and the close');
   assert.ok(!c.includes('STEP_ICON') && !css.includes('.guide-tip-icon'), 'no step icon');
-  assert.ok(css.includes('.guide-tip.guide-enter { animation: guideTipIn'), 'it grows out of its arrow');
+  assert.ok(css.includes('.guide-tip.guide-enter { animation: guideTipGrow var(--g-open) var(--g-spring) backwards; }'), 'it grows out of its arrow, transform only');
   for (const f of ['src/components/guide/GuideCard.tsx', 'src/components/guide/LauncherGuide.tsx', 'src/components/guide/SettingsGuide.tsx']) {
     const src = read(f);
     assert.ok(!src.includes('LavenderButton'), `${f}: no onboarding lavender button`);
@@ -150,4 +150,19 @@ test('a notes step with no saved meeting offers to go on', () => {
   const l = read('src/components/guide/LauncherGuide.tsx');
   assert.ok(l.includes('onNotes && !endedMeetingId ? NO_NOTES_MS : OFF_SCREEN_MS'), 'waits for the save, then offers the way on');
   assert.ok(l.includes("if (onNotes && !endedMeetingId) dispatch({ type: 'notes_next' });"), 'and the way on passes the notes step');
+});
+
+// Evin, 2026-11-15: "i want apple like animations". The surface moves by
+// transform only (a fade on it would cut the frost); each glass layer fades
+// itself; a step leaves before the next arrives; the lit ring closes in.
+test('guide motion: Apple-like, and never fades the box that holds the frost', () => {
+  const css = read('src/components/guide/guide.css');
+  for (const k of ['guideTipGrow', 'guidePillRise', 'guideLitIn', 'guideDraw', 'guideTextIn']) assert.ok(css.includes(`@keyframes ${k}`), k);
+  assert.ok(!/@keyframes guideTipGrow[^}]*opacity/.test(css) && !/@keyframes guidePillRise[^}]*opacity/.test(css), 'the surface itself never fades');
+  assert.ok(css.includes('[data-guide-leaving] .guide-tip {'), 'tips leave');
+  assert.ok(!/box-shadow:[^;]*!important/.test(css.slice(css.indexOf('[data-guide-lit]'))), 'no important ring, so the ring can animate');
+  assert.ok(css.includes('guideLit 2.8s ease-in-out 520ms 2;'), 'breathes twice, then holds still');
+  const g = read('src/components/guide/useGuide.ts');
+  assert.ok(g.includes('DONE_MS - LEAVE_MS') && g.includes("next.status === 'skipped'"), 'leaves at the end of the hold; a skip leaves at once');
+  assert.ok(!read('src/components/guide/LauncherGuide.tsx').includes("transform: 'translateX(-50%)'"), 'the pill is centred without a transform');
 });
