@@ -1,11 +1,13 @@
 // First-run guide, overlay window: step 2 (the meeting overlay itself), step 3
-// (What to answer), step 4 (screenshots), opening the notepad for step 5 (and an
-// "Open notepad" banner if it gets closed), and the stop prompt. Each is the
+// (What to answer) and step 4 (screenshots). Step 5 is the notepad alone: main
+// hides the overlay and opens it (main.ts showNotepadForGuide). Should the user
+// bring the overlay back, it offers "Open notepad" or the stop prompt while the
+// notepad is closed, never beside it. Each is the
 // overlay's own banner (ui/OverlayBanner.tsx) in a periwinkle guide tone, in a
 // banner fold of NativelyInterface.tsx: the overlay grows to hold it and the
 // banner picker can hold it back for a fault. It never takes focus: the user's
 // call stays in front.
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AppWindow, Camera, Check, CircleStop, NotebookPen, Pencil } from 'lucide-react';
 import { useT } from '../../i18n';
 import { GUIDE_STEP_COUNT, GUIDE_STEP_NUMBER } from '../../lib/onboarding/firstRunGuide.mjs';
@@ -35,20 +37,6 @@ export function useOverlayGuide(): { wants: boolean; node: React.ReactNode } {
     const off = window.electronAPI?.onNotesWindowVisibility?.((open) => setNotesOpen(!!open));
     return () => { alive = false; off?.(); };
   }, [active]);
-
-  // Step 5 opens the notepad by itself: it is its own step, in its own window.
-  // Asked of main first, since a toggle would close one that is already open.
-  // Once per visit to the step, so closing it is respected.
-  const openedForStep = useRef(false);
-  const onNotepad = guideOn(state, 'notepad') && !justDone;
-  useEffect(() => {
-    if (!onNotepad) { openedForStep.current = false; return; }
-    if (openedForStep.current) return;
-    openedForStep.current = true;
-    window.electronAPI?.notesWindowIsOpen?.()
-      .then((open) => { if (!open) void window.electronAPI?.notesWindowToggle?.(); })
-      .catch(() => {});
-  }, [onNotepad]);
 
   // Has anyone said anything yet? Until then step 3 says how to get a question.
   const [heard, setHeard] = useState(false);
@@ -173,7 +161,7 @@ export function useOverlayGuide(): { wants: boolean; node: React.ReactNode } {
     };
   }
 
-  if (guideOn(state, 'stop')) {
+  if (guideOn(state, 'stop') && !notesOpen) {
     return {
       wants: true,
       node: banner(

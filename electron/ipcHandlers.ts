@@ -9464,6 +9464,12 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasOwnAiKey: hasOwnAiKey(cm.getAllCredentials(), { codexReady: codexRouteReady() }),
       });
     },
+    // Step 5 is the notepad on its own: the overlay steps are done (main.ts).
+    // After the overlay's one-second green tick (useGuide's hold), if still there.
+    onEnterStep: (step) => {
+      if (step !== 'notepad') return;
+      setTimeout(() => { const g = getGuideState(); if (g.status === 'active' && g.step === 'notepad') appState.showNotepadForGuide(); }, 1000);
+    },
   });
   safeHandle('guide:get', async () => getGuideState());
   // Validated against GUIDE_EVENT_TYPES; then reduced, saved and broadcast

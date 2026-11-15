@@ -12,13 +12,15 @@ import {
   reconcileGuide,
   reduceGuide,
 } from '../../src/lib/onboarding/firstRunGuide.mjs';
-import type { GuideEvent, GuideFacts, GuideState } from '../../src/lib/onboarding/firstRunGuide.mjs';
+import type { GuideEvent, GuideFacts, GuideState, GuideStepId } from '../../src/lib/onboarding/firstRunGuide.mjs';
 
 type GuideStoreDeps = {
   /** Whether a meeting is running right now (AppState.getIsMeetingActive). */
   meetingActive: () => boolean;
   /** Facts from main's own sources: a window's facts are never trusted. */
   factsProvider: () => GuideFacts;
+  /** A step was entered (main moves windows for it: step 5 is the notepad alone). */
+  onEnterStep?: (step: GuideStepId) => void;
 };
 
 let deps: GuideStoreDeps = {
@@ -77,7 +79,11 @@ export function applyGuideEvent(event: GuideEvent | { type: 'meeting_saved'; mee
     : reduced;
   // One line per real move, so a support log shows how the guide got where it is.
   if (next !== current) console.log(`[Guide] ${event.type}: ${current.step}/${current.status} -> ${next.step}/${next.status}`);
-  return save(current, next);
+  const saved = save(current, next);
+  if (next.status === 'active' && next.step !== current.step) {
+    try { deps.onEnterStep?.(next.step); } catch (e) { console.warn('[Guide] step hand-off failed:', (e as Error)?.message); }
+  }
+  return saved;
 }
 
 /** guide:dispatch: only the events a window may report. */

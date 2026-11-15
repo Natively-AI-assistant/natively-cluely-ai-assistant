@@ -62,12 +62,9 @@ test('the guide accent is a soft periwinkle ice, not the old purple', () => {
 });
 
 // Evin, 2026-11-15: the meeting overlay and the notepad are separate steps.
-test('step 2 is the meeting overlay itself, with Next; step 5 opens the notepad on its own', () => {
+test('step 2 is the meeting overlay itself, with Next', () => {
   const g = read('src/components/guide/OverlayGuide.tsx');
   for (const s of ["guideOn(state, 'overlay')", "tr('This is your meeting overlay.')",
     "tr('Answers, screenshots and chat show up here, over your call.')", "dispatch({ type: 'overlay_next' })"]) assert.ok(g.includes(s), s);
-  // Entering step 5 opens the notes window once, never closing an open one (toggle).
-  const open = g.slice(g.indexOf('// Step 5 opens the notepad'), g.indexOf('// Step 5 opens the notepad') + 700);
-  assert.ok(open.includes('notesWindowIsOpen') && open.includes('notesWindowToggle'), 'checks before toggling');
-  assert.ok(/if \(!open\)/.test(open), 'only opens a closed one');
+  // Step 5's hand-off to the notepad is main's (firstRunGuideWiring.test.mjs).
 });

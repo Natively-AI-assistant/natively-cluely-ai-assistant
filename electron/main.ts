@@ -4155,6 +4155,20 @@ export class AppState {
     if (plan.openNotes) this.notesWindowHelper.open({ activate: false });
   }
 
+  /**
+   * First-run guide, step 5 (services/firstRunGuideStore.ts): the overlay's
+   * steps are done, so the running meeting moves to the notepad alone, as a
+   * notepad meeting runs: the overlay held hidden, the notepad open without
+   * taking focus, and "Meeting ongoing" bringing back the notepad. Same path
+   * on macOS and Windows (WindowHelper.switchToOverlay hidden).
+   */
+  public showNotepadForGuide(): void {
+    if (!this.isMeetingActive) return;
+    this.meetingSurface = 'notepad';
+    this.windowHelper.setWindowMode('overlay', true, { hidden: true });
+    this.notesWindowHelper.open({ activate: false });
+  }
+
   /** The user's name: the active résumé's, else the connected Calendar account's. */
   /** The user's name for recipes that sign as them (notepad recipes, 2026-10-31). */
   public getUserName(): string | null {
