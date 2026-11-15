@@ -96,6 +96,7 @@ export const AUTO_DETECT_ALTERNATES = [
     'he-IL',
     'ms-MY',
     'fi-FI',
+    'ne-NP',
     // Indian languages (2026-10-16). The relay pins them from auto-detect too;
     // Soniox, ElevenLabs, Deepgram (all but Malayalam) and Google carry them.
     'mr-IN',
@@ -150,6 +151,7 @@ export const RECOGNITION_LANGUAGES: Record<string, LanguageOption> = {
     'malayalam': { label: 'Malayalam', code: 'malayalam', bcp47: 'ml-IN', iso639: 'ml', group: 'Malayalam' },
     'punjabi': { label: 'Punjabi', code: 'punjabi', bcp47: 'pa-IN', iso639: 'pa', group: 'Punjabi' },
     'urdu': { label: 'Urdu', code: 'urdu', bcp47: 'ur-IN', iso639: 'ur', group: 'Urdu' },
+    'nepali': { label: 'Nepali', code: 'nepali', bcp47: 'ne-NP', iso639: 'ne', group: 'Nepali' },
     'croatian': { label: 'Croatian', code: 'croatian', bcp47: 'hr-HR', iso639: 'hr', group: 'Croatian' },
     'estonian': { label: 'Estonian', code: 'estonian', bcp47: 'et-EE', iso639: 'et', group: 'Estonian' },
     'latvian': { label: 'Latvian', code: 'latvian', bcp47: 'lv-LV', iso639: 'lv', group: 'Latvian' },
@@ -170,17 +172,40 @@ export const PARAKEET_ONLY_LANGUAGE_KEYS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * ISO-639-1 codes a cloud STT provider refuses when the language is pinned,
+ * by provider id. Soniox lists 60 languages on GET /v1/models (stt-rt-v6,
+ * checked 2026-11-15); Nepali and Maltese are not among them, and a pinned
+ * `ne` is answered with 400 "Invalid language hint", which ends the session.
+ * The Natively API relay starts every session on Soniox and turns a refused
+ * pin into auto-detect, which has no Nepali either, so it is held back there
+ * too until the relay sends these languages to a provider that has them.
+ */
+const PROVIDER_UNSUPPORTED_ISO639: Readonly<Record<string, ReadonlySet<string>>> = {
+    soniox: new Set(['ne', 'mt']),
+    natively: new Set(['ne', 'mt']),
+};
+
+/** True when `providerId` is known to refuse the recognition language `key`. */
+export function sttProviderRejectsLanguage(providerId: string | null | undefined, key: string): boolean {
+    const iso639 = RECOGNITION_LANGUAGES[key]?.iso639;
+    return !!providerId && !!iso639 && !!PROVIDER_UNSUPPORTED_ISO639[providerId]?.has(iso639);
+}
+
+/**
  * Whether the STT language picker offers `key`.
  * `localModelKeys` — what the active local model(s) accept; null unless the
  * provider is local-whisper. `providerKeys` — the active backend's restriction
  * (local model, NVIDIA, Apple); null for an unrestricted cloud provider.
+ * `providerId` — the active STT provider, for the languages it refuses.
  */
 export function isRecognitionLanguageOffered(
     key: string,
     localModelKeys: ReadonlySet<string> | null,
     providerKeys: ReadonlySet<string> | null,
+    providerId?: string | null,
 ): boolean {
     if (PARAKEET_ONLY_LANGUAGE_KEYS.has(key) && !localModelKeys?.has(key)) return false;
+    if (sttProviderRejectsLanguage(providerId, key)) return false;
     return !providerKeys || providerKeys.has(key);
 }
 
@@ -225,6 +250,7 @@ export const AI_RESPONSE_LANGUAGES = [
     { label: 'Malayalam', code: 'Malayalam' },
     { label: 'Punjabi', code: 'Punjabi' },
     { label: 'Urdu', code: 'Urdu' },
+    { label: 'Nepali', code: 'Nepali' },
 ];
 
 /**
