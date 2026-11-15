@@ -211,7 +211,7 @@ describe('#738 a newer problem replaces the warm-up', () => {
       [3, 'interviewer', 'show the solution in python'],
     ]);
     assert.equal(session.getDetectedCodingQuestion().question, KEYWORD_PROBLEM);
-    assert.match(questionLine(prompt), /follow-up to the coding problem: "Implement a function to rotate/);
+    assert.match(questionLine(prompt), /Earlier problem: "Implement a function to rotate/);
   });
 
   // The residual case: a newer problem the detector does not recognise, and no
@@ -231,9 +231,10 @@ describe('#738 a newer problem replaces the warm-up', () => {
       ]);
       assert.match(prompt, /<coding_contract>/, 'no coding contract');
       const q = questionLine(prompt);
-      const said = q.match(/; the interviewer said after it: "([^"]*)" — if that states a different problem, this is about that one\)$/);
-      assert.ok(said, `the newer statement is not quoted after the stored problem: ${q}`);
+      const said = q.match(/^show the solution in python \(follow-up to the coding problem the interviewer is on now\. Their latest statement before this ask: "([^"]*)"\. Earlier problem: "([^"]*)"\. If the latest statement describes a task or problem, solve that task instead of the earlier problem\./);
+      assert.ok(said, `the newer statement does not lead the note: ${q}`);
       assert.equal(said[1], lines.join(' '));
+      assert.match(said[2], /staircase/);
     });
   }
 
@@ -254,7 +255,7 @@ describe('#738 a newer problem replaces the warm-up', () => {
       [60, 'user', 'Right, the tail of the list is the eviction candidate.'],
       [3, 'interviewer', 'show the solution in python'],
     ]);
-    assert.match(questionLine(prompt), /follow-up to the coding problem: "Implement an LRU cache with get and put\."/);
+    assert.match(questionLine(prompt), /Earlier problem: "Implement an LRU cache with get and put\."/);
   });
 
   test('what is said after a screenshot problem is quoted, and the screenshot stays the problem', () => {

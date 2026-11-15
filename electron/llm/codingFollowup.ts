@@ -247,12 +247,14 @@ const DIRECT_ACTION_RE =
 // is the subject, not the question, so its words ("Have you used …", a spec with
 // no coding verbs) must not pick the answer type.
 // `saidAfter` is what the interviewer said after the problem was stated. It is
-// quoted, not judged: when it states a newer problem the detector missed, the model
-// is told to answer that one (#738), instead of the app asserting the older.
-const ACTIVE_CODING_PROBLEM_NOTE_RE = / \(follow-up to the coding problem: "[\s\S]*\)$/;
+// quoted, not judged, and it comes FIRST: live, gemini-3.1-flash-lite given the
+// older problem as "the coding problem" with the later lines after it answered
+// the older one (the count_ways(n) of #539 and #738). The latest statement leads, and
+// the older problem is offered only for when the latest is talk about it.
+const ACTIVE_CODING_PROBLEM_NOTE_RE = / \(follow-up to the coding problem[\s\S]*\)$/;
 export function withActiveCodingProblem(ask: string, problem: string, saidAfter: readonly string[] = []): string {
   if (saidAfter.length === 0) return `${ask} (follow-up to the coding problem: "${problem}")`;
-  return `${ask} (follow-up to the coding problem: "${problem}"; the interviewer said after it: "${saidAfter.join(' ')}" — if that states a different problem, this is about that one)`;
+  return `${ask} (follow-up to the coding problem the interviewer is on now. Their latest statement before this ask: "${saidAfter.join(' ')}". Earlier problem: "${problem}". If the latest statement describes a task or problem, solve that task instead of the earlier problem. Only if it just talks about the earlier problem, solve the earlier problem.)`;
 }
 export function isActiveCodingProblemFollowUp(question: string | null | undefined): boolean {
   return ACTIVE_CODING_PROBLEM_NOTE_RE.test(question || '');
