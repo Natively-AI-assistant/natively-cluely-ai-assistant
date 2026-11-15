@@ -126,6 +126,10 @@ export const LauncherGuide: React.FC<Props> = ({ onOpenSettings, onOpenMeeting, 
     else if (tab) onOpenSettings(tab);
   };
 
+  // First: a card whose control is gone draws nothing, so the way back must
+  // win over it (seen live 2026-11-15: step 13 at Home showed neither).
+  if (offScreen && anchor) return <ContinueGuide label={tr('Continue the guide')} skipLabel={tr('Skip guide')} onContinue={resume} onSkip={skip} />;
+
   if (guideOn(state, 'start')) {
     return (
       <GuideCard
@@ -187,8 +191,6 @@ export const LauncherGuide: React.FC<Props> = ({ onOpenSettings, onOpenMeeting, 
       />
     );
   }
-
-  if (offScreen && anchor) return <ContinueGuide label={tr('Continue the guide')} skipLabel={tr('Skip guide')} onContinue={resume} onSkip={skip} />;
 
   return null;
 };
