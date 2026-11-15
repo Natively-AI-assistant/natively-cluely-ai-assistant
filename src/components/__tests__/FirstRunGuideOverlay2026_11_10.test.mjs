@@ -130,3 +130,13 @@ test('the launcher has the second Start and the notepad meeting\'s notes, and go
   assert.ok(read('src/App.tsx').includes('onShowHome={openLauncherHome}'));
 });
 
+
+// Evin, 2026-11-15, at step 5: "show the stop button". It is in the top pill,
+// a window of its own, so that window lights it.
+test('step 5 lights the Stop button in the top pill window', () => {
+  const pill = read('src/components/ui/TopPill.tsx');
+  assert.equal((pill.match(/data-guide="overlay-stop"/g) || []).length, 2, 'both pill layouts');
+  const aux = read('src/components/OverlayAuxWindows.tsx');
+  assert.ok(aux.includes(`useGuideLit(guideOn(guide.state, 'stop') && !guide.justDone ? '[data-guide="overlay-stop"]' : null);`));
+  assert.ok(aux.includes("import './guide/guide.css';"), 'the ring style loads in that window');
+});

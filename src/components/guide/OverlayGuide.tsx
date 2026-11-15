@@ -142,7 +142,7 @@ export function useOverlayGuide(): { wants: boolean; node: React.ReactNode } {
         'stop',
         <CircleStop strokeWidth={2.2} />,
         tr('Stop the meeting when you’re ready.'),
-        tr('Natively writes up your notes as soon as it stops.'),
+        tr('Press the stop button ■ in the bar at the top. Natively writes up your notes.'),
       ),
     };
   }

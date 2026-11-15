@@ -60,6 +60,7 @@ export default function TopPill({
                     </button>
                     <button
                         onClick={onQuit}
+                        data-guide="overlay-stop"
                         aria-label="Stop"
                         className="overlay-icon-surface overlay-icon-surface-hover interaction-base interaction-press overlay-text-muted w-8 h-8 rounded-full flex items-center justify-center"
                     >
@@ -138,6 +139,7 @@ export default function TopPill({
                 {/* STOP / QUIT BUTTON */}
                 <button
                     onClick={onQuit}
+                    data-guide="overlay-stop"
                     className={`
             w-7 h-7
             rounded-full
