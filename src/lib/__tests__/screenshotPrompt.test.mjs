@@ -131,7 +131,8 @@ test('the Settings row: every string is translated, the table has no leftover ro
   const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
   const src = fs.readFileSync(path.join(SRC, 'components/settings/OverlaySettings.tsx'), 'utf8');
   const start = src.indexOf('const ScreenshotQuestionRow');
-  const end = src.indexOf('type ScreenshotDisplay', start);
+  // The Answer length row follows; its strings have their own table (i18n.answerLength.ts).
+  const end = src.indexOf('type AnswerLength', start);
   assert.ok(start > 0 && end > start, 'ScreenshotQuestionRow found');
   const block = src.slice(start, end);
   // On both meeting surfaces.
