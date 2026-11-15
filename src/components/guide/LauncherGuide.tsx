@@ -8,9 +8,8 @@ import { createPortal } from 'react-dom';
 import { useT } from '../../i18n';
 import { startCoverage, trialEventFromLocal } from '../../lib/onboarding/firstRunGuide.mjs';
 import { GuideCard } from './GuideCard';
-import GlassSurface from '../../ui-components/GlassSurface';
+import { GuideGlass } from './GuideGlass';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
-import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { guideOn, useAnchorRect, useGuide } from './useGuide';
 
 /** The control each launcher-side step points at (Settings opens in this window). */
@@ -198,37 +197,19 @@ export const LauncherGuide: React.FC<Props> = ({ onOpenSettings, onOpenMeeting, 
 const ContinueGuide: React.FC<{ label: string; skipLabel: string; onContinue: () => void; onSkip: () => void }> = ({
   label, skipLabel, onContinue, onSkip,
 }) => {
-  const light = useResolvedTheme() === 'light';
   return createPortal(
     <div
       className="guide-enter guide-pill"
       data-guide-card="continue"
       style={{ position: 'fixed', left: '50%', bottom: 20, transform: 'translateX(-50%)', zIndex: 2147483001 }}
     >
-      <GlassSurface
-        width="auto"
-        height={44}
-        borderRadius={22}
-        borderWidth={0.25}
-        blur={4}
-        brightness={60}
-        opacity={0.9}
-        distortionScale={light ? -24 : -52}
-        redOffset={0}
-        greenOffset={0}
-        blueOffset={0}
-        yChannel="B"
-        displace={14}
-        tint={light ? 'rgba(255, 255, 255, 0.86)' : 'rgba(36, 36, 41, 0.86)'}
-        saturation={light ? 1.2 : 1.4}
-        className="guide-pill-glass"
-        contentClassName="glass-surface__content--bare"
-      >
+      <div className="guide-pill-shell">
+        <GuideGlass radius={22} />
         <div className="guide-pill-row">
           <button type="button" className="guide-skip" onClick={onSkip}>{skipLabel}</button>
           <LiquidGlassButton variant="lavender" className="lg-sm" onClick={onContinue}>{label}</LiquidGlassButton>
         </div>
-      </GlassSurface>
+      </div>
     </div>,
     document.body,
   );

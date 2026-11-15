@@ -85,14 +85,18 @@ test('the launcher and Settings steps are a tip that points at its control', () 
   const css = read('src/components/guide/guide.css');
   // Evin: "why dark mode not having a dark mode" and "use expo liquid glass":
   // the app's own refracting glass, dark in dark mode, light in light mode.
-  assert.ok(c.includes("import GlassSurface from '../../ui-components/GlassSurface';"), 'the tip is liquid glass');
-  assert.ok(c.includes("tint: 'rgba(36, 36, 41, 0.86)'") && c.includes("tint: 'rgba(255, 255, 255, 0.86)'"), 'dark glass in dark mode, light glass in light mode');
+  // Evin, 2026-11-15: "card isnt liquid glass, i want proper liquid glass with tint".
+  assert.ok(c.includes('<GuideGlass radius={18} />'), 'the tip is liquid glass');
+  const gg = read('src/components/guide/GuideGlass.tsx');
+  for (const s of ['<GlassSurface', 'guide-glass-frost', 'glass-cta__bevel', 'glass-cta__sheen', 'glass-cta__edge']) assert.ok(gg.includes(s), s);
+  const glassCss = read('src/components/guide/guide.css');
+  assert.ok(/backdrop-filter: var\(--gt-frost\)/.test(glassCss) && (glassCss.match(/--gt-tint:/g) || []).length === 2, 'frosted, with a tint per theme');
   // Seen live: at a 62% tint a card's text read through the tip. Frosted.
-  assert.ok(c.includes('displace={14}'), 'the tip body is frosted, not clear');
+  assert.ok(/--gt-frost: blur\(26px\)/.test(glassCss), 'the tip body is frosted, not clear');
   assert.ok(c.includes('<LiquidGlassButton variant="lavender"'), 'the action is the app glass button');
   assert.ok(css.includes('--gt-ink: var(--text-primary);'), 'the app inks, so the theme carries');
   const lg = read('src/components/guide/LauncherGuide.tsx');
-  assert.ok(lg.includes('<GlassSurface') && lg.includes('<LiquidGlassButton variant="lavender"'), 'the Continue pill is the same glass');
+  assert.ok(lg.includes('<GuideGlass radius={22} />') && lg.includes('<LiquidGlassButton variant="lavender"'), 'the Continue pill is the same glass');
   // Evin: "stop using generic icons or logos".
   assert.ok(!/lucide-react'/.test(c) || /import \{ Check, X \} from 'lucide-react';/.test(c), 'only the done tick and the close');
   assert.ok(!c.includes('STEP_ICON') && !css.includes('.guide-tip-icon'), 'no step icon');

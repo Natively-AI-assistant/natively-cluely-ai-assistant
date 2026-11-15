@@ -62,6 +62,15 @@
   --gt-wash: rgba(168, 184, 255, 0.13);
   --gt-hair: rgba(255, 255, 255, 0.14);
   --gt-shadow: 0 18px 44px -14px rgba(0, 0, 0, 0.7), 0 2px 10px rgba(0, 0, 0, 0.3);
+  /* The glass (GuideGlass.tsx): a lavender tint over a heavy frost, so the
+     page behind is colour and light, never readable text. */
+  --gt-tint: linear-gradient(160deg, rgba(92, 88, 170, 0.5) 0%, rgba(46, 44, 96, 0.62) 100%);
+  --gt-frost: blur(26px) saturate(1.8) brightness(0.72);
+  --cta-edge-hi: rgba(206, 210, 255, 0.62);
+  --cta-edge-mid: rgba(206, 210, 255, 0.18);
+  --cta-edge-lo: rgba(206, 210, 255, 0.04);
+  --cta-bevel-a: rgba(255, 255, 255, 0.24);
+  --cta-bevel-b: rgba(190, 196, 255, 0.14);
   --guide-accent: 168, 184, 255;
   color: var(--gt-ink);
   -webkit-font-smoothing: antialiased;
@@ -73,14 +82,54 @@
   --gt-wash: rgba(79, 95, 214, 0.09);
   --gt-hair: rgba(20, 22, 42, 0.1);
   --gt-shadow: 0 18px 44px -16px rgba(20, 24, 60, 0.28), 0 2px 10px rgba(20, 24, 60, 0.08);
+  --gt-tint: linear-gradient(160deg, rgba(246, 247, 255, 0.66) 0%, rgba(222, 226, 255, 0.72) 100%);
+  --gt-frost: blur(26px) saturate(1.6) brightness(1.08);
+  --cta-edge-hi: rgba(255, 255, 255, 0.95);
+  --cta-edge-mid: rgba(255, 255, 255, 0.4);
+  --cta-edge-lo: rgba(120, 132, 230, 0.12);
+  --cta-bevel-a: rgba(255, 255, 255, 0.85);
+  --cta-bevel-b: rgba(255, 255, 255, 0.5);
   --guide-accent: 79, 95, 214;
 }
 
 .guide-tip { box-sizing: border-box; }
-.guide-tip-glass,
-.guide-pill-glass {
-  box-shadow: inset 0 0 0 1px var(--gt-hair), var(--gt-shadow);
+.guide-tip-shell,
+.guide-pill-shell { position: relative; }
+.guide-tip-shell { border-radius: 18px; }
+.guide-pill-shell { border-radius: 22px; height: 44px; }
+.guide-tip-inner,
+.guide-pill-row { position: relative; z-index: 1; }
+
+/* GuideGlass: frost + tint, the refracting lens, then the 2.0 bevel, sheen
+   and lit edge (LiquidGlassCta.css), all under the content. */
+.guide-glass {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  box-shadow: var(--gt-shadow);
 }
+.guide-glass-frost {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--gt-tint);
+  -webkit-backdrop-filter: var(--gt-frost);
+  backdrop-filter: var(--gt-frost);
+}
+/* The lens brings no fill or shadow of its own: the frost is the fill. */
+.guide-glass .guide-glass-lens.glass-surface--svg,
+[data-theme='light'] .guide-glass .guide-glass-lens.glass-surface--svg,
+.guide-glass .guide-glass-lens.glass-surface--fallback {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+/* On a card of sentences the CTA's corner bloom is too bright; keep a hint. */
+.guide-glass .glass-cta__sheen { opacity: 0.35; }
+[data-theme='light'] .guide-glass .glass-cta__sheen { opacity: 0.6; }
 .guide-tip-inner { padding: 14px 14px 12px 16px; }
 
 /* The arrow: a frosted sliver of the same tint (a 9px lens would only smear). */
@@ -89,8 +138,9 @@
   top: -8px;
   width: 18px; height: 9px;
   clip-path: path('M0 9 C5 9 7 1 9 1 C11 1 13 9 18 9 Z');
-  -webkit-backdrop-filter: blur(14px) saturate(1.4);
-  backdrop-filter: blur(14px) saturate(1.4);
+  background: var(--gt-tint);
+  -webkit-backdrop-filter: var(--gt-frost);
+  backdrop-filter: var(--gt-frost);
 }
 
 .guide-tip-title {

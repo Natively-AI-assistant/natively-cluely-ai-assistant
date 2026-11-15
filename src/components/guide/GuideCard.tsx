@@ -16,9 +16,8 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { Check, X } from 'lucide-react';
-import GlassSurface from '../../ui-components/GlassSurface';
+import { GuideGlass } from './GuideGlass';
 import { LiquidGlassButton } from '../../ui-components/LiquidGlassButton';
-import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { useT } from '../../i18n';
 import { GUIDE_STEP_COUNT, GUIDE_STEP_NUMBER } from '../../lib/onboarding/firstRunGuide.mjs';
 import type { GuideStepId } from '../../lib/onboarding/firstRunGuide.mjs';
@@ -52,20 +51,10 @@ const ARROW = 8;     // arrow height
 const EDGE = 12;     // window margin
 const ARROW_INSET = 22;
 
-// The meeting page's Ask bar glass (MeetingDetails.tsx ASK_BAR_*), per theme,
-// frosted harder: the Ask bar holds one short line, the tip holds sentences
-// over busy cards, and the 62% tint let a card's text read through (seen live
-// 2026-11-15). The rim still refracts; the body is frost, as Apple's tips are.
-const GLASS = {
-  dark: { tint: 'rgba(36, 36, 41, 0.86)', distortion: -52, saturation: 1.5 },
-  light: { tint: 'rgba(255, 255, 255, 0.86)', distortion: -24, saturation: 1.3 },
-} as const;
-
 export const GuideCard: React.FC<GuideCardProps> = ({
   anchor, width = 320, dx = 0, stepId, title, body, list, waiting, action, done, lit = true, onSkip,
 }) => {
   const tr = useT();
-  const glass = GLASS[useResolvedTheme() === 'light' ? 'light' : 'dark'];
   const rect = useAnchorRect(anchor);
   useGuideLit(lit && rect ? anchor : null);
   if (!rect) return null;
@@ -92,26 +81,9 @@ export const GuideCard: React.FC<GuideCardProps> = ({
       aria-label={title}
       data-guide-card={stepId}
     >
-      <div className="guide-tip-arrow" style={{ left: arrowX - 9, background: glass.tint }} aria-hidden />
-      <GlassSurface
-        width="100%"
-        height="auto"
-        borderRadius={18}
-        borderWidth={0.12}
-        blur={4}
-        brightness={60}
-        opacity={0.9}
-        distortionScale={glass.distortion}
-        redOffset={0}
-        greenOffset={0}
-        blueOffset={0}
-        yChannel="B"
-        displace={14}
-        tint={glass.tint}
-        saturation={glass.saturation}
-        className="guide-tip-glass"
-        contentClassName="glass-surface__content--bare"
-      >
+      <div className="guide-tip-arrow" style={{ left: arrowX - 9 }} aria-hidden />
+      <div className="guide-tip-shell">
+        <GuideGlass radius={18} />
         <div className="guide-tip-inner">
           <div className="flex items-start gap-3">
             <div className="min-w-0 flex-1">
@@ -159,7 +131,7 @@ export const GuideCard: React.FC<GuideCardProps> = ({
             ) : null}
           </div>
         </div>
-      </GlassSurface>
+      </div>
     </div>,
     document.body,
   );
