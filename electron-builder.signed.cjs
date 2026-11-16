@@ -58,6 +58,27 @@ const base = require('./package.json').build;
 const signIdentity =
   process.env.NATIVELY_SIGN_IDENTITY || process.env.CSC_NAME || undefined;
 
+/** Start the early Apple Silicon DMG job after the arm64 app's afterSign. Never throws. */
+function startEarlyArm64Dmg(context) {
+  const dmgJob = require('./scripts/lib/dmg-job.cjs');
+  const runId = process.env[dmgJob.RUN_ID_ENV];
+  try {
+    const arch = context && context.arch;
+    const archName = typeof arch === 'number' ? require('builder-util').Arch[arch] : arch;
+    if (!dmgJob.shouldStartEarlyDmg({
+      platform: process.platform,
+      electronPlatformName: context && context.electronPlatformName,
+      archName,
+      runId,
+    })) return;
+    if (!require('./scripts/afterAllArtifactBuild.cjs').notarytoolArgs()) return; // unsigned: nothing to notarize
+    const outDir = (context && context.outDir) || require('path').dirname(context.appOutDir);
+    dmgJob.startEarlyDmgJob({ outDir, runId });
+  } catch (err) {
+    console.warn(`[dmg-job] could not start the early Apple Silicon DMG (${err && err.message}); it will be built at the end instead.`);
+  }
+}
+
 module.exports = {
   ...base,
   // A signed release without the calendar client secret ships a calendar that
@@ -89,30 +110,24 @@ module.exports = {
   // electron-builder's built-in `mac.notarize` because its single-shot staple has
   // no retry and fails the whole build on that race (observed repeatedly). See the
   // notarize.js header and apple-signing-report.md §"Error 65 staple race".
-  afterSign: './scripts/notarize.js',
-  // Rebuild styled DMGs from the pristine signed .app (create-dmg), then notarize +
-  // staple them, then patch latest*.yml dmg hashes and assert the updater ZIP manifest.
-  // (electron-builder's own DMG creation corrupts the embedded app signature — see header.)
-  afterAllArtifactBuild: require('./scripts/afterAllArtifactBuild.cjs'),
-  // As soon as the arm64 updater zip exists, start the Apple Silicon DMG (build +
-  // notarize + staple + verify) in a separate background process, so its ~9-min
-  // notary wait overlaps the Intel pack/sign/notarize instead of following it.
-  // The job stops when this build stops, so a failed build leaves nothing running.
+  //
+  // Then, for the arm64 app only, start the Apple Silicon DMG (build + notarize +
+  // staple + verify) in a separate background process. The app is final at this
+  // point (signed, notarized, stapled), so the DMG's ~9-min notary wait overlaps
+  // the arm64 zip and the Intel pack/sign/notarize instead of following them. The
+  // job stops when this build stops, so a failed build leaves nothing running.
   // Optional speed-up only: any problem starting it is logged and
   // afterAllArtifactBuild builds the DMG itself. Only for builds run through
   // scripts/package-app.js (it sets the run id); otherwise afterAllArtifactBuild
   // builds both DMGs itself, as before. See scripts/lib/dmg-job.cjs.
-  artifactBuildCompleted: (event) => {
-    const dmgJob = require('./scripts/lib/dmg-job.cjs');
-    const runId = process.env[dmgJob.RUN_ID_ENV];
-    if (!dmgJob.shouldStartEarlyDmg({ platform: process.platform, file: event && event.file, runId })) return;
-    try {
-      if (!require('./scripts/afterAllArtifactBuild.cjs').notarytoolArgs()) return; // unsigned: nothing to notarize
-      dmgJob.startEarlyDmgJob({ outDir: require('path').dirname(event.file), runId });
-    } catch (err) {
-      console.warn(`[dmg-job] could not start the early Apple Silicon DMG (${err && err.message}); it will be built at the end instead.`);
-    }
+  afterSign: async (context) => {
+    await require('./scripts/notarize.js')(context);
+    startEarlyArm64Dmg(context);
   },
+  // Rebuild styled DMGs from the pristine signed .app (create-dmg), then notarize +
+  // staple them, then patch latest*.yml dmg hashes and assert the updater ZIP manifest.
+  // (electron-builder's own DMG creation corrupts the embedded app signature — see header.)
+  afterAllArtifactBuild: require('./scripts/afterAllArtifactBuild.cjs'),
   mac: {
     ...base.mac,
     identity: signIdentity,                 // undefined => auto-discover Developer ID Application
@@ -127,7 +142,7 @@ module.exports = {
     // Build ONLY zip with electron-builder (preserves signatures + is the updater
     // artifact); the DMGs are produced cleanly by the afterAllArtifactBuild hook.
     // arm64 FIRST: electron-builder builds arches in this order, and the arm64 DMG
-    // starts in the background the moment its zip exists (artifactBuildCompleted).
+    // starts in the background as soon as that app is notarized (afterSign).
     target: [
       { target: 'zip', arch: ['arm64', 'x64'] },
     ],

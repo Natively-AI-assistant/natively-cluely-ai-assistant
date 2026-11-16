@@ -7,9 +7,11 @@
  * other at the very end (scripts/afterAllArtifactBuild.cjs), ~9 minutes each.
  *
  * With arm64 built FIRST (electron-builder.signed.cjs lists it first), its DMG can
- * be made the moment its zip exists, while electron-builder moves on to x64. This
- * module starts that work as a background process (scripts/dmg-job-run.cjs) and
- * lets afterAllArtifactBuild collect the result.
+ * be made as soon as the arm64 app is signed, notarized and stapled (afterSign),
+ * while electron-builder zips it and moves on to x64. The DMG is made from the
+ * finished .app only; the zip is not needed. This module starts that work as a
+ * background process (scripts/dmg-job-run.cjs) and lets afterAllArtifactBuild
+ * collect the result.
  *
  * LIFETIME: the job lives and dies with the electron-builder process that started
  * it. It runs as its own process group (detached) so the whole group — the node
@@ -81,12 +83,15 @@ function defaultSleepSync(ms) {
 }
 
 /**
- * Should this electron-builder artifact start the early DMG job?
- * Only the arm64 updater zip of a darwin build that package-app gave a run id.
+ * Should this afterSign start the early DMG job?
+ * Only for the arm64 app of a darwin build that package-app gave a run id. Called
+ * after notarize.js returned, so the app is signed, notarized and stapled.
+ * `archName` is electron-builder's arch name ('arm64', 'x64', …).
  */
-function shouldStartEarlyDmg({ platform, file, runId }) {
-  if (platform !== 'darwin' || !runId || typeof file !== 'string') return false;
-  return /-arm64\.zip$/.test(path.basename(file));
+function shouldStartEarlyDmg({ platform, electronPlatformName, archName, runId }) {
+  if (platform !== 'darwin' || !runId) return false;
+  if (electronPlatformName && electronPlatformName !== 'darwin') return false; // mas etc.
+  return archName === 'arm64';
 }
 
 /**

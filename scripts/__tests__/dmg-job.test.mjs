@@ -19,26 +19,23 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'dmg-job-test-'));
 const quiet = { log() {}, warn() {}, error() {} };
 
 // ---------------------------------------------------------------------------
-// shouldStartEarlyDmg
+// shouldStartEarlyDmg (called from the signed config's afterSign)
 // ---------------------------------------------------------------------------
 
-test('starts only for the arm64 updater zip of a darwin run with a run id', () => {
-  const zip = path.join('release', 'Natively-3.2.0-arm64.zip');
-  assert.equal(job.shouldStartEarlyDmg({ platform: 'darwin', file: zip, runId: 'r1' }), true);
+test('starts only after the arm64 app of a darwin build with a run id', () => {
+  assert.equal(job.shouldStartEarlyDmg({ platform: 'darwin', electronPlatformName: 'darwin', archName: 'arm64', runId: 'r1' }), true);
 });
 
-test('never starts on Windows, even for an arm64-named zip', () => {
-  const zip = path.join('release', 'Natively-3.2.0-arm64.zip');
-  assert.equal(job.shouldStartEarlyDmg({ platform: 'win32', file: zip, runId: 'r1' }), false);
+test('never starts on Windows', () => {
+  assert.equal(job.shouldStartEarlyDmg({ platform: 'win32', electronPlatformName: 'win32', archName: 'arm64', runId: 'r1' }), false);
+  assert.equal(job.shouldStartEarlyDmg({ platform: 'win32', electronPlatformName: 'win32', archName: 'x64', runId: 'r1' }), false);
 });
 
-test('does not start for the Intel zip, a dmg, a blockmap, or without a run id', () => {
-  const r = path.join('release');
-  assert.equal(job.shouldStartEarlyDmg({ platform: 'darwin', file: path.join(r, 'Natively-3.2.0-x64.zip'), runId: 'r1' }), false);
-  assert.equal(job.shouldStartEarlyDmg({ platform: 'darwin', file: path.join(r, 'Natively-3.2.0-arm64.dmg'), runId: 'r1' }), false);
-  assert.equal(job.shouldStartEarlyDmg({ platform: 'darwin', file: path.join(r, 'Natively-3.2.0-arm64.zip.blockmap'), runId: 'r1' }), false);
-  assert.equal(job.shouldStartEarlyDmg({ platform: 'darwin', file: path.join(r, 'Natively-3.2.0-arm64.zip'), runId: undefined }), false);
-  assert.equal(job.shouldStartEarlyDmg({ platform: 'darwin', file: undefined, runId: 'r1' }), false);
+test('does not start for the Intel app, a MAS build, or without a run id (CI, unsigned)', () => {
+  assert.equal(job.shouldStartEarlyDmg({ platform: 'darwin', electronPlatformName: 'darwin', archName: 'x64', runId: 'r1' }), false);
+  assert.equal(job.shouldStartEarlyDmg({ platform: 'darwin', electronPlatformName: 'darwin', archName: 'universal', runId: 'r1' }), false);
+  assert.equal(job.shouldStartEarlyDmg({ platform: 'darwin', electronPlatformName: 'mas', archName: 'arm64', runId: 'r1' }), false);
+  assert.equal(job.shouldStartEarlyDmg({ platform: 'darwin', electronPlatformName: 'darwin', archName: 'arm64', runId: undefined }), false);
 });
 
 // ---------------------------------------------------------------------------
