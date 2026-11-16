@@ -5,9 +5,9 @@
  *
  *   node scripts/dmg-job-run.cjs <outDir> <archDir> <suffix> <runId>
  *
- * Started by scripts/lib/dmg-job.cjs (startEarlyDmgJob) from electron-builder's
- * artifactBuildCompleted hook as soon as the arm64 updater zip exists, so the
- * Apple Silicon DMG is notarized while electron-builder packages the Intel app.
+ * Started by scripts/lib/dmg-job.cjs (startEarlyDmgJob) from the signed config's
+ * afterSign hook as soon as the arm64 app is notarized and stapled, so the Apple
+ * Silicon DMG is notarized while electron-builder zips it and packages the Intel app.
  * afterAllArtifactBuild reads the result from the job file.
  *
  * It is its own process-group leader (spawned detached). A watchdog stops the

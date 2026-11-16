@@ -49,6 +49,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { notarytoolSubmitWithRetry, isTransientNetworkMessage } = require('./lib/notary-transient.cjs');
 const { stapleWithRetry } = require('./staple-with-retry');
+const { runCreateDmg } = require('./lib/create-dmg-run.cjs');
 const {
   RUN_ID_ENV, EARLY_ARCH, waitForDmgJob, earlyDmgDecision, dmgIsNewerThanApp, appSignedMtimeMs,
 } = require('./lib/dmg-job.cjs');
@@ -328,15 +329,10 @@ function buildStyledDmg({ appPath, outDmg, identity }) {
   args.push(outDmg, stage);
 
   try {
-    // create-dmg exits 2 when it built the dmg but couldn't set the .DS_Store layout
-    // (e.g. headless/no Finder); the dmg is still valid + signed, so tolerate exit 2.
-    execFileSync('create-dmg', args, { stdio: 'inherit' });
-  } catch (e) {
-    if (e.status === 2 && fs.existsSync(outDmg)) {
-      console.warn('[dmg] create-dmg exit 2 (cosmetic layout skipped) — dmg built + signed OK.');
-    } else {
-      throw e;
-    }
+    // Exit 2 (layout skipped, dmg still valid + signed) is accepted; exit 64 (the
+    // Finder AppleScript step failed) is retried; leftover working images are
+    // removed. See scripts/lib/create-dmg-run.cjs.
+    runCreateDmg({ args, outDmg });
   } finally {
     fs.rmSync(stage, { recursive: true, force: true });
   }
