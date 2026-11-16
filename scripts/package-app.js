@@ -202,6 +202,14 @@ function recoverFromKilledRun() {
 // carry a stale platform alias. Restore it before applying a fresh disguise.
 recoverFromKilledRun();
 
+// One id per packaging run, inherited by electron-builder and its hooks. Its
+// presence turns on the early arm64 DMG job (scripts/lib/dmg-job.cjs), which tags
+// its status file with it, so a file left behind by an earlier build is never read
+// as this build's result. The job stops with electron-builder; nothing waits here.
+const dmgJob = require('./lib/dmg-job.cjs');
+const runId = `${Date.now()}-${process.pid}`;
+process.env[dmgJob.RUN_ID_ENV] = runId;
+
 let builderCode;
 try {
   applyDisguiseProductName();
