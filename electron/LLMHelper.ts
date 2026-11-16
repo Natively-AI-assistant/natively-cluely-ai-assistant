@@ -5800,6 +5800,15 @@ let isMultimodal = !!(imagePaths?.length);
    * will use — and null once the turn was answered by someone else (no pick
    * applied, or the pick failed and the fallback rescued it).
    */
+  /**
+   * The provider family Fast Response would answer a text turn with right now,
+   * or null when it is off or the Active Model answers. Read-only: the Pro pack
+   * rule asks it (services/packs/packProRule.ts).
+   */
+  public fastResponseFamilyNow(): string | null {
+    try { return this.resolveFastPick()?.family ?? null; } catch { return null; }
+  }
+
   private fastPickForTextTurn(): FastPick | null {
     const turn = this._fastTurn;
     if (!turn) return this.resolveFastPick();

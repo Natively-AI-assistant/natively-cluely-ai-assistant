@@ -2,12 +2,15 @@
  * The Pro pack meeting clock: reports live meeting time to natively-api so a
  * Pro pack ends when its hours are used.
  *
- * WHY (2026-11-06, Evin). A Pro pack (Light $5 = 2 h within 7 days, Heavy $10
- * = 5 h within 14 days) is sold as MEETING hours, and it unlocks Pro as well
- * as the API. Its hours must run out whatever transcribes the meeting:
- * Natively's speech-to-text or the customer's own keys. A meter fed only by
- * our own transcription minutes would never end for someone on their own keys,
- * and $5 would be a cheap Pro licence.
+ * WHY (2026-11-06, Evin). A Pro pack (Light $5 = 2 h within 2 days, Heavy $10
+ * = 5 h within 5 days, since 2026-11-16) is sold as MEETING hours, and it
+ * unlocks Pro as well as the API.
+ *
+ * 2026-11-16 (Evin): the hours count only while the AI and speech-to-text both
+ * run on Natively API (`counts`). With either on the customer's own provider,
+ * Pro is off (packProRule.ts), so the pack cannot become a cheap Pro licence,
+ * and only the Natively part's own allowance is used: AI tokens for Natively
+ * AI, voice minutes for Natively speech-to-text.
  *
  * HOW. While a meeting is live and a Natively API key is saved, the clock
  * ticks once a minute and POSTs the seconds since the last tick to
@@ -80,6 +83,17 @@ export interface PackMeetingClockDeps {
   onPackRenewed?(): void;
   /** Latest pack view the server sent with a counted tick. */
   onPackState?(pack: any): void;
+  /**
+   * Do the pack's meeting hours count right now? (2026-11-16) Only while the AI
+   * and speech-to-text both run on Natively API (packProRule.ts): with either on
+   * another provider the pack gives no Pro, and only the Natively part's own
+   * allowance (AI tokens or voice minutes) is used. Asked once per tick; time
+   * that does not count is dropped, never billed later. Absent → always counts.
+   * The time since the last tick goes by the state it RAN under (read at that
+   * tick, or at the last countsChanged()), so a switch mid-minute bills the
+   * seconds before it by the old providers and the rest by the new ones.
+   */
+  counts?(): boolean;
   log?: { log(...a: unknown[]): void; warn(...a: unknown[]): void };
 }
 
@@ -100,6 +114,8 @@ export function createPackMeetingClock(deps: PackMeetingClockDeps) {
     since: number | null;
     /** Sub-second remainder carried to the next tick. */
     carryMs: number;
+    /** Whether the time accruing since `since` counts (read when it started). */
+    counting: boolean;
     /**
      * The pack ended mid-meeting. Nothing accrues (since is null) and the timer
      * only asks whether hours were added; the time in between is never billed.
@@ -117,9 +133,22 @@ export function createPackMeetingClock(deps: PackMeetingClockDeps) {
   let notPackKey: string | null = null;
   let endedReported = false;
 
+  function countsNow(): boolean {
+    try { return deps.counts ? deps.counts() !== false : true; } catch { return true; }
+  }
+
   /** Move time accrued since `since` (capped) into whole seconds on a new tick. */
   function accrue(at: number): void {
     if (!meeting || meeting.since === null) return;
+    // The interval just ended ran under `meeting.counting`; the next one runs
+    // under whatever holds now.
+    const counted = meeting.counting;
+    meeting.counting = countsNow();
+    if (!counted) {
+      meeting.since = at;
+      meeting.carryMs = 0;
+      return;
+    }
     const gap = Math.max(0, at - meeting.since);
     meeting.since = at;
     const ms = meeting.carryMs + Math.min(gap, MAX_GAP_MS);
@@ -224,6 +253,7 @@ export function createPackMeetingClock(deps: PackMeetingClockDeps) {
     meeting.paused = false;
     meeting.since = deps.now();
     meeting.carryMs = 0;
+    meeting.counting = countsNow();
     endedReported = false;
     log.log('[PackClock] the pack is live again — metering the rest of this meeting');
     try { deps.onPackRenewed?.(); } catch { /* a listener never stops the clock */ }
@@ -251,6 +281,7 @@ export function createPackMeetingClock(deps: PackMeetingClockDeps) {
         seq: 0,
         since: deps.now(),
         carryMs: 0,
+        counting: countsNow(),
         paused: false,
         cancelTimer: () => {},
       };
@@ -280,6 +311,17 @@ export function createPackMeetingClock(deps: PackMeetingClockDeps) {
       // A paused meeting (pack ended) does not start accruing on wake.
       if (!meeting || meeting.paused || meeting.since !== null) return;
       meeting.since = deps.now();
+      meeting.counting = countsNow();
+    },
+
+    /**
+     * The AI or speech-to-text provider just changed. Close the interval so far
+     * under the providers it ran on; what follows goes by the new ones. Queued,
+     * not sent: the next tick sends it.
+     */
+    countsChanged(): void {
+      if (!meeting || meeting.paused || meeting.since === null) return;
+      accrue(deps.now());
     },
 
     /** Test and diagnostics view. */

@@ -3,6 +3,10 @@ import fs from 'fs';
 import path from 'path';
 
 export interface AppSettings {
+    /** The Pro mode a Pro pack's provider rule switched off (2026-11-16): put
+     *  back when the AI and speech-to-text are both on Natively API again.
+     *  Cleared once used (ipcHandlers restorePackStandDown). */
+    packProStandDownModeId?: string | null;
     /** The Calendar account name whose full-name mentions in saved notes were carried
      *  to the first name (calendarNameMigration); set once per name. */
     calendarFirstNameMigratedFor?: string;

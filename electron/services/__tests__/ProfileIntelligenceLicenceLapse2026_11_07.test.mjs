@@ -83,13 +83,14 @@ test('the startup licence re-check goes through recheckLicence and turns knowled
   const start = ipc.indexOf('const runLicenceRecheck = async');
   assert.ok(start > 0);
   const body = ipc.slice(start, ipc.indexOf("safeHandle('license:deactivate'", start));
-  assert.match(body, /safeHandle\('license:check-premium-async', async \(\) => runLicenceRecheck\(\)\)/);
+  // 2026-11-16: the windows hear the licence with the Pro pack rule applied.
+  assert.match(body, /safeHandle\('license:check-premium-async', async \(\) => \(await runLicenceRecheck\(\)\) && licencePremiumForWindows\(\)\)/);
   assert.match(body, /recheckLicence\(lm, \{/);
   assert.match(body, /stillAllowed: isProOrTrialActive/);
   assert.match(body, /setKnowledgeMode\(false\)/);
   assert.match(body, /clearActiveModeOnLicenseLoss\(\)/);
   assert.match(body, /'license-status-changed', \{ isPremium \}/);
   assert.match(body, /tell\(false\)/);
-  assert.match(body, /onRestored: \(\) => tell\(true\)/);
+  assert.match(body, /onRestored: \(\) => tell\(licencePremiumForWindows\(\)\)/);
   assert.match(body, /startLicenceRecheck\(\{/);
 });

@@ -338,6 +338,24 @@ let appleSpeechLocalesCache: { available: boolean; supported: string[]; installe
 /** The running licence re-check schedule (services/licenceRecheck.ts), once IPC is up. */
 let licenceRecheck: import('./services/licenceRecheck').LicenceRecheck | null = null;
 let proWatchTimer: ReturnType<typeof setInterval> | null = null;
+/**
+ * Re-read Pro now instead of at the next 30 s watch. Called after the AI model
+ * or the speech-to-text provider changes: a Pro pack's Pro follows both
+ * (services/packs/packProRule.ts). A no-op until the Pro watch exists.
+ */
+let checkProNow: () => void = () => {};
+
+/** The licence as the windows are told it (the Pro pack rule applied). */
+function licencePremiumForWindows(): boolean {
+  try {
+    const { isLicencePremium, forgetLicenceFacts } = require('./services/proAccess') as typeof import('./services/proAccess');
+    // Windows are told after an activation or a re-check: read the licence fresh.
+    forgetLicenceFacts();
+    return isLicencePremium();
+  } catch {
+    return false;
+  }
+}
 
 /** Ask the licence server now (wake from sleep, a usage read without Pro); spaced and single-flight. */
 export function triggerLicenceRecheck(reason: import('./services/licenceRecheck').RecheckReason): void {
@@ -345,12 +363,20 @@ export function triggerLicenceRecheck(reason: import('./services/licenceRecheck'
 }
 
 export function initializeIpcHandlers(appState: AppState): void {
+  // Each handler as registered, so main can run the very flow a window asks
+  // for (the Pro pack restore re-selects a mode through modes:set-active).
+  const registeredHandlers = new Map<string, (event: any, ...args: any[]) => any>();
   const safeHandle = (
     channel: string,
     listener: (event: any, ...args: any[]) => Promise<any> | any,
   ) => {
     ipcMain.removeHandler(channel);
     ipcMain.handle(channel, listener);
+    registeredHandlers.set(channel, listener);
+  };
+  const applyActiveMode = async (id: string | null): Promise<any> => {
+    const handler = registeredHandlers.get('modes:set-active');
+    return handler ? handler(null, id) : { success: false, error: 'not_ready' };
   };
 
   const safeOn = (
@@ -1036,6 +1062,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (cm.getDefaultModel() !== defaultModel) return null;
       cm.setDefaultModel(next);
       llmHelper.setModel(next, allProviders);
+      // A Pro pack's Pro follows the AI and speech-to-text (packs/packProRule.ts).
+      checkProNow();
       // Same two listeners as every other model change. Converted alongside the
       // rest rather than left as the one surviving broadcast — an untargeted
       // straggler is how this class of fix keeps coming back.
@@ -1150,6 +1178,17 @@ export function initializeIpcHandlers(appState: AppState): void {
       try {
         const { ModesManager, modeNeedsPro } = require('./services/ModesManager') as typeof import('./services/ModesManager');
         if (modeNeedsPro(ModesManager.getInstance().getStoredActiveMode())) {
+          const stored = ModesManager.getInstance().getStoredActiveMode();
+          // A Pro pack's Pro went off because the AI or speech-to-text moved
+          // off Natively API: remember the mode, so switching back puts it
+          // back (restorePackStandDown). Used once, the next time Pro is back.
+          try {
+            const { currentPackProBlock } = require('./services/proAccess') as typeof import('./services/proAccess');
+            const { SettingsManager } = require('./services/SettingsManager');
+            // Pro lost any other way (the pack ran out, a plan lapsed): nothing
+            // is put back later, so a stale mode cannot return weeks on.
+            SettingsManager.getInstance().set('packProStandDownModeId', stored?.id && currentPackProBlock() !== null ? stored.id : null);
+          } catch { /* the mode is not put back: the user picks it again */ }
           clearActiveModeOnLicenseLoss();
           changed = true;
         }
@@ -1157,6 +1196,44 @@ export function initializeIpcHandlers(appState: AppState): void {
       return changed;
     } catch {
       return false;
+    }
+  };
+
+  /**
+   * Pro is back: put back what standDownIfNoPro switched off, so a Pro pack
+   * owner who moved the AI or speech-to-text off Natively API and back finds
+   * things as they left them (2026-11-16).
+   *   - Profile Intelligence: its saved setting is never cleared by a stand-down,
+   *     only the live switch; launch restores it from the setting when Pro is
+   *     there (main.ts), and this does the same without a relaunch. A user who
+   *     switched it off themselves saved false, so it stays off.
+   *   - The Pro mode: put back only when the pack rule cleared it and no mode
+   *     was picked since, through the same flow as the mode picker.
+   * Never throws.
+   */
+  const restorePackStandDown = async (): Promise<void> => {
+    try {
+      const { restoreAfterPackStandDown } = require('./services/packs/packProRule') as typeof import('./services/packs/packProRule');
+      const { SettingsManager } = require('./services/SettingsManager');
+      const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
+      const sm = SettingsManager.getInstance();
+      const mm = ModesManager.getInstance();
+      const orchestrator = appState.getKnowledgeOrchestrator();
+      const done = await restoreAfterPackStandDown({
+        proActive: isProOrTrialActive,
+        packLicence: () => (require('./services/proAccess') as typeof import('./services/proAccess')).licenceIsPack(),
+        knowledgeSetting: () => sm.get('knowledgeMode'),
+        knowledgeSwitchedOn: () => Boolean(orchestrator?.isKnowledgeModeSwitchedOn?.()),
+        setKnowledge: (on) => orchestrator?.setKnowledgeMode(on),
+        savedModeId: () => sm.get('packProStandDownModeId'),
+        clearSavedModeId: () => { sm.set('packProStandDownModeId', null); },
+        activeModeId: () => mm.getStoredActiveMode()?.id ?? null,
+        modeExists: (id) => mm.getModes().some((m: any) => m.id === id),
+        applyMode: (id) => applyActiveMode(id),
+      });
+      if (done.knowledge || done.modeId) console.log(`[IPC] Pro is back: Profile Intelligence ${done.knowledge ? 'on again' : 'unchanged'}, mode ${done.modeId ? 'put back' : 'unchanged'}`);
+    } catch (e: any) {
+      console.warn('[IPC] putting Pro switches back failed:', e?.message ?? e);
     }
   };
 
@@ -1341,19 +1418,18 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: false, error: 'Premium features not available in this build.' };
     }
   });
-  safeHandle('license:check-premium', async () => {
-    try {
-      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      return LicenseManager.getInstance().isPremium();
-    } catch {
-      return false;
-    }
-  });
+  safeHandle('license:check-premium', async () => licencePremiumForWindows());
 
+  // A Pro pack whose AI or speech-to-text is off Natively API reads as no Pro,
+  // with `packProPaused` naming which ('ai' | 'stt' | 'both') so Settings can
+  // say why. The licence itself stays stored (services/packs/packProRule.ts).
   safeHandle('license:get-details', async () => {
     try {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      return LicenseManager.getInstance().getLicenseDetails();
+      const details = LicenseManager.getInstance().getLicenseDetails();
+      const { currentPackProBlock } = require('./services/proAccess') as typeof import('./services/proAccess');
+      const block = details?.isPremium ? currentPackProBlock() : null;
+      return block ? { ...details, isPremium: false, packProPaused: block } : details;
     } catch {
       return { isPremium: false };
     }
@@ -1392,10 +1468,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         clearActiveModeOnLicenseLoss();
         tell(false);
       },
-      onRestored: () => tell(true),
+      onRestored: () => tell(licencePremiumForWindows()),
     });
   };
-  safeHandle('license:check-premium-async', async () => runLicenceRecheck());
+  safeHandle('license:check-premium-async', async () => (await runLicenceRecheck()) && licencePremiumForWindows());
   // Whatever changes Pro (a check, an activation, a trial starting or running
   // out), what follows it outside the per-use checks follows within 30 s:
   // Profile Intelligence and a Pro mode switched off, the MCP server and local
@@ -1407,8 +1483,32 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       void require('./services/outputs/outputsIpc').syncConnectorServersWithPro();
     } catch { /* connectors module absent */ }
+    // Some flips have no broadcast of their own: a Pro pack's Pro going off
+    // and on as the AI or speech-to-text provider moves (packs/packProRule.ts).
+    // Put back what the stand-down switched off, then tell the windows the
+    // licence as they should show it (they re-read the switches on it).
+    void (allowed ? restorePackStandDown() : Promise.resolve()).finally(() => {
+      const isPremium = licencePremiumForWindows();
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send('license-status-changed', { isPremium });
+      });
+    });
   });
+  try {
+    const { setLiveAiModelReader } = require('./services/proAccess') as typeof import('./services/proAccess');
+    setLiveAiModelReader(
+      () => appState.processingHelper?.getLLMHelper?.()?.getCurrentModelId?.(),
+      // Fast Response can answer on the user's own provider while the main model is Natively API.
+      () => appState.processingHelper?.getLLMHelper?.()?.fastResponseFamilyNow?.() ?? null,
+    );
+  } catch { /* the saved default model is read instead */ }
   proWatch.check();
+  checkProNow = () => {
+    // The pack clock bills the time up to this switch by the providers it ran
+    // on, not by the ones just picked (packs/PackMeetingClock.ts countsChanged).
+    try { require('./services/packs/packClockWiring').getPackMeetingClock().countsChanged(); } catch { /* no clock: nothing to bill */ }
+    proWatch.check();
+  };
   {
     proWatchTimer && clearInterval(proWatchTimer);
     proWatchTimer = setInterval(() => proWatch.check(), PRO_WATCH_EVERY_MS);
@@ -12753,11 +12853,14 @@ export function initializeIpcHandlers(appState: AppState): void {
           const result = await LicenseManager.getInstance().activateWithApiKey(apiKey);
           if (result.success) {
             console.log('[IPC] set-natively-api-key: Pro auto-activated via API plan.');
-            // Notify all windows so the license UI refreshes immediately
+            // Notify all windows so the license UI refreshes immediately. A Pro
+            // pack whose AI or speech-to-text is off Natively API shows no Pro.
+            const isPremium = licencePremiumForWindows();
             BrowserWindow.getAllWindows().forEach((win) => {
               if (!win.isDestroyed())
-                win.webContents.send('license-status-changed', { isPremium: true });
+                win.webContents.send('license-status-changed', { isPremium });
             });
+            checkProNow();
           } else if (result.skipped && !result.error) {
             // Benign skip: the stored perpetual license is verified and already
             // granting Pro, so there is nothing to tell the user.
@@ -14317,6 +14420,11 @@ export function initializeIpcHandlers(appState: AppState): void {
           CredentialsManager.getInstance().emitStorageStatusDiagnostic('stt_save_failed');
           return { success: false, error: sttPersistError };
         }
+
+        // A Pro pack's Pro follows the AI and speech-to-text (packs/packProRule.ts).
+        // Before the rebuild: the provider is saved, so Pro follows it even if
+        // the rebuild below throws.
+        checkProNow();
 
         // Reconfigure the audio pipeline to use the new STT provider
         await appState.reconfigureSttProvider();
@@ -15941,6 +16049,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
 
       appState.sendModelChanged(modelId);
+      // A Pro pack's Pro follows the AI model (packs/packProRule.ts).
+      checkProNow();
 
       // Close the selector window if open
       appState.modelSelectorWindowHelper.hideWindow();
@@ -16031,6 +16141,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
 
       appState.sendModelChanged(modelId);
+      // A Pro pack's Pro follows the AI model (packs/packProRule.ts).
+      checkProNow();
 
       // Close the selector window if open
       appState.modelSelectorWindowHelper.hideWindow();

@@ -34,10 +34,10 @@ test('yearly is ten months of the monthly price on every tier', () => {
   assert.equal(apiPlanPrice('nope', 'yearly'), null);
 });
 
-test('the packs match the server catalog: Light $5 2 h / 7 d, Heavy $10 5 h / 14 d', () => {
+test('the packs match the server catalog: Light $5 2 h / 2 d, Heavy $10 5 h / 5 d (2026-11-16)', () => {
   assert.deepEqual(PRO_PACKS.map((p) => [p.id, p.name, p.price, p.hours, p.days]), [
-    ['pack_light', 'Light pack', 5, 2, 7],
-    ['pack_heavy', 'Heavy pack', 10, 5, 14],
+    ['pack_light', 'Light pack', 5, 2, 2],
+    ['pack_heavy', 'Heavy pack', 10, 5, 5],
   ]);
 });
 

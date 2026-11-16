@@ -24,8 +24,8 @@ export const YEARLY_MONTHS_FREE = 2;
  * OR the days run out, whichever comes first. Same figures as the server's PACKS.
  */
 export const PRO_PACKS = Object.freeze([
-  Object.freeze({ id: 'pack_light', name: 'Light pack', price: 5, hours: 2, days: 7 }),
-  Object.freeze({ id: 'pack_heavy', name: 'Heavy pack', price: 10, hours: 5, days: 14 }),
+  Object.freeze({ id: 'pack_light', name: 'Light pack', price: 5, hours: 2, days: 2 }),
+  Object.freeze({ id: 'pack_heavy', name: 'Heavy pack', price: 10, hours: 5, days: 5 }),
 ]);
 
 const PACK_NAMES = Object.freeze({ pack_light: 'Light pack', pack_heavy: 'Heavy pack' });

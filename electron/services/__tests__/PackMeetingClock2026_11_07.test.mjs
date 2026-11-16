@@ -1,5 +1,5 @@
-// 2026-11-07. Pro packs (Light $5 = 2 h within 7 days, Heavy $10 = 5 h within
-// 14 days) are sold as meeting hours and unlock Pro. The app reports live
+// 2026-11-07. Pro packs (Light $5 = 2 h within 2 days, Heavy $10 = 5 h within
+// 5 days, since 2026-11-16) are sold as meeting hours and unlock Pro. The app reports live
 // meeting time to natively-api /v1/pack/meeting-tick once a minute, whatever
 // transcribes the meeting. These tests pin the clock: what it bills, what it
 // re-sends, when it stops, and that sleep is never billed.
@@ -44,6 +44,7 @@ function world(over = {}) {
     onPackState: (p) => states.push(p),
     ...(over.isKeyLive ? { isKeyLive: async (k) => { probes.push(k); return over.isKeyLive(k); } } : {}),
     onPackRenewed: () => renewed.push(now),
+    ...(over.counts ? { counts: over.counts } : {}),
     log: { log() {}, warn() {} },
   });
   const settle = () => new Promise((r) => setImmediate(r));
@@ -318,4 +319,62 @@ test('TOP-UP: a failed check counts as not yet, and checks never overlap', async
   release(false);
   await w.settle();
   assert.equal(w.clock.snapshot().paused, true);
+});
+
+// 2026-11-16 (Evin): the hours count only while the AI and speech-to-text both
+// run on Natively API. Time on another provider is dropped, not billed later.
+// The app calls countsChanged() at every provider switch.
+test('minutes on another provider are not billed, and never billed later', async () => {
+  let natively = true;
+  const w = world({ counts: () => natively });
+  w.clock.meetingStarted();
+  await w.tick();                 // counted
+  natively = false; w.clock.countsChanged();
+  await w.tick(); await w.tick(); // own provider: nothing sent
+  natively = true; w.clock.countsChanged();
+  await w.tick();                 // counted again, only its own minute
+  w.advance(10_000);
+  await w.clock.meetingEnded();
+  assert.deepEqual(w.sent.map((s) => [s.seq, s.seconds]), [[0, 60], [1, 60], [2, 10]]);
+});
+
+test('a switch mid-minute bills the seconds before it, not the ones after', async () => {
+  let natively = true;
+  const w = world({ counts: () => natively });
+  w.clock.meetingStarted();
+  w.advance(55_000);
+  natively = false; w.clock.countsChanged();   // 55 s on Natively, then own STT
+  await w.tick(5_000);                          // the minute's last 5 s: not billed
+  w.advance(40_000);
+  natively = true; w.clock.countsChanged();    // 40 s on own STT: dropped
+  await w.tick(20_000);                         // 20 s back on Natively
+  assert.deepEqual(w.sent.map((s) => s.seconds), [55, 20]);
+});
+
+test('a meeting that ends on another provider bills nothing for its tail', async () => {
+  let natively = true;
+  const w = world({ counts: () => natively });
+  w.clock.meetingStarted();
+  w.advance(30_000);
+  natively = false; w.clock.countsChanged();
+  w.advance(30_000);
+  await w.clock.meetingEnded();
+  assert.deepEqual(w.sent.map((s) => s.seconds), [30]);
+});
+
+test('a meeting started on another provider bills nothing until the switch', async () => {
+  let natively = false;
+  const w = world({ counts: () => natively });
+  w.clock.meetingStarted();
+  await w.tick(); await w.tick();
+  natively = true; w.clock.countsChanged();
+  await w.tick();
+  assert.deepEqual(w.sent.map((s) => s.seconds), [60]);
+});
+
+test('a counts() that throws keeps the hours counting', async () => {
+  const w = world({ counts: () => { throw new Error('settings unreadable'); } });
+  w.clock.meetingStarted();
+  await w.tick();
+  assert.deepEqual(w.sent.map((s) => s.seconds), [60]);
 });

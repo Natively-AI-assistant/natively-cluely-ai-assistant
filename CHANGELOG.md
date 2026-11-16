@@ -12,7 +12,7 @@ Eleven days of work since v3.1.0: a guided first run, a smarter Auto Answer, fas
 - **Every answer on your phone** — each overlay answer (buttons, Auto Answer, Direct Assist, spoken follow-ups) streams word by word to the paired phone.
 - **Screenshot question** — choose what a screenshot asks when you type nothing, in Settings → Overlay (#726).
 - **Newer speech models** — BYOK Soniox stt-rt-v6 and ElevenLabs Scribe v3, and Nepali in the language picker where the provider supports it (#736).
-- **Yearly plans and packs** — Natively plans can be paid yearly (two months free). One-time Light ($5, 2 hours within 7 days) and Heavy ($10, 5 hours within 14 days) packs include Pro, with a meeting clock. Plans & Billing has an Hourly, Monthly and Yearly switch, and Unlock Pro opens a plans page inside the panel.
+- **Yearly plans and packs** — Natively plans can be paid yearly (two months free). One-time Light ($5, 2 hours within 2 days) and Heavy ($10, 5 hours within 5 days) packs include Pro while AI and transcription both use Natively API, with a meeting clock. Plans & Billing has an Hourly, Monthly and Yearly switch, and Unlock Pro opens a plans page inside the panel.
 - **Lost your key** — "Bought a key but no email?" sends the key again, from the activation card in Plans & Billing, in English, Russian, Chinese, Japanese and Spanish.
 - **Keep overlay size** — Settings → General → Advanced, on by default: the overlay keeps its size between answers.
 

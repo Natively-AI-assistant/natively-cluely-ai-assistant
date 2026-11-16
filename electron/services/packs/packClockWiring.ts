@@ -128,6 +128,10 @@ export function getPackMeetingClock(onProLost: () => void = () => {}): Clock {
     isKeyLive,
     onPackRenewed: packRenewed,
     onPackState: (pack) => broadcast('pack-state', pack),
+    counts: () => {
+      const { packHoursCountNow } = require('../proAccess') as typeof import('../proAccess');
+      return packHoursCountNow();
+    },
   });
   return instance;
 }

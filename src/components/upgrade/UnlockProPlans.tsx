@@ -245,13 +245,14 @@ interface Tier {
 function buildTiers(now: Date): Tier[] {
   const saleName = yearlySaleLabel(now)?.replace(/\s*[−-]\d+%$/, '') ?? null;
   const apiPro = PLANS.find(x => x.planKey === 'pro')!;
+  const light = PRO_PACKS.find(p => p.id === 'pack_light')!;
   const heavy = PRO_PACKS.find(p => p.id === 'pack_heavy')!;
   return [
     {
       id: 'pack_light', name: 'Pro Pack', badge: 'Try it', tab: null,
       blurb: 'Every Pro feature with AI included, for an interview or two.',
       price: '$5', was: null, period: 'one-time', note: 'No renewal', noteAccent: false,
-      features: ['Full Natively Pro app', 'AI and transcription included', '2 meeting hours within 7 days'],
+      features: ['Full Natively Pro app', 'AI and transcription included', `${light.hours} meeting hours within ${light.days} days`],
       cta: 'Get Pro Pack', url: CHECKOUT_URLS.packLight,
       alt: { id: heavy.id, label: `or ${heavy.hours} hours for $${heavy.price}`, url: CHECKOUT_URLS.packHeavy },
       featured: false, mesh: 'standard', pattern: 'dots',

@@ -927,11 +927,12 @@ const DISSOLVE = {
 // Two one-time buys beside the subscriptions, drawn as small website tiers
 // like the plan card above: Light on the Max band, Heavy on the Ultra band.
 // The allowance is the product, so it gets the two rows; the rule that makes
-// a pack a pack (hours OR days, whichever first; any live meeting counts, even
-// on your own keys) is said once, under both.
+// a pack a pack (hours OR days, whichever first; Pro only while the AI and
+// transcription both run on Natively API, 2026-11-16) is said once, under both.
+// The Pro rule: electron/services/packs/packProRule.ts.
 const PACK_LOOK: Record<string, { mesh: TierMesh; pattern: TierPattern; blurb: string }> = {
   pack_light: { mesh: 'max', pattern: 'dots', blurb: 'For an interview or two: a few hours of Pro, paid once.' },
-  pack_heavy: { mesh: 'ultra', pattern: 'grid', blurb: 'For two busy weeks of meetings, with no plan to cancel.' },
+  pack_heavy: { mesh: 'ultra', pattern: 'grid', blurb: 'For a busy week of meetings, with no plan to cancel.' },
 };
 
 function ProPacks({ currentPlan, onBuy, arrive }: { currentPlan?: string; onBuy: (url: string) => void; arrive: (i: number) => object }) {
@@ -979,8 +980,11 @@ function ProPacks({ currentPlan, onBuy, arrive }: { currentPlan?: string; onBuy:
         })}
       </div>
       <p className="text-[11px] text-text-tertiary px-1 mt-2 leading-snug">
-        Pay once, nothing renews. A pack ends when its hours or its days run out, whichever comes first. Every live meeting counts toward
-        the hours, even on your own AI keys. Buying another pack adds more hours.
+        Pay once, nothing renews. A pack ends when its hours or days run out. More packs add hours.
+      </p>
+      <p data-pack-provider-rule className="text-[11px] text-text-tertiary px-1 leading-snug">
+        Pro works only while AI and transcription both use Natively API. Switch either to another provider and Pro turns off;
+        the pack still covers the part on Natively API.
       </p>
     </div>
   );
@@ -1804,11 +1808,13 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                     <RollingPrice price={price} from={price} />
                   </span>
                   <span className="api-tier-per">{yearly ? '/ year' : '/ month'}</span>
+                  {/* "/ month" already says it; only Yearly has news to add. On
+                      the price row's free right side, so Yearly cards stand
+                      exactly as tall as Monthly ones (Evin, 2026-11-16). */}
+                  {yearly && (
+                    <span className="api-tier-save api-tier-save-inline" data-on="true">{`${YEARLY_MONTHS_FREE} months free`}</span>
+                  )}
                 </p>
-                {/* "/ month" already says it; only Yearly has news to add. */}
-                {yearly && (
-                  <p className="api-tier-save" data-on="true">{`${YEARLY_MONTHS_FREE} months free`}</p>
-                )}
                 {isActive ? (
                   <div className="api-tier-cta" data-state="active">Your current plan</div>
                 ) : (

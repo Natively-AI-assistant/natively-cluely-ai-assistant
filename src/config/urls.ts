@@ -36,9 +36,9 @@ export const CHECKOUT_URLS = {
     apiUltraYearly: 'https://checkout.dodopayments.com/buy/pdt_0NrMWzLKdFcSU6HozUl55',
     // Pro packs: one-time. Natively Pro + the API until the hours or the days
     // run out, whichever comes first. Another pack adds hours. Never renews.
-    /** Light pack — $5, 2 hours of meetings within 7 days */
+    /** Light pack — $5, 2 hours of meetings within 2 days */
     packLight: 'https://checkout.dodopayments.com/buy/pdt_0NrMWztmLVYzyt4L9SQJd',
-    /** Heavy pack — $10, 5 hours of meetings within 14 days */
+    /** Heavy pack — $10, 5 hours of meetings within 5 days */
     packHeavy: 'https://checkout.dodopayments.com/buy/pdt_0NrMX0EGK6xaJYhsWRIla',
 } as const;
 

@@ -70,7 +70,13 @@ export function getProEntitlementReconciler(): Reconciler {
       if (!lm) return { success: false, skipped: true };
       return lm.activateWithApiKey(key);
     },
-    onActivated: () => broadcast('license-status-changed', { isPremium: true }),
+    // A Pro pack activated while its AI or speech-to-text is off Natively API
+    // holds its licence but shows no Pro (packs/packProRule.ts).
+    onActivated: () => {
+      let isPremium = true;
+      try { isPremium = (require('./proAccess') as typeof import('./proAccess')).isLicencePremium(); } catch { /* as activated */ }
+      broadcast('license-status-changed', { isPremium });
+    },
     onStatus: (status: ReconcilerStatus) => broadcast('pro-activation-status', status),
     schedule: (fn, ms) => {
       const t = setTimeout(() => { void fn(); }, ms);
