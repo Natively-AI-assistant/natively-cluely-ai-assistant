@@ -541,7 +541,7 @@ const ModelSelectorWindow = () => {
                                     className={groupIndex > 0 ? 'mt-1' : undefined}
                                 >
                                     {showHeaders && group.showHeader && (
-                                        <div className="px-2 pt-1 pb-0.5 text-center text-[11px] leading-4 font-semibold select-none" style={{ color: headerColor }}>
+                                        <div className="px-2 pt-1 pb-0.5 text-[11px] leading-4 font-semibold select-none" style={{ color: headerColor }}>
                                             {group.label}
                                         </div>
                                     )}
