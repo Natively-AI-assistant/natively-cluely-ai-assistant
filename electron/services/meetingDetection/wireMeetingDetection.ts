@@ -49,6 +49,8 @@ export interface OsNotification {
 export interface MeetingDetectionDeps {
     platform: string;
     native: NativeSignals | null;
+    /** Linux only: the compositor adapter's window snapshot (Wayland has no native list). */
+    linuxWindows?: () => Array<{ pid: number; owner: string; title: string; path?: string }> | null;
     self: SelfIdentity;
     isMeetingActive: () => boolean;
     /** Undetectable's native-prompt gate, or a disguise. */
@@ -125,7 +127,12 @@ export function wireMeetingDetection(deps: MeetingDetectionDeps): MeetingDetecto
         read: () => ({
             platform: deps.platform,
             micUsers: deps.native?.getMicUsers ? deps.native.getMicUsers() ?? null : null,
-            windows: () => deps.native?.getVisibleWindows?.() ?? null,
+            windows: () => {
+                const native = deps.native?.getVisibleWindows?.() ?? null;
+                // Linux: the native list is X11/XWayland only; empty/null means a Wayland session.
+                if (deps.platform === 'linux' && !native?.length) return deps.linuxWindows?.() ?? native;
+                return native;
+            },
             ...(deps.native?.inputInUse ? { inputInUse: deps.native.inputInUse() ?? false } : {}),
             live: live.list(),
             self: deps.self,

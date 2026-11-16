@@ -53,6 +53,16 @@ block2 = "0.5"
 core-graphics = "0.24"
 core-foundation = "0.10"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# System audio: PulseAudio/PipeWire monitor source (src/speaker/linux.rs).
+libpulse-binding = "2.28"
+libpulse-simple-binding = "2.28"
+# Stealth keyboard (src/keyboard_evdev_linux.rs): evdev grab + layout via libxkbcommon
+# (runtime lib every desktop has; libxkbcommon-dev at build time).
+evdev = "0.13"
+xkbcommon = { version = "0.8", default-features = false }
+libc = "0.2"
+
 [target.'cfg(target_os = "windows")'.dependencies]
 wasapi = "0.13.0"
 # Win32 features:

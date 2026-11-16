@@ -67,6 +67,12 @@ pub mod edit_shortcut;
 #[cfg(target_os = "windows")]
 pub mod keyboard_hook_windows;
 
+// Linux counterpart: evdev grab + xkbcommon, same napi surface. Pure decisions in
+// linux_keymap (declared for every OS so its tests run anywhere).
+pub mod linux_keymap;
+#[cfg(target_os = "linux")]
+pub mod keyboard_evdev_linux;
+
 // Windows: a no-activate window's clicks are delivered, not eaten (MA_NOACTIVATE).
 #[cfg(target_os = "windows")]
 pub mod no_activate_window;

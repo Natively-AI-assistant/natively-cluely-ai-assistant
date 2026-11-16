@@ -4,15 +4,13 @@ import path from "node:path"
 import fs from "node:fs"
 import { app, desktopCapturer, screen, systemPreferences } from "electron"
 import { v4 as uuidv4 } from "uuid"
-import util from "util"
 import sharp, { type OverlayOptions } from "sharp"
-import { exec as execShell } from "child_process"
+import { captureLinuxScreenshot } from "./utils/linuxScreenshot"
 import { FORMULA_IMAGE_PREFIX } from "./services/formulaScreenshotHandoff"
 
 // Module-level: promisified shell exec created once per process lifetime.
 // Uses the shell-capable exec variant (not execFile) because Linux screenshot
 // commands use shell operators (||, 2>/dev/null) that require a shell interpreter.
-const shellExecAsync = util.promisify(execShell);
 
 /**
  * Asserts that macOS screen recording permission is in a usable state.
@@ -691,26 +689,15 @@ export class ScreenshotHelper {
   }
 
   /**
-   * Platform-aware screenshot command builder.
-   * Linux-only in practice. macOS and Windows use desktopCapturer APIs instead.
+   * Linux-only capture (macOS and Windows use desktopCapturer). Refuses paths
+   * outside userData: every caller builds `path.join(screenshotDir, uuid)`, so
+   * this guards a future regression where external input could reach a tool.
    */
-  private getScreenshotCommand(outputPath: string, interactive: boolean): string {
-    // Safety: outputPath must be within our controlled directories.
-    // Since we always construct paths using path.join(this.screenshotDir, uuidv4()),
-    // this assertion guards against any future regression where external input could reach here.
-    // This is a defense-in-depth measure against path traversal attacks.
-    const userDataDir = app.getPath('userData');
-    if (!outputPath.startsWith(userDataDir)) {
-      throw new Error(`[ScreenshotHelper] Refusing shell command for path outside userData: ${outputPath}`);
+  private async captureWithLinuxTool(outputPath: string, interactive: boolean): Promise<void> {
+    if (!outputPath.startsWith(app.getPath('userData'))) {
+      throw new Error(`[ScreenshotHelper] Refusing capture for path outside userData: ${outputPath}`);
     }
-    const safePath = outputPath.replace(/"/g, '\\"');
-    const platform = process.platform;
-    if (platform === 'linux') {
-      return interactive
-        ? `gnome-screenshot -a -f "${safePath}" 2>/dev/null || scrot -s "${safePath}" 2>/dev/null || import "${safePath}"`
-        : `gnome-screenshot -f "${safePath}" 2>/dev/null || scrot "${safePath}" 2>/dev/null || import -window root "${safePath}"`;
-    }
-    throw new Error(`Unsupported platform for screenshots: ${platform}`);
+    await captureLinuxScreenshot(outputPath, interactive);
   }
 
   public async takeScreenshot(preferredDisplay?: Electron.Display): Promise<string> {
@@ -733,7 +720,7 @@ export class ScreenshotHelper {
         if (process.platform === 'darwin' || process.platform === 'win32') {
           await this.captureWithDesktopCapturer(screenshotPath, undefined, preferredDisplay);
         } else {
-          await shellExecAsync(this.getScreenshotCommand(screenshotPath, false))
+          await this.captureWithLinuxTool(screenshotPath, false)
         }
 
         await this.enqueue(screenshotPath, 'queue')
@@ -751,7 +738,7 @@ export class ScreenshotHelper {
         if (process.platform === 'darwin' || process.platform === 'win32') {
           await this.captureWithDesktopCapturer(screenshotPath, undefined, preferredDisplay);
         } else {
-          await shellExecAsync(this.getScreenshotCommand(screenshotPath, false))
+          await this.captureWithLinuxTool(screenshotPath, false)
         }
 
         await this.enqueue(screenshotPath, 'extra')
@@ -787,7 +774,7 @@ export class ScreenshotHelper {
         // Linux: use interactive selection command
         console.log('[ScreenshotHelper] Using interactive selection');
         try {
-          await shellExecAsync(this.getScreenshotCommand(screenshotPath, true))
+          await this.captureWithLinuxTool(screenshotPath, true)
         } catch (e: any) {
           console.warn('[ScreenshotHelper] User cancelled selection or error occurred:', e);
           throw new Error("Selection cancelled")
