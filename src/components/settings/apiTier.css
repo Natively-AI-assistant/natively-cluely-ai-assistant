@@ -331,19 +331,22 @@
   color: var(--tier-faint);
 }
 .api-tier-save[data-on='true'] { color: var(--tier-save); }
-/* Yearly's "2 months free" on the price row, at its right edge: no line of
-   its own, so a Yearly card stands exactly as tall as a Monthly one. Bottom-
-   aligned with the price. In a narrow window it wraps to two lines, and two
-   16px lines are the 32px price line, so the row still cannot grow. */
-.api-tier-save-inline {
-  margin: 0 0 0 auto;
-  padding-left: 6px;
-  height: auto;
-  max-height: 32px;
-  min-width: 0;
-  overflow: hidden;
-  align-self: flex-end;
-  text-align: right;
+.api-tier-per { white-space: nowrap; }
+/* Yearly's "2 months free", pinned to the price row's top-right corner and
+   shown on both faces, "$20.83 / month" and "$250 / year" (Evin, 2026-11-16).
+   Out of the flow, so it takes no width or height and the 36px row cannot
+   grow. At the launcher's minimum width (cards 259px) the widest face,
+   "$29.17", still clears it by 18px; wider windows only add room. */
+.api-tier-yearly-save {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: 12px;
+  line-height: 14px;
+  font-weight: 600;
+  color: var(--tier-save);
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 /* The button: .lg-paper on every tier, .lg-lavender on Pro. */

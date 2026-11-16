@@ -36,8 +36,8 @@ interface Props<T extends string> {
   options?: ReadonlyArray<SwitchOption<T>>;
   /** Row alignment: centred in Settings, left-aligned in a card's text column. */
   align?: 'center' | 'start';
-  /** "Yearly: 2 months free" beside the switch. Settings hides it (its price
-   *  card already shows the months-free pill), so the switch sits centred. */
+  /** "Yearly: 2 months free" beside the switch. Settings hides it (Evin,
+   *  2026-11-16); the end-of-trial card shows it. */
   showNote?: boolean;
 }
 

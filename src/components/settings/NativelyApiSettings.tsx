@@ -29,6 +29,7 @@ import { trialRefusal } from '../../lib/trial/trialStart.mjs';
 import { CHECKOUT_URLS } from '../../config/urls';
 import { KeyResendHelp, KeyResendLink } from './KeyResendHelp';
 import { BillingCycleSwitch, PLANS_VIEWS, type PlansView } from '../ui/BillingCycleSwitch';
+import { StaticPrice } from '../ui/StaticPrice';
 import './apiTier.css';
 import { plansVisit } from '../../lib/funnel/plansVisit.mjs';
 import { usePlansSeen } from '../../lib/funnel/usePlansSeen';
@@ -318,6 +319,12 @@ export function TierBand({ mesh, pattern, name, badge }: { mesh: TierMesh; patte
 // parked between digits.
 const PRICE_DIGITS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 const PRICE_ROLL_EASE = 'cubic-bezier(0.23, 1, 0.32, 1)';
+/** A yearly price label as its monthly share, "$150" -> "$12.50". Null for a
+ *  label it cannot read, so the card falls back to "$150 / year". */
+function perMonthOfYearly(label: string): string | null {
+  const m = /^\$(\d+(?:\.\d+)?)$/.exec(label);
+  return m ? `$${(Number(m[1]) / 12).toFixed(2)}` : null;
+}
 const reelDollars = (label: string): number | null => {
   const m = /^\$(\d{1,3})$/.exec(label);
   return m ? Number(m[1]) : null;
@@ -332,7 +339,8 @@ function RollingPrice({ price, from }: { price: string; from: string }) {
     return () => cancelAnimationFrame(id);
   }, [value]);
 
-  if (value === null || shown === null) return <>{price}</>;
+  // A price the reels cannot show ("$12.50") keeps the reels' line height.
+  if (value === null || shown === null) return <StaticPrice price={price} />;
   const hundreds = Math.floor(shown / 100);
   const tens = Math.floor(shown / 10) % 10;
   const reel = (digit: number, delayMs: number) => (
@@ -787,6 +795,8 @@ function trialMeter(used: number, limit: number, unit: UsageMeter['unit']): Usag
 // keyboard focus inside it. It also skips turns nobody can see (window
 // hidden) and never moves under reduced motion.
 const RAIL_STEP_MS = 3500;
+/** How long each yearly price face ("/ month", "/ year") stays up. */
+const YEARLY_FACE_MS = 3000;
 const RAIL_RESUME_AFTER_MS = 6000;
 
 function PlanRail({ children }: { children: React.ReactNode }) {
@@ -1119,6 +1129,18 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   useEffect(() => {
     if (keyBillingPeriod === 'yearly') setBillingCycle('yearly');
   }, [keyBillingPeriod]);
+  // Yearly prices take turns, all four cards together: "$20.83 / month",
+  // then "$250 / year" (Evin, 2026-11-16). Each turn starts on the monthly
+  // share; it waits while the window is hidden.
+  const [yearlyFace, setYearlyFace] = useState<'month' | 'year'>('month');
+  useEffect(() => {
+    setYearlyFace('month');
+    if (billingCycle !== 'yearly') return;
+    const id = window.setInterval(() => {
+      if (!document.hidden) setYearlyFace((f) => (f === 'month' ? 'year' : 'month'));
+    }, YEARLY_FACE_MS);
+    return () => window.clearInterval(id);
+  }, [billingCycle]);
   // Funnel (plans_visit): the switch's value, and again at each visit's start
   // so a visit knows what it opened on. Only a press on the switch counts as
   // a switch (onChange below); the move to Yearly for a yearly key does not.
@@ -1768,6 +1790,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         {PLANS.map((plan) => {
           const yearly = billingCycle === 'yearly';
           const price = yearly ? plan.yearlyPrice : plan.price;
+          const yearlyPerMonth = yearly ? perMonthOfYearly(plan.yearlyPrice) : null;
           // A verified-live Dodo link (all four checked 2026-09-08); changing
           // one is an app release. Yearly links are the 2026-11-06 products
           // (src/config/urls.ts).
@@ -1803,18 +1826,45 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
               />
               <div className="api-tier-well">
                 <p className="api-tier-blurb">{plan.description}</p>
-                <p className="api-tier-price">
-                  <span className="api-tier-amount">
-                    <RollingPrice price={price} from={price} />
-                  </span>
-                  <span className="api-tier-per">{yearly ? '/ year' : '/ month'}</span>
-                  {/* "/ month" already says it; only Yearly has news to add. On
-                      the price row's free right side, so Yearly cards stand
-                      exactly as tall as Monthly ones (Evin, 2026-11-16). */}
-                  {yearly && (
-                    <span className="api-tier-save api-tier-save-inline" data-on="true">{`${YEARLY_MONTHS_FREE} months free`}</span>
-                  )}
-                </p>
+                {/* Yearly: "$12.50 / month" and "$150 / year" take turns in
+                    one cell (yearlyFace), so the price card keeps the packs'
+                    exact layout and height (Evin, 2026-11-16). The faces
+                    swap like the section title: 4px rise, 2px blur clearing;
+                    reduced motion keeps only the fade. */}
+                {yearlyPerMonth ? (
+                  <p className="api-tier-price" style={{ display: 'grid', position: 'relative' }}>
+                    <span className="sr-only">{`${yearlyPerMonth} a month, billed ${plan.yearlyPrice} a year, ${YEARLY_MONTHS_FREE} months free`}</span>
+                    {([['month', yearlyPerMonth, '/ month'], ['year', plan.yearlyPrice, '/ year']] as const).map(([face, amount, per]) => {
+                      const on = yearlyFace === face;
+                      return (
+                        <span
+                          key={face}
+                          aria-hidden="true"
+                          data-face={face}
+                          className="col-start-1 row-start-1 flex items-baseline gap-1 min-w-0"
+                          style={{
+                            opacity: on ? 1 : 0,
+                            transform: on || prefersReducedMotion ? 'none' : 'translateY(4px)',
+                            filter: on || prefersReducedMotion ? 'none' : 'blur(2px)',
+                            transition: `opacity ${on ? 250 : 150}ms ease-in-out, transform ${on ? 250 : 150}ms ease-in-out, filter ${on ? 250 : 150}ms ease-in-out`,
+                          }}
+                        >
+                          <span className="api-tier-amount"><StaticPrice price={amount} /></span>
+                          <span className="api-tier-per">{per}</span>
+                        </span>
+                      );
+                    })}
+                    {/* Stays put while the two faces swap under it. */}
+                    <span className="api-tier-yearly-save" aria-hidden="true">{`${YEARLY_MONTHS_FREE} months free`}</span>
+                  </p>
+                ) : (
+                  <p className="api-tier-price">
+                    <span className="api-tier-amount">
+                      <RollingPrice price={price} from={price} />
+                    </span>
+                    <span className="api-tier-per">{yearly ? '/ year' : '/ month'}</span>
+                  </p>
+                )}
                 {isActive ? (
                   <div className="api-tier-cta" data-state="active">Your current plan</div>
                 ) : (

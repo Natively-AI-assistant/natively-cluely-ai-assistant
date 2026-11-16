@@ -134,7 +134,11 @@ test('Monthly is the default; a yearly key opens on Yearly and only matches Year
   const sw = stripComments(read('components/ui/BillingCycleSwitch.tsx'));
   assert.match(sw, /role="radiogroup"[\s\S]*?aria-label="Billing"/);
   assert.ok(sw.includes('surface-switch'), "Overlay's two-way switch, not a new control");
+  // Yearly: the monthly share and the yearly total take turns in one cell
+  // (2026-11-16), so a plan card matches the packs' height.
   assert.ok(settingsCode.includes("{yearly ? '/ year' : '/ month'}"));
+  assert.ok(settingsCode.includes("[['month', yearlyPerMonth, '/ month'], ['year', plan.yearlyPrice, '/ year']]"));
+  assert.match(settingsCode, /setYearlyFace\(\(f\) => \(f === 'month' \? 'year' : 'month'\)\)/);
 });
 
 test('the odometer takes three-digit prices: $150, $250, $350', () => {
