@@ -331,20 +331,18 @@
   color: var(--tier-faint);
 }
 .api-tier-save[data-on='true'] { color: var(--tier-save); }
-/* Yearly's "2 months free" on the price row, at its right edge: no line of
-   its own, so a Yearly card stands exactly as tall as a Monthly one. Bottom-
-   aligned with the price. In a narrow window it wraps to two lines, and two
-   16px lines are the 32px price line, so the row still cannot grow. */
-.api-tier-save-inline {
-  margin: 0 0 0 auto;
-  padding-left: 6px;
-  height: auto;
-  max-height: 32px;
-  min-width: 0;
-  overflow: hidden;
-  align-self: flex-end;
-  text-align: right;
+/* "/ month", or Yearly's "/ year" over "2 months free", beside the price.
+   Never wraps: a narrow card used to split "/ year" across two lines. Yearly's
+   two 16px lines are the 32px price line, bottom-aligned with it, so a Yearly
+   card stands exactly as tall as a Monthly one. */
+.api-tier-per-group {
+  display: inline-flex;
+  flex-direction: column;
+  white-space: nowrap;
 }
+.api-tier-per-group[data-stacked='true'] { align-self: flex-end; }
+.api-tier-per-group[data-stacked='true'] > span { line-height: 16px; }
+.api-tier-save-stacked { margin: 0; }
 
 /* The button: .lg-paper on every tier, .lg-lavender on Pro. */
 .api-tier-cta {

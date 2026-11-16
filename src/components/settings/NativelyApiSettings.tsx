@@ -328,6 +328,9 @@ function RollingPrice({ price, from }: { price: string; from: string }) {
   const value = reelDollars(price);
   const [shown, setShown] = useState(reduceMotion ? value : reelDollars(from) ?? value);
   useEffect(() => {
+    // A hidden page gets no frames, so the reels would sit on the old figure (a
+    // pack showing the plan's $8) until it is shown. Nobody sees a roll there.
+    if (document.visibilityState === 'hidden') { setShown(value); return; }
     const id = requestAnimationFrame(() => setShown(value));
     return () => cancelAnimationFrame(id);
   }, [value]);
@@ -935,7 +938,7 @@ const PACK_LOOK: Record<string, { mesh: TierMesh; pattern: TierPattern; blurb: s
   pack_heavy: { mesh: 'ultra', pattern: 'grid', blurb: 'For a busy week of meetings, with no plan to cancel.' },
 };
 
-function ProPacks({ currentPlan, onBuy, arrive }: { currentPlan?: string; onBuy: (url: string) => void; arrive: (i: number) => object }) {
+function ProPacks({ currentPlan, onBuy, arrive, rollFrom = [] }: { currentPlan?: string; onBuy: (url: string) => void; arrive: (i: number) => object; rollFrom?: readonly string[] }) {
   const urls: Record<string, string> = { pack_light: CHECKOUT_URLS.packLight, pack_heavy: CHECKOUT_URLS.packHeavy };
   const current = currentPlan?.toLowerCase();
   // Funnel (plans_visit): the packs were on screen during this visit.
@@ -954,8 +957,8 @@ function ProPacks({ currentPlan, onBuy, arrive }: { currentPlan?: string; onBuy:
               <div className="api-tier-well">
                 <p className="api-tier-blurb">{look.blurb}</p>
                 <p className="api-tier-price">
-                  {/* The plans' odometer, still here: it sets the same line height, so a pack and a plan match. */}
-                  <span className="api-tier-amount"><RollingPrice price={`$${p.price}`} from={`$${p.price}`} /></span>
+                  {/* The plans' odometer: it rolls from the plan price this card replaced, and sets the same line height, so a pack and a plan match. */}
+                  <span className="api-tier-amount"><RollingPrice price={`$${p.price}`} from={rollFrom[i] ?? `$${p.price}`} /></span>
                   <span className="api-tier-per">once</span>
                 </p>
                 <button
@@ -1128,14 +1131,23 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   const plansView: PlansView = packsView ? 'hourly' : billingCycle;
   // Cards only dissolve in after a press on the switch, never on first paint.
   const [viewSwitched, setViewSwitched] = useState(false);
+  // Hourly swaps the cards, so no price stays mounted to roll as Monthly /
+  // Yearly's do. The cards coming in roll from the prices they replace, slot
+  // by slot (Standard <-> Light, Pro <-> Heavy); a slot with nothing before it
+  // starts on its own price. Empty until the first switch: no roll on first paint.
+  const [priceFrom, setPriceFrom] = useState<readonly string[]>([]);
   const choosePlansView = (next: PlansView) => {
     if (next === plansView) return;
     if (next === 'hourly') {
+      setPriceFrom(PLANS.map((p) => (billingCycle === 'yearly' ? p.yearlyPrice : p.price)));
       setViewSwitched(true);
       setPacksView(true);
       return;
     }
-    if (packsView) setViewSwitched(true);
+    if (packsView) {
+      setPriceFrom(PRO_PACKS.map((p) => `$${p.price}`));
+      setViewSwitched(true);
+    }
     setPacksView(false);
     plansVisit.cycleSwitched(next);
     setBillingCycle(next);
@@ -1755,7 +1767,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
       <AnimatePresence mode="popLayout" initial={false}>
       {packsView ? (
         <motion.div key="packs" exit={prefersReducedMotion ? { opacity: 0, transition: { duration: 0.15 } } : DISSOLVE.leave}>
-          <ProPacks currentPlan={usageData?.plan} onBuy={openExternal} arrive={arrive} />
+          <ProPacks currentPlan={usageData?.plan} onBuy={openExternal} arrive={arrive} rollFrom={priceFrom} />
         </motion.div>
       ) : (
       <motion.div key="plans" className="space-y-3" exit={prefersReducedMotion ? { opacity: 0, transition: { duration: 0.15 } } : DISSOLVE.leave}>
@@ -1805,15 +1817,19 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                 <p className="api-tier-blurb">{plan.description}</p>
                 <p className="api-tier-price">
                   <span className="api-tier-amount">
-                    <RollingPrice price={price} from={price} />
+                    <RollingPrice price={price} from={priceFrom[PLANS.indexOf(plan)] ?? price} />
                   </span>
-                  <span className="api-tier-per">{yearly ? '/ year' : '/ month'}</span>
-                  {/* "/ month" already says it; only Yearly has news to add. On
-                      the price row's free right side, so Yearly cards stand
-                      exactly as tall as Monthly ones (Evin, 2026-11-16). */}
-                  {yearly && (
-                    <span className="api-tier-save api-tier-save-inline" data-on="true">{`${YEARLY_MONTHS_FREE} months free`}</span>
-                  )}
+                  {/* "/ month" already says it; only Yearly has news to add. It
+                      stacks under "/ year": two 16px lines are the 32px price
+                      line, so a Yearly card stands exactly as tall as a Monthly
+                      one, and neither line can wrap in a narrow card (on the
+                      row's right it split "/ year" and the pill, 2026-11-16). */}
+                  <span className="api-tier-per-group" data-stacked={yearly ? 'true' : undefined}>
+                    <span className="api-tier-per">{yearly ? '/ year' : '/ month'}</span>
+                    {yearly && (
+                      <span className="api-tier-save api-tier-save-stacked" data-on="true">{`${YEARLY_MONTHS_FREE} months free`}</span>
+                    )}
+                  </span>
                 </p>
                 {isActive ? (
                   <div className="api-tier-cta" data-state="active">Your current plan</div>
