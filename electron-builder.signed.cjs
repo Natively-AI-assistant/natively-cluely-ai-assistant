@@ -94,6 +94,25 @@ module.exports = {
   // staple them, then patch latest*.yml dmg hashes and assert the updater ZIP manifest.
   // (electron-builder's own DMG creation corrupts the embedded app signature — see header.)
   afterAllArtifactBuild: require('./scripts/afterAllArtifactBuild.cjs'),
+  // As soon as the arm64 updater zip exists, start the Apple Silicon DMG (build +
+  // notarize + staple + verify) in a separate background process, so its ~9-min
+  // notary wait overlaps the Intel pack/sign/notarize instead of following it.
+  // The job stops when this build stops, so a failed build leaves nothing running.
+  // Optional speed-up only: any problem starting it is logged and
+  // afterAllArtifactBuild builds the DMG itself. Only for builds run through
+  // scripts/package-app.js (it sets the run id); otherwise afterAllArtifactBuild
+  // builds both DMGs itself, as before. See scripts/lib/dmg-job.cjs.
+  artifactBuildCompleted: (event) => {
+    const dmgJob = require('./scripts/lib/dmg-job.cjs');
+    const runId = process.env[dmgJob.RUN_ID_ENV];
+    if (!dmgJob.shouldStartEarlyDmg({ platform: process.platform, file: event && event.file, runId })) return;
+    try {
+      if (!require('./scripts/afterAllArtifactBuild.cjs').notarytoolArgs()) return; // unsigned: nothing to notarize
+      dmgJob.startEarlyDmgJob({ outDir: require('path').dirname(event.file), runId });
+    } catch (err) {
+      console.warn(`[dmg-job] could not start the early Apple Silicon DMG (${err && err.message}); it will be built at the end instead.`);
+    }
+  },
   mac: {
     ...base.mac,
     identity: signIdentity,                 // undefined => auto-discover Developer ID Application
@@ -107,8 +126,10 @@ module.exports = {
     notarize: false,
     // Build ONLY zip with electron-builder (preserves signatures + is the updater
     // artifact); the DMGs are produced cleanly by the afterAllArtifactBuild hook.
+    // arm64 FIRST: electron-builder builds arches in this order, and the arm64 DMG
+    // starts in the background the moment its zip exists (artifactBuildCompleted).
     target: [
-      { target: 'zip', arch: ['x64', 'arm64'] },
+      { target: 'zip', arch: ['arm64', 'x64'] },
     ],
   },
 };

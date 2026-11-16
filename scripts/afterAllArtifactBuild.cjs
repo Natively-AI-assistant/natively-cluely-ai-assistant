@@ -49,6 +49,9 @@ const path = require('path');
 const crypto = require('crypto');
 const { notarytoolSubmitWithRetry, isTransientNetworkMessage } = require('./lib/notary-transient.cjs');
 const { stapleWithRetry } = require('./staple-with-retry');
+const {
+  RUN_ID_ENV, EARLY_ARCH, waitForDmgJob, earlyDmgDecision, dmgIsNewerThanApp, appSignedMtimeMs,
+} = require('./lib/dmg-job.cjs');
 
 // DMG volume + file name base. MUST match the on-disk app identity so the DMG
 // (and its volume window) present the same disguised name as the .app inside it
@@ -348,6 +351,66 @@ function findAppForArch(outDir, archDir) {
   return app ? path.join(dir, app) : null;
 }
 
+/**
+ * Build, notarize, staple and verify ONE arch's styled DMG from its signed .app.
+ * Returns the dmg path, or null when electron-builder produced no app for the arch.
+ * Shared by this hook and by the early background job (scripts/dmg-job-run.cjs),
+ * so both make the DMG the same way.
+ */
+async function produceDmgForArch({ outDir, archDir, suffix, identity, creds, version }) {
+  const appPath = findAppForArch(outDir, archDir);
+  if (!appPath) return null;
+  const dmgName = `${VOLNAME}-${version}${suffix}.dmg`;
+  const outDmg = path.join(outDir, dmgName);
+
+  // Reuse an existing DMG only when it is stapled, its embedded app passes
+  // Gatekeeper, AND it is at least as new as this build's signed app. A full
+  // re-run of the build re-signs the apps, so a DMG from the previous run counts
+  // as stale and is rebuilt — deliberately: it holds the PREVIOUS run's app, and
+  // shipping it next to this run's fresh updater zips mixes two builds in one
+  // release. The skip still saves the notarize round-trip when this hook runs
+  // again over the same signed apps (e.g. a DMG the early job already finished).
+  if (fs.existsSync(outDmg)) {
+    const fresh = dmgIsNewerThanApp(fs.statSync(outDmg).mtimeMs, appSignedMtimeMs(appPath));
+    if (!fresh) {
+      console.log(`[dmg] ${dmgName} is older than this build's signed app — rebuilding it.`);
+    } else if (isDmgAlreadyValid(outDmg)) {
+      console.log(`[dmg] ${dmgName} already built + stapled + Gatekeeper-accepted — skipping rebuild.`);
+      return outDmg;
+    }
+  }
+
+  console.log(`[dmg] Rebuilding clean styled DMG for ${archDir}: ${dmgName}`);
+  buildStyledDmg({ appPath, outDmg, identity });
+
+  // Submit with a bounded retry. A single dropped TCP connection during this
+  // ~1 GB upload used to fail the ENTIRE signed build after the apps had already
+  // been notarized + stapled (~55 min of work). Only the submit is retried — the
+  // DMG bytes are unchanged and already signed, so re-submitting the same file is
+  // correct and avoids re-running ditto + hdiutil per attempt. A DECIDED verdict
+  // (Invalid/Rejected) never retries. See scripts/lib/notary-transient.cjs.
+  console.log(`[dmg] notarytool submit ${dmgName} (several minutes)…`);
+  await notarytoolSubmitWithRetry({ target: outDmg, credArgs: creds });
+  // Staple through Apple's CDN ticket-propagation lag (Error 65 / "Record not
+  // found"). Notarization has already SUCCEEDED at this point, so failing the
+  // build on that race would throw away the same hour the retry above protects.
+  // stapleWithRetry also runs `stapler validate`, matching isDmgAlreadyValid().
+  console.log(`[dmg] stapler staple ${dmgName}`);
+  await stapleWithRetry(outDmg, { maxAttempts: 6, baseDelayMs: 15000 });
+  // Verify the app INSIDE the freshly built+stapled dmg before trusting it.
+  verifyDmgAppSignature(outDmg);
+  return outDmg;
+}
+
+// Map electron-builder's arch output dirs to their final dmg names. eb names the
+// arm64 dmg "<name>-arm64.dmg" and the x64 dmg "<name>.dmg" (matching latest-mac.yml).
+// arm64 first: it is built first, and its early background job is awaited before
+// the x64 DMG starts, so two DMGs are never built or mounted at the same time.
+const ARCH_MAP = [
+  { archDir: 'mac-arm64', suffix: '-arm64' },
+  { archDir: 'mac', suffix: '' },
+];
+
 module.exports = async function afterAllArtifactBuild(buildResult) {
   if (process.platform !== 'darwin') return [];
 
@@ -368,50 +431,31 @@ module.exports = async function afterAllArtifactBuild(buildResult) {
     return [];
   }
 
-  // Map electron-builder's arch output dirs to their final dmg names. eb names the
-  // arm64 dmg "<name>-arm64.dmg" and the x64 dmg "<name>.dmg" (matching latest-mac.yml).
-  const archMap = [
-    { archDir: 'mac-arm64', suffix: '-arm64' },
-    { archDir: 'mac', suffix: '' },
-  ];
-
   const rebuiltDmgs = [];
   const version = require('../package.json').version;
-  for (const { archDir, suffix } of archMap) {
-    const appPath = findAppForArch(outDir, archDir);
-    if (!appPath) continue;
-    const dmgName = `${VOLNAME}-${version}${suffix}.dmg`;
-    const outDmg = path.join(outDir, dmgName);
-
-    // Idempotent re-run: if this DMG already exists, is stapled, and its embedded app
-    // passes Gatekeeper, skip the expensive create-dmg + ~15-min notarize round-trip.
-    // (Lets a re-run finish only the missing arch without re-notarizing a good one.)
-    if (fs.existsSync(outDmg) && isDmgAlreadyValid(outDmg)) {
-      console.log(`[dmg] ${dmgName} already built + stapled + Gatekeeper-accepted — skipping rebuild.`);
-      rebuiltDmgs.push(outDmg);
-      continue;
+  const runId = process.env[RUN_ID_ENV];
+  for (const { archDir, suffix } of ARCH_MAP) {
+    // Only arm64 can have been started early (scripts/lib/dmg-job.cjs). Collect
+    // this run's result instead of building the same DMG a second time.
+    // waitForDmgJob never returns while the job is alive — on timeout it stops the
+    // job's process group first — so building inline below never races it.
+    if (archDir === EARLY_ARCH.archDir) {
+      const early = await waitForDmgJob({ outDir, archDir, runId });
+      if (earlyDmgDecision(early) === 'use') {
+        console.log(`[dmg] ${path.basename(early.dmg)} finished early in the background ✅`);
+        rebuiltDmgs.push(early.dmg);
+        continue;
+      }
+      if (early && early.status === 'done') {
+        console.warn(`[dmg] background ${archDir} DMG reported done but ${early.dmg} is missing — building it here instead.`);
+      } else if (early && early.status === 'failed') {
+        // The Intel half is done by now; one inline attempt is cheaper than failing
+        // the whole build. A second failure throws.
+        console.warn(`[dmg] background ${archDir} DMG failed (${early.error}) — building it here instead.`);
+      }
     }
-
-    console.log(`[dmg] Rebuilding clean styled DMG for ${archDir}: ${dmgName}`);
-    buildStyledDmg({ appPath, outDmg, identity });
-
-    // Submit with a bounded retry. A single dropped TCP connection during this
-    // ~1 GB upload used to fail the ENTIRE signed build after the apps had already
-    // been notarized + stapled (~55 min of work). Only the submit is retried — the
-    // DMG bytes are unchanged and already signed, so re-submitting the same file is
-    // correct and avoids re-running ditto + hdiutil per attempt. A DECIDED verdict
-    // (Invalid/Rejected) never retries. See scripts/lib/notary-transient.cjs.
-    console.log(`[dmg] notarytool submit ${dmgName} (several minutes)…`);
-    await notarytoolSubmitWithRetry({ target: outDmg, credArgs: creds });
-    // Staple through Apple's CDN ticket-propagation lag (Error 65 / "Record not
-    // found"). Notarization has already SUCCEEDED at this point, so failing the
-    // build on that race would throw away the same hour the retry above protects.
-    // stapleWithRetry also runs `stapler validate`, matching isDmgAlreadyValid().
-    console.log(`[dmg] stapler staple ${dmgName}`);
-    await stapleWithRetry(outDmg, { maxAttempts: 6, baseDelayMs: 15000 });
-    // Verify the app INSIDE the freshly built+stapled dmg before trusting it.
-    verifyDmgAppSignature(outDmg);
-    rebuiltDmgs.push(outDmg);
+    const dmg = await produceDmgForArch({ outDir, archDir, suffix, identity, creds, version });
+    if (dmg) rebuiltDmgs.push(dmg);
   }
 
   if (rebuiltDmgs.length === 0) {
@@ -428,3 +472,7 @@ module.exports = async function afterAllArtifactBuild(buildResult) {
 
 // Exported for scripts/__tests__ — electron-builder only calls the default hook.
 module.exports.isInconclusiveStaplerFailure = isInconclusiveStaplerFailure;
+// Exported for scripts/dmg-job-run.cjs (the early arm64 DMG job).
+module.exports.produceDmgForArch = produceDmgForArch;
+module.exports.notarytoolArgs = notarytoolArgs;
+module.exports.resolveDeveloperIdIdentity = resolveDeveloperIdIdentity;
