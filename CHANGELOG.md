@@ -2,10 +2,11 @@
 
 ## [3.2.0] - 2026-11-15
 
-Eleven days of work since v3.1.0: a smarter Auto Answer, faster screenshot answers, Answer length, every answer on your phone, and Natively plans by the month, the year or the hour. Full notes: [v3.2.0](docs/releases/v3.2.0.md).
+Eleven days of work since v3.1.0: a guided first run, a smarter Auto Answer, faster screenshot answers, Answer length, every answer on your phone, and Natively plans by the month, the year or the hour. Full notes: [v3.2.0](docs/releases/v3.2.0.md).
 
 ### Added
 
+- **First-run guide** — new users walk through two short meetings (overlay, then notepad), their notes, and plans or keys, in five languages. The first meeting plays a demo film and Stop waits 30 s. Shown only to first users; Settings → Setup & Help → Show the guide again runs it for anyone.
 - **Smarter Auto Answer** — an on-device model decides which questions are meant for you. Its settings are in Settings → Intelligence (the switch stays in General), with a card the first time you turn it on and one when you stop sharing.
 - **Answer length** — Shorter, Smart or Longer answers, one setting in Settings → Overlay for every mode. Shorter and Longer are Pro.
 - **Every answer on your phone** — each overlay answer (buttons, Auto Answer, Direct Assist, spoken follow-ups) streams word by word to the paired phone.
@@ -44,6 +45,7 @@ Eleven days of work since v3.1.0: a smarter Auto Answer, faster screenshot answe
 - **Timeouts** — long Natively answers get 30 s instead of 8 s; an exhausted provider chain says the providers failed, not "none set up".
 - **Chat** — a question typed while an answer streams is sent, and the replaced stream's late tokens are dropped.
 - **Screenshot question** field keeps spaces and reaches the overlay.
+- **Interview answers** — a design problem stated over several sentences routes to a design answer (#741); an image promotes a question to code only when its words allow code (#742); a cut-off answer stays out of the conversation ring (#743); "40M deliveries" is a count, while pay sentences are still withheld (#744).
 - **Privacy** — question and answer text leave the trace logs, and premium generation honours the Profile & history scope.
 
 ### Technical
