@@ -12,6 +12,7 @@ import { AccordionPanel } from '../ui/AccordionSection';
 import { getLicenseSnapshot, setLicenseSnapshot } from '../../lib/licenseCache';
 import { BEAT, EASE_ENTER, EASE_LEAVE, INK, SETTLE } from '../../lib/plansMotion';
 import { SwapLabel } from './SettingsRow';
+import { StaticPrice } from '../ui/StaticPrice';
 import { LIFETIME_LIST, LIFETIME_SALE, YEARLY_LIST, YEARLY_SALE, lifetimeSaleLabel, yearlySaleLabel } from '../../lib/lifetimeSale.mjs';
 import { CHECKOUT_URLS } from '../../config/urls';
 
@@ -667,7 +668,7 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
     // Parse numeric prices once. Used both for the "Save N%" chip on the
     // toggle and for the live "Save $X over 3 years" copy under the
     // lifetime CTA — concrete anchoring is more persuasive than a percent.
-    const { yearlyPrice, lifetimePrice, lifetimeSavingsPct, lifetimeSavingsAbs, yearlyDiscountAbs, yearlyOriginalText } = useMemo(() => {
+    const { yearlyPrice, lifetimePrice, lifetimeSavingsPct, yearlyDiscountAbs, yearlyOriginalText } = useMemo(() => {
         const parsePrice = (s?: string | null): number | null => {
             if (!s) return null;
             const m = s.match(/([0-9]+(?:\.[0-9]+)?)/);
@@ -1006,8 +1007,6 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                                     list: yearlySale !== null ? yearlyListText : null,
                                     price: yearlyPriceText,
                                     per: '/ year',
-                                    save: 'Renews yearly',
-                                    saveOn: false,
                                     cta: 'Get Pro',
                                     url: yearlyUrl,
                                 },
@@ -1021,8 +1020,6 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                                     list: lifetimeSale !== null ? lifetimeListText : null,
                                     price: lifetimePriceText,
                                     per: 'once',
-                                    save: lifetimeSavingsAbs !== null ? `Save $${lifetimeSavingsAbs} vs 3 years of yearly` : 'Pay once, never renew',
-                                    saveOn: lifetimeSavingsAbs !== null,
                                     cta: 'Lock in lifetime',
                                     url: lifetimeUrl,
                                 },
@@ -1033,11 +1030,12 @@ export const NativelyProSettings: React.FC<NativelyProSettingsProps> = ({
                                         <p className="api-tier-blurb">{c.blurb}</p>
                                         <p className="api-tier-price">
                                             {c.list && <s className="api-tier-was">{c.list}</s>}
-                                            <span className="api-tier-amount">{c.price}</span>
+                                            <span className="api-tier-amount"><StaticPrice price={c.price} /></span>
                                             <span className="api-tier-per">{c.per}</span>
                                         </p>
-                                        {/* One line on both cards, so the two wells and lists line up. */}
-                                        <p className="api-tier-save" data-on={c.saveOn ? 'true' : 'false'}>{c.save}</p>
+                                        {/* No line under the price (Evin, 2026-11-16): the
+                                            well is the plans' and packs' layout, so all
+                                            the cards in Plans & Billing stand as tall. */}
                                         <button
                                             type="button"
                                             onClick={() => openExternal(c.url)}
