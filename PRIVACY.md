@@ -1,6 +1,6 @@
 # Privacy Policy
 
-_Last updated: November 13th 2026_
+_Last updated: November 17th 2026_
 
 This policy describes how **Natively** — the desktop application, the **Natively Pro** licensed features, and the **Natively API** managed service — handles your data. We've tried to write it like a person, not a lawyer.
 
@@ -73,7 +73,7 @@ For Natively Pro, the Natively API, and the Free Trial we maintain a small opera
 | Anti-abuse signals (rate-limited IP, multi-account heuristics) | Prevent trial farming, refund-rebuy abuse, license sharing | Up to 12 months from last signal |
 | Support correspondence | Answer your questions and keep a record of what we agreed | Up to 3 years from the last message in the thread |
 
-We do **not** store the audio you capture, the screen content you capture, your transcripts, your prompts, or your generated outputs on our servers.
+We do **not** store the audio you capture, the screen content you capture, your transcripts, your prompts, or your generated outputs on our servers, except the meeting transcripts you choose to share to improve Auto Answer (§3.7).
 
 This applies to the usage ledger too. The ledger records **that** something happened — when,
 through which endpoint, on which model, whether it succeeded, and how much of your quota it
@@ -192,9 +192,10 @@ You can disconnect at any time in Settings › Calendar, which deletes the store
 
 Auto Answer is part of Natively Pro. You can also use it **without Pro** if you agree to share the transcripts of the meetings where it runs, so we can teach it when to answer and when to wait. Pro and Free Trial users can choose to share too; for them it is optional. Nothing is shared until you agree in the app, and the app shows you this list before you do.
 
-- **What is sent:** the full transcript of each meeting in which Auto Answer was on, **including what the other people in the meeting said**. Each line carries only whether it was you or someone else speaking and how far into the meeting it was said. With it: the meeting mode, its length, the day (not the time), the app version, your operating system, your installation identifier, your licence or trial (if you have one), and the consent version and time you agreed.
-- **Removed on your device before sending:** e-mail addresses, phone numbers, web links and long numbers, and the names the app knows for that meeting (yours, your calendar invitees' and the names shown in the call), which become "[name]". Other names said aloud, and everything else that was said, are **not** removed, so the transcripts can still identify you or others.
-- **Never sent:** audio, screenshots, your notes, AI answers, meeting titles and calendar events.
+- **What is sent:** the full transcript of each meeting in which Auto Answer was on, **including what the other people in the meeting said, what you typed to Natively during the meeting (your questions and anything you pasted), and Natively's AI answers**. Each line carries only whether it is marked as yours (what you said or typed) or as someone else's (what others said, and the AI's answers), and how far into the meeting it came. With it: the meeting mode, its length, the day (not the time), the app version, your operating system, your installation identifier, your licence or trial (if you have one), and the consent version and time you agreed.
+- **Removed on your device before sending:** e-mail addresses, phone numbers, web links and long numbers, and the names the app knows for that meeting (yours, your calendar invitees' and the names shown in the call), which become "[name]". Other names, and everything else that was said or typed, are **not** removed, so the transcripts can still identify you or others.
+- **Never sent:** audio, screenshot images, your notes, meeting titles and calendar events.
+- **If you agreed before 17 November 2026:** the earlier version of this list said AI answers were never sent, but they and your typed questions were sent with the transcript. From Natively 3.2.1 the app asks you again with this list, and shares nothing more until you agree.
 - **What we use it for:** only to train and test the models behind Auto Answer. We do not sell it, use it for advertising, or publish it. To label and train, we may process it with the service providers we use for that: Anthropic (Claude) to label examples and Modal to run training. Storage is in our database at Supabase (Tokyo region).
 - **Legal basis:** your consent for your own data. For the other people in the meeting, our legitimate interest in improving Auto Answer, with the safeguards above; you must tell them where the law requires it (Terms §10.1).
 - **How long we keep it:** at most **2 years** from when we received it.
