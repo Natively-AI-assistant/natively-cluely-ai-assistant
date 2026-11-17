@@ -5,6 +5,7 @@ import { Search, Sparkles, FileText, Brain } from 'lucide-react';
 import { motion, AnimatePresence, useIsPresent } from 'framer-motion';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { plainMeetingTitle } from '../lib/codingAnswer.mjs';
+import { isRestoredSearchFocus } from '../lib/searchFocusIntent.mjs';
 
 // ============================================
 // Types
@@ -280,8 +281,23 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
         if (selectedIndex >= totalItems) setSelectedIndex(-1);
     }, [selectedIndex, totalItems]);
 
+    // When the user last asked for the search box (a press on the pill, ⌘K or
+    // Tab), and when the window last became active. A focus right as the window
+    // becomes active, without asking, is Chromium handing the box back the
+    // focus it gave it when ⌘B showed the window; it must not open the search
+    // (isRestoredSearchFocus).
+    const focusIntentAtRef = useRef(0);
+    const noteFocusIntent = useCallback(() => { focusIntentAtRef.current = Date.now(); }, []);
+    const windowFocusAtRef = useRef(0);
+    useEffect(() => {
+        const onWindowFocus = () => { windowFocusAtRef.current = Date.now(); };
+        window.addEventListener('focus', onWindowFocus);
+        return () => window.removeEventListener('focus', onWindowFocus);
+    }, []);
+
     // State transitions
     const open = useCallback(() => {
+        focusIntentAtRef.current = Date.now();
         setState('focused');
         setTimeout(() => inputRef.current?.focus(), 50);
     }, []);
@@ -346,6 +362,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
     // Keyboard handling
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Tab') noteFocusIntent();
             // ⌘K to open
             if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
                 e.preventDefault();
@@ -386,7 +403,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [state, open, close, selectedIndex, totalItems, handleSelect]);
+    }, [state, open, close, selectedIndex, totalItems, handleSelect, noteFocusIntent]);
 
     // Click outside to close
     useEffect(() => {
@@ -461,6 +478,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
             <div
                 ref={containerRef}
                 className="absolute left-1/2 -translate-x-1/2 top-[7px] no-drag z-40 will-change-transform"
+                onPointerDownCapture={noteFocusIntent}
             >
                 <div className="relative">
                     <motion.div
@@ -510,7 +528,19 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                         type="text"
                                         value={query}
                                         onChange={handleInputChange}
-                                        onFocus={() => state === 'idle' && setState('focused')}
+                                        onFocus={() => {
+                                            if (state !== 'idle') return;
+                                            // The window coming back, not the user: give the focus back.
+                                            if (isRestoredSearchFocus({
+                                                lastIntentAt: focusIntentAtRef.current,
+                                                lastWindowFocusAt: windowFocusAtRef.current,
+                                                now: Date.now(),
+                                            })) {
+                                                inputRef.current?.blur();
+                                                return;
+                                            }
+                                            setState('focused');
+                                        }}
                                         className={`
                                         w-full bg-transparent
                                         pl-9 pr-4 py-1
