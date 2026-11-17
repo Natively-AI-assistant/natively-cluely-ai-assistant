@@ -58,7 +58,7 @@ test('crash counts and out-of-memory come from the marker', () => {
 test('a marker from an older build (no version, no counts) reports only what it knows', () => {
   const old = { pid: 7, startedAt: T0, lastEvent: 'clean-exit', lastEventAt: at(10), quitReason: 'updater-quit-install' }
   const r = summarizeRunEnd(old, '3.2.0')
-  assert.deepEqual(r.props, { how: 'update', minutes: 10 })
+  assert.deepEqual(r.props, { how: 'update', minutes: 10, last_event: 'clean_exit' }, 'older markers record their last event too')
   assert.equal(valid(r.props).ok, true)
 })
 
@@ -143,4 +143,148 @@ test('a run whose end was recorded keeps its own end: the log never stretches it
 test('a restart reads as a restart', () => {
   assert.equal(how(marker({ quitReason: 'app-restart' })), 'restart')
   assert.equal(valid(summarizeRunEnd(marker({ quitReason: 'app-restart' }), '3.2.0').props).ok, true)
+})
+
+// ── 2026-11-16: a crash says where and what ─────────────────────────────────
+import { fatalErrorFacts, FATAL_SOURCES, ERROR_NAMES, ERROR_CODES } from '../runEnd.mjs'
+
+const crash = (quitMeta, over = {}) => summarizeRunEnd(marker({ quitReason: 'fatal-main-error', quitMeta, ...over }), '3.2.1').props
+
+test('fatalErrorFacts keeps the class and the code, never the message', () => {
+  const e = Object.assign(new Error('/Users/someone/secret path sk-abc'), { code: 'ENOENT' })
+  const { name, code, where } = fatalErrorFacts(e)
+  assert.deepEqual({ name, code }, { name: 'Error', code: 'ENOENT' })
+  assert.ok(typeof where === 'string', 'a real error has a stack to place')
+  assert.ok(!/someone|secret/.test(JSON.stringify(fatalErrorFacts(e))))
+  assert.equal(fatalErrorFacts(new TypeError('x')).name, 'TypeError')
+  assert.deepEqual(fatalErrorFacts('a string'), { name: 'not_an_error' })
+  assert.deepEqual(fatalErrorFacts(null), { name: 'not_an_error' })
+  assert.deepEqual(fatalErrorFacts({ name: 'has spaces <b>', code: 'x'.repeat(65) }), {})
+  const hostile = { get name() { throw new Error('no') } }
+  assert.deepEqual(fatalErrorFacts(hostile), {})
+})
+
+test('an uncaught error during startup: where, what and that startup never finished', () => {
+  const p = crash({ source: 'uncaughtException', name: 'Error', code: 'ERR_DLOPEN_FAILED', message: 'cannot open /Users/someone/a.node' }, { startedUp: false })
+  assert.equal(p.how, 'crash')
+  assert.equal(p.fatal_source, 'uncaught_exception')
+  assert.equal(p.error_name, 'error')
+  assert.equal(p.error_code, 'err_dlopen_failed')
+  assert.equal(p.started_up, false)
+  assert.ok(!/someone|cannot open/.test(JSON.stringify(p)), 'no message leaves')
+  assert.deepEqual(valid(p).ok, true)
+})
+
+test('each fatal path maps to its source; an unknown one is other', () => {
+  assert.equal(crash({ source: 'unhandledRejection-loop-giveup' }).fatal_source, 'rejection_loop')
+  assert.equal(crash({ source: 'render-process-gone-loop-giveup' }).fatal_source, 'window_crash_loop')
+  assert.equal(crash({ source: 'initializeApp-failed' }).fatal_source, 'startup_failed')
+  assert.equal(crash({ source: 'native-arch-gate', message: 'x' }).fatal_source, 'native_arch')
+  assert.equal(crash({ source: 'something-new' }).fatal_source, 'other')
+  assert.equal(crash({ name: 'TypeError', message: 'm' }).fatal_source, 'uncaught_exception', "the tracker's own handler writes no source")
+})
+
+test('names and codes outside the lists report as other; SQLite extended codes as their base', () => {
+  assert.equal(crash({ source: 'uncaughtException', name: 'TypeError' }).error_name, 'type_error')
+  assert.equal(crash({ source: 'uncaughtException', name: 'not_an_error' }).error_name, 'not_an_error')
+  assert.equal(crash({ source: 'uncaughtException', code: 'EACCES' }).error_code, 'eacces')
+  assert.equal(crash({ source: 'uncaughtException', name: 'MyCustomError' }).error_name, 'other')
+  assert.equal(crash({ source: 'uncaughtException', code: 'SQLITE_IOERR_SHORT_READ' }).error_code, 'sqlite_ioerr')
+  assert.equal(crash({ source: 'uncaughtException', code: 'E_SOMETHING' }).error_code, 'other')
+})
+
+test('3.2.0 markers (source only, no startedUp) report the source alone', () => {
+  const p = crash({ source: 'uncaughtException' })
+  assert.equal(p.fatal_source, 'uncaught_exception')
+  assert.equal('error_name' in p || 'error_code' in p || 'started_up' in p, false)
+  assert.equal(valid(p).ok, true)
+})
+
+test('only a crash carries crash details', () => {
+  const p = summarizeRunEnd(marker({ quitReason: 'user-quit', lastEvent: 'clean-exit', quitMeta: { source: 'uncaughtException', name: 'Error' }, startedUp: true }), '3.2.1').props
+  assert.equal('fatal_source' in p || 'error_name' in p || 'started_up' in p, false)
+})
+
+test('the catalogue lists are exactly runEnd.mjs lists, so every value passes', () => {
+  const spec = FUNNEL_CATALOG.app_run_ended
+  assert.deepEqual([...spec.fatal_source], [...FATAL_SOURCES])
+  assert.deepEqual([...spec.error_name], [...ERROR_NAMES])
+  assert.deepEqual([...spec.error_code], [...ERROR_CODES])
+  for (const fatal_source of FATAL_SOURCES) for (const error_name of ERROR_NAMES) {
+    assert.equal(valid({ how: 'crash', fatal_source, error_name, error_code: 'other', started_up: true }).ok, true)
+  }
+})
+
+// ── 2026-11-16: where in the code, how far startup got, the machine ─────────
+import { stackFacts, toSnake, STARTUP_PHASES, LAST_EVENTS } from '../runEnd.mjs'
+import fs from 'node:fs'
+
+const MAC = '/Applications/Natively.app/Contents/Resources/app.asar'
+const WIN = 'C:\\Users\\someone\\AppData\\Local\\Programs\\Natively\\resources\\app.asar'
+
+test('the first app frame gives file, line and column; no path is kept, on either platform', () => {
+  for (const root of [MAC, WIN]) {
+    const sep = root === WIN ? '\\' : '/'
+    const p = (...xs) => [root, ...xs].join(sep)
+    const stack = `TypeError: boom\n    at Database.prepare (${p('node_modules', 'better-sqlite3', 'lib', 'database.js')}:65:21)\n` +
+      `    at Store.load (${p('dist-electron', 'electron', 'main.js')}:204811:33)\n    at ${p('dist-electron', 'electron', 'main.js')}:1:1`
+    const f = stackFacts(stack)
+    assert.deepEqual(f, { where: 'dependency', file: 'main', line: 204811, col: 33 })
+    assert.ok(!/someone|Applications/.test(JSON.stringify(f)))
+  }
+  assert.deepEqual(stackFacts(`Error\n    at x (${MAC}/dist-electron/premium/electron/autoAnswer/a.js:9:2)`), { where: 'app', file: 'premium', line: 9, col: 2 })
+  assert.deepEqual(stackFacts('Error\n    at node:internal/modules/cjs/loader:1:2'), { where: 'node_internal' })
+  assert.deepEqual(stackFacts(undefined), {})
+})
+
+test('a crash reports the location; the catalogue takes it', () => {
+  const p = crash({ source: 'uncaughtException', name: 'TypeError', where: 'app', file: 'main', line: 204811, col: 33 })
+  assert.equal(p.crash_where, 'app')
+  assert.equal(p.crash_file, 'main')
+  assert.equal(p.crash_line, 204811)
+  assert.equal(p.crash_col, 33)
+  assert.equal(valid(p).ok, true)
+})
+
+test('every run says what it last recorded; a run that never finished starting says how far it got', () => {
+  const vanished = summarizeRunEnd(marker({ lastEvent: 'render-process-gone', startedUp: false, startupPhase: 'create-window:start' }), '3.2.1').props
+  assert.equal(vanished.how, 'vanished')
+  assert.equal(vanished.last_event, 'render_process_gone')
+  assert.equal(vanished.startup_phase, 'create_window_start')
+  assert.equal(valid(vanished).ok, true)
+  const later = summarizeRunEnd(marker({ lastEvent: 'clean-exit', startedUp: true, startupPhase: 'initializeApp:complete' }), '3.2.1').props
+  assert.equal(later.last_event, 'clean_exit')
+  assert.equal('startup_phase' in later, false, 'only for a run that never finished starting')
+  assert.equal(summarizeRunEnd(marker({ lastEvent: 'quit-reason:fatal-main-error' }), '3.2.1').props.last_event, 'quit_reason_set')
+  assert.equal(summarizeRunEnd(marker({ lastEvent: 'something-new' }), '3.2.1').props.last_event, 'other')
+})
+
+test('the machine: arch, Rosetta and the OS version, on both platforms', () => {
+  const mac = summarizeRunEnd(marker({ env: { platform: 'darwin', arch: 'x64', translated: true, osRelease: '25.1.0' } }), '3.2.1').props
+  assert.deepEqual([mac.arch, mac.translated, mac.os_version], ['x64', true, 25])
+  const win = summarizeRunEnd(marker({ env: { platform: 'win32', arch: 'x64', translated: false, osRelease: '10.0.26100' } }), '3.2.1').props
+  assert.deepEqual([win.arch, win.translated, win.os_version], ['x64', false, 26100])
+  assert.equal(valid(mac).ok && valid(win).ok, true)
+  const old = summarizeRunEnd(marker(), '3.2.1').props
+  assert.equal('arch' in old || 'os_version' in old, false, '3.2.0 markers carry no env')
+})
+
+test('every startup phase main.ts logs has its own value, so none reads as other', () => {
+  const src = fs.readFileSync(new URL('../../../../electron/main.ts', import.meta.url), 'utf8')
+  const phases = [...src.matchAll(/logStartupPhase\('([^']+)'/g)].map((m) => m[1])
+  assert.ok(phases.length >= 10)
+  for (const ph of phases) assert.ok(STARTUP_PHASES.includes(toSnake(ph)), `${ph} → ${toSnake(ph)} is missing from STARTUP_PHASES`)
+})
+
+test('every event the tracker records has its own last_event value', () => {
+  const src = fs.readFileSync(new URL('../../../../electron/utils/lifecycleTracker.ts', import.meta.url), 'utf8')
+  const names = new Set(['app-start', 'clean-exit', 'unhandledRejection'])
+  for (const m of src.matchAll(/(?:record|noteIncident|osShutdown|takeBackPendingShutdown)\(\s*'([^']+)'/g)) names.add(m[1])
+  for (const n of names) assert.ok(LAST_EVENTS.includes(toSnake(n)), `${n} → ${toSnake(n)} is missing from LAST_EVENTS`)
+})
+
+test('the catalogue lists are runEnd.mjs lists', () => {
+  const spec = FUNNEL_CATALOG.app_run_ended
+  assert.deepEqual([...spec.last_event], [...LAST_EVENTS])
+  assert.deepEqual([...spec.startup_phase], [...STARTUP_PHASES])
 })

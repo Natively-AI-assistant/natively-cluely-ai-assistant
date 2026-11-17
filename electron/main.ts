@@ -7,6 +7,7 @@
 // init_DatabaseManager() (which is what loads better-sqlite3).
 // ============================================================================
 import './nativeArchGate';
+import { summarizeRunEnd } from '../src/lib/funnel/runEnd.mjs';
 // Dev-only prompt recorder: must wrap fetch before any SDK client exists (inert unless NATIVELY_PROMPT_DEBUG=1, never when packaged).
 import './llm/promptDebug';
 // Pin the packaged userData to the historical "Natively" folder BEFORE any
@@ -247,7 +248,7 @@ process.on('uncaughtException', (err) => {
   // alive here is the worst outcome: the window keeps working, the user keeps
   // holding meetings, and every one of them is silently discarded. End the
   // process so the next launch comes back with a working database.
-  terminateAfterFatalError('uncaughtException', 1);
+  terminateAfterFatalError('uncaughtException', 1, err);
 });
 
 // Crash-loop guard for unhandledRejection, mirroring the render-process-gone
@@ -301,7 +302,7 @@ process.on('unhandledRejection', (reason, promise) => {
       rejectionsInWindow: unhandledRejectionHistory.length,
       windowMs: UNHANDLED_REJECTION_WINDOW_MS,
     });
-    terminateAfterFatalError('unhandledRejection-loop-giveup', 1);
+    terminateAfterFatalError('unhandledRejection-loop-giveup', 1, reason);
   }
 });
 
@@ -572,14 +573,14 @@ function emergencyCloseDatabase(reason: string): void {
 // — fatal signals routinely arrive in pairs (e.g. the mic and system STT
 // sockets failing in the same tick) and only the first may act.
 let _fatalMainProcess: FatalMainProcessCoordinator | null = null;
-function terminateAfterFatalError(reason: string, exitCode: number): void {
+function terminateAfterFatalError(reason: string, exitCode: number, error?: unknown): void {
   // 2026-11-14: every fatal exit tells the next launch it was one (app_run_ended
   // 'crash'). The give-ups (renderer crash loop, rejection loop, a failed
   // startup) exit through app.exit(), which skips before-quit, and used to
   // leave no reason at all.
   try {
     const { LifecycleTracker } = require('./utils/lifecycleTracker');
-    LifecycleTracker.getInstance().markFatal(reason);
+    LifecycleTracker.getInstance().markFatal(reason, error);
   } catch { /* best-effort */ }
   if (!_fatalMainProcess) {
     _fatalMainProcess = new FatalMainProcessCoordinator({
@@ -646,6 +647,8 @@ function writeProcessReport(label: string): string | null {
 
 function logStartupPhase(phase: string, meta: Record<string, unknown> = {}): void {
   logToFile(`[STARTUP:${phase}] ${safeJsonForLog(getCrashDiagnostics(meta))}`);
+  // The crash report says how far startup got (app_run_ended startup_phase).
+  try { require('./utils/lifecycleTracker').LifecycleTracker.getInstance().noteStartupPhase(phase); } catch { /* best-effort */ }
 }
 
 // Lazy redactor import — pulled at first call so this file can boot even if
@@ -11111,7 +11114,9 @@ async function initializeApp() {
         `[Lifecycle] previous session ended unexpectedly: ` +
         `pid=${prev.pid} lastEvent=${prev.lastEvent} reason=${prev.quitReason ?? 'unknown'} ` +
         `startedAt=${prev.startedAt} lastEventAt=${prev.lastEventAt}` +
-        (prev.lastIncident ? ` lastIncident=${prev.lastIncident.event}@${prev.lastIncident.at}` : '')
+        (prev.lastIncident ? ` lastIncident=${prev.lastIncident.event}@${prev.lastIncident.at}` : '') +
+        // 2026-11-16: what the crash report sends about it, so the log and the report agree.
+        ` report=${JSON.stringify(summarizeRunEnd(prev, app.getVersion())?.props ?? null)}`
       );
     }
   } catch (err) {
@@ -12304,6 +12309,7 @@ if (process.env.THINKING_MATRIX === '1') {
   });
 
   logStartupPhase('initializeApp:complete');
+  try { require('./utils/lifecycleTracker').LifecycleTracker.getInstance().markStartedUp(); } catch { /* best-effort */ }
 
   // Refresh each keyed provider's model catalogue once it is older than its TTL
   // (LiveModelCatalogService.ttlFor), off the launch path, then re-check hourly:
@@ -12878,6 +12884,6 @@ initializeApp().catch((err) => {
   // gate renders its own dialog and exits from its dedicated handler, so skip
   // it here and let that path own the user-facing message.
   if (!isNativeArchGateCrash(err)) {
-    terminateAfterFatalError('initializeApp-failed', 1);
+    terminateAfterFatalError('initializeApp-failed', 1, err);
   }
 })

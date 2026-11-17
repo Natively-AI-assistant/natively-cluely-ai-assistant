@@ -26,14 +26,14 @@ test('initializeApp catch terminates the half-initialized process', () => {
   assert.notEqual(anchor, -1, 'initializeApp().catch not found');
   const block = source.slice(anchor, anchor + 2200);
   // The catch used to call app.exit(1) inline. It now routes through
-  // terminateAfterFatalError('initializeApp-failed', 1) — the same terminal
+  // terminateAfterFatalError('initializeApp-failed', 1[, err]) — the same terminal
   // coordinator the DB-survival pin names as the ONLY sanctioned way to close
   // the database from a handler that would otherwise keep running. The
   // invariant is that the half-initialized process actually dies, not which
   // function spells the exit, so accept either and verify the coordinator
   // really exits rather than trusting its name.
   const directExit = /app\.exit\(1\)/.test(block);
-  const viaCoordinator = /terminateAfterFatalError\(\s*['"][^'"]*['"]\s*,\s*1\s*\)/.test(block);
+  const viaCoordinator = /terminateAfterFatalError\(\s*['"][^'"]*['"]\s*,\s*1\s*(?:,\s*\w+\s*)?\)/.test(block);
   assert.ok(
     directExit || viaCoordinator,
     'initializeApp().catch must terminate the process (app.exit(1) or terminateAfterFatalError(..., 1)) — ' +
@@ -42,7 +42,7 @@ test('initializeApp catch terminates the half-initialized process', () => {
   if (!directExit) {
     const fnIdx = source.search(/function terminateAfterFatalError/);
     assert.ok(fnIdx >= 0, 'terminateAfterFatalError must exist if the catch delegates to it');
-    const fnBody = source.slice(fnIdx, fnIdx + 900);
+    const fnBody = source.slice(fnIdx, fnIdx + 1400);
     assert.match(
       fnBody, /\.exit\(code\)/,
       'terminateAfterFatalError must actually exit the process — delegating to a coordinator that ' +

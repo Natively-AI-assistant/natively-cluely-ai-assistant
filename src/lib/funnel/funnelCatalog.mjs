@@ -224,6 +224,42 @@ export const FUNNEL_CATALOG = Object.freeze({
     out_of_memory: BOOL,    // one of those ran out of memory
     updated: BOOL,          // that run was another version than the one reporting it
     computer_restarted: BOOL, // the computer has started since its last sign of life
+    // A 'crash' says where and what (2026-11-16): fixed lists, never a message
+    // or path. src/lib/funnel/runEnd.mjs keeps the same lists.
+    fatal_source: ['uncaught_exception', 'rejection_loop', 'window_crash_loop', 'startup_failed', 'native_arch', 'other'],
+    error_name: [
+      'error', 'type_error', 'reference_error', 'range_error', 'syntax_error', 'uri_error', 'eval_error',
+      'aggregate_error', 'sqlite_error', 'abort_error', 'system_error', 'not_an_error', 'other',
+    ],
+    error_code: [
+      'enoent', 'eacces', 'eperm', 'enospc', 'emfile', 'enfile', 'ebusy', 'eexist', 'eisdir', 'enotdir',
+      'eio', 'erofs', 'enomem', 'eagain', 'epipe', 'econnreset', 'econnrefused', 'etimedout', 'eaddrinuse',
+      'err_dlopen_failed', 'module_not_found', 'err_module_not_found', 'err_require_esm',
+      'err_invalid_arg_type', 'err_invalid_arg_value', 'err_stream_destroyed', 'err_stream_write_after_end',
+      'err_ipc_channel_closed', 'err_socket_closed', 'sqlite_corrupt', 'sqlite_notadb', 'sqlite_busy',
+      'sqlite_locked', 'sqlite_cantopen', 'sqlite_full', 'sqlite_ioerr', 'sqlite_readonly', 'sqlite_error',
+      'sqlite_misuse', 'sqlite_constraint', 'other',
+    ],
+    started_up: BOOL,       // startup had finished (initializeApp) before it died
+    crash_where: ['app', 'dependency', 'node_internal', 'electron_internal', 'unknown'],  // the first stack frame
+    crash_file: ['main', 'preload', 'premium', 'app_other'],
+    crash_line: INT,        // with crash_file and the version: one line of the released bundle
+    crash_col: INT,
+    last_event: [
+      'app_start', 'before_quit', 'will_quit', 'window_all_closed', 'clean_exit', 'quit_reason_set',
+      'render_process_gone', 'child_process_gone', 'gpu_process_crashed', 'query_session_end', 'session_end',
+      'power_shutdown', 'session_end_cancelled', 'session_end_cancelled_by_quit', 'uncaught_exception',
+      'unhandled_rejection', 'sigterm', 'sigint', 'sighup', 'other',
+    ],
+    startup_phase: [
+      'single_instance_lock', 'initialize_app_start', 'before_app_when_ready', 'after_app_when_ready',
+      'telemetry_configure_start', 'telemetry_configure_complete', 'credentials_init_start',
+      'credentials_init_complete', 'app_state_get_instance_start', 'app_state_get_instance_complete',
+      'create_window_start', 'create_window_complete', 'initialize_app_complete', 'other',
+    ],
+    arch: ['arm64', 'x64', 'ia32', 'other'],
+    translated: BOOL,       // an Intel build running under Rosetta (or x64 emulation on Windows Arm)
+    os_version: INT,        // macOS: Darwin major (25 = macOS 26). Windows: build (26100)
   },
   // An answer was asked for and did not come. At most once per cause per local
   // day per install: which kinds of failure someone met that day, not how often.

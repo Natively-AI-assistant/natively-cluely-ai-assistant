@@ -27,6 +27,7 @@ import { app, BrowserWindow, WebContents, utilityProcess, powerMonitor } from 'e
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
+import { fatalErrorFacts } from '../../src/lib/funnel/runEnd.mjs';
 
 // PHASE-2E: a tiny local LogFn alias. We intentionally do NOT import from
 // ./redactForLog here — the tracker is wired into the very first lifecycle
@@ -85,6 +86,13 @@ export interface LifecycleMarker {
   /** Refreshed every few minutes while the app runs: its last sign of life. */
   aliveAt?: string;
   crashes?: ProcessCrashCounts;
+  // Added 2026-11-16: false until initializeApp finishes, so a crash report can
+  // tell a startup failure from a run that died later.
+  startedUp?: boolean;
+  /** The last main.ts startup phase reached (logStartupPhase). */
+  startupPhase?: string;
+  /** The machine, as this run saw it: the crash report's arch, Rosetta and OS version. */
+  env?: { platform: string; arch: string; translated?: boolean; osRelease: string };
 }
 
 /** `render-process-gone` / `child-process-gone` reasons that are failures. */
@@ -163,8 +171,15 @@ export class LifecycleTracker {
       lastEventAt: new Date().toISOString(),
       quitReason: null,
       crashes: { renderer: 0, gpu: 0, helper: 0, oom: 0 },
+      startedUp: false,
     };
     try { this.marker.version = app.getVersion(); } catch { /* stub or too early */ }
+    this.marker.env = { platform: process.platform, arch: process.arch, osRelease: os.release() };
+    try {
+      // Electron: true for an x64 build running on Apple Silicon (Rosetta) or Windows on Arm.
+      const translated = (app as any).runningUnderARM64Translation;
+      if (typeof translated === 'boolean') this.marker.env.translated = translated;
+    } catch { /* stub or unsupported */ }
   }
 
   /**
@@ -396,9 +411,14 @@ export class LifecycleTracker {
       // nativeArchGate.ts have their own uncaughtException for the
       // [nativeArch] prefix path. We log and tag, but don't prevent
       // the existing handlers from running.
+      // main.ts's own handler usually runs first and has already marked the
+      // run fatal with its source (markFatal). Keep that source; add what the
+      // error is. The message stays on this computer (never reported).
+      const prior = instance.marker.quitReason === 'fatal-main-error' ? instance.marker.quitMeta : undefined;
       record('uncaughtException', 'fatal-main-error', {
+        ...(prior ?? {}),
         message: err instanceof Error ? err.message : String(err),
-        name: err instanceof Error ? err.name : typeof err,
+        ...fatalErrorFacts(err),
       });
     });
 
@@ -480,9 +500,39 @@ export class LifecycleTracker {
    * The main process is about to exit on a fatal error. Keeps a fatal reason
    * already set (an uncaughtException records its own, with the message).
    */
-  markFatal(source: string): void {
-    if (this.marker.quitReason === 'fatal-main-error') return;
-    this.setQuitReason('fatal-main-error', { source: String(source).slice(0, 80) });
+  markFatal(source: string, error?: unknown): void {
+    if (this.marker.quitReason === 'fatal-main-error') {
+      // Already marked (the tracker's own uncaughtException handler, or the
+      // native-arch gate). Fill in only what is missing.
+      const meta: Record<string, unknown> = { ...(this.marker.quitMeta ?? {}) };
+      if (meta.source === undefined) meta.source = String(source).slice(0, 80);
+      if (error !== undefined) {
+        for (const [k, v] of Object.entries(fatalErrorFacts(error))) if (meta[k] === undefined) meta[k] = v;
+      }
+      this.marker.quitMeta = meta;
+      try { this.writeMarker(); } catch { /* best-effort */ }
+      return;
+    }
+    this.setQuitReason('fatal-main-error', {
+      source: String(source).slice(0, 80),
+      ...(error !== undefined ? fatalErrorFacts(error) : {}),
+    });
+  }
+
+  /**
+   * main.ts reached a startup phase. Kept in memory until install() has read the
+   * previous run's marker (writing sooner would overwrite it), then on disk.
+   */
+  noteStartupPhase(phase: string): void {
+    this.marker.startupPhase = String(phase).slice(0, 80);
+    if (this.previous === undefined) return;
+    try { this.writeMarker(); } catch { /* best-effort */ }
+  }
+
+  /** Startup finished (initializeApp:complete): a later crash is not a startup failure. */
+  markStartedUp(): void {
+    this.marker.startedUp = true;
+    try { this.writeMarker(); } catch { /* best-effort */ }
   }
 
   /**

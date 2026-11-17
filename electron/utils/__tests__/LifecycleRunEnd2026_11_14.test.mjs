@@ -392,3 +392,95 @@ test('darwin: closing every window is not a quit (the app keeps running), so a l
   assert.equal(onDisk().lastEvent, 'window-all-closed');
   assert.equal(nextLaunchReads().how, 'vanished');
 });
+
+// ── 2026-11-16: a crash says where it died, what the error was, and whether
+// startup had finished. 3.2.0's first day had 9 Mac crashes and nothing more.
+// installBeforeReady() (from nativeArchGate.ts, before main.ts's own handler)
+// adds the tracker's process listener; the newest listener is this launch's.
+const lastUncaughtHandler = () => process.listeners('uncaughtException').at(-1);
+
+for (const platform of ['darwin', 'win32']) {
+  test(`${platform}: a fatal error during startup reports its source, class and code, not its message`, async () => {
+    const tracker = await launch(platform);
+    const err = Object.assign(new Error('dlopen(/Users/someone/a.node) failed'), { code: 'ERR_DLOPEN_FAILED' });
+    tracker.markFatal('uncaughtException', err); // main.ts's handler, which runs first
+    const p = nextLaunchReads();
+    assert.equal(p.how, 'crash');
+    assert.equal(p.fatal_source, 'uncaught_exception');
+    assert.equal(p.error_name, 'error');
+    assert.equal(p.error_code, 'err_dlopen_failed');
+    assert.equal(p.started_up, false);
+    assert.ok(!/someone/.test(JSON.stringify(p)));
+  });
+
+  test(`${platform}: a crash after startup says so; the tracker's own handler keeps main.ts's source`, async () => {
+    const tracker = await launch(platform);
+    LifecycleTracker.installBeforeReady(() => {});
+    tracker.markStartedUp();
+    const err = new TypeError('x is undefined');
+    tracker.markFatal('uncaughtException', err);
+    lastUncaughtHandler()(err); // the tracker's listener, registered after main.ts's
+    const p = nextLaunchReads();
+    assert.equal(p.fatal_source, 'uncaught_exception');
+    assert.equal(p.error_name, 'type_error');
+    assert.equal(p.started_up, true);
+    assert.equal(onDisk().quitMeta.message, 'x is undefined', 'the message stays in the local marker');
+  });
+
+  test(`${platform}: the tracker's handler first, then main.ts: the source and the facts are both kept`, async () => {
+    const tracker = await launch(platform);
+    LifecycleTracker.installBeforeReady(() => {});
+    const err = Object.assign(new Error('disk'), { code: 'SQLITE_IOERR_WRITE', name: 'SqliteError' });
+    lastUncaughtHandler()(err);
+    tracker.markFatal('uncaughtException', err);
+    const p = nextLaunchReads();
+    assert.equal(p.fatal_source, 'uncaught_exception');
+    assert.equal(p.error_name, 'sqlite_error');
+    assert.equal(p.error_code, 'sqlite_ioerr');
+  });
+}
+
+test('the give-ups report their own source', async () => {
+  for (const [label, source] of [
+    ['render-process-gone-loop-giveup', 'window_crash_loop'],
+    ['unhandledRejection-loop-giveup', 'rejection_loop'],
+    ['initializeApp-failed', 'startup_failed'],
+  ]) {
+    const tracker = await launch('darwin');
+    tracker.markFatal(label);
+    assert.equal(nextLaunchReads().fatal_source, source, label);
+  }
+});
+
+for (const platform of ['darwin', 'win32']) {
+  test(`${platform}: startup phases reach the marker only after the previous one was read; the machine is recorded`, async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-run-end-'));
+    userData = dir;
+    leavePrevious({ startedAt: new Date(Date.now() - 60_000).toISOString(), lastEvent: 'clean-exit', lastEventAt: new Date().toISOString(), quitReason: null, version: '3.2.0' });
+    LifecycleTracker.instance = null;
+    const early = LifecycleTracker.getInstance();
+    early.noteStartupPhase('single-instance-lock'); // before install: must not overwrite the previous marker
+    assert.equal(onDisk().lastEvent, 'clean-exit');
+    handlers = {}; powerHandlers = {};
+    early.install(() => {}, platform);
+    assert.equal(early.readPreviousSessionMarker().lastEvent, 'clean-exit', 'the previous run survived');
+    early.noteStartupPhase('create-window:start');
+    const p = nextLaunchReads();
+    assert.equal(p.how, 'vanished');
+    assert.equal(p.startup_phase, 'create_window_start');
+    assert.equal(p.last_event, 'app_start');
+    assert.equal(p.arch, process.arch === 'arm64' || process.arch === 'x64' ? process.arch : 'other');
+    assert.ok(Number.isInteger(p.os_version));
+    early.markStartedUp();
+    assert.equal('startup_phase' in nextLaunchReads(), false);
+  });
+}
+
+test('a real thrown error: the crash report points at its line in the built file', async () => {
+  const tracker = await launch('darwin');
+  const err = new TypeError('x');
+  err.stack = `TypeError: x\n    at f (${path.join('/Applications/Natively.app/Contents/Resources/app.asar', 'dist-electron', 'electron', 'main.js')}:4242:7)`;
+  tracker.markFatal('uncaughtException', err);
+  const p = nextLaunchReads();
+  assert.deepEqual([p.crash_where, p.crash_file, p.crash_line, p.crash_col], ['app', 'main', 4242, 7]);
+});
