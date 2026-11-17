@@ -766,7 +766,37 @@ export function initializeIpcHandlers(appState: AppState): void {
    * server, have it refused, and call revertNativelyAutoDefaults() — undoing the
    * promotion this exists to apply.
    */
+  /**
+   * Hand the embedder the Natively credential that is stored NOW.
+   *
+   * NativelyEmbeddingProvider captures its key at construction, and nothing on
+   * the key paths rebuilt it — only boot, a Gemini/OpenAI key save and the
+   * Ollama pull did. So a customer who upgraded mid-meeting (Pro key cancelled,
+   * Ultra key pasted) kept embedding with the cancelled key: every /v1/embed
+   * answered 403 subscription_inactive, once a minute, and meeting memory and
+   * reference-file retrieval were dark until the app restarted (2026-11-16, 80+
+   * minutes of 403s from one Ultra customer).
+   *
+   * Cheap to call: EmbeddingPipeline.initialize() re-resolves only when
+   * embeddingConfigChanged() says an input moved (the key, the trial token).
+   */
+  const refreshNativelyEmbeddings = (reason: string): void => {
+    try {
+      const ragManager = appState.getRAGManager?.();
+      if (!ragManager) return;
+      ragManager.initializeEmbeddings(buildEmbeddingConfig())
+        .then(() => {
+          appState.scheduleModeReferenceIndexRetry?.();
+          return ragManager.retryPendingEmbeddings?.();
+        })
+        .catch((e: any) => console.warn(`[IPC] embeddings refresh after ${reason} failed:`, e?.message));
+    } catch (e: any) {
+      console.warn(`[IPC] embeddings refresh after ${reason} failed:`, e?.message);
+    }
+  };
+
   const syncNativelyModelRuntime = (): void => {
+    refreshNativelyEmbeddings('Natively credential change');
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -13004,6 +13034,10 @@ export function initializeIpcHandlers(appState: AppState): void {
           if (!win.isDestroyed()) win.webContents.send('trial-ended', { choice: 'purchased' });
         });
       }
+
+      // Last, once the stored key (and trial token) are final for this save:
+      // a refused key may have restored the trial above, a purchase cleared it.
+      refreshNativelyEmbeddings('Natively key saved');
 
       // A cleared key is not a key entered; the trial sentinel never comes
       // through this handler (trial:start writes it directly).
