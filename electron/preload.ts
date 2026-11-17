@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { SkillUploadPayload } from './services/skills/SkillValidator';
-import type { NativelyUsageResponse, NativelyPlansResponse } from '../src/types/nativelyUsage';
+import type { NativelyUsageResponse, NativelyPlansResponse, NativelyPackKeyState } from '../src/types/nativelyUsage';
 import type { MeetingOutputsApi } from '../src/types/meetingOutputs';
 import type { ConnectorsApi } from '../src/types/connectors';
 import type { AutoAnswerModelInstall, AutoAnswerModelSavings } from './premium/autoAnswer';
@@ -249,7 +249,7 @@ interface ElectronAPI {
   getDisabledProviders: () => Promise<string[]>;
   setDisabledProviders: (providers: string[]) => Promise<{ success: boolean; error?: string }>;
   setCloudEnabledModels: (provider: string, models: string[]) => Promise<{ success: boolean; error?: string }>;
-  setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string; proPending?: boolean; proError?: string }>;
+  setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string; proPending?: boolean; proError?: string; storedAs?: 'pack' }>;
   // ── In-app review / testimonial prompt ─────────────────────────────────
   reviewGetPromptState: () => Promise<{
     ok: boolean;
@@ -283,7 +283,12 @@ interface ElectronAPI {
   // Shape imported, not restated. This used to be written out here AND in
   // src/types/electron.d.ts, so the resource model would have had to be
   // remembered in three places.
-  getNativelyUsage: (force?: boolean) => Promise<NativelyUsageResponse>;
+  getNativelyUsage: (force?: boolean, which?: 'active' | 'main' | 'pack') => Promise<NativelyUsageResponse>;
+  getNativelyUpgradeLink: () => Promise<{ ok: boolean; token?: string | null; email?: string | null; error?: string }>;
+  nativelyYearlyUpgrade: (plan: string, expectedAmount?: number) => Promise<{ ok: boolean; changed?: boolean; error?: string; preview?: { plan: string; amount: number; currency: string } | null }>;
+  getNativelyPackKey: () => Promise<NativelyPackKeyState>;
+  removeNativelyPackKey: () => Promise<{ ok: boolean; error?: string }>;
+  onNativelyPackFallbackChanged: (cb: (state: { held: boolean; inUse: boolean; until: string | null; reason: string }) => void) => () => void;
   /** The plan catalog — allowances and prices, straight from the server, so the
    *  plan table never carries its own copy of numbers the server enforces. */
   getNativelyPlans: () => Promise<NativelyPlansResponse>;
@@ -2012,7 +2017,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     can_use_publicly: boolean;
     display_name_publicly: boolean;
   }) => ipcRenderer.invoke('review:update-testimonial', payload),
-  getNativelyUsage: (force?: boolean) => ipcRenderer.invoke('get-natively-usage', force ? { force: true } : undefined),
+  getNativelyUsage: (force?: boolean, which?: 'active' | 'main' | 'pack') =>
+    ipcRenderer.invoke('get-natively-usage', force || which ? { ...(force ? { force: true } : {}), ...(which ? { which } : {}) } : undefined),
+  getNativelyUpgradeLink: () => ipcRenderer.invoke('get-natively-upgrade-link'),
+  nativelyYearlyUpgrade: (plan: string, expectedAmount?: number) => ipcRenderer.invoke('natively-yearly-upgrade', plan, expectedAmount),
+  getNativelyPackKey: () => ipcRenderer.invoke('get-natively-pack-key'),
+  removeNativelyPackKey: () => ipcRenderer.invoke('remove-natively-pack-key'),
+  onNativelyPackFallbackChanged: (cb: (state: { held: boolean; inUse: boolean; until: string | null; reason: string }) => void) => {
+    const handler = (_: unknown, state: { held: boolean; inUse: boolean; until: string | null; reason: string }) => cb(state);
+    ipcRenderer.on('natively-pack-fallback-changed', handler);
+    return () => { ipcRenderer.removeListener('natively-pack-fallback-changed', handler); };
+  },
   getNativelyPlans: () => ipcRenderer.invoke('get-natively-plans'),
   resendNativelyKey: (email: string) => ipcRenderer.invoke('resend-natively-key', email),
   getStoredCredentials: () => ipcRenderer.invoke('get-stored-credentials'),

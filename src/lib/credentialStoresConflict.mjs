@@ -65,6 +65,7 @@ export const CREDENTIAL_KEY_LABELS = {
   litellmApiKey: 'LiteLLM',
   ninerouterApiKey: '9Router',
   nativelyApiKey: 'Natively',
+  nativelyPackApiKey: 'Natively pack',
   customEmbeddingApiKey: PHRASE.customEmbeddings,
   customRerankerApiKey: PHRASE.customReranker,
   jinaApiKey: 'Jina',

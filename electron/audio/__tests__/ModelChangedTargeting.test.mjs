@@ -52,7 +52,10 @@ test('model-changed call sites use the targeted helper', () => {
   // holds broadcastCredentialsChanged() (an intentional all-window send) and
   // the words 'model-changed', which read as a broadcast of model-changed.
   for (const needle of ["safeHandle('set-natively-api-key'", "safeHandle('set-model'", "safeHandle('set-default-model'"]) {
-    const region = extractRegion(ipcSource, needle, 2_000);
+    // 2,400: set-natively-api-key first decides whether a pasted pack key is
+    // held beside the plan's key (2026-11-17), which put its model sync just
+    // past the old 2,000-character window. The pin is unchanged.
+    const region = extractRegion(ipcSource, needle, 2_400);
     assert.ok(/appState\.sendModelChanged\s*\(/.test(region), `BUG: ${needle} must use targeted model-changed dispatch.`);
     assert.ok(!/BrowserWindow\.getAllWindows\s*\(\s*\)[\s\S]*model-changed/.test(region), `BUG: ${needle} must not broadcast model-changed to every BrowserWindow.`);
   }

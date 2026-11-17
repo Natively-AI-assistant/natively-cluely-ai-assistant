@@ -18,7 +18,10 @@ import { createPackMeetingClock, type TickAnswer, type TickBody } from './PackMe
 const API_BASE = nativelyApiBase();
 
 type Clock = ReturnType<typeof createPackMeetingClock>;
-let instance: Clock | null = null;
+// One per process, not per bundle (every .ts file is its own esbuild bundle;
+// see nativelyPlanLimitEvents.ts): ipcHandlers.ts reaches main.ts's clock here.
+const CLOCK_KEY = Symbol.for('natively.packMeetingClock');
+const clockHolder = globalThis as unknown as { [CLOCK_KEY]?: Clock | null };
 
 function broadcast(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -104,8 +107,9 @@ async function recheckPro(reason: string | undefined, onProLost: () => void): Pr
  *   those objects.
  */
 export function getPackMeetingClock(onProLost: () => void = () => {}): Clock {
-  if (instance) return instance;
-  instance = createPackMeetingClock({
+  const existing = clockHolder[CLOCK_KEY];
+  if (existing) return existing;
+  const instance = clockHolder[CLOCK_KEY] = createPackMeetingClock({
     getApiKey: () => {
       try {
         const { CredentialsManager } = require('../CredentialsManager');
@@ -124,7 +128,15 @@ export function getPackMeetingClock(onProLost: () => void = () => {}): Clock {
       return () => clearInterval(t);
     },
     newMeetingId: () => `mtg_${randomBytes(12).toString('hex')}`,
-    onPackEnded: (info) => { void recheckPro(info.reason, onProLost); },
+    onPackEnded: (info) => {
+      // A held pack key standing in for a used-up plan: the plan's key goes
+      // back in use (nativelyPackFallback.ts) before Pro is re-checked.
+      try {
+        const { currentNativelyPackFallback } = require('./nativelyPackFallback') as typeof import('./nativelyPackFallback');
+        void currentNativelyPackFallback()?.check('pack_ended');
+      } catch { /* no fallback wired */ }
+      void recheckPro(info.reason, onProLost);
+    },
     isKeyLive,
     onPackRenewed: packRenewed,
     onPackState: (pack) => broadcast('pack-state', pack),
@@ -134,4 +146,9 @@ export function getPackMeetingClock(onProLost: () => void = () => {}): Clock {
     },
   });
   return instance;
+}
+
+/** The clock if main.ts has made it, else null (never makes one: main.ts owns its Pro teardown). */
+export function packMeetingClockIfStarted(): Clock | null {
+  return clockHolder[CLOCK_KEY] ?? null;
 }

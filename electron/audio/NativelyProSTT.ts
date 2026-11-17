@@ -3,6 +3,7 @@ import { getSttContextTerms, nativelyContextTerms } from './sttContextTerms';
 import WebSocket from 'ws';
 import { RECOGNITION_LANGUAGES, EnglishVariant } from '../config/languages';
 import { TRIAL_SENTINEL_KEY } from '../config/constants';
+import { emitNativelyPlanLimit } from '../llm/nativelyPlanLimitEvents';
 import { streamingStttWsOptions } from './dnsHelpers';
 import { RealtimeSilenceTail } from './realtimeSilenceTail';
 import { nextVoiceEpoch, voiceIdFromLabel } from './sttDiarization';
@@ -705,6 +706,13 @@ export class NativelyProSTT extends EventEmitter {
                     const relayTokenRejected = msg.error === 'invalid_key_format' && this.isOnRelayTarget(connectUrl);
                     const fatal = NativelyProSTT.FATAL_SERVER_ERRORS.has(String(msg.error)) && !relayTokenRejected;
                     this.emit('error', nativelyProServerError(msg, fatal));
+                    // The plan's voice minutes are used up: say so on the same bus
+                    // as an AI refusal, so a held pack key can take over
+                    // (nativelyPackFallback.ts). A trial's refusal is the trial's
+                    // business and is not announced.
+                    if (msg.error === 'transcription_quota_exceeded' && this.apiKey !== TRIAL_SENTINEL_KEY) {
+                        emitNativelyPlanLimit({ code: 'transcription_quota_exceeded', onTrial: false });
+                    }
 
                     // RELAY token-fatal carve-out (Phase 7/8): on a RELAY url an
                     // `invalid_key_format` means a bad/expired SESSION TOKEN, not

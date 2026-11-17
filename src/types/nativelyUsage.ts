@@ -142,6 +142,24 @@ export interface NativelyUsageResponse {
     ended: boolean;
     ended_reason: 'hours_used' | 'window_closed' | null;
   } | null;
+  /**
+   * What a plan change carried over (natively-api, 2026-11-17), ALREADY
+   * included in `limits`. null when nothing is carried or it has expired;
+   * absent from older servers.
+   */
+  carry?: {
+    ai_tokens: number;
+    transcription_minutes: number;
+    embedding_tokens: number;
+    reranker_tokens: number;
+    expires_at: string | null;
+    from_plan: string | null;
+  } | null;
+  /**
+   * A live yearly plan may move up a yearly tier now, on the same subscription
+   * (natively-api POST /v1/yearly-upgrade, 2026-11-17). Absent = no.
+   */
+  yearly_upgrade?: boolean;
   /** Set when a network failure was covered by serving the last good response. */
   stale?: boolean;
   error?: string;
@@ -366,4 +384,18 @@ export function normalizeQuota(raw: unknown): NativelyQuota | null {
       : (q.knowledge as KnowledgeMeter),
     resets_at: (q.resets_at as string) ?? '',
   };
+}
+
+/**
+ * The pack key held beside the saved monthly/yearly key (2026-11-17). Only the
+ * last four characters leave the main process.
+ */
+export interface NativelyPackKeyState {
+  ok: boolean;
+  held: boolean;
+  last4: string | null;
+  /** The pack key is the one in use (the plan's allowance is used up). */
+  inUse: boolean;
+  /** Until when it is in use (the plan's refill), ISO. */
+  until: string | null;
 }

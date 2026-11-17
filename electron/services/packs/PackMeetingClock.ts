@@ -124,6 +124,9 @@ export function createPackMeetingClock(deps: PackMeetingClockDeps) {
     cancelTimer: () => void;
   } | null = null;
   let probing = false;
+  // A meeting is running, metered or not. `meeting` is null for a meeting on a
+  // key that is not a pack; keyChanged still has to know the meeting is live.
+  let meetingLive = false;
 
   // Ticks not yet confirmed by the server, oldest first. They outlive their
   // meeting: a tick that failed at the end of one meeting is sent during the next.
@@ -266,32 +269,54 @@ export function createPackMeetingClock(deps: PackMeetingClockDeps) {
     void flush();
   }
 
+  /** A meeting went live (or its key changed). No key (or a trial) → nothing to meter. */
+  function startMeeting(): void {
+    if (meeting) { accrue(deps.now()); stopTimer(); meeting = null; }
+    const key = deps.getApiKey();
+    if (!key) return;
+    if (notPackKey !== null && notPackKey !== key) notPackKey = null;
+    if (notPackKey === key) return;
+    endedReported = false;
+    meeting = {
+      id: deps.newMeetingId(),
+      key,
+      seq: 0,
+      since: deps.now(),
+      carryMs: 0,
+      counting: countsNow(),
+      paused: false,
+      cancelTimer: () => {},
+    };
+    meeting.cancelTimer = deps.every(onTimer, TICK_INTERVAL_MS);
+    // Leftovers from an earlier meeting go out now, not a minute from now.
+    if (pending.length > 0) void flush();
+  }
+
   return {
     /** A meeting went live. No key (or a trial) → nothing to meter. */
     meetingStarted(): void {
-      if (meeting) { accrue(deps.now()); stopTimer(); meeting = null; }
-      const key = deps.getApiKey();
-      if (!key) return;
-      if (notPackKey !== null && notPackKey !== key) notPackKey = null;
-      if (notPackKey === key) return;
-      endedReported = false;
-      meeting = {
-        id: deps.newMeetingId(),
-        key,
-        seq: 0,
-        since: deps.now(),
-        carryMs: 0,
-        counting: countsNow(),
-        paused: false,
-        cancelTimer: () => {},
-      };
-      meeting.cancelTimer = deps.every(onTimer, TICK_INTERVAL_MS);
-      // Leftovers from an earlier meeting go out now, not a minute from now.
-      if (pending.length > 0) void flush();
+      meetingLive = true;
+      startMeeting();
+    },
+
+    /**
+     * The key in use changed mid-meeting (a held pack key took over from a
+     * used-up plan, or the plan's key came back; nativelyPackFallback.ts). The
+     * time so far is billed to the key it ran on, and the rest of the meeting
+     * is a new meeting on the new key, metered only if that key is a pack.
+     */
+    keyChanged(): void {
+      if (!meetingLive) return;
+      if (meeting && deps.getApiKey() === meeting.key) return;
+      // Bills the old key's time so far and sends it (startMeeting flushes
+      // whatever is queued); an empty flush here would only hold the queue
+      // shut for the next tick.
+      startMeeting();
     },
 
     /** The meeting stopped: bill the last partial minute and send. */
     meetingEnded(): Promise<void> {
+      meetingLive = false;
       if (!meeting) return pending.length > 0 ? flush() : Promise.resolve();
       accrue(deps.now());
       stopTimer();

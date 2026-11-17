@@ -142,6 +142,16 @@ export interface StoredCredentials {
     fastModel?: string;
     nativelyApiKey?: string;
     /**
+     * A PACK key held beside a monthly/yearly key in nativelyApiKey (2026-11-17).
+     * The server keeps packs and subscriptions on separate keys; the app holds
+     * both and uses this one only while the plan's allowance is used up
+     * (nativelyPackInUseUntil). Never set alone: a lone pack key lives in
+     * nativelyApiKey like any key.
+     */
+    nativelyPackApiKey?: string;
+    /** ISO time until which the pack key is the one in use (the plan's next refill). */
+    nativelyPackInUseUntil?: string;
+    /**
      * Optional bearer token for a user-hosted OpenAI-compatible embedding
      * endpoint. Lives here rather than in settings.json because that file is
      * plaintext on disk; LM Studio and llama.cpp need no token at all, but a
@@ -1339,8 +1349,49 @@ export class CredentialsManager {
         return true;
     }
 
-    public getNativelyApiKey(): string | undefined {
+    /**
+     * The Natively key IN USE: the saved key, or the pack key held beside it
+     * while the plan's allowance is used up (see nativelyPackFallback.ts).
+     * Every request, the voice pipeline, retrieval and the pack clock read this.
+     */
+    public getNativelyApiKey(now: number = Date.now()): string | undefined {
+        return this.isNativelyPackInUse(now) ? this.credentials.nativelyPackApiKey : this.credentials.nativelyApiKey;
+    }
+
+    /** The saved (main) Natively key, whatever is in use right now. */
+    public getMainNativelyApiKey(): string | undefined {
         return this.credentials.nativelyApiKey;
+    }
+
+    public getNativelyPackApiKey(): string | undefined {
+        return this.credentials.nativelyPackApiKey;
+    }
+
+    public getNativelyPackInUseUntil(): string | undefined {
+        return this.credentials.nativelyPackInUseUntil;
+    }
+
+    public isNativelyPackInUse(now: number = Date.now()): boolean {
+        const until = Date.parse(this.credentials.nativelyPackInUseUntil || '');
+        return !!this.credentials.nativelyPackApiKey && Number.isFinite(until) && until > now;
+    }
+
+    /** Hold (or drop, with null) a pack key beside the saved key. Dropping it ends its use. */
+    public setNativelyPackApiKey(key: string | null): boolean {
+        if (this.refuseWriteWhileDegraded('set natively pack key')) return false;
+        const trimmed = (key || '').trim();
+        this.credentials.nativelyPackApiKey = trimmed || undefined;
+        if (!trimmed) this.credentials.nativelyPackInUseUntil = undefined;
+        this.saveCredentials();
+        return true;
+    }
+
+    /** Use the pack key until `iso` (the plan's refill), or stop using it with null. */
+    public setNativelyPackInUseUntil(iso: string | null): boolean {
+        if (this.refuseWriteWhileDegraded('set natively pack in use')) return false;
+        this.credentials.nativelyPackInUseUntil = iso && this.credentials.nativelyPackApiKey ? iso : undefined;
+        this.saveCredentials();
+        return true;
     }
 
     public getDisabledProviders(): string[] {
@@ -1949,6 +2000,9 @@ export class CredentialsManager {
     public setNativelyApiKey(key: string): void {
         if (this.refuseWriteWhileDegraded('set natively api key')) return;
         const trimmed = key.trim();
+        // A different saved key starts fresh: whatever ran the old one out does
+        // not apply to it, so the held pack key goes back to standing by.
+        if ((trimmed || undefined) !== this.credentials.nativelyApiKey) this.credentials.nativelyPackInUseUntil = undefined;
         this.credentials.nativelyApiKey = trimmed || undefined;
 
         if (trimmed) {

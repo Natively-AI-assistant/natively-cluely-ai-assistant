@@ -12806,6 +12806,50 @@ export function initializeIpcHandlers(appState: AppState): void {
   const _plansCache = new Map<string, { data: any; ts: number }>();
   const PLANS_CACHE_TTL_MS = 15 * 60_000;
 
+  /**
+   * One app, two Natively keys (2026-11-17). A pack key pasted while a live
+   * monthly/yearly key is saved is HELD beside it, not saved over it; a
+   * monthly/yearly key pasted over a live pack saves normally and holds the
+   * pack. The held key takes over when the plan is used up
+   * (services/packs/nativelyPackFallback.ts). Removing the saved key while a
+   * pack is held saves the pack key in its place.
+   *
+   * Answers `done` when the save is finished here (the key was held), else the
+   * key the normal save below should store.
+   */
+  const routePastedNativelyKey = async (cm: any, apiKey: string): Promise<{ done?: { success: boolean; error?: string; storedAs?: 'pack' }; apiKey: string }> => {
+    const pastedKey = typeof apiKey === 'string' ? apiKey.trim() : '';
+    if (pastedKey) {
+      const slot = await packFallback.slotForSave(pastedKey);
+      if (slot === 'same') return { done: { success: true, storedAs: 'pack' }, apiKey };
+      if (slot === 'pack') {
+        const wasInUse = cm.isNativelyPackInUse();
+        if (!cm.setNativelyPackApiKey(pastedKey)) return { done: { success: false, error: 'credentials_unavailable' }, apiKey };
+        if (wasInUse) await resyncNativelyKeyInUse('held pack key replaced');
+        _usageCache.clear();
+        broadcastCredentialsChanged();
+        BrowserWindow.getAllWindows().forEach((win) => {
+          if (!win.isDestroyed()) win.webContents.send('natively-pack-fallback-changed', packFallback.state());
+        });
+        funnelTelemetry.keyEntered('api_key', 'ok');
+        console.log('[IPC] set-natively-api-key: pack key held beside the saved plan key');
+        return { done: { success: true, storedAs: 'pack' }, apiKey };
+      }
+      if (slot === 'swap') {
+        cm.setNativelyPackApiKey(cm.getMainNativelyApiKey() ?? null);
+        console.log('[IPC] set-natively-api-key: plan key saved; the live pack key it replaces is held beside it');
+      }
+      return { apiKey };
+    }
+    const held: string | undefined = cm.getNativelyPackApiKey();
+    if (held) {
+      cm.setNativelyPackApiKey(null);
+      console.log('[IPC] set-natively-api-key: saved key removed — the held pack key becomes the saved key');
+      return { apiKey: held };
+    }
+    return { apiKey };
+  };
+
   safeHandle('set-natively-api-key', async (_, apiKey: string) => {
     // Set when the server REFUSES the key, so the handler can report the real
     // reason instead of the unconditional { success: true } it used to return
@@ -12818,6 +12862,10 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
+
+      const routed = await routePastedNativelyKey(cm, apiKey); // a pack key may be held
+      if (routed.done) return routed.done;
+      apiKey = routed.apiKey;
       const prevSttProvider = cm.getSttProvider();
       // Captured BEFORE the write, because the write overwrites the trial
       // sentinel. A live trial running underneath this save is a state both
@@ -13119,12 +13167,18 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle('get-natively-usage', async (_event, opts?: { force?: boolean }) => {
+  safeHandle('get-natively-usage', async (_event, opts?: { force?: boolean; which?: 'active' | 'main' | 'pack' }) => {
     // Hoisted out of try so the catch block's stale-cache lookup can reach it.
     let key: string | undefined;
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
-      key = CredentialsManager.getInstance().getNativelyApiKey();
+      const cmUsage = CredentialsManager.getInstance();
+      // 'active' (default): the key in use, which is what the quota banners
+      // describe. Plans & Billing asks for the saved key ('main') and for the
+      // pack key held beside it ('pack') separately.
+      key = opts?.which === 'main' ? cmUsage.getMainNativelyApiKey()
+        : opts?.which === 'pack' ? cmUsage.getNativelyPackApiKey()
+        : cmUsage.getNativelyApiKey();
       if (!key) return { ok: false, error: 'no_key' };
 
       // Return cached value if it's still fresh — skipped when the caller
@@ -13144,6 +13198,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       // to Standard): ask the licence server now rather than at the next 6-hour
       // check. A reason to ask only; the licence check decides.
       const askLicenceIf = (answer: { ok: boolean; plan?: unknown; error?: unknown }) => {
+        // The held pack key's own numbers say nothing about the key in use.
+        if (opts?.which === 'pack') return;
         try {
           const { usageSuggestsProLost } = require('./services/licenceRecheck') as typeof import('./services/licenceRecheck');
           if (usageSuggestsProLost(answer)) triggerLicenceRecheck('usage');
@@ -13178,7 +13234,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // The plan is now known. If it includes Pro and Pro is off on this device,
       // fix that here — this is the moment the user is looking at "Ultra" with no
       // Pro features. Fire-and-forget; passes the plan so no second request is made.
-      if (typeof data?.plan === 'string') {
+      if (typeof data?.plan === 'string' && opts?.which !== 'pack') {
         try {
           const { getProEntitlementReconciler } = require('./services/proEntitlementWiring');
           void getProEntitlementReconciler().run('usage-ok', { plan: data.plan });
@@ -13195,9 +13251,169 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // The signed upgrade token for the saved key (natively-api /v1/upgrade-link,
+  // 2026-11-17). The Plans tab adds it to a checkout link so the purchase lands
+  // on THIS key even when the customer pays with another email. Any failure
+  // answers ok:false and the link opens untouched (the server then matches by
+  // email). The key itself never leaves the main process.
+  safeHandle('get-natively-upgrade-link', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      // The SAVED key, not a pack standing in for it: plan purchases land on the
+      // plan's key, and the server matches a pack purchase to the pack key by email.
+      const key: string | undefined = CredentialsManager.getInstance().getMainNativelyApiKey();
+      if (!key) return { ok: false, error: 'no_key' };
+      const res = await fetch(`${NATIVELY_API_BASE}/v1/upgrade-link`, {
+        headers: { 'x-natively-key': key },
+        signal: AbortSignal.timeout(2500),
+      });
+      const body = (await res.json().catch(() => ({}))) as any;
+      if (!res.ok || body?.ok !== true) return { ok: false, error: body?.error || `http_${res.status}` };
+      return {
+        ok: true,
+        token: typeof body.token === 'string' ? body.token : null,
+        email: typeof body.email === 'string' ? body.email : null,
+      };
+    } catch (error: any) {
+      return { ok: false, error: error?.message || 'network_error' };
+    }
+  });
+
+  // A live yearly plan moving up a yearly tier on its own Dodo subscription
+  // (natively-api POST /v1/yearly-upgrade, 2026-11-17). Without expectedAmount it
+  // only asks what would be charged; with it, Dodo charges that amount (the
+  // server refuses if the amount moved). The saved plan key, never a held pack.
+  safeHandle('natively-yearly-upgrade', async (_e, plan: unknown, expectedAmount?: unknown) => {
+    try {
+      if (typeof plan !== 'string' || !/^(standard|pro|max|ultra)$/.test(plan)) return { ok: false, error: 'bad_plan' };
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const key: string | undefined = CredentialsManager.getInstance().getMainNativelyApiKey();
+      if (!key) return { ok: false, error: 'no_key' };
+      const body: Record<string, unknown> = { plan };
+      if (typeof expectedAmount === 'number' && Number.isFinite(expectedAmount)) body.expected_amount = expectedAmount;
+      const res = await fetch(`${NATIVELY_API_BASE}/v1/yearly-upgrade`, {
+        method: 'POST',
+        headers: { 'x-natively-key': key, 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(20_000),
+      });
+      const out = (await res.json().catch(() => ({}))) as any;
+      const preview = out?.preview && Number.isFinite(out.preview.amount) && typeof out.preview.currency === 'string'
+        ? { plan: String(out.preview.plan), amount: Number(out.preview.amount), currency: out.preview.currency }
+        : null;
+      if (!res.ok || out?.ok !== true) return { ok: false, error: out?.error || `http_${res.status}`, preview };
+      if (out.changed) _usageCache.clear();
+      return { ok: true, changed: out.changed === true, preview };
+    } catch (error: any) {
+      return { ok: false, error: error?.message || 'network_error' };
+    }
+  });
+
   // Allow other handlers to force-invalidate the usage cache (e.g. after key change)
   safeHandle('invalidate-natively-usage-cache', () => {
     _usageCache.clear();
+    return { ok: true };
+  });
+
+  // ── One app, two Natively keys (2026-11-17) ──────────────────────────────────
+  // A pack key held beside a monthly/yearly key takes over while the plan's
+  // allowance is used up (services/packs/nativelyPackFallback.ts).
+  const fetchKeyUsage = async (key: string): Promise<import('./services/packs/nativelyPackFallback').KeyUsage> => {
+    try {
+      const res = await fetch(`${NATIVELY_API_BASE}/v1/usage`, {
+        headers: { 'x-natively-key': key },
+        signal: AbortSignal.timeout(8000),
+      });
+      const body = (await res.json().catch(() => ({}))) as any;
+      if (!res.ok) return { ok: false, error: body?.error || 'request_failed', status: res.status, ...(body?.pack ? { pack: body.pack } : {}) };
+      return { ok: true, ...body };
+    } catch (e: any) {
+      return { ok: false, error: 'network_error' };
+    }
+  };
+
+  /** Re-point everything that holds a Natively key at the key in use now. */
+  const resyncNativelyKeyInUse = async (reason: string): Promise<void> => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const cm = CredentialsManager.getInstance();
+    const active: string | undefined = cm.getNativelyApiKey();
+    _usageCache.clear();
+    try { appState.processingHelper?.getLLMHelper?.()?.setNativelyKey(active || null); } catch (e: any) {
+      console.warn('[PackFallback] LLM key update failed:', e?.message);
+    }
+    syncNativelyModelRuntime(); // retrieval, the model chip, the settings panels
+    // The voice pipeline holds its key: rebuild it (mid-meeting too) on the key in use.
+    if (cm.getSttProvider() === 'natively') {
+      try { await appState.reconfigureSttProvider(); } catch (e: any) { console.warn('[PackFallback] voice rebuild failed:', e?.message); }
+    }
+    try {
+      const { packMeetingClockIfStarted } = require('./services/packs/packClockWiring');
+      packMeetingClockIfStarted()?.keyChanged();
+    } catch { /* clock not running */ }
+    // A pack includes Natively Pro on Natively API: a Standard subscriber using
+    // their pack gets it for as long as the pack is in use and alive. The
+    // licence re-check takes it away when the pack ends, as for any pack.
+    if (active && active === cm.getNativelyPackApiKey() && !licencePremiumForWindows()) {
+      try {
+        const { LicenseManager } = require('../premium/electron/services/LicenseManager');
+        const result = await LicenseManager.getInstance().activateWithApiKey(active);
+        if (result?.success) {
+          const isPremium = licencePremiumForWindows();
+          BrowserWindow.getAllWindows().forEach((win) => {
+            if (!win.isDestroyed()) win.webContents.send('license-status-changed', { isPremium });
+          });
+        }
+      } catch { /* open-source build: no Pro */ }
+    }
+    console.log(`[PackFallback] key in use re-synced (${reason})`);
+  };
+
+  const { createNativelyPackFallback, setNativelyPackFallback } =
+    require('./services/packs/nativelyPackFallback') as typeof import('./services/packs/nativelyPackFallback');
+  const packFallback = createNativelyPackFallback({
+    getMainKey: () => require('./services/CredentialsManager').CredentialsManager.getInstance().getMainNativelyApiKey(),
+    getPackKey: () => require('./services/CredentialsManager').CredentialsManager.getInstance().getNativelyPackApiKey(),
+    getInUseUntil: () => require('./services/CredentialsManager').CredentialsManager.getInstance().getNativelyPackInUseUntil(),
+    setInUseUntil: (iso) => { require('./services/CredentialsManager').CredentialsManager.getInstance().setNativelyPackInUseUntil(iso); },
+    fetchUsage: fetchKeyUsage,
+    resync: resyncNativelyKeyInUse,
+    notify: (state) => {
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send('natively-pack-fallback-changed', state);
+      });
+    },
+    isPlaceholderKey: (key) => key === TRIAL_SENTINEL_KEY,
+  });
+  setNativelyPackFallback(packFallback);
+  onNativelyPlanLimit((limit) => { void packFallback.onPlanLimit(limit); });
+  void packFallback.start().catch((e: any) => console.warn('[PackFallback] start failed:', e?.message));
+
+  /** The pack key held beside the saved key, for the Plans & Billing row. Never the key itself. */
+  safeHandle('get-natively-pack-key', () => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const cm = CredentialsManager.getInstance();
+    const pack: string | undefined = cm.getNativelyPackApiKey();
+    const state = packFallback.state();
+    return {
+      ok: true,
+      held: !!pack,
+      last4: pack ? pack.slice(-4) : null,
+      inUse: state.inUse,
+      until: state.until,
+    };
+  });
+
+  safeHandle('remove-natively-pack-key', async () => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const cm = CredentialsManager.getInstance();
+    const wasInUse = cm.isNativelyPackInUse();
+    if (!cm.setNativelyPackApiKey(null)) return { ok: false, error: 'credentials_unavailable' };
+    if (wasInUse) await resyncNativelyKeyInUse('pack key removed');
+    _usageCache.clear();
+    broadcastCredentialsChanged();
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) win.webContents.send('natively-pack-fallback-changed', packFallback.state());
+    });
     return { ok: true };
   });
 

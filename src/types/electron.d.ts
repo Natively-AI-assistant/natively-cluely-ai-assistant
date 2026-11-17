@@ -333,7 +333,7 @@ export interface ElectronAPI {
   getDisabledProviders: () => Promise<string[]>
   setDisabledProviders: (providers: string[]) => Promise<{ success: boolean; error?: string }>
   setCloudEnabledModels: (provider: string, models: string[]) => Promise<{ success: boolean; error?: string }>
-  setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string; proPending?: boolean; proError?: string }>
+  setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string; proPending?: boolean; proError?: string; storedAs?: 'pack' }>
   setNvidiaNimSttModel: (model: string) => Promise<{ success: boolean; error?: string }>
   setSttModel: (provider: 'deepgram' | 'openai', model: string) => Promise<{ success: boolean; error?: string }>
   // ── In-app review / testimonial prompt ─────────────────────────────────
@@ -368,7 +368,13 @@ export interface ElectronAPI {
   }) => Promise<{ ok: boolean; error?: string; status?: number }>
   // See src/types/nativelyUsage.ts — one definition, shared with the preload
   // bridge. Four user-facing categories over five server-side meters.
-  getNativelyUsage: (force?: boolean) => Promise<import('./nativelyUsage').NativelyUsageResponse>
+  getNativelyUsage: (force?: boolean, which?: 'active' | 'main' | 'pack') => Promise<import('./nativelyUsage').NativelyUsageResponse>
+  getNativelyUpgradeLink?: () => Promise<{ ok: boolean; token?: string | null; email?: string | null; error?: string }>
+  /** Move a live yearly plan up a yearly tier in place. No expectedAmount = preview only, nothing charged. */
+  nativelyYearlyUpgrade?: (plan: string, expectedAmount?: number) => Promise<{ ok: boolean; changed?: boolean; error?: string; preview?: { plan: string; amount: number; currency: string } | null }>
+  getNativelyPackKey?: () => Promise<import('./nativelyUsage').NativelyPackKeyState>
+  removeNativelyPackKey?: () => Promise<{ ok: boolean; error?: string }>
+  onNativelyPackFallbackChanged?: (cb: (state: { held: boolean; inUse: boolean; until: string | null; reason: string }) => void) => () => void
   getNativelyPlans: () => Promise<import('./nativelyUsage').NativelyPlansResponse>
   resendNativelyKey: (email: string) => Promise<{ ok: boolean; message?: string; error?: string }>
   getStoredCredentials: () => Promise<{ hasNativelyKey?: boolean; hasOwnAiKey?: boolean; hasGeminiKey: boolean; hasGroqKey: boolean; hasOpenaiKey: boolean; hasClaudeKey: boolean; hasDeepseekKey: boolean; hasNvidiaNimKey?: boolean; hasOpenrouterKey?: boolean; hasFluxionKey?: boolean; fluxionProtocol?: 'openai' | 'anthropic'; hasAgentRouterKey?: boolean; hasLitellmBaseURL?: boolean; litellmBaseURL?: string | null; litellmMaxTokens?: number | null; hasNinerouterBaseURL?: boolean; hasNinerouterKey?: boolean; ninerouterBaseURL?: string | null; ninerouterMaxTokens?: number | null; ninerouterThinking?: string | null; ninerouterModelMeta?: Record<string, { reasoning?: boolean; thinkingCanDisable?: boolean; thinkingFormat?: string }>; googleServiceAccountPath: string | null; sttProvider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'qwen' | 'nvidia_nim' | 'natively' | 'local-whisper' | 'apple-speech'; hasSttGroqKey: boolean; hasSttOpenaiKey: boolean; hasDeepgramKey: boolean; hasElevenLabsKey: boolean; hasAzureKey: boolean; azureRegion: string; hasIbmWatsonKey: boolean; ibmWatsonRegion: string; groqSttModel?: string; nvidiaNimSttModel?: string; sttModels?: { deepgram?: string; openai?: string }; hasSonioxKey?: boolean; hasQwenAsrKey?: boolean; hasTavilyKey?: boolean; geminiPreferredModel?: string; groqPreferredModel?: string; openaiPreferredModel?: string; claudePreferredModel?: string; deepseekPreferredModel?: string; nvidia_nimPreferredModel?: string; openrouterPreferredModel?: string; fluxionPreferredModel?: string; agentrouterPreferredModel?: string; litellmPreferredModel?: string; ninerouterPreferredModel?: string; disabledProviders?: string[]; cloudEnabledModels?: Record<string, string[]>; sttGroqKey?: string; sttOpenaiKey?: string; sttDeepgramKey?: string; sttElevenLabsKey?: string; sttAzureKey?: string; sttIbmKey?: string; sttSonioxKey?: string; sttQwenAsrKey?: string; openAiSttBaseUrl?: string }>

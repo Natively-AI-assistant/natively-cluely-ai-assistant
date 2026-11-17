@@ -382,8 +382,9 @@
 }
 .api-tier[data-tier='pro'] .api-tier-cta { color: var(--tier-lav-ink); background: var(--tier-sheen), var(--tier-lav); }
 
-/* Your current plan: the button's place, flat and inert. */
-.api-tier-cta[data-state='active'] {
+/* Your current plan, or a yearly key's locked row: the button's place, flat and inert. */
+.api-tier-cta[data-state='active'],
+.api-tier-cta[data-state='locked'] {
   cursor: default;
   font-weight: 500;
   color: var(--tier-muted);
