@@ -4029,6 +4029,16 @@ export class LLMHelper {
 
   /** Records a plan-limit 429 from the Natively API. Returns true when it was one. */
   private noteNativelyPlanLimit(status: number, headers: { get(name: string): string | null } | null | undefined, errData: any, onTrial = false): boolean {
+    // The key in use refused outright (a pack ended or refunded, a plan
+    // cancelled): the pack switch looks again now, not at its next half-hourly
+    // look (services/packs/nativelyPackFallback.ts; throttled there, and a
+    // no-op without a pack key).
+    if ((status === 401 || status === 403) && !onTrial) {
+      try {
+        (require('./services/packs/nativelyPackFallback') as typeof import('./services/packs/nativelyPackFallback'))
+          .nudgeNativelyPackFallback(String(errData?.error ?? 'key_refused'));
+      } catch { /* not wired */ }
+    }
     if (status !== 429) return false;
     const code = String(errData?.error ?? errData?.code ?? '');
     if (!LLMHelper.PLAN_LIMIT_RE.test(code)) return false;

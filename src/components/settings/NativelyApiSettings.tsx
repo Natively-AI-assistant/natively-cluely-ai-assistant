@@ -1744,7 +1744,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     // amount_changed answers the new amount: show it, ask again.
     setYearlyUp({ plan: planId, amount: preview?.amount, currency: preview?.currency, error: r.error || 'failed' });
   };
-  const openExternal = (url: string) => {
+  const openExternal = (url: string, family: 'pack' | 'plan' = 'plan') => {
     const open = (target: string) => (window.electronAPI as any)?.openExternal?.(target, { surface: 'api_settings' });
     if (!isCheckoutUrl(url) || !isSaved || !window.electronAPI?.getNativelyUpgradeLink) { plansVisit.opened(url); open(url); return; }
     if (checkoutPendingRef.current) return;
@@ -1754,7 +1754,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     // The signed token puts the purchase on THIS key even with another email.
     // Any failure (offline, older server) opens the plain link; the server then
     // matches the purchase by email.
-    window.electronAPI.getNativelyUpgradeLink()
+    window.electronAPI.getNativelyUpgradeLink(family)
       .then((link) => open(withUpgradeLink(url, link)))
       .catch(() => open(url))
       .finally(() => { checkoutPendingRef.current = false; });
@@ -1867,7 +1867,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
       <AnimatePresence mode="popLayout" initial={false}>
       {packsView ? (
         <motion.div key="packs" exit={prefersReducedMotion ? { opacity: 0, transition: { duration: 0.15 } } : DISSOLVE.leave}>
-          <ProPacks currentPlan={usageData?.plan} onBuy={openExternal} arrive={arrive} changeNote={isSaved && usageData ? planChangeNote(usageData, 'packs') : null} />
+          <ProPacks currentPlan={usageData?.plan} onBuy={(url: string) => openExternal(url, 'pack')} arrive={arrive} changeNote={isSaved && usageData ? planChangeNote(usageData, 'packs') : null} />
         </motion.div>
       ) : (
       <motion.div key="plans" className="space-y-3" exit={prefersReducedMotion ? { opacity: 0, transition: { duration: 0.15 } } : DISSOLVE.leave}>

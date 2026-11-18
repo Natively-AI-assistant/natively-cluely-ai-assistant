@@ -37,7 +37,7 @@ test('the token and email ride on the checkout link; a failed lookup leaves it u
 });
 
 test('the note says what a change does to this key', () => {
-  assert.match(planChangeNote({ plan: 'max', billing_period: 'monthly' }, 'packs'), /own API key.*Max plan keeps running/);
+  assert.match(planChangeNote({ plan: 'max', billing_period: 'monthly' }, 'packs'), /own API key.*it is used first, then your Max plan carries on when the pack ends/);
   assert.match(planChangeNote({ plan: 'pack_light', billing_period: 'pack' }, 'packs'), /adds its hours.*ends when the new pack ends/);
   assert.match(planChangeNote({ plan: 'pack_heavy', billing_period: 'pack' }, 'plans', 'monthly'), /own API key.*pack keeps running/);
   const yearly = planChangeNote({ plan: 'pro', billing_period: 'yearly' }, 'plans', 'monthly');
@@ -63,10 +63,10 @@ test('carry line', () => {
 
 test('the Plans tab uses the helper and the bridge exists', () => {
   const panel = read('src/components/settings/NativelyApiSettings.tsx');
-  assert.match(panel, /getNativelyUpgradeLink\(\)/);
+  assert.match(panel, /getNativelyUpgradeLink\(family\)/);
   assert.match(panel, /withUpgradeLink\(url, link\)/);
   assert.match(panel, /planChangeNote\(usageData, 'packs'\)/);
-  assert.match(read('electron/preload.ts'), /getNativelyUpgradeLink: \(\) => ipcRenderer\.invoke\('get-natively-upgrade-link'\)/);
+  assert.match(read('electron/preload.ts'), /getNativelyUpgradeLink: \(family\?: 'pack' \| 'plan'\) => ipcRenderer\.invoke\('get-natively-upgrade-link', family\)/);
   assert.match(read('electron/ipcHandlers.ts'), /safeHandle\('get-natively-upgrade-link'/);
 });
 
@@ -82,8 +82,12 @@ test('a yearly key is offered no other plan; checkout clicks are guarded while t
 });
 
 test('the held pack key\'s line says when it is used', () => {
-  assert.equal(heldPackNote({ held: true, inUse: false, until: null }), "Used automatically when your plan's AI or voice runs out.");
-  assert.equal(heldPackNote({ held: true, inUse: true, until: '2026-12-01T00:00:00Z' }, { formatDate: () => 'Dec 1' }), "In use until Dec 1, when your plan's allowance refills.");
+  assert.equal(heldPackNote({ held: true, inUse: false, until: null, stoppedEarly: true }), 'Your plan covers what this pack has used up. The pack is used again if your plan runs out of it too.');
+  // just pasted, not answered yet: nothing rather than something untrue
+  assert.equal(heldPackNote({ held: true, inUse: false, until: null }), null);
+  assert.equal(heldPackNote({ held: true, inUse: false, until: null, stoppedEarly: false }), null);
+  assert.equal(heldPackNote({ held: true, inUse: true, until: '2026-12-01T00:00:00Z' }, { formatDate: () => 'Nov 22' }), 'In use until Nov 22. Anything left then expires and your plan is used again.');
+  assert.equal(heldPackNote({ held: true, inUse: true, until: null }), 'In use now. Anything left expires when the pack ends, then your plan is used again.', 'no made-up date');
   assert.equal(heldPackNote({ held: false }), null);
   assert.equal(heldPackNote(null), null);
 });
@@ -105,4 +109,13 @@ test('yearly policy (2026-11-17): a yearly key moves UP a yearly tier in place o
   assert.match(panel, /api\(planId, confirming \? yearlyUp!\.amount : undefined\)/, 'the second press pays exactly the previewed amount');
   assert.match(read('electron/preload.ts'), /nativelyYearlyUpgrade: \(plan: string, expectedAmount\?: number\) => ipcRenderer\.invoke\('natively-yearly-upgrade', plan, expectedAmount\)/);
   assert.match(read('electron/ipcHandlers.ts'), /safeHandle\('natively-yearly-upgrade'[\s\S]{0,600}getMainNativelyApiKey\(\)/);
+});
+
+test('Evin 11-18: on a plan, the pack card says the pack is used first', () => {
+  assert.equal(planChangeNote({ plan: 'pro', billing_period: 'monthly' }, 'packs'),
+    'A pack comes with its own API key, sent by email. Paste it here: it is used first, then your Pro plan carries on when the pack ends.');
+  assert.equal(planChangeNote({ plan: 'starter', billing_period: 'yearly' }, 'packs'),
+    'A pack comes with its own API key, sent by email. Paste it here: it is used first, then your Standard plan carries on when the pack ends.');
+  // on a pack, the packs card still says the next pack stacks on this key
+  assert.match(planChangeNote({ plan: 'pack_heavy', billing_period: 'pack' }, 'packs'), /^Another pack adds its hours to this key/);
 });

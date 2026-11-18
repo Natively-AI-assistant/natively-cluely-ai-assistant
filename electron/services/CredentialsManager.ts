@@ -144,12 +144,13 @@ export interface StoredCredentials {
     /**
      * A PACK key held beside a monthly/yearly key in nativelyApiKey (2026-11-17).
      * The server keeps packs and subscriptions on separate keys; the app holds
-     * both and uses this one only while the plan's allowance is used up
-     * (nativelyPackInUseUntil). Never set alone: a lone pack key lives in
-     * nativelyApiKey like any key.
+     * both and uses this one FIRST: from when it is held until the pack's own
+     * time is over, or it runs out of something the plan still has
+     * (nativelyPackInUseUntil; services/packs/nativelyPackFallback.ts). Never
+     * set alone: a lone pack key lives in nativelyApiKey like any key.
      */
     nativelyPackApiKey?: string;
-    /** ISO time until which the pack key is the one in use (the plan's next refill). */
+    /** ISO time until which the pack key is the one in use: the pack's use-by date, or a shorter hold when the server did not name it. */
     nativelyPackInUseUntil?: string;
     /**
      * Optional bearer token for a user-hosted OpenAI-compatible embedding
@@ -1351,7 +1352,7 @@ export class CredentialsManager {
 
     /**
      * The Natively key IN USE: the saved key, or the pack key held beside it
-     * while the plan's allowance is used up (see nativelyPackFallback.ts).
+     * while it is in use: a live pack is used first (see nativelyPackFallback.ts).
      * Every request, the voice pipeline, retrieval and the pack clock read this.
      */
     public getNativelyApiKey(now: number = Date.now()): string | undefined {
@@ -1376,17 +1377,18 @@ export class CredentialsManager {
         return !!this.credentials.nativelyPackApiKey && Number.isFinite(until) && until > now;
     }
 
-    /** Hold (or drop, with null) a pack key beside the saved key. Dropping it ends its use. */
+    /** Hold (or drop, with null) a pack key beside the saved key. Dropping or replacing it ends its use. */
     public setNativelyPackApiKey(key: string | null): boolean {
         if (this.refuseWriteWhileDegraded('set natively pack key')) return false;
         const trimmed = (key || '').trim();
+        // Another key never inherits the old one's in-use time.
+        if ((trimmed || undefined) !== this.credentials.nativelyPackApiKey) this.credentials.nativelyPackInUseUntil = undefined;
         this.credentials.nativelyPackApiKey = trimmed || undefined;
-        if (!trimmed) this.credentials.nativelyPackInUseUntil = undefined;
         this.saveCredentials();
         return true;
     }
 
-    /** Use the pack key until `iso` (the plan's refill), or stop using it with null. */
+    /** Use the pack key until `iso` (the pack's use-by date, or a hold), or stop using it with null. */
     public setNativelyPackInUseUntil(iso: string | null): boolean {
         if (this.refuseWriteWhileDegraded('set natively pack in use')) return false;
         this.credentials.nativelyPackInUseUntil = iso && this.credentials.nativelyPackApiKey ? iso : undefined;

@@ -101,12 +101,29 @@ async function recheckPro(reason: string | undefined, onProLost: () => void): Pr
   broadcast('license-status-changed', { isPremium: false });
 }
 
+// The Pro teardown main.ts supplies, kept per process. Only a caller that
+// passes one sets it: other callers (ipcHandlers' checkProNow) ask for the clock
+// with no argument and must not replace the real teardown with nothing.
+const PRO_LOST_KEY = Symbol.for('natively.packProLost');
+const proLostHolder = globalThis as unknown as { [PRO_LOST_KEY]?: () => void };
+const proLost = (): (() => void) => proLostHolder[PRO_LOST_KEY] ?? (() => {});
+
+/**
+ * Re-check Pro now, with the same teardown a pack end gets. For the plan's key
+ * coming back after a pack (nativelyPackFallback.ts): no "pack ended" notice,
+ * the pack clock says that itself when it is the pack that ended.
+ */
+export function recheckProNow(): Promise<void> {
+  return recheckPro(undefined, proLost());
+}
+
 /**
  * @param onProLost the same premium-only teardown a deactivated licence gets
  *   (active mode cleared, knowledge mode off). Supplied by main.ts, which owns
- *   those objects.
+ *   those objects; every other caller passes nothing.
  */
-export function getPackMeetingClock(onProLost: () => void = () => {}): Clock {
+export function getPackMeetingClock(onProLost?: () => void): Clock {
+  if (onProLost) proLostHolder[PRO_LOST_KEY] = onProLost;
   const existing = clockHolder[CLOCK_KEY];
   if (existing) return existing;
   const instance = clockHolder[CLOCK_KEY] = createPackMeetingClock({
@@ -131,11 +148,16 @@ export function getPackMeetingClock(onProLost: () => void = () => {}): Clock {
     onPackEnded: (info) => {
       // A held pack key standing in for a used-up plan: the plan's key goes
       // back in use (nativelyPackFallback.ts) before Pro is re-checked.
-      try {
-        const { currentNativelyPackFallback } = require('./nativelyPackFallback') as typeof import('./nativelyPackFallback');
-        void currentNativelyPackFallback()?.check('pack_ended');
-      } catch { /* no fallback wired */ }
-      void recheckPro(info.reason, onProLost);
+      // In that order: the key in use settles first, so Pro is re-checked
+      // against what is actually in use. The teardown is read at the time, not
+      // from whichever caller created the clock.
+      void (async () => {
+        try {
+          const { currentNativelyPackFallback } = require('./nativelyPackFallback') as typeof import('./nativelyPackFallback');
+          await currentNativelyPackFallback()?.check('pack_ended');
+        } catch { /* no fallback wired */ }
+        await recheckPro(info.reason, proLost());
+      })();
     },
     isKeyLive,
     onPackRenewed: packRenewed,

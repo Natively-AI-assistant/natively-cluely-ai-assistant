@@ -223,7 +223,7 @@ export function userBioForAnswers(): string {
  */
 export async function recheckLicence(
   license: { isPremium(): boolean; isPremiumAsync(): Promise<boolean> },
-  deps: { stillAllowed(): boolean; onLost(): void; onRestored?(): void },
+  deps: { stillAllowed(): boolean; onLost(): void | Promise<void>; onRestored?(): void },
 ): Promise<boolean> {
   let wasPremium = false;
   try { wasPremium = license.isPremium() === true; } catch { wasPremium = false; }
@@ -233,7 +233,8 @@ export async function recheckLicence(
     let allowed = false;
     try { allowed = deps.stillAllowed() === true; } catch { allowed = false; }
     if (!allowed) {
-      try { deps.onLost(); } catch { /* standing down is best effort */ }
+      // Awaited: onLost may first let a pack in use take Pro over (ipcHandlers.ts).
+      try { await deps.onLost(); } catch { /* standing down is best effort */ }
     }
   }
   if (!wasPremium && active) {
