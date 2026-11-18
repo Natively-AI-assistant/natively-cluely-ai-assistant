@@ -30,6 +30,8 @@ const WebSocketLib = require('ws');
 
 const chain = makeFakeAvChain();
 const fakeRoot = chain.rootPem;
+// Only parseable, unexpired, self-signed certificates are merged (#759).
+const otherRoot = makeFakeAvChain().rootPem;
 
 function fakeTls({ defaults, system, onSet }) {
   return {
@@ -42,10 +44,10 @@ describe('trustSystemCertificates (injected store)', () => {
   test('appends only the system certificates Node does not already have', () => {
     let set = null;
     const result = trustSystemCertificates({
-      tls: fakeTls({ defaults: ['A', 'B'], system: ['B', 'C', 'C\n'], onSet: (c) => { set = c; } }),
+      tls: fakeTls({ defaults: ['A', otherRoot], system: [otherRoot, fakeRoot, `${fakeRoot}\n`], onSet: (c) => { set = c; } }),
       env: {}, log: () => {},
     });
-    assert.deepEqual(set, ['A', 'B', 'C']);
+    assert.deepEqual(set, ['A', otherRoot, fakeRoot]);
     assert.deepEqual(result, { applied: true, systemCount: 3, addedCount: 1 });
   });
 
@@ -62,7 +64,7 @@ describe('trustSystemCertificates (injected store)', () => {
   test('NATIVELY_SYSTEM_CA=0 keeps the bundled list', () => {
     let calls = 0;
     const result = trustSystemCertificates({
-      tls: fakeTls({ defaults: ['A'], system: ['C'], onSet: () => { calls++; } }),
+      tls: fakeTls({ defaults: ['A'], system: [fakeRoot], onSet: () => { calls++; } }),
       env: { NATIVELY_SYSTEM_CA: '0' }, log: () => {},
     });
     assert.equal(calls, 0);
@@ -85,7 +87,7 @@ describe('trustSystemCertificates (injected store)', () => {
 
   test('a rejected list never throws into startup', () => {
     const result = trustSystemCertificates({
-      tls: fakeTls({ defaults: ['A'], system: ['C'], onSet: () => { throw new Error('bad pem'); } }),
+      tls: fakeTls({ defaults: ['A'], system: [fakeRoot], onSet: () => { throw new Error('bad pem'); } }),
       env: {}, log: () => {},
     });
     assert.equal(result.applied, false);

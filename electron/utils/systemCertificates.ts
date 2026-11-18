@@ -21,12 +21,24 @@
 // every later connection that does not pass its own `ca` use the result.
 // Connections that pin their own `ca` are untouched.
 //
+// ONLY USABLE ROOTS (2026-11-18, #759): the store returns more than roots.
+// Windows adds its "Intermediate Certification Authorities" (cross-signatures,
+// issuing CAs) and certificates that expired years ago. BoringSSL treats every
+// entry in the CA list as a trusted issuer, looks there first, and picks one by
+// name and key without checking its dates, so an expired twin of a certificate
+// the server sends (an old cross-signature has the same name and key) won over
+// the valid one: every fetch to api.natively.software failed CERT_HAS_EXPIRED
+// on a customer's PC and Pro never activated. Only self-signed certificates
+// that have not expired are added; an antivirus or corporate root is one, and a
+// chain can only end at one.
+//
 // SCOPE: per thread. main.ts calls it at startup and each worker that can
 // download models calls it at the top of its entry file.
 //
 // ESCAPE HATCH: NATIVELY_SYSTEM_CA=0 keeps Node's bundled list only.
 
 import * as nodeTls from 'tls';
+import { X509Certificate } from 'crypto';
 
 type CaApi = {
   getCACertificates?: (type?: 'default' | 'system' | 'bundled' | 'extra') => string[];
@@ -53,6 +65,15 @@ function pemKey(pem: string): string {
   return pem.replace(/\s+/g, '');
 }
 
+function isUsableRoot(pem: string, now: number): boolean {
+  try {
+    const cert = new X509Certificate(pem);
+    return cert.subject === cert.issuer && cert.validToDate.getTime() > now;
+  } catch {
+    return false;
+  }
+}
+
 export function trustSystemCertificates(deps: SystemCertificateDeps = {}): SystemCertificateResult {
   const tls: CaApi = deps.tls ?? (nodeTls as unknown as CaApi);
   const env = deps.env ?? process.env;
@@ -76,9 +97,10 @@ export function trustSystemCertificates(deps: SystemCertificateDeps = {}): Syste
   }
 
   const known = new Set(defaults.map(pemKey));
+  const now = Date.now();
   const added = system.filter((pem) => {
     const key = pemKey(pem);
-    if (known.has(key)) return false;
+    if (known.has(key) || !isUsableRoot(pem, now)) return false;
     known.add(key);
     return true;
   });
