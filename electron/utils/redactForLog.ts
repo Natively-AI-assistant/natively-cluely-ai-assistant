@@ -160,10 +160,37 @@ export function redactSecretsOnly(value: unknown): unknown {
     return sanitize(value, new WeakSet(), 'full', Number.POSITIVE_INFINITY);
 }
 
+/**
+ * The `cause` chain, e.g. "ENOTFOUND getaddrinfo ENOTFOUND api.example.com".
+ * Node's fetch reports DNS, TLS and reset failures all as "fetch failed" and
+ * puts the reason on `cause`; logging only the stack made them identical in
+ * the log, and a customer's certificate failure went unseen for days (#759).
+ */
+function describeCause(err: Error): string {
+    // Runs inside console.log/warn/error: an odd `cause` must never make logging throw.
+    try {
+        const parts: string[] = [];
+        let cause: any = (err as any).cause;
+        for (let depth = 0; cause != null && depth < 3; depth++, cause = cause?.cause) {
+            const code = typeof cause?.code === 'string' ? cause.code : '';
+            const message = (typeof cause === 'string' ? cause : String(cause?.message ?? '')).slice(0, 300);
+            parts.push(code && !message.includes(code) ? `${code} ${message}`.trim() : message || code);
+        }
+        return parts.filter(Boolean).join(' <- ');
+    } catch {
+        return '';
+    }
+}
+
 function formatOne(arg: unknown, level: LogRedactionLevel): string {
     if (arg instanceof Error) {
         const base = arg.stack || arg.message || 'Error';
-        return scrubString(base);
+        const cause = describeCause(arg);
+        if (!cause) return scrubString(base);
+        // On the first line, where "fetch failed" is, not after the frames.
+        const eol = base.indexOf('\n');
+        const head = eol === -1 ? base : base.slice(0, eol);
+        return scrubString(`${head} (cause: ${cause})${eol === -1 ? '' : base.slice(eol)}`);
     }
     if (typeof arg === 'object' && arg !== null) {
         try {
@@ -200,9 +227,11 @@ function sanitize(
     if (typeof value === 'function' || typeof value === 'symbol') return undefined;
 
     if (value instanceof Error) {
+        const cause = describeCause(value);
         return {
             name: value.name,
             message: scrubString(value.message ?? ''),
+            ...(cause ? { cause: scrubString(cause) } : {}),
             stack: scrubString(value.stack ?? ''),
         };
     }

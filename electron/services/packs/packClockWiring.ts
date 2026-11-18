@@ -52,7 +52,9 @@ async function isKeyLive(key: string): Promise<boolean> {
       signal: AbortSignal.timeout(10_000),
     });
     return res.status === 200;
-  } catch {
+  } catch (e: any) {
+    // Unreachable reads the same as "not topped up" to the clock; say which (#759).
+    console.warn(`[PackClock] pack re-check could not reach the server: ${e?.message ?? e}${e?.cause?.code ? ` (${e.cause.code})` : ''}`);
     return false;
   }
 }
