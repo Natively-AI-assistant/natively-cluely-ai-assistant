@@ -9,6 +9,8 @@
 import { BrowserWindow } from 'electron';
 import { TRIAL_SENTINEL_KEY } from '../config/constants';
 import { nativelyApiBase } from './nativelyApiBase';
+import { getAppConnectivityWatcher } from './connectivityWiring';
+import type { FailureReason } from './connectivityWatcher';
 import {
   createProEntitlementReconciler,
   type ActivateAnswer,
@@ -20,6 +22,9 @@ const API_BASE = nativelyApiBase();
 
 type Reconciler = ReturnType<typeof createProEntitlementReconciler>;
 let instance: Reconciler | null = null;
+// Why the last Pro check was asked for, so a failure is reported as "after a key
+// was saved" or "the Pro check". The reconciler's own retries do not change it.
+let lastReason: FailureReason = 'pro_check';
 
 /** The premium module is absent from open-source builds; absence means "nothing to do". */
 function licenseManager(): any | null {
@@ -52,7 +57,7 @@ async function fetchPlan(key: string): Promise<PlanAnswer> {
 
 export function getProEntitlementReconciler(): Reconciler {
   if (instance) return instance;
-  instance = createProEntitlementReconciler({
+  const reconciler = createProEntitlementReconciler({
     getApiKey: () => {
       try {
         const { CredentialsManager } = require('./CredentialsManager');
@@ -77,7 +82,16 @@ export function getProEntitlementReconciler(): Reconciler {
       try { isPremium = (require('./proAccess') as typeof import('./proAccess')).isLicencePremium(); } catch { /* as activated */ }
       broadcast('license-status-changed', { isPremium });
     },
-    onStatus: (status: ReconcilerStatus) => broadcast('pro-activation-status', status),
+    onStatus: (status: ReconcilerStatus) => {
+      broadcast('pro-activation-status', status);
+      // A failure that looks like the network: find out why (once per 30 minutes),
+      // tell the person, report it, and undo a stale certificate store if that is it.
+      if (status.state === 'retrying' || status.state === 'gave_up') {
+        try {
+          void getAppConnectivityWatcher().onFailure(lastReason, status.lastError).catch(() => { /* never into the status callback */ });
+        } catch { /* best effort */ }
+      }
+    },
     schedule: (fn, ms) => {
       const t = setTimeout(() => { void fn(); }, ms);
       // A pending retry must never hold the app open on quit.
@@ -85,5 +99,12 @@ export function getProEntitlementReconciler(): Reconciler {
       return () => clearTimeout(t);
     },
   });
+  instance = {
+    ...reconciler,
+    run: (reason, hint) => {
+      lastReason = reason === 'key-saved' ? 'key_saved' : 'pro_check';
+      return reconciler.run(reason, hint);
+    },
+  };
   return instance;
 }

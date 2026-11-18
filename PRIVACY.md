@@ -110,6 +110,7 @@ have a trial or an account, to that trial or account.
 | Usage events — the app was opened for the first time; the app was used on a given day; a getting-started step was shown or completed; a meeting started or ended (including one cut short because the app was closed), how many whole minutes it lasted and how many answers it produced; an answer could not be given, and the kind of reason, chosen from a fixed list (for example: no AI is set up, a key was refused, the request timed out) and never the provider's message; which features you used that day; a card or a locked feature was shown, and what you chose; a free trial was started, or could not be and why; a checkout page was opened, and from which screen; a licence key or API key was entered, and whether it was accepted | Understand how the product is used, where people give up, and what leads to a purchase | 13 months |
 | The state of the installation at that moment, as yes/no values — whether it is on a trial, has a plan, has a Pro licence, or uses its own AI keys — with the application version and operating system | Compare those groups | 13 months |
 | Country — a two-letter country code that our server works out from the network address the request arrives from | See roughly where in the world the app is in use, and show it per country on our website (see below) | 13 months |
+| Connection check (Usage statistics on) — only when a key you saved or the Pro check cannot reach our servers: the error code of each step (name lookup, secure handshake with and without your computer's own certificates, our server's answer), whether two public connectivity-check sites loaded, whether a proxy is set (never its address), how many minutes your computer's clock differs from the internet's, how many system certificates were read and added, and, if something re-signed the connection, which security product it is — from a fixed list such as Kaspersky, ESET, Zscaler, or "other" | Tell a blocked connection from a broken one, fix it for you where we can, and count how many people are affected | Same as the events above; at most one report every 30 minutes |
 
 Every event is a fixed name with fixed choices, whole numbers, or yes/no values. No field in it
 can hold text, so an event cannot contain anything you say, see, type or paste, a file name, a
@@ -120,6 +121,17 @@ never sent. We do not store your IP address with these events.
 a database it keeps on its own disk (IP geolocation by [DB-IP](https://db-ip.com)), and stores the
 two-letter country code with the event. The address is not stored and is not sent to anyone for
 this lookup. Nothing finer than the country is kept: no region, city or network.
+
+**Connection check.** When a Natively key or the Pro check fails because our servers cannot be reached,
+the app runs a short check to find out why and tells you the result on your own screen. If the cause is
+a stale certificate stored on your computer, it also undoes that for the session and tries again. With
+Usage statistics on, the check also asks two public connectivity-check addresses (Cloudflare and Google)
+for nothing but their response, to tell "our servers are blocked" from "your internet is down", with no
+key, no header and no body, and sends the result to us as one more of these fixed events. With Usage
+statistics off, the check makes no request to anyone but Natively and sends us nothing. The report holds
+names from fixed lists and whole numbers only: no address, no host name, no certificate text, no key and
+nothing you typed. The name of a security product is looked up from a fixed list in the app; anything not
+on the list is reported as "other".
 
 **Shown on our website.** Our website shows where the app was open in the last 24 hours. For each
 country it shows a whole percentage and a shade of colour, and never a number of people. Nothing

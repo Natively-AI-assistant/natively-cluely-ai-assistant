@@ -66,6 +66,11 @@ if (!app.isPackaged) {
   require('dotenv').config();
 }
 
+// Any failed call to the Natively API starts the connection check
+// (connectivityWiring), not only the Pro check. After .env: the API origin
+// can come from it in development.
+try { (require('./services/connectivityWiring') as typeof import('./services/connectivityWiring')).installApiFailureHook(); } catch { /* the app works without it */ }
+
 // ============================================================================
 // FONTATIONS RENDERER-CRASH MITIGATION (2026-07-10) — user crash report on
 // macOS 27.0 (26A5378j), Electron 33.4.11 / Chromium 130.

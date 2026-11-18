@@ -3574,6 +3574,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   licenseCheckPremiumAsync: () => ipcRenderer.invoke('license:check-premium-async'),
   licenseDeactivate: () => ipcRenderer.invoke('license:deactivate'),
   licenseGetHardwareId: () => ipcRenderer.invoke('license:get-hardware-id'),
+  // The connection check found why Natively cannot be reached (connectivityWatcher).
+  onConnectDiagnosis: (callback: (data: { verdict: string; message: string; healed: boolean }) => void) => {
+    const subscription = (_: unknown, data: { verdict: string; message: string; healed: boolean }) => callback(data)
+    ipcRenderer.on('connect-diagnosis', subscription)
+    return () => {
+      ipcRenderer.removeListener('connect-diagnosis', subscription)
+    }
+  },
   onLicenseStatusChanged: (callback: (data: { isPremium: boolean; plan?: string }) => void) => {
     const subscription = (_: any, data: { isPremium: boolean; plan?: string }) => callback(data);
     ipcRenderer.on('license-status-changed', subscription);

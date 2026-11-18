@@ -147,6 +147,27 @@ const BOOL = 'bool'
 /** What ended a free trial, or is about to: its 30 minutes, or its AI allowance. */
 export const TRIAL_END_REASONS = Object.freeze(['clock', 'allowance'])
 
+/**
+ * Why this install cannot reach Natively (added 2026-11-18, #759). The app runs
+ * a short connection check when a key or the Pro check fails with a network
+ * error (electron/services/connectivityDiagnosis.ts) and reports the result.
+ * Every value is a name from these lists: error codes, a verdict, and one of a
+ * fixed set of security products. Nothing the user typed, no address, no host.
+ */
+export const CONNECT_CODES = Object.freeze([
+  'ok', 'cert_has_expired', 'cert_not_yet_valid', 'self_signed_cert_in_chain', 'depth_zero_self_signed_cert',
+  'unable_to_verify_leaf_signature', 'unable_to_get_issuer_cert', 'unable_to_get_issuer_cert_locally',
+  'err_tls_cert_altname_invalid', 'econnrefused', 'econnreset', 'etimedout', 'enotfound', 'eai_again', 'eproto',
+  'other',
+])
+export const CONNECT_VERDICTS = Object.freeze([
+  'reachable', 'stale_store', 'interception', 'clock', 'proxy', 'dns', 'blocked', 'offline',
+])
+export const CONNECT_INTERCEPTORS = Object.freeze([
+  'none', 'kaspersky', 'eset', 'avast', 'avg', 'bitdefender', 'norton', 'mcafee', 'sophos', 'trend_micro',
+  'zscaler', 'netskope', 'fortinet', 'palo_alto', 'cisco_umbrella', 'other',
+])
+
 export const FUNNEL_CATALOG = Object.freeze({
   // ── The install ──────────────────────────────────────────────────────────
   app_first_run: {},
@@ -339,6 +360,25 @@ export const FUNNEL_CATALOG = Object.freeze({
     // pasted a paid key" countable.
     mins_since_trial_start: INT,
     mins_since_byok_exit: INT,
+  },
+  // Why a key or the Pro check could not reach Natively (added 2026-11-18, #759).
+  // One report per failed attempt, at most once every 30 minutes per install.
+  connect_diag: {
+    reason: ['key_saved', 'pro_check', 'api_call'],
+    verdict: CONNECT_VERDICTS,
+    // The TLS handshake with the certificate list Node ships, and with the list
+    // plus what Windows or macOS trust. 'ok' or the error code.
+    tls_builtin: CONNECT_CODES,
+    tls_merged: CONNECT_CODES,
+    dns: CONNECT_CODES,
+    http: ['none', '2xx', '401', '403', '429', '5xx', 'other'],
+    interceptor: CONNECT_INTERCEPTORS,
+    proxy: ['none', 'system', 'env'],
+    control_ok: BOOL,        // two unrelated sites loaded
+    clock_skew_min: INT,     // |this PC's clock - the internet's|, in minutes
+    certs_merged: INT,
+    certs_dropped: INT,
+    healed: BOOL,            // the app switched the certificate merge off and it worked
   },
   upgrade_prompt: {
     surface: SURFACES,

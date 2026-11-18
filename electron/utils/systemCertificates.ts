@@ -74,7 +74,22 @@ function isUsableRoot(pem: string, now: number): boolean {
   }
 }
 
+let lastStats: { merged: number; dropped: number } | null = null;
+
+/** What the last merge did, for the connection check's report: certificates added, and read but not added. Null when it never ran. */
+export function getSystemCertificateStats(): { merged: number; dropped: number } | null {
+  return lastStats;
+}
+
 export function trustSystemCertificates(deps: SystemCertificateDeps = {}): SystemCertificateResult {
+  const result = applySystemCertificates(deps);
+  lastStats = result.reason === 'disabled' || result.reason === 'unsupported' || result.reason === 'read-failed'
+    ? null
+    : { merged: result.addedCount, dropped: Math.max(0, result.systemCount - result.addedCount) };
+  return result;
+}
+
+function applySystemCertificates(deps: SystemCertificateDeps): SystemCertificateResult {
   const tls: CaApi = deps.tls ?? (nodeTls as unknown as CaApi);
   const env = deps.env ?? process.env;
   const log = deps.log ?? ((message: string) => console.log(message));
@@ -116,4 +131,21 @@ export function trustSystemCertificates(deps: SystemCertificateDeps = {}): Syste
   }
   log(`[SystemCA] Trusting ${added.length} certificate(s) from the system store (${system.length} read)`);
   return { applied: true, systemCount: system.length, addedCount: added.length };
+}
+
+/**
+ * Undo trustSystemCertificates for this session: back to the certificates Node
+ * ships, plus the ones NODE_EXTRA_CA_CERTS names. Used by the connection check
+ * (connectivityWatcher) when Node's own list connects and the merged one does
+ * not. False when it could not be done; never throws.
+ */
+export function dropSystemCertificates(deps: { tls?: CaApi } = {}): boolean {
+  const tls: CaApi = deps.tls ?? (nodeTls as unknown as CaApi);
+  if (typeof tls.getCACertificates !== 'function' || typeof tls.setDefaultCACertificates !== 'function') return false;
+  try {
+    tls.setDefaultCACertificates([...tls.getCACertificates('bundled'), ...tls.getCACertificates('extra')]);
+    return true;
+  } catch {
+    return false;
+  }
 }

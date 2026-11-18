@@ -1106,7 +1106,13 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   // The retry succeeded in the background — the notice has done its job.
   useEffect(() => {
     const off = window.electronAPI?.onLicenseStatusChanged?.((d) => { if (d?.isPremium) setProNotice(null); });
-    return () => { off?.(); };
+    // The connection check (main/connectivityWatcher) found why Natively could not
+    // be reached: say it in the same place, in plain words. A healed connection
+    // needs no notice; Pro turns on by itself.
+    const offDiag = window.electronAPI?.onConnectDiagnosis?.((d) => {
+      if (d && !d.healed && d.verdict !== 'reachable') setProNotice(d.message);
+    });
+    return () => { off?.(); offDiag?.(); };
   }, []);
   const [justSaved, setJustSaved] = useState(false);
   // Distinct from justSaved: a Dodo/Gumroad license key activates Pro but
