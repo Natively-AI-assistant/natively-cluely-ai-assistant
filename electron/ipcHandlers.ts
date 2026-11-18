@@ -13156,6 +13156,21 @@ export function initializeIpcHandlers(appState: AppState): void {
   //
   // NO KEY REQUIRED, deliberately: a visitor deciding which plan to buy has no
   // key yet, and that is exactly who the table is for.
+  // The opt-in diagnostic report (2026-11-18, #759). Both run only when the
+  // person asks: the preview shows exactly what the send would carry.
+  safeHandle('diagnostic-report:preview', async () => {
+    const { previewCurrentDiagnosticReport } = require('./services/diagnosticReportWiring') as typeof import('./services/diagnosticReportWiring');
+    return previewCurrentDiagnosticReport();
+  });
+  safeHandle('connect-diagnosis:last', async () => {
+    const { lastConnectionNotice } = require('./services/diagnosticReportWiring') as typeof import('./services/diagnosticReportWiring');
+    return lastConnectionNotice();
+  });
+  safeHandle('diagnostic-report:send', async () => {
+    const { sendCurrentDiagnosticReport } = require('./services/diagnosticReportWiring') as typeof import('./services/diagnosticReportWiring');
+    return sendCurrentDiagnosticReport();
+  });
+
   safeHandle('get-natively-plans', async () => {
     try {
       const cached = _plansCache.get('plans');

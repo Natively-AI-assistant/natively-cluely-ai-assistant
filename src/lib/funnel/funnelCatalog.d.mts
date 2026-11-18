@@ -33,3 +33,7 @@ export function checkFunnelProps(
   eventType: string,
   props: unknown,
 ): { ok: true; props: FunnelProps } | { ok: false; error: string };
+
+export const CONNECT_CODES: readonly string[];
+export const CONNECT_VERDICTS: readonly ['reachable', 'stale_store', 'interception', 'clock', 'proxy', 'dns', 'blocked', 'offline'];
+export const CONNECT_INTERCEPTORS: readonly string[];

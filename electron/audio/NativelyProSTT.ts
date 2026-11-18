@@ -884,6 +884,8 @@ export class NativelyProSTT extends EventEmitter {
             }
             this.isConnecting = false;
             this.isConnected  = false;
+            // A socket that cannot reach us starts the connection check (once per 30 minutes, shared with every other trigger).
+            try { (require('../services/connectivityWiring') as typeof import('../services/connectivityWiring')).reportApiFailure('api_call', `${err.code ?? ''} ${err.message ?? ''}`); } catch { /* best effort */ }
             this.emit('error', err);
             if (this.isDnsFailure && this.isActive) {
                 this.scheduleReconnect();
