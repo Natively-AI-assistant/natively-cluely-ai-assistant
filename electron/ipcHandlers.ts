@@ -1488,6 +1488,14 @@ export function initializeIpcHandlers(appState: AppState): void {
     return recheckLicence(lm, {
       stillAllowed: isProOrTrialActive,
       onLost: () => {
+        // The plan's licence went while a pack is in use: the plan may have
+        // ended, and the pack includes Pro (services/packs/nativelyPackFallback.ts
+        // moves it to the pack key).
+        try {
+          const { currentNativelyPackFallback } = require('./services/packs/nativelyPackFallback') as typeof import('./services/packs/nativelyPackFallback');
+          const fb = currentNativelyPackFallback();
+          if (fb?.state().inUse) void fb.check('licence lost');
+        } catch { /* not wired */ }
         try {
           const orchestrator = appState.getKnowledgeOrchestrator();
           if (orchestrator) {
@@ -12822,12 +12830,20 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (pastedKey) {
       const slot = await packFallback.slotForSave(pastedKey);
       if (slot === 'same') return { done: { success: true, storedAs: 'pack' }, apiKey };
+      if (slot === 'pack_taken') {
+        // One pack key per customer: every pack lands on it (Evin, 2026-11-17).
+        console.log('[IPC] set-natively-api-key: refused a second pack key while a live one is here');
+        const { PACK_TAKEN_MESSAGE } = require('./services/packs/nativelyPackFallback') as typeof import('./services/packs/nativelyPackFallback');
+        return { done: { success: false, error: PACK_TAKEN_MESSAGE }, apiKey };
+      }
       if (slot === 'pack') {
         const wasInUse = cm.isNativelyPackInUse();
         if (!cm.setNativelyPackApiKey(pastedKey)) return { done: { success: false, error: 'credentials_unavailable' }, apiKey };
         if (wasInUse) await resyncNativelyKeyInUse('held pack key replaced');
         _usageCache.clear();
         broadcastCredentialsChanged();
+        // The pack is used first: it goes in use now.
+        void packFallback.check('pack key held');
         BrowserWindow.getAllWindows().forEach((win) => {
           if (!win.isDestroyed()) win.webContents.send('natively-pack-fallback-changed', packFallback.state());
         });
@@ -12879,9 +12895,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         !trialTimeIsUp();
       cm.setNativelyApiKey(apiKey);
 
-      // Update LLMHelper immediately (same pattern as other provider keys)
+      // Update LLMHelper immediately (same pattern as other provider keys).
+      // The key IN USE, not the one just saved: a held pack in use stays in use
+      // when a plan key is saved beside it (services/packs/nativelyPackFallback.ts).
       const llmHelper = appState.processingHelper.getLLMHelper();
-      llmHelper.setNativelyKey(apiKey || null);
+      llmHelper.setNativelyKey(cm.getNativelyApiKey() || null);
 
       // Sync the model into LLMHelper and notify the UI whenever the effective default changed
       const defaultModel = cm.getDefaultModel();
@@ -13091,6 +13109,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       // through this handler (trial:start writes it directly).
       if (apiKey) funnelTelemetry.keyEntered('api_key', keyRejection ? 'invalid' : 'ok');
 
+      // A plan key saved beside a held pack (the swap, or a new plan key): the
+      // pack is used first, so it goes (back) in use. Last, so the Pro set-up
+      // above for the plan's key is already done.
+      if (apiKey && !keyRejection && cm.getNativelyPackApiKey()) void packFallback.check('plan key saved beside a pack');
+
       return keyRejection
         ? { success: false, error: keyRejection.error }
         : proPending
@@ -13227,6 +13250,16 @@ export function initializeIpcHandlers(appState: AppState): void {
       const data = (await res.json()) as any;
       askLicenceIf({ ok: true, plan: data?.plan });
       const result = { ok: true, ...data };
+      // A held pack that was over is live again: a new pack landed on its key.
+      // It is used first, so look now rather than at the slow watch.
+      if (opts?.which === 'pack' && data?.pack && !data.pack.ended) {
+        try {
+          const { currentNativelyPackFallback } = require('./services/packs/nativelyPackFallback') as typeof import('./services/packs/nativelyPackFallback');
+          const fb = currentNativelyPackFallback();
+          const st = fb?.state();
+          if (fb && st?.held && !st.inUse && !st.stoppedEarly) void fb.check('held pack live again');
+        } catch { /* not wired */ }
+      }
 
       // Cache the successful response
       _usageCache.set(key, { data: result, ts: Date.now() });
@@ -13256,12 +13289,14 @@ export function initializeIpcHandlers(appState: AppState): void {
   // on THIS key even when the customer pays with another email. Any failure
   // answers ok:false and the link opens untouched (the server then matches by
   // email). The key itself never leaves the main process.
-  safeHandle('get-natively-upgrade-link', async () => {
+  safeHandle('get-natively-upgrade-link', async (_event, family?: unknown) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
-      // The SAVED key, not a pack standing in for it: plan purchases land on the
-      // plan's key, and the server matches a pack purchase to the pack key by email.
-      const key: string | undefined = CredentialsManager.getInstance().getMainNativelyApiKey();
+      const cm = CredentialsManager.getInstance();
+      // A plan purchase carries the plan's (saved) key; a pack purchase carries
+      // the held pack key, so the new pack stacks on the customer's ONE pack key
+      // even when they pay with another email.
+      const key: string | undefined = (family === 'pack' ? cm.getNativelyPackApiKey() : undefined) ?? cm.getMainNativelyApiKey();
       if (!key) return { ok: false, error: 'no_key' };
       const res = await fetch(`${NATIVELY_API_BASE}/v1/upgrade-link`, {
         headers: { 'x-natively-key': key },
@@ -13350,21 +13385,48 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { packMeetingClockIfStarted } = require('./services/packs/packClockWiring');
       packMeetingClockIfStarted()?.keyChanged();
     } catch { /* clock not running */ }
-    // A pack includes Natively Pro on Natively API: a Standard subscriber using
-    // their pack gets it for as long as the pack is in use and alive. The
-    // licence re-check takes it away when the pack ends, as for any pack.
-    if (active && active === cm.getNativelyPackApiKey() && !licencePremiumForWindows()) {
-      try {
-        const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-        const result = await LicenseManager.getInstance().activateWithApiKey(active);
-        if (result?.success) {
-          const isPremium = licencePremiumForWindows();
-          BrowserWindow.getAllWindows().forEach((win) => {
-            if (!win.isDestroyed()) win.webContents.send('license-status-changed', { isPremium });
-          });
+    // Pro follows the key in use, and moves only when it has to (review
+    // 2026-11-17). A pack includes Natively Pro on Natively API.
+    //   - Pack in use: Pro is activated with the pack key only when Pro is not
+    //     on already (a Standard plan) or the plan itself has ended. A Pro, Max
+    //     or Ultra plan's licence stays on the plan's key, so the pack ending
+    //     never touches it.
+    //   - Plan key back: Pro is activated with it. A definite "no" (the plan has
+    //     no Pro, or its key is refused) re-checks the stored licence, which
+    //     removes a pack's Pro once the pack is over. No answer (offline, 5xx)
+    //     changes nothing: the licence re-check schedule settles it later. A
+    //     lifetime or Dodo licence is never touched (skipped).
+    try {
+      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
+      const lm = LicenseManager.getInstance();
+      const onPack = !!active && active === cm.getNativelyPackApiKey();
+      let changed = false;
+      if (onPack) {
+        if (!licencePremiumForWindows() || reason.startsWith('plan ended')) {
+          changed = !!(await lm.activateWithApiKey(active))?.success;
         }
-      } catch { /* open-source build: no Pro */ }
-    }
+      } else {
+        const result = active && active !== TRIAL_SENTINEL_KEY ? await lm.activateWithApiKey(active) : null;
+        changed = !!result?.success;
+        const definiteNo = !result
+          || (!result.success && !result.skipped && (result.keyRejected || /does not include Natively Pro/i.test(result.error || '')));
+        if (definiteNo) {
+          const { recheckProNow } = require('./services/packs/packClockWiring') as typeof import('./services/packs/packClockWiring');
+          await recheckProNow();
+          // The pack clock's teardown is main.ts's, registered at the first
+          // meeting: stand the Pro-only features down here as well, so a pack
+          // that ends before any meeting leaves nothing switched on.
+          standDownIfNoPro('pack over, plan key back');
+          changed = true;
+        }
+      }
+      if (changed) {
+        const isPremium = licencePremiumForWindows();
+        BrowserWindow.getAllWindows().forEach((win) => {
+          if (!win.isDestroyed()) win.webContents.send('license-status-changed', { isPremium });
+        });
+      }
+    } catch { /* open-source build: no Pro */ }
     console.log(`[PackFallback] key in use re-synced (${reason})`);
   };
 
@@ -13400,6 +13462,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       last4: pack ? pack.slice(-4) : null,
       inUse: state.inUse,
       until: state.until,
+      stoppedEarly: state.stoppedEarly,
     };
   });
 

@@ -21,7 +21,14 @@ export function resolveCompanySearchProvider(): SearchProvider | null {
     return new TavilySearchProvider(tavilyApiKey);
   }
 
-  const nativelyKey = cm.getNativelyApiKey();
+  // The key in use, except company research once a pack in use has spent its
+  // research runs: then the plan's research (services/packs/nativelyPackFallback.ts).
+  let researchKey: string | null = null;
+  try {
+    const { currentNativelyPackFallback } = require('./packs/nativelyPackFallback') as typeof import('./packs/nativelyPackFallback');
+    researchKey = currentNativelyPackFallback()?.researchKey() ?? null;
+  } catch { /* not wired */ }
+  const nativelyKey = researchKey ?? cm.getNativelyApiKey();
   if (nativelyKey) {
     const {
       NativelySearchProvider,
@@ -30,7 +37,24 @@ export function resolveCompanySearchProvider(): SearchProvider | null {
     // server can authenticate via x-trial-token instead of the invalid key.
     const trialToken = nativelyKey === TRIAL_SENTINEL_KEY ? cm.getTrialToken() : undefined;
     console.log('[CompanySearch] Using Natively API search (no Tavily key configured)');
-    return new NativelySearchProvider(nativelyKey, trialToken ?? undefined);
+    const provider = new NativelySearchProvider(nativelyKey, trialToken ?? undefined);
+    // A research refusal on any path (company research, chat web search):
+    // the pack switch looks again, so research moves to the key that has runs
+    // (services/packs/nativelyPackFallback.ts). Never on a trial.
+    if (nativelyKey !== TRIAL_SENTINEL_KEY && typeof provider.search === 'function') {
+      const search = provider.search.bind(provider);
+      provider.search = async (...args: Parameters<typeof search>) => {
+        const results = await search(...args);
+        if (provider.quotaExhausted) {
+          try {
+            (require('./packs/nativelyPackFallback') as typeof import('./packs/nativelyPackFallback'))
+              .nudgeNativelyPackFallback('search_quota_exceeded');
+          } catch { /* not wired */ }
+        }
+        return results;
+      };
+    }
+    return provider;
   }
 
   return null;

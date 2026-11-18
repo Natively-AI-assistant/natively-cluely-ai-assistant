@@ -255,6 +255,15 @@ export class OpenRouterReranker implements RerankSeamPort {
 
       if (!res.ok) {
         const kind = classifyStatus(res.status);
+        // Natively's own reranker refusing: the plan's knowledge allowance may
+        // be used up, and a held pack can take over (nativelyPackFallback.ts).
+        // Bring-your-own-key providers never touch the pack.
+        if (res.status === 429 && this.options.providerId === 'natively' && attempt === 0) {
+          try {
+            (require('../packs/nativelyPackFallback') as typeof import('../packs/nativelyPackFallback'))
+              .nudgeNativelyPackFallback('reranker_quota_exceeded');
+          } catch { /* not wired */ }
+        }
         const retryable = kind === 'rate-limited' || kind === 'server-error';
         if (retryable && attempt < MAX_RETRIES) {
           // Bounded exponential backoff, and only inside the deadline. An

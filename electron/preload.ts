@@ -284,7 +284,7 @@ interface ElectronAPI {
   // src/types/electron.d.ts, so the resource model would have had to be
   // remembered in three places.
   getNativelyUsage: (force?: boolean, which?: 'active' | 'main' | 'pack') => Promise<NativelyUsageResponse>;
-  getNativelyUpgradeLink: () => Promise<{ ok: boolean; token?: string | null; email?: string | null; error?: string }>;
+  getNativelyUpgradeLink: (family?: 'pack' | 'plan') => Promise<{ ok: boolean; token?: string | null; email?: string | null; error?: string }>;
   nativelyYearlyUpgrade: (plan: string, expectedAmount?: number) => Promise<{ ok: boolean; changed?: boolean; error?: string; preview?: { plan: string; amount: number; currency: string } | null }>;
   getNativelyPackKey: () => Promise<NativelyPackKeyState>;
   removeNativelyPackKey: () => Promise<{ ok: boolean; error?: string }>;
@@ -2019,7 +2019,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }) => ipcRenderer.invoke('review:update-testimonial', payload),
   getNativelyUsage: (force?: boolean, which?: 'active' | 'main' | 'pack') =>
     ipcRenderer.invoke('get-natively-usage', force || which ? { ...(force ? { force: true } : {}), ...(which ? { which } : {}) } : undefined),
-  getNativelyUpgradeLink: () => ipcRenderer.invoke('get-natively-upgrade-link'),
+  getNativelyUpgradeLink: (family?: 'pack' | 'plan') => ipcRenderer.invoke('get-natively-upgrade-link', family),
   nativelyYearlyUpgrade: (plan: string, expectedAmount?: number) => ipcRenderer.invoke('natively-yearly-upgrade', plan, expectedAmount),
   getNativelyPackKey: () => ipcRenderer.invoke('get-natively-pack-key'),
   removeNativelyPackKey: () => ipcRenderer.invoke('remove-natively-pack-key'),

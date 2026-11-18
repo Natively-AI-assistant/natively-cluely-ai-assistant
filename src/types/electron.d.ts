@@ -369,7 +369,7 @@ export interface ElectronAPI {
   // See src/types/nativelyUsage.ts — one definition, shared with the preload
   // bridge. Four user-facing categories over five server-side meters.
   getNativelyUsage: (force?: boolean, which?: 'active' | 'main' | 'pack') => Promise<import('./nativelyUsage').NativelyUsageResponse>
-  getNativelyUpgradeLink?: () => Promise<{ ok: boolean; token?: string | null; email?: string | null; error?: string }>
+  getNativelyUpgradeLink?: (family?: 'pack' | 'plan') => Promise<{ ok: boolean; token?: string | null; email?: string | null; error?: string }>
   /** Move a live yearly plan up a yearly tier in place. No expectedAmount = preview only, nothing charged. */
   nativelyYearlyUpgrade?: (plan: string, expectedAmount?: number) => Promise<{ ok: boolean; changed?: boolean; error?: string; preview?: { plan: string; amount: number; currency: string } | null }>
   getNativelyPackKey?: () => Promise<import('./nativelyUsage').NativelyPackKeyState>

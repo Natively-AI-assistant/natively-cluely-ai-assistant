@@ -56,7 +56,7 @@ export function planChangeNote(key, view, cycle = 'monthly') {
   const name = plan === 'starter' ? 'Standard' : plan.charAt(0).toUpperCase() + plan.slice(1);
   if (view === 'packs') {
     if (period === 'pack') return 'Another pack adds its hours to this key and carries what is left over; it ends when the new pack ends.';
-    return `A pack comes with its own API key, sent by email. Your ${name} plan keeps running on this key.`;
+    return `A pack comes with its own API key, sent by email. Paste it here: it is used first, then your ${name} plan carries on when the pack ends.`;
   }
   if (period === 'pack') {
     return 'A monthly or yearly plan comes with its own API key, sent by email. Your pack keeps running on this key until it ends.';
@@ -128,10 +128,16 @@ function labelOf(plan) {
 /**
  * The line under the held pack key's row (one app, two keys, 2026-11-17):
  * when it is used, or until when it is in use now. `formatDate` renders the ISO
- * refill time.
+ * pack's use-by date.
  */
 export function heldPackNote(state, { formatDate = (iso) => iso } = {}) {
   if (!state || !state.held) return null;
-  if (state.inUse && state.until) return `In use until ${formatDate(state.until)}, when your plan's allowance refills.`;
-  return "Used automatically when your plan's AI or voice runs out.";
+  if (state.inUse && state.until) return `In use until ${formatDate(state.until)}. Anything left then expires and your plan is used again.`;
+  // In use, but the server has not named the pack's use-by date: no made-up date.
+  if (state.inUse) return 'In use now. Anything left expires when the pack ends, then your plan is used again.';
+  // Not in use while it lives: it used up something the plan still has. Any
+  // other "not in use" (just pasted, not answered yet) says nothing rather than
+  // something untrue.
+  if (state.stoppedEarly) return 'Your plan covers what this pack has used up. The pack is used again if your plan runs out of it too.';
+  return null;
 }

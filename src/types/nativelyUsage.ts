@@ -394,8 +394,10 @@ export interface NativelyPackKeyState {
   ok: boolean;
   held: boolean;
   last4: string | null;
-  /** The pack key is the one in use (the plan's allowance is used up). */
+  /** The pack key is the one in use (a live pack is used first). */
   inUse: boolean;
-  /** Until when it is in use (the plan's refill), ISO. */
+  /** Until when it is in use (the pack's use-by date), ISO. */
   until: string | null;
+  /** Live but not in use: it used up something the plan still has. */
+  stoppedEarly?: boolean;
 }
