@@ -3574,6 +3574,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   licenseCheckPremiumAsync: () => ipcRenderer.invoke('license:check-premium-async'),
   licenseDeactivate: () => ipcRenderer.invoke('license:deactivate'),
   licenseGetHardwareId: () => ipcRenderer.invoke('license:get-hardware-id'),
+  // The opt-in diagnostic report: what would be sent, and sending it (only on a click).
+  getDiagnosticReportPreview: () => ipcRenderer.invoke('diagnostic-report:preview'),
+  sendDiagnosticReport: () => ipcRenderer.invoke('diagnostic-report:send'),
   // The connection check found why Natively cannot be reached (connectivityWatcher).
   onConnectDiagnosis: (callback: (data: { verdict: string; message: string; healed: boolean }) => void) => {
     const subscription = (_: unknown, data: { verdict: string; message: string; healed: boolean }) => callback(data)

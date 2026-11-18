@@ -15,6 +15,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import DiagnosticReportActions from './DiagnosticReportActions';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../../i18n';
 import { motion, AnimatePresence, LayoutGroup, useReducedMotion } from 'framer-motion';
@@ -1103,14 +1104,16 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   // (server unwell). The main process keeps retrying; this just says so, instead
   // of showing a plan card with no Pro and no explanation (support, 2026-09-22).
   const [proNotice, setProNotice] = useState<string | null>(null);
+  // The connection check found something it could not fix: offer the opt-in report.
+  const [diagOffer, setDiagOffer] = useState(false);
   // The retry succeeded in the background — the notice has done its job.
   useEffect(() => {
-    const off = window.electronAPI?.onLicenseStatusChanged?.((d) => { if (d?.isPremium) setProNotice(null); });
+    const off = window.electronAPI?.onLicenseStatusChanged?.((d) => { if (d?.isPremium) { setProNotice(null); setDiagOffer(false); } });
     // The connection check (main/connectivityWatcher) found why Natively could not
     // be reached: say it in the same place, in plain words. A healed connection
     // needs no notice; Pro turns on by itself.
     const offDiag = window.electronAPI?.onConnectDiagnosis?.((d) => {
-      if (d && !d.healed && d.verdict !== 'reachable') setProNotice(d.message);
+      if (d && !d.healed && d.verdict !== 'reachable') { setProNotice(d.message); setDiagOffer(true); }
     });
     return () => { off?.(); offDiag?.(); };
   }, []);
@@ -2409,6 +2412,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                 {proNotice}
               </motion.div>
             )}
+            {!error && proNotice && diagOffer && <DiagnosticReportActions />}
 
             {/* Save / Activate button. The disabled state used to be a
                 full-width saturated slab (`bg-legacy-action-disabled-bg`),

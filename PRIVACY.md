@@ -133,6 +133,20 @@ names from fixed lists and whole numbers only: no address, no host name, no cert
 nothing you typed. The name of a security product is looked up from a fixed list in the app; anything not
 on the list is reported as "other".
 
+**Diagnostic report (only if you click it).** When the connection check finds something it could not fix,
+Settings › Plans & Billing offers **Send diagnostic report to Natively**. Nothing is sent unless you click
+it. **What's sent** shows the exact text first, and **Copy report** lets you e-mail it to us instead. The
+report is the connection check's result (the same fixed-list names and numbers as above) and the last 400
+lines (at most 60,000 characters) of the app's own log file, `natively_debug.log`. The app already hides
+keys and tokens when it writes that log; before sending it hides them again, and also e-mail addresses,
+identifiers, network addresses, and your user name in file paths. The log can still contain other text the
+app wrote, such as error messages, feature names and the host names it contacted; read the preview. It is
+stored with your installation identifier, app version, operating system, a country code and a one-way hash
+of your network address (never the address), is used only to work out why the connection failed, and is
+deleted after 30 days. At most five reports a day per installation. You can ask us to delete one earlier,
+quoting the reference shown after sending, at **privacy@heynatively.com**. This works whether or not
+Usage statistics is on, because it is your decision each time.
+
 **Shown on our website.** Our website shows where the app was open in the last 24 hours. For each
 country it shows a whole percentage and a shade of colour, and never a number of people. Nothing
 about a single installation is published, and nothing is shown at all when fewer than 50

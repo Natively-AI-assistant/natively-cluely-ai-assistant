@@ -23,6 +23,13 @@ function broadcast(channel: string, payload: unknown): void {
   }
 }
 
+let lastDiagnosis: { reason?: string; verdict?: string; report?: Record<string, unknown> } | undefined;
+
+/** The most recent connection check, for the diagnostic report. */
+export function getLastDiagnosis() {
+  return lastDiagnosis;
+}
+
 export function createAppConnectivityWatcher(retry: () => Promise<string>) {
   return createConnectivityWatcher({
     diagnose: (reason: FailureReason) => diagnoseConnection(
@@ -36,7 +43,10 @@ export function createAppConnectivityWatcher(retry: () => Promise<string>) {
       new URL(nativelyApiBase()).hostname,
       { reason },
     ),
-    track: (props) => funnelTelemetry.track('connect_diag', props),
+    track: (props) => {
+      lastDiagnosis = { reason: String(props.reason), verdict: String(props.verdict), report: { ...props } };
+      return funnelTelemetry.track('connect_diag', props);
+    },
     notify: (notice) => broadcast('connect-diagnosis', notice),
     heal: () => dropSystemCertificates(),
     retry,

@@ -1282,6 +1282,8 @@ export interface ElectronAPI {
   licenseGetDetails: () => Promise<{ isPremium: boolean; plan?: string; provider?: string }>
   /** Async startup check — calls Dodo validate endpoint to detect server-side revocations. */
   licenseCheckPremiumAsync: () => Promise<boolean>
+  getDiagnosticReportPreview: () => Promise<{ preview: string }>
+  sendDiagnosticReport: () => Promise<{ ok: true; ref: string } | { ok: false; error: 'network' | 'unavailable' | 'rate_limited' | 'rejected' }>
   onConnectDiagnosis: (callback: (data: { verdict: string; message: string; healed: boolean }) => void) => () => void
   onLicenseStatusChanged: (callback: (data: { isPremium: boolean, plan?: string }) => void) => () => void
   /** A Pro pack ran out during a meeting (main: PackMeetingClock). */
