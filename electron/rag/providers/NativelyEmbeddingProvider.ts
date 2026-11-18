@@ -154,6 +154,9 @@ export class NativelyEmbeddingProvider implements IEmbeddingProvider {
       const err: any = new Error(e?.name === 'TimeoutError' || e?.name === 'AbortError'
         ? 'Natively embedding request timed out'
         : 'Natively embedding request failed');
+      // fetch puts the TLS/DNS/reset code on its own `cause`; describeProbeError logs it (#759).
+      // A timeout has none (its DOMException `code` is a number, not a reason).
+      if (e?.cause) err.cause = e.cause;
       err.retryable = true;
       throw err;
     }

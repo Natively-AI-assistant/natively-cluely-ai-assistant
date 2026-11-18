@@ -137,7 +137,7 @@ export function createProEntitlementReconciler(deps: ProReconcilerDeps) {
     // trigger does not cost a second identical request.
     let plan: PlanAnswer;
     if (hint?.plan) plan = { ok: true, plan: hint.plan };
-    else try { plan = await deps.fetchPlan(key); } catch (e: any) { return transient(`plan lookup failed: ${e?.message ?? e}`); }
+    else try { plan = await deps.fetchPlan(key); } catch (e: any) { return transient(`plan lookup failed: ${e?.message ?? e}${e?.cause?.code ? ` (${e.cause.code})` : ''}`); }
     if (!plan.ok) {
       if (plan.keyRejected) { log.warn('[ProReconciler] the server refused the key — leaving it to the save flow'); return finish('key_rejected'); }
       return transient(`plan lookup answered ${plan.status ?? 'nothing'}`);
