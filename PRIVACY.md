@@ -137,7 +137,9 @@ on the list is reported as "other".
 Settings › Plans & Billing offers **Send diagnostic report to Natively**. Nothing is sent unless you click
 it. **What's sent** shows the exact text first, and **Copy report** lets you e-mail it to us instead. The
 report is the connection check's result (the same fixed-list names and numbers as above) and the last 400
-lines (at most 60,000 characters) of the app's own log file, `natively_debug.log`. The app already hides
+lines (at most 60,000 characters) of the app's own log file, `natively_debug.log`. If you have switched on
+detailed logging (Settings › General › Advanced), which can put meeting text in that log, the log is left
+out and only the connection check's result is sent. The app already hides
 keys and tokens when it writes that log; before sending it hides them again, and also e-mail addresses,
 identifiers, network addresses, and your user name in file paths. The log can still contain other text the
 app wrote, such as error messages, feature names and the host names it contacted; read the preview. It is
