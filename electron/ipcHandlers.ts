@@ -1193,8 +1193,13 @@ export function initializeIpcHandlers(appState: AppState): void {
    * (recheckLicence skips the stand-down then) is stood down once the trial
    * goes, whichever way it goes. Returns whether anything changed. Never throws.
    */
+  // True while a pack in use takes Pro over from a plan whose licence just went
+  // (runLicenceRecheck's onLost): Pro is off for those few seconds, and a stand-
+  // down then would switch off what the pack's Pro keeps (2026-11-18).
+  let packTakingOverPro = false;
   const standDownIfNoPro = (reason: string): boolean => {
     try {
+      if (packTakingOverPro) return false;
       if (isProOrTrialActive()) return false;
       let changed = false;
       try {
@@ -1487,15 +1492,26 @@ export function initializeIpcHandlers(appState: AppState): void {
     });
     return recheckLicence(lm, {
       stillAllowed: isProOrTrialActive,
-      onLost: () => {
+      onLost: async () => {
         // The plan's licence went while a pack is in use: the plan may have
         // ended, and the pack includes Pro (services/packs/nativelyPackFallback.ts
-        // moves it to the pack key).
+        // moves it to the pack key). The pack takes Pro over FIRST; only if Pro
+        // is still gone after that is anything switched off. Switching off
+        // first left Profile Intelligence and the Pro mode off for good once
+        // the pack's Pro arrived (live test 2026-11-18).
         try {
           const { currentNativelyPackFallback } = require('./services/packs/nativelyPackFallback') as typeof import('./services/packs/nativelyPackFallback');
           const fb = currentNativelyPackFallback();
-          if (fb?.state().inUse) void fb.check('licence lost');
-        } catch { /* not wired */ }
+          if (fb?.state().inUse) {
+            packTakingOverPro = true;
+            try { await fb.check('licence lost'); } finally { packTakingOverPro = false; }
+            if (isProOrTrialActive()) {
+              console.log('[IPC] the plan\'s licence went; the pack in use took Pro over: Pro switches kept');
+              tell(licencePremiumForWindows());
+              return;
+            }
+          }
+        } catch { packTakingOverPro = false; /* not wired */ }
         try {
           const orchestrator = appState.getKnowledgeOrchestrator();
           if (orchestrator) {
@@ -13466,12 +13482,46 @@ export function initializeIpcHandlers(appState: AppState): void {
     };
   });
 
+  /**
+   * The pack key was removed while Pro came from a pack (2026-11-18): that Pro
+   * is not this app's any more. Its key is gone, so meetings no longer count
+   * its hours, and it would have lasted until the pack's last day. Pro moves to
+   * the key that is left when that key includes it (a plan with Pro, or itself
+   * a pack); otherwise the pack's licence goes and the Pro features stand down.
+   * A plan, lifetime or Dodo licence is never touched (licenceIsPack). Never throws.
+   */
+  const dropRemovedPackPro = async (cm: any): Promise<void> => {
+    try {
+      const { licenceIsPack } = require('./services/proAccess') as typeof import('./services/proAccess');
+      if (!licenceIsPack()) return;
+      const { LicenseManager } = require('../premium/electron/services/LicenseManager');
+      const lm = LicenseManager.getInstance();
+      const left: string | undefined = cm.getNativelyApiKey();
+      const moved = left && left !== TRIAL_SENTINEL_KEY
+        ? !!(await lm.activateWithApiKey(left).catch(() => null))?.success
+        : false;
+      if (!moved && licenceIsPack()) {
+        await lm.deactivate();
+        console.log('[IPC] pack key removed: the pack\'s Pro removed with it');
+        standDownIfNoPro('pack key removed');
+      }
+      proWatch.check();
+      const isPremium = licencePremiumForWindows();
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send('license-status-changed', { isPremium });
+      });
+    } catch (e: any) {
+      console.warn('[IPC] pack key removed: Pro check failed:', e?.message ?? e);
+    }
+  };
+
   safeHandle('remove-natively-pack-key', async () => {
     const { CredentialsManager } = require('./services/CredentialsManager');
     const cm = CredentialsManager.getInstance();
     const wasInUse = cm.isNativelyPackInUse();
     if (!cm.setNativelyPackApiKey(null)) return { ok: false, error: 'credentials_unavailable' };
     if (wasInUse) await resyncNativelyKeyInUse('pack key removed');
+    await dropRemovedPackPro(cm);
     _usageCache.clear();
     broadcastCredentialsChanged();
     BrowserWindow.getAllWindows().forEach((win) => {

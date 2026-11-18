@@ -413,7 +413,7 @@ test('review 11-18: the plan ends while the pack is in use: announced once, so P
   assert.equal(w.resyncs.length, n, 'once, not on every look');
   // the licence re-check losing Pro while a pack is in use asks for that look
   const ipc = read('electron/ipcHandlers.ts');
-  assert.match(ipc, /onLost: \(\) => \{[\s\S]{0,500}if \(fb\?\.state\(\)\.inUse\) void fb\.check\('licence lost'\);/);
+  assert.match(ipc, /onLost: async \(\) => \{[\s\S]{0,900}if \(fb\?\.state\(\)\.inUse\) \{[\s\S]{0,120}await fb\.check\('licence lost'\);/);
 });
 
 test('review 11-18: a key change during a look is looked at again, not absorbed', async () => {
@@ -624,4 +624,38 @@ test('pack first wiring: a Pro plan keeps its own Pro, a saved plan key re-check
   assert.match(ipc, /if \(apiKey && !keyRejection && cm\.getNativelyPackApiKey\(\)\) void packFallback\.check\('plan key saved beside a pack'\);/);
   assert.match(ipc, /llmHelper\.setNativelyKey\(cm\.getNativelyApiKey\(\) \|\| null\);/,
     'a plan key saved while the pack is in use does not move AI off the pack');
+});
+
+test('fix 11-18: a plan licence lost while a pack is in use: the pack takes Pro over before anything is switched off', async () => {
+  const { recheckLicence } = await import('../proAccess.ts');
+  // recheckLicence waits for onLost, so the caller's own stand-down runs after the pack took over
+  const order = [];
+  await recheckLicence(
+    { isPremium: () => true, isPremiumAsync: async () => false },
+    { stillAllowed: () => false, onLost: async () => { await new Promise((r) => setTimeout(r, 5)); order.push('onLost done'); } },
+  );
+  order.push('recheck returned');
+  assert.deepEqual(order, ['onLost done', 'recheck returned']);
+
+  const ipc = read('electron/ipcHandlers.ts');
+  assert.match(ipc, /if \(fb\?\.state\(\)\.inUse\) \{\n\s+packTakingOverPro = true;\n\s+try \{ await fb\.check\('licence lost'\); \} finally \{ packTakingOverPro = false; \}\n\s+if \(isProOrTrialActive\(\)\) \{[\s\S]{0,200}?tell\(licencePremiumForWindows\(\)\);\n\s+return;/,
+    'the pack is asked first; Pro back means nothing is switched off');
+  // the teardown (knowledge mode off, Pro mode cleared) comes after that early return
+  const onLost = ipc.slice(ipc.indexOf('onLost: async () => {'), ipc.indexOf('onRestored: () => tell('));
+  assert.ok(onLost.indexOf("await fb.check('licence lost')") < onLost.indexOf('orchestrator.setKnowledgeMode(false)'));
+  assert.ok(onLost.indexOf("await fb.check('licence lost')") < onLost.indexOf('clearActiveModeOnLicenseLoss()'));
+  assert.match(ipc, /const standDownIfNoPro = \(reason: string\): boolean => \{\n\s+try \{\n\s+if \(packTakingOverPro\) return false;/,
+    'the 30-second Pro watch does not stand things down while the pack takes over');
+});
+
+test('fix 11-18: removing the pack key takes the pack\'s Pro with it, unless the key left has Pro', () => {
+  const ipc = read('electron/ipcHandlers.ts');
+  const handler = ipc.slice(ipc.indexOf("safeHandle('remove-natively-pack-key'"), ipc.indexOf('// ── Free Trial IPC'));
+  assert.match(handler, /if \(wasInUse\) await resyncNativelyKeyInUse\('pack key removed'\);\n\s+await dropRemovedPackPro\(cm\);/,
+    'checked whether or not the pack was in use (a pack that stopped early still gave Pro)');
+  const fn = ipc.slice(ipc.indexOf('const dropRemovedPackPro = async'), ipc.indexOf("safeHandle('remove-natively-pack-key'"));
+  assert.match(fn, /if \(!licenceIsPack\(\)\) return;/, 'a plan, lifetime or Dodo licence is never touched');
+  assert.match(fn, /await lm\.activateWithApiKey\(left\)/, 'Pro moves to the key left when it includes Pro');
+  assert.match(fn, /if \(!moved && licenceIsPack\(\)\) \{\n\s+await lm\.deactivate\(\);[\s\S]{0,120}standDownIfNoPro\('pack key removed'\);/,
+    'otherwise the pack\'s licence goes and the Pro features stand down');
 });
