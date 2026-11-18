@@ -9,7 +9,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { createConnectivityWatcher, looksLikeNetworkFailure } from '../connectivityWatcher.ts';
-import { dropSystemCertificates } from '../../utils/systemCertificates.ts';
+import { dropSystemCertificates, restoreSystemCertificates } from '../../utils/systemCertificates.ts';
 import { checkFunnelProps } from '../../../src/lib/funnel/funnelCatalog.mjs';
 
 const stale = { verdict: 'stale_store', heal: 'drop_system_ca', userMessage: 'stale message', report: { reason: 'pro_check', verdict: 'stale_store', tls_builtin: 'ok', tls_merged: 'cert_has_expired' } };
@@ -23,6 +23,7 @@ function rig(over = {}) {
     track: (props) => { calls.track.push(props); return 'queued'; },
     notify: (n) => calls.notify.push(n),
     heal: () => { calls.heal++; return true; },
+    restore: () => { calls.restore = (calls.restore || 0) + 1; },
     retry: async () => { calls.retry++; return 'activated'; },
     now: () => t,
     log: (m) => calls.logs.push(m),
@@ -94,6 +95,18 @@ describe('the watcher', () => {
     assert.equal(calls.notify[0].healed, false);
   });
 
+  test('an undo that did not fix it is taken back: the OS certificates other hosts may need come back', async () => {
+    const { w, calls } = rig({ diagnose: async () => stale, retry: async () => 'retrying' });
+    await w.onFailure('pro_check', 'plan lookup failed: fetch failed');
+    assert.equal(calls.restore, 1);
+  });
+
+  test('an undo that worked is kept', async () => {
+    const { w, calls } = rig({ diagnose: async () => stale });
+    await w.onFailure('pro_check', 'plan lookup failed: fetch failed');
+    assert.equal(calls.restore, undefined);
+  });
+
   test('a heal that cannot be done does not retry', async () => {
     const { w, calls } = rig({ diagnose: async () => stale, heal: () => false });
     await w.onFailure('pro_check', 'plan lookup failed: fetch failed');
@@ -128,6 +141,30 @@ describe('the watcher', () => {
       const { w } = rig(over);
       await assert.doesNotReject(() => w.onFailure('pro_check', 'plan lookup failed: fetch failed'));
     }
+  });
+});
+
+describe('restoreSystemCertificates', () => {
+  const mk = () => {
+    const set = [];
+    return { set, tls: { getCACertificates: (t) => ({ bundled: ['B'], extra: [], default: ['B', 'S1', 'S2'] })[t], setDefaultCACertificates: (c) => set.push(c) } };
+  };
+  test('puts back exactly the list that was in use before the undo', () => {
+    const { set, tls } = mk();
+    assert.equal(dropSystemCertificates({ tls }), true);
+    assert.equal(restoreSystemCertificates({ tls }), true);
+    assert.deepEqual(set, [['B'], ['B', 'S1', 'S2']]);
+  });
+  test('a second undo does not overwrite what to restore', () => {
+    const { set, tls } = mk();
+    dropSystemCertificates({ tls });
+    tls.getCACertificates = (t) => ({ bundled: ['B'], extra: [], default: ['B'] })[t];
+    dropSystemCertificates({ tls });
+    restoreSystemCertificates({ tls });
+    assert.deepEqual(set.at(-1), ['B', 'S1', 'S2']);
+  });
+  test('with nothing undone there is nothing to restore', () => {
+    assert.equal(restoreSystemCertificates({ tls: mk().tls }), false);
   });
 });
 

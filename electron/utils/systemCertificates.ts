@@ -133,6 +133,9 @@ function applySystemCertificates(deps: SystemCertificateDeps): SystemCertificate
   return { applied: true, systemCount: system.length, addedCount: added.length };
 }
 
+// What was in use before the undo, so it can be put back. Set by the first undo only.
+let beforeDrop: string[] | null = null;
+
 /**
  * Undo trustSystemCertificates for this session: back to the certificates Node
  * ships, plus the ones NODE_EXTRA_CA_CERTS names. Used by the connection check
@@ -143,7 +146,27 @@ export function dropSystemCertificates(deps: { tls?: CaApi } = {}): boolean {
   const tls: CaApi = deps.tls ?? (nodeTls as unknown as CaApi);
   if (typeof tls.getCACertificates !== 'function' || typeof tls.setDefaultCACertificates !== 'function') return false;
   try {
+    const current = tls.getCACertificates('default');
     tls.setDefaultCACertificates([...tls.getCACertificates('bundled'), ...tls.getCACertificates('extra')]);
+    if (beforeDrop === null) beforeDrop = current;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Take dropSystemCertificates back: the list that was in use before it. The undo
+ * is process-wide, so it is kept only when it demonstrably fixed Natively; when
+ * it did not, the OS certificates other hosts (an antivirus that re-signs
+ * provider traffic) may need must come back. False with nothing to restore.
+ */
+export function restoreSystemCertificates(deps: { tls?: CaApi } = {}): boolean {
+  const tls: CaApi = deps.tls ?? (nodeTls as unknown as CaApi);
+  if (beforeDrop === null || typeof tls.setDefaultCACertificates !== 'function') return false;
+  try {
+    tls.setDefaultCACertificates(beforeDrop);
+    beforeDrop = null;
     return true;
   } catch {
     return false;

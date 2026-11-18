@@ -12,7 +12,7 @@ import { nativelyApiBase } from './nativelyApiBase';
 import { diagnoseConnection } from './connectivityDiagnosis';
 import { createRealProbes } from './connectivityProbes';
 import { createConnectivityWatcher, settleRetry, type FailureReason } from './connectivityWatcher';
-import { dropSystemCertificates, getSystemCertificateStats } from '../utils/systemCertificates';
+import { dropSystemCertificates, restoreSystemCertificates, getSystemCertificateStats } from '../utils/systemCertificates';
 import { funnelTelemetry } from './FunnelTelemetry';
 import { wrapFetchForApiFailures } from './apiFailureHook';
 import { describeProbeError } from '../rag/providers/probeError';
@@ -49,6 +49,7 @@ export function createAppConnectivityWatcher(retry: () => Promise<string>) {
     },
     notify: (notice) => broadcast('connect-diagnosis', notice),
     heal: () => dropSystemCertificates(),
+    restore: () => { restoreSystemCertificates(); },
     retry,
     log: (message) => console.log(message),
   });

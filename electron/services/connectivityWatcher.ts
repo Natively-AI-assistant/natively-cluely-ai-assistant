@@ -30,6 +30,8 @@ export interface WatcherDeps {
   notify(notice: WatcherNotice): void;
   /** Undo the stale certificate merge for this session. False when it could not. */
   heal(): boolean;
+  /** Take the undo back. Called when it did not fix anything: it is process-wide, so it stays only if it worked. */
+  restore?(): void;
   /** Run the Pro check again right now. */
   retry(): Promise<string>;
   now?(): number;
@@ -79,7 +81,10 @@ export function createConnectivityWatcher(deps: WatcherDeps) {
       let healed = false;
       if (d.heal === 'drop_system_ca') {
         try {
-          if (deps.heal()) healed = ANSWERED.has(await deps.retry());
+          if (deps.heal()) {
+            healed = ANSWERED.has(await deps.retry());
+            if (!healed) { try { deps.restore?.(); } catch { /* best effort */ } }
+          }
         } catch (e: any) { log(`[ConnectDiag] heal failed: ${e?.message ?? e}`); }
       }
       try { deps.track({ ...d.report, healed }); } catch { /* telemetry is best effort */ }
