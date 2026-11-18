@@ -54,9 +54,12 @@ const IPV4_RE = /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d
 // Full form, or a compressed one (it contains "::", which a clock time never does).
 const IPV6_RE = /\b(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}\b|\b(?:[0-9a-f]{1,4}:){1,7}:(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})?(?![0-9a-z_])/gi;
 const BEARER_RE = /\b(Bearer|Basic|Token)\s+[A-Za-z0-9._~+/=-]{8,}/gi;
-const MAC_HOME_RE = /\/Users\/[^/\s]+/g;
-const LINUX_HOME_RE = /\/home\/[^/\s]+/g;
-const WIN_HOME_RE = /(\\Users\\)[^\\\r\n]+(?=\\)/gi;
+// A home folder name can hold a space ("John Smith"), so the name runs to the next
+// separator, a quote or the end of the line, not to the first space. Windows paths
+// appear with single backslashes, doubled ones (JSON-escaped), or forward slashes.
+const MAC_HOME_RE = /(\/Users\/)[^/\r\n"'`<>|]+/g;
+const LINUX_HOME_RE = /(\/home\/)[^/\r\n"'`<>|]+/g;
+const WIN_HOME_RE = /([A-Za-z]:)?((?:\\{1,2}|\/)Users(?:\\{1,2}|\/))[^\\/\r\n"'`<>|:*?]+/gi;
 
 /**
  * A second pass over a log that was already redacted as it was written: the
@@ -72,7 +75,7 @@ export function maskLog(text: string, maskCredentials: (t: string) => string): s
   out = out.replace(UUID_RE, '<id>');
   out = out.replace(IPV4_RE, '<ip>');
   out = out.replace(IPV6_RE, '<ip>');
-  out = out.replace(MAC_HOME_RE, '/Users/<user>').replace(LINUX_HOME_RE, '/home/<user>').replace(WIN_HOME_RE, '$1<user>');
+  out = out.replace(MAC_HOME_RE, '$1<user>').replace(LINUX_HOME_RE, '$1<user>').replace(WIN_HOME_RE, (_m, drive = '', sep) => `${drive}${sep}<user>`);
   return out;
 }
 
@@ -83,10 +86,12 @@ export interface BuildInput {
   platform: string;
   diagnosis?: DiagnosisInput;
   mask: (t: string) => string;
+  /** Leave the log out: detailed logging was on, so it may hold meeting text. */
+  omitLog?: boolean;
 }
 
 export function buildDiagnosticReport(input: BuildInput): { payload: DiagnosticPayload; preview: string } {
-  const log_text = maskLog(tailLog(input.logText, LOG_LIMITS), input.mask);
+  const log_text = input.omitLog ? '' : maskLog(tailLog(input.logText, LOG_LIMITS), input.mask);
 
   const d = input.diagnosis;
   const reason = d?.reason === 'key_saved' || d?.reason === 'pro_check' || d?.reason === 'api_call' ? d.reason : 'manual';
@@ -107,8 +112,9 @@ export function buildDiagnosticReport(input: BuildInput): { payload: DiagnosticP
     `App ${input.appVersion} · ${input.platform} · ${reason}${verdict ? ` · ${verdict}` : ''}`,
     report ? `Connection check: ${Object.entries(report).map(([k, v]) => `${k}=${v}`).join(', ')}` : 'Connection check: not available',
     '',
-    `Log (the last ${log_text ? log_text.split('\n').length : 0} lines, with keys, e-mail addresses, ids, network addresses and your user name hidden):`,
-    log_text || '(the log is empty)',
+    ...(input.omitLog
+      ? ['Log: left out, because detailed logging is switched on in Settings › General › Advanced and the log may hold what was said in your meetings. Switch it back to standard to include the log.']
+      : [`Log (the last ${log_text ? log_text.split('\n').length : 0} lines, with keys, e-mail addresses, ids, network addresses and your user name hidden):`, log_text || '(the log is empty)']),
   ].join('\n');
 
   return { payload, preview };
@@ -131,11 +137,22 @@ export async function sendDiagnosticReport(opts: {
   let identity: Record<string, string> = {};
   try { identity = await opts.headers(); } catch { /* the server answers 401, which is reported as rejected */ }
   try {
-    const res = await new Promise<Response>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('timeout')), timeoutMs);
-      doFetch(opts.endpoint, { method: 'POST', headers: { ...identity, 'content-type': 'application/json' }, body: JSON.stringify(opts.payload) })
-        .then((r) => { clearTimeout(timer); resolve(r); }, (e) => { clearTimeout(timer); reject(e); });
+    // The timeout cancels the request: a send that is given up on must not still arrive and be stored twice.
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // Abort the request AND stop waiting for it: a fetch that ignores the signal must not hold the button forever.
+    const timedOut = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => { controller.abort(); reject(new Error('timeout')); }, timeoutMs);
     });
+    let res: Response;
+    try {
+      res = await Promise.race([
+        doFetch(opts.endpoint, { method: 'POST', headers: { ...identity, 'content-type': 'application/json' }, body: JSON.stringify(opts.payload), signal: controller.signal }),
+        timedOut,
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
     if (res.status === 200 || res.status === 201) {
       const body = (await res.json().catch(() => null)) as { ref?: unknown } | null;
       return { ok: true, ref: typeof body?.ref === 'string' ? body.ref.slice(0, 16) : '' };
@@ -146,4 +163,36 @@ export async function sendDiagnosticReport(opts: {
   } catch {
     return { ok: false, error: 'network' };
   }
+}
+
+/**
+ * What was previewed is what is sent. The log keeps growing while a person reads
+ * the preview, so a send that rebuilt it would carry lines they never saw. The
+ * preview is kept for ttlMs (a preview left open for an hour is stale, so it is
+ * rebuilt); a failed send keeps it so the retry sends the same text; a successful
+ * one clears it.
+ */
+export function createReportSession<T extends { payload: DiagnosticPayload; preview: string }>(deps: {
+  build(): T;
+  send(payload: T['payload']): Promise<SendOutcome>;
+  now?(): number;
+  ttlMs?: number;
+}) {
+  const now = deps.now ?? (() => Date.now());
+  const ttl = deps.ttlMs ?? 10 * 60_000;
+  let held: { built: T; at: number } | null = null;
+  const current = (): T => {
+    if (!held || now() - held.at > ttl) held = { built: deps.build(), at: now() };
+    return held.built;
+  };
+  return {
+    /** Build (or reuse) the report and return what the person is shown. */
+    async preview(): Promise<{ preview: string }> { return { preview: current().preview }; },
+    async send(): Promise<SendOutcome> {
+      const built = current();
+      const outcome = await deps.send(built.payload);
+      if (outcome.ok) held = null;
+      return outcome;
+    },
+  };
 }

@@ -17,6 +17,11 @@
 import type { Diagnosis } from './connectivityDiagnosis';
 
 export const MIN_GAP_MS = 30 * 60_000;
+/** A key the person has just pasted is checked even inside MIN_GAP_MS, but not on every attempt. */
+export const KEY_SAVED_MIN_GAP_MS = 60_000;
+
+/** What the person is told when the undo worked (the diagnosis text describes the unfixed state). */
+export const HEALED_MESSAGE = 'An out-of-date security certificate on this computer was blocking the connection to Natively. Natively worked around it for this session and is connected now. Restarting Natively keeps the workaround off until the next problem.';
 
 export type FailureReason = 'key_saved' | 'pro_check' | 'api_call';
 
@@ -46,7 +51,7 @@ export function looksLikeNetworkFailure(lastError: string | undefined): boolean 
   if (!lastError) return false;
   // "refused" alone is not enough: ECONNREFUSED is a connection that never happened.
   if (/answered\s+\d{3}|server refused|refused the key|refused by server/i.test(lastError)) return false;
-  return /plan lookup failed|activation threw|fetch failed|network error|verify did not confirm|ECONN|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|EPROTO|ENET|EHOST|CERT_|certificate|UNABLE_TO_|socket hang up|timeout|abort/i.test(lastError);
+  return /plan lookup failed|activation threw|fetch failed|network error|ECONN|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|EPROTO|ENET|EHOST|CERT_|certificate|UNABLE_TO_|socket hang up|timeout|abort/i.test(lastError);
 }
 
 /** After heal() the Pro check got an answer from the server, whatever the answer was. */
@@ -57,10 +62,18 @@ const ANSWERED = new Set(['activated', 'no_entitlement', 'key_rejected', 'skippe
  * check says so when it had something to check. With nothing to check (a trial,
  * no key, a plan without Pro) a plain request to Natively stands in.
  */
-export async function settleRetry(reconcile: () => Promise<string>, plainRequest: () => Promise<boolean>): Promise<string> {
+export async function settleRetry(
+  reconcile: () => Promise<string>,
+  plainRequest: () => Promise<boolean>,
+  lastError: () => string | undefined = () => undefined,
+): Promise<string> {
   try {
     const outcome = await reconcile();
-    if (outcome !== 'not_needed') return outcome;
+    if (outcome !== 'not_needed') {
+      // A server that answered an error (a 502, a 503) still proves the connection works.
+      if ((outcome === 'retrying' || outcome === 'gave_up') && /answered\s+\d{3}/i.test(lastError() ?? '')) return 'activated';
+      return outcome;
+    }
   } catch { /* fall through to the plain request */ }
   try { return (await plainRequest()) ? 'activated' : 'retrying'; } catch { return 'retrying'; }
 }
@@ -70,12 +83,16 @@ export function createConnectivityWatcher(deps: WatcherDeps) {
   const log = deps.log ?? (() => {});
   let inFlight = false;
   let lastRunAt = -Infinity;
+  let lastKeyRunAt = -Infinity;
 
   async function onFailure(reason: FailureReason, lastError: string | undefined): Promise<void> {
     if (!looksLikeNetworkFailure(lastError)) return;
-    if (inFlight || now() - lastRunAt < MIN_GAP_MS) return;
+    const gap = reason === 'key_saved' ? KEY_SAVED_MIN_GAP_MS : MIN_GAP_MS;
+    const since = reason === 'key_saved' ? lastKeyRunAt : lastRunAt;
+    if (inFlight || now() - since < gap) return;
     inFlight = true;
     lastRunAt = now();
+    if (reason === 'key_saved') lastKeyRunAt = lastRunAt;
     try {
       const d = await deps.diagnose(reason);
       let healed = false;
@@ -88,7 +105,7 @@ export function createConnectivityWatcher(deps: WatcherDeps) {
         } catch (e: any) { log(`[ConnectDiag] heal failed: ${e?.message ?? e}`); }
       }
       try { deps.track({ ...d.report, healed }); } catch { /* telemetry is best effort */ }
-      try { deps.notify({ verdict: d.verdict, message: d.userMessage, healed }); } catch { /* the notice is best effort */ }
+      try { deps.notify({ verdict: d.verdict, message: healed ? HEALED_MESSAGE : d.userMessage, healed }); } catch { /* the notice is best effort */ }
       log(`[ConnectDiag] verdict ${d.verdict}${healed ? ' (healed)' : ''}`);
     } catch (e: any) {
       log(`[ConnectDiag] diagnosis failed: ${e?.message ?? e}`);

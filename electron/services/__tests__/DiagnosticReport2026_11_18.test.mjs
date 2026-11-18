@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { tailLog, maskLog, buildDiagnosticReport, sendDiagnosticReport, LOG_LIMITS } from '../diagnosticReport.ts';
+import { tailLog, maskLog, buildDiagnosticReport, sendDiagnosticReport, createReportSession, LOG_LIMITS } from '../diagnosticReport.ts';
 import { checkFunnelProps } from '../../../src/lib/funnel/funnelCatalog.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -47,6 +47,17 @@ describe('maskLog: a second pass over a log that was already redacted', () => {
     assert.ok(!/evin|Eugene|Lopin|sam\b/.test(out), out);
     assert.match(out, /\/Users\/<user>\/Library/);
     assert.match(out, /C:\\Users\\<user>\\AppData/);
+  });
+  test('home folders in every shape a log writes them: JSON-escaped, forward slashes, spaces in the name, a path that ends at the name', () => {
+    const cases = {
+      '{"p":"C:\\\\Users\\\\John\\\\AppData"}': 'John',
+      'C:/Users/John Smith/x': 'Smith',
+      '/Users/John Smith/Library/y': 'Smith',
+      'at C:\\Users\\John': 'John',
+      'C:\\Users\\Eugene Lopin\\AppData': 'Lopin',
+      '/home/Mary Ann/.config': 'Ann',
+    };
+    for (const [input, leak] of Object.entries(cases)) assert.ok(!mask(input).includes(leak), `${input} -> ${mask(input)}`);
   });
   test('what support needs survives: codes, hosts, versions, our own words', () => {
     const line = '[ProReconciler] plan lookup failed: fetch failed (CERT_HAS_EXPIRED) api.natively.software v3.2.1 ETIMEDOUT retrying in 30s';
@@ -109,6 +120,50 @@ describe('buildDiagnosticReport', () => {
   });
 });
 
+describe('detailed logging', () => {
+  test('a log written with detailed logging on can hold meeting text: it is left out, and the preview says why', () => {
+    const { payload, preview } = buildDiagnosticReport({ logText: 'Q: tell me about your salary', installId: INSTALL, appVersion: '3.2.1', platform: 'darwin', mask: maskCredentials, omitLog: true });
+    assert.equal(payload.log_text, '');
+    assert.ok(!preview.includes('salary'));
+    assert.match(preview, /detailed logging/i);
+  });
+});
+
+describe('createReportSession: what was previewed is what is sent', () => {
+  const mk = (logs, over = {}) => {
+    let i = 0; let t = 1000; const sent = [];
+    const build = () => { const log_text = logs[Math.min(i++, logs.length - 1)]; return { payload: { log_text }, preview: `P:${log_text}` }; };
+    const s = createReportSession({ build, send: async (p) => { sent.push(p.log_text); return { ok: true, ref: 'r' }; }, now: () => t, ttlMs: 60_000, ...over });
+    return { s, sent, advance: (ms) => { t += ms; } };
+  };
+  test('the log grows after the preview: the older text, the one the person read, is sent', async () => {
+    const { s, sent } = mk(['seen', 'newer']);
+    assert.equal((await s.preview()).preview, 'P:seen');
+    await s.send();
+    assert.deepEqual(sent, ['seen']);
+  });
+  test('sending without ever previewing builds it fresh', async () => {
+    const { s, sent } = mk(['fresh']);
+    await s.send();
+    assert.deepEqual(sent, ['fresh']);
+  });
+  test('a preview left open for a long time is rebuilt, and a sent one is not reused', async () => {
+    const { s, sent, advance } = mk(['one', 'two', 'three']);
+    await s.preview();
+    advance(61_000);
+    await s.send();
+    await s.send();
+    assert.deepEqual(sent, ['two', 'three']);
+  });
+  test('a failed send keeps the preview, so the retry sends the same text', async () => {
+    let n = 0; const sent = [];
+    const s = createReportSession({ build: () => ({ payload: { log_text: `b${n++}` }, preview: 'p' }), send: async (p) => { sent.push(p.log_text); return sent.length === 1 ? { ok: false, error: 'network' } : { ok: true, ref: 'r' }; }, now: () => 0, ttlMs: 60_000 });
+    await s.preview();
+    await s.send(); await s.send();
+    assert.deepEqual(sent, ['b0', 'b0']);
+  });
+});
+
 describe('sendDiagnosticReport', () => {
   const payload = { schema: 1, sent_by_user: true, install_id: INSTALL, log_text: 'x' };
   const send = (fetchImpl) => sendDiagnosticReport({ payload, endpoint: 'https://example.test/v1/diagnostics/report', headers: async () => ({ 'x-install-id': INSTALL, 'x-install-token': 't' }), fetchImpl, timeoutMs: 50 });
@@ -134,6 +189,12 @@ describe('sendDiagnosticReport', () => {
     assert.deepEqual(await send(answer(413)), { ok: false, error: 'rejected' });
     assert.deepEqual(await send(async () => { throw new TypeError('fetch failed'); }), { ok: false, error: 'network' });
     assert.deepEqual(await send(() => new Promise(() => {})), { ok: false, error: 'network' });
+  });
+  test('a send that times out is cancelled, not left running to be stored a second time', async () => {
+    let signal;
+    const r = await sendDiagnosticReport({ payload, endpoint: 'https://example.test/x', headers: async () => ({}), timeoutMs: 20, fetchImpl: (_u, init) => { signal = init.signal; return new Promise(() => {}); } });
+    assert.deepEqual(r, { ok: false, error: 'network' });
+    assert.equal(signal.aborted, true);
   });
   test('headers that cannot be built do not stop the attempt or throw', async () => {
     const r = await sendDiagnosticReport({ payload, endpoint: 'https://example.test/x', headers: async () => { throw new Error('x'); }, fetchImpl: answer(401), timeoutMs: 50 });

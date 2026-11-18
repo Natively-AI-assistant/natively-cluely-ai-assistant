@@ -101,6 +101,14 @@ describe('verdicts', () => {
     assert.doesNotMatch(d.userMessage, /other sites load/i);
   });
 
+  test('the messages say only what is known: no claim of a fix, no operating system, and a clock hint for certificate errors', async () => {
+    const stale = await diagnoseConnection(probes({ tls_merged: { ok: false, code: 'CERT_HAS_EXPIRED' } }), HOST, { reason: 'key_saved' });
+    assert.doesNotMatch(stale.userMessage, /switched|tried again|windows/i);
+    const fail = { ok: false, code: 'SELF_SIGNED_CERT_IN_CHAIN', issuer: 'Zscaler Root CA' };
+    const inter = await diagnoseConnection(probes({ tls_builtin: fail, tls_merged: fail }), HOST, { reason: 'key_saved' });
+    assert.match(inter.userMessage, /date and time|clock/i);
+  });
+
   test('connection times out with no proxy while other sites load → our host is blocked', async () => {
     const fail = { ok: false, code: 'ETIMEDOUT' };
     const d = await diagnoseConnection(probes({ tls_builtin: fail, tls_merged: fail }), HOST, { reason: 'key_saved' });

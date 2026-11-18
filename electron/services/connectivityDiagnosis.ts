@@ -100,8 +100,8 @@ function httpBucket(status: number | undefined): string {
 
 const MESSAGES: Record<Verdict, string> = {
   reachable: 'Natively\'s servers answered this check, so the connection is working now. If Pro is still not active, close and reopen Natively, or paste the key again.',
-  stale_store: 'An out-of-date certificate stored in Windows was blocking the connection to Natively. Natively has switched that check off for this session and tried again.',
-  interception: 'Something on this computer or network (antivirus web protection, or a company or school filter) is replacing the secure connection to Natively. Turn off its HTTPS or web scanning for Natively, or add Natively to its exceptions, then try again.',
+  stale_store: 'An out-of-date security certificate on this computer is blocking the connection to Natively. Close and reopen Natively, then try again. If it keeps happening, send the diagnostic report below.',
+  interception: 'Something on this computer or network (antivirus web protection, or a company or school filter) is replacing the secure connection to Natively. Turn off its HTTPS or web scanning for Natively, or add Natively to its exceptions, then try again. If your date and time are wrong, set the clock to automatic first.',
   clock: 'This computer\'s date or time looks wrong, so secure connections are being refused. Set the clock to automatic in your system settings, then try again.',
   proxy: 'This computer uses a proxy that is not letting Natively through. Allow Natively through the proxy, or try another network.',
   dns: 'This network cannot look up Natively\'s address. Try another network or a different DNS server, such as 1.1.1.1 or 8.8.8.8.',

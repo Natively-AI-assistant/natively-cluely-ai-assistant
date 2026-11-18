@@ -84,6 +84,7 @@ export function getProEntitlementReconciler(): Reconciler {
     },
     onStatus: (status: ReconcilerStatus) => {
       broadcast('pro-activation-status', status);
+      try { (require('./connectivityState') as typeof import('./connectivityState')).connectivityState().lastProError = status.lastError; } catch { /* best effort */ }
       // A failure that looks like the network: find out why (once per 30 minutes),
       // tell the person, report it, and undo a stale certificate store if that is it.
       if (status.state === 'retrying' || status.state === 'gave_up') {

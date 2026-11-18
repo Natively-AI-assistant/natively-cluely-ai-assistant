@@ -14,6 +14,7 @@ import { createRealProbes } from './connectivityProbes';
 import { createConnectivityWatcher, settleRetry, type FailureReason } from './connectivityWatcher';
 import { dropSystemCertificates, restoreSystemCertificates, getSystemCertificateStats } from '../utils/systemCertificates';
 import { funnelTelemetry } from './FunnelTelemetry';
+import { connectivityState } from './connectivityState';
 import { wrapFetchForApiFailures } from './apiFailureHook';
 import { describeProbeError } from '../rag/providers/probeError';
 
@@ -23,11 +24,14 @@ function broadcast(channel: string, payload: unknown): void {
   }
 }
 
-let lastDiagnosis: { reason?: string; verdict?: string; report?: Record<string, unknown> } | undefined;
-
 /** The most recent connection check, for the diagnostic report. */
 export function getLastDiagnosis() {
-  return lastDiagnosis;
+  return connectivityState().lastDiagnosis;
+}
+
+/** The most recent finding shown to the person, for a Settings panel that opens after it was sent. */
+export function getLastNotice() {
+  return connectivityState().lastNotice;
 }
 
 export function createAppConnectivityWatcher(retry: () => Promise<string>) {
@@ -44,10 +48,13 @@ export function createAppConnectivityWatcher(retry: () => Promise<string>) {
       { reason },
     ),
     track: (props) => {
-      lastDiagnosis = { reason: String(props.reason), verdict: String(props.verdict), report: { ...props } };
+      connectivityState().lastDiagnosis = { reason: String(props.reason), verdict: String(props.verdict), report: { ...props } };
       return funnelTelemetry.track('connect_diag', props);
     },
-    notify: (notice) => broadcast('connect-diagnosis', notice),
+    notify: (notice) => {
+      connectivityState().lastNotice = { ...notice, at: Date.now() };
+      broadcast('connect-diagnosis', notice);
+    },
     heal: () => dropSystemCertificates(),
     restore: () => { restoreSystemCertificates(); },
     retry,
@@ -61,13 +68,13 @@ const retryAfterHeal = (): Promise<string> => settleRetry(
     return getProEntitlementReconciler().run('retry');
   },
   async () => { await fetch(`${nativelyApiBase()}/v1/plans`, { signal: AbortSignal.timeout(8000) }); return true; },
+  () => connectivityState().lastProError,
 );
 
-let shared: ReturnType<typeof createAppConnectivityWatcher> | null = null;
-
-/** One watcher for every trigger, so they share one 30-minute throttle. */
-export function getAppConnectivityWatcher() {
-  return (shared ??= createAppConnectivityWatcher(retryAfterHeal));
+/** One watcher for every trigger and every bundle, so they share one 30-minute throttle. */
+export function getAppConnectivityWatcher(): ReturnType<typeof createAppConnectivityWatcher> {
+  const state = connectivityState();
+  return (state.watcher ??= createAppConnectivityWatcher(retryAfterHeal)) as ReturnType<typeof createAppConnectivityWatcher>;
 }
 
 /** A failed call to Natively, from anywhere in the main process. Never throws. */

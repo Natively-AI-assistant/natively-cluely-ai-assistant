@@ -3577,6 +3577,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // The opt-in diagnostic report: what would be sent, and sending it (only on a click).
   getDiagnosticReportPreview: () => ipcRenderer.invoke('diagnostic-report:preview'),
   sendDiagnosticReport: () => ipcRenderer.invoke('diagnostic-report:send'),
+  getLastConnectionNotice: () => ipcRenderer.invoke('connect-diagnosis:last'),
   // The connection check found why Natively cannot be reached (connectivityWatcher).
   onConnectDiagnosis: (callback: (data: { verdict: string; message: string; healed: boolean }) => void) => {
     const subscription = (_: unknown, data: { verdict: string; message: string; healed: boolean }) => callback(data)

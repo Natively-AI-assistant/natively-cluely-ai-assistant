@@ -1284,6 +1284,7 @@ export interface ElectronAPI {
   licenseCheckPremiumAsync: () => Promise<boolean>
   getDiagnosticReportPreview: () => Promise<{ preview: string }>
   sendDiagnosticReport: () => Promise<{ ok: true; ref: string } | { ok: false; error: 'network' | 'unavailable' | 'rate_limited' | 'rejected' }>
+  getLastConnectionNotice: () => Promise<{ verdict: string; message: string; healed: boolean; at: number } | null>
   onConnectDiagnosis: (callback: (data: { verdict: string; message: string; healed: boolean }) => void) => () => void
   onLicenseStatusChanged: (callback: (data: { isPremium: boolean, plan?: string }) => void) => () => void
   /** A Pro pack ran out during a meeting (main: PackMeetingClock). */

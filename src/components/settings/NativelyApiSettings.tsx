@@ -1112,6 +1112,10 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     // The connection check (main/connectivityWatcher) found why Natively could not
     // be reached: say it in the same place, in plain words. A healed connection
     // needs no notice; Pro turns on by itself.
+    // A finding that arrived while this panel was closed.
+    void window.electronAPI?.getLastConnectionNotice?.().then((d) => {
+      if (d && !d.healed && d.verdict !== 'reachable') { setProNotice((cur) => cur ?? d.message); setDiagOffer(true); }
+    }).catch(() => {});
     const offDiag = window.electronAPI?.onConnectDiagnosis?.((d) => {
       if (d && !d.healed && d.verdict !== 'reachable') { setProNotice(d.message); setDiagOffer(true); }
     });

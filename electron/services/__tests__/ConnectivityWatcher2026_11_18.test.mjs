@@ -8,7 +8,7 @@
 // same cases.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { createConnectivityWatcher, looksLikeNetworkFailure } from '../connectivityWatcher.ts';
+import { createConnectivityWatcher, looksLikeNetworkFailure, settleRetry } from '../connectivityWatcher.ts';
 import { dropSystemCertificates, restoreSystemCertificates } from '../../utils/systemCertificates.ts';
 import { checkFunnelProps } from '../../../src/lib/funnel/funnelCatalog.mjs';
 
@@ -34,10 +34,10 @@ function rig(over = {}) {
 
 describe('which failures count', () => {
   test('a network error from the Pro check does; a server answer or a refused key does not', () => {
-    for (const s of ['plan lookup failed: fetch failed (CERT_HAS_EXPIRED)', 'plan lookup failed: fetch failed', 'plan lookup failed: The operation was aborted due to timeout', 'verify did not confirm', 'network error: fetch failed']) {
+    for (const s of ['plan lookup failed: fetch failed (CERT_HAS_EXPIRED)', 'plan lookup failed: fetch failed', 'plan lookup failed: The operation was aborted due to timeout', 'network error: fetch failed']) {
       assert.equal(looksLikeNetworkFailure(s), true, s);
     }
-    for (const s of ['plan lookup answered 503', 'verify answered 502', 'the server refused the key', undefined, '']) {
+    for (const s of ['plan lookup answered 503', 'verify answered 502', 'verify did not confirm', 'the server refused the key', undefined, '']) {
       assert.equal(looksLikeNetworkFailure(s), false, String(s));
     }
   });
@@ -85,7 +85,10 @@ describe('the watcher', () => {
     assert.equal(calls.heal, 1);
     assert.equal(calls.retry, 1);
     assert.equal(calls.track[0].healed, true);
-    assert.deepEqual(calls.notify[0], { verdict: 'stale_store', message: 'stale message', healed: true });
+    assert.equal(calls.notify[0].verdict, 'stale_store');
+    assert.equal(calls.notify[0].healed, true);
+    assert.match(calls.notify[0].message, /worked around it/i);
+    assert.doesNotMatch(calls.notify[0].message, /stale message/);
   });
 
   test('healing that does not help is reported as not healed', async () => {
@@ -105,6 +108,25 @@ describe('the watcher', () => {
     const { w, calls } = rig({ diagnose: async () => stale });
     await w.onFailure('pro_check', 'plan lookup failed: fetch failed');
     assert.equal(calls.restore, undefined);
+  });
+
+  test('an undo that failed is never reported as done', async () => {
+    const { w, calls } = rig({ diagnose: async () => ({ ...stale, userMessage: 'blocking the connection' }), retry: async () => 'retrying' });
+    await w.onFailure('pro_check', 'plan lookup failed: fetch failed');
+    assert.equal(calls.notify[0].message, 'blocking the connection');
+    assert.doesNotMatch(calls.notify[0].message, /switched|worked around/i);
+  });
+
+  test('a key pasted just now is checked even if an earlier failure used the slot, but not on every keystroke', async () => {
+    const { w, calls, advance } = rig();
+    await w.onFailure('api_call', 'plan lookup failed: fetch failed');
+    await w.onFailure('key_saved', 'plan lookup failed: fetch failed');
+    assert.equal(calls.diagnose, 2, 'the key save is not starved by a background failure');
+    await w.onFailure('key_saved', 'plan lookup failed: fetch failed');
+    assert.equal(calls.diagnose, 2, 'but not twice in a minute');
+    advance(61_000);
+    await w.onFailure('key_saved', 'plan lookup failed: fetch failed');
+    assert.equal(calls.diagnose, 3);
   });
 
   test('a heal that cannot be done does not retry', async () => {
@@ -141,6 +163,28 @@ describe('the watcher', () => {
       const { w } = rig(over);
       await assert.doesNotReject(() => w.onFailure('pro_check', 'plan lookup failed: fetch failed'));
     }
+  });
+});
+
+describe('settleRetry: a server that answers an error still proves the connection works', () => {
+  test('retrying because the server said 503 is an answer; retrying because the network failed is not', async () => {
+    assert.equal(await settleRetry(async () => 'retrying', async () => false, () => 'plan lookup answered 503'), 'activated');
+    assert.equal(await settleRetry(async () => 'gave_up', async () => false, () => 'verify answered 502'), 'activated');
+    assert.equal(await settleRetry(async () => 'retrying', async () => false, () => 'plan lookup failed: fetch failed'), 'retrying');
+    assert.equal(await settleRetry(async () => 'retrying', async () => false, () => undefined), 'retrying');
+  });
+});
+
+describe('the build bundles every entry point separately (scripts/build-electron.js, esbuild bundle:true)', () => {
+  test('so what the undo remembers is shared between two copies of the module', async () => {
+    const A = await import('../../utils/systemCertificates.ts?bundle=a');
+    const B = await import('../../utils/systemCertificates.ts?bundle=b');
+    assert.notEqual(A.dropSystemCertificates, B.dropSystemCertificates, 'really two copies');
+    const set = [];
+    const tls = { getCACertificates: (t) => ({ bundled: ['B'], extra: [], default: ['B', 'S1'] })[t], setDefaultCACertificates: (c) => set.push(c) };
+    assert.equal(A.dropSystemCertificates({ tls }), true);
+    assert.equal(B.restoreSystemCertificates({ tls }), true, 'the other copy can put it back');
+    assert.deepEqual(set.at(-1), ['B', 'S1']);
   });
 });
 

@@ -13120,8 +13120,12 @@ export function initializeIpcHandlers(appState: AppState): void {
   // The opt-in diagnostic report (2026-11-18, #759). Both run only when the
   // person asks: the preview shows exactly what the send would carry.
   safeHandle('diagnostic-report:preview', async () => {
-    const { buildCurrentDiagnosticReport } = require('./services/diagnosticReportWiring') as typeof import('./services/diagnosticReportWiring');
-    return { preview: buildCurrentDiagnosticReport().preview };
+    const { previewCurrentDiagnosticReport } = require('./services/diagnosticReportWiring') as typeof import('./services/diagnosticReportWiring');
+    return previewCurrentDiagnosticReport();
+  });
+  safeHandle('connect-diagnosis:last', async () => {
+    const { lastConnectionNotice } = require('./services/diagnosticReportWiring') as typeof import('./services/diagnosticReportWiring');
+    return lastConnectionNotice();
   });
   safeHandle('diagnostic-report:send', async () => {
     const { sendCurrentDiagnosticReport } = require('./services/diagnosticReportWiring') as typeof import('./services/diagnosticReportWiring');

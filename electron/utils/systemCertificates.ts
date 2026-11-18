@@ -134,7 +134,17 @@ function applySystemCertificates(deps: SystemCertificateDeps): SystemCertificate
 }
 
 // What was in use before the undo, so it can be put back. Set by the first undo only.
-let beforeDrop: string[] | null = null;
+// Anchored on globalThis, NOT a module-local `let`: scripts/build-electron.js runs
+// esbuild with bundle:true over every .ts as its own entry point, so this module is
+// inlined into each bundle and each would otherwise keep a private copy (the same
+// reason redactForLog.ts anchors its level). Self-contained on purpose: this file
+// is loaded directly by tests, so it imports nothing local.
+const BEFORE_DROP_KEY = '__nativelySystemCaBeforeDropV1__';
+interface DropHolder { before: string[] | null }
+function dropHolder(): DropHolder {
+  const g = globalThis as unknown as Record<string, DropHolder | undefined>;
+  return (g[BEFORE_DROP_KEY] ??= { before: null });
+}
 
 /**
  * Undo trustSystemCertificates for this session: back to the certificates Node
@@ -148,7 +158,8 @@ export function dropSystemCertificates(deps: { tls?: CaApi } = {}): boolean {
   try {
     const current = tls.getCACertificates('default');
     tls.setDefaultCACertificates([...tls.getCACertificates('bundled'), ...tls.getCACertificates('extra')]);
-    if (beforeDrop === null) beforeDrop = current;
+    const h = dropHolder();
+    if (h.before === null) h.before = current;
     return true;
   } catch {
     return false;
@@ -163,10 +174,11 @@ export function dropSystemCertificates(deps: { tls?: CaApi } = {}): boolean {
  */
 export function restoreSystemCertificates(deps: { tls?: CaApi } = {}): boolean {
   const tls: CaApi = deps.tls ?? (nodeTls as unknown as CaApi);
-  if (beforeDrop === null || typeof tls.setDefaultCACertificates !== 'function') return false;
+  const h = dropHolder();
+  if (h.before === null || typeof tls.setDefaultCACertificates !== 'function') return false;
   try {
-    tls.setDefaultCACertificates(beforeDrop);
-    beforeDrop = null;
+    tls.setDefaultCACertificates(h.before);
+    h.before = null;
     return true;
   } catch {
     return false;
