@@ -37,3 +37,24 @@ export function resampleToF32(chunk: Buffer, inputSampleRate: number): Float32Ar
 
   return output;
 }
+
+/**
+ * Raises a quiet segment to a 0.5 peak (never lowers one; at most 30x).
+ * Moonshine reads the raw waveform and Whisper's log-mel features carry the
+ * level too, so a -30 dB voice is heard worse than the same voice at normal
+ * level (2026-11-18, Moonshine Tiny one-pass, quiet JFK: 1 word wrong at
+ * -30 dB, none at the restored level). The cap keeps the noise that clears the
+ * VAD from being raised into something that looks like speech.
+ */
+export function normalizeGain(audio: Float32Array, targetPeak = 0.5, maxGain = 30): Float32Array {
+  let peak = 0;
+  for (let i = 0; i < audio.length; i++) {
+    const a = Math.abs(audio[i]);
+    if (a > peak) peak = a;
+  }
+  if (peak === 0 || peak >= targetPeak) return audio;
+  const gain = Math.min(maxGain, targetPeak / peak);
+  const out = new Float32Array(audio.length);
+  for (let i = 0; i < audio.length; i++) out[i] = audio[i] * gain;
+  return out;
+}

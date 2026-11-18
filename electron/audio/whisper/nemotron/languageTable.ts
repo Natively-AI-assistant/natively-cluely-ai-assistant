@@ -20,14 +20,9 @@
 // "this app always has an explicit locale selection, never auto" — that is
 // FALSE. 'auto' ("Auto Detect") is a real, user-selectable entry in
 // electron/config/languages.ts's RECOGNITION_LANGUAGES, and LocalWhisperSTT
-// can receive it. Nemotron still has no real auto-detect mode, so 'auto' is
-// intentionally never looked up in THIS table (it is not a table key) —
-// but the caller (LocalWhisperSTT.resolveAndApplyNemotronLanguage) handles
-// it explicitly by normalizing to 'english-us' before ever calling
-// resolveNemotronLangId(), the same precedent AppState.setRecognitionLanguage
-// already applies for every other non-NativelyProSTT provider. See that
-// method's own doc comment for why this matters (a real, disruptive
-// startup-path bug this table's wrong claim would otherwise have hidden).
+// can receive it. 'auto' is not a key of the table below: LocalWhisperSTT
+// sends it as NEMOTRON_AUTO_LANG_ID (101, upstream's own 'auto' prompt; see
+// that constant for the measurement). It used to be sent as English.
 //
 // Re-verified (Task 12) directly against
 // https://raw.githubusercontent.com/codavidgarcia/nemotron-3.5-asr-streaming-onnx/main/engine/nemotron_onnx_streaming.py's
@@ -130,3 +125,14 @@ export function resolveNemotronLangId(locale: string): number | null {
   const canonical = NEMOTRON_LOCALE_ALIASES[locale] ?? locale;
   return NEMOTRON_TRANSCRIPTION_READY_LOCALES[canonical] ?? null;
 }
+
+/**
+ * The prompt id for "Auto Detect": 101, upstream PROMPT_DICTIONARY's 'auto'.
+ * Until 2026-11-18 'auto' was sent as English (lang_id 0), and with Auto Detect
+ * being the default setting, non-English speech came back empty (Spanish,
+ * French, German) or as romanized gibberish (Hindi). Measured on the int4
+ * model through LocalWhisperSTT, 8 Piper clips: with 101 every language matched
+ * its own explicit lang_id (es/de/it 0% WER, hi 5.3%), and the English set
+ * (JFK, quiet, 48 kHz, noise, clicks, meeting TTS) stayed at 0%.
+ */
+export const NEMOTRON_AUTO_LANG_ID = 101;

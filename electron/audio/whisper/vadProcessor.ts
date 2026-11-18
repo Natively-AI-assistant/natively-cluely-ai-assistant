@@ -1,9 +1,11 @@
 /**
  * Energy-based Voice Activity Detection (VAD) at 16 kHz.
  *
- * Uses 30ms windows (480 samples), RMS threshold 0.008,
- * 700ms hangover (~23 frames), 250ms min speech duration (~8 frames),
- * and 15000ms max segment duration (force-flush).
+ * Uses 30ms windows (480 samples), an RMS threshold that follows the noise
+ * floor (see thresholdFor), 600ms hangover (20 frames; 1.2s for a phrase
+ * under 1.5s), 120ms min speech
+ * duration (4 frames), 300ms pre-roll and 15000ms max segment duration
+ * (force-flush).
  */
 
 export interface SpeechSegment {
@@ -12,8 +14,30 @@ export interface SpeechSegment {
 }
 
 const WINDOW_SIZE = 480;       // 30ms at 16kHz
-const RMS_THRESHOLD = 0.008;
-const HANGOVER_FRAMES = 10;    // ~300ms — must be shorter than Rust SilenceSuppressor hangover (500ms)
+// The threshold is 3x the quietest window of the last ~2 s (minimum
+// statistics: speech always has gaps between syllables, so the minimum is the
+// room, not the talker), clamped to [MIN, MAX]. A fixed 0.008 (-42 dBFS) cut a
+// quiet mic or a low call volume into sub-second fragments, and Whisper fills
+// those with invented words (2026-11-18: JFK clip at -30 dB came back as "I know
+// my fellow men. your country."). MAX keeps a noisy room exactly as strict as
+// before; the native gate has already dropped the silence (keepalive zeros).
+const RMS_THRESHOLD_MIN = 0.002;
+const RMS_THRESHOLD_MAX = 0.008;
+const NOISE_FLOOR_FRAMES = 67; // ~2 s
+// Windows kept from before speech opens. Soft consonants and the rise of the
+// first syllable sit under the threshold, and dropping them clipped first words.
+const PRE_ROLL_FRAMES = 10;    // ~300ms
+// ~600ms. 300ms split a sentence at every natural pause, and a lone word
+// ("not") came back as another ("Knock!"). Measured 2026-11-18, Whisper Base
+// EN, JFK clip at -30 dB: 4.5% WER at 300ms, 0% at 600ms. Once the native gate
+// closes it sends a 20ms zero frame per 100ms, so the hangover's tail costs a
+// little more wall time than its length.
+const HANGOVER_FRAMES = 20;
+// A phrase with under ~1.5 s of voiced audio gets one more hangover before it
+// closes. Cut off alone, a two-word lead-in has no context and the model
+// guesses: quiet JFK's "Ask not." came back "As not." while the same worker
+// given the whole clip got it right (Moonshine Tiny, 2026-11-18).
+const SHORT_PHRASE_FRAMES = 50;
 const MIN_SPEECH_FRAMES = 4;   // ~120ms minimum to avoid transcribing tiny noise bursts
 const MAX_SPEECH_MS = 15000;
 
@@ -23,6 +47,10 @@ function rms(samples: Float32Array, start: number, end: number): number {
     sum += samples[i] * samples[i];
   }
   return Math.sqrt(sum / (end - start));
+}
+
+export function thresholdFor(noiseFloor: number): number {
+  return Math.min(RMS_THRESHOLD_MAX, Math.max(RMS_THRESHOLD_MIN, noiseFloor * 3));
 }
 
 export class VadProcessor {
@@ -37,6 +65,9 @@ export class VadProcessor {
   // closes (or closes-and-reopens) within a single buffer — boolean
   // edge-detection on isInSpeech() can miss those cases.
   private segmentIdCounter = 0;
+  private recentLevels: number[] = [];
+  private preRoll: Float32Array[] = [];
+  private shortPhraseExtended = false;
 
   push(samples: Float32Array): SpeechSegment[] {
     const segments: SpeechSegment[] = [];
@@ -60,17 +91,24 @@ export class VadProcessor {
       offset += WINDOW_SIZE;
 
       const energy = rms(window, 0, window.length);
-      const isSpeech = energy >= RMS_THRESHOLD;
+      this.recentLevels.push(energy);
+      if (this.recentLevels.length > NOISE_FLOOR_FRAMES) this.recentLevels.shift();
+      const isSpeech = energy >= thresholdFor(Math.min(...this.recentLevels));
 
       if (isSpeech) {
         this.hangoverCount = HANGOVER_FRAMES;
+        this.shortPhraseExtended = false;
         if (!this.inSpeech) {
           this.inSpeech = true;
           this.speechFrameCount = 0;
-          this.speechDurationMs = 0;
-          this.speechBuffer = [];
+          this.speechBuffer = this.preRoll;
+          this.speechDurationMs = this.preRoll.length * 30;
+          this.preRoll = [];
           this.segmentIdCounter++;
         }
+      } else if (!this.inSpeech) {
+        this.preRoll.push(window.slice());
+        if (this.preRoll.length > PRE_ROLL_FRAMES) this.preRoll.shift();
       }
 
       if (this.inSpeech) {
@@ -91,6 +129,10 @@ export class VadProcessor {
           const seg = this.buildSegment();
           if (seg) segments.push(seg);
           this.resetSpeech();
+        } else if (this.hangoverCount <= 0 && this.speechFrameCount >= MIN_SPEECH_FRAMES
+          && this.speechFrameCount < SHORT_PHRASE_FRAMES && !this.shortPhraseExtended) {
+          this.hangoverCount = HANGOVER_FRAMES;
+          this.shortPhraseExtended = true;
         } else if (this.hangoverCount <= 0) {
           // End of speech
           if (this.speechFrameCount >= MIN_SPEECH_FRAMES) {
@@ -190,12 +232,15 @@ export class VadProcessor {
     }
     this.resetSpeech();
     this.buffer = [];
+    this.preRoll = [];
     return segments;
   }
 
   reset(): void {
     this.resetSpeech();
     this.buffer = [];
+    this.preRoll = [];
+    this.recentLevels = [];
   }
 
   private buildSegment(): SpeechSegment | null {
@@ -213,6 +258,7 @@ export class VadProcessor {
   private resetSpeech(): void {
     this.inSpeech = false;
     this.hangoverCount = 0;
+    this.shortPhraseExtended = false;
     this.speechFrameCount = 0;
     this.speechDurationMs = 0;
     this.speechBuffer = [];

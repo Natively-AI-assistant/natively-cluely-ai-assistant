@@ -136,11 +136,13 @@ test('worker: Whisper passes go through the queue; Auto checks every final and r
   assert.match(src, /run: runWhisperTranscribe,/);
   assert.match(src, /skipped: true/);
   const run = src.slice(src.indexOf('async function runWhisperTranscribe('));
-  // Finals detect (and hand over the encoder output); partials take the last final's language.
-  assert.match(run, /if \(streaming\) \{\s*language = autoLanguage;\s*\} else if \(internalsUsable\('detect'\)\) \{[\s\S]{0,200}\(\{ language, encoderOutputs \} = await detectAutoLanguage\(msg\.audio\)\);/);
+  // Finals run the first decoder step (and hand over the encoder output);
+  // partials take the last final's language.
+  assert.match(run, /if \(!streaming && !isMoonshine && internalsUsable\('detect'\)\) \{[\s\S]{0,120}const step = await firstDecoderStep\(msg\.audio\);[\s\S]{0,200}encoderOutputs = step\.encoderOutputs;[\s\S]{0,200}if \(autoDetect\) language = detectAutoLanguage\(step\.logits, msg\.audio\.length\);/);
+  assert.match(run, /\} else if \(autoDetect\) \{\s*language = autoLanguage;\s*\}\n/);
   // The reuse path falls back to a plain run, so a library change cannot cost a transcript.
-  assert.match(run, /result = await pipe\(msg\.audio, \{ \.\.\.opts, encoder_outputs: encoderOutputs \}\);[\s\S]{0,80}\} catch[\s\S]{0,300}result = await pipe\(msg\.audio, opts\);/);
-  const detect = src.slice(src.indexOf('async function detectAutoLanguage('), src.indexOf('function letGenerateReuseEncoderOutputs('));
+  assert.match(run, /const r = await pipe\(msg\.audio, \{ \.\.\.o, encoder_outputs: encoderOutputs \}\);[\s\S]{0,80}\} catch[\s\S]{0,300}return pipe\(msg\.audio, o\);/);
+  const detect = src.slice(src.indexOf('async function firstDecoderStep('), src.indexOf('function letGenerateReuseEncoderOutputs('));
   assert.match(detect, /_prepare_encoder_decoder_kwargs_for_generation\(/, 'the encoder runs once, here');
   assert.match(detect, /await model\(\{\s*encoder_outputs,/, 'the language step reuses it');
   assert.equal(/input_features,\s*decoder_input_ids/.test(detect), false, 'no second encoder pass in the language step');
@@ -151,7 +153,7 @@ test('worker: Whisper passes go through the queue; Auto checks every final and r
 
 test('worker: an unsure guess keeps the previous language', () => {
   const src = fs.readFileSync(path.join(repoRoot, 'electron/audio/whisper/whisperWorker.ts'), 'utf8');
-  const fnSrc = src.slice(src.indexOf('function acceptsAutoLanguage('), src.indexOf('async function detectAutoLanguage('));
+  const fnSrc = src.slice(src.indexOf('function acceptsAutoLanguage('), src.indexOf('\n// The encoder output and the first-step logits'));
   const body = fnSrc.replace(/^function acceptsAutoLanguage\([^)]*\): boolean \{/, '').replace(/\}\s*$/, '');
   const make = (prev) => new Function('guess', 'samples', `const autoLanguage = ${JSON.stringify(prev)}; const AUTO_LANGUAGE_MIN_SAMPLES = 24000;${body}`);
   const first = make(null);

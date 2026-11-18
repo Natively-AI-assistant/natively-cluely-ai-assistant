@@ -1,6 +1,6 @@
 // Unit tests for electron/audio/whisper/vadProcessor.ts — the energy-based
-// VAD (30 ms / 480-sample windows at 16 kHz, RMS threshold 0.008, 10-frame
-// hangover, 15 s force-flush) that cuts mic/system audio into speech segments
+// VAD (30 ms / 480-sample windows at 16 kHz, RMS threshold 3x the noise floor in [0.002, 0.008], 300 ms pre-roll, 20-frame
+// hangover (40 for a phrase under 1.5 s), 15 s force-flush) that cuts mic/system audio into speech segments
 // for local Whisper.
 //
 // Loads the compiled CommonJS output from dist-electron/ (build first).
@@ -22,8 +22,14 @@ const { VadProcessor } = require(
 
 const WINDOW = 480;        // samples per 30 ms frame
 const FRAME_MS = 30;
-const HANGOVER = 10;       // silent frames that close a segment
+// Silent frames that close a phrase under 1.5 s of voiced audio, which is every
+// phrase in this file except the 'short-phrase hangover' block: the 20-frame
+// hangover plus its one 20-frame extension.
+const HANGOVER = 40;
+const BASE_HANGOVER = 20;
+const SHORT_PHRASE = 50;   // voiced frames below which a phrase gets the extension
 const MAX_FRAMES = 500;    // 15000 ms / 30 ms
+const PRE_ROLL = 10;       // frames kept from before speech opens
 
 /** `n` frames filled with a constant amplitude (RMS === |amp|). */
 function frames(n, amp) {
@@ -103,16 +109,16 @@ describe('VadProcessor — energy threshold', () => {
 });
 
 describe('VadProcessor — segment close on hangover', () => {
-  test('speech followed by 10 silent frames closes one segment including the hangover', () => {
+  test('speech followed by HANGOVER silent frames closes one segment including the hangover', () => {
     const vad = new VadProcessor();
     assert.deepEqual(vad.push(speech(5)), []);
     assert.equal(vad.isInSpeech(), true);
 
-    // 9 silent frames: still inside the hangover.
+    // HANGOVER - 1 silent frames: still inside the hangover.
     assert.deepEqual(vad.push(silence(HANGOVER - 1)), []);
     assert.equal(vad.isInSpeech(), true);
 
-    // The 10th silent frame closes it.
+    // The last silent frame closes it.
     const out = vad.push(silence(1));
     assert.equal(out.length, 1);
     const seg = out[0];
@@ -128,8 +134,8 @@ describe('VadProcessor — segment close on hangover', () => {
     const vad = new VadProcessor();
     const out = vad.push(concat(speech(5), silence(HANGOVER)));
     assert.equal(out.length, 1);
-    assert.equal(out[0].durationMs, 15 * FRAME_MS);
-    assert.equal(out[0].samples.length, 15 * WINDOW);
+    assert.equal(out[0].durationMs, (5 + HANGOVER) * FRAME_MS);
+    assert.equal(out[0].samples.length, (5 + HANGOVER) * WINDOW);
   });
 
   test('speech resuming inside the hangover keeps the segment open and re-arms the hangover', () => {
@@ -143,19 +149,38 @@ describe('VadProcessor — segment close on hangover', () => {
 
     const out = vad.push(silence(1));
     assert.equal(out.length, 1);
-    const total = 4 + 9 + 1 + 10;
+    const total = 4 + (HANGOVER - 1) + 1 + HANGOVER;
     assert.equal(out[0].durationMs, total * FRAME_MS);
     assert.equal(out[0].samples.length, total * WINDOW);
   });
 
-  test('silence after a closed segment is not buffered into the next one', () => {
+  test('only the 300 ms pre-roll of the silence after a closed segment joins the next one', () => {
     const vad = new VadProcessor();
     vad.push(concat(speech(4), silence(HANGOVER + 20)));
     assert.equal(vad.isInSpeech(), false);
     const out = vad.push(concat(speech(4, 0.2), silence(HANGOVER)));
     assert.equal(out.length, 1);
-    assert.equal(out[0].samples.length, (4 + HANGOVER) * WINDOW);
-    assert.ok(Math.abs(out[0].samples[0] - 0.2) < 1e-6, 'second segment starts at its own first speech frame');
+    assert.equal(out[0].samples.length, (PRE_ROLL + 4 + HANGOVER) * WINDOW);
+    assert.equal(out[0].durationMs, (PRE_ROLL + 4 + HANGOVER) * FRAME_MS);
+    assert.equal(out[0].samples[0], 0, 'segment opens on the pre-roll');
+    assert.ok(Math.abs(out[0].samples[PRE_ROLL * WINDOW] - 0.2) < 1e-6, 'speech follows the pre-roll');
+  });
+
+  // 2026-11-18: a fixed 0.008 gate cut quiet speech into fragments Whisper
+  // filled with invented words. After silence the gate drops to 0.002.
+  test('after silence, speech below the old 0.008 gate still opens a segment', () => {
+    const vad = new VadProcessor();
+    vad.push(silence(20));
+    vad.push(speech(1, 0.003));
+    assert.equal(vad.isInSpeech(), true);
+  });
+
+  test('steady noise raises the gate, but never above 0.008', () => {
+    const vad = new VadProcessor();
+    vad.push(frames(80, 0.004)); // noise floor 0.004 -> gate 0.008
+    assert.equal(vad.isInSpeech(), false);
+    vad.push(speech(1, 0.009));
+    assert.equal(vad.isInSpeech(), true);
   });
 
   test('two utterances in a single push yield two segments and two ids', () => {
@@ -202,7 +227,9 @@ describe('VadProcessor — segment close on hangover', () => {
 
   test('a dropped burst does not disturb the next utterance', () => {
     const vad = new VadProcessor();
-    const out = vad.push(concat(speech(1), silence(HANGOVER), speech(5, 0.2), silence(HANGOVER)));
+    // Below the voiced minimum there is no short-phrase extension: the burst
+    // closes (and is dropped) after the base hangover.
+    const out = vad.push(concat(speech(1), silence(BASE_HANGOVER), speech(5, 0.2), silence(HANGOVER)));
     assert.equal(out.length, 1);
     assert.equal(out[0].durationMs, (5 + HANGOVER) * FRAME_MS);
     assert.ok(Math.abs(out[0].samples[0] - 0.2) < 1e-6);
@@ -384,13 +411,13 @@ describe('VadProcessor — softCommit', () => {
     vad.push(concat(speech(12), silence(8)));   // 8 frames into the hangover
     const seg = vad.softCommit();
     assert.equal(seg.durationMs, 600);
-    // Hangover was re-armed to 10: 9 more silent frames do not close it...
+    // Hangover was re-armed to HANGOVER: one frame short does not close it...
     assert.deepEqual(vad.push(silence(HANGOVER - 1)), []);
     assert.equal(vad.isInSpeech(), true);
-    // ...the 10th does, and the segment is tail (10) + silence (10).
+    // ...the last does, and the segment is tail (10) + silence (HANGOVER).
     const out = vad.push(silence(1));
     assert.equal(out.length, 1);
-    assert.equal(out[0].durationMs, 20 * FRAME_MS);
+    assert.equal(out[0].durationMs, (10 + HANGOVER) * FRAME_MS);
     assert.equal(vad.isInSpeech(), false);
   });
 
@@ -487,5 +514,34 @@ describe('VadProcessor — flush and reset', () => {
     assert.equal(a.isInSpeech(), true);
     assert.equal(b.isInSpeech(), false);
     assert.equal(b.currentSegmentId(), 0);
+  });
+});
+
+// 2026-11-18: a two-word lead-in cut off alone ("Ask not.") has no context and
+// the model guesses ("As not."); the same audio as part of the sentence is right.
+describe('VadProcessor — short-phrase hangover', () => {
+  test('a phrase of 1.5 s or more closes after the base hangover', () => {
+    const vad = new VadProcessor();
+    const out = vad.push(concat(speech(SHORT_PHRASE), silence(BASE_HANGOVER)));
+    assert.equal(out.length, 1);
+    assert.equal(out[0].durationMs, (SHORT_PHRASE + BASE_HANGOVER) * FRAME_MS);
+  });
+
+  test('a shorter phrase waits one more hangover, and speech in it joins the phrase', () => {
+    const vad = new VadProcessor();
+    assert.deepEqual(vad.push(concat(speech(10), silence(BASE_HANGOVER + 15))), []);
+    assert.equal(vad.isInSpeech(), true);
+    vad.push(speech(SHORT_PHRASE));
+    const out = vad.push(silence(BASE_HANGOVER));
+    assert.equal(out.length, 1, 'one phrase, not a fragment and a sentence');
+    assert.equal(out[0].durationMs, (10 + BASE_HANGOVER + 15 + SHORT_PHRASE + BASE_HANGOVER) * FRAME_MS);
+    assert.equal(vad.currentSegmentId(), 1);
+  });
+
+  test('the extension is given once per pause', () => {
+    const vad = new VadProcessor();
+    const out = vad.push(concat(speech(10), silence(2 * BASE_HANGOVER)));
+    assert.equal(out.length, 1);
+    assert.equal(out[0].durationMs, (10 + 2 * BASE_HANGOVER) * FRAME_MS);
   });
 });

@@ -158,3 +158,27 @@ describe('resampleToF32 — upsampling', () => {
     for (const v of out) assert.ok(v >= -1 && v < 1);
   });
 });
+
+// 2026-11-18: a -30 dB voice is heard worse by Moonshine (raw waveform) and
+// Whisper (log-mel) than the same voice at normal level.
+describe('normalizeGain', () => {
+  const { normalizeGain } = require(path.join(repoRoot, 'dist-electron', 'electron', 'audio', 'whisper', 'audioResampler.js'));
+
+  test('raises a quiet segment to a 0.5 peak', () => {
+    const out = normalizeGain(Float32Array.from([0.05, -0.1, 0.02]));
+    assert.ok(Math.abs(out[1] + 0.5) < 1e-6);
+    assert.ok(Math.abs(out[0] - 0.25) < 1e-6);
+  });
+
+  test('never lowers a loud segment and never boosts more than 30x', () => {
+    const loud = Float32Array.from([0.9, -0.2]);
+    assert.equal(normalizeGain(loud), loud);
+    const faint = normalizeGain(Float32Array.from([0.001]));
+    assert.ok(Math.abs(faint[0] - 0.03) < 1e-6);
+  });
+
+  test('silence stays silence', () => {
+    const z = new Float32Array(4);
+    assert.equal(normalizeGain(z), z);
+  });
+});

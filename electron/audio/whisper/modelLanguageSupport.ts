@@ -214,7 +214,8 @@ function isNemotronModel(modelId: string): boolean {
  *  - Nemotron: every RECOGNITION_LANGUAGES key whose BCP-47 locale resolves
  *    through resolveNemotronLangId() (the verified transcription-ready tier,
  *    including the documented en-IN/en-AU/en-CA → en-US inference and the
- *    ar-SA → ar-AR alias). 'auto' excluded — Nemotron has no auto-detect.
+ *    ar-SA → ar-AR alias), plus 'auto', sent as the model's own Auto prompt
+ *    (NEMOTRON_AUTO_LANG_ID).
  *  - Parakeet TDT v3: the 25 European languages in its training vocabulary +
  *    auto. The only model offered PARAKEET_ONLY_LANGUAGE_KEYS. (v2 is
  *    English-only and takes the last branch.)
@@ -225,8 +226,8 @@ function isNemotronModel(modelId: string): boolean {
 export function getLocalModelLanguageSupport(modelId: string): LocalModelLanguageSupport {
   if (isNemotronModel(modelId)) {
     const allowed = Object.entries(RECOGNITION_LANGUAGES)
-      .filter(([key, lang]) => key !== 'auto' && !PARAKEET_ONLY_LANGUAGE_KEYS.has(key)
-        && resolveNemotronLangId(lang.bcp47) !== null)
+      .filter(([key, lang]) => key === 'auto' || (!PARAKEET_ONLY_LANGUAGE_KEYS.has(key)
+        && resolveNemotronLangId(lang.bcp47) !== null))
       .map(([key]) => key);
     return { languageSelectable: true, accentSelectable: true, allowedLanguageKeys: allowed };
   }
@@ -254,4 +255,11 @@ export function getLocalModelLanguageSupport(modelId: string): LocalModelLanguag
     accentSelectable: false,
     allowedLanguageKeys: [...ENGLISH_VARIANT_KEYS],
   };
+}
+
+/** The `<|xx|>` code for a Whisper language name ('french' -> 'fr'), or null. */
+export function whisperLanguageCode(name: string | null): string | null {
+  if (!name) return null;
+  for (const [code, n] of Object.entries(WHISPER_LANGUAGE_BY_ISO639)) if (n === name) return code;
+  return null;
 }
