@@ -50,6 +50,7 @@ const GUARDED_FILES = [
   'src/components/settings/connectors/WebhooksPanel.tsx',
   'src/components/settings/connectors/common.tsx',
   'src/components/settings/connectors/parts.tsx',
+  'src/components/settings/DiagnosticReportActions.tsx',
   'src/components/settings/FollowMicDeviceSettings.tsx',
   'src/components/settings/EmbeddingSettings.tsx',
   'src/components/settings/HelpSettings.tsx',
