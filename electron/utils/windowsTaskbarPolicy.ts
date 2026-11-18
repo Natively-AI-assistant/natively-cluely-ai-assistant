@@ -33,8 +33,14 @@ export const LEGACY_LOGIN_ITEM_NAMES: readonly string[] = DISGUISE_MODES.map(
   (mode) => `com.natively.assistant.${mode}`,
 );
 
-export function appUserModelIdForDisguise(mode: DisguiseModeId): string {
-  return mode === 'none' ? WINDOWS_APP_USER_MODEL_ID : `com.natively.assistant.${mode}`;
+// Dev runs get their own IDs. Electron writes a Start-menu shortcut stamped with
+// the current ID whenever a notification shows, named after the exe's product
+// name: "Electron.lnk" → node_modules/electron/dist/electron.exe in dev. Once a
+// dev run had stamped it with the production ID, the taskbar resolved the
+// INSTALLED app's button to that shortcut and drew Electron's icon.
+export function appUserModelIdForDisguise(mode: DisguiseModeId, isPackaged: boolean): string {
+  const id = mode === 'none' ? WINDOWS_APP_USER_MODEL_ID : `com.natively.assistant.${mode}`;
+  return isPackaged ? id : `${id}.dev`;
 }
 
 /** Structural subset of Electron's `app` for login items. */
