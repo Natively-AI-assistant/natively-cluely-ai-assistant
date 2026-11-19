@@ -1556,16 +1556,74 @@ export function initializeIpcHandlers(appState: AppState): void {
       () => appState.processingHelper?.getLLMHelper?.()?.fastResponseFamilyNow?.() ?? null,
     );
   } catch { /* the saved default model is read instead */ }
+  // A Pro pack moves the AI and speech-to-text to Natively API once per pack
+  // key, and puts them back when the pack is gone (packs/packNativelySwitch.ts).
+  // Runs wherever Pro is re-read: launch (a pack bought on an older version),
+  // every Pro watch, and right after an activation or a provider change.
+  let packSwitchRun: Promise<void> | null = null;
+  const reconcilePackSwitchNow = (): void => {
+    if (packSwitchRun) return;
+    packSwitchRun = (async () => {
+      const { reconcilePackSwitch } = require('./services/packs/packNativelySwitch') as typeof import('./services/packs/packNativelySwitch');
+      const { isPackLicence } = require('./services/packs/packProRule') as typeof import('./services/packs/packProRule');
+      const { storedLicenceFacts } = require('./services/proAccess') as typeof import('./services/proAccess');
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const { createHash } = require('node:crypto') as typeof import('node:crypto');
+      const licence = storedLicenceFacts();
+      if (!licence) return; // unreadable is not "no licence": nothing is put back on a guess
+      const cm = CredentialsManager.getInstance();
+      const llm = () => appState.processingHelper?.getLLMHelper?.();
+      const result = await reconcilePackSwitch({
+        facts: () => {
+          const key: string | undefined = cm.getNativelyApiKey();
+          const helper = llm();
+          const savedModel: string | null = cm.getDefaultModel() ?? null;
+          return {
+            licencePremium: licence.isPremium,
+            licenceProvider: licence.provider,
+            licenceIsPack: isPackLicence(licence.provider, licence.plan),
+            keyId: key && key !== TRIAL_SENTINEL_KEY ? createHash('sha256').update(key).digest('hex').slice(0, 16) : null,
+            memory: cm.getNativelyPackSwitch() ?? null,
+            savedModel,
+            liveModel: helper?.getCurrentModelId?.() ?? savedModel,
+            sttProvider: cm.getSttProvider() ?? null,
+            // No AI helper yet: unknown, so nothing moves until it is up.
+            aiStaysWithUser: helper ? Boolean(helper.aiStaysWithUser?.()) : true,
+          };
+        },
+        fastModel: () => cm.getFastModel(),
+        savedModel: () => cm.getDefaultModel() ?? null,
+        sttProvider: () => cm.getSttProvider() ?? null,
+        write: (change, memory) => cm.applyNativelyPackSwitch(change, memory),
+        beforeChange: () => {
+          try { require('./services/packs/packClockWiring').getPackMeetingClock().countsChanged(); } catch { /* no clock: nothing to bill */ }
+        },
+        // The running AI, the overlay's model chip and Settings follow the saved model.
+        applyModel: () => syncNativelyModelRuntime(),
+        fastFamilyNow: () => llm()?.fastResponseFamilyNow?.() ?? null,
+        applyStt: async () => {
+          try { await appState.reconfigureSttProvider(); } finally { broadcastCredentialsChanged(); }
+        },
+        log: (m) => console.log(`[IPC] ${m}`),
+      });
+      // Pro follows at once, not at the next 30 s watch.
+      if (result) proWatch.check();
+    })()
+      .catch((e: any) => console.warn('[IPC] pack switch failed:', e?.message ?? e))
+      .finally(() => { packSwitchRun = null; });
+  };
   proWatch.check();
+  reconcilePackSwitchNow();
   checkProNow = () => {
     // The pack clock bills the time up to this switch by the providers it ran
     // on, not by the ones just picked (packs/PackMeetingClock.ts countsChanged).
     try { require('./services/packs/packClockWiring').getPackMeetingClock().countsChanged(); } catch { /* no clock: nothing to bill */ }
     proWatch.check();
+    reconcilePackSwitchNow();
   };
   {
     proWatchTimer && clearInterval(proWatchTimer);
-    proWatchTimer = setInterval(() => proWatch.check(), PRO_WATCH_EVERY_MS);
+    proWatchTimer = setInterval(() => { proWatch.check(); reconcilePackSwitchNow(); }, PRO_WATCH_EVERY_MS);
     if (typeof (proWatchTimer as any).unref === 'function') (proWatchTimer as any).unref();
   }
   try {

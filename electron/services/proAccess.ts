@@ -60,6 +60,17 @@ function readLicenceFacts(): { provider?: string; plan?: string; isPremium: bool
   licenceFacts = { at: now, provider: d?.provider, plan: d?.plan, isPremium: Boolean(d?.isPremium) };
   return licenceFacts;
 }
+/**
+ * The stored licence as stored (the pack rule not applied), kept 10 s. null
+ * when it cannot be read, which is not the same as no licence.
+ */
+export function storedLicenceFacts(): { provider?: string; plan?: string; isPremium: boolean } | null {
+  try {
+    return readLicenceFacts();
+  } catch {
+    return null;
+  }
+}
 /** Activation, deactivation, a re-check: read the licence afresh next time. */
 export function forgetLicenceFacts(): void {
   licenceFacts = null;

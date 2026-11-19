@@ -153,6 +153,12 @@ export interface StoredCredentials {
     /** ISO time until which the pack key is the one in use: the pack's use-by date, or a shorter hold when the server did not name it. */
     nativelyPackInUseUntil?: string;
     /**
+     * The pack moved the AI / speech-to-text / Fast Response to Natively API
+     * for this key (fingerprint) and what they were before
+     * (services/packs/packNativelySwitch.ts, 2026-11-19).
+     */
+    nativelyPackSwitch?: { keyId: string; prev: { defaultModel?: string; sttProvider?: string; fastModel?: string | null } };
+    /**
      * Optional bearer token for a user-hosted OpenAI-compatible embedding
      * endpoint. Lives here rather than in settings.json because that file is
      * plaintext on disk; LM Studio and llama.cpp need no token at all, but a
@@ -1377,6 +1383,31 @@ export class CredentialsManager {
         return !!this.credentials.nativelyPackApiKey && Number.isFinite(until) && until > now;
     }
 
+    public getNativelyPackSwitch(): { keyId: string; prev: { defaultModel?: string; sttProvider?: string; fastModel?: string | null } } | undefined {
+        return this.credentials.nativelyPackSwitch;
+    }
+
+    /**
+     * The pack switch to or from Natively API (services/packs/packNativelySwitch.ts):
+     * the settings named and what to remember, in ONE save, so a refused or
+     * failed write never leaves the settings moved with nothing to put them back
+     * from. False: nothing was saved.
+     */
+    public applyNativelyPackSwitch(
+        change: { defaultModel?: string; sttProvider?: string; fastModel?: string | null },
+        memory: { keyId: string; prev: { defaultModel?: string; sttProvider?: string; fastModel?: string | null } } | null,
+    ): boolean {
+        if (this.refuseWriteWhileDegraded('natively pack switch')) return false;
+        const before = { ...this.credentials };
+        if (change.defaultModel !== undefined) this.credentials.defaultModel = change.defaultModel;
+        if (change.sttProvider !== undefined) this.credentials.sttProvider = change.sttProvider as StoredCredentials['sttProvider'];
+        if ('fastModel' in change) this.credentials.fastModel = change.fastModel ?? undefined;
+        this.credentials.nativelyPackSwitch = memory ?? undefined;
+        if (this.saveCredentials()) return true;
+        this.credentials = before;
+        return false;
+    }
+
     /** Hold (or drop, with null) a pack key beside the saved key. Dropping or replacing it ends its use. */
     public setNativelyPackApiKey(key: string | null): boolean {
         if (this.refuseWriteWhileDegraded('set natively pack key')) return false;
@@ -1889,6 +1920,30 @@ export class CredentialsManager {
     }
 
     /**
+     * The settings a pack moved to Natively API (services/packs/packNativelySwitch.ts)
+     * go back to what they were, where they are still on Natively API. Mutates
+     * only; the caller saves.
+     */
+    private putBackPackSwitch(reason: string, changed: { defaultModel?: string; sttProvider?: string }): void {
+        const packSwitch = this.credentials.nativelyPackSwitch;
+        if (!packSwitch) return;
+        this.credentials.nativelyPackSwitch = undefined;
+        const prev = packSwitch.prev || {};
+        if (prev.defaultModel && this.credentials.defaultModel === 'natively') {
+            this.credentials.defaultModel = prev.defaultModel;
+            changed.defaultModel = prev.defaultModel;
+        }
+        if (prev.sttProvider && this.credentials.sttProvider === 'natively') {
+            this.credentials.sttProvider = prev.sttProvider as StoredCredentials['sttProvider'];
+            changed.sttProvider = prev.sttProvider;
+        }
+        if ('fastModel' in prev && this.credentials.fastModel === 'natively') {
+            this.credentials.fastModel = prev.fastModel ?? undefined;
+        }
+        console.log(`[CredentialsManager] ${reason} — put back the settings from before the pack`);
+    }
+
+    /**
      * Undo the auto-promotions setNativelyApiKey() performs when a key is stored.
      * Mutates only; the caller saves.
      *
@@ -1897,6 +1952,9 @@ export class CredentialsManager {
      */
     private applyNativelyAutoDefaultRevert(reason: string): { defaultModel?: string; sttProvider?: string; rerankerProvider?: string } {
         const changed: { defaultModel?: string; sttProvider?: string; rerankerProvider?: string } = {};
+        // A pack moved these to Natively API: what was there before goes back
+        // first, not the fallbacks below.
+        this.putBackPackSwitch(reason, changed);
         if (this.credentials.defaultModel === 'natively') {
             this.credentials.defaultModel = 'gemini-3.1-flash-lite';
             changed.defaultModel = this.credentials.defaultModel;
@@ -1991,11 +2049,12 @@ export class CredentialsManager {
      */
     public revertNativelyAutoDefaults(reason: string): { defaultModel?: string; sttProvider?: string; rerankerProvider?: string } {
         if (this.refuseWriteWhileDegraded('revert natively auto defaults')) return {};
+        const hadPackSwitch = !!this.credentials.nativelyPackSwitch;
         const changed = this.applyNativelyAutoDefaultRevert(reason);
         // rerankerProvider is deliberately NOT part of this condition: it lives
         // in SettingsManager and has already persisted itself. Adding it here
         // would write the credentials file for a change that is not in it.
-        if (changed.defaultModel || changed.sttProvider) this.saveCredentials();
+        if (changed.defaultModel || changed.sttProvider || hadPackSwitch) this.saveCredentials();
         return changed;
     }
 
