@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useT } from '../i18n';
 import {
     Github, Twitter, Linkedin, Instagram, Send, Star, Bug, Mail, Heart,
-    AlignLeft, Smartphone, Camera, AudioLines,
+    Smartphone, Camera,
     LayoutGrid, Search, FileText, PlayCircle,
     HardDrive, Sliders, Lock, ArrowRight, Check, HandCoins,
 } from 'lucide-react';
@@ -79,12 +79,17 @@ interface AboutItem { title: string; body: string; badge?: string; Icon: AboutIc
 // screenshot question (#726, Settings › Overlay "Screenshot question"), and BYOK Soniox
 // stt-rt-v6 / ElevenLabs Scribe v3 plus Nepali (a5b063f9, #736; the speech
 // provider and its key live in Settings › Audio).
+// 3.2.1 (2026-11-19), patch rows for the same "What's New in v3.2" heading: the
+// diagnostic report (#759, shown in Natively API settings only when a connection
+// finding appears, sent only when the person chooses), and one Natively key that
+// moves AI, speech and search to Natively API (PR #767, pack-switch-to-natively).
+// Answer length, the speech-model row and "Packs keep working" moved out to keep five.
 const WHATS_NEW: AboutItem[] = [
+    { title: 'Send a diagnostic report', body: 'If Natively cannot reach its servers, Natively API settings can send a report with a masked log.', Icon: Bug },
+    { title: 'One Natively key', body: 'A pack or plan key runs AI, speech and search on Natively API. Clearing it puts your settings back.', Icon: HandCoins },
     { title: 'Smarter Auto Answer', body: 'An on-device model decides which questions to answer. In Intelligence.', Icon: AutoAnswerIcon },
     { title: 'Faster screenshot answers', body: 'Answers start about twice as fast, and you choose the question. In Overlay.', Icon: Camera },
-    { title: 'Answer length', body: 'Shorter, Smart or Longer answers, for every mode. In Overlay.', Icon: AlignLeft },
     { title: 'Answers on your phone', body: 'Every overlay answer streams live to your paired phone.', Icon: Smartphone },
-    { title: 'Newer speech models', body: 'Soniox v6, ElevenLabs Scribe v3 and Nepali. In Audio.', Icon: AudioLines },
 ];
 
 // Compressed 2026-09-25 at the owner's request. Not numbered: they are not a
