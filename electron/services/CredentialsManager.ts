@@ -99,24 +99,6 @@ export interface CurlProvider {
  */
 export type PreferredModelProvider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter' | 'litellm' | 'ninerouter';
 
-/**
- * What the Natively switch remembers (services/packs/packNativelySwitch.ts
- * PackSwitchMemory): the key it ran for, by fingerprint, and the settings it
- * moved. Mirrored here so this file needs no import from there.
- */
-type NativelySwitchMemory = {
-    keyId: string;
-    prev: {
-        defaultModel?: string;
-        sttProvider?: string;
-        fastMode?: boolean;
-        rerankerProvider?: string;
-        embedding?: { mode?: string; provider?: string; model?: string; dimensions?: number };
-    };
-    pack?: boolean;
-    ended?: boolean;
-};
-
 export interface StoredCredentials {
     geminiApiKey?: string;
     groqApiKey?: string;
@@ -402,6 +384,24 @@ export interface StoredCredentials {
         projectId: string;
     };
 }
+
+/**
+ * What the Natively switch remembers (services/packs/packNativelySwitch.ts
+ * PackSwitchMemory): the key it ran for, by fingerprint, and the settings it
+ * moved. Mirrored here so this file needs no import from there.
+ */
+type NativelySwitchMemory = {
+    keyId: string;
+    prev: {
+        defaultModel?: string;
+        sttProvider?: string;
+        fastMode?: boolean;
+        rerankerProvider?: string;
+        embedding?: { mode?: string; provider?: string; model?: string; dimensions?: number };
+    };
+    pack?: boolean;
+    ended?: boolean;
+};
 
 export class CredentialsManager {
     private static instance: CredentialsManager;
