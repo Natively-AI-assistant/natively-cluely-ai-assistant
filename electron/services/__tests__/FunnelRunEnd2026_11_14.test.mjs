@@ -114,6 +114,8 @@ describe('app_run_ended (2026-11-14)', { skip: HAVE_BUILD ? false : 'run `npm ru
     assert.deepEqual(rest, {
       how: 'vanished', minutes: 95, in_meeting: false,
       renderer_crashes: 1, gpu_crashes: 0, helper_crashes: 2, out_of_memory: true, updated: true,
+      // 2026-11-16: every run also says what it last recorded (runEnd.mjs contextProps).
+      last_event: 'app_start',
     });
     assert.equal(h.state().runEndReported, `${vanished.pid}:${vanished.startedAt}`);
     await h.ft.tick();
