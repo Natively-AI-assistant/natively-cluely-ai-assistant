@@ -1923,6 +1923,13 @@ export class CredentialsManager {
      * go back to what they were, where they are still on Natively API. Mutates
      * only; the caller saves.
      */
+    private packFastModeListener: ((on: boolean) => void) | null = null;
+
+    /** Applies a Fast Response Mode the pack put-back turned on again to the running AI and the windows. */
+    public setPackFastModeListener(fn: ((on: boolean) => void) | null): void {
+        this.packFastModeListener = fn;
+    }
+
     private putBackPackSwitch(reason: string, changed: { defaultModel?: string; sttProvider?: string }): void {
         const packSwitch = this.credentials.nativelyPackSwitch;
         if (!packSwitch) return;
@@ -1936,14 +1943,17 @@ export class CredentialsManager {
             this.credentials.sttProvider = prev.sttProvider as StoredCredentials['sttProvider'];
             changed.sttProvider = prev.sttProvider;
         }
-        // Fast Response Mode lives in SettingsManager (like the reranker above);
-        // the running AI picks it up on the next launch or toggle.
+        // Fast Response Mode lives in SettingsManager (like the reranker above).
+        // Saved here; the running AI and the windows follow through the
+        // listener ipcHandlers registers (setPackFastModeListener).
         if (prev.fastMode) {
             try {
                 // eslint-disable-next-line @typescript-eslint/no-var-requires
                 const { SettingsManager } = require('./SettingsManager');
                 const settings = SettingsManager.getInstance();
-                if (!settings.get('groqFastTextMode')) settings.set('groqFastTextMode', true);
+                if (!settings.get('groqFastTextMode') && settings.set('groqFastTextMode', true)) {
+                    try { this.packFastModeListener?.(true); } catch { /* the next launch or toggle applies it */ }
+                }
             } catch { /* the user turns it on again */ }
         }
         console.log(`[CredentialsManager] ${reason} — put back the settings from before the pack`);

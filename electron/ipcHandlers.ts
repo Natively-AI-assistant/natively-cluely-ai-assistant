@@ -5,7 +5,7 @@ import { prewarmPreparedJpeg } from './services/screen/preparedJpeg';
 import { repairCapReached, endsInsideFence } from './llm/repairCap';
 import { AntigravityService, initializeAntigravityLifecycle } from './services/AntigravityService';
 import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
-import { app, BrowserWindow, clipboard, dialog, desktopCapturer, ipcMain, nativeImage, screen, shell, systemPreferences } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, desktopCapturer, ipcMain, nativeImage, safeStorage, screen, shell, systemPreferences } from 'electron';
 import { startChatWebSearch } from './services/webSearch/chatWebSearch';
 import { setOpenAtLogin, getOpenAtLogin } from './utils/windowsTaskbarPolicy';
 import { normalizeMeetingSurface } from './utils/meetingSurface';
@@ -1562,6 +1562,17 @@ export function initializeIpcHandlers(appState: AppState): void {
   // every Pro watch, and right after an activation or a provider change.
   let packSwitchRun: Promise<void> | null = null;
   let packGoneSince: number | null = null;
+  // Fast Response Mode, live and in every window, as set-groq-fast-text-mode
+  // does after its save.
+  const applyFastModeLive = (on: boolean): void => {
+    appState.processingHelper?.getLLMHelper?.()?.setGroqFastTextMode?.(on);
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) win.webContents.send('groq-fast-text-changed', on);
+    });
+  };
+  // A cleared or refused key puts back a Fast Response Mode the pack turned
+  // off; CredentialsManager saves it, this makes it live.
+  try { require('./services/CredentialsManager').CredentialsManager.getInstance().setPackFastModeListener(applyFastModeLive); } catch { /* applied at the next launch */ }
   const reconcilePackSwitchNow = (): void => {
     if (packSwitchRun) return;
     packSwitchRun = (async () => {
@@ -1573,10 +1584,16 @@ export function initializeIpcHandlers(appState: AppState): void {
       const licence = storedLicenceFacts();
       if (!licence) return; // unreadable is not "no licence": nothing is put back on a guess
       const cm = CredentialsManager.getInstance();
+      // A locked Keychain or unavailable DPAPI reads the licence file as "no
+      // licence" without throwing. Nothing moves until the store reads again:
+      // a restore on that guess, then the pack seen again, would switch twice.
+      if (cm.isCredentialStoreDegraded?.() || !safeStorage?.isEncryptionAvailable?.()) return;
       const llm = () => appState.processingHelper?.getLLMHelper?.();
       const result = await reconcilePackSwitch({
         facts: () => {
-          const key: string | undefined = cm.getNativelyApiKey();
+          // The pack's own key: the held pack key, else the saved key. Not the
+          // key in use, which flips to the plan key while the licence stays the pack.
+          const key: string | undefined = cm.getNativelyPackApiKey?.() || cm.getMainNativelyApiKey?.();
           const helper = llm();
           const savedModel: string | null = cm.getDefaultModel() ?? null;
           return {
@@ -1609,10 +1626,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         setFastMode: (on) => {
           const { SettingsManager } = require('./services/SettingsManager');
           if (!SettingsManager.getInstance().set('groqFastTextMode', on)) return false;
-          llm()?.setGroqFastTextMode?.(on);
-          BrowserWindow.getAllWindows().forEach((win) => {
-            if (!win.isDestroyed()) win.webContents.send('groq-fast-text-changed', on);
-          });
+          applyFastModeLive(on);
           return true;
         },
         applyStt: async () => {

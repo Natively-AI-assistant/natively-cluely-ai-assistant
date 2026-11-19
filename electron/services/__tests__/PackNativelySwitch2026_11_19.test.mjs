@@ -172,17 +172,21 @@ test('one unreadable licence read restores nothing: the pack must look gone twic
   assert.equal(state.defaultModel, 'groq/llama');
 });
 
-test('the pack gone with nothing left on Natively API: the memory stays, nothing is written', async () => {
+test('the pack over with nothing left on Natively API: only the memory goes, so a new pack on the same key switches again', async () => {
+  // Review 2026-11-19: the memory used to stay, and every pack lands on the
+  // customer's one pack key, so a second pack bought later switched nothing.
   const memory = { keyId: 'k1', prev: { defaultModel: 'groq/llama' } };
   const state = { defaultModel: 'gpt-5', sttProvider: 'soniox', fastMode: false, memory, facts: { licencePremium: false, licenceIsPack: false } };
   const { deps, calls } = fakeDeps(state);
-  assert.equal(await reconcilePackSwitch(deps), null);
-  assert.equal(state.memory, memory);
-  assert.equal(calls.length, 0);
-  // The licence readable again, same pack key: not switched again.
-  state.facts = {};
-  assert.equal(await reconcilePackSwitch(deps), null);
+  assert.equal(await reconcilePackSwitch(deps), 'forgot');
+  assert.deepEqual(calls, [['write', {}, null]], 'nothing but the memory is written');
+  assert.equal(state.memory, null);
   assert.equal(state.defaultModel, 'gpt-5');
+  // Pack 2 on the same key: switched like the first.
+  state.facts = {};
+  assert.equal(await reconcilePackSwitch(deps), 'switched');
+  assert.equal(state.defaultModel, 'natively');
+  assert.equal(state.memory.keyId, 'k1');
 });
 
 test('goneConfirmed hears every run, so a pack seen again resets the count', async () => {
@@ -249,6 +253,14 @@ test('ipcHandlers runs the switch at launch, on every Pro watch and in checkProN
   assert.match(src, /return now - packGoneSince >= 20_000;/);
   // An unreadable licence is not "no licence".
   assert.match(src, /const licence = storedLicenceFacts\(\);\s*\n\s*if \(!licence\) return;/);
+  // Nor is a credential store that cannot be read (a locked Keychain, DPAPI
+  // unavailable): it reads the licence as none without throwing.
+  assert.match(src, /if \(cm\.isCredentialStoreDegraded\?\.\(\) \|\| !safeStorage\?\.isEncryptionAvailable\?\.\(\)\) return;/);
+  // The pack's own key, never the key in use (it flips to the plan key while
+  // the licence stays the pack's, which would switch the same pack again).
+  const facts = src.slice(src.indexOf('const reconcilePackSwitchNow = (): void => {'), src.indexOf('const reconcilePackSwitchNow = (): void => {') + 3000);
+  assert.match(facts, /const key: string \| undefined = cm\.getNativelyPackApiKey\?\.\(\) \|\| cm\.getMainNativelyApiKey\?\.\(\);/);
+  assert.doesNotMatch(facts, /cm\.getNativelyApiKey\(\)/);
 });
 
 test('a cleared or refused key puts the pack\'s remembered settings back before the fallbacks', () => {
@@ -261,7 +273,11 @@ test('a cleared or refused key puts the pack\'s remembered settings back before 
   const put = src.slice(src.indexOf('private putBackPackSwitch('), src.indexOf('private putBackPackSwitch(') + 2200);
   assert.match(put, /this\.credentials\.nativelyPackSwitch = undefined;/);
   assert.match(put, /prev\.defaultModel && this\.credentials\.defaultModel === 'natively'/);
-  assert.match(put, /if \(!settings\.get\('groqFastTextMode'\)\) settings\.set\('groqFastTextMode', true\);/);
+  assert.match(put, /if \(!settings\.get\('groqFastTextMode'\) && settings\.set\('groqFastTextMode', true\)\) \{\s*\n\s*try \{ this\.packFastModeListener\?\.\(true\); \}/);
+  // ...and ipcHandlers makes it live, as set-groq-fast-text-mode does.
+  const ipc = read('../../ipcHandlers.ts');
+  assert.match(ipc, /CredentialsManager\.getInstance\(\)\.setPackFastModeListener\(applyFastModeLive\)/);
+  assert.match(ipc, /const applyFastModeLive = \(on: boolean\): void => \{\s*\n\s*appState\.processingHelper\?\.getLLMHelper\?\.\(\)\?\.setGroqFastTextMode\?\.\(on\);/);
   assert.match(src, /changed\.defaultModel \|\| changed\.sttProvider \|\| hadPackSwitch\) this\.saveCredentials\(\)/);
   // One save for the settings and the memory.
   assert.match(src, /public applyNativelyPackSwitch\(/);

@@ -58,7 +58,11 @@ export interface PackSwitchFacts {
   licenceProvider?: string | null;
   /** The licence is a pack's (packProRule.ts isPackLicence). */
   licenceIsPack: boolean;
-  /** Fingerprint of the Natively key in use, or null when there is none. */
+  /**
+   * Fingerprint of the pack's own key (the held pack key, else the saved key),
+   * or null when there is none. Not the key IN USE: that flips between a held
+   * pack key and the plan key while the licence stays the pack's.
+   */
   keyId: string | null;
   memory: PackSwitchMemory | null;
   /** The saved default model and the model answering now (the overlay picker changes only the second). */
@@ -169,9 +173,15 @@ export async function reconcilePackSwitch(d: PackSwitchDeps): Promise<PackSwitch
       const change = packRestoreChange(plan.prev, {
         defaultModel: d.savedModel(), sttProvider: d.sttProvider(), fastMode: d.fastModeOn(),
       });
-      // Nothing still on Natively API: the user moved it all. The memory stays,
-      // so a licence that comes back readable does not switch this pack again.
-      if (Object.keys(change).length === 0) return null;
+      // Nothing still on Natively API: the user moved it all. The pack is over
+      // (confirmed twice, and the caller does not run while the credential
+      // store cannot be read), so the memory goes: a new pack on the same key
+      // switches again.
+      if (Object.keys(change).length === 0) {
+        if (!d.write({}, null)) return null;
+        d.log('the pack ended: nothing left on Natively API to put back');
+        return 'forgot';
+      }
       d.beforeChange();
       if (!d.write({ defaultModel: change.defaultModel, sttProvider: change.sttProvider }, null)) return null;
       if (change.defaultModel !== undefined) d.applyModel();
