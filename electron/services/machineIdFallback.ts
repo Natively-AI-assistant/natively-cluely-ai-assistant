@@ -26,6 +26,7 @@
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
 export type MachineIdSource = 'ioreg' | 'registry' | 'machine_id_file';
 
@@ -73,7 +74,8 @@ export async function readMachineId(d: MachineIdDeps): Promise<{ raw: string; so
         // reg.exe from the Windows directory, not whatever 'reg' PATH finds.
         const root = d.env.SystemRoot || d.env.windir;
         if (!root) return null;
-        const reg = `${root.replace(/[\\/]+$/, '')}\\System32\\reg.exe`;
+        // path.win32 on purpose: the same answer whatever runs the tests.
+        const reg = path.win32.join(root, 'System32', 'reg.exe');
         const out = await d.execFile(reg, ['query', 'HKLM\\SOFTWARE\\Microsoft\\Cryptography', '/v', 'MachineGuid', '/reg:64'], { timeout: TIMEOUT_MS, windowsHide: true });
         const raw = parseRegMachineGuid(out);
         return raw ? { raw, source: 'registry' } : null;

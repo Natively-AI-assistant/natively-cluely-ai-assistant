@@ -20,12 +20,17 @@ export const ANSWER_PRESS_KINDS = /** @type {const} */ (['answered', 'message', 
  * @returns {'answered' | 'message' | 'empty' | 'failed'}
  */
 export function classifyAnswerPress(r = {}) {
-  // An answer recorded while the press ran wins: the user saw it.
-  if (Number.isFinite(r.answersBefore) && Number.isFinite(r.answersAfter) && r.answersAfter > r.answersBefore) return 'answered';
   if (r.threw) return 'failed';
   if (r.error !== undefined && r.error !== null && r.error !== '') return 'failed';
-  if (typeof r.answer === 'string' && r.answer.trim()) return 'message';
-  return 'empty';
+  const text = typeof r.answer === 'string' && r.answer.trim() !== '';
+  if (!text) return 'empty';
+  // Text came back AND an answer was recorded while the press ran. Both: the
+  // count is process-wide (an Auto Answer finishing meanwhile adds to it), so
+  // growth alone never makes an empty or failed press an answer. Text with no
+  // answer recorded is a message: setup lines, and the fallbacks the engine
+  // marks do_not_store ("did not produce an answer in time").
+  if (Number.isFinite(r.answersBefore) && Number.isFinite(r.answersAfter) && r.answersAfter > r.answersBefore) return 'answered';
+  return 'message';
 }
 
 /**

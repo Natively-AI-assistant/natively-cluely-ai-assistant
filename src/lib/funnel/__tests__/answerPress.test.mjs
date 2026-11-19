@@ -4,9 +4,14 @@ import assert from 'node:assert/strict';
 import { classifyAnswerPress, answerPressProps, ANSWER_PRESS_KINDS } from '../answerPress.mjs';
 import { FUNNEL_CATALOG } from '../funnelCatalog.mjs';
 
-test('an answer recorded during the press is answered, whatever else came back', () => {
+test('answered: text came back and an answer was recorded while the press ran', () => {
   assert.equal(classifyAnswerPress({ answersBefore: 3, answersAfter: 4, answer: 'x' }), 'answered');
-  assert.equal(classifyAnswerPress({ answersBefore: 3, answersAfter: 4, error: 'late error' }), 'answered');
+});
+
+test('an answer recorded by something else meanwhile (Auto Answer) never makes an empty or failed press an answer', () => {
+  assert.equal(classifyAnswerPress({ answersBefore: 3, answersAfter: 4, answer: null }), 'empty');
+  assert.equal(classifyAnswerPress({ answersBefore: 3, answersAfter: 4, answer: null, error: 'boom' }), 'failed');
+  assert.equal(classifyAnswerPress({ answersBefore: 3, answersAfter: 4, threw: true }), 'failed');
 });
 
 test('text with no answer recorded is a message, not an answer', () => {
