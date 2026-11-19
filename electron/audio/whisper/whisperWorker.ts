@@ -31,8 +31,11 @@ import { getBoundedOnnxSessionOptions } from '../../utils/onnxThreadConfig';
 //  - ENGLISH_ONLY_MODELS was a hand-typed id list that omitted Parakeet CTC
 //    (English-only per NVIDIA's model card). isEnglishOnlyLocalModel() is
 //    derived from MODEL_CATALOG's own `multilingual` flag instead.
-import { detectedWhisperLanguage, isEnglishOnlyLocalModel, resolveWhisperLanguage } from './modelLanguageSupport';
+import { detectedWhisperLanguage, isEnglishOnlyLocalModel, resolveWhisperLanguage, whisperLanguageCode } from './modelLanguageSupport';
 import { moonshineMaxNewTokens } from './moonshineTokenBudget';
+import { normalizeGain } from './audioResampler';
+import { localSttTuningFor } from './localSttTuning';
+import { looksLikeLoop, NO_SPEECH_THRESHOLD, noSpeechProbability, noSpeechTokenId, whisperMaxNewTokens } from './whisperSilenceGuard';
 import { loadedOnnxFiles, onnxDirFor } from './modelManager';
 import { trustSystemCertificates } from '../../utils/systemCertificates';
 
@@ -734,13 +737,14 @@ function acceptsAutoLanguage(guess: { probability: number } | null, samples: num
   return guess.probability >= (samples >= AUTO_LANGUAGE_MIN_SAMPLES ? 0.5 : 0.8);
 }
 
-async function detectAutoLanguage(audio: Float32Array): Promise<{ language: string | null; encoderOutputs: any }> {
+// The encoder output and the first-step logits after <|startoftranscript|>.
+// Auto Detect reads the language tokens and the silence guard <|nospeech|> off
+// the same step. Null when the model does not expose what this needs.
+async function firstDecoderStep(audio: Float32Array): Promise<{ logits: ArrayLike<number>; encoderOutputs: any } | null> {
   const model = pipe?.model;
-  const config = model?.generation_config;
-  const langToId = config?.lang_to_id;
-  const sot = config?.decoder_start_token_id;
-  if (!langToId || sot == null || !pipe.processor || typeof model._prepare_encoder_decoder_kwargs_for_generation !== 'function') {
-    return { language: autoLanguage, encoderOutputs: null };
+  const sot = model?.generation_config?.decoder_start_token_id;
+  if (sot == null || !pipe.processor || typeof model._prepare_encoder_decoder_kwargs_for_generation !== 'function') {
+    return null;
   }
   const { Tensor } = await loadTransformers() as any;
   const { input_features } = await pipe.processor(audio);
@@ -754,12 +758,60 @@ async function detectAutoLanguage(audio: Float32Array): Promise<{ language: stri
     encoder_outputs,
     decoder_input_ids: new Tensor('int64', BigInt64Array.from([BigInt(sot)]), [1, 1]),
   });
-  const guess = detectedWhisperLanguage(out.logits.data, langToId);
-  if (acceptsAutoLanguage(guess, audio.length) && guess!.language !== autoLanguage) {
+  return { logits: out.logits.data, encoderOutputs: encoder_outputs };
+}
+
+function detectAutoLanguage(logits: ArrayLike<number>, samples: number): string | null {
+  const langToId = pipe?.model?.generation_config?.lang_to_id;
+  if (!langToId) return autoLanguage;
+  const guess = detectedWhisperLanguage(logits, langToId);
+  if (acceptsAutoLanguage(guess, samples) && guess!.language !== autoLanguage) {
     console.log(`[WhisperWorker] Auto Detect: ${guess!.language} (${Math.round(guess!.probability * 100)}%, was ${autoLanguage ?? 'none'}, ${loadedModelId})`);
     autoLanguage = guess!.language;
   }
-  return { language: autoLanguage, encoderOutputs: encoder_outputs };
+  return autoLanguage;
+}
+
+// Mean log-probability per token of the decoded text, the second half of
+// Whisper's own silence rule (no_speech_prob > 0.6 AND avg_logprob < -1).
+// transformers.js never computes it, and Distil's no-speech probability alone
+// let noise through as "You're" (2026-11-18). Teacher-forced: one decoder pass
+// over the prompt + text tokens, on the encoder output the first step made.
+async function meanLogprob(text: string, language: string | null, encoderOutputs: any): Promise<number | null> {
+  const model = pipe?.model;
+  const cfg = model?.generation_config;
+  if (!encoderOutputs || cfg?.decoder_start_token_id == null || !pipe?.tokenizer) return null;
+  const encoded = await pipe.tokenizer(text.trim(), { add_special_tokens: false });
+  const ids: number[] = (encoded?.input_ids?.tolist?.()?.[0] ?? []).map(Number);
+  if (ids.length === 0) return null;
+  const prefix: number[] = [Number(cfg.decoder_start_token_id)];
+  const code = whisperLanguageCode(language);
+  const langId = code ? cfg.lang_to_id?.[`<|${code}|>`] : undefined;
+  if (langId != null) {
+    prefix.push(Number(langId));
+    if (cfg.task_to_id?.transcribe != null) prefix.push(Number(cfg.task_to_id.transcribe));
+  }
+  if (cfg.no_timestamps_token_id != null) prefix.push(Number(cfg.no_timestamps_token_id));
+  const seq = [...prefix, ...ids].slice(0, 440);
+  const { Tensor } = await loadTransformers() as any;
+  const out = await model({
+    encoder_outputs: encoderOutputs,
+    decoder_input_ids: new Tensor('int64', BigInt64Array.from(seq.map(BigInt)), [1, seq.length]),
+  });
+  const vocab = out.logits.dims[2];
+  const data = out.logits.data as Float32Array;
+  let sum = 0;
+  let n = 0;
+  for (let i = prefix.length - 1; i < seq.length - 1; i++) {
+    const row = data.subarray(i * vocab, (i + 1) * vocab);
+    let max = -Infinity;
+    for (let k = 0; k < vocab; k++) if (row[k] > max) max = row[k];
+    let z = 0;
+    for (let k = 0; k < vocab; k++) z += Math.exp(row[k] - max);
+    sum += row[seq[i + 1]] - max - Math.log(z);
+    n++;
+  }
+  return n ? sum / n : null;
 }
 
 // WhisperPreTrainedModel.forward_params leaves out encoder_outputs, so
@@ -771,6 +823,8 @@ function letGenerateReuseEncoderOutputs(model: any): boolean {
   return true;
 }
 
+const isTimestampDecodeBug = (e: any) => /token_ids must be a non-empty array/.test(String(e?.message ?? e));
+
 async function runWhisperTranscribe(msg: any): Promise<void> {
   if (!pipe) {
     parentPort!.postMessage({ type: 'error', taskId: msg.taskId, message: 'Model not loaded' });
@@ -779,6 +833,8 @@ async function runWhisperTranscribe(msg: any): Promise<void> {
   try {
     let language: string | null = resolveWhisperLanguage(msg.language);
     const streaming: boolean = !!msg.streaming;
+    msg.audio = normalizeGain(msg.audio);
+    const startedAt = Date.now();
 
     // English-only checkpoints (Distil-Whisper + .en variants) have no
     // multilingual decoder — and transformers.js REJECTS the decoder-prompt
@@ -805,24 +861,33 @@ async function runWhisperTranscribe(msg: any): Promise<void> {
     // — English-only per NVIDIA's model card, and a CTC pipeline with no
     // decoder prompt to condition anyway.
     let encoderOutputs: any = null;
+    let noSpeechProb: number | null = null;
     const isEnglishOnly = isEnglishOnlyLocalModel(loadedModelId);
+    const isMoonshine = isMoonshineModel(loadedModelId);
+    const autoDetect = !isEnglishOnly && !language && !isMoonshine;
     if (isEnglishOnly) {
       language = null;
-    } else if (!language && !isMoonshineModel(loadedModelId)) {
-      if (streaming) {
-        language = autoLanguage;
-      } else if (internalsUsable('detect')) {
-        try {
-          ({ language, encoderOutputs } = await detectAutoLanguage(msg.audio));
-          internalsResult('detect', true);
-        } catch (e: any) {
-          console.warn('[WhisperWorker] Auto Detect failed, keeping the last language:', e?.message ?? e);
-          internalsResult('detect', false, e);
+    }
+    // Every Whisper final runs the first decoder step: the silence guard needs
+    // it, and Auto Detect reads the same logits. Partials skip it (cost).
+    if (!streaming && !isMoonshine && internalsUsable('detect')) {
+      try {
+        const step = await firstDecoderStep(msg.audio);
+        internalsResult('detect', true);
+        if (step) {
+          encoderOutputs = step.encoderOutputs;
+          noSpeechProb = noSpeechProbability(step.logits, noSpeechTokenId(pipe.tokenizer));
+          if (autoDetect) language = detectAutoLanguage(step.logits, msg.audio.length);
+        } else if (autoDetect) {
           language = autoLanguage;
         }
-      } else {
-        language = autoLanguage;
+      } catch (e: any) {
+        console.warn('[WhisperWorker] First decoder step failed (Auto Detect / silence check skipped):', e?.message ?? e);
+        internalsResult('detect', false, e);
+        if (autoDetect) language = autoLanguage;
       }
+    } else if (autoDetect) {
+      language = autoLanguage;
     }
 
     // Streaming partial passes use deterministic settings so consecutive
@@ -835,23 +900,18 @@ async function runWhisperTranscribe(msg: any): Promise<void> {
           sampling_rate: 16000,
           task: 'transcribe',
           temperature: 0,
-          no_speech_threshold: 0.6,
-          // Whisper's anti-loop check — drops outputs whose token gzip
-          // ratio exceeds 2.4 (typical of "thank you. thank you. thank
-          // you..." hallucinations on near-silent windows). Final pass
-          // uses the same threshold; streaming should match for
-          // consistency in what reaches the user.
-          compression_ratio_threshold: 2.4,
-          condition_on_previous_text: false,
           return_timestamps: false,
         }
       : {
           sampling_rate: 16000,
           task: 'transcribe',
-          condition_on_previous_text: false,
-          compression_ratio_threshold: 2.4,
-          logprob_threshold: -1.0,
-          no_speech_threshold: 0.6,
+          // Timestamp mode, the way Whisper and Distil-Whisper were trained to
+          // decode. Without it Distil Small EN skipped the middle of a sentence
+          // that repeats words ("ask not what your country can do for your
+          // country", 2026-11-18). The text is the same either way.
+          // no_speech / logprob / compression thresholds are not passed: this
+          // transformers.js ignores them (see whisperSilenceGuard.ts).
+          ...(isMoonshine ? {} : { return_timestamps: true }),
         };
     // `task` is set unconditionally in BOTH opts branches above, so an
     // English-only model must have it stripped here — fixing only the
@@ -874,25 +934,67 @@ async function runWhisperTranscribe(msg: any): Promise<void> {
     // host resamples before posting).
     if (isMoonshineModel(loadedModelId)) {
       opts.max_new_tokens = moonshineMaxNewTokens(msg.audio?.length ?? 0, 16000);
+    } else {
+      // Bounded by the audio's length, not Whisper's whole window: see whisperSilenceGuard.ts.
+      opts.max_new_tokens = whisperMaxNewTokens(msg.audio?.length ?? 0, 16000, opts.prompt_ids?.length ?? 0);
     }
 
-    let result: any;
-    if (encoderOutputs && internalsUsable('reuse') && letGenerateReuseEncoderOutputs(pipe.model)) {
+    const run = async (o: any): Promise<any> => {
+      if (!(encoderOutputs && internalsUsable('reuse') && letGenerateReuseEncoderOutputs(pipe.model))) return pipe(msg.audio, o);
       try {
-        result = await pipe(msg.audio, { ...opts, encoder_outputs: encoderOutputs });
+        const r = await pipe(msg.audio, { ...o, encoder_outputs: encoderOutputs });
         internalsResult('reuse', true);
+        return r;
       } catch (e: any) {
+        if (isTimestampDecodeBug(e)) throw e; // not the reuse's fault
         console.warn('[WhisperWorker] Reusing the encoder output failed, running it again:', e?.message ?? e);
         internalsResult('reuse', false, e);
-        result = await pipe(msg.audio, opts);
+        return pipe(msg.audio, o);
       }
-    } else {
-      result = await pipe(msg.audio, opts);
+    };
+    let result: any;
+    try {
+      result = await run(opts);
+    } catch (e: any) {
+      if (!opts.return_timestamps || !isTimestampDecodeBug(e)) throw e;
+      // transformers.js 3.8.1 throws this when a timestamped chunk decodes to
+      // no text tokens; the segment is fine without timestamps (2026-11-18).
+      result = await run({ ...opts, return_timestamps: false });
+    }
+    // Timestamp mode can also decode a short fragment to nothing at all (Tiny
+    // EN, the lone "Ask not." of a quiet JFK clip, 2026-11-18). Empty text on
+    // audio the model does not call silence is a decode miss: try once without.
+    if (opts.return_timestamps && !(result.text ?? '').trim() && (noSpeechProb ?? 0) <= NO_SPEECH_THRESHOLD) {
+      result = await run({ ...opts, return_timestamps: false });
+    }
+    let text: string = result.text ?? '';
+    let logprob: number | null = null;
+    // Per-platform: macOS has no floor, so it neither scores nor drops on it.
+    const logprobFloor = localSttTuningFor(process.platform).logprobFloor;
+    if (logprobFloor !== null && !streaming && text.trim() && encoderOutputs) {
+      try {
+        logprob = await meanLogprob(text, language, encoderOutputs);
+      } catch (e: any) {
+        console.warn('[WhisperWorker] Log-probability check failed:', e?.message ?? e);
+      }
+    }
+    if (text && noSpeechProb !== null && noSpeechProb > NO_SPEECH_THRESHOLD) {
+      console.log(`[WhisperWorker] Dropped as no speech (p=${noSpeechProb.toFixed(2)}, logprob ${logprob === null ? 'n/a' : logprob.toFixed(2)}): ${JSON.stringify(text.slice(0, 80))}`);
+      text = '';
+    } else if (text && logprobFloor !== null && logprob !== null && logprob < logprobFloor) {
+      console.log(`[WhisperWorker] Dropped as low confidence (logprob ${logprob.toFixed(2)}, no_speech p=${noSpeechProb?.toFixed(2) ?? 'n/a'}): ${JSON.stringify(text.slice(0, 80))}`);
+      text = '';
+    } else if (text && looksLikeLoop(text)) {
+      console.log(`[WhisperWorker] Dropped as a repetition loop: ${JSON.stringify(text.slice(0, 80))}`);
+      text = '';
+    } else if (!streaming && noSpeechProb !== null) {
+      // One line per final: a model slower than speech shows here first.
+      console.log(`[WhisperWorker] final ${(msg.audio.length / 16000).toFixed(1)}s audio in ${Date.now() - startedAt}ms, no_speech p=${noSpeechProb.toFixed(2)}, logprob ${logprob === null ? 'n/a' : logprob.toFixed(2)}: ${JSON.stringify(text.slice(0, 60))}`);
     }
     parentPort!.postMessage({
       type: streaming ? 'partial' : 'result',
       taskId: msg.taskId,
-      text: result.text ?? '',
+      text,
     });
   } catch (e: any) {
     parentPort!.postMessage({

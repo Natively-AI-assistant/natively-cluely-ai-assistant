@@ -9256,8 +9256,8 @@ export class AppState {
     //   ElevenLabsStreaming  language_code omitted
     //   NvidiaNimStreaming   null → the model's own multi default
     //   SonioxStreaming      no hint + enable_language_identification
-    //   LocalWhisperSTT      auto-detect (and self-normalises for Nemotron,
-    //                        which has no auto mode — see modelLanguageSupport)
+    //   LocalWhisperSTT      auto-detect (Nemotron: its own Auto prompt,
+    //                        NEMOTRON_AUTO_LANG_ID — see languageTable.ts)
     //   RestSTT              language form-field omitted
     // Collapsing here silently answered "Auto Detect" with English on all of
     // them, and — now that getSttLanguage() defaults to 'auto' — would have

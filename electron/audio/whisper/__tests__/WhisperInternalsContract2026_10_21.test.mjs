@@ -119,7 +119,7 @@ test('the worker guards each internal and switches it off after repeated failure
   assert.match(src, /typeof model\._prepare_encoder_decoder_kwargs_for_generation !== 'function'/);
   assert.match(src, /if \(!Array\.isArray\(model\?\.forward_params\)\) return false;/);
   assert.match(src, /const INTERNALS_FAILURE_LIMIT = 3;/);
-  assert.match(src, /\} else if \(internalsUsable\('detect'\)\) \{/);
+  assert.match(src, /if \(!streaming && !isMoonshine && internalsUsable\('detect'\)\) \{/);
   assert.match(src, /encoderOutputs && internalsUsable\('reuse'\) && letGenerateReuseEncoderOutputs\(pipe\.model\)/);
   assert.equal((src.match(/internalsResult\('detect', (true|false)/g) ?? []).length, 2);
   assert.equal((src.match(/internalsResult\('reuse', (true|false)/g) ?? []).length, 2);
