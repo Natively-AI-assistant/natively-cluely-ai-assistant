@@ -157,7 +157,7 @@ export interface StoredCredentials {
      * for this key (fingerprint) and what they were before
      * (services/packs/packNativelySwitch.ts, 2026-11-19).
      */
-    nativelyPackSwitch?: { keyId: string; prev: { defaultModel?: string; sttProvider?: string; fastModel?: string | null } };
+    nativelyPackSwitch?: { keyId: string; prev: { defaultModel?: string; sttProvider?: string; fastMode?: boolean } };
     /**
      * Optional bearer token for a user-hosted OpenAI-compatible embedding
      * endpoint. Lives here rather than in settings.json because that file is
@@ -1383,7 +1383,7 @@ export class CredentialsManager {
         return !!this.credentials.nativelyPackApiKey && Number.isFinite(until) && until > now;
     }
 
-    public getNativelyPackSwitch(): { keyId: string; prev: { defaultModel?: string; sttProvider?: string; fastModel?: string | null } } | undefined {
+    public getNativelyPackSwitch(): { keyId: string; prev: { defaultModel?: string; sttProvider?: string; fastMode?: boolean } } | undefined {
         return this.credentials.nativelyPackSwitch;
     }
 
@@ -1394,14 +1394,13 @@ export class CredentialsManager {
      * from. False: nothing was saved.
      */
     public applyNativelyPackSwitch(
-        change: { defaultModel?: string; sttProvider?: string; fastModel?: string | null },
-        memory: { keyId: string; prev: { defaultModel?: string; sttProvider?: string; fastModel?: string | null } } | null,
+        change: { defaultModel?: string; sttProvider?: string },
+        memory: { keyId: string; prev: { defaultModel?: string; sttProvider?: string; fastMode?: boolean } } | null,
     ): boolean {
         if (this.refuseWriteWhileDegraded('natively pack switch')) return false;
         const before = { ...this.credentials };
         if (change.defaultModel !== undefined) this.credentials.defaultModel = change.defaultModel;
         if (change.sttProvider !== undefined) this.credentials.sttProvider = change.sttProvider as StoredCredentials['sttProvider'];
-        if ('fastModel' in change) this.credentials.fastModel = change.fastModel ?? undefined;
         this.credentials.nativelyPackSwitch = memory ?? undefined;
         if (this.saveCredentials()) return true;
         this.credentials = before;
@@ -1937,8 +1936,15 @@ export class CredentialsManager {
             this.credentials.sttProvider = prev.sttProvider as StoredCredentials['sttProvider'];
             changed.sttProvider = prev.sttProvider;
         }
-        if ('fastModel' in prev && this.credentials.fastModel === 'natively') {
-            this.credentials.fastModel = prev.fastModel ?? undefined;
+        // Fast Response Mode lives in SettingsManager (like the reranker above);
+        // the running AI picks it up on the next launch or toggle.
+        if (prev.fastMode) {
+            try {
+                // eslint-disable-next-line @typescript-eslint/no-var-requires
+                const { SettingsManager } = require('./SettingsManager');
+                const settings = SettingsManager.getInstance();
+                if (!settings.get('groqFastTextMode')) settings.set('groqFastTextMode', true);
+            } catch { /* the user turns it on again */ }
         }
         console.log(`[CredentialsManager] ${reason} — put back the settings from before the pack`);
     }

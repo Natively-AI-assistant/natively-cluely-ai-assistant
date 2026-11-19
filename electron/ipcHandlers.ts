@@ -1561,6 +1561,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Runs wherever Pro is re-read: launch (a pack bought on an older version),
   // every Pro watch, and right after an activation or a provider change.
   let packSwitchRun: Promise<void> | null = null;
+  let packGoneSince: number | null = null;
   const reconcilePackSwitchNow = (): void => {
     if (packSwitchRun) return;
     packSwitchRun = (async () => {
@@ -1591,7 +1592,6 @@ export function initializeIpcHandlers(appState: AppState): void {
             aiStaysWithUser: helper ? Boolean(helper.aiStaysWithUser?.()) : true,
           };
         },
-        fastModel: () => cm.getFastModel(),
         savedModel: () => cm.getDefaultModel() ?? null,
         sttProvider: () => cm.getSttProvider() ?? null,
         write: (change, memory) => cm.applyNativelyPackSwitch(change, memory),
@@ -1601,8 +1601,28 @@ export function initializeIpcHandlers(appState: AppState): void {
         // The running AI, the overlay's model chip and Settings follow the saved model.
         applyModel: () => syncNativelyModelRuntime(),
         fastFamilyNow: () => llm()?.fastResponseFamilyNow?.() ?? null,
+        fastModeOn: () => {
+          const { SettingsManager } = require('./services/SettingsManager');
+          return Boolean(SettingsManager.getInstance().get('groqFastTextMode'));
+        },
+        // As set-groq-fast-text-mode does: saved, live, and every window told.
+        setFastMode: (on) => {
+          const { SettingsManager } = require('./services/SettingsManager');
+          if (!SettingsManager.getInstance().set('groqFastTextMode', on)) return false;
+          llm()?.setGroqFastTextMode?.(on);
+          BrowserWindow.getAllWindows().forEach((win) => {
+            if (!win.isDestroyed()) win.webContents.send('groq-fast-text-changed', on);
+          });
+          return true;
+        },
         applyStt: async () => {
           try { await appState.reconfigureSttProvider(); } finally { broadcastCredentialsChanged(); }
+        },
+        goneConfirmed: (gone) => {
+          if (!gone) { packGoneSince = null; return false; }
+          const now = Date.now();
+          if (packGoneSince === null || now < packGoneSince) { packGoneSince = now; return false; }
+          return now - packGoneSince >= 20_000; // the next 30 s watch, not the same moment
         },
         log: (m) => console.log(`[IPC] ${m}`),
       });
@@ -1612,18 +1632,21 @@ export function initializeIpcHandlers(appState: AppState): void {
       .catch((e: any) => console.warn('[IPC] pack switch failed:', e?.message ?? e))
       .finally(() => { packSwitchRun = null; });
   };
-  proWatch.check();
+  // The switch first: its saves and the model change happen before its first
+  // await, so the watch already reads the moved providers and never stands Pro
+  // down just to bring it back.
   reconcilePackSwitchNow();
+  proWatch.check();
   checkProNow = () => {
     // The pack clock bills the time up to this switch by the providers it ran
     // on, not by the ones just picked (packs/PackMeetingClock.ts countsChanged).
     try { require('./services/packs/packClockWiring').getPackMeetingClock().countsChanged(); } catch { /* no clock: nothing to bill */ }
-    proWatch.check();
     reconcilePackSwitchNow();
+    proWatch.check();
   };
   {
     proWatchTimer && clearInterval(proWatchTimer);
-    proWatchTimer = setInterval(() => { proWatch.check(); reconcilePackSwitchNow(); }, PRO_WATCH_EVERY_MS);
+    proWatchTimer = setInterval(() => { reconcilePackSwitchNow(); proWatch.check(); }, PRO_WATCH_EVERY_MS);
     if (typeof (proWatchTimer as any).unref === 'function') (proWatchTimer as any).unref();
   }
   try {

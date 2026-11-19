@@ -11,10 +11,15 @@
  *
  * WHAT.
  *   - A pack licence is seen (bought, pasted, or already stored when this
- *     version starts): the AI model, speech-to-text and, when it would answer on
- *     another provider, Fast Response move to Natively API. Once per pack key:
- *     a user who moves something back afterwards is left alone, and Pro goes off
- *     as the rule says.
+ *     version starts): the AI model and speech-to-text move to Natively API.
+ *     Once per pack key: a user who moves something back afterwards is left
+ *     alone, and Pro goes off as the rule says.
+ *   - Fast Response Mode is turned off when it would answer on the user's own
+ *     provider (Auto picks their Groq or Gemini key; the rule counts it). Not
+ *     pointed at Natively API: 'natively' is not a Background Model the picker
+ *     offers (Settings would say "not supported"), and on Natively API the mode
+ *     measured no faster than the main model (IntelligenceEngine, 2026-08-25:
+ *     1364 vs 1415 ms first token), so off costs nothing there.
  *   - What was there before is remembered. When the pack is no longer the
  *     licence (it ran out, it was removed, its key was cleared or refused), the
  *     settings still on Natively API go back to it. A monthly or yearly Natively
@@ -37,8 +42,8 @@ export const ON_DEVICE_STT: ReadonlySet<string> = new Set(['local-whisper', 'app
 export interface PackSwitchPrev {
   defaultModel?: string;
   sttProvider?: string;
-  /** null is Fast Response on Auto, a real value; absent means not changed. */
-  fastModel?: string | null;
+  /** true: Fast Response Mode was on and the switch turned it off. */
+  fastMode?: boolean;
 }
 
 /** Stored with the credentials. keyId is a fingerprint of the key, never the key. */
@@ -92,7 +97,7 @@ export function planPackSwitch(f: PackSwitchFacts): PackSwitchPlan {
     else if (carry.defaultModel !== undefined) prev.defaultModel = carry.defaultModel;
     if (stt) prev.sttProvider = f.sttProvider ?? undefined;
     else if (carry.sttProvider !== undefined) prev.sttProvider = carry.sttProvider;
-    if ('fastModel' in carry) prev.fastModel = carry.fastModel;
+    if (carry.fastMode) prev.fastMode = true;
     for (const k of Object.keys(prev) as Array<keyof PackSwitchPrev>) if (prev[k] === undefined) delete prev[k];
     return { kind: 'switch', keyId: f.keyId, ai, stt, prev };
   }
@@ -104,22 +109,25 @@ export function planPackSwitch(f: PackSwitchFacts): PackSwitchPlan {
 /** The values to put back: only settings still on Natively API, so a choice made since stands. */
 export function packRestoreChange(
   prev: PackSwitchPrev,
-  now: { defaultModel: string | null; sttProvider: string | null; fastModel: string | null },
+  now: { defaultModel: string | null; sttProvider: string | null; fastMode: boolean },
 ): PackSwitchPrev {
   const change: PackSwitchPrev = {};
   if (prev.defaultModel && now.defaultModel === NATIVELY) change.defaultModel = prev.defaultModel;
   if (prev.sttProvider && now.sttProvider === NATIVELY) change.sttProvider = prev.sttProvider;
-  if ('fastModel' in prev && now.fastModel === NATIVELY) change.fastModel = prev.fastModel ?? null;
+  if (prev.fastMode && !now.fastMode) change.fastMode = true;
   return change;
 }
 
 export interface PackSwitchDeps {
   facts(): PackSwitchFacts;
-  fastModel(): string | null;
   savedModel(): string | null;
   sttProvider(): string | null;
-  /** Writes the settings and the memory together, in one save. False: nothing was saved. */
-  write(change: PackSwitchPrev, memory: PackSwitchMemory | null): boolean;
+  /** Writes the AI model / speech-to-text and the memory together, in one save. False: nothing was saved. */
+  write(change: { defaultModel?: string; sttProvider?: string }, memory: PackSwitchMemory | null): boolean;
+  /** Fast Response Mode, the saved setting. */
+  fastModeOn(): boolean;
+  /** Turn Fast Response Mode on or off, saved and live. False: not saved. */
+  setFastMode(on: boolean): boolean;
   /** The pack clock bills the time up to now by the providers it ran on (PackMeetingClock countsChanged). */
   beforeChange(): void;
   /** The running AI follows the saved model, and the windows hear it. */
@@ -128,6 +136,13 @@ export interface PackSwitchDeps {
   fastFamilyNow(): string | null;
   /** The audio pipeline follows the saved speech-to-text provider. */
   applyStt(): Promise<void>;
+  /**
+   * Called on every run with whether the pack looks gone. True only once it has
+   * looked gone on two runs some time apart: a licence store that cannot be read
+   * for a moment (a locked Keychain, DPAPI unavailable) reads as no licence, and
+   * one such read must not move a meeting onto other providers.
+   */
+  goneConfirmed(gone: boolean): boolean;
   log(message: string): void;
 }
 
@@ -140,6 +155,7 @@ export type PackSwitchResult = 'switched' | 'restored' | 'forgot' | null;
 export async function reconcilePackSwitch(d: PackSwitchDeps): Promise<PackSwitchResult> {
   try {
     const plan = planPackSwitch(d.facts());
+    const confirmed = d.goneConfirmed(plan.kind === 'restore');
     if (plan.kind === 'none') return null;
 
     if (plan.kind === 'forget') {
@@ -149,14 +165,19 @@ export async function reconcilePackSwitch(d: PackSwitchDeps): Promise<PackSwitch
     }
 
     if (plan.kind === 'restore') {
+      if (!confirmed) return null;
       const change = packRestoreChange(plan.prev, {
-        defaultModel: d.savedModel(), sttProvider: d.sttProvider(), fastModel: d.fastModel(),
+        defaultModel: d.savedModel(), sttProvider: d.sttProvider(), fastMode: d.fastModeOn(),
       });
+      // Nothing still on Natively API: the user moved it all. The memory stays,
+      // so a licence that comes back readable does not switch this pack again.
+      if (Object.keys(change).length === 0) return null;
       d.beforeChange();
-      if (!d.write(change, null)) return null;
-      if (change.defaultModel !== undefined || 'fastModel' in change) d.applyModel();
+      if (!d.write({ defaultModel: change.defaultModel, sttProvider: change.sttProvider }, null)) return null;
+      if (change.defaultModel !== undefined) d.applyModel();
+      if (change.fastMode && !d.setFastMode(true)) delete change.fastMode;
       if (change.sttProvider !== undefined) await d.applyStt();
-      d.log(`the pack ended: put back ${describe(change) || 'nothing (all changed since)'}`);
+      d.log(`the pack ended: put back ${describe(change)}`);
       return 'restored';
     }
 
@@ -169,13 +190,11 @@ export async function reconcilePackSwitch(d: PackSwitchDeps): Promise<PackSwitch
     if (plan.ai) d.applyModel();
     // Fast Response is read from the running AI, so only after it moved: on
     // Auto it can pick the user's own Groq or Gemini, which the rule counts.
+    // Remembered first, so a mode turned off is always turned back on later.
     const family = d.fastFamilyNow();
-    if (family && family !== NATIVELY) {
-      const fast = { ...memory, prev: { ...memory.prev, fastModel: d.fastModel() } };
-      if (d.write({ fastModel: NATIVELY }, fast)) {
-        change.fastModel = NATIVELY;
-        d.applyModel();
-      }
+    if (family && family !== NATIVELY && d.fastModeOn()) {
+      const fast: PackSwitchMemory = { ...memory, prev: { ...memory.prev, fastMode: true } };
+      if (d.write({}, fast) && d.setFastMode(false)) change.fastMode = false;
     }
     if (plan.stt) await d.applyStt();
     d.log(`a pack is in use: moved ${describe(change) || 'nothing (already on Natively API)'} to Natively API`);
@@ -190,6 +209,6 @@ function describe(c: PackSwitchPrev): string {
   const parts: string[] = [];
   if (c.defaultModel !== undefined) parts.push(`AI model (${c.defaultModel})`);
   if (c.sttProvider !== undefined) parts.push(`speech-to-text (${c.sttProvider})`);
-  if ('fastModel' in c) parts.push(`Fast Response (${c.fastModel ?? 'Auto'})`);
+  if (c.fastMode !== undefined) parts.push(`Fast Response Mode (${c.fastMode ? 'on' : 'off'})`);
   return parts.join(', ');
 }
