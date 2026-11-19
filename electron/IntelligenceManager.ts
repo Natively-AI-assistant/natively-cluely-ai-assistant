@@ -293,11 +293,13 @@ export class IntelligenceManager extends EventEmitter {
         this.engine.noteAutoAnswerCandidate(questionId, candidateGeneration);
     }
     /**
-     * How many answers the session log holds. A count only: the funnel reports
-     * how many answers a meeting produced, never what they were.
+     * How many answers were ever recorded in this process. A count only: the
+     * funnel reports how many answers a meeting produced (the difference across
+     * it), never what they were. Only grows, so a mid-meeting reset or the
+     * usage log's cap no longer hides answers (2026-11-19).
      */
     getAnswerCount(): number {
-        try { return this.session.getFullUsage().length; } catch { return 0; }
+        try { return this.session.getUsagePushedTotal(); } catch { return 0; }
     }
 
     getSpeculativeSnapshot(): { questionId: string | null; text: string | null } {

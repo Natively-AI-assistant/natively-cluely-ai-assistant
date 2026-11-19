@@ -27,6 +27,10 @@ import { CardLedger } from './services/cards/CardLedger';
 import { funnelTelemetry } from './services/FunnelTelemetry';
 import { checkFunnelProps, SURFACES as FUNNEL_SURFACES } from '../src/lib/funnel/funnelCatalog.mjs';
 import { mapTrialStartResult, resolveEntitlement, resolveMeetingAi, trialCardActionForChoice, usesLocalModel } from '../src/lib/funnel/funnelState.mjs';
+import { loadNativeModule } from './audio/nativeModuleLoader';
+import { classifyAnswerPress } from '../src/lib/funnel/answerPress.mjs';
+/** Where a trial's hardware id came from when LicenseManager's native module gave none (funnel trial_start_result.hwid_from). */
+type TrialHwidFrom = 'native_reload' | 'ioreg' | 'registry' | 'machine_id_file' | 'none';
 import { nativePromptsBlocked, UNDETECTABLE_REFUSAL_ERROR, UNDETECTABLE_REFUSAL_MESSAGES } from './services/stealthPromptGate';
 import { TEXT_PLACEHOLDER_RE } from './utils/curlPlaceholderPolicy';
 import { routeOverlayUiAction } from './utils/overlayUiActionRouter';
@@ -13553,8 +13557,10 @@ export function initializeIpcHandlers(appState: AppState): void {
   // fallback button) and by itself with a meeting (the hook further down).
   async function startTrialFlow(surface?: unknown) {
     const startSurface = funnelSurface(surface);
+    // Set when the hardware id did not come from LicenseManager's native module.
+    let hwidFrom: TrialHwidFrom | undefined;
     const reportStart = (r: Parameters<typeof mapTrialStartResult>[0]) =>
-      funnelTelemetry.track('trial_start_result', { surface: startSurface, result: mapTrialStartResult(r) });
+      funnelTelemetry.track('trial_start_result', { surface: startSurface, result: mapTrialStartResult(r), ...(hwidFrom ? { hwid_from: hwidFrom } : {}) });
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -13579,8 +13585,28 @@ export function initializeIpcHandlers(appState: AppState): void {
       } catch {
         /* LicenseManager not available — handled by the guard below */
       }
+      // The native module did not load for LicenseManager (2026-11-19: 23
+      // installs in 10 days never got a trial, while the rest of the app worked
+      // for them). Every esbuild bundle has its own loader, so this bundle's may
+      // still load it; failing that, the same id read without it
+      // (services/machineIdFallback.ts). Where it came from is reported, so the
+      // funnel shows how often each path is needed.
       if (!hwid || hwid === 'unavailable') {
-        console.error('[Trial] Refusing to start a trial without a real hardware id (native module unavailable).');
+        hwid = '';
+        try {
+          const own = loadNativeModule()?.getHardwareId?.();
+          if (typeof own === 'string' && own && own !== 'unavailable') { hwid = own; hwidFrom = 'native_reload'; }
+        } catch { /* the id read without the module, below */ }
+        if (!hwid) {
+          const { machineHardwareIdFallback, liveMachineIdDeps } = require('./services/machineIdFallback') as typeof import('./services/machineIdFallback');
+          const fb = await machineHardwareIdFallback(liveMachineIdDeps());
+          if (fb) { hwid = fb.hwid; hwidFrom = fb.source; }
+        }
+        if (hwid) console.warn(`[Trial] native hardware id unavailable to LicenseManager; using the same id read via ${hwidFrom}`);
+      }
+      if (!hwid) {
+        console.error('[Trial] Refusing to start a trial without a real hardware id (native module and machine id both unavailable).');
+        hwidFrom = 'none';
         reportStart({ hwidUnavailable: true });
         return { ok: false, error: 'hardware_id_unavailable' };
       }
@@ -17267,7 +17293,14 @@ export function initializeIpcHandlers(appState: AppState): void {
     ) => {
       // The press, for the answer's latency trace (PiTraceInit.startedAt).
       const pressedAt = tracerNow();
-      return _tracked(async () => {
+      // Counted into the running meeting by what it gave (src/lib/funnel/answerPress.mjs):
+      // "no answer and no failure" was the funnel's blind spot.
+      const answersBefore = appState.getIntelligenceManager?.()?.getAnswerCount?.();
+      const pressDone = funnelTelemetry.answerPressStarted();
+      let pressResult: { answer?: unknown; error?: unknown } | undefined;
+      let pressThrew = false;
+      try {
+        pressResult = await _tracked(async () => {
       // Auto Answer V3: a manual What-to-Answer (hotkey, button, or an accepted
       // offer card) commits whatever Auto Answer was offering — retract the card.
       try { appState.onManualWhatToAnswer?.(); } catch { /* never block the answer */ }
@@ -17606,6 +17639,21 @@ export function initializeIpcHandlers(appState: AppState): void {
         };
       }
       });
+      } catch (e) {
+        pressThrew = true;
+        throw e;
+      } finally {
+        try {
+          pressDone(classifyAnswerPress({
+            threw: pressThrew,
+            error: pressResult?.error,
+            answer: pressResult?.answer,
+            answersBefore,
+            answersAfter: appState.getIntelligenceManager?.()?.getAnswerCount?.(),
+          }));
+        } catch { /* analytics never touches the answer */ }
+      }
+      return pressResult;
     },
   );
 

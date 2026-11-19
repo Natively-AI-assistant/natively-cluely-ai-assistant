@@ -555,4 +555,45 @@ describe('FunnelTelemetry', { skip: HAVE_BUILD ? false : 'run `npm run build:ele
     const files = fs.readdirSync(h.userData).filter((f) => f.startsWith('funnel_'));
     assert.deepEqual(files.sort(), ['funnel_queue.json', 'funnel_state.json']);
   });
+
+  // ── What to answer presses (2026-11-19) ────────────────────────────────────
+  // "No answer and no failure" in ~20% of meetings with a press: each press is
+  // now counted by what it gave, and a press still running at the end says so.
+
+  test('meeting_ended counts presses by what they gave, and a press still running as waiting', () => {
+    const h = load({ packaged: true, state: { firstRunSent: true } });
+    h.ft.setSnapshotResolver(() => SNAPSHOT);
+    const t0 = Date.now();
+    h.ft.meetingStarted(0, 'overlay');
+    h.ft.answerPressStarted()('answered');
+    h.ft.answerPressStarted()('empty');
+    h.ft.answerPressStarted()('message');
+    const fail = h.ft.answerPressStarted(); fail('failed'); fail('answered'); // a second call changes nothing
+    h.ft.answerPressStarted(t0 - 42_000);          // never finishes before the end
+    h.ft.meetingEnded(1);
+    const ended = h.queue().find((e) => e.event_type === 'meeting_ended');
+    assert.equal(ended.props.presses, 5);
+    assert.equal(ended.props.presses_answered, 1);
+    assert.equal(ended.props.presses_empty, 1);
+    assert.equal(ended.props.presses_message, 1);
+    assert.equal(ended.props.presses_failed, 1);
+    assert.equal(ended.props.presses_waiting, 1);
+    assert.ok(ended.props.wait_secs >= 42 && ended.props.wait_secs < 60, `wait_secs ${ended.props.wait_secs}`);
+  });
+
+  test('a meeting with no press keeps its old shape; a press outside a meeting or finishing after it counts nowhere', () => {
+    const h = load({ packaged: true, state: { firstRunSent: true } });
+    h.ft.setSnapshotResolver(() => SNAPSHOT);
+    h.ft.answerPressStarted()('answered');           // no meeting
+    h.ft.meetingStarted(0, 'overlay');
+    const late = h.ft.answerPressStarted();
+    h.ft.meetingEnded(0);
+    h.ft.meetingStarted(0, 'overlay');
+    late('answered');                                // finished in the next meeting
+    h.ft.meetingEnded(0);
+    const ended = h.queue().filter((e) => e.event_type === 'meeting_ended');
+    assert.equal(ended[0].props.presses, 1);
+    assert.equal(ended[0].props.presses_waiting, 1);
+    assert.equal('presses' in ended[1].props, false, 'the second meeting had no press of its own');
+  });
 });

@@ -209,6 +209,13 @@ export class SessionTracker {
     // ten-hour meeting is ~15,000. Only a runaway source could reach it.
     private static readonly MAX_PERSISTED_SEGMENTS = 200_000;
     private fullUsage: any[] = []; // UsageInteraction
+    /**
+     * Every usage entry ever pushed, never reset (2026-11-19). The funnel's
+     * answers-per-meeting is the difference across a meeting; fullUsage.length
+     * lost every answer before a mid-meeting reset (the overlay's reset
+     * shortcut) and stopped growing at its 500 cap.
+     */
+    private usagePushedTotal = 0;
     // AI interactions the assistant no longer holds but the saved meeting
     // keeps: those before a reset made during a running meeting, and those
     // past the 500-entry cap of fullUsage (which used to drop them from the
@@ -1044,6 +1051,11 @@ export class SessionTracker {
         return this.fullUsage;
     }
 
+    /** How many usage entries were ever recorded in this process. Only grows: no reset or cap lowers it. */
+    getUsagePushedTotal(): number {
+        return this.usagePushedTotal;
+    }
+
     /** Receives the oldest archived interactions as they leave memory (the running meeting writes them to disk). */
     setUsageOverflowSink(sink: ((entries: any[]) => void) | null): void {
         this.usageOverflowSink = sink;
@@ -1302,6 +1314,7 @@ export class SessionTracker {
             entry.answer = this.lastRepairedAnswer.after;
         }
         this.fullUsage.push(entry);
+        this.usagePushedTotal += 1;
         this.capUsageArray();
         if (Array.isArray(imagePaths) && imagePaths.length > 0) {
             makeUsagePreviews(imagePaths)

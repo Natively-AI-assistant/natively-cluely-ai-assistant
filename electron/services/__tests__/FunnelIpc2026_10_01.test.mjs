@@ -434,6 +434,8 @@ describe('funnel telemetry hooks in main.ts', () => {
     assert.equal((main.match(/funnelTelemetry\.meetingEnded\(/g) || []).length, 2);
     // A count only: the manager hands over a number, never the answers.
     const im = fs.readFileSync(path.join(ROOT, 'electron/IntelligenceManager.ts'), 'utf8');
-    assert.match(im, /getAnswerCount\(\): number \{\n\s+try \{ return this\.session\.getFullUsage\(\)\.length; \} catch \{ return 0; \}/);
+    // 2026-11-19: a count that only grows, so a mid-meeting reset (the overlay's
+    // reset shortcut) or the usage log's 500 cap no longer hides a meeting's answers.
+    assert.match(im, /getAnswerCount\(\): number \{\n\s+try \{ return this\.session\.getUsagePushedTotal\(\); \} catch \{ return 0; \}/);
   });
 });
