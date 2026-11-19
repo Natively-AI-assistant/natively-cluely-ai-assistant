@@ -47,13 +47,19 @@ const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf
 test('the undisguised app uses the installer shortcut AppUserModelID (build.appId)', () => {
   assert.equal(WINDOWS_APP_USER_MODEL_ID, pkg.build.appId,
     'must equal package.json build.appId — NSIS stamps it on every shortcut (WinShell::SetLnkAUMI)');
-  assert.equal(appUserModelIdForDisguise('none'), pkg.build.appId);
+  assert.equal(appUserModelIdForDisguise('none', true), pkg.build.appId);
 });
 
 test('disguise modes keep their own AppUserModelIDs (they must NOT group with the real app)', () => {
-  assert.equal(appUserModelIdForDisguise('terminal'), 'com.natively.assistant.terminal');
-  assert.equal(appUserModelIdForDisguise('settings'), 'com.natively.assistant.settings');
-  assert.equal(appUserModelIdForDisguise('activity'), 'com.natively.assistant.activity');
+  assert.equal(appUserModelIdForDisguise('terminal', true), 'com.natively.assistant.terminal');
+  assert.equal(appUserModelIdForDisguise('settings', true), 'com.natively.assistant.settings');
+  assert.equal(appUserModelIdForDisguise('activity', true), 'com.natively.assistant.activity');
+});
+
+test('dev runs never use a packaged ID (Electron.lnk would claim it and paint Electron on the installed app)', () => {
+  for (const mode of ['none', 'terminal', 'settings', 'activity']) {
+    assert.equal(appUserModelIdForDisguise(mode, false), `${appUserModelIdForDisguise(mode, true)}.dev`);
+  }
 });
 
 // --- 2b. open-at-login keyed on a stable name ---------------------------------
@@ -178,8 +184,17 @@ test('no electron/ code calls setFocusable(true) directly', () => {
 
 test('main.ts sets the AppUserModelID through the policy and denies every new window', () => {
   const main = fs.readFileSync(path.join(repoRoot, 'electron/main.ts'), 'utf8');
-  assert.ok(/app\.setAppUserModelId\(\s*appUserModelIdForDisguise\(\s*mode\s*\)\s*\)/.test(main),
-    'BUG: _applyDisguise must call app.setAppUserModelId(appUserModelIdForDisguise(mode)).');
+  // The app ID is always the undisguised one: Electron stamps it onto the
+  // installer's Natively.lnk on every notification. Disguise IDs live on windows.
+  const appIds = [...main.matchAll(/app\.setAppUserModelId\(([^;]*)\);/g)].map((m) => m[1].trim());
+  assert.deepEqual(appIds, ["appUserModelIdForDisguise('none', app.isPackaged)"],
+    'BUG: the app-wide AppUserModelID must stay the undisguised policy ID — disguise IDs go on windows.');
+  assert.ok(/for \(const win of BrowserWindow\.getAllWindows\(\)\) this\.applyTaskbarIdentity\(win, mode\)/.test(main),
+    'BUG: _applyDisguise must re-ID every existing window — a live switch otherwise keeps the old taskbar icon.');
+  assert.ok(/win\.setAppDetails\(\{ appId: appUserModelIdForDisguise\(mode, app\.isPackaged\) \}\)/.test(main),
+    'BUG: applyTaskbarIdentity must set the window ID from the policy.');
+  assert.ok(/on\(\s*['"]browser-window-created['"][\s\S]{0,300}applyTaskbarIdentity\(win\)/.test(main),
+    'BUG: windows created after a disguise switch must get the disguise ID too (browser-window-created).');
   assert.ok(!/com\.natively\.assistant\.\$\{/.test(main), 'BUG: the old template AUMID is back in main.ts.');
   assert.ok(/on\(\s*['"]web-contents-created['"][\s\S]{0,400}setWindowOpenHandler/.test(main),
     'BUG: every webContents needs a setWindowOpenHandler (app.on("web-contents-created")).');

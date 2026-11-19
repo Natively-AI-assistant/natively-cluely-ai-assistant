@@ -10719,6 +10719,12 @@ export class AppState {
     this._applyDisguise(this.disguiseMode);
   }
 
+  /** Windows: the taskbar ID (and so icon and grouping) of one window. */
+  public applyTaskbarIdentity(win: BrowserWindow, mode = this.disguiseMode): void {
+    if (process.platform !== 'win32' || win.isDestroyed()) return;
+    win.setAppDetails({ appId: appUserModelIdForDisguise(mode, app.isPackaged) });
+  }
+
   // Attach (idempotently) a page-title-updated guard to a window: while
   // undetectable, the renderer's <title> ("Natively") must not override the
   // disguise window title. The page loads async (after createWindow), and
@@ -10815,8 +10821,16 @@ export class AppState {
     // is the installer shortcut's ID so the running window groups with a
     // pinned Natively instead of adding a second button; each disguise keeps
     // its own ID so it never groups with the real app. See windowsTaskbarPolicy.
+    //
+    // The disguise ID goes on each window (setAppDetails), never on the app:
+    // Electron stamps the APP's ID onto "<exe product name>.lnk" whenever a
+    // notification shows — the installer's own Natively.lnk — so a reminder
+    // while disguised would re-point the real shortcut at the disguise. And
+    // app.setAppUserModelId never reaches a window already on the taskbar,
+    // which kept its old icon after a live switch.
     if (isWin) {
-      app.setAppUserModelId(appUserModelIdForDisguise(mode));
+      app.setAppUserModelId(appUserModelIdForDisguise('none', app.isPackaged));
+      for (const win of BrowserWindow.getAllWindows()) this.applyTaskbarIdentity(win, mode);
     }
 
     // 4. Update Icons
@@ -11086,6 +11100,7 @@ async function initializeApp() {
       const appState = AppState.peekInstance();
       appState?.guardWindowTitle(win);
       appState?.guardWindowProtection(win);
+      appState?.applyTaskbarIdentity(win);
     } catch (err) {
       console.error('[Main] browser-window-created title guard failed:', err);
     }
