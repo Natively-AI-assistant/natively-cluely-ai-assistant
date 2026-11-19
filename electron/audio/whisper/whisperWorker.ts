@@ -34,7 +34,8 @@ import { getBoundedOnnxSessionOptions } from '../../utils/onnxThreadConfig';
 import { detectedWhisperLanguage, isEnglishOnlyLocalModel, resolveWhisperLanguage, whisperLanguageCode } from './modelLanguageSupport';
 import { moonshineMaxNewTokens } from './moonshineTokenBudget';
 import { normalizeGain } from './audioResampler';
-import { LOGPROB_FLOOR, looksLikeLoop, NO_SPEECH_THRESHOLD, noSpeechProbability, noSpeechTokenId, whisperMaxNewTokens } from './whisperSilenceGuard';
+import { localSttTuningFor } from './localSttTuning';
+import { looksLikeLoop, NO_SPEECH_THRESHOLD, noSpeechProbability, noSpeechTokenId, whisperMaxNewTokens } from './whisperSilenceGuard';
 import { loadedOnnxFiles, onnxDirFor } from './modelManager';
 import { trustSystemCertificates } from '../../utils/systemCertificates';
 
@@ -968,7 +969,9 @@ async function runWhisperTranscribe(msg: any): Promise<void> {
     }
     let text: string = result.text ?? '';
     let logprob: number | null = null;
-    if (!streaming && text.trim() && encoderOutputs) {
+    // Per-platform: macOS has no floor, so it neither scores nor drops on it.
+    const logprobFloor = localSttTuningFor(process.platform).logprobFloor;
+    if (logprobFloor !== null && !streaming && text.trim() && encoderOutputs) {
       try {
         logprob = await meanLogprob(text, language, encoderOutputs);
       } catch (e: any) {
@@ -978,7 +981,7 @@ async function runWhisperTranscribe(msg: any): Promise<void> {
     if (text && noSpeechProb !== null && noSpeechProb > NO_SPEECH_THRESHOLD) {
       console.log(`[WhisperWorker] Dropped as no speech (p=${noSpeechProb.toFixed(2)}, logprob ${logprob === null ? 'n/a' : logprob.toFixed(2)}): ${JSON.stringify(text.slice(0, 80))}`);
       text = '';
-    } else if (text && logprob !== null && logprob < LOGPROB_FLOOR) {
+    } else if (text && logprobFloor !== null && logprob !== null && logprob < logprobFloor) {
       console.log(`[WhisperWorker] Dropped as low confidence (logprob ${logprob.toFixed(2)}, no_speech p=${noSpeechProb?.toFixed(2) ?? 'n/a'}): ${JSON.stringify(text.slice(0, 80))}`);
       text = '';
     } else if (text && looksLikeLoop(text)) {

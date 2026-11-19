@@ -61,6 +61,6 @@ test('the low-confidence floor sits between real speech and invented words', () 
 
 test('the worker drops a final under the floor, only after measuring it on that final', () => {
   const src = fs.readFileSync(path.join(repoRoot, 'electron/audio/whisper/whisperWorker.ts'), 'utf8');
-  assert.match(src, /if \(!streaming && text\.trim\(\) && encoderOutputs\) \{[\s\S]{0,80}logprob = await meanLogprob\(text, language, encoderOutputs\);/);
-  assert.match(src, /\} else if \(text && logprob !== null && logprob < LOGPROB_FLOOR\) \{[\s\S]{0,250}text = '';/);
+  assert.match(src, /if \(logprobFloor !== null && !streaming && text\.trim\(\) && encoderOutputs\) \{[\s\S]{0,80}logprob = await meanLogprob\(text, language, encoderOutputs\);/);
+  assert.match(src, /\} else if \(text && logprobFloor !== null && logprob !== null && logprob < logprobFloor\) \{[\s\S]{0,250}text = '';/);
 });

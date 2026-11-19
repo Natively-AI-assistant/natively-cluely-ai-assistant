@@ -1,12 +1,13 @@
 /**
  * Energy-based Voice Activity Detection (VAD) at 16 kHz.
  *
- * Uses 30ms windows (480 samples), an RMS threshold that follows the noise
- * floor (see thresholdFor), 600ms hangover (20 frames; 1.2s for a phrase
- * under 1.5s), 120ms min speech
- * duration (4 frames), 300ms pre-roll and 15000ms max segment duration
- * (force-flush).
+ * Uses 30ms windows (480 samples), 120ms min speech duration (4 frames) and
+ * 15000ms max segment duration (force-flush). The threshold, hangover,
+ * short-phrase extension and pre-roll are per-platform (VadTuning, see
+ * localSttTuning.ts): macOS keeps its original 0.008 gate and 300ms hangover,
+ * Windows follows the noise floor with a 600ms hangover and 300ms pre-roll.
  */
+import { localSttTuningFor, type VadTuning } from './localSttTuning';
 
 export interface SpeechSegment {
   samples: Float32Array;
@@ -14,30 +15,6 @@ export interface SpeechSegment {
 }
 
 const WINDOW_SIZE = 480;       // 30ms at 16kHz
-// The threshold is 3x the quietest window of the last ~2 s (minimum
-// statistics: speech always has gaps between syllables, so the minimum is the
-// room, not the talker), clamped to [MIN, MAX]. A fixed 0.008 (-42 dBFS) cut a
-// quiet mic or a low call volume into sub-second fragments, and Whisper fills
-// those with invented words (2026-11-18: JFK clip at -30 dB came back as "I know
-// my fellow men. your country."). MAX keeps a noisy room exactly as strict as
-// before; the native gate has already dropped the silence (keepalive zeros).
-const RMS_THRESHOLD_MIN = 0.002;
-const RMS_THRESHOLD_MAX = 0.008;
-const NOISE_FLOOR_FRAMES = 67; // ~2 s
-// Windows kept from before speech opens. Soft consonants and the rise of the
-// first syllable sit under the threshold, and dropping them clipped first words.
-const PRE_ROLL_FRAMES = 10;    // ~300ms
-// ~600ms. 300ms split a sentence at every natural pause, and a lone word
-// ("not") came back as another ("Knock!"). Measured 2026-11-18, Whisper Base
-// EN, JFK clip at -30 dB: 4.5% WER at 300ms, 0% at 600ms. Once the native gate
-// closes it sends a 20ms zero frame per 100ms, so the hangover's tail costs a
-// little more wall time than its length.
-const HANGOVER_FRAMES = 20;
-// A phrase with under ~1.5 s of voiced audio gets one more hangover before it
-// closes. Cut off alone, a two-word lead-in has no context and the model
-// guesses: quiet JFK's "Ask not." came back "As not." while the same worker
-// given the whole clip got it right (Moonshine Tiny, 2026-11-18).
-const SHORT_PHRASE_FRAMES = 50;
 const MIN_SPEECH_FRAMES = 4;   // ~120ms minimum to avoid transcribing tiny noise bursts
 const MAX_SPEECH_MS = 15000;
 
@@ -49,11 +26,10 @@ function rms(samples: Float32Array, start: number, end: number): number {
   return Math.sqrt(sum / (end - start));
 }
 
-export function thresholdFor(noiseFloor: number): number {
-  return Math.min(RMS_THRESHOLD_MAX, Math.max(RMS_THRESHOLD_MIN, noiseFloor * 3));
-}
-
 export class VadProcessor {
+  /** `tuning` defaults to this platform's; tests pass either platform's explicitly. */
+  constructor(private readonly tuning: VadTuning = localSttTuningFor(process.platform).vad) {}
+
   private buffer: Float32Array[] = [];
   private speechBuffer: Float32Array[] = [];
   private hangoverCount = 0;
@@ -91,12 +67,10 @@ export class VadProcessor {
       offset += WINDOW_SIZE;
 
       const energy = rms(window, 0, window.length);
-      this.recentLevels.push(energy);
-      if (this.recentLevels.length > NOISE_FLOOR_FRAMES) this.recentLevels.shift();
-      const isSpeech = energy >= thresholdFor(Math.min(...this.recentLevels));
+      const isSpeech = energy >= this.thresholdAfter(energy);
 
       if (isSpeech) {
-        this.hangoverCount = HANGOVER_FRAMES;
+        this.hangoverCount = this.tuning.hangoverFrames;
         this.shortPhraseExtended = false;
         if (!this.inSpeech) {
           this.inSpeech = true;
@@ -106,9 +80,9 @@ export class VadProcessor {
           this.preRoll = [];
           this.segmentIdCounter++;
         }
-      } else if (!this.inSpeech) {
+      } else if (!this.inSpeech && this.tuning.preRollFrames > 0) {
         this.preRoll.push(window.slice());
-        if (this.preRoll.length > PRE_ROLL_FRAMES) this.preRoll.shift();
+        if (this.preRoll.length > this.tuning.preRollFrames) this.preRoll.shift();
       }
 
       if (this.inSpeech) {
@@ -130,8 +104,9 @@ export class VadProcessor {
           if (seg) segments.push(seg);
           this.resetSpeech();
         } else if (this.hangoverCount <= 0 && this.speechFrameCount >= MIN_SPEECH_FRAMES
-          && this.speechFrameCount < SHORT_PHRASE_FRAMES && !this.shortPhraseExtended) {
-          this.hangoverCount = HANGOVER_FRAMES;
+          && this.tuning.shortPhraseFrames !== null
+          && this.speechFrameCount < this.tuning.shortPhraseFrames && !this.shortPhraseExtended) {
+          this.hangoverCount = this.tuning.hangoverFrames;
           this.shortPhraseExtended = true;
         } else if (this.hangoverCount <= 0) {
           // End of speech
@@ -201,7 +176,7 @@ export class VadProcessor {
       // counts in full: a short word right after the cut is still sent.
       this.speechFrameCount = tail.length;
       this.speechDurationMs = tail.length * 30;
-      this.hangoverCount = HANGOVER_FRAMES;
+      this.hangoverCount = this.tuning.hangoverFrames;
       // Tail-keep starts a NEW logical segment (caller should re-stamp any
       // per-segment timers) — bump the id so callers detect the boundary.
       this.segmentIdCounter++;
@@ -241,6 +216,19 @@ export class VadProcessor {
     this.buffer = [];
     this.preRoll = [];
     this.recentLevels = [];
+  }
+
+  /**
+   * The RMS a window must reach to count as speech. For the noise-floor gate the
+   * window's own level is recorded first, so the quietest of the last N windows
+   * includes this one.
+   */
+  private thresholdAfter(energy: number): number {
+    const t = this.tuning.threshold;
+    if (t.kind === 'fixed') return t.rms;
+    this.recentLevels.push(energy);
+    if (this.recentLevels.length > t.frames) this.recentLevels.shift();
+    return Math.min(t.max, Math.max(t.min, Math.min(...this.recentLevels) * t.multiplier));
   }
 
   private buildSegment(): SpeechSegment | null {
