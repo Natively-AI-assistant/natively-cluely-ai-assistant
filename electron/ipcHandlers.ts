@@ -5,7 +5,7 @@ import { prewarmPreparedJpeg } from './services/screen/preparedJpeg';
 import { repairCapReached, endsInsideFence } from './llm/repairCap';
 import { AntigravityService, initializeAntigravityLifecycle } from './services/AntigravityService';
 import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
-import { app, BrowserWindow, clipboard, dialog, desktopCapturer, ipcMain, nativeImage, screen, shell, systemPreferences } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, desktopCapturer, ipcMain, nativeImage, safeStorage, screen, shell, systemPreferences } from 'electron';
 import { startChatWebSearch } from './services/webSearch/chatWebSearch';
 import { setOpenAtLogin, getOpenAtLogin } from './utils/windowsTaskbarPolicy';
 import { normalizeMeetingSurface } from './utils/meetingSurface';
@@ -1436,13 +1436,58 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('license:activate', async (event, key: string) => {
     try {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      const result = await LicenseManager.getInstance().activateLicense(key);
+      const lm = LicenseManager.getInstance();
+      // The Natively key whose licence this activation may replace: put back if
+      // the pasted pack key cannot be saved for the AI (below).
+      let keyBefore: string | undefined;
+      try {
+        const { CredentialsManager } = require('./services/CredentialsManager');
+        const cmBefore = CredentialsManager.getInstance();
+        keyBefore = cmBefore.getNativelyPackApiKey?.() || cmBefore.getMainNativelyApiKey?.();
+      } catch { /* no key to put back */ }
+      let result = await lm.activateLicense(key);
       funnelTelemetry.keyEntered('pro_licence', result?.success ? 'ok' : 'invalid');
       if (result?.success) {
-        proWatch.check();
+        // A Pro pack key pasted here (2026-11-19): the licence alone left the
+        // buyer paywalled, because a pack gives Pro only with the AI and
+        // speech-to-text on Natively API, and nothing saved the key for them.
+        // Saved as if pasted under AI Providers (a plan key already there keeps
+        // its place and the pack is held beside it), then the pack switch runs.
+        // A plan key pasted here is left as before: licence only.
+        let details: { provider?: string; plan?: string } | null = null;
+        try { details = lm.getLicenseDetails(); } catch { /* not a pack, as far as we can tell */ }
+        const { isPackLicence } = require('./services/packs/packProRule') as typeof import('./services/packs/packProRule');
+        if (isPackLicence(details?.provider, details?.plan)) {
+          const pasted = typeof key === 'string' ? key.trim() : '';
+          const { CredentialsManager } = require('./services/CredentialsManager');
+          const cm = CredentialsManager.getInstance();
+          if (pasted && pasted !== cm.getMainNativelyApiKey() && pasted !== cm.getNativelyPackApiKey()) {
+            const saveKey = registeredHandlers.get('set-natively-api-key');
+            const saved = saveKey
+              ? await Promise.resolve(saveKey({}, pasted)).catch((e: any) => ({ success: false, error: e?.message }))
+              : { success: false, error: 'set-natively-api-key not registered' };
+            if (!saved?.success) {
+              // Not saved (a second pack key while one is in use: one pack key
+              // per customer; or the store refused). Its licence would show Pro
+              // the AI can never use: put back the licence of the key in use and
+              // say why, rather than report success.
+              console.warn('[IPC] license:activate: pack licence stored, but saving its key for the AI failed:', saved?.error);
+              if (keyBefore && keyBefore !== TRIAL_SENTINEL_KEY && keyBefore !== pasted) {
+                await Promise.resolve(lm.activateWithApiKey(keyBefore)).catch(() => null);
+              }
+              result = { success: false, error: saved?.error || 'Could not save this pack key.' };
+            }
+          }
+          checkProNow();
+        } else {
+          proWatch.check();
+        }
+        // What the windows show is what holds now: a pack off Natively API, or
+        // a licence just put back, is not "Pro on".
+        const isPremiumNow = licencePremiumForWindows();
         BrowserWindow.getAllWindows().forEach((win) => {
           if (!win.isDestroyed())
-            win.webContents.send('license-status-changed', { isPremium: true });
+            win.webContents.send('license-status-changed', { isPremium: isPremiumNow });
         });
         // A licence supersedes an EXPIRED trial (a running one keeps going: the
         // licence is the Pro app, not AI access).
@@ -1560,16 +1605,189 @@ export function initializeIpcHandlers(appState: AppState): void {
       () => appState.processingHelper?.getLLMHelper?.()?.fastResponseFamilyNow?.() ?? null,
     );
   } catch { /* the saved default model is read instead */ }
+  // A Pro pack moves the AI and speech-to-text to Natively API once per pack
+  // key, and puts them back when the pack is gone (packs/packNativelySwitch.ts).
+  // Runs wherever Pro is re-read: launch (a pack bought on an older version),
+  // every Pro watch, and right after an activation or a provider change.
+  let packSwitchRun: Promise<void> | null = null;
+  let packGoneSince: number | null = null;
+  // Fast Response Mode, live and in every window, as set-groq-fast-text-mode
+  // does after its save.
+  const applyFastModeLive = (on: boolean): void => {
+    appState.processingHelper?.getLLMHelper?.()?.setGroqFastTextMode?.(on);
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) win.webContents.send('groq-fast-text-changed', on);
+    });
+  };
+  // A cleared or refused key puts back a Fast Response Mode the pack turned
+  // off; CredentialsManager saves it, this makes it live.
+  try { require('./services/CredentialsManager').CredentialsManager.getInstance().setPackFastModeListener(applyFastModeLive); } catch { /* applied at the next launch */ }
+  // ...and the embedding choice the switch replaced: through the Retrieval
+  // settings path (provider check, re-index), after the credentials save that
+  // called it, and only while embeddings are still on auto (a pin made since stands).
+  try {
+    require('./services/CredentialsManager').CredentialsManager.getInstance().setPackEmbeddingListener((choice: { mode?: string; provider?: string }) => {
+      setTimeout(() => {
+        try {
+          const { SettingsManager } = require('./services/SettingsManager');
+          const now = SettingsManager.getInstance().get('embedding') as { mode?: string } | undefined;
+          if ((now?.mode ?? 'auto') !== 'auto') return;
+          const handler = registeredHandlers.get('embedding:set-config');
+          if (handler) void Promise.resolve(handler({}, choice)).catch((e: any) => console.warn('[IPC] embedding put-back failed:', e?.message ?? e));
+        } catch (e: any) { console.warn('[IPC] embedding put-back failed:', e?.message ?? e); }
+      }, 0);
+    });
+  } catch { /* the user picks it again */ }
+  // Keys the server said are not live (refused, a pack that is over), and keys
+  // it did not answer for: asked again only after a while, not every 30 s.
+  const keyStateQuietUntil = new Map<string, number>();
+  let packSwitchEnteredAgain = false;
+  const reconcilePackSwitchNow = (opts: { entered?: boolean } = {}): void => {
+    if (packSwitchRun) {
+      // An entered key must not be lost to a background run already going.
+      if (opts.entered) packSwitchEnteredAgain = true;
+      return;
+    }
+    const entered = !!opts.entered;
+    packSwitchRun = (async () => {
+      const { reconcilePackSwitch } = require('./services/packs/packNativelySwitch') as typeof import('./services/packs/packNativelySwitch');
+      const { isPackLicence } = require('./services/packs/packProRule') as typeof import('./services/packs/packProRule');
+      const { storedLicenceFacts } = require('./services/proAccess') as typeof import('./services/proAccess');
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const { createHash } = require('node:crypto') as typeof import('node:crypto');
+      const licence = storedLicenceFacts();
+      if (!licence) return; // unreadable is not "no licence": nothing is put back on a guess
+      const cm = CredentialsManager.getInstance();
+      // A locked Keychain or unavailable DPAPI reads the licence file as "no
+      // licence" without throwing. Nothing moves until the store reads again:
+      // a restore on that guess, then the pack seen again, would switch twice.
+      if (cm.isCredentialStoreDegraded?.() || !safeStorage?.isEncryptionAvailable?.()) return;
+      const llm = () => appState.processingHelper?.getLLMHelper?.();
+      const { SettingsManager } = require('./services/SettingsManager');
+      const settings = SettingsManager.getInstance();
+      const fingerprint = (key: string | undefined): string | null =>
+        key && key !== TRIAL_SENTINEL_KEY ? createHash('sha256').update(key).digest('hex').slice(0, 16) : null;
+      const keyById = new Map<string, string>();
+      const rerankerProvider = (): string | null => ((settings.get('reranker') as { provider?: string } | undefined)?.provider) ?? null;
+      const embedding = () => (settings.get('embedding') as import('./services/packs/packNativelySwitch').EmbeddingChoice | undefined) ?? null;
+      const result = await reconcilePackSwitch({
+        facts: () => {
+          // The pack's own key: the held pack key, else the saved key. Not the
+          // key in use, which flips to the plan key while the licence stays the pack.
+          const key: string | undefined = cm.getNativelyPackApiKey?.() || cm.getMainNativelyApiKey?.();
+          const keyId = fingerprint(key);
+          if (keyId && key) keyById.set(keyId, key);
+          const helper = llm();
+          const savedModel: string | null = cm.getDefaultModel() ?? null;
+          const scopes = settings.get('providerDataScopes') as { reference_files?: boolean } | undefined;
+          return {
+            licencePremium: licence.isPremium,
+            licenceProvider: licence.provider,
+            licenceIsPack: isPackLicence(licence.provider, licence.plan),
+            keyId,
+            mainKeyId: fingerprint(cm.getMainNativelyApiKey?.()),
+            memory: cm.getNativelyPackSwitch() ?? null,
+            savedModel,
+            liveModel: helper?.getCurrentModelId?.() ?? savedModel,
+            sttProvider: cm.getSttProvider() ?? null,
+            rerankerProvider: rerankerProvider(),
+            embedding: embedding(),
+            // Same rule as the reranker promotion (CredentialsManager): document
+            // text leaves this device only if the privacy settings allow it.
+            documentsStayLocal: scopes?.reference_files === false,
+            // No AI helper yet: nothing moves until it is up.
+            aiReady: !!helper,
+            entered,
+          };
+        },
+        savedModel: () => cm.getDefaultModel() ?? null,
+        sttProvider: () => cm.getSttProvider() ?? null,
+        rerankerProvider,
+        embedding,
+        // As the Retrieval settings save them: the same handlers, the same checks
+        // and, for embeddings, the same re-index.
+        setReranker: (provider) => {
+          const current = (settings.get('reranker') as Record<string, unknown> | undefined) ?? {};
+          return !!settings.set('reranker', { ...current, provider });
+        },
+        setEmbedding: async (choice) => {
+          const handler = registeredHandlers.get('embedding:set-config');
+          if (!handler) return false;
+          const res = await Promise.resolve(handler({}, choice)).catch(() => null);
+          return !!res?.success;
+        },
+        keyState: async (keyId) => {
+          // fetchKeyUsage is declared further down this function: wait for it.
+          await null;
+          const quiet = keyStateQuietUntil.get(keyId);
+          if (quiet && Date.now() < quiet) return null;
+          const key = keyById.get(keyId);
+          if (!key) return null;
+          const { usedUp, packIsOver } = require('./services/packs/nativelyPackFallback') as typeof import('./services/packs/nativelyPackFallback');
+          const usage = await fetchKeyUsage(key);
+          if (usage.ok && !usage.pack?.ended) return { live: true, usedUp: usedUp(usage) ?? new Set() };
+          // Refused or over: asked again in 6 h (a renewal, a new pack). No
+          // answer at all (offline, a 5xx): in 10 minutes.
+          keyStateQuietUntil.set(keyId, Date.now() + (packIsOver(usage) ? 6 * 3_600_000 : 10 * 60_000));
+          return packIsOver(usage) ? { live: false } : null;
+        },
+        meetingActive: () => appState.getIsMeetingActive?.() === true,
+        write: (change, memory) => cm.applyNativelyPackSwitch(change, memory),
+        beforeChange: () => {
+          try { require('./services/packs/packClockWiring').getPackMeetingClock().countsChanged(); } catch { /* no clock: nothing to bill */ }
+        },
+        // The running AI, the overlay's model chip and Settings follow the saved model.
+        applyModel: () => syncNativelyModelRuntime(),
+        fastFamilyNow: () => llm()?.fastResponseFamilyNow?.() ?? null,
+        fastModeOn: () => {
+          const { SettingsManager } = require('./services/SettingsManager');
+          return Boolean(SettingsManager.getInstance().get('groqFastTextMode'));
+        },
+        // As set-groq-fast-text-mode does: saved, live, and every window told.
+        setFastMode: (on) => {
+          const { SettingsManager } = require('./services/SettingsManager');
+          if (!SettingsManager.getInstance().set('groqFastTextMode', on)) return false;
+          applyFastModeLive(on);
+          return true;
+        },
+        applyStt: async () => {
+          try { await appState.reconfigureSttProvider(); } finally { broadcastCredentialsChanged(); }
+        },
+        goneConfirmed: (gone) => {
+          if (!gone) { packGoneSince = null; return false; }
+          const now = Date.now();
+          if (packGoneSince === null || now < packGoneSince) { packGoneSince = now; return false; }
+          return now - packGoneSince >= 20_000; // the next 30 s watch, not the same moment
+        },
+        log: (m) => console.log(`[IPC] ${m}`),
+      });
+      // Pro follows at once, not at the next 30 s watch.
+      if (result) proWatch.check();
+    })()
+      .catch((e: any) => console.warn('[IPC] Natively switch failed:', e?.message ?? e))
+      .finally(() => {
+        packSwitchRun = null;
+        if (packSwitchEnteredAgain) {
+          packSwitchEnteredAgain = false;
+          reconcilePackSwitchNow({ entered: true });
+        }
+      });
+  };
+  // The switch first: its saves and the model change happen before its first
+  // await, so the watch already reads the moved providers and never stands Pro
+  // down just to bring it back.
+  reconcilePackSwitchNow();
   proWatch.check();
   checkProNow = () => {
     // The pack clock bills the time up to this switch by the providers it ran
     // on, not by the ones just picked (packs/PackMeetingClock.ts countsChanged).
     try { require('./services/packs/packClockWiring').getPackMeetingClock().countsChanged(); } catch { /* no clock: nothing to bill */ }
+    reconcilePackSwitchNow();
     proWatch.check();
   };
   {
     proWatchTimer && clearInterval(proWatchTimer);
-    proWatchTimer = setInterval(() => proWatch.check(), PRO_WATCH_EVERY_MS);
+    proWatchTimer = setInterval(() => { reconcilePackSwitchNow(); proWatch.check(); }, PRO_WATCH_EVERY_MS);
     if (typeof (proWatchTimer as any).unref === 'function') (proWatchTimer as any).unref();
   }
   try {
@@ -13133,6 +13351,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       // pack is used first, so it goes (back) in use. Last, so the Pro set-up
       // above for the plan's key is already done.
       if (apiKey && !keyRejection && cm.getNativelyPackApiKey()) void packFallback.check('plan key saved beside a pack');
+
+      // A key entered and accepted: the AI, speech-to-text, the reranker and
+      // embeddings move to Natively API now, even for a key switched before
+      // (services/packs/packNativelySwitch.ts).
+      if (apiKey && !keyRejection) reconcilePackSwitchNow({ entered: true });
 
       return keyRejection
         ? { success: false, error: keyRejection.error }
