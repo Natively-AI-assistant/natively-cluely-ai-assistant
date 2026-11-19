@@ -209,6 +209,19 @@ export const FUNNEL_CATALOG = Object.freeze({
     recipes: INT,
     // The resumed part of a meeting (meeting_started.resumed); `minutes` is that part's.
     resumed: BOOL,
+    // What to answer presses in this meeting, by what each gave (added
+    // 2026-11-19; src/lib/funnel/answerPress.mjs). Sent only when there was a
+    // press. answered: an answer was recorded; message: text that is not an
+    // answer ("configure your API keys"); empty: nothing (the "no answer yet"
+    // note); failed: an error; waiting: still running when the meeting ended,
+    // and wait_secs how long the oldest of those had waited. Counts only.
+    presses: INT,
+    presses_answered: INT,
+    presses_message: INT,
+    presses_empty: INT,
+    presses_failed: INT,
+    presses_waiting: INT,
+    wait_secs: INT,
   },
 
   // A meeting the app never saw end: it was closed or it crashed while one was
@@ -324,6 +337,12 @@ export const FUNNEL_CATALOG = Object.freeze({
       'ok', 'already_used', 'already_used_expired', 'ip_limit', 'daily_limit', 'rate_limited',
       'hwid_unavailable', 'network', 'server_error',
     ],
+    // Where the hardware id came from when LicenseManager's native module gave
+    // none (added 2026-11-19): this bundle's own load of the module, the
+    // machine id read without it (macOS ioreg, the Windows registry, Linux's
+    // machine-id file), or nowhere ('none', the trial refused). Absent when the
+    // native module answered, as before.
+    hwid_from: ['native_reload', 'ioreg', 'registry', 'machine_id_file', 'none'],
   },
   // What ended it (added 2026-11-03): its 30 minutes, or its AI allowance
   // before them. Absent from builds before 2026-11-03.
