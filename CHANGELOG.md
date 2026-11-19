@@ -1,5 +1,40 @@
 # Changelog
 
+## [3.2.1] - Unreleased
+
+One Natively key runs everything: AI, speech, reranker, embeddings and search move to Natively API, plus a diagnostic report option, cleaner local speech, a trial that starts on more machines, and Pro on Windows. Draft notes: [v3.2.1](docs/releases/v3.2.1.md).
+
+### Changed
+
+- **One Natively key** — entering a Natively key, for a pack or a monthly, yearly or Standard plan, moves the AI model, speech-to-text, the reranker, pinned embeddings and web search to Natively API (#767). A pack gives Pro only while the AI and speech use Natively API, so this is what makes a pack work on a setup with its own keys.
+- **Existing customers are switched on update** — anyone who already has a Natively key and uses their own AI, speech, reranker or embedding provider is switched to Natively API the first time 3.2.1 starts, once per key. Their own keys stay saved. Clearing the Natively key, or the server refusing it, puts their settings back, and a pack that ends puts back what it moved. A plan key is checked with the server first, an allowance already used up stays where it is, and the switch waits for a running meeting to end.
+- **What this costs** — someone who pinned an embedding provider has their notes re-indexed once on Natively, and again if their settings are put back. The reranker and embeddings stay on the device when Settings keep reference files local.
+- **Web search** — with a Natively key, searches use Natively API first and your own Tavily key answers once the plan's research runs out. Without a key, Tavily still comes first.
+
+### Added
+
+- **Send diagnostic report** — when Natively can't reach its servers it says why and offers an opt-in report with a masked log tail, in Settings → Natively API (#763).
+- **Connection help** — the app works out the likely cause of a failed connection and tells you what to try.
+
+### Improved
+
+- **Held pack keys** — a pack key you already hold is used first and your plan carries on afterwards (#761). A pack's Pro goes with its key, and yearly plans move up in place.
+- **Pro licence box** — a pack key pasted there is saved as your Natively key so the AI uses it too. A second, different pack key while one is in use is refused with a message and your current licence stays.
+- **Trial start** — when the native module can't give a device ID, it is read from the system (macOS ioreg, Windows registry MachineGuid, Linux machine-id) and gives the same ID, so the free trial starts on machines where it was refused (#768).
+- **Crash details** — the report says where a run crashed, how far startup got and what it last did.
+- **Yearly prices** — the yearly price on plan cards takes turns with the monthly one, and every plan card is as tall as the packs (#756).
+- **Auto Answer sharing** — the consent text says typed chat and AI answers are shared along with transcripts.
+
+### Fixed
+
+- **Windows Pro** — Pro activates on Windows: the app trusts only usable roots from the system certificate store (#759, #760).
+- **Local speech** — Auto Detect no longer returns empty or gibberish text in Spanish, French, German or Hindi, invented phrases such as "Thanks for watching!" and sound labels are dropped, and Whisper's silence checks now run (#764).
+- **Windows taskbar** — shows the Natively or disguise icon, not Electron's default (#762).
+- **Network errors** — a failed Pro or licence request says why, instead of only "fetch failed".
+- **Search embedder** — picks up a new Natively key as soon as you change it (#757).
+- **Launcher** — the search box no longer opens by itself when ⌘B brings the window back.
+- **Funnel counts** — answer-button presses are counted by what came back, so silent answers show up in the funnel report.
+
 ## [3.2.0] - 2026-11-15
 
 Eleven days of work since v3.1.0: a guided first run, a smarter Auto Answer, faster screenshot answers, Answer length, every answer on your phone, and Natively plans by the month, the year or the hour. Full notes: [v3.2.0](docs/releases/v3.2.0.md).
