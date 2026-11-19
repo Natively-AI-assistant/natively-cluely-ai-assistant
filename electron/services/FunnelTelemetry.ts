@@ -38,6 +38,7 @@ import {
 } from '../../src/lib/funnel/funnelState.mjs';
 import { ANSWER_FAILURE_CAUSES, type FunnelProps, type FunnelEntitlement } from '../../src/lib/funnel/funnelCatalog.mjs';
 import { tagCheckoutUrl, viaWebsiteCheckout } from '../../src/lib/funnel/checkoutLinks.mjs';
+import { answerPressProps, type AnswerPressKind } from '../../src/lib/funnel/answerPress.mjs';
 import { createInstallRegistrar, type InstallRegistrar } from '../../src/lib/funnel/funnelInstall.mjs';
 import { getAppSessionId, usageFlagEnabled } from './UsageOutbox';
 import { SettingsManager } from './SettingsManager';
@@ -104,6 +105,13 @@ export class FunnelTelemetry {
     private meetingWasFirst = false;
     // The running meeting is a Resume of a saved one (2026-11-02).
     private meetingWasResumed = false;
+    /** What to answer presses in the running meeting, by what they gave (src/lib/funnel/answerPress.mjs). */
+    private meetingPresses: Record<AnswerPressKind, number> = { answered: 0, message: 0, empty: 0, failed: 0 };
+    /** Presses still running, by when they started. */
+    private pressesWaiting = new Map<number, number>();
+    private pressSeq = 0;
+    /** Bumped at every meeting start and end: a press that finishes after its meeting counts nowhere. */
+    private meetingEpoch = 0;
     /** The running meeting's notepad, for meeting_ended: counts and yes/no only, never the notes. */
     private meetingNotepad: { surface: MeetingSurface; open: boolean; typed: boolean; asks: number; recipes: number } | null = null;
     /** notepad_used keys already queued today, in memory, so a keystroke never reads the state file. */
@@ -482,6 +490,7 @@ export class FunnelTelemetry {
             st.openMeeting = { startedAt: this.meetingStartedAt, seenAt: this.meetingStartedAt, first, boot: this.bootId };
             this.saveState();
             this.answersAtMeetingStart = Number.isInteger(answersSoFar) && answersSoFar > 0 ? answersSoFar : 0;
+            this.resetPresses();
             this.meetingWasFirst = first;
             this.meetingWasResumed = resumed === true;
             const meetingSurface = surface ?? this.currentSurface();
@@ -519,8 +528,36 @@ export class FunnelTelemetry {
                     : (answersNow as number);
                 props.answers = Math.max(0, n);
             }
+            Object.assign(props, answerPressProps(this.meetingPresses, [...this.pressesWaiting.values()], Date.now()));
+            this.resetPresses();
             this.track('meeting_ended', props);
         } catch { /* never into a meeting */ }
+    }
+
+    private resetPresses(): void {
+        this.meetingEpoch += 1;
+        this.meetingPresses = { answered: 0, message: 0, empty: 0, failed: 0 };
+        this.pressesWaiting.clear();
+    }
+
+    /**
+     * A What to answer press started. Returns what to call with what it gave;
+     * outside a meeting, or once the meeting it started in has ended, that
+     * counts nothing. Never throws.
+     */
+    public answerPressStarted(now: number = Date.now()): (kind: AnswerPressKind) => void {
+        if (this.meetingStartedAt === null) return () => {};
+        const epoch = this.meetingEpoch;
+        const id = ++this.pressSeq;
+        this.pressesWaiting.set(id, now);
+        let done = false;
+        return (kind) => {
+            if (done) return;
+            done = true;
+            if (epoch !== this.meetingEpoch) return;
+            this.pressesWaiting.delete(id);
+            if (kind in this.meetingPresses) this.meetingPresses[kind] += 1;
+        };
     }
 
     /**
