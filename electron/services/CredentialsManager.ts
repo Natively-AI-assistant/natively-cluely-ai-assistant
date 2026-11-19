@@ -99,6 +99,24 @@ export interface CurlProvider {
  */
 export type PreferredModelProvider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter' | 'litellm' | 'ninerouter';
 
+/**
+ * What the Natively switch remembers (services/packs/packNativelySwitch.ts
+ * PackSwitchMemory): the key it ran for, by fingerprint, and the settings it
+ * moved. Mirrored here so this file needs no import from there.
+ */
+type NativelySwitchMemory = {
+    keyId: string;
+    prev: {
+        defaultModel?: string;
+        sttProvider?: string;
+        fastMode?: boolean;
+        rerankerProvider?: string;
+        embedding?: { mode?: string; provider?: string; model?: string; dimensions?: number };
+    };
+    pack?: boolean;
+    ended?: boolean;
+};
+
 export interface StoredCredentials {
     geminiApiKey?: string;
     groqApiKey?: string;
@@ -157,7 +175,7 @@ export interface StoredCredentials {
      * for this key (fingerprint) and what they were before
      * (services/packs/packNativelySwitch.ts, 2026-11-19).
      */
-    nativelyPackSwitch?: { keyId: string; prev: { defaultModel?: string; sttProvider?: string; fastMode?: boolean } };
+    nativelyPackSwitch?: NativelySwitchMemory;
     /**
      * Optional bearer token for a user-hosted OpenAI-compatible embedding
      * endpoint. Lives here rather than in settings.json because that file is
@@ -1383,7 +1401,7 @@ export class CredentialsManager {
         return !!this.credentials.nativelyPackApiKey && Number.isFinite(until) && until > now;
     }
 
-    public getNativelyPackSwitch(): { keyId: string; prev: { defaultModel?: string; sttProvider?: string; fastMode?: boolean } } | undefined {
+    public getNativelyPackSwitch(): NativelySwitchMemory | undefined {
         return this.credentials.nativelyPackSwitch;
     }
 
@@ -1395,7 +1413,7 @@ export class CredentialsManager {
      */
     public applyNativelyPackSwitch(
         change: { defaultModel?: string; sttProvider?: string },
-        memory: { keyId: string; prev: { defaultModel?: string; sttProvider?: string; fastMode?: boolean } } | null,
+        memory: NativelySwitchMemory | null,
     ): boolean {
         if (this.refuseWriteWhileDegraded('natively pack switch')) return false;
         const before = { ...this.credentials };
@@ -1924,13 +1942,19 @@ export class CredentialsManager {
      * only; the caller saves.
      */
     private packFastModeListener: ((on: boolean) => void) | null = null;
+    private packEmbeddingListener: ((choice: NonNullable<NativelySwitchMemory['prev']['embedding']>) => void) | null = null;
 
     /** Applies a Fast Response Mode the pack put-back turned on again to the running AI and the windows. */
     public setPackFastModeListener(fn: ((on: boolean) => void) | null): void {
         this.packFastModeListener = fn;
     }
 
-    private putBackPackSwitch(reason: string, changed: { defaultModel?: string; sttProvider?: string }): void {
+    /** Puts back the embedding choice the switch replaced (re-indexing runs there, after this save). */
+    public setPackEmbeddingListener(fn: ((choice: NonNullable<NativelySwitchMemory['prev']['embedding']>) => void) | null): void {
+        this.packEmbeddingListener = fn;
+    }
+
+    private putBackPackSwitch(reason: string, changed: { defaultModel?: string; sttProvider?: string; rerankerProvider?: string }): void {
         const packSwitch = this.credentials.nativelyPackSwitch;
         if (!packSwitch) return;
         this.credentials.nativelyPackSwitch = undefined;
@@ -1956,7 +1980,24 @@ export class CredentialsManager {
                 }
             } catch { /* the user turns it on again */ }
         }
-        console.log(`[CredentialsManager] ${reason} — put back the settings from before the pack`);
+        // The reranker, back to the user's own while it is still on Natively API.
+        if (prev.rerankerProvider) {
+            try {
+                // eslint-disable-next-line @typescript-eslint/no-var-requires
+                const { SettingsManager } = require('./SettingsManager');
+                const settings = SettingsManager.getInstance();
+                const current = (settings.get('reranker') as { provider?: string } | undefined) ?? {};
+                if (current.provider === 'natively' && settings.set('reranker', { ...current, provider: prev.rerankerProvider })) {
+                    changed.rerankerProvider = prev.rerankerProvider;
+                }
+            } catch { /* the reranker revert below still lands on local */ }
+        }
+        // Embeddings: put back through the Retrieval settings path (it checks the
+        // provider and re-indexes), which runs after this save.
+        if (prev.embedding) {
+            try { this.packEmbeddingListener?.(prev.embedding); } catch { /* the user picks it again */ }
+        }
+        console.log(`[CredentialsManager] ${reason} — put back the settings from before the Natively switch`);
     }
 
     /**

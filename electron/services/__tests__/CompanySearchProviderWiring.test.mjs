@@ -147,11 +147,13 @@ test('manual research-company handler uses the SAME shared resolver (no drift)',
     );
 });
 
-test('shared resolver: Tavily first, Natively fallback, trial-sentinel handled', () => {
+test('shared resolver: a plan or pack key searches on Natively first, Tavily the fallback; trial-sentinel handled', () => {
+    // 2026-11-19 (Evin): with a Natively key everything runs on Natively API.
+    // Without one (or on the trial) the user's Tavily key still comes first.
     const src = read('electron/services/resolveCompanySearchProvider.ts');
-    const tavily = src.indexOf('getTavilyApiKey()');
-    const natively = src.indexOf('getNativelyApiKey()');
-    assert.ok(tavily >= 0 && natively > tavily, 'Tavily (user key) must be checked before Natively fallback');
+    assert.match(src, /if \(tavilyApiKey && \(!savedKey \|\| savedKey === TRIAL_SENTINEL_KEY\)\) return tavily\(\);/);
+    // Research run out on Natively: Tavily answers the query.
+    assert.match(src, /if \(provider\.quotaExhausted\) \{[\s\S]{0,500}const fallback = tavily\(\);\s*\n\s*if \(fallback\) return \(fallback\.search as [^\n]*\)\(\.\.\.args\);/);
     assert.ok(
         src.includes('TRIAL_SENTINEL_KEY') && src.includes('getTrialToken()'),
         'trial-sentinel → x-trial-token handling must come along with the cascade'
