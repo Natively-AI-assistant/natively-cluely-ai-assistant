@@ -44,6 +44,7 @@ import { Worker } from 'worker_threads';
 import { resampleToF32 } from './whisper/audioResampler';
 import { VadProcessor } from './whisper/vadProcessor';
 import { filterHallucination } from './whisper/hallucinationFilter';
+import { isGlossaryEcho } from './sttContextTerms';
 import { configureTransformersCache, getModelSizeMb, purgeCorruptModel } from './whisper/modelManager';
 import { clearLoadSentinel, modelPreloader, writeLoadSentinel } from './whisper/modelPreloader';
 import { buildWorkerInitMessage } from './whisper/inferenceConfig';
@@ -118,7 +119,7 @@ function localSttMemoryRefusal(check: ModelMemoryCheck): Error {
         `Close other apps to free memory, choose a smaller local model, or use a cloud STT provider.`,
     ));
 }
-import { resolveNemotronLangId } from './whisper/nemotron/languageTable';
+import { NEMOTRON_AUTO_LANG_ID, resolveNemotronLangId } from './whisper/nemotron/languageTable';
 import { acquireSharedNemotronWorker } from './whisper/nemotron/sharedWorkerRegistry';
 // The engine's fixed audio window. Imported rather than duplicated as a local
 // literal so the streaming gate can never drift out of sync with the value
@@ -440,25 +441,11 @@ export class LocalWhisperSTT extends EventEmitter {
      * setRecognitionLanguage() immediately after `new LocalWhisperSTT(...)`,
      * before start() or any listener is attached).
      *
-     * 'auto' → English, not fail-closed: 'auto' IS a real, user-selectable
-     * RECOGNITION_LANGUAGES entry ("Auto Detect") — the language table's own
-     * doc comment claiming this app "never sends Nemotron literal auto" was
-     * wrong, corrected here. Nemotron has no real auto-detect mode (its
-     * lang_id conditioning requires one explicit locale per session), so
-     * this follows the SAME precedent AppState.setRecognitionLanguage
-     * already applies for every other non-NativelyProSTT provider (main.ts:
-     * "'auto' is only meaningful for NativelyProSTT — other providers fall
-     * back to en-US"). This normalization must also live HERE, not only at
-     * that call site, because createSTTProvider() (main.ts) calls
-     * setRecognitionLanguage() with the RAW persisted value at construction
-     * time — that particular call site does NOT go through
-     * AppState.setRecognitionLanguage's own 'auto' normalization. Without
-     * this, any user who previously picked "Auto Detect" would hit the
-     * fail-closed path below on every app launch while on the Nemotron
-     * model — surfacing as a disruptive "reconnecting"/eventually "failed"
-     * STT status (main.ts's stt.on('error', ...) treats any non-auth/quota
-     * error as retryable-then-fatal after 5 occurrences), not a one-time
-     * settings notice.
+     * 'auto' → the model's own Auto prompt (NEMOTRON_AUTO_LANG_ID, 101), never
+     * fail-closed: 'auto' is the default setting and a real "Auto Detect" entry,
+     * and createSTTProvider() passes the raw persisted value here at
+     * construction. Until 2026-11-18 it was sent as English (lang_id 0), which
+     * turned every other language into empty text or gibberish.
      *
      * Fail-closed (per the design doc's error-handling section) for
      * everything else unmapped: any of the 21 non-"transcription-ready"
@@ -473,7 +460,14 @@ export class LocalWhisperSTT extends EventEmitter {
      */
     private resolveAndApplyNemotronLanguage(): void {
         const attemptedKey = this.language;
-        const effectiveKey = attemptedKey === 'auto' ? 'english-us' : attemptedKey;
+        // Auto Detect has its own prompt id; sending English here turned every
+        // other language into empty text or gibberish (see NEMOTRON_AUTO_LANG_ID).
+        if (attemptedKey === 'auto') {
+            this.nemotronLangId = NEMOTRON_AUTO_LANG_ID;
+            this.maybePushNemotronLangToWorker();
+            return;
+        }
+        const effectiveKey = attemptedKey;
         const bcp47 = RECOGNITION_LANGUAGES[effectiveKey]?.bcp47;
         const langId = bcp47 ? resolveNemotronLangId(bcp47) : null;
         if (langId === null) {
@@ -789,6 +783,12 @@ export class LocalWhisperSTT extends EventEmitter {
         if (!this.vad.isInSpeech()) { this.recordStreamingStall(); return; }
         // Don't stack streaming requests — wait for the previous one to finish.
         if (this.streamingTaskInFlight) { this.recordStreamingStall(); return; }
+        // A final still on the worker goes first. On a model slower than speech
+        // a partial started now runs before the next final can, and finals
+        // queued behind partials that never showed: Distil Medium EN, 0
+        // partials shown, finals 12-25 s after the speech (2026-11-18).
+        // Nemotron is exempt: its partials carry the streamed audio itself.
+        if (this.finalTasksOutstanding > 0 && !this.isNemotronModel) return;
 
         const open = this.vad.peekOpenSegment();
         if (!open) {
@@ -906,6 +906,14 @@ export class LocalWhisperSTT extends EventEmitter {
      * baseline (no emit — agreement requires two passes). Subsequent passes
      * emit only the *new* committed text as an interim transcript.
      */
+    // Whisper returns its own prompt for audio with no speech in it; with a
+    // dictionary that prompt is "Glossary: ...". The cloud Whisper paths drop
+    // that echo (RestSTT, OpenAIStreamingSTT); this one showed it as speech.
+    private cleanResult(text: string): string {
+        const cleaned = filterHallucination(text ?? '');
+        return isGlossaryEcho(cleaned, this.contextPromptSentToWorker) ? '' : cleaned;
+    }
+
     private handleStreamingPartial(text: string): void {
         this.clearStreamingWatchdog();
         this.streamingTaskInFlight = false;
@@ -915,7 +923,7 @@ export class LocalWhisperSTT extends EventEmitter {
         this.streamingStallCount = 0;
         this.streamingNextDelayMs = this.streamingIntervalBaseMs;
 
-        const cleaned = filterHallucination(text);
+        const cleaned = this.cleanResult(text);
         if (this.isNemotronModel) {
             // Mirrors the `← result` log so the partial path is no longer the
             // one silent leg. Distinguishes engine-returned-nothing from
@@ -1573,7 +1581,7 @@ export class LocalWhisperSTT extends EventEmitter {
                 this.handleStreamingPartial(msg.text);
             } else if (msg.type === 'result') {
                 if (msg.taskId?.startsWith('t')) this.finalTasksOutstanding = Math.max(0, this.finalTasksOutstanding - 1);
-                const text = filterHallucination(msg.text);
+                const text = this.cleanResult(msg.text);
                 if (this.isNemotronModel) {
                     // Distinguishes the three silent outcomes this path had no
                     // way to tell apart: engine returned nothing, engine returned

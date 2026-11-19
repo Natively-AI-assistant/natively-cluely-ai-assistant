@@ -1,10 +1,13 @@
 /**
  * Energy-based Voice Activity Detection (VAD) at 16 kHz.
  *
- * Uses 30ms windows (480 samples), RMS threshold 0.008,
- * 700ms hangover (~23 frames), 250ms min speech duration (~8 frames),
- * and 15000ms max segment duration (force-flush).
+ * Uses 30ms windows (480 samples), 120ms min speech duration (4 frames) and
+ * 15000ms max segment duration (force-flush). The threshold, hangover,
+ * short-phrase extension and pre-roll are per-platform (VadTuning, see
+ * localSttTuning.ts): macOS keeps its original 0.008 gate and 300ms hangover,
+ * Windows follows the noise floor with a 600ms hangover and 300ms pre-roll.
  */
+import { localSttTuningFor, type VadTuning } from './localSttTuning';
 
 export interface SpeechSegment {
   samples: Float32Array;
@@ -12,8 +15,6 @@ export interface SpeechSegment {
 }
 
 const WINDOW_SIZE = 480;       // 30ms at 16kHz
-const RMS_THRESHOLD = 0.008;
-const HANGOVER_FRAMES = 10;    // ~300ms — must be shorter than Rust SilenceSuppressor hangover (500ms)
 const MIN_SPEECH_FRAMES = 4;   // ~120ms minimum to avoid transcribing tiny noise bursts
 const MAX_SPEECH_MS = 15000;
 
@@ -26,6 +27,9 @@ function rms(samples: Float32Array, start: number, end: number): number {
 }
 
 export class VadProcessor {
+  /** `tuning` defaults to this platform's; tests pass either platform's explicitly. */
+  constructor(private readonly tuning: VadTuning = localSttTuningFor(process.platform).vad) {}
+
   private buffer: Float32Array[] = [];
   private speechBuffer: Float32Array[] = [];
   private hangoverCount = 0;
@@ -37,6 +41,9 @@ export class VadProcessor {
   // closes (or closes-and-reopens) within a single buffer — boolean
   // edge-detection on isInSpeech() can miss those cases.
   private segmentIdCounter = 0;
+  private recentLevels: number[] = [];
+  private preRoll: Float32Array[] = [];
+  private shortPhraseExtended = false;
 
   push(samples: Float32Array): SpeechSegment[] {
     const segments: SpeechSegment[] = [];
@@ -60,17 +67,22 @@ export class VadProcessor {
       offset += WINDOW_SIZE;
 
       const energy = rms(window, 0, window.length);
-      const isSpeech = energy >= RMS_THRESHOLD;
+      const isSpeech = energy >= this.thresholdAfter(energy);
 
       if (isSpeech) {
-        this.hangoverCount = HANGOVER_FRAMES;
+        this.hangoverCount = this.tuning.hangoverFrames;
+        this.shortPhraseExtended = false;
         if (!this.inSpeech) {
           this.inSpeech = true;
           this.speechFrameCount = 0;
-          this.speechDurationMs = 0;
-          this.speechBuffer = [];
+          this.speechBuffer = this.preRoll;
+          this.speechDurationMs = this.preRoll.length * 30;
+          this.preRoll = [];
           this.segmentIdCounter++;
         }
+      } else if (!this.inSpeech && this.tuning.preRollFrames > 0) {
+        this.preRoll.push(window.slice());
+        if (this.preRoll.length > this.tuning.preRollFrames) this.preRoll.shift();
       }
 
       if (this.inSpeech) {
@@ -91,6 +103,11 @@ export class VadProcessor {
           const seg = this.buildSegment();
           if (seg) segments.push(seg);
           this.resetSpeech();
+        } else if (this.hangoverCount <= 0 && this.speechFrameCount >= MIN_SPEECH_FRAMES
+          && this.tuning.shortPhraseFrames !== null
+          && this.speechFrameCount < this.tuning.shortPhraseFrames && !this.shortPhraseExtended) {
+          this.hangoverCount = this.tuning.hangoverFrames;
+          this.shortPhraseExtended = true;
         } else if (this.hangoverCount <= 0) {
           // End of speech
           if (this.speechFrameCount >= MIN_SPEECH_FRAMES) {
@@ -159,7 +176,7 @@ export class VadProcessor {
       // counts in full: a short word right after the cut is still sent.
       this.speechFrameCount = tail.length;
       this.speechDurationMs = tail.length * 30;
-      this.hangoverCount = HANGOVER_FRAMES;
+      this.hangoverCount = this.tuning.hangoverFrames;
       // Tail-keep starts a NEW logical segment (caller should re-stamp any
       // per-segment timers) — bump the id so callers detect the boundary.
       this.segmentIdCounter++;
@@ -190,12 +207,28 @@ export class VadProcessor {
     }
     this.resetSpeech();
     this.buffer = [];
+    this.preRoll = [];
     return segments;
   }
 
   reset(): void {
     this.resetSpeech();
     this.buffer = [];
+    this.preRoll = [];
+    this.recentLevels = [];
+  }
+
+  /**
+   * The RMS a window must reach to count as speech. For the noise-floor gate the
+   * window's own level is recorded first, so the quietest of the last N windows
+   * includes this one.
+   */
+  private thresholdAfter(energy: number): number {
+    const t = this.tuning.threshold;
+    if (t.kind === 'fixed') return t.rms;
+    this.recentLevels.push(energy);
+    if (this.recentLevels.length > t.frames) this.recentLevels.shift();
+    return Math.min(t.max, Math.max(t.min, Math.min(...this.recentLevels) * t.multiplier));
   }
 
   private buildSegment(): SpeechSegment | null {
@@ -213,6 +246,7 @@ export class VadProcessor {
   private resetSpeech(): void {
     this.inSpeech = false;
     this.hangoverCount = 0;
+    this.shortPhraseExtended = false;
     this.speechFrameCount = 0;
     this.speechDurationMs = 0;
     this.speechBuffer = [];

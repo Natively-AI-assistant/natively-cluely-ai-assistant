@@ -119,18 +119,17 @@ describe('Nemotron language selection fail-closed behaviour (Task 12)', () => {
     assert.equal(lws['nemotronLangId'], 0, 'fail-closed: must keep the previous (default) lang_id, not silently fall back or corrupt state');
   });
 
-  test('"auto" normalizes to English (lang_id 0), does NOT trigger the fail-closed path', async () => {
-    // Regression for the specific bug found during Task 12 review: 'auto' IS
-    // a real, selectable RECOGNITION_LANGUAGES entry, not an impossible
-    // input — must be normalized to 'english-us' before table lookup, the
-    // same precedent AppState.setRecognitionLanguage already applies for
-    // every other non-NativelyProSTT provider.
+  test('"auto" uses the model Auto prompt (lang_id 101), does NOT trigger the fail-closed path', async () => {
+    // 'auto' is the default setting and a real "Auto Detect" entry. It used to
+    // be sent as English (lang_id 0), which turned Spanish/French/German into
+    // empty text and Hindi into gibberish (2026-11-18); 101 transcribed all of
+    // them as well as their own lang_id did, and English unchanged.
     lws = new LocalWhisperSTT(NEMOTRON_MODEL_ID);
     let errored = false;
     lws.on('error', () => { errored = true; });
     lws.setRecognitionLanguage('auto');
     await sleep(200);
-    assert.equal(lws['nemotronLangId'], 0, 'BUG REGRESSION: "auto" must resolve to English (lang_id 0), not fail closed.');
+    assert.equal(lws['nemotronLangId'], 101, 'BUG REGRESSION: "auto" must use the Auto prompt (101), not English (0).');
     assert.equal(errored, false, 'BUG REGRESSION: "auto" must not emit a fail-closed error — it is a real, always-possible input, not an out-of-tier locale.');
   });
 

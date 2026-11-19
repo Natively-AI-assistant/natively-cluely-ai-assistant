@@ -1520,11 +1520,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     // checkpoints) — while an unsupported pick on a selectable model keeps
     // showing the stored value alongside the warning hint below.
     const languageLocked = localLanguageCapability ? !localLanguageCapability.languageSelectable : false;
-    // 'auto' is its own case, NOT an unsupported language. No local model has a
-    // real auto-detect mode with locale conditioning, but LocalWhisperSTT
-    // normalizes 'auto' to English rather than failing (see
-    // resolveAndApplyNemotronLanguage), so the honest message is "auto-detect
+    // 'auto' is its own case, NOT an unsupported language. It only applies to a
+    // model whose allowed keys leave 'auto' out (the English-only ones, which
+    // transcribe English regardless), so the honest message is "auto-detect
     // is unavailable, English is used" — not "your language isn't supported".
+    // Nemotron lists 'auto' (its own Auto prompt, NEMOTRON_AUTO_LANG_ID).
     const autoDetectUnavailable =
         recognitionLanguage === 'auto' && !!allowedLanguageKeySet && !allowedLanguageKeySet.has('auto');
     const storedLanguageUnsupported =

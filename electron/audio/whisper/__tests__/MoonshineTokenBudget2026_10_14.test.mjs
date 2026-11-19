@@ -69,9 +69,10 @@ test('the worker passes the budget for Moonshine, and only for Moonshine', () =>
     src,
     /if \(isMoonshineModel\(loadedModelId\)\) \{\s*opts\.max_new_tokens = moonshineMaxNewTokens\(msg\.audio\?\.length \?\? 0, 16000\);\s*\}/,
   );
-  assert.equal(src.split('max_new_tokens').length - 1, 1, 'Whisper keeps the library default');
-  // First pipeline call (2026-10-21: a reuse-the-encoder branch comes first, then the plain call).
-  const call = src.indexOf('result = await pipe(msg.audio');
+  // 2026-11-18: Whisper has its own budget now (whisperSilenceGuard.whisperMaxNewTokens).
+  assert.match(src, /\} else \{[\s\S]{0,120}opts\.max_new_tokens = whisperMaxNewTokens\(msg\.audio\?\.length \?\? 0, 16000, opts\.prompt_ids\?\.length \?\? 0\);/);
+  // First pipeline call (2026-11-18: run() wraps the reuse branch and the plain call).
+  const call = src.indexOf('result = await run(opts)');
   assert.ok(call > 0, 'fixture: the pipeline call moved');
   assert.ok(src.indexOf('opts.max_new_tokens') < call, 'the budget must be set before the pipeline is called');
 });

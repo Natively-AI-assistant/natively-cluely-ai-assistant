@@ -37,7 +37,6 @@ describe('filterHallucination — real speech passes through', () => {
   test('two-character text is the shortest that survives', () => {
     assert.equal(filterHallucination('ok'), 'ok');
     assert.equal(filterHallucination('Hi'), 'Hi');
-    assert.equal(filterHallucination('..'), '..');
   });
 
   test('non-English text passes through', () => {
@@ -101,10 +100,35 @@ describe('filterHallucination — exact known hallucinations', () => {
     assert.equal(filterHallucination('I was listening to music'), 'I was listening to music');
   });
 
-  test('a blocked phrase with extra punctuation is not an exact match', () => {
-    assert.equal(filterHallucination('Thanks for watching!'), 'Thanks for watching!');
-    assert.equal(filterHallucination('Bye.'), 'Bye.');
-    assert.equal(filterHallucination('....'), '....');
+  // 2026-11-18: Whisper emits these with punctuation, which the exact match missed.
+  test('a blocked phrase with punctuation is still dropped', () => {
+    assert.equal(filterHallucination('Thanks for watching!'), '');
+    assert.equal(filterHallucination('Bye.'), '');
+    assert.equal(filterHallucination('You.'), '');
+    assert.equal(filterHallucination('Thank you for watching. Please subscribe!'), '');
+    assert.equal(filterHallucination('Subtitles by the Amara.org community'), '');
+  });
+
+  test('a result made only of interjections is dropped; real short answers are kept', () => {
+    assert.equal(filterHallucination('Uh'), '');
+    assert.equal(filterHallucination('Oh Whoa. Oh'), '');
+    assert.equal(filterHallucination('Hmm...'), '');
+    assert.equal(filterHallucination('Yeah.'), 'Yeah.');
+    assert.equal(filterHallucination('Okay.'), 'Okay.');
+    assert.equal(filterHallucination('No.'), 'No.');
+    assert.equal(filterHallucination('Oh, that makes sense.'), 'Oh, that makes sense.');
+  });
+
+  test('a bare "Thank you." is kept', () => {
+    assert.equal(filterHallucination('Thank you.'), 'Thank you.');
+  });
+
+  test('text with no letter or digit is dropped', () => {
+    assert.equal(filterHallucination('..'), '');
+    assert.equal(filterHallucination('....'), '');
+    assert.equal(filterHallucination('[?'), '');
+    assert.equal(filterHallucination(' [? [? [ [ [......... '), '');
+    assert.equal(filterHallucination('42'), '42');
   });
 });
 
@@ -124,9 +148,20 @@ describe('filterHallucination — bracketed tags', () => {
     assert.equal(filterHallucination('unopened]'), 'unopened]');
   });
 
-  test('only square brackets are treated as tags — other parenthesised text is kept', () => {
-    assert.equal(filterHallucination('(laughs)'), '(laughs)');
-    assert.equal(filterHallucination('(applause)'), '(applause)');
+  // 2026-11-18: Whisper Tiny captioned typing and coughs "(upbeat music)" and
+  // "(gunshot)". A result that is only a parenthesised label is not speech.
+  test('a whole result that is one parenthesised sound label is dropped too', () => {
+    assert.equal(filterHallucination('(laughs)'), '');
+    assert.equal(filterHallucination('(upbeat music)'), '');
+    assert.equal(filterHallucination(' (gunshot) '), '');
+    assert.equal(filterHallucination('[BLANK_AUDIO] [BLANK_AUDIO]'), '');
+    assert.equal(filterHallucination('(music) [applause]'), '');
+  });
+
+  test('parentheses inside speech, and other brackets, are kept', () => {
+    assert.equal(filterHallucination('(laughs) okay, fair point'), '(laughs) okay, fair point');
+    assert.equal(filterHallucination('We use (mostly) Postgres'), 'We use (mostly) Postgres');
+    assert.equal(filterHallucination('(one) and (two)'), '(one) and (two)');
     assert.equal(filterHallucination('{noise}'), '{noise}');
   });
 });
