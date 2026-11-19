@@ -15,7 +15,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  planPackSwitch, packRestoreChange, reconcilePackSwitch, ON_DEVICE_STT,
+  planPackSwitch, packRestoreChange, reconcilePackSwitch,
 } from '../packs/packNativelySwitch.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -30,7 +30,7 @@ const packFacts = (over = {}) => ({
   savedModel: 'groq/llama',
   liveModel: 'groq/llama',
   sttProvider: 'deepgram',
-  aiStaysWithUser: false,
+  aiReady: true,
   ...over,
 });
 
@@ -73,11 +73,15 @@ test('a new pack key switches again and keeps the settings from before the first
   assert.equal(q.prev.defaultModel, 'claude-sonnet-5-5');
 });
 
-test('nothing moves while the AI or speech-to-text stays on this computer or the user\'s own endpoint', () => {
-  assert.deepEqual(planPackSwitch(packFacts({ aiStaysWithUser: true })), { kind: 'none' });
-  for (const stt of ON_DEVICE_STT) {
-    assert.deepEqual(planPackSwitch(packFacts({ sttProvider: stt })), { kind: 'none' }, stt);
+test('local and self-hosted setups move too: a pack gives Pro only on Natively API (Evin, 2026-11-19)', () => {
+  for (const stt of ['local-whisper', 'apple-speech']) {
+    const p = planPackSwitch(packFacts({ sttProvider: stt, savedModel: 'ollama-llama3.2', liveModel: 'ollama-llama3.2' }));
+    assert.equal(p.kind, 'switch', stt);
+    assert.equal(p.ai && p.stt, true);
+    assert.deepEqual(p.prev, { defaultModel: 'ollama-llama3.2', sttProvider: stt });
   }
+  // Only while the AI helper is not up yet does nothing move.
+  assert.deepEqual(planPackSwitch(packFacts({ aiReady: false })), { kind: 'none' });
 });
 
 test('no key, no switch; not a pack, no switch', () => {
@@ -325,10 +329,4 @@ test('real LLMHelper: Fast Response Mode off with the AI on Natively API reads a
   // Why not point it at Natively API instead: 'natively' is no Background Model
   // the picker offers (Settings would label it "not supported").
   assert.equal(LLMHelper.prototype.canDispatchFastModel.call(helper(null), 'natively'), false);
-  // aiStaysWithUser: cloud keys move, Ollama and local-only do not.
-  assert.equal(helper(null).aiStaysWithUser(), false);
-  const ollama = helper(null); ollama.useOllama = true;
-  assert.equal(ollama.aiStaysWithUser(), true);
-  const local = helper(null); local.isLocalOnlyMode = true;
-  assert.equal(local.aiStaysWithUser(), true);
 });

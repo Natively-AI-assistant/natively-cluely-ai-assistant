@@ -24,10 +24,12 @@
  *     licence (it ran out, it was removed, its key was cleared or refused), the
  *     settings still on Natively API go back to it. A monthly or yearly Natively
  *     API plan replacing the pack keeps Natively API: the plan includes the AI.
- *   - Nothing moves while the AI or speech-to-text runs on this computer or on
- *     the user's own endpoint (Ollama, a custom or self-hosted provider, local
- *     Whisper, Apple Speech). Switching those would send audio and prompts off
- *     a machine the user chose to keep them on. Pro stays off there, as before.
+ *   - Every setup moves, local and self-hosted ones too (Ollama, a custom or
+ *     curl provider, LiteLLM, 9Router, local Whisper, Apple Speech): a pack
+ *     gives Pro ONLY with both the AI and speech-to-text on Natively API
+ *     (Evin, 2026-11-19), so leaving them would leave the buyer paywalled.
+ *     setModel('natively') leaves Ollama and the custom provider; the put-back
+ *     restores the model id, which selects them again.
  *
  * PURE ON PURPOSE. No Electron, no filesystem, no process.platform: the same
  * on macOS and Windows by construction. The settings come from
@@ -35,9 +37,6 @@
  * TypeScript only, and no imports, so the test loads this file with no build
  * step.
  */
-/** Speech-to-text that runs on this computer. */
-export const ON_DEVICE_STT: ReadonlySet<string> = new Set(['local-whisper', 'apple-speech']);
-
 /** The settings as they were before the switch: only the ones it changed. */
 export interface PackSwitchPrev {
   defaultModel?: string;
@@ -69,8 +68,8 @@ export interface PackSwitchFacts {
   savedModel: string | null;
   liveModel: string | null;
   sttProvider: string | null;
-  /** The AI runs on this computer or the user's own endpoint. */
-  aiStaysWithUser: boolean;
+  /** The running AI helper exists (false early in launch): nothing moves without it. */
+  aiReady: boolean;
 }
 
 export type PackSwitchPlan =
@@ -90,7 +89,7 @@ export function planPackSwitch(f: PackSwitchFacts): PackSwitchPlan {
     if (!f.keyId) return { kind: 'none' };
     // Done for this pack already: whatever the user chose since stands.
     if (f.memory?.keyId === f.keyId) return { kind: 'none' };
-    if (f.aiStaysWithUser || ON_DEVICE_STT.has(f.sttProvider ?? '')) return { kind: 'none' };
+    if (!f.aiReady) return { kind: 'none' };
     const ai = f.savedModel !== NATIVELY || f.liveModel !== NATIVELY;
     const stt = f.sttProvider !== NATIVELY;
     // A new pack while an older one's switch is still in place: what is still

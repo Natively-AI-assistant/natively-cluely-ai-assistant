@@ -5970,15 +5970,6 @@ let isMultimodal = !!(imagePaths?.length);
     return optIn ? list.includes(id) : (list.length === 0 || list.includes(id));
   }
 
-  /**
-   * The AI runs on this computer or on the user's own endpoint: local-only
-   * mode, Ollama, or a self-hosted Active Model. A Pro pack never moves such an
-   * AI to Natively API by itself (services/packs/packNativelySwitch.ts).
-   */
-  public aiStaysWithUser(): boolean {
-    return this.isLocalOnlyMode || this.useOllama || this.activeIsSelfHosted();
-  }
-
   /** The Active Model is an endpoint the user runs or points at themselves. */
   private activeIsSelfHosted(): boolean {
     return !!(this.customProvider || this.activeCurlProvider)

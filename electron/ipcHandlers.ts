@@ -1432,10 +1432,34 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('license:activate', async (event, key: string) => {
     try {
       const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-      const result = await LicenseManager.getInstance().activateLicense(key);
+      const lm = LicenseManager.getInstance();
+      const result = await lm.activateLicense(key);
       funnelTelemetry.keyEntered('pro_licence', result?.success ? 'ok' : 'invalid');
       if (result?.success) {
-        proWatch.check();
+        // A Pro pack key pasted here (2026-11-19): the licence alone left the
+        // buyer paywalled, because a pack gives Pro only with the AI and
+        // speech-to-text on Natively API, and nothing saved the key for them.
+        // Saved as if pasted under AI Providers (a plan key already there keeps
+        // its place and the pack is held beside it), then the pack switch runs.
+        // A plan key pasted here is left as before: licence only.
+        let details: { provider?: string; plan?: string } | null = null;
+        try { details = lm.getLicenseDetails(); } catch { /* not a pack, as far as we can tell */ }
+        const { isPackLicence } = require('./services/packs/packProRule') as typeof import('./services/packs/packProRule');
+        if (isPackLicence(details?.provider, details?.plan)) {
+          const pasted = typeof key === 'string' ? key.trim() : '';
+          const { CredentialsManager } = require('./services/CredentialsManager');
+          const cm = CredentialsManager.getInstance();
+          if (pasted && pasted !== cm.getMainNativelyApiKey() && pasted !== cm.getNativelyPackApiKey()) {
+            const saveKey = registeredHandlers.get('set-natively-api-key');
+            const saved = saveKey
+              ? await Promise.resolve(saveKey({}, pasted)).catch((e: any) => ({ success: false, error: e?.message }))
+              : { success: false, error: 'set-natively-api-key not registered' };
+            if (!saved?.success) console.warn('[IPC] license:activate: pack licence stored, but saving its key for the AI failed:', saved?.error);
+          }
+          checkProNow();
+        } else {
+          proWatch.check();
+        }
         BrowserWindow.getAllWindows().forEach((win) => {
           if (!win.isDestroyed())
             win.webContents.send('license-status-changed', { isPremium: true });
@@ -1605,8 +1629,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             savedModel,
             liveModel: helper?.getCurrentModelId?.() ?? savedModel,
             sttProvider: cm.getSttProvider() ?? null,
-            // No AI helper yet: unknown, so nothing moves until it is up.
-            aiStaysWithUser: helper ? Boolean(helper.aiStaysWithUser?.()) : true,
+            // No AI helper yet: nothing moves until it is up.
+            aiReady: !!helper,
           };
         },
         savedModel: () => cm.getDefaultModel() ?? null,
