@@ -5,7 +5,8 @@
  * floor (see thresholdFor), 600ms hangover (20 frames; 1.2s for a phrase
  * under 1.5s), 120ms min speech
  * duration (4 frames), 300ms pre-roll and 15000ms max segment duration
- * (force-flush).
+ * (force-flush). The hangover is wall time: the native gate's keepalive zero
+ * frames count for the time they stand for (see KEEPALIVE_CREDIT_MAX_MS).
  */
 
 export interface SpeechSegment {
@@ -29,10 +30,19 @@ const NOISE_FLOOR_FRAMES = 67; // ~2 s
 const PRE_ROLL_FRAMES = 10;    // ~300ms
 // ~600ms. 300ms split a sentence at every natural pause, and a lone word
 // ("not") came back as another ("Knock!"). Measured 2026-11-18, Whisper Base
-// EN, JFK clip at -30 dB: 4.5% WER at 300ms, 0% at 600ms. Once the native gate
-// closes it sends a 20ms zero frame per 100ms, so the hangover's tail costs a
-// little more wall time than its length.
+// EN, JFK clip at -30 dB: 4.5% WER at 300ms, 0% at 600ms. The hangover is meant
+// in wall time, but once the native gate closes it sends a 20ms zero frame per
+// 100ms: counted as audio, 600ms would take ~3 s (and a short phrase's extra
+// hangover another ~3 s, ~4 s from the end of speech to the final). push()
+// therefore credits the wall time those keepalives stand for (see
+// KEEPALIVE_CREDIT_MAX_MS).
 const HANGOVER_FRAMES = 20;
+const FRAME_MS = 30;
+// The most wall time one all-zero push can stand for: a keepalive is 100ms apart,
+// so 250ms keeps a stalled event loop or a device that hands over a burst of
+// zeros late from closing a segment on time that was never silent.
+const KEEPALIVE_CREDIT_MAX_MS = 250;
+const SAMPLES_PER_MS = 16;
 // A phrase with under ~1.5 s of voiced audio gets one more hangover before it
 // closes. Cut off alone, a two-word lead-in has no context and the model
 // guesses: quiet JFK's "Ask not." came back "As not." while the same worker
@@ -47,6 +57,11 @@ function rms(samples: Float32Array, start: number, end: number): number {
     sum += samples[i] * samples[i];
   }
   return Math.sqrt(sum / (end - start));
+}
+
+function isAllZero(samples: Float32Array): boolean {
+  for (let i = 0; i < samples.length; i++) if (samples[i] !== 0) return false;
+  return true;
 }
 
 export function thresholdFor(noiseFloor: number): number {
@@ -68,9 +83,19 @@ export class VadProcessor {
   private recentLevels: number[] = [];
   private preRoll: Float32Array[] = [];
   private shortPhraseExtended = false;
+  // Wall time of the previous push, and wall time the native gate swallowed
+  // that is still owed to the hangover (see KEEPALIVE_CREDIT_MAX_MS).
+  private lastPushAt: number | null = null;
+  private owedMs = 0;
+
+  /** `now` is the wall clock in ms; injectable so tests can drive keepalive timing. */
+  constructor(private readonly now: () => number = () => performance.now()) {}
 
   push(samples: Float32Array): SpeechSegment[] {
     const segments: SpeechSegment[] = [];
+    const pushedAt = this.now();
+    const wallGapMs = this.lastPushAt === null ? 0 : pushedAt - this.lastPushAt;
+    this.lastPushAt = pushedAt;
 
     // Prepend any sub-window remainder carried from the previous call
     let input = samples;
@@ -98,6 +123,7 @@ export class VadProcessor {
       if (isSpeech) {
         this.hangoverCount = HANGOVER_FRAMES;
         this.shortPhraseExtended = false;
+        this.owedMs = 0;
         if (!this.inSpeech) {
           this.inSpeech = true;
           this.speechFrameCount = 0;
@@ -129,18 +155,22 @@ export class VadProcessor {
           const seg = this.buildSegment();
           if (seg) segments.push(seg);
           this.resetSpeech();
-        } else if (this.hangoverCount <= 0 && this.speechFrameCount >= MIN_SPEECH_FRAMES
-          && this.speechFrameCount < SHORT_PHRASE_FRAMES && !this.shortPhraseExtended) {
-          this.hangoverCount = HANGOVER_FRAMES;
-          this.shortPhraseExtended = true;
         } else if (this.hangoverCount <= 0) {
-          // End of speech
-          if (this.speechFrameCount >= MIN_SPEECH_FRAMES) {
-            const seg = this.buildSegment();
-            if (seg) segments.push(seg);
-          }
-          this.resetSpeech();
+          this.endOfSpeech(segments);
         }
+      }
+    }
+
+    // All zeros is the native gate's keepalive: 20ms of audio standing for the
+    // ~100ms since the last one. Count the rest of that time toward the
+    // hangover. Real audio (even digital silence at real-time pace) has no gap
+    // between its length and the wall clock, so it earns nothing.
+    if (this.inSpeech && samples.length > 0 && isAllZero(samples)) {
+      const missingMs = wallGapMs - samples.length / SAMPLES_PER_MS;
+      this.owedMs += Math.min(KEEPALIVE_CREDIT_MAX_MS, Math.max(0, missingMs));
+      while (this.inSpeech && this.owedMs >= FRAME_MS) {
+        this.owedMs -= FRAME_MS;
+        if (--this.hangoverCount <= 0) this.endOfSpeech(segments);
       }
     }
 
@@ -241,6 +271,22 @@ export class VadProcessor {
     this.buffer = [];
     this.preRoll = [];
     this.recentLevels = [];
+    this.lastPushAt = null;
+  }
+
+  // The hangover has run out: give a short phrase its one extension, else close.
+  private endOfSpeech(segments: SpeechSegment[]): void {
+    if (this.speechFrameCount >= MIN_SPEECH_FRAMES
+      && this.speechFrameCount < SHORT_PHRASE_FRAMES && !this.shortPhraseExtended) {
+      this.hangoverCount = HANGOVER_FRAMES;
+      this.shortPhraseExtended = true;
+      return;
+    }
+    if (this.speechFrameCount >= MIN_SPEECH_FRAMES) {
+      const seg = this.buildSegment();
+      if (seg) segments.push(seg);
+    }
+    this.resetSpeech();
   }
 
   private buildSegment(): SpeechSegment | null {
@@ -259,6 +305,7 @@ export class VadProcessor {
     this.inSpeech = false;
     this.hangoverCount = 0;
     this.shortPhraseExtended = false;
+    this.owedMs = 0;
     this.speechFrameCount = 0;
     this.speechDurationMs = 0;
     this.speechBuffer = [];

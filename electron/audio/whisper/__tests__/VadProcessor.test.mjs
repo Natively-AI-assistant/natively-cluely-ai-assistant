@@ -545,3 +545,100 @@ describe('VadProcessor — short-phrase hangover', () => {
     assert.equal(out[0].durationMs, (10 + 2 * BASE_HANGOVER) * FRAME_MS);
   });
 });
+
+// 2026-11-19 (PR #764 review): once the native gate closes (500-600 ms after
+// speech) the VAD receives one 20 ms all-zero frame per 100 ms. Counted as 20 ms
+// of audio each, the 600 ms hangover took ~3 s of wall time and a short phrase's
+// extension another ~3 s: ~4 s from the end of speech to the final, against
+// 0.3 s before the PR. The hangover is wall time, so those frames count for the
+// time they stand for.
+describe('VadProcessor — native keepalive frames count as wall time', () => {
+  const KEEPALIVE_MS = 100;
+
+  /** A VadProcessor on a fake wall clock; audio advances it by its own length, a keepalive by 100 ms. */
+  function rig() {
+    let t = 1000;
+    const vad = new VadProcessor(() => t);
+    return {
+      vad,
+      real: (samples) => { t += samples.length / 16; return vad.push(samples); },
+      keepalive: () => { t += KEEPALIVE_MS; return vad.push(new Float32Array(320)); },
+      stall: (ms) => { t += ms; },
+    };
+  }
+
+  /** Wall ms from the end of speech to the segment: real-time hangover frames, then keepalives. */
+  function wallToClose(speechFrames, nativeHangoverFrames) {
+    const r = rig();
+    r.real(speech(speechFrames));
+    let wall = 0;
+    let out = r.real(silence(nativeHangoverFrames));
+    wall += nativeHangoverFrames * FRAME_MS;
+    for (let i = 0; i < 200 && out.length === 0; i++) { out = r.keepalive(); wall += KEEPALIVE_MS; }
+    assert.equal(out.length, 1, 'the segment closed');
+    return wall;
+  }
+
+  test('a phrase of 1.5 s or more closes about one hangover (600 ms) after speech, native hangover included', () => {
+    const wall = wallToClose(SHORT_PHRASE + 10, 20);
+    assert.ok(wall <= 700, `closed ${wall} ms after speech ended`);
+  });
+
+  test('a short phrase closes about 1.2 s after speech, not ~4 s', () => {
+    for (const nativeHangover of [17, 20]) { // mic 500 ms, system audio 600 ms
+      const wall = wallToClose(30, nativeHangover);
+      assert.ok(wall >= 1000 && wall <= 1400, `native hangover ${nativeHangover} frames: closed ${wall} ms after speech ended`);
+    }
+  });
+
+  test('real-time digital silence earns no credit: the audio-time hangover still applies', () => {
+    const r = rig();
+    r.real(speech(10));
+    assert.deepEqual(r.real(silence(BASE_HANGOVER + 15)), []);
+    assert.equal(r.vad.isInSpeech(), true);
+    assert.equal(r.real(silence(5)).length, 1);
+  });
+
+  test('only all-zero pushes earn credit: a stalled clock with low-level audio does not close the segment', () => {
+    const r = rig();
+    r.real(speech(10));
+    for (let i = 0; i < 3; i++) {
+      r.stall(5000);
+      assert.deepEqual(r.vad.push(frames(5, 0.0005)), []);
+    }
+    assert.equal(r.vad.isInSpeech(), true);
+  });
+
+  test('one late all-zero push earns at most 250 ms', () => {
+    const r = rig();
+    r.real(speech(SHORT_PHRASE + 10));          // base hangover only: 20 frames
+    for (let i = 0; i < 2; i++) {
+      r.stall(10000);
+      assert.deepEqual(r.vad.push(new Float32Array(320)), []);
+    }
+    assert.equal(r.vad.isInSpeech(), true);      // 2 x 250 ms = ~17 frames of 20
+    r.stall(10000);
+    assert.equal(r.vad.push(new Float32Array(320)).length, 1, 'the third one closes it');
+  });
+
+  test('speech resuming re-arms the hangover and drops the credit', () => {
+    const r = rig();
+    r.real(speech(SHORT_PHRASE + 10));
+    for (let i = 0; i < 3; i++) assert.deepEqual(r.keepalive(), []);
+    r.real(speech(2));
+    for (let i = 0; i < 4; i++) assert.deepEqual(r.keepalive(), []);
+    assert.equal(r.vad.isInSpeech(), true);
+    let out = [];
+    for (let i = 0; i < 6 && out.length === 0; i++) out = r.keepalive();
+    assert.equal(out.length, 1);
+  });
+
+  test('reset() forgets the previous push time', () => {
+    const r = rig();
+    r.real(speech(SHORT_PHRASE + 10));
+    r.vad.reset();
+    r.stall(60000);
+    assert.deepEqual(r.vad.push(new Float32Array(320)), []);
+    assert.equal(r.vad.isInSpeech(), false);
+  });
+});
