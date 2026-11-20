@@ -1654,7 +1654,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
     const entered = !!opts.entered;
     packSwitchRun = (async () => {
-      const { reconcilePackSwitch, switchFunnelProps } = require('./services/packs/packNativelySwitch') as typeof import('./services/packs/packNativelySwitch');
+      const { reconcilePackSwitch, switchFunnelProps, shouldSendSwitchReport, switchReportTag } = require('./services/packs/packNativelySwitch') as typeof import('./services/packs/packNativelySwitch');
       const { isPackLicence } = require('./services/packs/packProRule') as typeof import('./services/packs/packProRule');
       const { storedLicenceFacts } = require('./services/proAccess') as typeof import('./services/proAccess');
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -1766,9 +1766,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         log: (m) => console.log(`[IPC] ${m}`),
         // natively_switch (funnel catalogue): flags only, no setting value, key or id.
         report: (r) => {
-          const tag = `${r.outcome}:${r.heldWhy ?? ''}`;
-          if (r.outcome === 'held' && switchReported.get(r.keyId) === tag) return;
-          switchReported.set(r.keyId, tag);
+          if (!shouldSendSwitchReport(switchReported.get(r.keyId), r)) return;
+          switchReported.set(r.keyId, switchReportTag(r));
           funnelTelemetry.track('natively_switch', switchFunnelProps(r));
         },
       });

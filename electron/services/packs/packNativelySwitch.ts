@@ -242,6 +242,26 @@ export function switchFunnelProps(r: PackSwitchReport): Record<string, string | 
   return props;
 }
 
+/**
+ * Whether a report should be sent, given the last tag sent for the same key
+ * (`outcome:heldWhy`). A hold repeats on every 30 s watch, so the same hold is
+ * sent once. A key the server refused is not asked again for 6 h and keyState
+ * answers null meanwhile, which reads as "no answer": that is not a new fact,
+ * so it is not sent as one.
+ */
+export function shouldSendSwitchReport(last: string | undefined, r: PackSwitchReport): boolean {
+  if (r.outcome !== 'held') return true;
+  const tag = switchReportTag(r);
+  if (last === tag) return false;
+  if (r.heldWhy === 'no_answer' && last === 'held:refused') return false;
+  return true;
+}
+
+/** The tag a sent report is remembered by. */
+export function switchReportTag(r: PackSwitchReport): string {
+  return `${r.outcome}:${r.heldWhy ?? ''}`;
+}
+
 function say(d: PackSwitchDeps, r: PackSwitchReport): void {
   try { d.report?.(r); } catch { /* telemetry never reaches the switch */ }
 }

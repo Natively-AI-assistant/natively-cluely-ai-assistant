@@ -16,7 +16,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  planPackSwitch, packRestoreChange, reconcilePackSwitch, switchFunnelProps,
+  planPackSwitch, packRestoreChange, reconcilePackSwitch, switchFunnelProps, shouldSendSwitchReport, switchReportTag,
 } from '../packs/packNativelySwitch.ts';
 import { checkFunnelProps } from '../../../src/lib/funnel/funnelCatalog.mjs';
 
@@ -514,8 +514,26 @@ test('real LLMHelper: Fast Response Mode off with the AI on Natively API reads a
   assert.equal(LLMHelper.prototype.canDispatchFastModel.call(helper(null), 'natively'), false);
 });
 
-test('ipcHandlers sends natively_switch once per held reason and never the key id', () => {
+test('a hold is sent once; a refused key\'s quiet window is not reported as "no answer"', () => {
+  const held = (heldWhy) => ({ keyId: 'k', outcome: 'held', key: 'plan', trigger: 'background', heldWhy });
+  const sent = [];
+  let last;
+  for (const r of [held('refused'), held('no_answer'), held('no_answer'), held('refused'), held('meeting'), held('meeting')]) {
+    if (shouldSendSwitchReport(last, r)) { sent.push(r.heldWhy); last = switchReportTag(r); }
+  }
+  assert.deepEqual(sent, ['refused', 'meeting'], 'refused once, then a real change; no_answer after refused is the quiet window');
+  // With no earlier report, or after a decision, a no-answer hold is real news.
+  assert.equal(shouldSendSwitchReport(undefined, held('no_answer')), true);
+  assert.equal(shouldSendSwitchReport('switched:', held('no_answer')), true);
+  assert.equal(shouldSendSwitchReport('held:no_answer', held('refused')), true, 'the server did answer this time');
+  // Decisions are never suppressed.
+  for (const outcome of ['switched', 'restored', 'forgot']) {
+    assert.equal(shouldSendSwitchReport(`${outcome}:`, { keyId: 'k', outcome, key: 'plan', trigger: 'background' }), true);
+  }
+});
+
+test('ipcHandlers sends natively_switch through the de-dupe and never the key id', () => {
   const src = read('../../ipcHandlers.ts');
-  assert.match(src, /if \(r\.outcome === 'held' && switchReported\.get\(r\.keyId\) === tag\) return;/);
+  assert.match(src, /if \(!shouldSendSwitchReport\(switchReported\.get\(r\.keyId\), r\)\) return;/);
   assert.match(src, /funnelTelemetry\.track\('natively_switch', switchFunnelProps\(r\)\);/);
 });
