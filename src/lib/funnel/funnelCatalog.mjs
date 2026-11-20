@@ -399,6 +399,23 @@ export const FUNNEL_CATALOG = Object.freeze({
     certs_dropped: INT,
     healed: BOOL,            // the app switched the certificate merge off and it worked
   },
+  // What the Natively key switch did (added 2026-11-20, #767): moved the AI,
+  // speech, reranker, embeddings (and turned Fast Response off) to Natively
+  // API, put them back, left everything and forgot, or held back and why. One
+  // report per decision, never per check. The booleans say which settings
+  // moved (or, for 'restored', which were put back); no setting's value is sent.
+  natively_switch: {
+    outcome: ['switched', 'restored', 'forgot', 'held'],
+    key: ['pack', 'plan'],
+    trigger: ['entered', 'background'],  // the user entered the key, or the app found it
+    held_why: ['meeting', 'refused', 'no_answer'],  // only with outcome 'held'
+    ai: BOOL,
+    stt: BOOL,
+    reranker: BOOL,
+    embedding: BOOL,
+    fast: BOOL,
+    left_used_up: INT,       // categories left alone: the plan's allowance for them was already used up
+  },
   upgrade_prompt: {
     surface: SURFACES,
     action: ['shown', 'clicked', 'dismissed'],
