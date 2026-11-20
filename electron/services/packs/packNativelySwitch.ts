@@ -221,7 +221,8 @@ export type PackSwitchResult = 'switched' | 'restored' | 'forgot' | null;
  * for the caller to avoid repeating itself and is never sent.
  */
 export interface PackSwitchReport {
-  keyId: string;
+  /** Absent when no key is involved (a pack over with nothing stored to name). */
+  keyId?: string;
   outcome: 'switched' | 'restored' | 'forgot' | 'held';
   key: 'pack' | 'plan';
   trigger: 'entered' | 'background';
@@ -257,6 +258,21 @@ export function shouldSendSwitchReport(last: string | undefined, r: PackSwitchRe
   return true;
 }
 
+/**
+ * The report hook for the app: sends each report to `send` (the funnel's
+ * natively_switch) through the de-dupe. One per app run, because it remembers
+ * the last report per key. Never throws into the switch.
+ */
+export function createSwitchReporter(send: (props: Record<string, string | number | boolean>) => void): (r: PackSwitchReport) => void {
+  const last = new Map<string, string>();
+  return (r) => {
+    const id = r.keyId ?? '';
+    if (!shouldSendSwitchReport(last.get(id), r)) return;
+    last.set(id, switchReportTag(r));
+    try { send(switchFunnelProps(r)); } catch { /* telemetry never reaches the switch */ }
+  };
+}
+
 /** The tag a sent report is remembered by. */
 export function switchReportTag(r: PackSwitchReport): string {
   return `${r.outcome}:${r.heldWhy ?? ''}`;
@@ -281,7 +297,7 @@ export async function reconcilePackSwitch(d: PackSwitchDeps): Promise<PackSwitch
     if (plan.kind === 'forget') {
       if (!d.write({}, null)) return null;
       d.log('a Natively API plan carries on after the pack: everything stays on Natively API');
-      say(d, { keyId: first.keyId ?? '', outcome: 'forgot', key: 'pack', trigger });
+      say(d, { keyId: first.keyId ?? undefined, outcome: 'forgot', key: 'pack', trigger });
       return 'forgot';
     }
 

@@ -16,7 +16,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  planPackSwitch, packRestoreChange, reconcilePackSwitch, switchFunnelProps, shouldSendSwitchReport, switchReportTag,
+  planPackSwitch, packRestoreChange, reconcilePackSwitch, switchFunnelProps, shouldSendSwitchReport, switchReportTag, createSwitchReporter,
 } from '../packs/packNativelySwitch.ts';
 import { checkFunnelProps } from '../../../src/lib/funnel/funnelCatalog.mjs';
 
@@ -532,8 +532,32 @@ test('a hold is sent once; a refused key\'s quiet window is not reported as "no 
   }
 });
 
-test('ipcHandlers sends natively_switch through the de-dupe and never the key id', () => {
-  const src = read('../../ipcHandlers.ts');
-  assert.match(src, /if \(!shouldSendSwitchReport\(switchReported\.get\(r\.keyId\), r\)\) return;/);
-  assert.match(src, /funnelTelemetry\.track\('natively_switch', switchFunnelProps\(r\)\);/);
+test('the reporter sends through the de-dupe, once per key, without the key id', () => {
+  const sent = [];
+  const report = createSwitchReporter((props) => sent.push(props));
+  const held = (keyId, heldWhy) => ({ keyId, outcome: 'held', key: 'plan', trigger: 'background', heldWhy });
+  report(held('SECRET-A', 'meeting')); report(held('SECRET-A', 'meeting')); report(held('SECRET-A', 'meeting'));
+  report(held('SECRET-B', 'meeting'));
+  report(held('SECRET-B', 'refused')); report(held('SECRET-B', 'no_answer'));
+  assert.deepEqual(sent.map((p) => p.held_why), ['meeting', 'meeting', 'refused'], 'A once, B once, B refused once; no_answer after refused dropped');
+  assert.equal(JSON.stringify(sent).includes('SECRET'), false);
+  // Decisions with no key id (a pack over, nothing stored to name) are sent and never collide with a real key.
+  report({ outcome: 'forgot', key: 'pack', trigger: 'background' });
+  report({ outcome: 'forgot', key: 'pack', trigger: 'background' });
+  assert.equal(sent.filter((p) => p.outcome === 'forgot').length, 2, 'decisions are never suppressed');
+  // A throwing sender never reaches the switch.
+  const bad = createSwitchReporter(() => { throw new Error('funnel down'); });
+  assert.doesNotThrow(() => bad(held('k', 'meeting')));
+});
+
+test('a forgot with no key reports without inventing a key id', async () => {
+  const memory = { keyId: 'k1', prev: { defaultModel: 'groq/llama' }, pack: true };
+  const state = { defaultModel: 'natively', sttProvider: 'natively', fastMode: false, memory, plan: true, facts: { licencePremium: true, licenceProvider: 'natively_api', licenceIsPack: false, keyId: null } };
+  const { got, deps } = reports(state);
+  assert.equal(await reconcilePackSwitch(deps), 'forgot');
+  assert.equal(got[0].keyId, undefined);
+});
+
+test('ipcHandlers hands the switch a reporter (behaviour is tested above)', () => {
+  assert.match(read('../../ipcHandlers.ts'), /createSwitchReporter/);
 });

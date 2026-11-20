@@ -1641,10 +1641,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Keys the server said are not live (refused, a pack that is over), and keys
   // it did not answer for: asked again only after a while, not every 30 s.
   const keyStateQuietUntil = new Map<string, number>();
-  // The last decision reported per key (by fingerprint, which is never sent), so
-  // a switch held for a meeting or an unanswered check is reported once, not on
-  // every 30 s watch.
-  const switchReported = new Map<string, string>();
+  // natively_switch reports, de-duplicated per key for the whole run.
+  let switchReporter: ((r: import('./services/packs/packNativelySwitch').PackSwitchReport) => void) | null = null;
   let packSwitchEnteredAgain = false;
   const reconcilePackSwitchNow = (opts: { entered?: boolean } = {}): void => {
     if (packSwitchRun) {
@@ -1654,7 +1652,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
     const entered = !!opts.entered;
     packSwitchRun = (async () => {
-      const { reconcilePackSwitch, switchFunnelProps, shouldSendSwitchReport, switchReportTag } = require('./services/packs/packNativelySwitch') as typeof import('./services/packs/packNativelySwitch');
+      const { reconcilePackSwitch, createSwitchReporter } = require('./services/packs/packNativelySwitch') as typeof import('./services/packs/packNativelySwitch');
       const { isPackLicence } = require('./services/packs/packProRule') as typeof import('./services/packs/packProRule');
       const { storedLicenceFacts } = require('./services/proAccess') as typeof import('./services/proAccess');
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -1766,9 +1764,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         log: (m) => console.log(`[IPC] ${m}`),
         // natively_switch (funnel catalogue): flags only, no setting value, key or id.
         report: (r) => {
-          if (!shouldSendSwitchReport(switchReported.get(r.keyId), r)) return;
-          switchReported.set(r.keyId, switchReportTag(r));
-          funnelTelemetry.track('natively_switch', switchFunnelProps(r));
+          switchReporter ??= createSwitchReporter((props) => funnelTelemetry.track('natively_switch', props));
+          switchReporter(r);
         },
       });
       // Pro follows at once, not at the next 30 s watch.
