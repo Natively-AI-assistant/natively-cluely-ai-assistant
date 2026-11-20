@@ -15,6 +15,7 @@ import { LiquidGlassBadge } from '../ui-components/LiquidGlassBadge';
 import { Presence } from './settings/SettingsRow';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
 import { UnlockProPlans } from './upgrade/UnlockProPlans';
+import { PlansSwap } from './upgrade/PlansSwap';
 import { useConfirmDialog } from './ui/ConfirmDialog';
 import { OwnAnswersSection } from './OwnAnswersSection';
 import { copyText } from '../lib/copyText';
@@ -1859,7 +1860,7 @@ function ProfileIntelligenceProGate({ onOpenNativelyAPI, onClose }: {
         (window as any).electronAPI?.funnelTrack?.('paywall_hit', { feature: 'profile_intelligence' })?.catch?.(() => {});
     }, []);
     /* "Unlock Pro" swaps this paywall for the plans page (UnlockProPlans), in
-       this same panel: the $5 Pro Pack, API Pro and Pro Yearly side by side,
+       this same panel: the $10 Pro Pack, API Pro and Pro Yearly side by side,
        and a link to every plan on the website. It used to open the API Max checkout straight away, a $25/month
        page behind a button that said Pro (6–9% of those checkouts were paid,
        against 21–25% where plans are compared first; Oct 7–Nov 5, 2026). */
@@ -1871,17 +1872,20 @@ function ProfileIntelligenceProGate({ onOpenNativelyAPI, onClose }: {
 
     if (showPlans) {
         return (
-            <UnlockProPlans
-                surface="profile_intelligence"
-                theme={theme === 'light' ? 'light' : 'dark'}
-                onBack={() => setShowPlans(false)}
-                onClose={onClose}
-                onHaveLicense={onOpenNativelyAPI}
-            />
+            <PlansSwap swapKey="plans" direction={1}>
+                <UnlockProPlans
+                    surface="profile_intelligence"
+                    theme={theme === 'light' ? 'light' : 'dark'}
+                    onBack={() => setShowPlans(false)}
+                    onClose={onClose}
+                    onHaveLicense={onOpenNativelyAPI}
+                />
+            </PlansSwap>
         );
     }
 
     return (
+        <PlansSwap swapKey="gate" direction={-1}>
         <div className="pi-pro-gate" data-theme={theme} style={{
             position: 'relative',
             display: 'flex', flexDirection: 'column', height: '100%',
@@ -2059,6 +2063,7 @@ function ProfileIntelligenceProGate({ onOpenNativelyAPI, onClose }: {
                 </div>
             </div>
         </div>
+        </PlansSwap>
     );
 }
 

@@ -2,9 +2,10 @@
 //
 // The Natively Plans card: the first card after getting started (welcome →
 // tour → permissions), for someone not yet on a plan. A startup paywall: the
-// Unlock Pro plans page (upgrade/UnlockProPlans.tsx: the $5 Pro Pack, API Pro,
+// Unlock Pro plans page (upgrade/UnlockProPlans.tsx: the $10 Pro Pack, API Pro,
 // Pro Yearly and "See all plans"), with a quiet "Continue for free" in place
-// of a close button. It used to show the four API plans side by side; since
+// of a close button; leaving it shows the $5 Light pack once more
+// ("Start smaller", variant="exit"). It used to show the four API plans side by side; since
 // 2026-11-07 it is the same page the Modes and Profile Intelligence paywalls
 // open, so a new install meets one set of offers wherever it looks.
 //
@@ -16,6 +17,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { GenieModal } from '../ui/GenieModal';
 import { UnlockProPlans } from '../upgrade/UnlockProPlans';
+import { PlansSwap } from '../upgrade/PlansSwap';
 
 const SHADOW = {
   dark: '0 40px 90px -30px rgba(0,0,0,0.85)',
@@ -38,6 +40,7 @@ export const PlansToaster: React.FC<Props> = ({ isOpen, onDismiss, onOpenPlans }
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     setVisible(isOpen);
+    if (isOpen) setStep('plans');
   }, [isOpen]);
 
   // The orchestrator unmounts this the moment it hears "dismissed", so every
@@ -49,9 +52,16 @@ export const PlansToaster: React.FC<Props> = ({ isOpen, onDismiss, onOpenPlans }
     setVisible(false);
   }, []);
 
-  // Escape, backdrop and "Continue for free" are a "later". No ✕: the
-  // quiet link is the way out, as on a startup paywall.
-  const handleDismiss = useCallback(() => closeThen(() => onDismiss()), [closeThen, onDismiss]);
+  // Leaving the plans is offered one more way in, once: the $5 Light pack on
+  // its own, in the same frame. Not a discount and not worded as one; it is the
+  // cheapest way in. Escape, backdrop and "Continue for free" all lead to it;
+  // leaving that card is the real "later". No ✕: the quiet link is the way
+  // out, as on a startup paywall.
+  const [step, setStep] = useState<'plans' | 'exit'>('plans');
+  const handleDismiss = useCallback(() => {
+    if (step === 'plans') { setStep('exit'); return; }
+    closeThen(() => onDismiss());
+  }, [step, closeThen, onDismiss]);
   // A checkout opened: the user is at checkout, so the card has done its job.
   const handleCheckoutOpened = useCallback(() => closeThen(() => onDismiss('acted')), [closeThen, onDismiss]);
   const handleHaveLicense = useCallback(
@@ -90,14 +100,31 @@ export const PlansToaster: React.FC<Props> = ({ isOpen, onDismiss, onOpenPlans }
       shadow={SHADOW[theme]}
       radius={24}
     >
-      <UnlockProPlans
-        surface="plans_card"
-        theme={theme}
-        subtitle="Every plan includes the full Natively Pro app."
-        dismiss={{ label: 'Continue for free', onClick: handleDismiss }}
-        onCheckoutOpened={handleCheckoutOpened}
-        onHaveLicense={onOpenPlans ? handleHaveLicense : undefined}
-      />
+      <PlansSwap swapKey={step} direction={1}>
+      {step === 'plans' ? (
+        <UnlockProPlans
+          key="plans"
+          surface="plans_card"
+          theme={theme}
+          subtitle="Every plan includes the full Natively Pro app."
+          dismiss={{ label: 'Continue for free', onClick: handleDismiss }}
+          onCheckoutOpened={handleCheckoutOpened}
+          onHaveLicense={onOpenPlans ? handleHaveLicense : undefined}
+        />
+      ) : (
+        <UnlockProPlans
+          key="exit"
+          variant="exit"
+          surface="plans_card"
+          theme={theme}
+          title="Start smaller."
+          subtitle="Not ready for the full week? Try everything in Pro for a couple of hours."
+          dismiss={{ label: 'No thanks, continue for free', onClick: handleDismiss }}
+          onCheckoutOpened={handleCheckoutOpened}
+          onHaveLicense={onOpenPlans ? handleHaveLicense : undefined}
+        />
+      )}
+      </PlansSwap>
     </GenieModal>
   );
 };
