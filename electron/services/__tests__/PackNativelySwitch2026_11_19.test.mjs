@@ -16,8 +16,9 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  planPackSwitch, packRestoreChange, reconcilePackSwitch,
+  planPackSwitch, packRestoreChange, reconcilePackSwitch, switchFunnelProps, shouldSendSwitchReport, switchReportTag, createSwitchReporter,
 } from '../packs/packNativelySwitch.ts';
+import { checkFunnelProps } from '../../../src/lib/funnel/funnelCatalog.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const read = (rel) => readFileSync(path.join(here, rel), 'utf8');
@@ -318,6 +319,107 @@ test('a throwing dependency never escapes', async () => {
   assert.equal(await reconcilePackSwitch(deps), null);
 });
 
+// ── what the funnel is told (2026-11-20, natively_switch) ───────────────────
+// The funnel could not see whether the update switch ran; each decision now
+// reports flags only. Every report must pass the funnel catalogue's own
+// validator, or the server refuses it and the app drops it for good.
+function reports(state, over = {}) {
+  const got = [];
+  const { deps } = fakeDeps(state, { report: (r) => got.push(r), ...over });
+  return { got, deps };
+}
+
+test('a pack switch reports what moved, as flags', async () => {
+  const state = { defaultModel: 'groq/llama', sttProvider: 'deepgram', fastMode: true, fastOn: 'groq', memory: null, reranker: 'jina', embedding: EMB };
+  const { got, deps } = reports(state);
+  assert.equal(await reconcilePackSwitch(deps), 'switched');
+  assert.equal(got.length, 1);
+  assert.deepEqual(got[0], {
+    keyId: 'k1', outcome: 'switched', key: 'pack', trigger: 'background', leftUsedUp: 0,
+    moved: { ai: true, stt: true, reranker: true, embedding: true, fast: true },
+  });
+});
+
+test('a key the user entered reports trigger entered', async () => {
+  const state = { plan: true, entered: true, defaultModel: 'gpt-5', sttProvider: 'deepgram', fastMode: false, memory: null };
+  const { got, deps } = reports(state);
+  await reconcilePackSwitch(deps);
+  assert.equal(got[0].trigger, 'entered');
+  assert.equal(got[0].key, 'plan');
+});
+
+test('a plan switch counts what an used-up allowance left alone', async () => {
+  const state = { plan: true, defaultModel: 'gpt-5', sttProvider: 'deepgram', fastMode: false, reranker: 'jina', embedding: EMB, memory: null,
+    keyState: { live: true, usedUp: new Set(['voice', 'knowledge']) } };
+  const { got, deps } = reports(state);
+  assert.equal(await reconcilePackSwitch(deps), 'switched');
+  assert.equal(got[0].leftUsedUp, 3, 'speech, reranker and embeddings were left');
+  assert.deepEqual(got[0].moved, { ai: true, stt: false, reranker: false, embedding: false, fast: false });
+});
+
+test('held back: a meeting, a refused key, no answer; each says why', async () => {
+  const meeting = { plan: true, defaultModel: 'gpt-5', sttProvider: 'deepgram', fastMode: false, memory: null, meeting: true };
+  let r = reports(meeting); await reconcilePackSwitch(r.deps);
+  assert.deepEqual(r.got.map((x) => [x.outcome, x.heldWhy, x.key]), [['held', 'meeting', 'plan']]);
+  const refused = { plan: true, defaultModel: 'gpt-5', sttProvider: 'deepgram', fastMode: false, memory: null, keyState: { live: false } };
+  r = reports(refused); await reconcilePackSwitch(r.deps);
+  assert.deepEqual(r.got.map((x) => [x.outcome, x.heldWhy]), [['held', 'refused']]);
+  const silent = { plan: true, defaultModel: 'gpt-5', sttProvider: 'deepgram', fastMode: false, memory: null, keyState: null };
+  r = reports(silent); await reconcilePackSwitch(r.deps);
+  assert.deepEqual(r.got.map((x) => [x.outcome, x.heldWhy]), [['held', 'no_answer']]);
+});
+
+test('a pack that ended reports restored with what was put back, then nothing more', async () => {
+  const state = { defaultModel: 'groq/llama', sttProvider: 'deepgram', fastMode: false, reranker: 'jina', embedding: EMB, memory: null };
+  const { got, deps } = reports(state);
+  await reconcilePackSwitch(deps);
+  got.length = 0;
+  state.facts = { licencePremium: false, licenceIsPack: false };
+  assert.equal(await reconcilePackSwitch(deps), 'restored');
+  assert.equal(got.length, 1);
+  assert.equal(got[0].outcome, 'restored');
+  assert.deepEqual(got[0].moved, { ai: true, stt: true, reranker: true, embedding: true, fast: false });
+});
+
+test('a pack over with a plan carrying on, or nothing left to put back, reports forgot', async () => {
+  const memory = { keyId: 'k1', prev: { defaultModel: 'groq/llama' }, pack: true };
+  const carrying = { defaultModel: 'natively', sttProvider: 'natively', fastMode: false, memory, plan: true, facts: { licencePremium: true, licenceProvider: 'natively_api', licenceIsPack: false } };
+  let r = reports(carrying); assert.equal(await reconcilePackSwitch(r.deps), 'forgot');
+  assert.deepEqual(r.got.map((x) => [x.outcome, x.key]), [['forgot', 'pack']]);
+  const nothing = { defaultModel: 'gpt-5', sttProvider: 'soniox', fastMode: false, reranker: 'jina', memory, facts: { licencePremium: false, licenceIsPack: false } };
+  r = reports(nothing); assert.equal(await reconcilePackSwitch(r.deps), 'forgot');
+  assert.deepEqual(r.got.map((x) => x.outcome), ['forgot']);
+});
+
+test('a run that decides nothing reports nothing; a throwing report never reaches the switch', async () => {
+  const memory = { keyId: 'k1', prev: {} };
+  const quiet = { plan: true, defaultModel: 'natively', sttProvider: 'natively', fastMode: false, memory };
+  const r = reports(quiet); assert.equal(await reconcilePackSwitch(r.deps), null);
+  assert.equal(r.got.length, 0);
+  const state = { defaultModel: 'groq/llama', sttProvider: 'deepgram', fastMode: false, memory: null };
+  const { deps } = fakeDeps(state, { report: () => { throw new Error('telemetry down'); } });
+  assert.equal(await reconcilePackSwitch(deps), 'switched');
+  assert.equal(state.defaultModel, 'natively');
+});
+
+test('every report the switch can make passes the funnel catalogue, and carries no value', () => {
+  const base = { keyId: 'SECRET-FINGERPRINT', key: 'plan', trigger: 'background' };
+  const all = [
+    { ...base, outcome: 'switched', leftUsedUp: 2, moved: { ai: true, stt: false, reranker: true, embedding: false, fast: true } },
+    { ...base, outcome: 'switched', key: 'pack', trigger: 'entered', leftUsedUp: 0, moved: { ai: false, stt: false, reranker: false, embedding: false, fast: false } },
+    { ...base, outcome: 'restored', key: 'pack', moved: { ai: true, stt: true, reranker: false, embedding: false, fast: false } },
+    { ...base, outcome: 'forgot', key: 'pack' },
+    ...['meeting', 'refused', 'no_answer'].map((heldWhy) => ({ ...base, outcome: 'held', heldWhy })),
+  ];
+  for (const r of all) {
+    const props = switchFunnelProps(r);
+    const verdict = checkFunnelProps('natively_switch', props);
+    assert.equal(verdict.ok, true, JSON.stringify([r, verdict]));
+    assert.deepEqual(verdict.props, props, 'nothing is dropped by the validator');
+    assert.equal(JSON.stringify(props).includes('SECRET-FINGERPRINT'), false, 'the key fingerprint is never sent');
+  }
+});
+
 // ── wiring pins ────────────────────────────────────────────────────────────
 test('ipcHandlers runs the switch at launch, on every Pro watch and in checkProNow', () => {
   const src = read('../../ipcHandlers.ts');
@@ -410,4 +512,52 @@ test('real LLMHelper: Fast Response Mode off with the AI on Natively API reads a
   // Why not point it at Natively API instead: 'natively' is no Background Model
   // the picker offers (Settings would label it "not supported").
   assert.equal(LLMHelper.prototype.canDispatchFastModel.call(helper(null), 'natively'), false);
+});
+
+test('a hold is sent once; a refused key\'s quiet window is not reported as "no answer"', () => {
+  const held = (heldWhy) => ({ keyId: 'k', outcome: 'held', key: 'plan', trigger: 'background', heldWhy });
+  const sent = [];
+  let last;
+  for (const r of [held('refused'), held('no_answer'), held('no_answer'), held('refused'), held('meeting'), held('meeting')]) {
+    if (shouldSendSwitchReport(last, r)) { sent.push(r.heldWhy); last = switchReportTag(r); }
+  }
+  assert.deepEqual(sent, ['refused', 'meeting'], 'refused once, then a real change; no_answer after refused is the quiet window');
+  // With no earlier report, or after a decision, a no-answer hold is real news.
+  assert.equal(shouldSendSwitchReport(undefined, held('no_answer')), true);
+  assert.equal(shouldSendSwitchReport('switched:', held('no_answer')), true);
+  assert.equal(shouldSendSwitchReport('held:no_answer', held('refused')), true, 'the server did answer this time');
+  // Decisions are never suppressed.
+  for (const outcome of ['switched', 'restored', 'forgot']) {
+    assert.equal(shouldSendSwitchReport(`${outcome}:`, { keyId: 'k', outcome, key: 'plan', trigger: 'background' }), true);
+  }
+});
+
+test('the reporter sends through the de-dupe, once per key, without the key id', () => {
+  const sent = [];
+  const report = createSwitchReporter((props) => sent.push(props));
+  const held = (keyId, heldWhy) => ({ keyId, outcome: 'held', key: 'plan', trigger: 'background', heldWhy });
+  report(held('SECRET-A', 'meeting')); report(held('SECRET-A', 'meeting')); report(held('SECRET-A', 'meeting'));
+  report(held('SECRET-B', 'meeting'));
+  report(held('SECRET-B', 'refused')); report(held('SECRET-B', 'no_answer'));
+  assert.deepEqual(sent.map((p) => p.held_why), ['meeting', 'meeting', 'refused'], 'A once, B once, B refused once; no_answer after refused dropped');
+  assert.equal(JSON.stringify(sent).includes('SECRET'), false);
+  // Decisions with no key id (a pack over, nothing stored to name) are sent and never collide with a real key.
+  report({ outcome: 'forgot', key: 'pack', trigger: 'background' });
+  report({ outcome: 'forgot', key: 'pack', trigger: 'background' });
+  assert.equal(sent.filter((p) => p.outcome === 'forgot').length, 2, 'decisions are never suppressed');
+  // A throwing sender never reaches the switch.
+  const bad = createSwitchReporter(() => { throw new Error('funnel down'); });
+  assert.doesNotThrow(() => bad(held('k', 'meeting')));
+});
+
+test('a forgot with no key reports without inventing a key id', async () => {
+  const memory = { keyId: 'k1', prev: { defaultModel: 'groq/llama' }, pack: true };
+  const state = { defaultModel: 'natively', sttProvider: 'natively', fastMode: false, memory, plan: true, facts: { licencePremium: true, licenceProvider: 'natively_api', licenceIsPack: false, keyId: null } };
+  const { got, deps } = reports(state);
+  assert.equal(await reconcilePackSwitch(deps), 'forgot');
+  assert.equal(got[0].keyId, undefined);
+});
+
+test('ipcHandlers hands the switch a reporter (behaviour is tested above)', () => {
+  assert.match(read('../../ipcHandlers.ts'), /createSwitchReporter/);
 });

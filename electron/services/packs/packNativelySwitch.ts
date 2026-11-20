@@ -209,9 +209,78 @@ export interface PackSwitchDeps {
    */
   goneConfirmed(gone: boolean): boolean;
   log(message: string): void;
+  /** Tells the funnel what this run decided. Optional; must never throw into the switch. */
+  report?(r: PackSwitchReport): void;
 }
 
 export type PackSwitchResult = 'switched' | 'restored' | 'forgot' | null;
+
+/**
+ * What a run decided, for the funnel's natively_switch event (2026-11-20).
+ * Flags only: never a setting's value, a key or a provider's name. keyId is
+ * for the caller to avoid repeating itself and is never sent.
+ */
+export interface PackSwitchReport {
+  /** Absent when no key is involved (a pack over with nothing stored to name). */
+  keyId?: string;
+  outcome: 'switched' | 'restored' | 'forgot' | 'held';
+  key: 'pack' | 'plan';
+  trigger: 'entered' | 'background';
+  /** Only with outcome 'held': a meeting is running, the server refused the key (or its pack is over), or it did not answer. */
+  heldWhy?: 'meeting' | 'refused' | 'no_answer';
+  /** Which settings moved to Natively API (switched) or were put back (restored). */
+  moved?: { ai: boolean; stt: boolean; reranker: boolean; embedding: boolean; fast: boolean };
+  /** Categories left alone because the plan's allowance for them was already used up. */
+  leftUsedUp?: number;
+}
+
+/** The funnel event's properties for a report (enums, booleans and one count; see natively_switch in the funnel catalogue). */
+export function switchFunnelProps(r: PackSwitchReport): Record<string, string | number | boolean> {
+  const props: Record<string, string | number | boolean> = { outcome: r.outcome, key: r.key, trigger: r.trigger };
+  if (r.heldWhy) props.held_why = r.heldWhy;
+  if (r.moved) Object.assign(props, { ai: r.moved.ai, stt: r.moved.stt, reranker: r.moved.reranker, embedding: r.moved.embedding, fast: r.moved.fast });
+  if (r.leftUsedUp !== undefined) props.left_used_up = r.leftUsedUp;
+  return props;
+}
+
+/**
+ * Whether a report should be sent, given the last tag sent for the same key
+ * (`outcome:heldWhy`). A hold repeats on every 30 s watch, so the same hold is
+ * sent once. A key the server refused is not asked again for 6 h and keyState
+ * answers null meanwhile, which reads as "no answer": that is not a new fact,
+ * so it is not sent as one.
+ */
+export function shouldSendSwitchReport(last: string | undefined, r: PackSwitchReport): boolean {
+  if (r.outcome !== 'held') return true;
+  const tag = switchReportTag(r);
+  if (last === tag) return false;
+  if (r.heldWhy === 'no_answer' && last === 'held:refused') return false;
+  return true;
+}
+
+/**
+ * The report hook for the app: sends each report to `send` (the funnel's
+ * natively_switch) through the de-dupe. One per app run, because it remembers
+ * the last report per key. Never throws into the switch.
+ */
+export function createSwitchReporter(send: (props: Record<string, string | number | boolean>) => void): (r: PackSwitchReport) => void {
+  const last = new Map<string, string>();
+  return (r) => {
+    const id = r.keyId ?? '';
+    if (!shouldSendSwitchReport(last.get(id), r)) return;
+    last.set(id, switchReportTag(r));
+    try { send(switchFunnelProps(r)); } catch { /* telemetry never reaches the switch */ }
+  };
+}
+
+/** The tag a sent report is remembered by. */
+export function switchReportTag(r: PackSwitchReport): string {
+  return `${r.outcome}:${r.heldWhy ?? ''}`;
+}
+
+function say(d: PackSwitchDeps, r: PackSwitchReport): void {
+  try { d.report?.(r); } catch { /* telemetry never reaches the switch */ }
+}
 
 /**
  * Plan and apply. Never throws; null when nothing changed (or a save was
@@ -220,6 +289,7 @@ export type PackSwitchResult = 'switched' | 'restored' | 'forgot' | null;
 export async function reconcilePackSwitch(d: PackSwitchDeps): Promise<PackSwitchResult> {
   try {
     const first = d.facts();
+    const trigger: PackSwitchReport['trigger'] = first.entered ? 'entered' : 'background';
     let plan = planPackSwitch(first);
     const confirmed = d.goneConfirmed(plan.kind === 'restore');
     if (plan.kind === 'none') return null;
@@ -227,6 +297,7 @@ export async function reconcilePackSwitch(d: PackSwitchDeps): Promise<PackSwitch
     if (plan.kind === 'forget') {
       if (!d.write({}, null)) return null;
       d.log('a Natively API plan carries on after the pack: everything stays on Natively API');
+      say(d, { keyId: first.keyId ?? undefined, outcome: 'forgot', key: 'pack', trigger });
       return 'forgot';
     }
 
@@ -242,6 +313,7 @@ export async function reconcilePackSwitch(d: PackSwitchDeps): Promise<PackSwitch
       if (Object.keys(change).length === 0) {
         if (!d.write({}, ended)) return null;
         d.log('the pack ended: nothing left on Natively API to put back');
+        say(d, { keyId: plan.keyId, outcome: 'forgot', key: 'pack', trigger });
         return 'forgot';
       }
       d.beforeChange();
@@ -252,6 +324,10 @@ export async function reconcilePackSwitch(d: PackSwitchDeps): Promise<PackSwitch
       if (change.embedding !== undefined && !(await d.setEmbedding(change.embedding))) delete change.embedding;
       if (change.sttProvider !== undefined) await d.applyStt();
       d.log(`the pack ended: put back ${describe(change)}`);
+      say(d, {
+        keyId: plan.keyId, outcome: 'restored', key: 'pack', trigger,
+        moved: { ai: change.defaultModel !== undefined, stt: change.sttProvider !== undefined, reranker: change.rerankerProvider !== undefined, embedding: change.embedding !== undefined, fast: change.fastMode === true },
+      });
       return 'restored';
     }
 
@@ -259,13 +335,20 @@ export async function reconcilePackSwitch(d: PackSwitchDeps): Promise<PackSwitch
     let stt = plan.stt;
     let reranker = plan.reranker;
     let embedding = plan.embedding;
+    let leftUsedUp = 0;
     if (plan.liveCheck) {
       // A plan key in the background waits for the meeting to end: a switch
       // rebuilds speech-to-text and can re-index. Entered by the user: now.
-      if (!first.entered && d.meetingActive()) return null;
+      if (!first.entered && d.meetingActive()) {
+        say(d, { keyId: plan.keyId, outcome: 'held', key: 'plan', trigger, heldWhy: 'meeting' });
+        return null;
+      }
       const keyId = plan.keyId;
       const state = await d.keyState(keyId);
-      if (!state || !state.live) return null;
+      if (!state || !state.live) {
+        say(d, { keyId, outcome: 'held', key: 'plan', trigger, heldWhy: state ? 'refused' : 'no_answer' });
+        return null;
+      }
       // The settings may have moved while the server was asked.
       const again = planPackSwitch({ ...d.facts(), entered: first.entered });
       if (again.kind !== 'switch' || again.keyId !== keyId) return null;
@@ -275,6 +358,7 @@ export async function reconcilePackSwitch(d: PackSwitchDeps): Promise<PackSwitch
       stt = again.stt && !state.usedUp.has('voice');
       reranker = again.reranker && !state.usedUp.has('knowledge');
       embedding = again.embedding && !state.usedUp.has('knowledge');
+      leftUsedUp = [again.ai && !ai, again.stt && !stt, again.reranker && !reranker, again.embedding && !embedding].filter(Boolean).length;
     }
 
     // Remember only what moves now or still sits on Natively API from before,
@@ -306,6 +390,10 @@ export async function reconcilePackSwitch(d: PackSwitchDeps): Promise<PackSwitch
     if (embedding && (await d.setEmbedding({ mode: 'auto' }))) change.embedding = { mode: 'auto' };
     if (stt) await d.applyStt();
     d.log(`a Natively key is in use${plan.pack ? ' (pack)' : ''}: moved ${describe(change) || 'nothing (already on Natively API)'} to Natively API`);
+    say(d, {
+      keyId: plan.keyId, outcome: 'switched', key: plan.pack ? 'pack' : 'plan', trigger, leftUsedUp,
+      moved: { ai, stt, reranker: change.rerankerProvider !== undefined, embedding: change.embedding !== undefined, fast: change.fastMode === false },
+    });
     return 'switched';
   } catch (e: any) {
     d.log(`Natively switch failed: ${e?.message ?? e}`);

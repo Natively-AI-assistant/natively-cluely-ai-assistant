@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **Switch report** — when the Natively key switch moves your settings to Natively API, puts them back, or holds back (a meeting is running, the key was refused, no answer), the app now sends one anonymous count of that decision with yes/no flags for which settings moved. No setting value, key or provider name is sent.
+
 ## [3.2.1] - Unreleased
 
 One Natively key runs everything: AI, speech, reranker, embeddings and search move to Natively API, plus a diagnostic report option, cleaner local speech, a trial that starts on more machines, and Pro on Windows. Draft notes: [v3.2.1](docs/releases/v3.2.1.md).
