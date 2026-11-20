@@ -307,6 +307,7 @@ export const RU_GENERATED2: Record<string, string> = {
     "Natively source repository": "репозитории исходного кода Natively",
     ", not the installed app — clone it, then from the repo root run and keep it running while you use the app (requires Node.js, and on Windows a bash shell such as WSL or Git Bash):": ", а не в установленном приложении — клонируйте репозиторий, затем из его корня запустите лаунчер и держите его запущенным, пока пользуетесь приложением (нужен Node.js, а в Windows — оболочка bash, например WSL или Git Bash):",
     "Starts the embedded memory server on port 8888.": "Запускает встроенный сервер памяти на порту 8888.",
+    "On Windows, run both commands in the same WSL shell (for example Ubuntu) and keep autoStart off below; the app connects to the server at http://localhost:8888 once it is running.": "В Windows выполните обе команды в одной и той же оболочке WSL (например, Ubuntu) и оставьте autoStart ниже выключенным; приложение подключится к серверу по адресу http://localhost:8888, когда он будет запущен.",
     "If you start it from inside Natively": "Если вы запускаете его из Natively",
     "If you run the script yourself": "Если вы запускаете скрипт сами",
     "We detected your AI Providers key for": "Мы обнаружили ваш ключ AI Providers для",

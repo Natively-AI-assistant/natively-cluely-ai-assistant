@@ -813,6 +813,7 @@ export const ZH_GENERATED: Record<string, string> = {
     "Start Natively": "启动 Natively",
     "Start memory server automatically at launch": "Start memory server automatically at launch",
     "Starts the embedded memory server on port 8888.": "Starts the embedded memory server on port 8888.",
+    "On Windows, run both commands in the same WSL shell (for example Ubuntu) and keep autoStart off below; the app connects to the server at http://localhost:8888 once it is running.": "在 Windows 上，请在同一个 WSL shell（例如 Ubuntu）中运行这两条命令，并保持下方的 autoStart 关闭；服务器运行后，应用会连接到 http://localhost:8888。",
     "Stealth & Control": "隐身与控制",
     "Stealth Execute": "Stealth Execute",
     "Stealth typing hotkey": "Stealth typing hotkey",

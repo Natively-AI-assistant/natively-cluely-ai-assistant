@@ -814,6 +814,7 @@ export const JA_GENERATED: Record<string, string> = {
     'Start Natively': 'Natively を起動',
     'Start memory server automatically at launch': '起動時にメモリサーバーを自動的に起動',
     'Starts the embedded memory server on port 8888.': '組み込みメモリサーバーをポート 8888 で起動します。',
+    'On Windows, run both commands in the same WSL shell (for example Ubuntu) and keep autoStart off below; the app connects to the server at http://localhost:8888 once it is running.': 'Windows では、両方のコマンドを同じ WSL シェル（例: Ubuntu）で実行し、下の autoStart はオフのままにしてください。サーバーが起動すると、アプリは http://localhost:8888 に接続します。',
     'Stealth & Control': 'ステルスと制御',
     'Stealth Execute': 'ステルス実行',
     'Stealth typing hotkey': 'ステルス入力のホットキー',

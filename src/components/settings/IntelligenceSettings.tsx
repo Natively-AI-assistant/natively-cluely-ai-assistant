@@ -942,6 +942,9 @@ export const IntelligenceSettings: React.FC<{ autoAnswer?: React.ReactNode; auto
                           {t('Starts the embedded memory server on port 8888.')}
                         </span>
                         <span className="mt-1 block">
+                          {t('On Windows, run both commands in the same WSL shell (for example Ubuntu) and keep autoStart off below; the app connects to the server at http://localhost:8888 once it is running.')}
+                        </span>
+                        <span className="mt-1 block">
                           <span className="font-medium text-text-primary">{t('If you start it from inside Natively')}</span> {t('(autoStart toggle ON below), your AI provider key from the AI Providers screen is forwarded to the server automatically — nothing else to do.')}
                         </span>
                         <span className="mt-1 block">

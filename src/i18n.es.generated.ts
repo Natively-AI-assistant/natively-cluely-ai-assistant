@@ -814,6 +814,7 @@ export const ES_GENERATED: Record<string, string> = {
     "Start Natively": "Iniciar Natively",
     "Start memory server automatically at launch": "Start memory server automatically at launch",
     "Starts the embedded memory server on port 8888.": "Starts the embedded memory server on port 8888.",
+    "On Windows, run both commands in the same WSL shell (for example Ubuntu) and keep autoStart off below; the app connects to the server at http://localhost:8888 once it is running.": "En Windows, ejecuta ambos comandos en el mismo shell de WSL (por ejemplo, Ubuntu) y deja autoStart desactivado más abajo; la app se conecta al servidor en http://localhost:8888 cuando está en ejecución.",
     "Stealth & Control": "Modo oculto y control",
     "Stealth Execute": "Stealth Execute",
     "Stealth typing hotkey": "Stealth typing hotkey",
