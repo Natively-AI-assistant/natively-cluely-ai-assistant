@@ -58,18 +58,20 @@ test('quota banner: no hardcoded checkout, plans open in Settings, trials stay o
 });
 
 test('Unlock Pro: still three cards, each a checkout from CHECKOUT_URLS or PLANS', () => {
-  const ids = [...unlockCode.matchAll(/^\s*id: ('pack_light'|apiPro\.id|'pro_yearly'),/gm)].map((m) => m[1]);
-  assert.deepEqual(ids, ["'pack_light'", 'apiPro.id', "'pro_yearly'"]);
+  const ids = [...unlockCode.matchAll(/^\s*id: ('pack_heavy'|apiPro\.id|'pro_yearly'),/gm)].map((m) => m[1]);
+  assert.deepEqual(ids, ["'pack_heavy'", 'apiPro.id', "'pro_yearly'"]);
   assert.doesNotMatch(unlockCode, /pdt_0N/, 'no product id on the page');
 });
 
-test('Unlock Pro: the Heavy pack and API Pro yearly as quiet second offers', () => {
-  assert.ok(unlockCode.includes("alt: { id: heavy.id, label: `or ${heavy.hours} hours for $${heavy.price}`, url: CHECKOUT_URLS.packHeavy }"));
-  assert.ok(unlockCode.includes("alt: { id: `${apiPro.id}_yearly`, label: `or ${apiPro.yearlyPrice}/yr, ${YEARLY_MONTHS_FREE} months free`, url: apiPro.yearlyUrl }"));
-  assert.ok(unlockCode.includes('alt: null,'), 'Pro Yearly has no second offer');
-  // Same checkout path as the main buttons: the paywall's surface, the same
-  // "opened" callback, so the funnel and the startup card see it.
-  assert.ok(unlockCode.includes('onClick={() => choose(alt.id, alt.url)}'));
+test('Unlock Pro: the pack card sells the Heavy pack, and no card carries a second-offer link', () => {
+  // 2026-11-20: buyers took the $5 Light pack instead of API Pro, so the card is the Heavy pack and the Light pack is not offered here.
+  assert.ok(unlockCode.includes('url: CHECKOUT_URLS.packHeavy,'));
+  // The Light pack is only the exit card's (buildExitTier), never one of the three.
+  const tiersFn = unlockCode.slice(unlockCode.indexOf('function buildTiers'), unlockCode.indexOf('function buildExitTier'));
+  assert.ok(!tiersFn.includes('packLight'), 'the Light pack is not on the three-card page');
+  // The "or $150/yr, 2 months free" line (and the row reserved for it) is gone, so the cards are Settings' size.
+  assert.doesNotMatch(unlockCode, /\balt\b|yearlyUrl|YEARLY_MONTHS_FREE|months free/, 'no second-offer link under any button');
+  // One checkout path: the paywall's surface, the same "opened" callback, so the funnel and the startup card see it.
   assert.ok(unlockCode.includes('onClick={() => choose(tier.id, tier.url)}'));
   assert.ok(unlockCode.includes('api.openExternal(url, { surface })'));
   const choose = unlockCode.slice(unlockCode.indexOf('const choose'), unlockCode.indexOf('const iconBtn'));

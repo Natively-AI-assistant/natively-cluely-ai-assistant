@@ -2,12 +2,20 @@
 //
 // The plans page behind the paywalls' "Unlock Pro" (Modes, Profile
 // Intelligence). It replaces the paywall inside the same manager panel, not a
-// new window and not a jump to Settings, and offers three ways in: the $5 Pro
-// Pack (a week to try it), API Pro (AI included, recommended) and Pro Yearly
-// (your own AI keys). "See all plans" opens the website's pricing page for the
-// rest (Lifetime, API Max and up). Two quieter text links sit under their
-// cards' buttons (2026-11-07): the bigger pack (5 hours for $10) and API Pro
-// yearly ($150, 2 months free).
+// new window and not a jump to Settings, and offers three ways in: the $10
+// Pro Pack (the Heavy pack, 5 hours within 5 days), API Pro (AI included,
+// recommended) and Pro Yearly (your own AI keys). "See all plans" opens the
+// website's pricing page for the rest (Lifetime, API Max and up). There are no
+// second-offer links under the buttons (the "or $150/yr, 2 months free" line
+// was removed 2026-11-20): the price cards are the size they are in Settings ›
+// Plans & Billing.
+//
+// The pack card used to be the $5 Light pack with the Heavy pack as a quiet
+// link under it. Buyers who would have taken API Pro ($15) were taking the
+// cheapest pack instead, so since 2026-11-20 the card sells the Heavy pack
+// and the Light pack is only on Settings › Plans & Billing, plus one more
+// time as the startup card's second chance (variant="exit": it shows the Light
+// pack alone, after "Continue for free").
 //
 // The same page is the Natively Plans card after getting started
 // (onboarding/PlansToaster.tsx): there it has no back arrow, a quiet
@@ -32,18 +40,18 @@
 // Checkouts open with the paywall's surface, so the funnel keeps counting them
 // per paywall.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { ArrowLeft, ArrowUpRight, Check, ChevronRight, X } from 'lucide-react';
 import { PLANS } from '../settings/NativelyApiSettings';
 import { CHECKOUT_URLS, PRICING_PAGE_URL } from '../../config/urls';
 import { YEARLY_LIST, YEARLY_SALE, YEARLY_PCT_OFF, yearlySaleLabel } from '../../lib/lifetimeSale.mjs';
-import { PRO_PACKS, YEARLY_MONTHS_FREE } from '../../lib/apiPlans.mjs';
+import { PRO_PACKS } from '../../lib/apiPlans.mjs';
 import LenticularGlass from '../glass/LenticularGlass';
 import type { Palette } from '../glass/lenticular';
 
 const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif';
-const EASE_CSS = 'cubic-bezier(0.23, 1, 0.32, 1)';
-const EASE_FM = [0.23, 1, 0.32, 1] as const;
+const EASE_CSS = 'cubic-bezier(0.22, 1, 0.36, 1)';
+const EASE_FM = [0.22, 1, 0.36, 1] as const;
 
 // The website's lavender (natively-website src/components/site/kit.tsx).
 const MID = '#AF8CFE';
@@ -205,8 +213,16 @@ function motif(pattern: Pattern, line: string, dot: string, accent: string): Rea
 
 const STAGGER = { hidden: {}, show: { transition: { staggerChildren: 0.05, delayChildren: 0.04 } } };
 const ITEM = {
-  hidden: { opacity: 0, y: 8 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: EASE_FM as any } },
+  hidden: { opacity: 0, y: 10, scale: 0.985 },
+  show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.45, ease: EASE_FM as any } },
+};
+// The second-chance card (variant="exit") lands rather than drifts: it starts a
+// little further back and softer, on the modal's 0.96 scale and the page
+// slide's 3px blur, so the single card reads as the thing the page was
+// leading to. Same smooth-out curve.
+const ITEM_LAND = {
+  hidden: { opacity: 0, y: 12, scale: 0.96, filter: 'blur(3px)' },
+  show: { opacity: 1, y: 0, scale: 1, filter: 'blur(0px)', transition: { duration: 0.42, ease: EASE_FM as any } },
 };
 const ITEM_REDUCED = {
   hidden: { opacity: 0 },
@@ -232,11 +248,6 @@ interface Tier {
   features: readonly string[];
   cta: string;
   url: string;
-  /**
-   * A quieter second way to buy the same tier, as a text link under the
-   * button: the bigger pack, API Pro yearly. Same checkout path and surface.
-   */
-  alt: { id: string; label: string; url: string } | null;
   featured: boolean;
   mesh: Mesh;
   pattern: Pattern;
@@ -245,16 +256,14 @@ interface Tier {
 function buildTiers(now: Date): Tier[] {
   const saleName = yearlySaleLabel(now)?.replace(/\s*[−-]\d+%$/, '') ?? null;
   const apiPro = PLANS.find(x => x.planKey === 'pro')!;
-  const light = PRO_PACKS.find(p => p.id === 'pack_light')!;
   const heavy = PRO_PACKS.find(p => p.id === 'pack_heavy')!;
   return [
     {
-      id: 'pack_light', name: 'Pro Pack', badge: 'Try it', tab: null,
-      blurb: 'Every Pro feature with AI included, for an interview or two.',
-      price: '$5', was: null, period: 'one-time', note: 'No renewal', noteAccent: false,
-      features: ['Full Natively Pro app', 'AI and transcription included', `${light.hours} meeting hours within ${light.days} days`],
-      cta: 'Get Pro Pack', url: CHECKOUT_URLS.packLight,
-      alt: { id: heavy.id, label: `or ${heavy.hours} hours for $${heavy.price}`, url: CHECKOUT_URLS.packHeavy },
+      id: 'pack_heavy', name: 'Pro Pack', badge: 'Try it', tab: null,
+      blurb: 'Every Pro feature with AI included, for a week of interviews.',
+      price: `$${heavy.price}`, was: null, period: 'one-time', note: 'No renewal', noteAccent: false,
+      features: ['Full Natively Pro app', 'AI and transcription included', `${heavy.hours} meeting hours within ${heavy.days} days`],
+      cta: 'Get Pro Pack', url: CHECKOUT_URLS.packHeavy,
       featured: false, mesh: 'standard', pattern: 'dots',
     },
     {
@@ -265,8 +274,6 @@ function buildTiers(now: Date): Tier[] {
       price: apiPro.price, was: null, period: '/mo', note: 'Cancel anytime', noteAccent: false,
       features: apiPro.features.slice(0, 3),
       cta: `Get API ${apiPro.name}`, url: apiPro.url,
-      // 10x monthly; the allowance still refills every month.
-      alt: { id: `${apiPro.id}_yearly`, label: `or ${apiPro.yearlyPrice}/yr, ${YEARLY_MONTHS_FREE} months free`, url: apiPro.yearlyUrl },
       featured: true, mesh: 'pro', pattern: 'rings',
     },
     {
@@ -277,10 +284,27 @@ function buildTiers(now: Date): Tier[] {
       note: `$${(YEARLY_SALE / 12).toFixed(2)} a month`, noteAccent: true,
       features: ['Resume & JD context awareness', '9 expert modes', 'Your own AI keys'],
       cta: 'Get Yearly', url: CHECKOUT_URLS.proYearly,
-      alt: null,
       featured: false, mesh: 'ultra', pattern: 'grid',
     },
   ];
+}
+
+/**
+ * The second chance, shown once when someone leaves the startup card
+ * (PlansToaster): the $5 Light pack on its own. It is not a discount and the
+ * copy never says it is; it is the cheapest way in, said plainly, as a
+ * smaller step for someone who found the Heavy pack too much to start with.
+ */
+function buildExitTier(): Tier {
+  const light = PRO_PACKS.find(p => p.id === 'pack_light')!;
+  return {
+    id: 'pack_light', name: 'Light Pack', badge: 'Start here', tab: 'Our lowest way in',
+    blurb: 'The smallest way to try Pro with AI included.',
+    price: `$${light.price}`, was: null, period: 'one-time', note: 'No renewal', noteAccent: false,
+    features: ['Full Natively Pro app', 'AI and transcription included', `${light.hours} meeting hours within ${light.days} days`],
+    cta: `Try Pro for $${light.price}`, url: CHECKOUT_URLS.packLight,
+    featured: true, mesh: 'pro', pattern: 'rings',
+  };
 }
 
 /** The website's CTA arrow (natively-website src/components/site/kit.tsx). */
@@ -303,25 +327,39 @@ interface Props {
   onCheckoutOpened?: (tierId: string) => void;
   /** Settings › Plans & Billing, for someone who already holds a licence or key. */
   onHaveLicense?: () => void;
+  /** The title; "Unlock Pro." unless a card needs its own. */
+  title?: string;
   /** The line under the title. */
   subtitle?: string;
+  /** 'exit': only the Light pack, centred, with no pricing-page link (PlansToaster's second chance). */
+  variant?: 'all' | 'exit';
   theme: 'light' | 'dark';
 }
 
 export function UnlockProPlans({
   surface, onBack, onClose, dismiss, onCheckoutOpened, onHaveLicense,
-  subtitle = 'Modes and Profile Intelligence come with every plan.', theme,
+  title = 'Unlock Pro.', subtitle = 'Modes and Profile Intelligence come with every plan.', variant = 'all', theme,
 }: Props) {
   const T = theme === 'light' ? LIGHT : DARK;
   const reduced = useReducedMotion() ?? false;
-  const item = reduced ? ITEM_REDUCED : ITEM;
-  const tiers = useMemo(() => buildTiers(new Date()), []);
+  const exit = variant === 'exit';
+  const item = reduced ? ITEM_REDUCED : exit ? ITEM_LAND : ITEM;
+  const tiers = useMemo(() => (exit ? [buildExitTier()] : buildTiers(new Date())), [exit]);
   const rootRef = useRef<HTMLDivElement>(null);
   const [opening, setOpening] = useState<string | null>(null);
   const [opened, setOpened] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
+  // The pill under the pointer (or key) right now: it gives a little, so the
+  // page can be felt hearing the press. Released it springs back at once.
+  const [pressed, setPressed] = useState<string | null>(null);
+  const pressProps = (id: string) => ({
+    onPointerDown: () => setPressed(id),
+    onPointerUp: () => setPressed(null),
+    onPointerLeave: () => setPressed(p => (p === id ? null : p)),
+    onPointerCancel: () => setPressed(null),
+  });
 
   // A checkout that opened says so for a moment, then the button is itself again.
   useEffect(() => {
@@ -342,7 +380,7 @@ export function UnlockProPlans({
     }
   };
 
-  // `id` is the tier's, or its alt's (pack_heavy, the yearly API Pro).
+  // `id` is the tier's (pack_heavy, the API plan's, pro_yearly).
   const choose = async (id: string, url: string) => {
     if (opening) return;
     setOpening(id);
@@ -408,8 +446,11 @@ export function UnlockProPlans({
             onClick={dismiss.onClick}
             style={{
               height: 32, padding: '0 10px', border: 0, borderRadius: 8, background: 'none', cursor: 'pointer',
-              fontFamily: FONT, fontSize: 12.5, fontWeight: 500, color: T.inkFaint, transition: `color 200ms ${EASE_CSS}`,
+              fontFamily: FONT, fontSize: 12.5, fontWeight: 500, color: T.inkFaint,
+              transform: pressed === 'dismiss' && !reduced ? 'scale(0.97)' : 'scale(1)',
+              transition: `color 200ms ${EASE_CSS}, transform ${pressed === 'dismiss' ? 120 : 200}ms ${EASE_CSS}`,
             }}
+            {...pressProps('dismiss')}
             onMouseEnter={e => (e.currentTarget.style.color = T.ink)}
             onMouseLeave={e => (e.currentTarget.style.color = T.inkFaint)}
             onFocus={e => (e.currentTarget.style.color = T.ink)}
@@ -427,13 +468,13 @@ export function UnlockProPlans({
         <motion.h2 variants={item} id="unlock-pro-title" style={{
           margin: 0, fontSize: 34, fontWeight: 600, letterSpacing: '-0.045em', lineHeight: 1, color: T.ink,
         }}>
-          Unlock Pro.
+          {title}
         </motion.h2>
         <motion.p variants={item} id="unlock-pro-desc" style={{ margin: '10px 0 0', fontSize: 13, lineHeight: 1.55, color: T.inkMuted, textAlign: 'center' }}>
           {subtitle}
         </motion.p>
 
-        <div style={{ position: 'relative', width: '100%', maxWidth: 760, marginTop: 4 }}>
+        <div style={{ position: 'relative', width: '100%', maxWidth: exit ? 270 : 760, marginTop: 4 }}>
           {/* The website's Bloom: the faint field behind the row. */}
           <div aria-hidden style={{
             position: 'absolute', inset: '-40px -40px', pointerEvents: 'none', filter: 'blur(3px)', background: T.bloom,
@@ -441,7 +482,7 @@ export function UnlockProPlans({
             WebkitMaskImage: 'radial-gradient(closest-side, #000 55%, transparent)',
           }} />
 
-          <motion.div variants={STAGGER} style={{ position: 'relative', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+          <motion.div variants={STAGGER} style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${tiers.length}, 1fr)`, gap: 14 }}>
             {tiers.map(tier => {
               const busy = opening === tier.id;
               const done = opened === tier.id;
@@ -459,7 +500,14 @@ export function UnlockProPlans({
                       which paints over it; only its 22px lip shows. */}
                   <div style={{ position: 'relative', height: 22 }}>
                     {tier.tab && (
-                      <div style={{
+                      // The tab starts tucked behind the card and slides up
+                      // into its lip once the card has settled (the card is
+                      // opaque and paints over it, so it rises out of the edge).
+                      <motion.div
+                        initial={reduced ? false : { transform: 'translate3d(0, 16px, 0)', opacity: 0 }}
+                        animate={{ transform: 'translate3d(0, 0, 0)', opacity: 1 }}
+                        transition={{ duration: 0.4, ease: EASE_FM as any, delay: reduced ? 0 : exit ? 0.34 : 0.3 }}
+                        style={{
                         position: 'absolute', left: 12, right: 12, top: 0, height: 40,
                         display: 'flex', justifyContent: 'center', paddingTop: 6, boxSizing: 'border-box',
                         borderRadius: '18px 18px 0 0', background: T.tab.bg,
@@ -468,7 +516,7 @@ export function UnlockProPlans({
                         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                       }}>
                         {tier.tab}
-                      </div>
+                      </motion.div>
                     )}
                   </div>
 
@@ -480,6 +528,10 @@ export function UnlockProPlans({
                       position: 'relative', zIndex: 1, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden',
                       borderRadius: 22, background: T.card, border: `1px solid ${T.rule}`,
                       boxShadow: tier.featured ? T.cardShadowFeatured : T.cardShadow,
+                      // Lifts a few px on hover, motion only (no shadow change:
+                      // shadows repaint). Held while a checkout is opening.
+                      transform: cardHot ? 'translate3d(0, -3px, 0)' : 'translate3d(0, 0, 0)',
+                      transition: `transform 260ms ${EASE_CSS}`,
                     }}
                   >
                     {/* The band. The tall bottom padding is the overlap the price card floats back up into. */}
@@ -550,48 +602,37 @@ export function UnlockProPlans({
                           background: pillBg, boxShadow: T.pill.rim,
                           color: tier.featured ? T.pill.lavenderInk : T.pill.paperInk,
                           cursor: opening ? 'progress' : 'pointer', opacity: opening && !busy ? 0.5 : 1, outline: 'none',
-                          transition: `opacity 200ms ${EASE_CSS}`,
+                          transform: pressed === tier.id && !reduced ? 'scale(0.97)' : 'scale(1)',
+                          // Release is quick; the press eases in just as fast, so it never lags the finger.
+                          transition: `opacity 200ms ${EASE_CSS}, transform ${pressed === tier.id ? 120 : 200}ms ${EASE_CSS}`,
                         }}
+                        {...pressProps(tier.id)}
                       >
-                        {busy ? 'Opening checkout' : done ? 'Opened in browser' : (
-                          <>
-                            {tier.cta}
-                            <span style={{ display: 'inline-flex', transform: btnHot && !reduced ? 'translateX(3px)' : 'none', transition: `transform 200ms ${EASE_CSS}` }}>
-                              <Arrow />
-                            </span>
-                          </>
-                        )}
-                      </button>
-
-                      {/* The quieter second offer. Every card keeps the line's
-                          height, so the three trays below still line up. */}
-                      <div style={{ marginTop: 8, height: 16, display: 'flex', justifyContent: 'center' }}>
-                        {tier.alt && (() => {
-                          const alt = tier.alt;
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => choose(alt.id, alt.url)}
-                              disabled={!!opening}
-                              style={{
-                                display: 'inline-flex', alignItems: 'center', gap: 2, padding: 0, border: 0, background: 'none',
-                                fontFamily: FONT, fontSize: 11.5, fontWeight: 500, lineHeight: '16px', whiteSpace: 'nowrap',
-                                color: T.inkMuted, cursor: opening ? 'progress' : 'pointer',
-                                opacity: opening && opening !== alt.id ? 0.5 : 1,
-                                transition: `color 200ms ${EASE_CSS}, opacity 200ms ${EASE_CSS}`,
-                              }}
-                              onMouseEnter={e => (e.currentTarget.style.color = T.ink)}
-                              onMouseLeave={e => (e.currentTarget.style.color = T.inkMuted)}
-                              onFocus={e => (e.currentTarget.style.color = T.ink)}
-                              onBlur={e => (e.currentTarget.style.color = T.inkMuted)}
+                        {/* The label changes state in place (Get → Opening → Opened):
+                            a short crossfade with a hint of blur so it reads as one
+                            word turning into the next, not two swapping. */}
+                        <span style={{ position: 'relative', display: 'inline-grid' }}>
+                          <AnimatePresence mode="popLayout" initial={false}>
+                            <motion.span
+                              key={busy ? 'busy' : done ? 'done' : 'idle'}
+                              initial={reduced ? { opacity: 0 } : { opacity: 0, filter: 'blur(2px)', transform: 'translate3d(0, 4px, 0)' }}
+                              animate={reduced ? { opacity: 1 } : { opacity: 1, filter: 'blur(0px)', transform: 'translate3d(0, 0, 0)' }}
+                              exit={reduced ? { opacity: 0 } : { opacity: 0, filter: 'blur(2px)', transform: 'translate3d(0, -4px, 0)' }}
+                              transition={{ duration: 0.18, ease: EASE_FM as any }}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}
                             >
-                              {opening === alt.id ? 'Opening checkout' : opened === alt.id ? 'Opened in browser' : (
-                                <>{alt.label} <ArrowUpRight size={12} strokeWidth={2} aria-hidden /></>
+                              {busy ? 'Opening checkout' : done ? 'Opened in browser' : (
+                                <>
+                                  {tier.cta}
+                                  <span style={{ display: 'inline-flex', transform: btnHot && !reduced ? 'translateX(3px)' : 'none', transition: `transform 200ms ${EASE_CSS}` }}>
+                                    <Arrow />
+                                  </span>
+                                </>
                               )}
-                            </button>
-                          );
-                        })()}
-                      </div>
+                            </motion.span>
+                          </AnimatePresence>
+                        </span>
+                      </button>
                     </div>
 
                     {/* The recessed tray. */}
@@ -611,7 +652,7 @@ export function UnlockProPlans({
         </div>
 
         {/* Lifetime, Max and the rest live on the website's pricing page. */}
-        <motion.p variants={item} style={{ margin: '18px 0 0', fontSize: 12.5, color: T.inkMuted, textAlign: 'center' }}>
+        {!exit && <motion.p variants={item} style={{ margin: '18px 0 0', fontSize: 12.5, color: T.inkMuted, textAlign: 'center' }}>
           Looking for Lifetime or API Max?{' '}
           <button
             type="button"
@@ -623,7 +664,7 @@ export function UnlockProPlans({
           >
             See all plans <ArrowUpRight size={13} strokeWidth={2} aria-hidden />
           </button>
-        </motion.p>
+        </motion.p>}
 
         {failed && (
           <p role="alert" style={{ margin: '8px 0 0', fontSize: 12, color: T.error }}>
