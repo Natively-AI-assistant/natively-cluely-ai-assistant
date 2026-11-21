@@ -768,7 +768,11 @@ describe('wiring', () => {
   test('the engine names the generation it discards', () => {
     const src = fs.readFileSync(path.join(repoRoot, 'electron/IntelligenceEngine.ts'), 'utf8');
     const emits = src.match(/emit\('suggested_answer_discard', [^)]*\)/g) || [];
-    assert.ok(emits.length >= 5);
+    assert.ok(emits.length >= 4);
     for (const e of emits) assert.match(e, /, (generationId|finished\.generationId)\)$/, e);
+    // A replaced run's discard goes through emitSupersededDiscard (#774 'restarted' reason).
+    const superseded = src.match(/emitSupersededDiscard\([^)]*\)/g) || [];
+    assert.ok(superseded.length >= 3);
+    for (const e of superseded) assert.match(e, /\((generationId|generationId: number)\)$/, e);
   });
 });

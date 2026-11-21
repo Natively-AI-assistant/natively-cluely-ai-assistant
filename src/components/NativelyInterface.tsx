@@ -329,7 +329,7 @@ import {
   pinnedViewportBudget,
   type OverlayResizeDirection,
 } from '../lib/overlayCustomSize.mjs';
-import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch, resolveChatStreamSurfaceError, isStaleDesktopChatEvent, shouldApplyLiveAnswerDiscard } from '../lib/chatStreamGuard.mjs';
+import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch, resolveChatStreamSurfaceError, isStaleDesktopChatEvent, shouldApplyLiveAnswerDiscard, liveAnswerDiscardKeepsThinking } from '../lib/chatStreamGuard.mjs';
 import { buildDirectWhatToSayPayload } from '../lib/directAssistWhatToSayPayload.mjs';
 import { resolveScreenshotPromptText, getScreenshotPresetPrompt } from '../lib/screenshotPrompt';
 import { chatFailureFromError, isProviderFailureSentence } from '../lib/chatFailure.mjs';
@@ -7991,7 +7991,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // A late discard from a replaced run must not clear the newer answer's
         // row: the row is found by intent, not by generation (F-CTX-09).
         if (!shouldApplyLiveAnswerDiscard(liveAnswerGenIdRef.current, data?.generationId)) return;
-        setIsProcessing(false);
+        // A restart (#774) is still answering the same press: keep Thinking up
+        // until its first words. The press's own finally clears it either way.
+        if (!liveAnswerDiscardKeepsThinking(data?.reason)) setIsProcessing(false);
         if (streamingNodeRef.current) streamingNodeRef.current.innerHTML = '';
         streamingNodeRef.current = null;
         streamingTextRef.current = '';

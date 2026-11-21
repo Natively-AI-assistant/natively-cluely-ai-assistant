@@ -49,3 +49,4 @@ export function resolveChatStreamSurfaceError(
 ): { release: boolean };
 
 export function shouldApplyLiveAnswerDiscard(activeId: number | null | undefined, incomingId: number | null | undefined): boolean;
+export function liveAnswerDiscardKeepsThinking(reason: string | null | undefined): boolean;

@@ -10,6 +10,7 @@ import { repairCapReached, endsInsideFence, looksCutOff } from './llm/repairCap'
 import { CODE_HINT_STREAM_FAILED } from './llm/CodeHintLLM';
 import { BRAINSTORM_STREAM_FAILED } from './llm/BrainstormLLM';
 import { wasSpokenOverOtherParty, speechWindowWithoutUserLine, segmentsWithoutUserLine } from './llm/overlappingTurns';
+import { finalCompletesPressedQuestion, type PressTranscriptSnapshot } from './llm/pressQuestionCompletion';
 import { EventEmitter } from 'events';
 import { LLMHelper } from './LLMHelper';
 import { SessionTracker, TranscriptSegment, SuggestionTrigger, ContextItem } from './SessionTracker';
@@ -202,6 +203,18 @@ export interface IntelligenceModeEvents {
     // newly created candidate action (post-dedupe). Renderer subscribes via
     // window.electronAPI.onIntelligenceDynamicAction and renders cards.
     'dynamic_action_emitted': (action: DynamicAction) => void;
+}
+
+/** Issue #774: a manual press that may restart once its question is finished. */
+interface PressCompletionWatch {
+    /** The press's run; -1 until it reads the transcript. */
+    generationId: number;
+    snapshot: PressTranscriptSnapshot | null;
+    /** Starts the press again with the same arguments (a new generation). */
+    restart: () => Promise<string | null>;
+    restarted: Promise<string | null> | null;
+    /** Its answer reached the overlay: never replaced after that. */
+    answerShown: boolean;
 }
 
 /**
@@ -534,6 +547,20 @@ export class IntelligenceEngine extends EventEmitter {
      */
     private automaticGenerationId: number | null = null;
     private nextRunIsAutomatic = false;
+    /**
+     * Issue #774: the manual press whose answer is still being written, with
+     * the transcript it read. An interviewer final that finishes that question
+     * restarts the answer once (see restartPressOnCompletedQuestion).
+     */
+    private pressAwaitingQuestionEnd: PressCompletionWatch | null = null;
+    /**
+     * The generation a #774 restart replaced. Its open row is discarded with
+     * reason 'restarted' instead of 'superseded', so the overlay keeps showing
+     * Thinking until the restarted answer's first words instead of going
+     * blank (no press of the user's started the new run, so nothing else
+     * would put Thinking back).
+     */
+    private pressRestartReplacedGenerationId: number | null = null;
     /**
      * Generation id of the engine's own SPECULATIVE prefetch, or null. Without
      * it, isManualAnswerActive read the prefetch (mode 'what_to_say', no
@@ -1158,11 +1185,48 @@ export class IntelligenceEngine extends EventEmitter {
     }
 
     /**
+     * Issue #774: a manual press made while the interviewer was mid-sentence
+     * answered the words heard at the press ("application port", "there could
+     * be zero"), although the finished line landed seconds before the answer
+     * did. When an interviewer final finishes the question that press heard
+     * while its answer is still being written, start the answer again, once,
+     * from the finished transcript. The new run supersedes the old one the same
+     * way a second press does (its open row is discarded), and the press's
+     * caller awaits the new run (see runWhatShouldISay).
+     */
+    private restartPressOnCompletedQuestion(segment: TranscriptSegment): void {
+        const watch = this.pressAwaitingQuestionEnd;
+        if (!watch?.snapshot || watch.restarted || watch.answerShown) return;
+        if (watch.generationId !== this.currentGenerationId || this.activeMode !== 'what_to_say') {
+            this.pressAwaitingQuestionEnd = null;
+            return;
+        }
+        if (!finalCompletesPressedQuestion(watch.snapshot, { text: segment.text, timestamp: segment.timestamp })) return;
+        this.pressAwaitingQuestionEnd = null;
+        console.log('[IntelligenceEngine] the interviewer finished the question after the press — answering the finished question', {
+            msAfterPress: segment.timestamp - watch.snapshot.readAt,
+            heardInterimChars: watch.snapshot.heardInterim.length,
+            finalChars: segment.text.length,
+        });
+        this.pressRestartReplacedGenerationId = watch.generationId;
+        const restarted = watch.restart();
+        restarted.catch(() => { /* surfaced to the press's caller, which awaits it */ });
+        watch.restarted = restarted;
+    }
+
+    /** Discard a replaced run's open row (reason: see pressRestartReplacedGenerationId). */
+    private emitSupersededDiscard(generationId: number): void {
+        const reason = generationId === this.pressRestartReplacedGenerationId ? 'restarted' : 'superseded';
+        this.emit('suggested_answer_discard', reason, generationId);
+    }
+
+    /**
      * Process transcript from native audio, and trigger follow-up if appropriate
      */
     handleTranscript(segment: TranscriptSegment, skipRefinementCheck: boolean = false): void {
         const result = this.session.handleTranscript(segment);
         this.lastTranscriptTime = Date.now();
+        if (segment.final && result?.role === 'interviewer') this.restartPressOnCompletedQuestion(segment);
 
         // QUESTION LEDGER SHADOW (WTA audit Phase 2, 2026-08-18): behind the
         // default-OFF questionLedgerShadow flag, feed every FINAL turn into a
@@ -2180,7 +2244,51 @@ export class IntelligenceEngine extends EventEmitter {
         // its screenshot were simply never recorded.
         const turnOut: { question?: string; writeDecision?: SessionWriteDecision } = {};
         const startedUnder = this.conversationSessionId();
-        const answer = await this.runWhatShouldISayInner(question, confidence, imagePaths, { ...options, turnOut });
+        // Issue #774: a manual press resolves its question from the transcript,
+        // so it can be restarted when the interviewer finishes that question
+        // mid-answer. Typed questions, Auto Answer and prefetches are not.
+        // The new run reports into its own turnOut: the replaced run may still
+        // write the old question into the first one while it unwinds.
+        let wakeOnRestart = () => {};
+        const restartStarted = new Promise<void>((resolve) => { wakeOnRestart = resolve; });
+        const restartTurnOut: { question?: string; writeDecision?: SessionWriteDecision } = {};
+        const pressWatch: PressCompletionWatch | null = !options?.speculative && !question?.trim() && !this.nextRunIsAutomatic
+            ? {
+                generationId: -1, snapshot: null, restarted: null, answerShown: false,
+                restart: () => {
+                    const run = this.runWhatShouldISayInner(question, confidence, imagePaths, { ...options, turnOut: restartTurnOut });
+                    wakeOnRestart();
+                    return run;
+                },
+            }
+            : null;
+        const markShown = (_a: string, _q: string, _c: number, generationId?: number) => {
+            if (pressWatch && generationId === pressWatch.generationId) pressWatch.answerShown = true;
+        };
+        if (pressWatch) this.on('suggested_answer', markShown);
+        let answer: string | null;
+        try {
+            const firstRun = this.runWhatShouldISayInner(question, confidence, imagePaths, { ...options, turnOut, pressWatch });
+            if (pressWatch) {
+                // A restarted press answers with the new run; the replaced run
+                // unwinds on its own and its outcome (null, or an error after
+                // the abort) is not this press's answer.
+                firstRun.catch(() => { /* replaced runs are not reported */ });
+                await Promise.race([firstRun, restartStarted]);
+            }
+            if (pressWatch?.restarted) {
+                answer = await pressWatch.restarted;
+                turnOut.question = restartTurnOut.question;
+                turnOut.writeDecision = restartTurnOut.writeDecision;
+            } else {
+                answer = await firstRun;
+            }
+        } finally {
+            if (pressWatch) {
+                this.off('suggested_answer', markShown);
+                if (this.pressAwaitingQuestionEnd === pressWatch) this.pressAwaitingQuestionEnd = null;
+            }
+        }
         // With no question, the turn is recorded only once the run got as far as
         // resolving one (turnOut is set there). A press that returned earlier
         // ("configure your API keys", "nothing to answer yet") answered nothing,
@@ -2215,7 +2323,7 @@ export class IntelligenceEngine extends EventEmitter {
         return answer;
     }
 
-    private async runWhatShouldISayInner(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; screenFromImage?: boolean; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string; forceFresh?: boolean; pressedAt?: number; turnOut?: { question?: string; writeDecision?: SessionWriteDecision } }): Promise<string | null> {
+    private async runWhatShouldISayInner(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; screenFromImage?: boolean; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string; forceFresh?: boolean; pressedAt?: number; turnOut?: { question?: string; writeDecision?: SessionWriteDecision }; pressWatch?: PressCompletionWatch | null }): Promise<string | null> {
         const now = Date.now();
         // Intelligence OS observe-only trace (Phase 1). Zero-cost NO-OP unless
         // intelligence_trace_enabled is on. Committed at the primary final-answer emit
@@ -2600,6 +2708,7 @@ export class IntelligenceEngine extends EventEmitter {
             // (86/86 injected presses). The resolver cuts the interim to its
             // novel tail against recent finals, caps length, and skips stale ones.
             const lastInterim = this.session.getLastInterimInterviewer();
+            let injectedInterimText = '';
             if (lastInterim && lastInterim.text.trim().length > 0) {
                 const { resolveInterimInjection } = require('./llm/interimInjectionGuard') as typeof import('./llm/interimInjectionGuard');
                 const verdict = resolveInterimInjection({
@@ -2610,6 +2719,7 @@ export class IntelligenceEngine extends EventEmitter {
                 });
                 if (verdict.action === 'inject') {
                     console.log(`[IntelligenceEngine] Injecting interim transcript`, { length: verdict.text.length, rawLength: lastInterim.text.length, reason: verdict.reason });
+                    injectedInterimText = verdict.text;
                     contextItems.push({
                         role: 'interviewer',
                         text: verdict.text,
@@ -2621,6 +2731,18 @@ export class IntelligenceEngine extends EventEmitter {
                 } else {
                     console.log(`[IntelligenceEngine] Interim injection skipped`, { rawLength: lastInterim.text.length, reason: verdict.reason });
                 }
+            }
+            // Issue #774: remember what this press heard, so a final that
+            // finishes the question while the answer is written restarts it.
+            const pressWatch = options?.pressWatch;
+            if (pressWatch && !isSpeculative && this.automaticGenerationId !== generationId) {
+                pressWatch.generationId = generationId;
+                pressWatch.snapshot = {
+                    readAt: Date.now(),
+                    interimAt: lastInterim?.timestamp ?? null,
+                    heardInterim: injectedInterimText,
+                };
+                this.pressAwaitingQuestionEnd = pressWatch;
             }
 
             const transcriptTurns = contextItems.map(item => ({
@@ -5466,7 +5588,7 @@ export class IntelligenceEngine extends EventEmitter {
                 // Don't update session or emit final event.
                 // If we opened a streaming row, discard it so the superseding
                 // generation's row is the only one (no orphaned partial answer).
-                if (discardOpenRow && openedStreamRow) this.emit('suggested_answer_discard', 'superseded', generationId);
+                if (discardOpenRow && openedStreamRow) this.emitSupersededDiscard(generationId);
                 if (isSpeculative && this.ownsSpeculativeSlot(generationId)) {
                     this.speculativeText = null;
                     this.speculativeTextExpiry = Infinity;
@@ -7605,7 +7727,7 @@ export class IntelligenceEngine extends EventEmitter {
             if (isWtaSuperseded()) {
                 recordWtaCancellation();
                 if (isSpeculative && this.ownsSpeculativeSlot(generationId)) { this.speculativeText = null; this.speculativeTextExpiry = Infinity; }
-                if (openedStreamRow) this.emit('suggested_answer_discard', 'superseded', generationId);
+                if (openedStreamRow) this.emitSupersededDiscard(generationId);
                 return null;
             }
             try {
@@ -9358,6 +9480,8 @@ export class IntelligenceEngine extends EventEmitter {
     reset(): void {
         this.activeMode = 'idle';
         this.currentGenerationId++; // Increment to break all active LLM streams
+        this.pressAwaitingQuestionEnd = null;
+        this.pressRestartReplacedGenerationId = null;
         if (this.whatToAnswerCancellationToken) {
             this.whatToAnswerCancellationToken.abort('engine_reset');
             this.whatToAnswerCancellationToken = null;
