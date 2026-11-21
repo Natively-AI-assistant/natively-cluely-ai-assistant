@@ -11,6 +11,8 @@
 //
 // Pure + deterministic. Fully dynamic: no profile-/fixture-specific strings.
 
+import { extractPositionParts, type PositionPart } from './positionList';
+
 export type AnswerStyle =
   | 'default'            // no explicit style cue — answer naturally per the answer type
   | 'one_liner'          // "in one line", "one sentence", "tl;dr"
@@ -134,7 +136,20 @@ export const ENUMERABLE_ASK_RE = /\b(?:walk\s+(?:me|us)\s+through\s+the\s+(?:ste
 export function isEnumerableAsk(question: string): boolean {
   const style = detectAnswerStyle(question).style;
   if (style === 'star' || style === 'one_liner' || style === 'code_only') return false;
-  return style === 'bullets' || ENUMERABLE_ASK_RE.test(question || '');
+  return style === 'bullets' || ENUMERABLE_ASK_RE.test(question || '') || extractPositionParts(question).length >= 2;
+}
+
+/**
+ * A list of positions ("what should be the first line, middle line, last
+ * line?", #776) is a set of named parts. The line names them so each one gets
+ * its own item. In the #776 report the answer covered the first two parts of
+ * a Dockerfile and never gave the last.
+ */
+export function positionFormLine(parts: readonly PositionPart[], detail = false): string {
+  const labels = parts.map((p) => p.label).join(', ');
+  return detail
+    ? `This question asks for ${parts.length} parts (${labels}) in detail: answer every one, in that order, as a numbered list, one part per item, with the detail each part needs.`
+    : `This question asks for ${parts.length} parts (${labels}): answer every one, in that order, as a short numbered list, each item one speakable sentence.`;
 }
 
 export const ENUMERABLE_FORM_LINE =
@@ -151,5 +166,8 @@ export const ENUMERABLE_DETAIL_FORM_LINE =
 /** The form line for an enumerable ask, '' otherwise. */
 export function enumerableFormLine(question: string): string {
   if (!isEnumerableAsk(question)) return '';
-  return DEPTH_ASK_RE.test(question) ? ENUMERABLE_DETAIL_FORM_LINE : ENUMERABLE_FORM_LINE;
+  const detail = DEPTH_ASK_RE.test(question);
+  const parts = extractPositionParts(question);
+  if (parts.length >= 2) return positionFormLine(parts, detail);
+  return detail ? ENUMERABLE_DETAIL_FORM_LINE : ENUMERABLE_FORM_LINE;
 }

@@ -24,6 +24,7 @@
 //     restatement at the end keeps the model anchored on the actual ask.
 
 import { renderUserInstructionSystemLayer } from './userInstructionContract';
+import { extractPositionParts, missingPositionLabels } from './positionList';
 
 export const DOCUMENT_GROUNDED_SYSTEM_OVERRIDE = [
   '',
@@ -547,10 +548,20 @@ export function detectIncompleteSubQuestionAnswer(params: {
 }): SubQuestionCoverageResult {
   const { question, answer } = params;
   if (params.answerIsRefusal) return { incomplete: false, missing: [] };
+  // One wh-word asking for a list of positions: "what should be the first
+  // line, middle line, last line?" (#776). Each position is its own part.
+  // Checked here rather than in hasMultipleSubQuestions, which also picks the
+  // document answer shape: "the first and final success rates" must stay a
+  // numeric question there.
+  const positionParts = extractPositionParts(question);
+  if (positionParts.length >= 2) {
+    const missingPositions = missingPositionLabels(answer || '', positionParts);
+    return { incomplete: missingPositions.length > 0, missing: missingPositions };
+  }
   if (!hasMultipleSubQuestions(question)) return { incomplete: false, missing: [] };
+  const answerLower = (answer || '').toLowerCase();
   const subQuestions = splitSubQuestions(question);
   if (subQuestions.length < 2) return { incomplete: false, missing: [] };
-  const answerLower = (answer || '').toLowerCase();
   const missing: string[] = [];
   for (const clause of subQuestions) {
     const terms = (clause.match(/\b[A-Za-z][A-Za-z0-9-]{3,}\b/g) || [])

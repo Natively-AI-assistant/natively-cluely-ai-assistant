@@ -265,6 +265,22 @@ describe('steps and counted sets get the list line at recency', () => {
     assert.ok(!r.user.includes(ENUMERABLE_FORM_LINE));
     assert.ok(compose(heard('Walk me through the steps to safely deploy a change to production.'), 'general').user.includes(ENUMERABLE_FORM_LINE));
   });
+  // #776: "first line, middle line, last line" asked for three parts with no
+  // "steps" or count word, so no list line was sent (checked in the live app).
+  test('a list of positions gets a line naming each part', () => {
+    const q = 'like, what what should be the first line, middle line, last line, like, at high level?';
+    assert.equal(isEnumerableAsk(q), true);
+    const r = compose(heard(q), 'general');
+    assert.ok(r.sections.includes('list_form'), r.sections.join(','));
+    assert.match(r.user, /This question asks for 3 parts \(first line, middle line, last line\): answer every one, in that order/);
+    assert.ok(!r.user.includes(ENUMERABLE_FORM_LINE));
+  });
+  test('one position, or a first-and-last-name question, gets no list line', () => {
+    for (const q of ['What is the first thing you check in an outage?', 'What is your first and last name?']) {
+      assert.equal(isEnumerableAsk(q), false, q);
+      assert.ok(!compose(heard(q), 'general').sections.includes('list_form'), q);
+    }
+  });
   test('absent for a non-enumerable question and for a coding turn', () => {
     assert.ok(!compose(heard('Why should we hire you?'), 'general').user.includes(ENUMERABLE_FORM_LINE));
     const d = heard('Walk me through the steps to reverse a linked list.');
