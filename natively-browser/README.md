@@ -80,6 +80,7 @@ it. See [`CONTRACT.md`](./CONTRACT.md) for the `/dom` + `/ws` + `/pair` API.
 | `alarms` | A 25s heartbeat that keeps the MV3 service worker resident so it can receive the desktop's capture push. |
 | `offscreen` | One hidden page that reads Chrome's light or dark theme (`matchMedia`), so the toolbar icon is the black mark on a light toolbar and the white mark on a dark one. It reads nothing else. |
 | `host_permissions: http://127.0.0.1/*`, `http://localhost/*`, `ws://127.0.0.1/*` | Let the service worker make the cross-origin loopback `fetch`/WebSocket to the desktop. **Loopback only** — the extension cannot reach any public site's network. |
+| `optional_host_permissions` (coding/interview sites, plus broad `https://*/*` and `http://*/*` patterns) | Declared but **never granted at install**. Chrome only lets the extension request a site's access at runtime if it is declared here; a lasting grant is one browser prompt, either **Allow on all sites** in the popup (every site) or the per-site prompt **Capture this page** shows only when `activeTab` is not enough and can be revoked under the extension's Details → Site access. Desktop-initiated capture (automatic, or the desktop hotkey) needs this access for the site; the popup's **Capture this page** works through `activeTab` without it. |
 
 There is **no `<all_urls>`** and **no persistent content script**. Extraction
 code is injected via `chrome.scripting.executeScript` into the active tab only,
@@ -131,6 +132,14 @@ changes. You only re-pair if you click **Reset pairing** in Settings → Compani
   isn't reachable, the desktop takes a screenshot instead.
 - **From the popup:** click the toolbar icon → **Capture this page** (works while
   Chrome is focused).
+- **Automatic:** see [Automatic context](#automatic-context). It needs site
+  access, which a fresh install does not have for coding sites (they are
+  optional host permissions): click **Allow on all sites** in the popup and
+  accept the browser prompt (every site, one prompt). **Capture this page**
+  usually works through temporary `activeTab` access and grants nothing
+  lasting; only if that is not enough does it prompt for access to that one
+  site, and accepting that prompt also lets automatic capture work there. If you
+  decline, manual capture keeps working and automatic capture stays off.
 
 Each capture pushes **once**. The desktop shows a "Captured: \<title\>" chip and
 consumes it on the next "What to say".
