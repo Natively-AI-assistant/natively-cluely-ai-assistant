@@ -131,6 +131,17 @@ export class ProcessingHelper {
       this.llmHelper.setNinerouterConfig(credManager.getNinerouterApiKey() || '', ninerouterBaseURL, credManager.getNinerouterMaxTokens(), credManager.getNinerouterThinking() || null);
     }
 
+    // Without this the OpenCode clients are never constructed at startup, so a
+    // user who configured OpenCode last session has a selected model that
+    // dispatches to nothing until they re-save the card. The metadata travels
+    // WITH the key: without it the adapter cannot tell which of the four
+    // protocols serves the selected model.
+    const opencodeKey = credManager.getOpencodeApiKey();
+    if (opencodeKey) {
+      console.log("[ProcessingHelper] Loading stored OpenCode config from CredentialsManager");
+      this.llmHelper.setOpencodeConfig(opencodeKey, credManager.getOpencodeModelMeta());
+    }
+
     const nativelyKey = credManager.getNativelyApiKey();
     if (nativelyKey) {
       console.log("[ProcessingHelper] Loading stored Natively API Key from CredentialsManager");

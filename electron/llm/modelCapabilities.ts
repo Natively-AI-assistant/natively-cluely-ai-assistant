@@ -101,7 +101,11 @@ export function ollamaRequestContext(modelId: string, env: NodeJS.ProcessEnv = p
 // by their own catalogue — come back supportsImages:false.
 // AgentRouter is Fluxion's shape (bare vendor ids behind the prefix), so the
 // same single strip leaves `claude-opus-5` — the id the predicates know.
-const ROUTING_PREFIX_RE = /^(?:litellm|nvidia_nim|openrouter|fluxion|ninerouter|agentrouter)\//i;
+// OpenCode is Fluxion's shape too (`opencode/claude-sonnet-5-5`): one bare,
+// slash-free vendor id behind the prefix, so the single strip below already
+// leaves the id the predicates know. Its ids are the REAL vendors' own, which
+// is why it must be in this list at all.
+const ROUTING_PREFIX_RE = /^(?:litellm|nvidia_nim|openrouter|fluxion|ninerouter|agentrouter|opencode)\//i;
 export function stripProviderRoutingPrefix(id: string): string {
   if (!ROUTING_PREFIX_RE.test(id)) return id;
   const withoutProvider = id.replace(ROUTING_PREFIX_RE, '');

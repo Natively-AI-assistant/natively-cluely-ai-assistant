@@ -10,6 +10,7 @@
 const OWN_AI_FLAGS = [
   'hasGeminiKey', 'hasGroqKey', 'hasOpenaiKey', 'hasClaudeKey', 'hasDeepseekKey',
   'hasNvidiaNimKey', 'hasOpenrouterKey', 'hasFluxionKey', 'hasAgentRouterKey', 'hasNinerouterKey', 'hasLitellmBaseURL',
+  'hasOpencodeKey',
 ];
 
 function tierOf(plan) {

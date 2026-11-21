@@ -9,13 +9,24 @@ import { isOpenAiModelId } from '../llm/openaiModels';
 import { AGENTROUTER_MODELS_URL, agentRouterCatalogue, agentRouterHttpHeaders } from '../llm/agentRouter';
 import { getVisionCapabilityStore } from '../llm/visionCapabilityStore';
 import { parseOpenRouterVision } from '../llm/providerVisionData';
+import {
+    OPENCODE_GO_MODELS_URL,
+    OPENCODE_MODELS_URL,
+} from '../llm/opencode/constants';
+import {
+    isFreeOpencodeModel,
+    mergeOpencodeCatalogues,
+    opencodeDisplayName,
+    parseOpencodeCatalogue,
+} from '../llm/opencode/catalog';
+import type { OpencodeModelMeta } from '../llm/opencode/types';
 
 export interface ProviderModel {
     id: string;
     label: string;
 }
 
-type Provider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter';
+type Provider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter' | 'opencode';
 
 /**
  * Fetch available models from a provider's API.
@@ -44,6 +55,8 @@ export async function fetchProviderModels(
             return fetchFluxionModels(apiKey);
         case 'agentrouter':
             return fetchAgentRouterModels(apiKey);
+        case 'opencode':
+            return (await fetchOpencodeCatalogue(apiKey)).models;
         default:
             throw new Error(`Unknown provider: ${provider}`);
     }
@@ -540,4 +553,111 @@ async function fetchGeminiModels(apiKey: string): Promise<ProviderModel[]> {
     );
 
     return filterGeminiModels(response.data?.models || []);
+}
+
+// ── OpenCode ────────────────────────────────────────────────────────────────
+
+export interface OpencodeCatalogueResult {
+    /** Prefixed ids for the picker (`opencode/<id>`). */
+    models: ProviderModel[];
+    /** Unprefixed ids → routing metadata, as the catalogue reported it. */
+    meta: Record<string, OpencodeModelMeta>;
+    /** Unprefixed wire ids whose catalogue entry reads images. */
+    vision: string[];
+    /** How many free-tier ids were withheld (they answer 403 outside OpenCode). */
+    freeSkipped: number;
+}
+
+interface OpencodeCatalogueCacheEntry {
+    apiKey: string;
+    at: number;
+    result: OpencodeCatalogueResult;
+}
+
+/** Short-lived, keyed by credential: a save path and a card refresh usually
+ *  fire back-to-back, and this is two GETs each time without it. */
+let opencodeCatalogueCache: OpencodeCatalogueCacheEntry | null = null;
+const OPENCODE_CATALOGUE_CACHE_MS = 15_000;
+
+/** Test seam: a cached catalogue must never leak between cases. */
+export function __resetOpencodeCatalogueCache(): void {
+    opencodeCatalogueCache = null;
+}
+
+function countFreeModels(payload: unknown): number {
+    const raw: unknown = Array.isArray(payload)
+        ? payload
+        : (payload as { data?: unknown } | null)?.data;
+    if (!Array.isArray(raw)) return 0;
+    return raw.filter((m: any) => typeof m?.id === 'string' && isFreeOpencodeModel(m.id)).length;
+}
+
+/**
+ * Read BOTH OpenCode catalogues and merge them.
+ *
+ * The paid list is required: a failure there is a real failure and propagates
+ * to the caller (the IPC layer sanitises it into a user-facing message). The
+ * Go list is optional — a key without a Go subscription cannot read it — so a
+ * failure is ignored rather than blocking the provider.
+ *
+ * Writes nothing to credentials: the caller applies the routing metadata
+ * (ipcHandlers' applyOpencodeCatalogue, the one writer). Like
+ * fetchOpenRouterModels it DOES publish the per-model vision answers to the
+ * vision store, because those are facts about models, not about a key.
+ */
+export async function fetchOpencodeCatalogue(apiKey: string): Promise<OpencodeCatalogueResult> {
+    const key = (apiKey || '').trim();
+    if (opencodeCatalogueCache && opencodeCatalogueCache.apiKey === key
+        && Date.now() - opencodeCatalogueCache.at < OPENCODE_CATALOGUE_CACHE_MS) {
+        return opencodeCatalogueCache.result;
+    }
+
+    const headers = { Authorization: `Bearer ${key}` };
+    // Both reads at once. A dead main key still fails the whole call — the main
+    // read is awaited as-is, and the Go read can only ever resolve to null — so
+    // a Go read that happened to succeed cannot mask it.
+    const [mainResponse, goResponse] = await Promise.all([
+        axios.get(OPENCODE_MODELS_URL, { headers, timeout: 15000 }),
+        axios.get(OPENCODE_GO_MODELS_URL, { headers, timeout: 15000 }).catch(() => null),
+    ]);
+
+    const main = parseOpencodeCatalogue(mainResponse.data);
+    const go = goResponse ? parseOpencodeCatalogue(goResponse.data, { go: true }) : {};
+    const meta = mergeOpencodeCatalogues(main, go);
+
+    const models: ProviderModel[] = Object.entries(meta)
+        .map(([id, m]) => ({
+            id: `opencode/${id}`,
+            label: m.name || opencodeDisplayName(id),
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+
+    const result: OpencodeCatalogueResult = {
+        models,
+        meta,
+        vision: Object.entries(meta).filter(([, m]) => m.vision === true).map(([id]) => id),
+        freeSkipped: countFreeModels(mainResponse.data) + (goResponse ? countFreeModels(goResponse.data) : 0),
+    };
+
+    // Publish the per-model answer where the vision resolver reads it. Without
+    // this the catalogue's "no" never reaches `gatewaySeatReadsImages`, which
+    // falls back to the NAME table — and absence from that table is "unknown",
+    // not "no". A text-only GLM would then be seated for a screenshot and
+    // answer it HTTP 200 without having seen the image.
+    //
+    // Both directions are recorded (true AND false): the store is a replace, so
+    // a model the catalogue marks text-only is refused rather than merely not
+    // claimed.
+    try {
+        if (Object.keys(meta).length > 0) {
+            const answers = new Map<string, boolean>();
+            for (const [id, m] of Object.entries(meta)) answers.set(id, m.vision === true);
+            getVisionCapabilityStore().replaceProviderAnswers('opencode', '', answers);
+        }
+    } catch (e: any) {
+        console.warn('[modelFetcher] could not publish OpenCode vision answers:', e?.message);
+    }
+
+    opencodeCatalogueCache = { apiKey: key, at: Date.now(), result };
+    return result;
 }

@@ -103,6 +103,21 @@ the tile's true 16 px on both themes: a simple disc stays recognisable where
 Fluxion's old galaxy mark did not. No licence statement accompanies it, so it is used
 nominatively, as stated at the top of this file.
 
+### OpenCode
+
+Not in any icon set. `opencode.svg` is OpenCode's own site icon,
+`https://opencode.ai/favicon-v3.svg` (fetched 2026-11-22; the `<link rel="icon">`
+family of their home page). The artwork is a tall frame with a filled lower
+block. Kept: the two paths, byte for byte. Changed: the `#131010` background
+square was dropped, both paths take `currentColor` (the inner block, `#5A5858`
+upstream, becomes 45% opacity so the two tones survive), and the viewBox was
+cropped to the mark so it sits at the other monochrome marks' visual size.
+
+Monochrome, so it is inlined with `?raw` like the other monochrome SVGs and
+takes the theme's text colour. The tile wash (`#14B8A6`) is a neutral teal
+chosen for contrast, not a brand colour. No licence statement accompanies the
+icon, so it is used nominatively, as stated at the top of this file.
+
 ### Jina
 
 Added for the hosted Jina reranker in Settings → Reranker, which is the only way

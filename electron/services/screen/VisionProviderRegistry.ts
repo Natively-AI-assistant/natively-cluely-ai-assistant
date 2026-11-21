@@ -112,6 +112,7 @@ export function buildVisionProviders(
     // image — see ninerouter() for why that matters, and why an empty
     // catalogue still seats it.
     providers.push(ninerouter(credentials, inputs));
+    providers.push(opencode(credentials, inputs));
     providers.push(deepseek(credentials, inputs));
     // Last of the cloud rungs: only when nothing above can read the screen.
     providers.push(oauthModel(inputs));
@@ -431,6 +432,38 @@ function ninerouter(creds: CredentialsManager, _inputs: VisionProviderBuildInput
   };
 }
 
+/**
+ * OpenCode as a vision rung.
+ *
+ * Same shape as ninerouter(): that provider's catalogue is the only
+ * trustworthy answer to "does this model read images?", and its per-model
+ * answer is persisted and read back through visionCapabilityStore. OpenCode is
+ * the same case with a sharper edge: a text-only model answers HTTP 200 with a
+ * confident answer that never saw the screenshot, so "send it and see" is worse
+ * than refusing. An unknown answer still seats the rung (SEAT_ON_UNKNOWN).
+ */
+function opencode(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const apiKey = creds.getOpencodeApiKey?.();
+  // The SELECTED model, not the stored preference: runVisionRequest dispatches
+  // against LLMHelper's live currentModelId.
+  const activeModelId = readActiveModelId();
+  const isSelected = /^opencode\//i.test(activeModelId);
+  const modelId = isSelected ? activeModelId : '';
+  const supportsImages = gatewaySeatReadsImages('opencode', modelId,
+    registryVisionFacts('', { opencodeVisionModels: creds.getOpencodeVisionModels?.() || [] }));
+  return {
+    id: 'opencode',
+    displayName: modelId ? `OpenCode (${modelId.replace(/^opencode\//, '')})` : 'OpenCode',
+    modelId,
+    isLocal: false,
+    isConfigured: !!apiKey && isSelected,
+    supportsVision: !!apiKey && isSelected && supportsImages,
+    scopeAllowsScreenshots: true,
+    hint: 'generic',
+    invoke: async (p) => callLLMHelperVision('opencode', p),
+  };
+}
+
 /** An NVIDIA NIM endpoint as a vision rung. Same reasoning as litellm() above. */
 function nvidiaNim(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
   const apiKey = creds.getNvidiaNimApiKey?.();
@@ -661,7 +694,7 @@ function selectionIsLocal(): boolean {
 export function selectionRung(): { id: string; key: string } | null {
   const selection = readActiveSelection();
   if (!selection) return null;
-  const GATEWAYS = ['litellm', 'nvidia_nim', 'openrouter', 'fluxion', 'agentrouter', 'ninerouter', 'deepseek'];
+  const GATEWAYS = ['litellm', 'nvidia_nim', 'openrouter', 'fluxion', 'agentrouter', 'ninerouter', 'opencode', 'deepseek'];
   const id = GATEWAYS.includes(selection.provider) ? selection.provider
     : selection.provider === 'custom' || selection.provider === 'curl' ? selection.provider
     : null;
@@ -672,7 +705,10 @@ export function selectionRung(): { id: string; key: string } | null {
   return { id, key: `${selection.provider}|${selection.model}|${command ?? ''}` };
 }
 
-function registryVisionFacts(baseURL = '', extra: { ninerouterVisionModels?: readonly string[] } = {}) {
+function registryVisionFacts(
+  baseURL = '',
+  extra: { ninerouterVisionModels?: readonly string[]; opencodeVisionModels?: readonly string[] } = {},
+) {
   return {
     ...extra,
     providerReportsVision: (p: string, m: string) => storedVisionAnswer(p, m, baseURL),

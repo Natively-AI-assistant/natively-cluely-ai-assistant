@@ -1592,6 +1592,10 @@ export const CLOUD_PROVIDERS = [
     // A gateway, not a vendor: its model list is opt-in (isOptInModelProvider),
     // and ONE key here also backs OpenRouter embeddings and reranking.
     { id: 'openrouter' as const, name: 'OpenRouter', placeholder: 'sk-or-v1-...', url: 'https://openrouter.ai/keys' },
+    // A gateway like AgentRouter: one key fronts four wire protocols, chosen per
+    // model from its catalogue. NOT opt-in. Key format and Console URL from the
+    // inference docs (read 2026-11-19).
+    { id: 'opencode' as const, name: 'OpenCode', placeholder: 'oc_sk_...', url: 'https://opencode.ai/console' },
 ];
 export type CloudProviderId = (typeof CLOUD_PROVIDERS)[number]['id'];
 
@@ -3382,6 +3386,11 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [openrouterApiKey, setOpenrouterApiKey] = useState('');
     const [fluxionApiKey, setFluxionApiKey] = useState('');
     const [agentrouterApiKey, setAgentrouterApiKey] = useState('');
+    // OpenCode — one key, four wire protocols. `opencodeModels` holds the
+    // prefixed catalogue ids the saved key can reach; the per-model protocol
+    // metadata is persisted main-side where the adapters read it.
+    const [opencodeApiKey, setOpencodeApiKey] = useState('');
+    const [opencodeModels, setOpencodeModels] = useState<string[]>([]);
     /**
      * Which wire protocol the user's Fluxion key speaks, which is a property
      * of the KEY'S GROUP and is not discoverable from the key itself. Held in
@@ -3444,6 +3453,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         openrouter: [openrouterApiKey, setOpenrouterApiKey],
         fluxion: [fluxionApiKey, setFluxionApiKey],
         agentrouter: [agentrouterApiKey, setAgentrouterApiKey],
+        opencode: [opencodeApiKey, setOpencodeApiKey],
     };
 
     // --- LiteLLM proxy (OpenAI-compatible gateway: baseURL + optional virtual key) ---
@@ -3834,6 +3844,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         litellm: creds.hasLitellmBaseURL || false,
                         // Base URL, not key: a stock 9Router runs keyless.
                         ninerouter: (creds as any).hasNinerouterBaseURL || false,
+                        opencode: (creds as any).hasOpencodeKey || false,
                         natively: creds.hasNativelyKey || false
                     });
                     setActiveSttProvider((creds as any).sttProvider || 'none');
@@ -3879,6 +3890,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     if (creds.litellmPreferredModel) pm.litellm = creds.litellmPreferredModel;
                     // Already prefixed on disk (`ninerouter/<alias>/<model>`), same rule.
                     if ((creds as any).ninerouterPreferredModel) pm.ninerouter = (creds as any).ninerouterPreferredModel;
+                    // Already prefixed on disk (`opencode/<model>`), same rule.
+                    if ((creds as any).opencodePreferredModel) pm.opencode = (creds as any).opencodePreferredModel;
                     setDisabledProviders(Array.isArray(creds.disabledProviders) ? creds.disabledProviders : []);
                     setCloudEnabledModelsState(creds.cloudEnabledModels || {});
                     window.electronAPI?.getCloudFetchedModels?.()
@@ -4024,6 +4037,9 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         // `ninerouterModels`, so the prefix is added here and the allow-list
         // stores the same `ninerouter/<id>` ids modelAvailable() compares.
         if (provider === 'ninerouter') ninerouterModels.forEach(m => push(`ninerouter/${m}`, gatewayModelLabel(m)));
+        // OpenCode, same shape: `opencodeModels` holds PREFIXED ids (the IPC
+        // returns them that way), so only the label needs stripping.
+        if (provider === 'opencode') opencodeModels.forEach(m => push(m, gatewayModelLabel(m)));
         // Antigravity is the same shape of problem as LiteLLM: no preset table, and
         // `cloudFetchedModels` is written only from getCloudFetchedModels(), which
         // covers the key-backed providers and never the OAuth ones. Without this the
@@ -4054,9 +4070,9 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         // prettifyModelId — which would render `litellm/openai/gpt-4o` as
         // "Litellm/Openai/Gpt 4o".
         (cloudEnabledModels[provider] || []).forEach(id =>
-            push(id, (provider === 'litellm' || provider === 'ninerouter') ? gatewayModelLabel(id) : prettifyModelId(id)));
+            push(id, (provider === 'litellm' || provider === 'ninerouter' || provider === 'opencode') ? gatewayModelLabel(id) : prettifyModelId(id)));
         return out;
-    }, [cloudFetchedModels, cloudEnabledModels, litellmModels, ninerouterModels, antigravityModels, codexModelCatalog, codexCliConfig.model, t]);
+    }, [cloudFetchedModels, cloudEnabledModels, litellmModels, ninerouterModels, opencodeModels, antigravityModels, codexModelCatalog, codexCliConfig.model, t]);
 
     /**
      * The Background Model picker's options: Auto, plus only the models the fast
@@ -4133,6 +4149,14 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 const id = `ninerouter/${model}`;
                 if (!isModelEnabled('ninerouter', id)) return;
                 opts.push({ id, name: `${gatewayModelLabel(model)} (9Router)` });
+            });
+        }
+        if (hasStoredKey.opencode && isProviderEnabled('opencode')) {
+            // Same allow-list gate. `opencodeModels` is already prefixed.
+            opencodeModels.forEach(model => {
+                if (!isModelEnabled('opencode', model)) return;
+                if (opts.some(o => o.id === model)) return; // presets already added above
+                opts.push({ id: model, name: `${gatewayModelLabel(model)} (OpenCode)` });
             });
         }
         if (isProviderEnabled('custom')) {
@@ -4229,6 +4253,26 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             });
         return () => { cancelled = true; };
     }, [hasStoredKey.ninerouter, ninerouterBaseURL]);
+
+    // Same rule for OpenCode: load its ids only while configured, so the
+    // active-model selector cannot offer stale `opencode/...` choices after the
+    // key is removed. Keyed on the stored key presence only — the catalogue is
+    // scoped to the key's workspace, and removing the key clears it main-side.
+    useEffect(() => {
+        let cancelled = false;
+        if (!hasStoredKey.opencode) {
+            setOpencodeModels([]);
+            return;
+        }
+        window.electronAPI?.getAvailableOpencodeModels?.()
+            .then((models) => {
+                if (!cancelled) setOpencodeModels(Array.isArray(models) ? models.filter(Boolean) : []);
+            })
+            .catch(() => {
+                if (!cancelled) setOpencodeModels([]);
+            });
+        return () => { cancelled = true; };
+    }, [hasStoredKey.opencode]);
 
     // Switch a whole provider off/on. The credential is left untouched — this is
     // the difference between "I'm not using this right now" and "delete my key".
@@ -4906,6 +4950,14 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 if (detected) setFluxionProtocol(detected);
             }
             if (provider === 'agentrouter') result = await window.electronAPI.setAgentRouterApiKey(key);
+            if (provider === 'opencode') {
+                result = await window.electronAPI.setOpencodeApiKey(key);
+                // The save also fetches the catalogue; adopt it here rather than
+                // paying a second round-trip (and so the model list is populated
+                // the moment the key lands).
+                const saved = result as { models?: string[] };
+                if (Array.isArray(saved?.models)) setOpencodeModels(saved.models);
+            }
 
             if (result && result.success) {
                 // The save may have just switched OpenRouter reranking on; the
@@ -5113,6 +5165,13 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             if (provider === 'openrouter') result = await window.electronAPI.setOpenrouterApiKey('');
             if (provider === 'fluxion') result = await window.electronAPI.setFluxionConfig({ apiKey: '' });
             if (provider === 'agentrouter') result = await window.electronAPI.setAgentRouterApiKey('');
+
+            if (provider === 'opencode') {
+                result = await window.electronAPI.setOpencodeApiKey('');
+                // Clearing the key clears the catalogue main-side; mirror it
+                // here so the card cannot keep rendering models it no longer has.
+                setOpencodeModels([]);
+            }
 
             if (result && result.success) {
                 setHasStoredKey(prev => ({ ...prev, [provider]: false }));

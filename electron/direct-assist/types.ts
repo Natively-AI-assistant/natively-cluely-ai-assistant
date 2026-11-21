@@ -17,6 +17,7 @@ export const DIRECT_ASSIST_PROVIDERS = [
   'agentrouter',
   'litellm',
   'ninerouter',
+  'opencode',
   'ollama',
   'codex-cli',
   'antigravity',

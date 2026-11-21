@@ -41,6 +41,7 @@ const GROUP_LABELS: Record<string, string> = {
     openrouter: 'OpenRouter',
     fluxion: 'Sidrune',
     agentrouter: 'AgentRouter',
+    opencode: 'OpenCode',
     antigravity: 'Antigravity',
     'codex-cli': 'OpenAI Codex',
     litellm: 'LiteLLM',
@@ -61,6 +62,7 @@ const SUFFIX_TAGS: Record<string, string[]> = {
     litellm: ['LiteLLM'],
     ninerouter: ['9Router'],
     agentrouter: ['AgentRouter'],
+    opencode: ['OpenCode'],
 };
 
 /** Host names the built-in lists prefix, e.g. "Groq Qwen 3.8". */

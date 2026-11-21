@@ -129,6 +129,13 @@ describe('AI model', () => {
     assert.doesNotMatch(step.detail, /deepseek-flash/);
   });
 
+  test('an OpenCode-only setup counts as a saved key', () => {
+    // getCurrentProvider() reports the coarse 'gemini' for an OpenCode model, so
+    // without the flag an OpenCode-only user was told "No key or sign-in yet".
+    const step = modelStep({ hasOpencodeKey: true }, { provider: 'gemini', modelId: 'opencode/glm-5.3' });
+    assert.deepEqual(step, { state: 'done', detail: 'A provider key is saved' });
+  });
+
   test('Natively API as the active model', () => {
     assert.deepEqual(modelStep({ hasNativelyKey: true }, { provider: 'gemini', modelId: 'natively' }), {
       state: 'done', detail: 'Using Natively API',

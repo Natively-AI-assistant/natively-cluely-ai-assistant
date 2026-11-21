@@ -243,6 +243,24 @@ const ModelSelectorWindow = () => {
                     // 9Router may not be running — ignore.
                 }
 
+                // OpenCode — one key, four wire protocols. The full catalogue
+                // (78 usable models today) lives in Settings; the overlay keeps
+                // the PRESETS plus the user's promoted default, exactly like
+                // NVIDIA NIM. Pushing the whole catalogue here would put ~78
+                // rows into a 140px dropdown nobody curated.
+                try {
+                    const opencodeModels = await window.electronAPI?.getAvailableOpencodeModels?.() || [];
+                    const presetIds = new Set(STANDARD_CLOUD_MODELS.opencode.ids);
+                    const preferred = (creds as any)?.opencodePreferredModel;
+                    opencodeModels.forEach((m: string) => {
+                        if (!presetIds.has(m) && m !== preferred) return;
+                        if (models.some(existing => existing.id === m)) return;
+                        models.push({ id: m, name: `${gatewayModelLabel(m)} (OpenCode)`, type: 'cloud', provider: 'opencode' });
+                    });
+                } catch {
+                    // OpenCode unreachable — the presets below still render.
+                }
+
                 if (cancelled || myToken !== runToken) return;
 
                 // Settings → AI Providers is where the user curates this list, and

@@ -13,7 +13,7 @@ test('no sources: an empty patch', () => {
 test('credentials: Natively key and own AI keys', () => {
   assert.deepEqual(cardInputsFromSources({ creds: { hasNativelyKey: true } }), { hasNativelyKey: true, hasOwnAiKey: false });
   for (const flag of ['hasGeminiKey', 'hasGroqKey', 'hasOpenaiKey', 'hasClaudeKey', 'hasDeepseekKey', 'hasNvidiaNimKey',
-    'hasOpenrouterKey', 'hasFluxionKey', 'hasNinerouterKey', 'hasLitellmBaseURL']) {
+    'hasOpenrouterKey', 'hasFluxionKey', 'hasNinerouterKey', 'hasLitellmBaseURL', 'hasOpencodeKey']) {
     assert.equal(cardInputsFromSources({ creds: { [flag]: true } }).hasOwnAiKey, true, flag);
   }
   assert.equal(cardInputsFromSources({ creds: { hasDeepgramKey: true, hasSonioxKey: true } }).hasOwnAiKey, false, 'speech keys are not AI keys');

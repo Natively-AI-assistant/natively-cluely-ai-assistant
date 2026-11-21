@@ -22,7 +22,8 @@ export type LiveCatalogProvider =
     | 'nvidia_nim'
     | 'openrouter'
     | 'fluxion'
-    | 'agentrouter';
+    | 'agentrouter'
+    | 'opencode';
 
 type CatalogFetcher = (provider: Parameters<typeof fetchProviderModels>[0], apiKey: string) => Promise<ProviderModel[]>;
 
@@ -111,6 +112,7 @@ export class LiveModelCatalogService {
             case 'openrouter': return cm.getOpenrouterApiKey?.() || '';
             case 'fluxion': return cm.getFluxionApiKey?.() || '';
             case 'agentrouter': return cm.getAgentRouterApiKey?.() || '';
+            case 'opencode': return cm.getOpencodeApiKey?.() || '';
             default: return '';
         }
     }
@@ -236,6 +238,7 @@ export class LiveModelCatalogService {
             'openrouter',
             'fluxion',
             'agentrouter',
+            'opencode',
         ];
 
         for (const provider of providers) {

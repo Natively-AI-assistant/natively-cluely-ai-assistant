@@ -38,6 +38,8 @@ export interface VisionFacts {
   ollamaReportsVision?: (model: string) => boolean | undefined;
   /** 9Router's catalogue: the WIRE ids it marks vision-capable. Empty = never fetched. */
   ninerouterVisionModels?: readonly string[];
+  /** OpenCode's catalogue: the WIRE ids it marks vision-capable. Empty = never fetched. */
+  opencodeVisionModels?: readonly string[];
   /** The active custom or cURL provider; its template decides whether an image can travel. */
   customProvider?: { curlCommand?: string; multimodal?: boolean } | null;
   /** What a provider's catalogue publishes (visionCapabilityStore), for a ROUTED id; undefined = it hasn't said. */
@@ -117,6 +119,25 @@ export function resolveVisionAuto(q: VisionQuery, facts: VisionFacts = {}): Visi
       }
       return fromTestThenNames(q, facts);
     }
+    // OpenCode publishes `modalities.input` per model and its catalogue is the
+    // only trustworthy answer: some models answer HTTP 200 without having read
+    // an image, so "try it and see" returns a confident blind answer rather
+    // than an error the chain can fall over from.
+    case 'opencode': {
+      const reported = facts.providerReportsVision?.('opencode', model);
+      if (reported === true && failedTest(q, facts)) return answer(false, 'test');
+      if (reported !== undefined) return answer(reported, 'provider');
+      // Fallback for a profile whose answers were persisted in credentials but
+      // not yet published to the vision store (an older build, or a failed
+      // write). The list is the full vision subset of the full catalogue, so an
+      // id it omits is a catalogue "no", not "unknown".
+      const catalogue = facts.opencodeVisionModels ?? [];
+      if (catalogue.length > 0) {
+        const listed = catalogue.includes(model.replace(/^opencode\//, ''));
+        return listed && failedTest(q, facts) ? answer(false, 'test') : answer(listed, 'provider');
+      }
+      return fromTestThenNames(q, facts);
+    }
     // OpenRouter publishes input_modalities per model and refuses images to the
     // ones it lists as text-only, so its answer is trusted both ways (2026-10-01).
     case 'openrouter': {
@@ -148,7 +169,7 @@ export function readsImages(v: VisionVerdict, unknownMeans: boolean): boolean {
  * and LiteLLM, NVIDIA NIM and Fluxion in phase 3, where a saved test result can
  * say "no" for them. Unknown still seats them, as it always has.
  */
-const SEAT_ON_UNKNOWN = { ninerouter: true, openrouter: true, litellm: true, nvidia_nim: true, fluxion: true, agentrouter: false } as const;
+const SEAT_ON_UNKNOWN = { ninerouter: true, openrouter: true, litellm: true, nvidia_nim: true, fluxion: true, agentrouter: false, opencode: true } as const;
 
 /**
  * Whether a selected gateway model is seated for a screenshot. One function for

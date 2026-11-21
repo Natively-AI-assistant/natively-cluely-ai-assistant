@@ -1975,7 +1975,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('switch-to-ollama', model, url),
   switchToGemini: (apiKey?: string, modelId?: string) =>
     ipcRenderer.invoke('switch-to-gemini', apiKey, modelId),
-  testLlmConnection: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter', apiKey: string) =>
+  testLlmConnection: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter' | 'opencode', apiKey: string) =>
     ipcRenderer.invoke('test-llm-connection', provider, apiKey),
   selectServiceAccount: () => ipcRenderer.invoke('select-service-account'),
 
@@ -1996,6 +1996,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAvailableNinerouterModels: () => ipcRenderer.invoke('get-available-ninerouter-models'),
   refreshNinerouterModels: () => ipcRenderer.invoke('refresh-ninerouter-models'),
   testNinerouterConnection: (config?: { apiKey?: string; baseURL?: string }) => ipcRenderer.invoke('test-ninerouter-connection', config),
+  // OpenCode — one key, four wire protocols. Models are stored prefixed
+  // (`opencode/<id>`); the metadata that decides the protocol is persisted main-side.
+  setOpencodeApiKey: (apiKey: string) => ipcRenderer.invoke('set-opencode-api-key', apiKey),
+  getAvailableOpencodeModels: () => ipcRenderer.invoke('get-available-opencode-models'),
   getCloudFetchedModels: () => ipcRenderer.invoke('get-cloud-fetched-models'),
   getDisabledProviders: () => ipcRenderer.invoke('get-disabled-providers'),
   setDisabledProviders: (providers: string[]) => ipcRenderer.invoke('set-disabled-providers', providers),
@@ -3555,7 +3559,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setTavilyApiKey: (apiKey: string) => ipcRenderer.invoke('set-tavily-api-key', apiKey),
 
   // Dynamic Model Discovery & Live Catalog
-  fetchProviderModels: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter', apiKey: string) =>
+  fetchProviderModels: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter' | 'opencode', apiKey: string) =>
     ipcRenderer.invoke('fetch-provider-models', provider, apiKey),
   onLiveCatalogUpdated: (callback: (data: { provider?: string; models?: any[] }) => void) => {
     const subscription = (_: any, data: { provider?: string; models?: any[] }) => callback(data);
@@ -3564,7 +3568,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('models-catalog-updated', subscription);
     };
   },
-  setProviderPreferredModel: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter' | 'litellm' | 'ninerouter', modelId: string) =>
+  setProviderPreferredModel: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter' | 'litellm' | 'ninerouter' | 'opencode', modelId: string) =>
     ipcRenderer.invoke('set-provider-preferred-model', provider, modelId),
 
   // License Management

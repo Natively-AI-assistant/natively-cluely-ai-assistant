@@ -13399,6 +13399,10 @@ Provide only the answer, nothing else.`;
                           // raw id reads `agentrouter/claude-opus-5` and the 16-char
                           // chip would show only "agentrouter/clau". Same rule.
                           if (m.startsWith('agentrouter/')) return gatewayModelLabel(m);
+                          // OpenCode: one prefix over a bare vendor id, so the raw
+                          // id reads `opencode/claude-sonnet-5` and the 16-char chip
+                          // would show only "opencode/claude". Same rule.
+                          if (m.startsWith('opencode/')) return gatewayModelLabel(m);
                           // The managed route. LLMHelper.getCurrentModelDisplayName()
                           // returns the id verbatim for it, so the displayName branch
                           // below cannot name it and the chip fell through to `return m`

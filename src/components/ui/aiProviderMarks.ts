@@ -44,6 +44,10 @@ import ninerouterMark from '../../assets/provider-logos/ninerouter.png';
 // gradient disc with a four-point star. Full-colour, so an <img> like the
 // two above, and a simple disc, so it stays recognisable at the tile's 16px.
 import agentrouterMark from '../../assets/provider-logos/agentrouter.png';
+// OpenCode's own site icon (opencode.ai/favicon-v3.svg), background dropped and
+// recoloured to currentColor like the other inlined monochrome SVGs. See the
+// README's provenance note.
+import opencodeMark from '../../assets/provider-logos/opencode.svg?raw';
 // Our own app icon, for the Natively API row. Raster and full-colour, so it is a
 // URL rendered with <img> for the same reason as litellm.
 import nativelyIcon from '../../../assets/icon-512.png';
@@ -81,6 +85,7 @@ export const AI_PROVIDER_BRANDS: Record<string, { mono: string; brand: string }>
     // Sampled from the shipping asset: the dominant saturated pixel of the
     // disc's pink half.
     agentrouter: { mono: 'AR', brand: '#F868B8' },
+    opencode: { mono: 'OC', brand: '#14B8A6' },
     voyage:   { mono: 'VY', brand: '#012E33' },
     // Jina's teal, taken from their own favicon (dominant non-neutral pixel,
     // 5758 of them) and confirmed against api.jina.ai's docs theme. NOT
@@ -138,6 +143,7 @@ export const AI_PROVIDER_MARKS: Record<string, string> = {
     voyage: voyageMark,
     jina: jinaMark,
     fluxion: sidruneMark,
+    opencode: opencodeMark,
 };
 
 /** True when this provider resolves to a real mark rather than a fallback. */
