@@ -106,6 +106,7 @@ export function buildVisionProviders(
     providers.push(litellm(credentials, inputs));
     providers.push(nvidiaNim(credentials, inputs));
     providers.push(openrouter(credentials, inputs));
+    providers.push(requesty(credentials, inputs));
     providers.push(fluxion(credentials, inputs));
     providers.push(agentrouter(credentials, inputs));
     // Unlike the four above, this one knows per model whether it can read an
@@ -483,6 +484,29 @@ function openrouter(creds: CredentialsManager, _inputs: VisionProviderBuildInput
 }
 
 /**
+ * Requesty as a vision rung, gated on `isSelected` exactly like openrouter():
+ * only ever a rung for a model the user picked.
+ */
+function requesty(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const apiKey = creds.getRequestyApiKey?.();
+  const activeModelId = readActiveModelId();
+  const isSelected = /^requesty\//i.test(activeModelId);
+  const modelId = isSelected ? activeModelId : '';
+  return {
+    id: 'requesty',
+    displayName: modelId ? `Requesty (${modelId.replace(/^requesty\//, '')})` : 'Requesty',
+    modelId,
+    isLocal: false,
+    isConfigured: !!apiKey && isSelected,
+    supportsVision: !!apiKey && isSelected
+      && gatewaySeatReadsImages('requesty', modelId, registryVisionFacts()),
+    scopeAllowsScreenshots: true,
+    hint: 'generic',
+    invoke: async (p) => callLLMHelperVision('requesty', p),
+  };
+}
+
+/**
  * Fluxion AI as a vision rung. Same `isSelected` gate as the three gateways
  * above, and for Fluxion the gate is doing more work than it is for them: its
  * model ids are the upstream vendors' own, so an ungated Fluxion rung would be
@@ -661,7 +685,7 @@ function selectionIsLocal(): boolean {
 export function selectionRung(): { id: string; key: string } | null {
   const selection = readActiveSelection();
   if (!selection) return null;
-  const GATEWAYS = ['litellm', 'nvidia_nim', 'openrouter', 'fluxion', 'agentrouter', 'ninerouter', 'deepseek'];
+  const GATEWAYS = ['litellm', 'nvidia_nim', 'openrouter', 'requesty', 'fluxion', 'agentrouter', 'ninerouter', 'deepseek'];
   const id = GATEWAYS.includes(selection.provider) ? selection.provider
     : selection.provider === 'custom' || selection.provider === 'curl' ? selection.provider
     : null;

@@ -21,6 +21,7 @@ export type LiveCatalogProvider =
     | 'deepseek'
     | 'nvidia_nim'
     | 'openrouter'
+    | 'requesty'
     | 'fluxion'
     | 'agentrouter';
 
@@ -109,6 +110,7 @@ export class LiveModelCatalogService {
             case 'deepseek': return cm.getDeepseekApiKey?.() || '';
             case 'nvidia_nim': return cm.getNvidiaNimApiKey?.() || '';
             case 'openrouter': return cm.getOpenrouterApiKey?.() || '';
+            case 'requesty': return cm.getRequestyApiKey?.() || '';
             case 'fluxion': return cm.getFluxionApiKey?.() || '';
             case 'agentrouter': return cm.getAgentRouterApiKey?.() || '';
             default: return '';
@@ -234,6 +236,7 @@ export class LiveModelCatalogService {
             'deepseek',
             'nvidia_nim',
             'openrouter',
+            'requesty',
             'fluxion',
             'agentrouter',
         ];

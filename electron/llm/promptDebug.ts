@@ -96,6 +96,7 @@ function providerFor(host: string): string {
     if (host.includes('api.openai.com')) return 'openai';
     if (host.includes('anthropic.com')) return 'claude';
     if (host.includes('openrouter.ai')) return 'openrouter';
+    if (host.includes('requesty.ai')) return 'requesty';
     if (host.includes('groq.com')) return 'groq';
     if (host.includes('nvidia.com')) return 'nvidia_nim';
     if (host.includes('natively.software')) return 'natively_gateway';

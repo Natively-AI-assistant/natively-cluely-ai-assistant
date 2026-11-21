@@ -101,7 +101,10 @@ export function ollamaRequestContext(modelId: string, env: NodeJS.ProcessEnv = p
 // by their own catalogue — come back supportsImages:false.
 // AgentRouter is Fluxion's shape (bare vendor ids behind the prefix), so the
 // same single strip leaves `claude-opus-5` — the id the predicates know.
-const ROUTING_PREFIX_RE = /^(?:litellm|nvidia_nim|openrouter|fluxion|ninerouter|agentrouter)\//i;
+// Requesty takes both shapes: `requesty/openai/gpt-4o-mini` loses the vendor
+// segment like OpenRouter, and a managed policy id (`requesty/gpt-5.4-mini`)
+// has no vendor segment, so only the prefix comes off.
+const ROUTING_PREFIX_RE = /^(?:litellm|nvidia_nim|openrouter|requesty|fluxion|ninerouter|agentrouter)\//i;
 export function stripProviderRoutingPrefix(id: string): string {
   if (!ROUTING_PREFIX_RE.test(id)) return id;
   const withoutProvider = id.replace(ROUTING_PREFIX_RE, '');
