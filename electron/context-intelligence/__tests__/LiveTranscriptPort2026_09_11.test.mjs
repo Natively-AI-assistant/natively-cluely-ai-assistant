@@ -116,7 +116,7 @@ describe('the live path wires the port (source pins)', () => {
     assert.match(src, /resolveMeetingEvidence\(\{/);
     // getRetrievalTranscript, not getFullTranscript: compaction drops a long
     // meeting's oldest lines from the latter (2026-10-15).
-    assert.match(src, /segments: \(this\.session as any\)\?\.getRetrievalTranscript\?\.\(\) \?\? \[\]/);
+    assert.match(src, /segments: (?:segmentsWithoutUserLine\()?\(this\.session as any\)\?\.getRetrievalTranscript\?\.\(\) \?\? \[\]/);
     assert.match(src, /sessionId: this\.conversationSessionId\(\)/);
   });
 });

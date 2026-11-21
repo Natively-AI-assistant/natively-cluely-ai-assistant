@@ -9,6 +9,7 @@ import type { CustomButtonActionV2 } from './llm/promptSystemV2';
 import { repairCapReached, endsInsideFence, looksCutOff } from './llm/repairCap';
 import { CODE_HINT_STREAM_FAILED } from './llm/CodeHintLLM';
 import { BRAINSTORM_STREAM_FAILED } from './llm/BrainstormLLM';
+import { wasSpokenOverOtherParty, speechWindowWithoutUserLine, segmentsWithoutUserLine } from './llm/overlappingTurns';
 import { EventEmitter } from 'events';
 import { LLMHelper } from './LLMHelper';
 import { SessionTracker, TranscriptSegment, SuggestionTrigger, ContextItem } from './SessionTracker';
@@ -2642,6 +2643,8 @@ export class IntelligenceEngine extends EventEmitter {
             const extractedQuestion = extractLatestQuestion(transcriptTurns);
             // Set when the user's OWN spoken line is chosen as the question below.
             let questionSpokenByUser = false;
+            // A user line spoken over the other party's question (issue #775): left out of this answer's prompt.
+            let overlappedUserLine: { text: string; timestamp: number } | null = null;
             // SPEAKER-MISATTRIBUTION FALLBACK (2026-09-07, always answer). Real
             // diarization labels the other party as "user" often enough that a
             // manual press can arrive with a transcript and NO interviewer turn.
@@ -2681,7 +2684,16 @@ export class IntelligenceEngine extends EventEmitter {
                     // party's "thanks, bye" and retrieval ran on THAT.
                     && /\b(?:what|which|how (?:many|much|long|often)|who|whom|when|where|remind (?:me|us)|do we (?:know|have)|does (?:it|the \w+) say|what'?s|(?:did|does|do|has|have|had|is|are|was|were|will|can|could|should|would)\s+(?:anyone|anybody|someone|somebody|we|they|he|she|it|you|i|the\s+\w+|that|this|there))\b/i.test(userText)
                     && !/\b(?:what do you mean|could you (?:repeat|clarify|rephrase)|say (?:that )?again|sorry,? (?:what|i (?:didn'?t|did not) (?:catch|get)))\b/i.test(userText);
-                if (userAskedLast && extractedQuestion.latestQuestion !== userText) {
+                // Issue #775: a mic line said over the other party (crosstalk, or their words via the mic) is
+                // not the user's question, and stays out of this answer's prompt. See overlappingTurns.ts.
+                const userSpokeOverOtherParty = userAskedLast && ii >= 0
+                    && wasSpokenOverOtherParty(transcriptTurns[ui], transcriptTurns[ii]);
+                if (userSpokeOverOtherParty) {
+                    console.log('[IntelligenceEngine] user line overlapped the other party; kept theirs', { gapMs: transcriptTurns[ui].timestamp - transcriptTurns[ii].timestamp });
+                    overlappedUserLine = { text: userText, timestamp: transcriptTurns[ui].timestamp };
+                    preparedTranscript = prepareTranscriptForWhatToAnswer(transcriptTurns.filter((_, i) => i !== ui), 12);
+                }
+                if (userAskedLast && !userSpokeOverOtherParty && extractedQuestion.latestQuestion !== userText) {
                     extractedQuestion.latestQuestion = userText;
                     extractedQuestion.confidence = Math.max(extractedQuestion.confidence ?? 0, 0.75);
                     trace.mark('repair_used', { reason: 'question_from_user_utterance' });
@@ -4413,7 +4425,7 @@ export class IntelligenceEngine extends EventEmitter {
                             : '',
                     ].filter(Boolean).join('\n\n') || undefined;
                     // The turn's t0 mode and files, not whatever is live now (F-CTX-11).
-                    const _ctx = this.v3ModeRetrievalContext(_screenPortText, { modeInfo: snapshotModeInfo, referenceFiles: snapshotReferenceFiles });
+                    const _ctx = this.v3ModeRetrievalContext(_screenPortText, { modeInfo: snapshotModeInfo, referenceFiles: snapshotReferenceFiles }, overlappedUserLine);
                     if (!_ctx) return undefined;
                     const _v3 = await buildV3Prompt({
                         // What the user told the app about themselves: About you (Cue Cards, Pro),
@@ -7743,7 +7755,7 @@ export class IntelligenceEngine extends EventEmitter {
      * gave one answer the old mode's plan and the new mode's files
      * (pipeline forensics 2026-11-13, F-CTX-11).
      */
-    private v3ModeRetrievalContext(screenDescription?: string, snapshot?: { modeInfo: ActiveModeInfo | null; referenceFiles: readonly unknown[] }): {
+    private v3ModeRetrievalContext(screenDescription?: string, snapshot?: { modeInfo: ActiveModeInfo | null; referenceFiles: readonly unknown[] }, leaveOutUserLine?: { text: string; timestamp: number } | null): {
         raw: string; modeUniqueId: string | null; modeName: string | null; meetingId: string | null;
         attachedSourceCount: number;
         attachedFileNames: string[];
@@ -7853,7 +7865,7 @@ export class IntelligenceEngine extends EventEmitter {
                 const meeting = resolveMeetingEvidence({
                     rag: this.meetingRagProvider?.() ?? null,
                     // Uncompacted (compaction drops a long meeting's oldest lines from getFullTranscript).
-                    segments: (this.session as any)?.getRetrievalTranscript?.() ?? [],
+                    segments: segmentsWithoutUserLine((this.session as any)?.getRetrievalTranscript?.() ?? [], leaveOutUserLine, (sp: string) => this.session.mapSpeakerToRole(sp)),
                     allowedSourceTypes: policy.allowedSourceTypes,
                     userId: 'local',
                     sessionId: this.conversationSessionId(),
@@ -7917,7 +7929,8 @@ export class IntelligenceEngine extends EventEmitter {
                     const formatted = typeof s?.getFormattedSpeech === 'function'
                         ? s.getFormattedSpeech(SPEECH_WINDOW_SECONDS)
                         : s?.getFormattedContext?.(sec);
-                    return speechWindowForPrompt(String(formatted ?? ''));
+                    const spoken = leaveOutUserLine ? speechWindowWithoutUserLine(String(formatted ?? ''), leaveOutUserLine.text) : String(formatted ?? '');
+                    return speechWindowForPrompt(spoken);
                 },
             };
         } catch { return null; }

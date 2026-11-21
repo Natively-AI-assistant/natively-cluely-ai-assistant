@@ -21,7 +21,7 @@ test('runWhatShouldISay hands its t0 mode and files to the V3 context', () => {
     const start = src.indexOf('async runWhatShouldISay(');
     const end = src.indexOf('\n    async ', start + 10);
     const body = src.slice(start, end > start ? end : undefined);
-    assert.match(body, /this\.v3ModeRetrievalContext\(_screenPortText, \{ modeInfo: snapshotModeInfo, referenceFiles: snapshotReferenceFiles \}\)/,
+    assert.match(body, /this\.v3ModeRetrievalContext\(_screenPortText, \{ modeInfo: snapshotModeInfo, referenceFiles: snapshotReferenceFiles \}(?:, overlappedUserLine)?\)/,
         'the WTA V3 build must pass the t0 snapshot');
     assert.doesNotMatch(body, /this\.v3ModeRetrievalContext\(_screenPortText\)/, 'no live-mode read left on this path');
 });
