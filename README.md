@@ -79,13 +79,11 @@
 
 <br/>
 
-**macOS — install with [Homebrew](https://brew.sh):**
+**macOS — install from [GitHub Releases](https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant/releases/latest):**
 
-```bash
-brew install --cask Natively-AI-assistant/tap/natively
-```
+Download the DMG for your architecture (Apple Silicon or Intel) from the latest release, open it, and drag **Natively** into Applications.
 
-<small>Upgrades arrive through Natively's own updater; `brew upgrade --cask --greedy natively` forces one via Homebrew.</small>
+<small>A Homebrew cask is prepared in-repo (`packaging/homebrew/`, see [`docs/homebrew-cask.md`](docs/homebrew-cask.md)), but the public `Natively-AI-assistant/homebrew-tap` is not published yet — until it is, Releases is the supported install path. Upgrades arrive through Natively's own updater.</small>
 
 <br/>
 
