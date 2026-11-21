@@ -1458,7 +1458,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         try { details = lm.getLicenseDetails(); } catch { /* not a pack, as far as we can tell */ }
         const { isPackLicence } = require('./services/packs/packProRule') as typeof import('./services/packs/packProRule');
         if (isPackLicence(details?.provider, details?.plan)) {
-          const pasted = typeof key === 'string' ? key.trim() : '';
+          const { normalizePastedKey } = require('../premium/electron/services/licenseVerifyPolicy') as typeof import('../premium/electron/services/licenseVerifyPolicy');
+          const pasted = normalizePastedKey(key);
           const { CredentialsManager } = require('./services/CredentialsManager');
           const cm = CredentialsManager.getInstance();
           if (pasted && pasted !== cm.getMainNativelyApiKey() && pasted !== cm.getNativelyPackApiKey()) {
@@ -13124,6 +13125,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
 
+      // A key pasted with a quote, a "> " or a zero-width character in front of
+      // it is stored as the key itself, not as that text.
+      if (typeof apiKey === 'string' && /natively_sk_/i.test(apiKey)) {
+        const { normalizePastedKey } = require('../premium/electron/services/licenseVerifyPolicy') as typeof import('../premium/electron/services/licenseVerifyPolicy');
+        apiKey = normalizePastedKey(apiKey);
+      }
       const routed = await routePastedNativelyKey(cm, apiKey); // a pack key may be held
       if (routed.done) return routed.done;
       apiKey = routed.apiKey;
