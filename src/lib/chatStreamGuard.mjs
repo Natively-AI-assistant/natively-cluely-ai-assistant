@@ -243,6 +243,21 @@ export function shouldApplyLiveAnswerDiscard(activeId, incomingId) {
 }
 
 /**
+ * Whether the overlay keeps its Thinking state after discarding the open
+ * What-to-Answer row. 'restarted' means the engine replaced the answer itself
+ * because the interviewer finished the question after the press (issue #774):
+ * the press is still waiting for the new answer, and no click of the user's
+ * will put Thinking back, so clearing it would leave the overlay blank until
+ * the new answer's first words. Every other reason ends the run.
+ *
+ * @param {string | null | undefined} reason
+ * @returns {boolean}
+ */
+export function liveAnswerDiscardKeepsThinking(reason) {
+  return reason === 'restarted';
+}
+
+/**
  * Decide whether a `gemini-stream-error` from `incomingSource` must RELEASE the
  * adopted stream guard.
  *
