@@ -142,9 +142,13 @@ check('LifecycleTracker is installed in main.ts before app.whenReady', () => {
 });
 
 // 5. Ollama skip-cloud-key guard is in place
+// The skip decision lives in electron/rag/ollamaBootstrapGate.ts (2026-11-21):
+// main.ts must ask it and log the skip, and it must still skip on a cloud key.
 check('bootstrapOllamaEmbeddings has a cloud-key skip guard', () => {
   const mainSrc = fs.readFileSync(path.join(repoRoot, 'electron', 'main.ts'), 'utf8');
-  if (!/Skipping Ollama embeddings bootstrap.*cloud embedding provider/.test(mainSrc)) {
+  const gateSrc = fs.readFileSync(path.join(repoRoot, 'electron', 'rag', 'ollamaBootstrapGate.ts'), 'utf8');
+  if (!/ollamaBootstrapSkipReason\(\{[\s\S]*?hasCloudEmbeddingKey[\s\S]*?Skipping Ollama embeddings bootstrap/.test(mainSrc)
+    || !/if \(deps\.hasCloudEmbeddingKey\) return 'a cloud embedding provider is configured'/.test(gateSrc)) {
     throw new Error('bootstrapOllamaEmbeddings no longer skips on cloud key — Ollama would be force-spawned.');
   }
 });

@@ -242,6 +242,15 @@ export class EmbeddingPipeline {
      * removals as well as additions. A removed Settings key must demote the stale
      * provider immediately instead of keeping the old client alive until restart.
      */
+    /**
+     * Make the next initialize() re-resolve even when its config is unchanged:
+     * for a change the config cannot show, such as a local server (Ollama) that
+     * has just come up.
+     */
+    markConfigStale(): void {
+        this._lastConfig = null;
+    }
+
     async initialize(config: AppAPIConfig): Promise<void> {
         // Skip only if the effective config is truly unchanged.
         if (this._lastConfig && !this._isConfigChanged(this._lastConfig, config)) {
@@ -539,13 +548,19 @@ export class EmbeddingPipeline {
     async waitForReady(timeoutMs: number = 15000): Promise<void> {
         if (this.provider) return; // already ready
         if (this.initPromise) {
-            // Race against a timeout so we don't hang forever
-            await Promise.race([
-                this.initPromise,
-                new Promise<void>((_, reject) =>
-                    setTimeout(() => reject(new Error(`Embedding pipeline initialization timed out after ${timeoutMs}ms`)), timeoutMs)
-                )
-            ]);
+            // Race against a timeout so we don't hang forever. Cleared after, so
+            // a fast init does not leave the timer running for timeoutMs.
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            try {
+                await Promise.race([
+                    this.initPromise,
+                    new Promise<void>((_, reject) => {
+                        timer = setTimeout(() => reject(new Error(`Embedding pipeline initialization timed out after ${timeoutMs}ms`)), timeoutMs);
+                    }),
+                ]);
+            } finally {
+                if (timer) clearTimeout(timer);
+            }
             return;
         }
         throw new Error('Embedding pipeline has not been initialized');

@@ -2976,13 +2976,24 @@ export class AppState {
           const hasCloudEmbeddingKey =
             !!(cm.getOpenaiApiKey() || process.env.OPENAI_API_KEY) ||
             !!(cm.getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY);
-          if (hasCloudEmbeddingKey) {
-            console.log('[AppState] Skipping Ollama embeddings bootstrap — a cloud embedding provider is configured.');
+          // The key check alone missed the Natively key and a trial: a
+          // Natively-only user got `ollama serve` (and the model pull) on every
+          // launch. It also overrode a hand-picked Ollama for users with an
+          // OpenAI or Gemini key.
+          const { EmbeddingProviderResolver } = require('./rag/EmbeddingProviderResolver');
+          const { ollamaBootstrapSkipReason } = require('./rag/ollamaBootstrapGate');
+          const skipReason = ollamaBootstrapSkipReason({
+            config: buildEmbeddingConfig(),
+            buildCandidates: EmbeddingProviderResolver.buildCandidates,
+            hasCloudEmbeddingKey,
+          });
+          if (skipReason) {
+            console.log(`[AppState] Skipping Ollama embeddings bootstrap — ${skipReason}.`);
             return;
           }
         } catch (guardErr: any) {
-          // Credential lookup failed — fall through and attempt the bootstrap.
-          console.warn('[AppState] Ollama bootstrap cloud-key guard failed (non-fatal):', guardErr?.message);
+          // Credential or settings lookup failed — fall through and attempt the bootstrap.
+          console.warn('[AppState] Ollama bootstrap guard failed (non-fatal):', guardErr?.message);
         }
 
         // PHASE-2C: capability resolver — even when no cloud key is
@@ -3028,6 +3039,10 @@ export class AppState {
              console.log('[AppState] Ollama model ready, re-evaluating RAG pipeline provider');
              // One shared builder — this site used to omit geminiKeys (killing key
              // rotation) and would have omitted the Natively key the same way.
+             // Whether Ollama is running is not part of the config, so without
+             // this the call saw "config unchanged" and stayed on the bundled
+             // model until restart (code review 2026-11-21).
+             this.ragManager.getEmbeddingPipeline().markConfigStale();
              this.ragManager.initializeEmbeddings(buildEmbeddingConfig());
              this.scheduleModeReferenceIndexRetry();
           }
