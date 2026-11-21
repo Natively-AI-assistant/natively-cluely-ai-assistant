@@ -215,6 +215,17 @@ interface PressCompletionWatch {
     restarted: Promise<string | null> | null;
     /** Its answer reached the overlay: never replaced after that. */
     answerShown: boolean;
+    /**
+     * Answers the finished question as a NEW answer under the shown one, for a
+     * finished line that lands after the press's answer was shown.
+     */
+    answerFinishedQuestion: () => Promise<string | null>;
+    /** The press has returned (its answer is recorded). */
+    pressReturned: boolean;
+    /** A finished line landed after the answer was shown but before the press returned. */
+    finishedWhileReturning: boolean;
+    /** The updated answer was started: at most one per press. */
+    updated: boolean;
 }
 
 /**
@@ -1196,12 +1207,23 @@ export class IntelligenceEngine extends EventEmitter {
      */
     private restartPressOnCompletedQuestion(segment: TranscriptSegment): void {
         const watch = this.pressAwaitingQuestionEnd;
-        if (!watch?.snapshot || watch.restarted || watch.answerShown) return;
-        if (watch.generationId !== this.currentGenerationId || this.activeMode !== 'what_to_say') {
+        if (!watch?.snapshot || watch.restarted || watch.updated || watch.finishedWhileReturning) return;
+        // Any run since the press (a second press, Auto Answer) read the
+        // transcript after this press did: the watch has nothing left to do.
+        if (watch.generationId !== this.currentGenerationId
+            || (!watch.answerShown && this.activeMode !== 'what_to_say')) {
             this.pressAwaitingQuestionEnd = null;
             return;
         }
         if (!finalCompletesPressedQuestion(watch.snapshot, { text: segment.text, timestamp: segment.timestamp })) return;
+        if (watch.answerShown) {
+            // The answer was already shown (a fast provider finishes before the
+            // interviewer does): keep it, and answer the finished question under it.
+            if (!watch.pressReturned) { watch.finishedWhileReturning = true; return; }
+            this.pressAwaitingQuestionEnd = null;
+            this.answerQuestionFinishedAfterAnswer(watch, segment.timestamp - watch.snapshot.readAt);
+            return;
+        }
         this.pressAwaitingQuestionEnd = null;
         console.log('[IntelligenceEngine] the interviewer finished the question after the press — answering the finished question', {
             msAfterPress: segment.timestamp - watch.snapshot.readAt,
@@ -1212,6 +1234,20 @@ export class IntelligenceEngine extends EventEmitter {
         const restarted = watch.restart();
         restarted.catch(() => { /* surfaced to the press's caller, which awaits it */ });
         watch.restarted = restarted;
+    }
+
+    /**
+     * Issue #774, the late case: the finished line landed after the press's
+     * answer was shown. That answer stays; the finished question gets its own
+     * answer under it, once per press. The new run is not a press (no watch of
+     * its own) and records its own turn.
+     */
+    private answerQuestionFinishedAfterAnswer(watch: PressCompletionWatch, msAfterPress: number): void {
+        watch.updated = true;
+        console.log('[IntelligenceEngine] the interviewer finished the question after the answer was shown — answering the finished question under it', { msAfterPress });
+        watch.answerFinishedQuestion().catch((error) => {
+            console.warn('[IntelligenceEngine] answer to the finished question failed:', (error as Error)?.message ?? error);
+        });
     }
 
     /** Discard a replaced run's open row (reason: see pressRestartReplacedGenerationId). */
@@ -2236,7 +2272,7 @@ export class IntelligenceEngine extends EventEmitter {
         })();
     }
 
-    async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; screenFromImage?: boolean; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string; forceFresh?: boolean; pressedAt?: number }): Promise<string | null> {
+    async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; screenFromImage?: boolean; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string; forceFresh?: boolean; pressedAt?: number; finishedQuestionOfPress?: boolean }): Promise<string | null> {
         // The question the turn actually answered, read out of the inner run.
         // A Cmd+1 press passes none (it is resolved from the transcript), and
         // recording `question` filed the turn under whatever question last
@@ -2252,14 +2288,17 @@ export class IntelligenceEngine extends EventEmitter {
         let wakeOnRestart = () => {};
         const restartStarted = new Promise<void>((resolve) => { wakeOnRestart = resolve; });
         const restartTurnOut: { question?: string; writeDecision?: SessionWriteDecision } = {};
-        const pressWatch: PressCompletionWatch | null = !options?.speculative && !question?.trim() && !this.nextRunIsAutomatic
+        const { finishedQuestionOfPress, ...runOptions } = options ?? {};
+        const pressWatch: PressCompletionWatch | null = !runOptions.speculative && !question?.trim() && !this.nextRunIsAutomatic && !finishedQuestionOfPress
             ? {
                 generationId: -1, snapshot: null, restarted: null, answerShown: false,
+                pressReturned: false, finishedWhileReturning: false, updated: false,
                 restart: () => {
-                    const run = this.runWhatShouldISayInner(question, confidence, imagePaths, { ...options, turnOut: restartTurnOut });
+                    const run = this.runWhatShouldISayInner(question, confidence, imagePaths, { ...runOptions, turnOut: restartTurnOut });
                     wakeOnRestart();
                     return run;
                 },
+                answerFinishedQuestion: () => this.runWhatShouldISay(question, confidence, imagePaths, { ...runOptions, pressedAt: Date.now(), finishedQuestionOfPress: true }),
             }
             : null;
         const markShown = (_a: string, _q: string, _c: number, generationId?: number) => {
@@ -2268,7 +2307,7 @@ export class IntelligenceEngine extends EventEmitter {
         if (pressWatch) this.on('suggested_answer', markShown);
         let answer: string | null;
         try {
-            const firstRun = this.runWhatShouldISayInner(question, confidence, imagePaths, { ...options, turnOut, pressWatch });
+            const firstRun = this.runWhatShouldISayInner(question, confidence, imagePaths, { ...runOptions, turnOut, pressWatch });
             if (pressWatch) {
                 // A restarted press answers with the new run; the replaced run
                 // unwinds on its own and its outcome (null, or an error after
@@ -2286,7 +2325,12 @@ export class IntelligenceEngine extends EventEmitter {
         } finally {
             if (pressWatch) {
                 this.off('suggested_answer', markShown);
-                if (this.pressAwaitingQuestionEnd === pressWatch) this.pressAwaitingQuestionEnd = null;
+                pressWatch.pressReturned = true;
+                // A shown answer keeps the watch for the rest of its window: the
+                // finished line may still land (answerQuestionFinishedAfterAnswer).
+                if (this.pressAwaitingQuestionEnd === pressWatch && (!pressWatch.answerShown || pressWatch.restarted)) {
+                    this.pressAwaitingQuestionEnd = null;
+                }
             }
         }
         // With no question, the turn is recorded only once the run got as far as
@@ -2319,6 +2363,14 @@ export class IntelligenceEngine extends EventEmitter {
                     // after the answer instead, if the transcription fails.
                     ...(options?.screenFromImage ? { backupDescribe: 'what_to_say' as const } : {}),
                 });
+        }
+        // The finished line landed between the answer showing and the press
+        // returning: its answer starts now, after this press's turn is recorded.
+        if (pressWatch?.finishedWhileReturning && pressWatch.snapshot && this.pressAwaitingQuestionEnd === pressWatch) {
+            this.pressAwaitingQuestionEnd = null;
+            if (pressWatch.generationId === this.currentGenerationId) {
+                this.answerQuestionFinishedAfterAnswer(pressWatch, Date.now() - pressWatch.snapshot.readAt);
+            }
         }
         return answer;
     }
