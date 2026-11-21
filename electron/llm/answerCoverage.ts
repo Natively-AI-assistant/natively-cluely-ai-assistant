@@ -25,6 +25,7 @@
 // do more harm than good).
 
 import { detectIncompleteSubQuestionAnswer, hasMultipleSubQuestions } from './documentGroundedPrompt';
+import { extractPositionParts } from './positionList';
 
 export interface AnswerCoverageAssessment {
     /** The question contains ≥2 sub-questions per hasMultipleSubQuestions. */
@@ -48,7 +49,7 @@ export function assessAnswerCoverage(
     answer: string,
     opts?: { answerIsRefusal?: boolean },
 ): AnswerCoverageAssessment {
-    const multiPart = hasMultipleSubQuestions(question);
+    const multiPart = hasMultipleSubQuestions(question) || extractPositionParts(question).length >= 2;
     if (!multiPart) return { multiPart: false, incomplete: false, missing: [] };
     const result = detectIncompleteSubQuestionAnswer({
         question,

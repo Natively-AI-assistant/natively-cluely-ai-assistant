@@ -412,7 +412,8 @@ export class IntelligenceEngine extends EventEmitter {
         const kind = cv.claimVerifierKind({ modeId: opts.modeId, question: opts.question, draft: opts.answer, surface: 'spoken' });
         if (!kind || !opts.modeId) return opts.answer;
         // Only when documents are attached (F-LAT-04, owner's decision 2026-11-13).
-        if (cv.materialHasNoDocuments(opts.material) && !cv.claimVerifierRunsWithoutDocuments()) {
+        // The live transcript is evidence too, but not an attached document.
+        if (!cv.materialHasAttachedDocuments(opts.material) && !cv.claimVerifierRunsWithoutDocuments()) {
             opts.trace.mark('claim_verifier_skipped' as any, { reason: 'no_documents' });
             return opts.answer;
         }
@@ -439,8 +440,22 @@ export class IntelligenceEngine extends EventEmitter {
             clean: cleanAnswerArtifacts,
             observe: secondaryStreamObserver('verification'),
         });
-        console.log(`[ClaimVerifier] hotkey kind=${kind} ${run.changed ? 'edited' : 'kept'} (${run.outcome}) ${run.ms}ms${shared ? ' shared_prefix' : ''}`);
-        opts.trace.mark('repair_used', { reason: 'claim_verifier', outcome: run.outcome, changed: run.changed, ms: run.ms });
+        // What an edit did, without its text (#776: a report said the pass edited
+        // an answer that came out missing a requested part, and nothing showed
+        // whether the edit removed it): word counts, and how many of the
+        // question's parts the draft and the edit each leave unanswered.
+        // Logging only: an error here must not lose an accepted edit.
+        let edit: ReturnType<typeof cv.describeVerifierEdit> | null = null;
+        try { if (run.changed) edit = cv.describeVerifierEdit(opts.question, opts.answer, run.text); } catch { edit = null; }
+        console.log(`[ClaimVerifier] hotkey kind=${kind} ${run.changed ? 'edited' : 'kept'} (${run.outcome}) ${run.ms}ms${shared ? ' shared_prefix' : ''}`
+            + (edit ? ` words ${edit.draftWords}->${edit.editWords}${edit.partsMissing ? ` parts_missing ${edit.partsMissing.draft}->${edit.partsMissing.edit}` : ''}` : ''));
+        opts.trace.mark('repair_used', {
+            reason: 'claim_verifier', outcome: run.outcome, changed: run.changed, ms: run.ms,
+            ...(edit ? {
+                draftWords: edit.draftWords, editWords: edit.editWords,
+                ...(edit.partsMissing ? { partsMissingDraft: edit.partsMissing.draft, partsMissingEdit: edit.partsMissing.edit } : {}),
+            } : {}),
+        });
         return run.text;
     }
 

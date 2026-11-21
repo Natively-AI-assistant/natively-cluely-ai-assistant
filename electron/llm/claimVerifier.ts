@@ -20,6 +20,7 @@
 // anything doubtful keeps the original. Pure module: the engine owns the call.
 
 import { splitGistLine } from './promptSystemV2';
+import { assessAnswerCoverage } from './answerCoverage';
 import { raceStreamWithDeadline, type StreamObserver } from './liveDeadlines';
 
 export type ClaimVerifierKind = 'personal' | 'product' | 'life' | 'meeting';
@@ -160,6 +161,29 @@ const TYPED_SUBJECT: Record<string, string> = {
 export function materialHasNoDocuments(material: string): boolean {
   return !/<evidence\b/.test(String(material ?? ''));
 }
+
+/**
+ * Evidence that is not an attached document: the live transcript, the
+ * conversation state and the screen. A live turn always packs the transcript
+ * as `<evidence source_type="MEETING_TRANSCRIPT">`, so counting any evidence
+ * tag (materialHasNoDocuments) let the pass run on every spoken General turn
+ * with nothing attached (seen live 2026-11-21: 8 of 8 turns, ~1-1.5 s each).
+ */
+const NOT_A_DOCUMENT_SOURCE_TYPES = new Set(['MEETING_TRANSCRIPT', 'CONVERSATION_STATE', 'SCREEN_CONTEXT']);
+
+/**
+ * Whether the material carries an attached document (reference file, résumé,
+ * job description, profile fact…). Evidence without a source_type counts as a
+ * document, so an unrecognised shape keeps the pass rather than skipping it.
+ */
+export function materialHasAttachedDocuments(material: string): boolean {
+  for (const m of String(material ?? '').matchAll(/<evidence\b[^>]*>/g)) {
+    const sourceType = /\bsource_type="([A-Za-z_]+)"/.exec(m[0])?.[1];
+    if (!sourceType || !NOT_A_DOCUMENT_SOURCE_TYPES.has(sourceType)) return true;
+  }
+  return false;
+}
+
 /**
  * ONLY WHEN DOCUMENTS ARE ATTACHED (2026-11-13, owner's decision after the live
  * pipeline forensics, F-LAT-04): the pass was 43 of 103 answer-sized calls on a
@@ -456,6 +480,27 @@ export function acceptVerifiedAnswer(input: { original: string; edited: string |
 // ── the pass itself, shared by both surfaces ────────────────────────────────
 
 export interface ClaimVerifierRun { text: string; changed: boolean; outcome: string; ms: number }
+
+export interface VerifierEditSummary {
+  draftWords: number;
+  editWords: number;
+  /** Unanswered parts of a multi-part question, before and after the edit. Absent for a single-part question. */
+  partsMissing?: { draft: number; edit: number };
+}
+
+/**
+ * What an accepted edit did, as counts only: never the answer's or the
+ * question's text, so it can go to the log and the trace.
+ */
+export function describeVerifierEdit(question: string, draft: string, edited: string): VerifierEditSummary {
+  const words = (s: string) => splitGistTrailer(s).body.split(/\s+/).filter(Boolean).length;
+  const summary: VerifierEditSummary = { draftWords: words(draft), editWords: words(edited) };
+  const before = assessAnswerCoverage(question, splitGistTrailer(draft).body);
+  if (before.multiPart) {
+    summary.partsMissing = { draft: before.missing.length, edit: assessAnswerCoverage(question, splitGistTrailer(edited).body).missing.length };
+  }
+  return summary;
+}
 
 /**
  * Run one verification: open the stream, bound it by a TOTAL budget (the
