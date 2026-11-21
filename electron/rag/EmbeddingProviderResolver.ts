@@ -200,8 +200,8 @@ export class EmbeddingProviderResolver {
    * LocalEmbeddingProvider is deliberately NOT in this list — it is the terminal
    * fallback and is never probed (probing loads the MiniLM ONNX model).
    */
-  static buildCandidates(config: AppAPIConfig): IEmbeddingProvider[] {
-    return EmbeddingProviderResolver.buildCandidatesWithScope(config).candidates;
+  static buildCandidates(config: AppAPIConfig, opts?: { quiet?: boolean }): IEmbeddingProvider[] {
+    return EmbeddingProviderResolver.buildCandidatesWithScope(config, opts).candidates;
   }
 
   /**
@@ -210,9 +210,12 @@ export class EmbeddingProviderResolver {
    * builder means the ordering resolve() actually uses is the ordering the
    * tests assert — two copies is exactly how priority silently drifts.
    */
-  private static buildCandidatesWithScope(config: AppAPIConfig): { candidates: IEmbeddingProvider[]; embeddingsDenied: boolean } {
+  private static buildCandidatesWithScope(config: AppAPIConfig, opts?: { quiet?: boolean }): { candidates: IEmbeddingProvider[]; embeddingsDenied: boolean } {
     const candidates: IEmbeddingProvider[] = [];
     let embeddingsDenied = false;
+    // `quiet` is for callers that only read the order (the startup Ollama
+    // check): the pipeline's own resolve already printed these warnings once.
+    const warn = (...args: unknown[]) => { if (!opts?.quiet) console.warn(...args); };
 
     /** Add a cloud provider unless the scope policy forbids sending embeddings there. */
     const pushScoped = (scopeName: string, make: () => IEmbeddingProvider) => {
@@ -222,7 +225,7 @@ export class EmbeddingProviderResolver {
       } catch (error) {
         if (error instanceof ProviderScopeError) {
           embeddingsDenied = true;
-          console.warn('[ScopeFallback] embeddings denied for cloud; routing to Ollama');
+          warn('[ScopeFallback] embeddings denied for cloud; routing to Ollama');
         } else {
           throw error;
         }
@@ -274,7 +277,7 @@ export class EmbeddingProviderResolver {
       } else {
         // Same rule as Ollama: no measured width means NO candidate. Guessing
         // stamps a wrong space key over the vectors.
-        console.warn(
+        warn(
           `[EmbeddingProviderResolver] Custom endpoint model '${customModel}' has no measured dimensions `
           + `(got ${String(customDims)}) — skipping it rather than assuming a width.`
         );
@@ -292,7 +295,7 @@ export class EmbeddingProviderResolver {
           apiKey: config.voyageKey!, model: voyModel, dimensions: voyDims,
         }));
       } else {
-        console.warn(
+        warn(
           `[EmbeddingProviderResolver] Voyage model '${voyModel}' has no measured dimensions `
           + `(got ${String(voyDims)}) — skipping it rather than assuming a width.`
         );
@@ -315,7 +318,7 @@ export class EmbeddingProviderResolver {
         // it bites hardest here, because /v1/models/info reports no width for 5
         // of the 6 models a stock instance serves, so "unmeasured" is the normal
         // starting state rather than an edge case.
-        console.warn(
+        warn(
           `[EmbeddingProviderResolver] 9Router model '${nrModel}' has no measured dimensions `
           + `(got ${String(nrDims)}) — skipping it rather than assuming a width.`
         );
@@ -334,7 +337,7 @@ export class EmbeddingProviderResolver {
       } else {
         // Same rule as Ollama and the custom endpoint: no measured width means NO
         // candidate. Guessing stamps a wrong space key over real vectors.
-        console.warn(
+        warn(
           `[EmbeddingProviderResolver] OpenRouter model '${orModel}' has no measured dimensions `
           + `(got ${String(orDims)}) — skipping it rather than assuming a width.`
         );
@@ -351,7 +354,7 @@ export class EmbeddingProviderResolver {
       || KNOWN_DEFAULT_WIDTH_MODELS.has(openaiModel)
       || (typeof config.openaiEmbeddingDims === 'number' && config.openaiEmbeddingDims > 0);
     if (config.openaiKey && !openaiWidthKnown) {
-      console.warn(
+      warn(
         `[EmbeddingProviderResolver] OpenAI model '${openaiModel}' has no measured dimensions `
         + `(got ${String(config.openaiEmbeddingDims)}) — skipping it rather than assuming a width.`
       );
@@ -393,7 +396,7 @@ export class EmbeddingProviderResolver {
         // 4096-d model written under a 768-d space key produces an index that
         // compares as noise with no error anywhere; having no Ollama provider
         // (and falling through to the next one) is strictly recoverable.
-        console.warn(
+        warn(
           `[EmbeddingProviderResolver] Ollama model '${ollamaModel}' has no measured dimensions `
           + `(got ${String(dims)}) — skipping it rather than guessing a width and stamping a wrong embedding space.`
         );
