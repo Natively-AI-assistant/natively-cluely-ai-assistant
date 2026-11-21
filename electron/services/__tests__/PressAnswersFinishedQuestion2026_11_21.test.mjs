@@ -232,15 +232,69 @@ describe('the engine answers the finished question', () => {
         hold1.resolve();
     });
 
-    test('a final that lands after the answer is shown changes nothing', async () => {
+    test('the finished line lands after the answer was shown → that answer stays, and the finished question gets its own answer under it', async () => {
         const h = await makeEngine();
+        const recorded = [];
+        h.engine.recordLiveTurn = (answer, _screen, heard) => recorded.push({ answer, heard });
         h.releaseFirst();
         const answer = await press(h.engine);
-        assert.match(answer, /empty list works too/);
+        assert.match(answer, /empty list works too/, 'the press returns its own answer');
         interviewerFinal(h, FINAL);
+        await until(() => h.finals.length === 2);
+        assert.equal(h.transcripts.length, 2);
+        assert.match(h.transcripts[1], /zero one two/i, 'the new answer reads the finished line');
+        assert.match(h.finals[0].text, /empty list works too/, 'the shown answer is kept');
+        assert.equal(h.finals[1].text, FINISHED_ANSWER);
+        assert.ok(h.finals[1].gen > h.finals[0].gen, 'a new row, under the first');
+        assert.ok(!h.discards.some((d) => d.gen === h.finals[0].gen), 'the shown answer is never discarded');
+        await until(() => recorded.length === 2);
+        assert.match(recorded[1].heard, /zero one two/i, 'the new answer is its own turn, under the finished question');
+        await until(() => h.engine.getActiveMode() === 'idle');
+
+        // Once per press: another line does not start a third answer.
+        interviewerFinal(h, 'And can you do it in one pass?', 300);
+        await new Promise((r) => setTimeout(r, 50));
+        assert.equal(h.transcripts.length, 2);
+    });
+
+    test('the finished line lands the moment the answer shows, before the press returns → answered under it after the press is recorded', async () => {
+        const h = await makeEngine();
+        const order = [];
+        h.engine.recordLiveTurn = (answer, _screen, heard) => order.push({ answer, heard });
+        const pressed = press(h.engine);
+        await until(() => h.transcripts.length === 1);
+        // Registered after the press's own listener, so the answer counts as shown.
+        h.engine.once('suggested_answer', () => interviewerFinal(h, FINAL));
+        h.releaseFirst();
+        assert.match(await pressed, /empty list works too/);
+        await until(() => h.finals.length === 2);
+        assert.equal(h.finals[1].text, FINISHED_ANSWER);
+        await until(() => order.length === 2);
+        assert.match(order[0].answer, /empty list works too/, 'the press is recorded first');
+        assert.equal(order[1].answer, FINISHED_ANSWER);
+    });
+
+    test('after the answer was shown: a line that repeats what the press heard, or a later sentence, adds nothing', async () => {
+        const h = await makeEngine();
+        h.releaseFirst();
+        await press(h.engine);
+        interviewerFinal(h, INTERIM);
+        interviewerFinal(h, 'Okay, take your time, no rush.', FINAL_AFTER_LIVE_INTERIM_MS + 500);
         await new Promise((r) => setTimeout(r, 50));
         assert.equal(h.transcripts.length, 1);
-        assert.equal(h.engine.getActiveMode(), 'idle');
+        assert.equal(h.finals.length, 1);
+    });
+
+    test('after the answer was shown: a second press in between wins, the first press adds nothing', async () => {
+        const h = await makeEngine();
+        h.releaseFirst();
+        await press(h.engine);
+        await press(h.engine);
+        assert.equal(h.transcripts.length, 2);
+        interviewerFinal(h, FINAL);
+        await until(() => h.transcripts.length === 3);
+        await new Promise((r) => setTimeout(r, 50));
+        assert.equal(h.transcripts.length, 3, 'only the latest press answers the finished line, once');
     });
 
     test('a final that repeats what the press already heard does not restart', async () => {
