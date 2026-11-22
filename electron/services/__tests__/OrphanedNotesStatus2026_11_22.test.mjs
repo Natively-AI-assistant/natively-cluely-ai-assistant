@@ -327,12 +327,14 @@ describe('notes left "being written" by a pass that is gone (#778)', () => {
             assert.equal(JSON.stringify(db().getMeetingDetails(id).detailedSummary), written, 'the notes Try again wrote stand');
         });
 
-        test('a failed Try again leaves the meeting to recovery at the next launch', async () => {
+        // Try again on notes never written runs the first-notes pass
+        // (ResumeAndTryAgainSavedMeta2026_11_22): a failure leaves the meeting as
+        // a failed Stop does, failed with Try again on the page.
+        test('a failed Try again leaves Try again on the page', async () => {
             const id = savedMeeting('try-again-fails', noNotes, 'failed', { processed: false });
             const empty = new Proxy({}, { get: () => async () => '' });
             assert.equal(await new MeetingPersistence(session(), empty).regenerateSavedMeeting(id), false);
             assert.equal(statusOf(id), 'failed');
-            assert.equal(processedOf(id), false);
         });
     });
 });

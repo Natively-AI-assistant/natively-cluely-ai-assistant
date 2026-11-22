@@ -2190,6 +2190,22 @@ export class MeetingPersistence {
         }
     }
 
+    /**
+     * Try again on a meeting whose first notes failed: the recovery pass, now.
+     * True when the notes were written. On failure the meeting reads failed and
+     * stays unprocessed, as after a failed Stop, so the next launch tries again.
+     */
+    private async retryFirstNotes(db: DatabaseManager, meetingId: string): Promise<boolean> {
+        if (this.notesPassRunning(meetingId)) {
+            console.warn(`[MeetingPersistence] ${meetingId}: notes are being written now; Try again not started.`);
+            return false;
+        }
+        console.log(`[MeetingPersistence] ${meetingId}: notes were never written; writing them as Stop would.`);
+        await this.recoverMeeting(db, meetingId);
+        const state = db.getMeetingNotesState(meetingId);
+        return !!state?.isProcessed && state.summaryStatus === 'completed';
+    }
+
     // ── Notes no pass is writing (#778) ─────────────────────────────────
     //
     // summary_status says a meeting's notes are being written. Only a notes
@@ -2406,6 +2422,15 @@ export class MeetingPersistence {
             console.warn('[MeetingPersistence] regenerate denied — post_call_summary scope off.');
             return false;
         }
+
+        // Its notes were never written (they failed at Stop): Try again writes
+        // them as Stop would have, with what was saved with the meeting (its
+        // calendar event, mode, the call's names, screens, typed notes, template,
+        // a resume's carry). Regenerate reads none of that, and its notes are
+        // final, so the meeting would never get it. A Regenerate aimed at a
+        // template, mode or tone is the user's choice and runs as one.
+        const chosen = !!(opts?.templateType || opts?.modeId || opts?.noteTemplateId !== undefined || opts?.tone);
+        if (!chosen && details.isProcessed === false) return this.retryFirstNotes(db, meetingId);
 
         // Resolve the target mode (explicit override, else stored selected mode, else active).
         let templateType = opts?.templateType;
