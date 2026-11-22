@@ -1370,6 +1370,65 @@ export function personalCommitmentNotice(question: string, modeId: string | unde
 }
 
 /**
+ * A heard question about the USER's own side is answered for that side: nothing about it invented, and never asked
+ * back (issue #777, 2026-11-21). Asked "how long is your sprint typically?", answers turned it around ("What cadence
+ * are you using?"; the reporter's: "I'd want to understand how your team runs them"), and with nothing stating the
+ * user's setup they made it up: "We run two-week sprints", "We're on GitHub Actions", "I report to the engineering
+ * manager", "I lead a team of five engineers". The system prompt already forbids both; at the end of the user
+ * message, next to the question, it holds.
+ *
+ * Measured by replaying 58 What to Answer prompts captured from a live session to the Natively API (deepseek-flash),
+ * 48 of them on eight personal questions in General, Looking for work and Technical Interview: with the first,
+ * figure-only wording, 9 answers turned the question back and 20 stated an unsupported fact; with the strict wording
+ * below, 0 and 6-7 over two passes (most of the rest "I report to the head of my group", hence that item). A second
+ * WRONG/RIGHT pair added no gain and once leaked its own coaching into the answer. Example topics stay off the
+ * measured questions. Then live in the app (same model, 58 presses): asked back 11 -> 0 of 48, a fact made up about the
+ * user about 20 -> 3 of 48 ("We usually run two weeks" twice, "I report to my engineering lead"), and on the issue's
+ * own transcript 2 -> 0 of 10 asked back.
+ *
+ * "Nothing above describes that side" only when nothing about the user is in the prompt: with a document, the
+ * user's own words or meeting context it says "where something above states it, use it", so a stated fact is still
+ * used (live, with a résumé attached in Looking for work and Technical Interview: team size, CI and sprint length came
+ * from it 8 of 8). The numbers above are for the wording before TYPICAL, NOT CERTAIN below. Only for a
+ * question put to the user ("you", "your"): "How many engineers did I say are on our team?" asks about the speaker's
+ * side, and "What port does HTTPS use?" needs a figure nothing above states. Not with the personal-life notice,
+ * which hands a question about the user's own life back on purpose ("What's yours?").
+ */
+// Each slip measured on the Natively API (deepseek-flash): "I report to the engineering lead" stated as fact in 18 of
+// 18 answers with no note at all, 8 to 13 of 18 with one; hence the manager item, and the claim verifier in the
+// interview modes (claimVerifier.ts).
+//
+// TYPICAL, NOT CERTAIN (2026-11-21, owner's decision): the stricter wording before this made "I'd want to confirm
+// that and send it over after this" the answer to 40 of 48 personal questions live. A typical answer framed as
+// typical may now be given; a named tool, an exact number or a person they report to still may not be stated as the
+// user's fact (in Looking for work and Technical Interview with no document, the claim verifier turns one into the
+// hedged form). Live with that wording, General (no verifier) slid from typical into the user's own record in 3 of
+// 16: "Two weeks is the usual cadence where I work, though we've stretched to three", "the standard we've worked
+// with", hence the line saying typical is never their own record. Worded first as "how teams usually do it", it sent 5
+// of 58 answers to the speaker's team instead ("I'd want to understand how your team runs it before I commit to
+// specifics", the issue's own bad answer), hence "common in the field" and "or defer to it".
+const ANSWER_SIDE_ITEMS = 'no named tool, language or framework they use, no exact headcount, sprint length or schedule, '
+  + 'no manager or anyone they report to, and no placeholder';
+const ANSWER_SIDE_CLOSE = ' You may say what is typical, framed as typical and hedged, and how the user generally '
+  + 'approaches it. Typical means what is common in the field, never the user\'s own record ("where I work", "on my '
+  + 'team", "we\'ve always", "the pattern I\'m used to"). The question is about the user, so do not ask about the '
+  + 'speaker\'s side or defer to it ("what do you use?", "I\'d want to see how your team runs it first"). '
+  + 'WRONG: "We run forty-two services. How many do you have?" RIGHT: "Usually a few dozen, depending on how you '
+  + 'count them. I\'d check the exact number and send it over after this.")';
+export const HEARD_QUESTION_ANSWER_SIDE = '\n(It asks about the user\'s own side, and nothing above describes that side. '
+  + `Whatever you say will be said aloud, so state nothing about it as certain fact: ${ANSWER_SIDE_ITEMS}.${ANSWER_SIDE_CLOSE}`;
+export const HEARD_QUESTION_ANSWER_SIDE_GROUNDED = '\n(It asks about the user\'s own side. Where something above states '
+  + `it, use it. Otherwise state nothing about that side as certain fact: ${ANSWER_SIDE_ITEMS}.${ANSWER_SIDE_CLOSE}`;
+
+const ADDRESSED_TO_USER_RE = /\b(?:you|your|yours|yourself|yourselves)\b/i;
+
+export function heardQuestionAnswerSide(question: string, heard: boolean, commitmentNotice: string, grounded = false): string {
+  if (!heard || commitmentNotice === PERSONAL_LIFE_NOTICE) return '';
+  if (!ADDRESSED_TO_USER_RE.test(String(question ?? ''))) return '';
+  return grounded ? HEARD_QUESTION_ANSWER_SIDE_GROUNDED : HEARD_QUESTION_ANSWER_SIDE;
+}
+
+/**
  * ARITHMETIC TURNS WORK IT OUT FIRST (2026-09-30). Replaying the recorded
  * prompts of nine quantitative benchmark turns to the same model, six samples
  * each, graded by deterministic validators: 23/54 right as prompted, 29/54 with
@@ -1576,6 +1635,7 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
   const { decision: d, policy, evidence } = input;
   // The user's own words about themselves are in this prompt (About you, mode notes, always-on skills).
   const hasOwnWords = Boolean(input.userBio?.trim() || input.modeNotes?.trim() || input.standingSkills?.trim());
+  const commitmentNotice = personalCommitmentNotice(d.resolvedQuestion, policy.id, Boolean(input.heardQuestion), hasOwnWords);
 
   // An exhaustive request carries a tripled evidence cap on its plan; the
   // token budget must grow with it or the extra chunks are dropped here.
@@ -1776,10 +1836,10 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
       : '',
     push('today', todayNotice(input.now ?? new Date(), d.resolvedQuestion, input.conversationSummary, packed.evidenceBlock)),
     push('evidence_story', evidenceStoryGuard(d, Boolean(packed.evidenceBlock), hasOwnWords)),
-    push('personal_commitment', personalCommitmentNotice(d.resolvedQuestion, policy.id, Boolean(input.heardQuestion), hasOwnWords)),
+    push('personal_commitment', commitmentNotice),
     push('calculation', calculationNotice(d.resolvedQuestion, input.conversationSummary, packed.evidenceBlock)),
     push('refinement', refinementNotice(d.resolvedQuestion, input.conversationSummary, input.heardQuestion === true)),
-    push('question', `# Question\n${d.resolvedQuestion}${input.heardQuestion ? heardQuestionPerspective(policy.id) : input.questionSpokenByUser ? USER_SPOKEN_QUESTION_PERSPECTIVE : ''}`),
+    push('question', `# Question\n${d.resolvedQuestion}${input.heardQuestion ? heardQuestionPerspective(policy.id) + heardQuestionAnswerSide(d.resolvedQuestion, true, commitmentNotice, Boolean(packed.evidenceBlock) || hasOwnWords) : input.questionSpokenByUser ? USER_SPOKEN_QUESTION_PERSPECTIVE : ''}`),
     // Steps or a counted set: the numbered-list rule lives in the system prompt,
     // which the sections above outrank — see isEnumerableAsk. Format, not
     // length, so it rides even when the user set a length. Coding turns keep

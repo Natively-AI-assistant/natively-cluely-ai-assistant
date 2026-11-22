@@ -19,7 +19,7 @@ import {
     FollowUpQuestionsLLM, WhatToAnswerLLM,
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
     AssistantResponse as LLMAssistantResponse, classifyIntent, hasQuestionSignal, planNextAssistantAction, PlannerDecision,
-    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCompleteShortAnswer, detectExplicitCodingContract, isCodingContinuation, withActiveCodingProblem, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, isScaffoldRegenerationEligible, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
+    extractLatestQuestion, isEchoOfOtherPartyQuestion, otherPartyLinesBefore, toCandidateFraming, planAnswer, validateAnswerStructure, isCompleteShortAnswer, detectExplicitCodingContract, isCodingContinuation, withActiveCodingProblem, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, isScaffoldRegenerationEligible, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
     isLiveSessionMemoryEnabled, resolveLiveFollowup, toMemoryMode, toSurface, effectiveMemoryMode,
     resolveLiveSessionMemoryConfig, piTelemetry, ageBucket,
     buildContextRoute, summarizeContextRoute, shouldThrottleTrigger,
@@ -434,15 +434,18 @@ export class IntelligenceEngine extends EventEmitter {
         trace: PiLatencyTrace;
     }): Promise<string> {
         const cv = require('./llm/claimVerifier') as typeof import('./llm/claimVerifier');
-        const kind = cv.claimVerifierKind({ modeId: opts.modeId, question: opts.question, draft: opts.answer, surface: 'spoken' });
+        // The live transcript, conversation state and screen are not documents (claimVerifier.materialHasAttachedDocuments).
+        const noDocuments = cv.materialHasNoDocuments(opts.material);
+        const kind = cv.claimVerifierKind({ modeId: opts.modeId, question: opts.question, draft: opts.answer, surface: 'spoken', noDocuments });
         if (!kind || !opts.modeId) return opts.answer;
-        // Only when documents are attached (F-LAT-04, owner's decision 2026-11-13).
-        // The live transcript is evidence too, but not an attached document.
-        if (!cv.materialHasAttachedDocuments(opts.material) && !cv.claimVerifierRunsWithoutDocuments()) {
+        // Only when documents are attached (F-LAT-04, owner's decision 2026-11-13), except Looking for work and
+        // Technical Interview, which run it only without them (issue #777, 2026-11-21), and General when the draft
+        // states the user's own setup as fact (issue #777, 2026-11-22).
+        if (noDocuments && !cv.claimVerifierRunsWithoutDocuments(opts.modeId, opts.answer)) {
             opts.trace.mark('claim_verifier_skipped' as any, { reason: 'no_documents' });
             return opts.answer;
         }
-        const system = cv.claimVerifierSystemPrompt(opts.modeId, 'spoken', { noDocuments: cv.materialHasNoDocuments(opts.material) });
+        const system = cv.claimVerifierSystemPrompt(opts.modeId, 'spoken', { noDocuments });
         // The replayed answer call carries the material itself (its own user
         // message comes first); without one, the V3 user message stands in.
         const h: any = this.llmHelper;
@@ -2857,7 +2860,14 @@ export class IntelligenceEngine extends EventEmitter {
                     // matched nothing here, so the extractor kept the other
                     // party's "thanks, bye" and retrieval ran on THAT.
                     && /\b(?:what|which|how (?:many|much|long|often)|who|whom|when|where|remind (?:me|us)|do we (?:know|have)|does (?:it|the \w+) say|what'?s|(?:did|does|do|has|have|had|is|are|was|were|will|can|could|should|would)\s+(?:anyone|anybody|someone|somebody|we|they|he|she|it|you|i|the\s+\w+|that|this|there))\b/i.test(userText)
-                    && !/\b(?:what do you mean|could you (?:repeat|clarify|rephrase)|say (?:that )?again|sorry,? (?:what|i (?:didn'?t|did not) (?:catch|get)))\b/i.test(userText);
+                    && !/\b(?:what do you mean|could you (?:repeat|clarify|rephrase)|say (?:that )?again|sorry,? (?:what|i (?:didn'?t|did not) (?:catch|get)))\b/i.test(userText)
+                    // The user saying the other party's question back while they think ("Like, how long is your
+                    // sprint? We... Our sprint") is not a question of their own. Taken as one, it was labelled as
+                    // said by the user and "your sprint" was answered as the interviewer's team (issue #777).
+                    // Compared with everything the other party said since the user last spoke, and with the
+                    // question the extractor picked, so a short turn after the question ("take your time")
+                    // does not hide it.
+                    && !(ii >= 0 && isEchoOfOtherPartyQuestion(userText, otherPartyLinesBefore(transcriptTurns, ui, extractedQuestion.latestQuestion)));
                 // Issue #775: a mic line said over the other party (crosstalk, or their words via the mic) is
                 // not the user's question, and stays out of this answer's prompt. See overlappingTurns.ts.
                 const userSpokeOverOtherParty = userAskedLast && ii >= 0

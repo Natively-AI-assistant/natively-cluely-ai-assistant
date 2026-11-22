@@ -51,7 +51,10 @@ const LIFE_RE = /\b(?:did you (?:catch|watch|see) (?:the|that|last)(?: [\w'-]+){
 export const DRAFT_PERSONAL_RE = /\b(?:I(?:'ve| have| had)\b(?! to\b)|I (?:built|ran|led|shipped|used|wrote|worked|designed|migrated|managed|owned|spent|learned|picked up|started|joined|left|chose|tried|set up|rolled out|cut|reduced|tested|ended up|got into|came (?:to|into|from))\b|in my (?:experience|last|previous|current|work|team|role|job|project|lab|own work)|at my (?:last|previous|current|old)|my (?:team|last|previous|current|side projects?|coursework|thesis|advisor|co-?authors?|lab|group|manager|old)\b|we (?:used|built|ran|shipped|chose|migrated|tried|went with|ended up|set up|rolled out)\b|on my (?:team|last|side))/i;
 
 /** Which verification (if any) a heard what-to-answer turn gets. Code answers are never touched. */
-export function claimVerifierKind(input: { modeId: string | null | undefined; question: string; draft: string; surface?: 'spoken' | 'typed' }): ClaimVerifierKind | null {
+/** A draft stating the user's own setup as fact: "we're on GitHub Actions", "our sprints run two weeks", "I report to my lead". */
+export const OWN_SIDE_FACT_RE = /\b(?:we(?:'re| are)? (?:on|using|use|run|ship|deploy|follow)|we'?ve (?:always |mostly |usually )?(?:worked|run|used|been|stretched|gone)|I(?:'m| am)? (?:on|using|use|run)|I(?:'m| am) used to|I work (?:mostly |mainly |primarily )?(?:with|in|around|on)|I report (?:in)?to|where I (?:work|am now)|on my (?:current )?team)\b|\bour (?:sprints?|team|stack|deploys?|pipeline|rotation|on-?call|ci|tooling|process|reviews?)\b|\bmy (?:manager|lead|team lead|tech lead|engineering lead|boss|director)\b|\b(?:on|at) (?:our|my) (?:side|end)\b|\bwhere we are\b/i;
+
+export function claimVerifierKind(input: { modeId: string | null | undefined; question: string; draft: string; surface?: 'spoken' | 'typed'; noDocuments?: boolean }): ClaimVerifierKind | null {
   const mode = String(input.modeId ?? '');
   const q = String(input.question ?? '');
   const draft = String(input.draft ?? '');
@@ -69,13 +72,20 @@ export function claimVerifierKind(input: { modeId: string | null | undefined; qu
   // 11 streamed answers there, 3 of 4 even with the user's own saved answer, and made them final 6.5 to 8 s after the
   // press instead of 3.5 to 5). The judged cost above is accepted.
   // NATIVELY_CLAIM_VERIFIER_INTERVIEW=1 restores both interview passes for a judged comparison.
+  // BACK ON WITHOUT DOCUMENTS (issue #777, 2026-11-21, owner's decision): with nothing about the candidate loaded, a
+  // spoken answer about their own side ("what CI does your team use?", "who do you report to?") is allowed a
+  // typical answer framed as typical, and this pass turns a flat specific ("We're on GitLab", "I report to my
+  // engineering lead") into that form. Live on the Natively API, the prompt alone left "I report to the engineering
+  // lead" in 8 to 13 of 18 answers. With a document loaded both modes keep the 2026-10-15 decision above.
+  const spokenWithoutDocuments = input.noDocuments === true && input.surface !== 'typed';
   if (mode === 'looking-for-work') {
-    if (process.env.NATIVELY_CLAIM_VERIFIER_INTERVIEW !== '1') return null;
+    if (process.env.NATIVELY_CLAIM_VERIFIER_INTERVIEW !== '1' && !spokenWithoutDocuments) return null;
     return 'personal';
   }
   if (mode === 'technical-interview') {
-    if (process.env.NATIVELY_CLAIM_VERIFIER_INTERVIEW !== '1') return null;
-    return TI_PERSONAL_RE.test(q) || DRAFT_PERSONAL_RE.test(draft) ? 'personal' : null;
+    if (process.env.NATIVELY_CLAIM_VERIFIER_INTERVIEW !== '1' && !spokenWithoutDocuments) return null;
+    return TI_PERSONAL_RE.test(q) || DRAFT_PERSONAL_RE.test(draft) || (spokenWithoutDocuments && OWN_SIDE_FACT_RE.test(draft))
+      ? 'personal' : null;
   }
   // Seminar (2026-10-01): every turn. Its capped answers were claims about the research the paper does not make
   // and an "I don't have that figure" the draft pattern never opened the gate for. Replayed and judged:
@@ -157,9 +167,17 @@ const TYPED_SUBJECT: Record<string, string> = {
  * day?"): with the general wording, the edit kept "the system flags the ones
  * that need a decision… status updates get handled automatically" because
  * removing them emptied the answer; the judge capped it before and after.
+ *
+ * THE LIVE TRANSCRIPT IS NOT A DOCUMENT (2026-11-22). A started meeting packs what was said as evidence
+ * (source_type="MEETING_TRANSCRIPT") on every press, so "no evidence block" was false in every real meeting and the
+ * documents-only rule (F-LAT-04, owner's decision 2026-11-13) never held there: General ran the pass on 15 of 15
+ * non-coding meeting presses, and Looking for work / Technical Interview, which run it only without documents
+ * (#777), on 0 of 30.
+ * One rule with materialHasAttachedDocuments (#776): evidence that is only the transcript, conversation state or
+ * screen counts as none; a tag with no source_type counts as a document.
  */
 export function materialHasNoDocuments(material: string): boolean {
-  return !/<evidence\b/.test(String(material ?? ''));
+  return !materialHasAttachedDocuments(material);
 }
 
 /**
@@ -193,8 +211,16 @@ export function materialHasAttachedDocuments(material: string): boolean {
  * spoken-General gain without documents (judged 8.53 -> 8.80, hard fails 5 -> 1)
  * is given up. NATIVELY_CLAIM_VERIFIER_NO_DOCS=1 restores it for a comparison.
  */
-export function claimVerifierRunsWithoutDocuments(): boolean {
-  return process.env.NATIVELY_CLAIM_VERIFIER_NO_DOCS === '1';
+export function claimVerifierRunsWithoutDocuments(modeId?: string | null, draft?: string | null): boolean {
+  if (process.env.NATIVELY_CLAIM_VERIFIER_NO_DOCS === '1') return true;
+  // The two interview modes run it exactly when no document is loaded (claimVerifierKind, issue #777).
+  if (modeId === 'looking-for-work' || modeId === 'technical-interview') return true;
+  // GENERAL, ONLY ON AN OWN-SIDE FACT (issue #777, 2026-11-22, owner's "fix it" after the meeting re-test): once the
+  // live transcript stopped counting as a document, General skipped the pass on every meeting press (median press
+  // 2.7 s -> 1.4 s) and stated the user's own setup flat again on 2 of 8 own-side questions ("I report to an
+  // engineering manager on the delivery side", "We use CI"). The pass now runs there only when the draft itself
+  // states such a fact (OWN_SIDE_FACT_RE), so every other General press keeps the F-LAT-04 latency.
+  return modeId === 'general' && OWN_SIDE_FACT_RE.test(String(draft ?? ''));
 }
 /**
  * LIST, THEN REWRITE (2026-10-01). Asked only to "output the revised reply",
@@ -308,20 +334,47 @@ const NO_TERMS_MATERIAL = ' The same holds for what the price depends on, which 
  * unverifiable figure — on new evidence; see ABSENCE IS NOT A CLAIM above. On
  * those 88 turns the unsupported and fabricated flags fell, 11 -> 6.)
  */
+/**
+ * Interview modes with nothing about the candidate loaded (issue #777, 2026-11-21, owner's decision): What to Answer
+ * may give a typical answer framed as typical ("usually a few dozen; I'd check the count"). This pass keeps that and
+ * turns a flat specific stated as their own fact into it, so the answer still answers instead of only deferring.
+ * Example topics stay off the measured questions. Live, with only the first two sentences, 5 of 16 Looking for work
+ * answers the pass edited turned toward the interviewer's team ("For your setup specifically, I'd want to know how your
+ * builds are structured", "What does the reporting line look like on your side?"): to a candidate's editor "your team"
+ * reads as the team being joined, hence the last sentence. The report-to example is the one slip the edit kept live
+ * ("I report to the engineering manager who runs the team", 1 of 33 edits, 2026-11-21): the model states it as fact
+ * in 18 of 18 answers with no note, so the example names it although it is a measured question.
+ */
+const TYPICAL_HEDGED = ' Nothing about the candidate\'s own setup is loaded. A typical answer framed as typical and hedged ("usually a few dozen; I\'d check the exact count", "typically the release manager signs off; I can confirm that after this") is not a claim: keep it. A specific stated as their own fact or record (a named tool, service, language or framework they work with, an exact number or schedule, "where I work", "the pattern I\'m used to", a person or title they report to) is [self]: list it, and in the reply change only that phrase into its typical, hedged form ("we run two-week sprints" becomes "sprints usually run two weeks"; "I report to the engineering manager" becomes "usually that\'s an engineering manager, I can confirm the exact line") instead of removing the answer; every other sentence stays word for word. The question is about the candidate\'s own current or past team, not the interviewer\'s: never turn the reply toward theirs ("your team", "your setup", "I\'d match whatever cadence you run") and never ask them about it.';
+// General's wording of the rule above (issue #777, 2026-11-22): the speaker is the user, the other person is anyone.
+const TYPICAL_HEDGED_GENERAL = ' Nothing about the speaker\'s own setup is loaded. A typical answer framed as typical and hedged ("usually a few dozen; I\'d check the exact count", "typically the release manager signs off; I can confirm that after this") is not a claim: keep it. A specific stated as their own fact or record (a named tool, service, language or framework they work with, an exact number or schedule, "where I work", "the pattern I\'m used to", a person or title they report to) is [self]: list it, and in the reply change only that phrase into its typical, hedged form ("we run two-week sprints" becomes "sprints usually run two weeks"; "I report to the engineering manager" becomes "usually that\'s an engineering manager, I can confirm the exact line") instead of removing the answer; every other sentence stays word for word. When the other person asked about the speaker\'s own team or setup, the reply answers for the speaker\'s side: never turn it toward theirs ("your team", "your setup") and never ask them about it.';
 const STUDY_SCOPE = ' The one exception is the scope of a study the material describes: that it did not measure, test or include something the material never mentions is supported, keep it.';
+
+/**
+ * THE EDIT KEEPS THE ANSWER'S SHAPE (2026-11-21). The pass saw only the spoken body and an accepted edit dropped the
+ * [[GIST]] chip (it summarised the removed claims too), so no edited answer had one: live, 0 of 29 edited What to
+ * Answer replies against 29 of 36 untouched. It also never saw the answer's format rules. Now the spoken edit follows
+ * the same rules as the answer (promptSystemV2's final check) and, when it changes the reply, ends with its own gist
+ * line; acceptVerifiedAnswer checks that line like the reply and otherwise keeps the old one only if its words survived.
+ */
+const SPOKEN_FORMAT = `
+The revised reply keeps the draft's spoken format: no em dashes, en dashes, semicolons, hyphen bullets, headings, brackets or placeholders, and at most three short **marks**. If you changed the reply and it runs past about forty words, its very last line is [[GIST]] followed on that same line by the five-to-eight-word essence of the revised reply.`;
 
 export function claimVerifierSystemPrompt(modeId: string, surface: 'spoken' | 'typed' = 'spoken', opts: { noDocuments?: boolean } = {}): string {
   const typed = surface === 'typed';
   const productGap = opts.noDocuments && (modeId === 'sales' || modeId === 'call-center')
     ? NO_PRODUCT_MATERIAL + (modeId === 'call-center' ? NO_POLICY_MATERIAL : NO_TERMS_MATERIAL) : '';
+  const typicalHedged = typed || !opts.noDocuments ? ''
+    : modeId === 'looking-for-work' || modeId === 'technical-interview' ? TYPICAL_HEDGED
+    : modeId === 'general' ? TYPICAL_HEDGED_GENERAL : '';
   const reply = typed
     ? `a reply the assistant wrote privately for ${WRITTEN_FOR[modeId] ?? 'the user'}`
     : `a reply that ${SPEAKER[modeId] ?? 'the user is about to say aloud'}`;
   const subject = typed ? (TYPED_SUBJECT[modeId] ?? 'the user themselves') : (SUBJECT[modeId] ?? 'the speaker themselves');
   return `You edit ${reply}. You receive the material the assistant had (documents, profile, conversation) and, after the last "---" line, the draft reply.
-Remove or neutralise every statement about ${subject} that the material does not state: preferences and stances ("I'm open to", "that works for me", "I'm taking it seriously"), willingness, motives and reasons, strengths and weaknesses, habits or practices presented as their own history, feelings, events, numbers, prices, capabilities, integrations, customers, results, guarantees and commitments not in the material. A denial ("I haven't", "we don't") is a statement too.${modeId === 'seminar' ? STUDY_SCOPE : ''}${productGap}
+Remove or neutralise every statement about ${subject} that the material does not state: preferences and stances ("I'm open to", "that works for me", "I'm taking it seriously"), willingness, motives and reasons, strengths and weaknesses, habits or practices presented as their own history, feelings, events, numbers, prices, capabilities, integrations, customers, results, guarantees and commitments not in the material. A denial ("I haven't", "we don't") is a statement too.${modeId === 'seminar' ? STUDY_SCOPE : ''}${productGap}${typicalHedged}
 Keep everything the material supports, everything the other person stated, and general reasoning. ${typed ? 'Keep the same voice, format and length.' : 'Keep the same voice, natural and speakable.'} Keep the draft's **double-asterisk** highlights on the words you keep. A caution that a document is expired, out of date, a draft or not the current version is supported whenever the material marks it so: keep it. Never say you cannot speak to something, do not have it, or that it is not available; never mention the material, a résumé, notes or what is missing. Do not add facts.
-Change as little as possible. If nothing needs changing, the revised reply is the draft unchanged. The revised reply is in the language the draft is written in.${LIST_THEN_REWRITE}`;
+Change as little as possible. If nothing needs changing, the revised reply is the draft unchanged. The revised reply is in the language the draft is written in.${typed ? '' : SPOKEN_FORMAT}${LIST_THEN_REWRITE}`;
 }
 
 /** The part of the verifier's message after the answer call's own (inherited) message. */
@@ -428,8 +481,10 @@ export function nonLatinShare(text: string): number {
  */
 export const SOURCE_WORD_RE = /\b(?:the material|material (?:I have|gives|says|records|states)|(?:the|my) (?:r[eé]sum[eé]|profile|job description) (?:says|lists|shows|records|states|has)|on record|the record (?:shows|says))\b/i;
 
+// Dashes and semicolons count as format too: the spoken edit is told to drop them (SPOKEN_FORMAT), and an answer is
+// not replaced on screen for punctuation alone.
 const formatInsensitive = (t: string): string => String(t ?? '')
-  .replace(/\*\*/g, '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, ' ').trim();
+  .replace(/\*\*/g, '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/\s*[—–;,]\s*/g, ', ').replace(/\s+/g, ' ').trim();
 
 /**
  * The edit as it will be shown. A quote pair is removed only when it WRAPS the whole reply: stripping any trailing
@@ -451,9 +506,10 @@ export interface VerifiedAnswer { accepted: boolean; changed: boolean; reason: s
  * `original` may carry a [[GIST]] trailer; the verifier only ever saw the body.
  */
 export function acceptVerifiedAnswer(input: { original: string; edited: string | null | undefined; material: string }): VerifiedAnswer {
-  const { body } = splitGistTrailer(input.original);
+  const { body, gist: oldGist } = splitGistTrailer(input.original);
   const keep = (reason: string): VerifiedAnswer => ({ accepted: false, changed: false, reason, text: input.original });
-  const edited = tidyEdit(splitGistTrailer(splitVerifierScratch(String(input.edited ?? '')).reply.replace(/^\s*DRAFT REPLY\s*:\s*/i, '')).body);
+  const editedSplit = splitGistTrailer(splitVerifierScratch(String(input.edited ?? '')).reply.replace(/^\s*DRAFT REPLY\s*:\s*/i, ''));
+  const edited = tidyEdit(editedSplit.body);
   if (!edited) return keep('empty');
   // Formatting is not a claim: an edit that differs only in **highlights**,
   // quote style or spacing keeps the original, highlights and all (in-app,
@@ -473,8 +529,29 @@ export function acceptVerifiedAnswer(input: { original: string; edited: string |
   if (DENIAL_RE.test(edited) && !DENIAL_RE.test(body)) return keep('denial_introduced');
   if (FRESHNESS_RE.test(body) && !FRESHNESS_RE.test(edited)) return keep('freshness_dropped');
   if (SOURCE_WORD_RE.test(edited) && !SOURCE_WORD_RE.test(body)) return keep('source_exposed');
-  // A changed body drops the old [[GIST]] chip: it summarised the removed claims too.
-  return { accepted: true, changed: true, reason: 'edited', text: edited };
+  // The old [[GIST]] chip may summarise a removed claim: the edit's own gist line replaces it (checked by the same
+  // rails), else the old one stays only if every word of it survived the edit, else the answer has none.
+  const gist = editedGist(editedSplit.gist, edited, body, input.material) || (gistSurvives(oldGist, edited) ? oldGist : '');
+  return { accepted: true, changed: true, reason: 'edited', text: gist ? `${edited}\n[[GIST]] ${gist}` : edited };
+}
+
+const gistWords = (t: string): string[] => (String(t ?? '').toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? []);
+/** The edit's gist line, when it passes the rails the reply passed; otherwise ''. */
+function editedGist(gist: string, edited: string, body: string, material: string): string {
+  const g = String(gist ?? '').replace(/\*\*/g, '').trim();
+  const n = gistWords(g).length;
+  if (n < 2 || n > 12 || /```|\[\[|\n/.test(g)) return '';
+  const allowed = new Set([...nums(body), ...nums(material), ...nums(edited)]);
+  for (const x of nums(g)) if (!allowed.has(x)) return '';
+  if (SOURCE_WORD_RE.test(g) || (EPISTEMIC_RE.test(g) && !EPISTEMIC_RE.test(edited)) || (DENIAL_RE.test(g) && !DENIAL_RE.test(edited))) return '';
+  return g;
+}
+/** Every content word of the old gist (four letters or more) still appears in the edited reply. */
+function gistSurvives(oldGist: string, edited: string): boolean {
+  const words = gistWords(oldGist).filter((w) => w.length >= 4);
+  if (!words.length) return false;
+  const have = new Set(gistWords(edited));
+  return words.every((w) => have.has(w));
 }
 
 // ── the pass itself, shared by both surfaces ────────────────────────────────

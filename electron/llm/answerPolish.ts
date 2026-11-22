@@ -464,6 +464,33 @@ export function isFabricatedTranscriptOnly(text: string): boolean {
   return strippedAny && rest.trim().length < MIN_REAL_ANSWER_CHARS_AFTER_STRIP;
 }
 
+/**
+ * A **mark pair that faces the wrong way: the first mark closes a word and the second opens one ("two-week** cycle is
+ * the **typical rhythm"). Markdown renders neither as bold, so both showed as literal asterisks (live, What to Answer
+ * on the Natively API, 2026-11-21: 1 of 512 answers). Marks are paired in order, as markdown pairs them; only a pair of
+ * exactly that shape on one line loses its marks. Inline code, "2**8" and "a ** b" are left alone.
+ */
+export function dropInvertedBoldPairs(text: string): string {
+  const s = String(text ?? '');
+  const marks: number[] = [];
+  let ticks = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '`') ticks++;
+    else if (s[i] === '*' && s[i + 1] === '*' && s[i + 2] !== '*' && s[i - 1] !== '*') { if (ticks % 2 === 0) marks.push(i); i++; }
+  }
+  const drop = new Set<number>();
+  for (let k = 0; k + 1 < marks.length; k += 2) {
+    const a = marks[k], b = marks[k + 1];
+    const inverted = /\S/.test(s[a - 1] ?? '') && /\s/.test(s[a + 2] ?? '')
+      && /\s/.test(s[b - 1] ?? '') && /\S/.test(s[b + 2] ?? '') && !s.slice(a, b).includes('\n');
+    if (inverted) { drop.add(a); drop.add(b); }
+  }
+  if (!drop.size) return s;
+  let out = '';
+  for (let i = 0; i < s.length; i++) { if (drop.has(i)) { i++; continue; } out += s[i]; }
+  return out;
+}
+
 export function cleanAnswerArtifacts(text: string): string {
   if (!text) return text;
   // A leaked JSON-schema stub carries no answer — blank it so the empty-answer
@@ -491,6 +518,7 @@ export function cleanAnswerArtifacts(text: string): string {
   out = out.replace(/^[ \t]*[-*•+][ \t]+[.,:;]*[ \t]*$/gm, '');
   // Collapse the blank-line runs the removals leave behind.
   out = out.replace(/\n{3,}/g, '\n\n');
+  out = dropInvertedBoldPairs(out);
 
   fences.forEach((f, i) => { out = out.replace(`FENCE${i}`, () => f); });
   return out.trim();

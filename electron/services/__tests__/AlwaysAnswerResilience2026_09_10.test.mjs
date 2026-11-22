@@ -80,7 +80,7 @@ describe('a manual press answers the user\'s own newer question', () => {
     const src = read('IntelligenceEngine.ts');
     assert.match(src, /question_from_user_utterance/);
     const i = src.indexOf('question_from_user_utterance');
-    const block = src.slice(Math.max(0, i - 2600), i);
+    const block = src.slice(Math.max(0, i - 4500), i);
     assert.match(block, /!isSpeculative && !question\?\.trim\(\)/, 'only on a manual press with no typed question');
     assert.match(block, /what do you mean/, 'a clarification thrown back at the other party keeps the extractor\'s choice');
   });

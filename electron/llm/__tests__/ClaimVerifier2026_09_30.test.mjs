@@ -88,7 +88,7 @@ describe('which turns are verified', () => {
     assert.equal(claimVerifierKind({ modeId: 'general', question: q, draft, surface: 'typed' }), null);
     assert.equal(claimVerifierKind({ modeId: 'general', question: q, draft }), null);
     assert.equal(claimVerifierKind({ modeId: 'general', question: 'How was your weekend?', draft: 'x', surface: 'typed' }), 'life');
-    assert.match(ENGINE, /claimVerifierKind\(\{ modeId: opts\.modeId, question: opts\.question, draft: opts\.answer, surface: 'spoken' \}\)/);
+    assert.match(ENGINE, /claimVerifierKind\(\{ modeId: opts\.modeId, question: opts\.question, draft: opts\.answer, surface: 'spoken'(?:, noDocuments)? \}\)/);
     assert.match(IPC, /claimVerifierKind\(\{ modeId: cvMode, question: String\(message \|\| ''\), draft: finalText, surface: 'typed' \}\)/);
   });
   test('the lecture and an unknown mode are never verified', () => {
@@ -427,7 +427,7 @@ describe('where the pass sits in the what-to-answer pipeline', () => {
     // replayed message, so the provider's prompt cache reuses the answer's prefix (claimVerifierInlineMessage).
     assert.match(body, /this\.repairCallArgs\(opts\.turnKey, cv\.claimVerifierInlineMessage\(system, body\), signal, undefined, \[\], cv\.CLAIM_VERIFIER_MATERIAL_MAX_CHARS\)/);
     assert.match(body, /const shared = canReplay && cv\.claimVerifierSharesAnswerPrefix\(\)/);
-    assert.match(body, /cv\.claimVerifierSystemPrompt\(opts\.modeId, 'spoken', \{ noDocuments: cv\.materialHasNoDocuments\(opts\.material\) \}\)/);
+    assert.match(body, /cv\.claimVerifierSystemPrompt\(opts\.modeId, 'spoken', \{ noDocuments(?:: cv\.materialHasNoDocuments\(opts\.material\))? \}\)/);
     assert.ok(CLAIM_VERIFIER_BUDGET_MS >= 2000 && CLAIM_VERIFIER_BUDGET_MS <= 5000);
   });
   test('logs outcome, reason and timing only — never answer or material text', () => {
