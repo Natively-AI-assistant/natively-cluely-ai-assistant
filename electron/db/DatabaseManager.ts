@@ -4802,6 +4802,9 @@ export class DatabaseManager {
             calendarEvent: parseCalendarEvent(meetingRow.calendar_event_json),
             source: meetingRow.source,
             summaryStatus: meetingRow.summary_status as SummaryStatus | undefined,
+            // Whether its notes are written. Resume reads it to tell what Stop
+            // saved for the first notes from what those notes now say.
+            isProcessed: meetingRow.is_processed === 1,
             transcript: transcript,
             usage: usage,
             ...(typeof meetingRow.user_notes === 'string' && meetingRow.user_notes ? { userNotes: meetingRow.user_notes } : {}),
