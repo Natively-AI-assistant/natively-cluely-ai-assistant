@@ -110,7 +110,7 @@ export function describeEmbeddingProvider(
 }
 
 /** Generation providers that are the user's own third-party choice. */
-const THIRD_PARTY_GENERATION = new Set(['openrouter', 'litellm', 'ninerouter', 'openai', 'anthropic', 'gemini', 'groq', 'deepseek', 'minimax', 'codex']);
+const THIRD_PARTY_GENERATION = new Set(['openrouter', 'requesty', 'litellm', 'ninerouter', 'openai', 'anthropic', 'gemini', 'groq', 'deepseek', 'minimax', 'codex']);
 
 /**
  * Whether to surface the "your embeddings are lightweight" warning.

@@ -78,6 +78,7 @@ export class ProcessingHelper {
     const openrouterKey = credManager.getOpenrouterApiKey();
     const fluxionKey = credManager.getFluxionApiKey();
     const agentrouterKey = credManager.getAgentRouterApiKey();
+    const requestyKey = credManager.getRequestyApiKey();
 
     if (geminiKey) {
       console.log("[ProcessingHelper] Loading stored Gemini API Key from CredentialsManager");
@@ -115,6 +116,7 @@ export class ProcessingHelper {
     // into a wrong-endpoint failure.
     if (fluxionKey) this.llmHelper.setFluxionConfig(fluxionKey, credManager.getFluxionProtocol());
     if (agentrouterKey) this.llmHelper.setAgentRouterApiKey(agentrouterKey);
+    if (requestyKey) this.llmHelper.setRequestyApiKey(requestyKey);
 
     const litellmBaseURL = credManager.getLitellmBaseURL();
     if (litellmBaseURL) {

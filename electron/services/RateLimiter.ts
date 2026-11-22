@@ -213,6 +213,9 @@ export function createProviderRateLimiters() {
         // meeting never needs 60 requests a minute, and a runaway loop should
         // queue here rather than get the user's account flagged.
         agentrouter: new RateLimiter(60, 1.0),
+        // Requesty fronts other vendors with its own per-key limits, so this
+        // is the same conservative gateway default as OpenRouter.
+        requesty: new RateLimiter(120, 2.0),
         // 9Router runs on the user's own machine, so the only ceiling that
         // matters is the upstream it forwards to — which it chooses per
         // request and rotates between accounts. Nothing local to rate-limit,
