@@ -493,6 +493,11 @@ export class IntelligenceManager extends EventEmitter {
         return this.persistence.regenerateSavedMeeting(meetingId, opts);
     }
 
+    /** Settle a meeting whose notes read "being written" with no pass writing them (#778). True when the row changed. */
+    settleAbandonedNotes(meetingId: string): boolean {
+        return this.persistence.settleAbandonedNotes(meetingId);
+    }
+
     /** Regenerate only the follow-up draft for a saved meeting (V3 notes or older ones). */
     async regenerateMeetingFollowUp(meetingId: string, tone?: 'professional' | 'warm' | 'concise' | 'friendly' | 'your_style'): Promise<boolean> {
         return this.persistence.regenerateFollowUpDraft(meetingId, tone);

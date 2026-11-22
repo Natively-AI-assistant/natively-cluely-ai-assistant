@@ -2324,12 +2324,14 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
                 setMeeting(fresh);
             } catch { /* swallow — the next tick retries */ }
         };
-        // Back off rather than stop. A generation still going after ten minutes is
-        // almost certainly hung — recoverUnprocessedMeetings only retries such a
-        // row at the NEXT app start — but "almost certainly" is not certain, and a
-        // poll that simply retired would leave the placeholder breathing at a view
-        // that has quietly stopped listening. Widening to 30s costs nothing (a
-        // local sqlite read) and keeps a late completion able to land.
+        // Back off rather than stop. Each read here also ends an abandoned
+        // generation: get-meeting-details settles a row left "being written" with
+        // no pass writing it (#778, MeetingPersistence.settleAbandonedNotes), and a
+        // running pass always ends, because each of its calls is time-boxed. A slow
+        // one (a long meeting, or the provider fallback chain) can run past ten
+        // minutes, so the poll widens to 30s instead of retiring: a view that had
+        // stopped listening would keep the placeholder up after the notes landed.
+        // Widening costs nothing (a local sqlite read).
         const startedMs = Date.now();
         let timer: ReturnType<typeof setTimeout> | undefined;
         const schedule = () => {

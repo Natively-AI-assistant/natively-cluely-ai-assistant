@@ -16979,8 +16979,16 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('get-meeting-details', async (event, id) => {
-    // Helper to fetch full details
-    return DatabaseManager.getInstance().getMeetingDetails(id);
+    const db = DatabaseManager.getInstance();
+    const details = db.getMeetingDetails(id);
+    // The meeting page polls this and the notepad reads it while notes are
+    // written: notes left "being written" by a pass that is gone are settled
+    // here, or both would wait on them for good (#778).
+    const { isNotesPendingStatus } = require('./services/meeting/meetingResume') as typeof import('./services/meeting/meetingResume');
+    if (details && isNotesPendingStatus(details.summaryStatus) && appState.getIntelligenceManager()?.settleAbandonedNotes(id)) {
+      return db.getMeetingDetails(id);
+    }
+    return details;
   });
 
   // GLOBAL MEETING SEARCH V2 (Phase 9 wiring, behind global_search_v2_enabled).
