@@ -4310,6 +4310,37 @@ export class DatabaseManager {
         }
     }
 
+    /**
+     * Saved meetings (is_processed = 1) whose row says their notes are being
+     * written: a Regenerate sets that on a meeting that already has notes, and
+     * getUnprocessedMeetings never returns these. MeetingPersistence.settleOrphanedNotes
+     * reads it at recovery (#778).
+     */
+    public getProcessedMeetingsWithPendingNotes(): string[] {
+        if (!this.db) return [];
+        try {
+            const rows = this.db.prepare(
+                "SELECT id FROM meetings WHERE is_processed = 1 AND summary_status IN ('queued', 'chunking', 'summarizing_chunks', 'reducing', 'validating')",
+            ).all() as Array<{ id: string }>;
+            return rows.map(row => row.id);
+        } catch (error) {
+            console.error('[DatabaseManager] Failed to read saved meetings with pending notes:', error);
+            return [];
+        }
+    }
+
+    /** Where a meeting's notes stand, without reading its transcript. Null when there is no such meeting. */
+    public getMeetingNotesState(id: string): { summaryStatus: SummaryStatus | null; isProcessed: boolean } | null {
+        if (!this.db) return null;
+        try {
+            const row = this.db.prepare('SELECT summary_status, is_processed FROM meetings WHERE id = ?').get(id) as { summary_status: SummaryStatus | null; is_processed: number } | undefined;
+            return row ? { summaryStatus: row.summary_status ?? null, isProcessed: row.is_processed === 1 } : null;
+        } catch (error) {
+            console.error(`[DatabaseManager] Failed to read the notes state of meeting ${id}:`, error);
+            return null;
+        }
+    }
+
     public getMeetingsWithSummaryStatus(status: SummaryStatus): Array<{ id: string; title: string; summaryStatus: SummaryStatus; date: string }> {
         if (!this.db) return [];
         try {
@@ -4425,7 +4456,13 @@ export class DatabaseManager {
         }
     }
 
-    public replaceDetailedSummary(id: string, detailedSummary: Meeting['detailedSummary'], opts?: { title?: string; summaryStatus?: SummaryStatus }): boolean {
+    /**
+     * `processed`: the notes written are the meeting's notes, so recovery no
+     * longer writes them (is_processed = 1). Regenerate passes it: a Try again on
+     * a meeting whose first notes failed left it unprocessed, and the next
+     * launch wrote its notes over again (#778).
+     */
+    public replaceDetailedSummary(id: string, detailedSummary: Meeting['detailedSummary'], opts?: { title?: string; summaryStatus?: SummaryStatus; processed?: boolean }): boolean {
         if (!this.db) return false;
         try {
             const row = this.db.prepare('SELECT summary_json FROM meetings WHERE id = ?').get(id) as any;
@@ -4433,21 +4470,22 @@ export class DatabaseManager {
             const existingData = JSON.parse(row.summary_json || '{}');
             const newData = { ...existingData, detailedSummary };
             const jsonStr = JSON.stringify(newData);
+            const processed = opts?.processed ? ', is_processed = 1' : '';
             if (opts?.title && opts?.summaryStatus) {
                 // RC-7 (2026-08-21): the deferred V3 summary used to overwrite
                 // the title UNCONDITIONALLY — a user rename made even after the
                 // meeting ended was silently reverted whenever the detailed
                 // summary landed. A generated title never beats a user one.
                 const info = this.db.prepare(
-                    'UPDATE meetings SET summary_json = ?, title = CASE WHEN COALESCE(user_titled, 0) = 1 THEN title ELSE ? END, summary_status = ? WHERE id = ?',
+                    `UPDATE meetings SET summary_json = ?, title = CASE WHEN COALESCE(user_titled, 0) = 1 THEN title ELSE ? END, summary_status = ?${processed} WHERE id = ?`,
                 ).run(jsonStr, opts.title, opts.summaryStatus, id);
                 return info.changes > 0;
             }
             if (opts?.summaryStatus) {
-                const info = this.db.prepare('UPDATE meetings SET summary_json = ?, summary_status = ? WHERE id = ?').run(jsonStr, opts.summaryStatus, id);
+                const info = this.db.prepare(`UPDATE meetings SET summary_json = ?, summary_status = ?${processed} WHERE id = ?`).run(jsonStr, opts.summaryStatus, id);
                 return info.changes > 0;
             }
-            const info = this.db.prepare('UPDATE meetings SET summary_json = ? WHERE id = ?').run(jsonStr, id);
+            const info = this.db.prepare(`UPDATE meetings SET summary_json = ?${processed} WHERE id = ?`).run(jsonStr, id);
             return info.changes > 0;
         } catch (error) {
             console.error(`[DatabaseManager] Failed to replace detailed summary for meeting ${id}:`, error);

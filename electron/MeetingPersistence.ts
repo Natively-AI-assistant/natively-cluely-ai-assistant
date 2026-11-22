@@ -311,6 +311,8 @@ function notesVocabulary(explicit?: string[]): string[] | undefined {
  */
 /** The title Stop's placeholder row carries until the notes are written. */
 const PLACEHOLDER_TITLE = 'Processing...';
+/** The title a meeting gets when nothing names it (isDefaultMeetingTitle recognises it). */
+const UNTITLED_TITLE = 'Untitled Session';
 
 class SupersededWrite extends Error {
     constructor(meetingId: string) { super(`notes for ${meetingId} are written by a newer pass`); }
@@ -1227,7 +1229,7 @@ export class MeetingPersistence {
         if (metadata && resumeCarry?.sharedScreens?.length) {
             metadata = { ...metadata, sharedScreens: resumedSharedScreens(resumeCarry, metadata.sharedScreens) };
         }
-        let title = "Untitled Session";
+        let title = UNTITLED_TITLE;
         let summaryData: any = { actionItems: [], keyPoints: [] };
         let v3SummaryMeta: MeetingSummaryTelemetryMeta | null = null;
         let generationSucceeded = false;
@@ -2113,6 +2115,7 @@ export class MeetingPersistence {
         const db = DatabaseManager.getInstance();
 
         this.promoteLiveMeetings(db);
+        this.settleAbandonedSavedNotes(db);
 
         const unprocessed = db.getUnprocessedMeetings();
 
@@ -2123,56 +2126,164 @@ export class MeetingPersistence {
 
         console.log(`[MeetingPersistence] Found ${unprocessed.length} unprocessed meetings. recovering...`);
 
-        for (const m of unprocessed) {
-            if (this.processing.has(m.id)) {
-                console.log(`[MeetingPersistence] ${m.id}: notes are being written now; not recovering it.`);
-                continue;
-            }
+        for (const m of unprocessed) await this.recoverMeeting(db, m.id);
+    }
+
+    /**
+     * Writes the notes of a meeting never processed: Stop's placeholder, a live
+     * copy promoted, an old profile's unfinished meeting. Never one a pass is
+     * writing. It claims the meeting before its first await, so a second call
+     * (the recovery loop, a screen's read) finds it running.
+     */
+    private async recoverMeeting(db: DatabaseManager, meetingId: string): Promise<void> {
+        if (this.processing.has(meetingId) || this.regenerating.has(meetingId)) {
+            console.log(`[MeetingPersistence] ${meetingId}: notes are being written now; not recovering it.`);
+            return;
+        }
+        try {
+            // Written since the list was read (a Try again while earlier
+            // meetings were recovered): those notes stand.
+            if (db.getMeetingNotesState(meetingId)?.isProcessed) return;
+            const details = db.getMeetingDetails(meetingId);
+            if (!details) return;
+
+            console.log(`[MeetingPersistence] Recovering meeting ${meetingId}...`);
+
+            const context = details.transcript?.map(t => {
+                const label = t.speaker === 'interviewer' ? 'INTERVIEWER' :
+                    t.speaker === 'user' ? 'ME' : 'ASSISTANT';
+                return `[${label}]: ${t.text}`;
+            }).join('\n') || "";
+
+            const saved = db.getMeetingRecoveryMeta(meetingId) as Partial<MeetingRecoveryMeta> | null;
+            const parts = (details.duration || '0:00').split(':');
+            // EC-07 fix: guard against malformed duration strings (e.g. corrupted DB row)
+            const mins = parseInt(parts[0]) || 0;
+            const secs = parseInt(parts[1]) || 0;
+            const durationMs = typeof saved?.durationMs === 'number' && saved.durationMs >= 0 ? saved.durationMs : ((mins * 60) + secs) * 1000;
+            // The true start when it was saved; created_at is when Stop ran.
+            const startTime = typeof saved?.startTime === 'number' && saved.startTime > 0 ? saved.startTime : new Date(details.date).getTime();
+
+            const transcript = details.transcript as TranscriptSegment[];
+            const snapshot = {
+                transcript,
+                usage: details.usage,
+                startTime: startTime,
+                durationMs: durationMs,
+                context: context,
+                memoryEligibleCount: countMemoryEligible(transcript),
+            };
+
+            const { metadata, mode } = recoveryMetadataFor(details, saved);
+            const writer = this.claimWriter(meetingId);
+            this.processing.add(meetingId);
             try {
-                const details = db.getMeetingDetails(m.id);
-                if (!details) continue;
+                await this.processAndSaveMeeting(snapshot, meetingId, metadata, mode, writer);
+            } finally {
+                if (this.isWriter(meetingId, writer)) this.processing.delete(meetingId);
+            }
+            console.log(`[MeetingPersistence] Recovered meeting ${meetingId}${saved ? ' (with its saved calendar, call and mode details)' : ''}`);
 
-                console.log(`[MeetingPersistence] Recovering meeting ${m.id}...`);
+        } catch (e) {
+            console.error(`[MeetingPersistence] Failed to recover meeting ${meetingId}`, e);
+            this.failUnsettledRecovery(db, meetingId);
+        }
+    }
 
-                const context = details.transcript?.map(t => {
-                    const label = t.speaker === 'interviewer' ? 'INTERVIEWER' :
-                        t.speaker === 'user' ? 'ME' : 'ASSISTANT';
-                    return `[${label}]: ${t.text}`;
-                }).join('\n') || "";
+    // ── Notes no pass is writing (#778) ─────────────────────────────────
+    //
+    // summary_status says a meeting's notes are being written. Only a notes
+    // pass may leave it there, and every pass in this app ends with completed
+    // or failed: each LLM call it makes is time-boxed (generateMeetingSummary).
+    // A row still "being written" with no pass running is abandoned: a pass cut
+    // off by a quit or crash, or a row copied in from an old profile. The
+    // meeting page polls it and the notepad waits on it until something moves
+    // it on, so it is settled where those screens read it (get-meeting-details)
+    // and at every recovery.
 
-                const saved = db.getMeetingRecoveryMeta(m.id) as Partial<MeetingRecoveryMeta> | null;
-                const parts = (details.duration || '0:00').split(':');
-                // EC-07 fix: guard against malformed duration strings (e.g. corrupted DB row)
-                const mins = parseInt(parts[0]) || 0;
-                const secs = parseInt(parts[1]) || 0;
-                const durationMs = typeof saved?.durationMs === 'number' && saved.durationMs >= 0 ? saved.durationMs : ((mins * 60) + secs) * 1000;
-                // The true start when it was saved; created_at is when Stop ran.
-                const startTime = typeof saved?.startTime === 'number' && saved.startTime > 0 ? saved.startTime : new Date(details.date).getTime();
+    /** A notes pass for this meeting is running in this app: Stop's or recovery's, a Regenerate, or a resume of it (its Stop writes the notes). */
+    private notesPassRunning(meetingId: string): boolean {
+        return this.processing.has(meetingId) || this.regenerating.has(meetingId) || this.resumeBase?.meetingId === meetingId;
+    }
 
-                const transcript = details.transcript as TranscriptSegment[];
-                const snapshot = {
-                    transcript,
-                    usage: details.usage,
-                    startTime: startTime,
-                    durationMs: durationMs,
-                    context: context,
-                    memoryEligibleCount: countMemoryEligible(transcript),
-                };
+    /**
+     * Settle `meetingId` if its notes are "being written" with no pass writing
+     * them. A saved meeting's notes stand (completed); with none it reads
+     * failed, so the page offers Try again. A meeting never written is left to
+     * recovery, which writes it now rather than at the next launch. True when
+     * the row changed.
+     */
+    public settleAbandonedNotes(meetingId: string): boolean {
+        if (this.notesPassRunning(meetingId)) return false;
+        const db = DatabaseManager.getInstance();
+        const state = db.getMeetingNotesState(meetingId);
+        if (!state || !isNotesPendingStatus(state.summaryStatus)) return false;
+        if (!state.isProcessed) {
+            // This meeting only: a whole recovery pass would also rewrite every
+            // other unprocessed meeting (old failed ones too) on a page read.
+            void this.recoverMeeting(db, meetingId);
+            return false;
+        }
+        if (!this.settleSavedNotes(db, meetingId)) return false;
+        this.notifyMeetingsUpdated();
+        return true;
+    }
 
-                const { metadata, mode } = recoveryMetadataFor(details, saved);
-                const writer = this.claimWriter(m.id);
-                this.processing.add(m.id);
-                try {
-                    await this.processAndSaveMeeting(snapshot, m.id, metadata, mode, writer);
-                } finally {
-                    if (this.isWriter(m.id, writer)) this.processing.delete(m.id);
-                }
-                console.log(`[MeetingPersistence] Recovered meeting ${m.id}${saved ? ' (with its saved calendar, call and mode details)' : ''}`);
-
+    /** Every saved meeting left "being written": a Regenerate cut off by a quit or crash. Recovery reads only meetings never processed, so nothing else would reach these. */
+    private settleAbandonedSavedNotes(db: DatabaseManager): void {
+        let ids: string[] = [];
+        try {
+            ids = db.getProcessedMeetingsWithPendingNotes();
+        } catch (e) {
+            console.warn('[MeetingPersistence] reading notes left in progress failed:', (e as Error)?.message);
+            return;
+        }
+        let settled = 0;
+        for (const id of ids) {
+            if (this.notesPassRunning(id)) continue;
+            try {
+                if (this.settleSavedNotes(db, id)) settled += 1;
             } catch (e) {
-                console.error(`[MeetingPersistence] Failed to recover meeting ${m.id}`, e);
+                console.warn(`[MeetingPersistence] ${id}: notes left in progress were not settled:`, (e as Error)?.message);
             }
         }
+        if (settled > 0) this.notifyMeetingsUpdated();
+    }
+
+    /** A saved meeting's abandoned status: completed over the notes it has, failed with none. */
+    private settleSavedNotes(db: DatabaseManager, meetingId: string): boolean {
+        const details = db.getMeetingDetails(meetingId);
+        if (!details || !isNotesPendingStatus(details.summaryStatus)) return false;
+        const status = isArchivableEarlierNotes(details.detailedSummary) ? 'completed' : 'failed';
+        if (!db.updateSummaryStatus(meetingId, status)) return false;
+        console.log(`[MeetingPersistence] ${meetingId}: notes were left "${details.summaryStatus}" by a pass that is gone; now ${status}.`);
+        return true;
+    }
+
+    /**
+     * Recovery threw before its pass settled the meeting, which then read
+     * "being written" for the rest of the session. It reads failed, as a failed
+     * Stop pass leaves it: the placeholder title replaced, is_processed kept at
+     * 0 so the next launch tries again.
+     */
+    private failUnsettledRecovery(db: DatabaseManager, meetingId: string): void {
+        if (this.notesPassRunning(meetingId)) return;
+        try {
+            const state = db.getMeetingNotesState(meetingId);
+            if (!state || state.isProcessed || !isNotesPendingStatus(state.summaryStatus)) return;
+            const title = db.getMeetingDetails(meetingId)?.title;
+            const keep = typeof title === 'string' && title.trim() && title !== PLACEHOLDER_TITLE;
+            if (db.markSummaryGenerationFailed(meetingId, keep ? title : UNTITLED_TITLE)) this.notifyMeetingsUpdated();
+        } catch (e) {
+            console.warn(`[MeetingPersistence] ${meetingId}: the failed recovery was not recorded:`, (e as Error)?.message);
+        }
+    }
+
+    private notifyMeetingsUpdated(): void {
+        try {
+            const wins = require('electron').BrowserWindow.getAllWindows();
+            wins.forEach((w: any) => w.webContents.send('meetings-updated'));
+        } catch { /* non-fatal */ }
     }
 
     /**
@@ -2276,6 +2387,13 @@ export class MeetingPersistence {
         const db = DatabaseManager.getInstance();
         const details = db.getMeetingDetails(meetingId);
         if (!details || !Array.isArray(details.transcript) || details.transcript.length < 3) return false;
+        // One pass per meeting (#778): a second would race the first for the
+        // notes and the status, and the first to finish would leave the other's
+        // status looking abandoned.
+        if (this.processing.has(meetingId) || this.regenerating.has(meetingId)) {
+            console.warn(`[MeetingPersistence] ${meetingId}: notes are being written now; Regenerate not started.`);
+            return false;
+        }
 
         // Scope gate.
         let postCallSummaryAllowed = true;
@@ -2483,7 +2601,9 @@ export class MeetingPersistence {
             // in its own tab (bounded; DatabaseManager.archiveNotesVersion).
             if (resumedSince()) { settleTakenOver(); return false; }
             if (isArchivableNotes(details.detailedSummary)) db.archiveNotesVersion(meetingId, details.detailedSummary);
-            const ok = db.replaceDetailedSummary(meetingId, detailedSummary, { title: v3.title, summaryStatus: 'completed' });
+            // processed: a Try again on notes that failed at Stop left the meeting
+            // unprocessed, and recovery wrote it over at the next launch.
+            const ok = db.replaceDetailedSummary(meetingId, detailedSummary, { title: v3.title, summaryStatus: 'completed', processed: true });
             if (ok) { this.notifyNotesSaved(meetingId); this.connectorsNotesReady(meetingId); }
             try {
                 const wins = require('electron').BrowserWindow.getAllWindows();
