@@ -936,10 +936,13 @@ export const IntelligenceSettings: React.FC<{ autoAnswer?: React.ReactNode; auto
                       </li>
                       <li>
                         <span className="font-semibold text-text-primary">{t('2. Start it.')}</span>{' '}
-                        {t('From the Natively project folder, run the bundled launcher and keep it running while you use the app:')}
+                        {t('This launcher lives in the')} <button type="button" onClick={() => openExternal('https://github.com/Natively-AI-assistant/natively-cluely-ai-assistant')} className="text-accent-primary hover:underline">{t('Natively source repository')}</button>{t(', not the installed app — clone it, then from the repo root run and keep it running while you use the app (requires Node.js, and on Windows a bash shell such as WSL or Git Bash):')}
                         <CopyBlock text="bash scripts/hindsight-start.sh" />
                         <span className="mt-1.5 block">
                           {t('Starts the embedded memory server on port 8888.')}
+                        </span>
+                        <span className="mt-1 block">
+                          {t('On Windows, run both commands in the same WSL shell (for example Ubuntu) and keep autoStart off below; the app connects to the server at http://localhost:8888 once it is running.')}
                         </span>
                         <span className="mt-1 block">
                           <span className="font-medium text-text-primary">{t('If you start it from inside Natively')}</span> {t('(autoStart toggle ON below), your AI provider key from the AI Providers screen is forwarded to the server automatically — nothing else to do.')}
