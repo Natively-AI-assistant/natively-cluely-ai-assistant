@@ -25,7 +25,7 @@ export {
     prepareTranscriptForWhatToAnswer
 } from "./transcriptCleaner";
 export type { TranscriptTurn } from "./transcriptCleaner";
-export { extractLatestQuestion, toCandidateFraming } from "./transcriptQuestionExtractor";
+export { extractLatestQuestion, toCandidateFraming, isEchoOfOtherPartyQuestion, otherPartyLinesBefore } from "./transcriptQuestionExtractor";
 export type { ExtractedQuestion, ExtractedQuestionType, DetectedSpeaker } from "./transcriptQuestionExtractor";
 export {
     buildTemporalContext,

@@ -182,8 +182,8 @@ describe('materialHasAttachedDocuments: the live transcript is not a document', 
   test('transcript, conversation state and screen alone are not documents', () => {
     for (const t of ['MEETING_TRANSCRIPT', 'CONVERSATION_STATE', 'SCREEN_CONTEXT']) {
       assert.equal(materialHasAttachedDocuments(ev(t)), false, t);
-      // The older check, still used for the Sales/Call Center wording, counts them.
-      assert.equal(materialHasNoDocuments(ev(t)), false, t);
+      // One rule since #777: the no-documents check (Sales/Call Center wording, interview modes) agrees.
+      assert.equal(materialHasNoDocuments(ev(t)), true, t);
     }
   });
   test('any attached source type is a document', () => {

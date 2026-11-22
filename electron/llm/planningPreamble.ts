@@ -95,6 +95,14 @@ const PLANNING_SENTENCE_RES: RegExp[] = [
   // Choosing an answer as an option: "X is the strongest, most specific one" /
   // "that directly ties to the grounded project".
   /\bthe grounded (?:project|fact|answer|example)\b/i,
+  // Narration that names both sides of the exchange, or tells itself how to
+  // answer (issue #777, 2026-11-22, live Technical Interview meeting): "how the
+  // user handles on-call,  that's a question back at the interviewer, so answer
+  // it as a genuine question about their setup:" then the real answer. Spoken
+  // content never refers to "the user" and "the interviewer" in one sentence.
+  /\bthe user\b[^\n]*\bthe interviewer\b|\bthe interviewer\b[^\n]*\bthe user\b/i,
+  /\ba question back (?:at|to) the (?:interviewer|user|candidate|other (?:person|side))\b/i,
+  /\b(?:so|then),?\s+(?:answer|respond to|reply to) (?:it|this|that)(?: question)? as (?:a|an|the|if)\b/i,
 ];
 
 /**
@@ -240,6 +248,14 @@ function couldStillBePreamble(text: string): boolean {
   return PREAMBLE_HEADS.some((h) => h.startsWith(t) || t.startsWith(h));
 }
 
+/** An answer that opens on a lowercase word is the tail of the model's own
+ *  thinking, not a spoken first sentence ("how the user handles on-call, …",
+ *  issue #777): hold it until its first sentence ends, so the frames above can
+ *  judge it whole. Answers almost never open this way, so nothing normal waits. */
+function opensMidThought(text: string): boolean {
+  return /^[\s"'>]*[a-z]/.test(text);
+}
+
 /** Longest opening held while it still reads like a preamble. Past it the
  *  text is released as-is (a leak is better than a stalled answer). */
 export const PREAMBLE_GATE_MAX_HOLD_CHARS = 240;
@@ -279,7 +295,7 @@ export class PreambleStreamGate {
       return this.release(scan.units ? answerAfter(this.held, scan.end) : this.held, scan.units);
     }
     const remainder = this.held.slice(scan.end);
-    if (remainder.trim() && (!couldStillBePreamble(remainder) || this.held.length >= this.maxHoldChars)) {
+    if (remainder.trim() && ((!couldStillBePreamble(remainder) && !opensMidThought(remainder)) || this.held.length >= this.maxHoldChars)) {
       return this.release(scan.units ? answerAfter(this.held, scan.end) : this.held, scan.units);
     }
     return '';

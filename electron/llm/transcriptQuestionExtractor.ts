@@ -661,3 +661,127 @@ export function extractLatestQuestion(
         ignoredTranscriptNoise,
     };
 }
+
+// Spoken fillers that sit between the words of a repeated question ("Like, how
+// long is your sprint?"). Dropped from both sides before the comparison.
+const ECHO_FILLER = new Set(['like', 'um', 'umm', 'uh', 'uhh', 'erm', 'hmm', 'so', 'okay', 'ok', 'well', 'yeah', 'and']);
+// Words a question is built from. A shared run made only of these ("do you have
+// any", "how long is") says nothing about WHAT is asked, so it never makes an echo.
+const ECHO_FRAME = new Set([
+    'what', 'which', 'how', 'who', 'whom', 'when', 'where', 'why', 'long', 'many', 'much', 'often',
+    'be', 'do', 'does', 'did', 'have', 'has', 'had', 'can', 'could', 'would', 'should', 'will', 'not',
+    'a', 'an', 'the', 'any', 'some', 'of', 'to', 'in', 'on', 'for', 'at', 'with', 'about', 'from', 'or', 'but',
+    'poss', 'you', 'i', 'we', 'they', 'he', 'she', 'it', 'me', 'us', 'them', 'this', 'that', 'there', 'these', 'those',
+]);
+const ECHO_QUESTION_START = /^(?:what|which|how|who|whom|when|where|why|do|does|did|is|are|was|were|can|could|would|should|will|have|has)\b/;
+
+/**
+ * Words of one spoken line, normalised so a question said back in the
+ * speaker's own way still matches: "what's" = "what is", is/are/was/were are one
+ * word, "your"/"our"/"my"/"their" are one word ("how long is OUR sprint" said
+ * back to "how long is YOUR sprint"), and a plural matches its singular.
+ */
+function echoWords(text: string): string[] {
+    return String(text ?? '')
+        .toLowerCase()
+        .replace(/[’‘]/g, "'")
+        .replace(/\b(what|how|who|where|when|that|it|there|here)'s\b/g, '$1 is')
+        .replace(/n't\b/g, ' not')
+        .replace(/'re\b/g, ' are')
+        .replace(/'ve\b/g, ' have')
+        .replace(/'ll\b/g, ' will')
+        .replace(/'d\b/g, ' would')
+        .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
+        .split(/\s+/)
+        .filter((w) => w && !ECHO_FILLER.has(w))
+        .map((w) => {
+            if (w === 'is' || w === 'are' || w === 'was' || w === 'were' || w === 'am') return 'be';
+            if (w === 'your' || w === 'our' || w === 'my' || w === 'their') return 'poss';
+            return w.length > 4 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w;
+        })
+        .slice(0, 80);
+}
+
+/** Sentences of a line, each with whether it was said as a question. */
+function echoSentences(text: string): Array<{ words: string[]; asked: boolean }> {
+    return (String(text ?? '').match(/[^?.!;\n…]+[?.!;\n…]*/g) ?? [])
+        .map((raw) => {
+            const words = echoWords(raw);
+            return { words, asked: /\?/.test(raw) || ECHO_QUESTION_START.test(words.join(' ')) };
+        })
+        .filter((s) => s.words.length > 0);
+}
+
+/** The longest run of consecutive words two lines share, and its position in `a`. */
+function longestSharedRun(a: string[], b: string[]): { length: number; end: number } {
+    let best = { length: 0, end: 0 };
+    let prev = new Array<number>(b.length + 1).fill(0);
+    for (let i = 1; i <= a.length; i++) {
+        const row = new Array<number>(b.length + 1).fill(0);
+        for (let j = 1; j <= b.length; j++) {
+            if (a[i - 1] === b[j - 1]) {
+                row[j] = prev[j - 1] + 1;
+                if (row[j] > best.length) best = { length: row[j], end: i };
+            }
+        }
+        prev = row;
+    }
+    return best;
+}
+
+/** Whether one sentence of the user's repeats one sentence of the other party's. */
+function sentenceRepeats(user: string[], other: string[]): boolean {
+    if (user.length < 3 || other.length < 3) return false;
+    const run = longestSharedRun(user, other);
+    if (run.length < 3) return false;
+    if (user.slice(run.end - run.length, run.end).every((w) => ECHO_FRAME.has(w))) return false;
+    return run.length >= 5 || run.length / other.length >= 2 / 3;
+}
+
+/**
+ * Whether the user's line REPEATS the other party's question rather than
+ * asking one of its own (issue #777, 2026-11-21). A candidate often says the
+ * question back while thinking: asked "how long is your sprint typically?",
+ * they said "Like, how long is your sprint? We... Our our our sprint". On a
+ * manual press that line passed as the user's own newer question, the prompt
+ * then said the user asked it, and "your sprint" came back as the
+ * interviewer's: "I'd want to understand how your team runs them".
+ *
+ * Each question the user asks in the line must repeat a sentence the other
+ * party said (`otherPartyText` may hold several of their turns): a shared run
+ * of words that holds a real word, not only question frame ("do you have
+ * any"), and covers two thirds of that sentence or five words. A line with an
+ * echo AND a question of the user's own is not an echo, and neither is a
+ * question that only opens the same way ("what is the biggest risk in the
+ * plan?" after "what is the biggest challenge you faced?").
+ */
+export function isEchoOfOtherPartyQuestion(userText: string, otherPartyText: string): boolean {
+    const other = echoSentences(otherPartyText);
+    const userSentences = echoSentences(userText);
+    if (!other.length || !userSentences.length) return false;
+    const asked = userSentences.filter((s) => s.asked);
+    const checked = asked.length ? asked : [{ words: userSentences.flatMap((s) => s.words), asked: false }];
+    return checked.every((u) => other.some((o) => sentenceRepeats(u.words, o.words)));
+}
+
+/**
+ * What the other party said since the user last spoke, before turn `userIndex`
+ * (up to four of their turns), plus the question already picked. The question
+ * the user may be repeating is not always the other party's LAST turn: "how
+ * long is your sprint typically?" can be followed by "take your time".
+ */
+export function otherPartyLinesBefore(
+    turns: ReadonlyArray<{ role: string; text?: unknown }>,
+    userIndex: number,
+    pickedQuestion?: string | null,
+): string {
+    const said: string[] = [];
+    for (let i = userIndex - 1; i >= 0 && said.length < 4; i--) {
+        const t = turns[i];
+        if (t.role === 'user') { if (said.length) break; continue; }
+        const text = String(t.text ?? '').trim();
+        if (t.role === 'interviewer' && text) said.push(text);
+    }
+    if (String(pickedQuestion ?? '').trim()) said.push(String(pickedQuestion).trim());
+    return said.join('\n');
+}
