@@ -97,7 +97,7 @@ export const CODE_SELF_CHECK = 'Before answering, run the code by hand on each e
 
 /** The contract for each shape except `full`, which is CODING_CONTRACT itself. */
 export const CODING_SHAPE_CONTRACTS: Readonly<Record<Exclude<CodingShape, 'full'>, string>> = {
-  code: `The user asked for code. Lead with it: ${FENCE_RULE}. After the block, at most two short sentences on how it works, then one line with the time and space complexity in Big-O notation. No headings, no dry run, no follow-up points, no second version. ${CODE_SELF_CHECK}`,
+  code: `The user asked for code. Lead with it: ${FENCE_RULE}. After the block, explain how it works clearly and thoroughly — the approach, the key edge cases it handles — followed by the time and space complexity in Big-O notation. No headings, no dry run, no second version. ${CODE_SELF_CHECK}`,
   solve: `The user asked for a solution to a problem. Use exactly these three headings, in this order, each alone on its line: "## Approach", "## Code", "## Complexity".
 Under Approach: two to four sentences with the key idea, naming the technique or data structure in the first sentence (hash map, two pointers, sliding window, DP, BFS...).
 Under Code: ${FENCE_RULE}.
