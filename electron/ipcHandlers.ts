@@ -128,7 +128,7 @@ function repairFirstUsefulMs(llmHelper: any, minMs: number = 7000, turnKey?: obj
     minMs,
   });
 }
-import { stripPriorAssistantTurns } from './llm/conversationHistoryPolicy';
+import { stripPriorAssistantTurns, SPEECH_WINDOW_SECONDS } from './llm/conversationHistoryPolicy';
 import { performanceHooks, applyAdaptiveTtft, secondaryStreamObserver } from './llm/performance/wiring';
 import { estimateTokens as _estimatePerfTokens } from './llm/modelCapabilities';
 import { DEEPSEEK_DEFAULT_MODEL, isDeepseekModelId } from './llm/deepseekModels';
@@ -9119,7 +9119,9 @@ export function initializeIpcHandlers(appState: AppState): void {
 
     let meetingTranscript = '';
     try {
-      meetingTranscript = appState.getIntelligenceManager()?.getFormattedContext?.(180) ?? '';
+      // Durable speech (PX-2002): the rolling context is evicted at 180s, so a
+      // question whose setup was said earlier arrived with no transcript at all.
+      meetingTranscript = appState.getIntelligenceManager()?.getFormattedSpeech?.(SPEECH_WINDOW_SECONDS) ?? '';
     } catch (error) {
       console.warn('[direct-assist] live session transcript unavailable, proceeding without it:', (error as Error)?.message);
     }
@@ -23138,7 +23140,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
         im.addTranscript({ speaker: 'interviewer', text: params.question, timestamp: Date.now(), final: true, confidence: 0.95, origin: 'test' } as any, true);
       }
-      const builtContext = params.context ?? im.getFormattedContext(180);
+      const builtContext = params.context ?? im.getFormattedSpeech(SPEECH_WINDOW_SECONDS);
       return await new Promise((resolve) => {
         let settled = false;
         let tokens = '';

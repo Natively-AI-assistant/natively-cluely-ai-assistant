@@ -15426,7 +15426,7 @@ let isMultimodal = !!(imagePaths?.length);
     // has a "CURRENT REQUEST" section, so it fires on every request.
     //
     // directScopes.includes('transcript') is NOT the right gate either:
-    // meetingTranscript (the live session's last 180s, added unconditionally
+    // meetingTranscript (the live session's recent durable speech, added unconditionally
     // to every Direct Assist request) is correctly tagged
     // <evidence source_type="MEETING_TRANSCRIPT">, so directScopes includes
     // 'transcript' on almost every request during a live meeting. Gating the

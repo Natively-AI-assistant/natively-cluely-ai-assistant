@@ -14,6 +14,7 @@ import type { TurnIdentity } from './llm/turnIdentity';
 import { IntelligenceEngine } from './IntelligenceEngine';
 import { MeetingPersistence } from './MeetingPersistence';
 import { ScreenContext } from './services/screen/ScreenContextService';
+import { SPEECH_WINDOW_SECONDS } from './llm/conversationHistoryPolicy';
 
 // Re-export types for backward compatibility
 export type { TranscriptSegment, SuggestionTrigger, ContextItem } from './SessionTracker';
@@ -323,7 +324,9 @@ export class IntelligenceManager extends EventEmitter {
         question: Parameters<IntelligenceEngine['runAutoAnswer']>[0],
         options: { reuseSpeculative: boolean },
     ): Promise<void> {
-        return this.engine.runAutoAnswer(question, { ...options, context: this.getFormattedContext(120) });
+        // Durable speech (PX-2002): the rolling window is evicted at 180s, so
+        // auto-answers lost everything the question was set up with.
+        return this.engine.runAutoAnswer(question, { ...options, context: this.getFormattedSpeech(SPEECH_WINDOW_SECONDS) });
     }
     /**
      * The ONE canonical live read surface (V2 §11/§27). Lazily built over the
