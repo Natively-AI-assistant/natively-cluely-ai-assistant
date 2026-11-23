@@ -41,3 +41,14 @@ established"). Hand-check a sample — the regexes miss in both directions.
 
 `results/` is gitignored (raw files carry whole prompts); the reference numbers
 live in `BASELINE.md`.
+
+## No-app check
+
+`dual-channel-replay.check.mjs` needs no running app, no audio devices and no
+model: it replays a >180 s mock interview (both channels) through the built
+`SessionTracker` and prints exactly what the prompt-context readers return —
+rolling window vs. durable speech — asserting the >180 s turns survive.
+
+```sh
+npm run test:meeting-memory:replay
+```
