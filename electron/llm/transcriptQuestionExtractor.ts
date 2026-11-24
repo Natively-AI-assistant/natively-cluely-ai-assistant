@@ -84,12 +84,15 @@ const GENERIC_CLOSER_MAX_TURNS_BACK = 6;
 // recency picked the tail alone, losing the ask. An interviewer turn with no
 // terminal . ? ! whose last word cannot end a sentence (an article, a
 // possessive, "of", a conjunction, a modal, or a question opener such as
-// "can you") is joined to the interviewer turn that follows within 8s.
-const MID_SENTENCE_TAIL = /(?:^|\s)(?:(?:a|an|the|my|your|our|their|of|and|or|but|because|whether|than|would|could|should|might|must)|(?:can|could|would|will|should|do|does|did|are|is|were|have|has)\s+(?:you|we|i|they|he|she))$/i;
+// "can you") is joined to the interviewer turn that follows within 8s. A
+// trailing "..." is a pause, not an end. "are you" / "is he" are left out:
+// they end real questions ("how are you"), and a greeting joined to the ask
+// after it lowered that ask's confidence on providers without punctuation.
+const MID_SENTENCE_TAIL = /(?:^|\s)(?:(?:a|an|the|my|your|our|their|of|and|or|but|because|whether|than|would|could|should|might|must)|(?:can|could|would|will|should|do|does|did|have|has)\s+(?:you|we|i|they|he|she))$/i;
 const MID_SENTENCE_MAX_GAP_MS = 8_000;
 const MID_SENTENCE_MAX_TURNS_BACK = 4;
 function endsMidSentence(raw: string): boolean {
-    const t = raw.trim().replace(/[\s,;:\-–—]+$/, '');
+    const t = raw.trim().replace(/(?:\.{2,}|…|[\s,;:\-–—])+$/, '');
     if (!t || /[.?!]["'”’)]*$/.test(t)) return false;
     return MID_SENTENCE_TAIL.test(t);
 }
@@ -552,7 +555,9 @@ export function extractLatestQuestion(
     // marker on a short turn (length-capped since a bare "that"/"this" is
     // common in ordinary fresh questions too) — AND there's a prior turn to
     // refer back to.
-    const priorTurns = cleaned.slice(0, chosenIdx);
+    // Before the question's first turn: a sentence rejoined above (#773) is
+    // not a prior turn it can refer back to.
+    const priorTurns = cleaned.slice(0, firstIdx);
     const hasPrior = priorTurns.length > 0;
     // ANSWERABILITY FLOOR. Selection is recency-first and has no question-shape
     // requirement (deliberately — see the comment above the walk-back loop), so

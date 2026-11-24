@@ -51,6 +51,23 @@ describe('a sentence split across two finals is joined back', () => {
     });
   }
 
+  test('a first half that trails off with "..." is joined', () => {
+    const r = extractLatestQuestion(at([
+      ['interviewer', 'What would the pseudocode be? Can you...', 0],
+      ['interviewer', 'think of?', 1_500],
+    ]));
+    assert.equal(r.latestQuestion, 'What would the pseudocode be? Can you... think of?');
+  });
+
+  test('the first half of the sentence is not a prior turn the question refers back to', () => {
+    const r = extractLatestQuestion(at([
+      ['interviewer', 'Going back to the cache you mentioned, how did you size the', 0],
+      ['interviewer', 'eviction window?', 1_200],
+    ]));
+    assert.equal(r.latestQuestion, 'Going back to the cache you mentioned, how did you size the eviction window?');
+    assert.equal(r.isFollowUp, false);
+  });
+
   test('a sentence split over three finals is joined in full', () => {
     const r = extractLatestQuestion(at([
       ['interviewer', 'Can you write the', 0],
@@ -123,6 +140,14 @@ describe('nothing else is joined', () => {
       ['interviewer', 'How would you size the worker pool?', 1_500],
     ]));
     assert.equal(r.latestQuestion, 'How would you size the worker pool?');
+  });
+
+  test('"how are you" without punctuation is a whole question, not half of the next one', () => {
+    const turns = [['interviewer', 'hey how are you', 0], ['interviewer', 'so tell me about your last project', 3_000]]
+      .map(([role, text, t]) => ({ role, text, timestamp: t, punctuationSource: 'unavailable' }));
+    const r = extractLatestQuestion(turns);
+    assert.equal(r.latestQuestion, 'so tell me about your last project');
+    assert.ok(r.confidence >= 0.75, `confidence ${r.confidence}`);
   });
 
   test('a trailing word followed by a comma or dash still counts as cut off', () => {
