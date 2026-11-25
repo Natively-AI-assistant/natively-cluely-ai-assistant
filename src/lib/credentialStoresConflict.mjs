@@ -64,6 +64,7 @@ export const CREDENTIAL_KEY_LABELS = {
   agentrouterApiKey: 'AgentRouter',
   litellmApiKey: 'LiteLLM',
   ninerouterApiKey: '9Router',
+  opencodeApiKey: 'OpenCode',
   nativelyApiKey: 'Natively',
   nativelyPackApiKey: 'Natively pack',
   customEmbeddingApiKey: PHRASE.customEmbeddings,

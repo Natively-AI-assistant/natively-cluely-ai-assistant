@@ -26,6 +26,7 @@ const AI_KEY_FIELDS = [
   'fluxionApiKey',
   'agentrouterApiKey',
   'ninerouterApiKey',
+  'opencodeApiKey',
   'litellmBaseURL',
 ];
 

@@ -14,6 +14,7 @@ import { deriveFallbackKey, encryptCredentialBlob, decryptCredentialBlob } from 
 // used to live here is exactly how the two answers drifted apart.
 import { customProviderSupportsVision, customProviderIsLocal } from '../llm/visionCapability';
 import { readActiveCustomProvider } from '../llm/activeCustomProvider';
+import type { OpencodeGoAccess, OpencodeModelMeta } from '../llm/opencode/types';
 import { normalizeSttLanguageKey } from '../config/languages';
 import { resolveSttModel, type SttModelProvider } from '../audio/sttModelCatalog';
 
@@ -97,7 +98,7 @@ export interface CurlProvider {
  * and setter build the key by concatenation, so adding a name here without the
  * field would silently read and write `undefined`.
  */
-export type PreferredModelProvider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter' | 'litellm' | 'ninerouter';
+export type PreferredModelProvider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter' | 'litellm' | 'ninerouter' | 'opencode';
 
 export interface StoredCredentials {
     geminiApiKey?: string;
@@ -207,6 +208,50 @@ export interface StoredCredentials {
      * MODEL (llm/agentRouter.ts agentRouterProtocolFor), not per key.
      */
     agentrouterApiKey?: string;
+    /**
+     * OpenCode Console inference key. ONE key fronts FOUR wire protocols
+     * (Chat Completions, Responses, Anthropic Messages, Gemini generateContent)
+     * and each model is served by exactly one of them, so the key alone is not
+     * enough to dispatch: the per-model metadata below decides which adapter
+     * runs.
+     */
+    opencodeApiKey?: string;
+    /**
+     * Per-model routing metadata, as `/inference/v1/models` reported it.
+     *
+     * Keyed by OpenCode's OWN wire id (`claude-sonnet-5-5`), never the routed
+     * form (`opencode/claude-sonnet-5-5`): the adapters strip exactly one
+     * prefix and look up the result, and storing both forms is how the two
+     * would drift.
+     *
+     * Absent or empty means "no catalogue yet" — never "no models". The
+     * presets in llm/opencode/catalog.ts keep the provider usable until the
+     * first fetch lands.
+     */
+    opencodeModelMeta?: Record<string, OpencodeModelMeta>;
+    /**
+     * The subset of `opencodeModelMeta` whose catalogue entry carries an
+     * image/* input modality. Persisted because VisionProviderRegistry has to
+     * answer "can this model read an image?" synchronously, with no handle on
+     * LLMHelper's in-memory copy.
+     *
+     * ABSENT OR EMPTY MEANS UNKNOWN, never "none" — a cold cache must not read
+     * as "this provider has no vision models".
+     */
+    opencodeVisionModels?: string[];
+    /**
+     * Whether the saved OpenCode key has a Go subscription, as a real request
+     * showed it ('yes' | 'no'); absent = not learned yet. Neither catalogue can
+     * answer this, because the Go list is public. Cleared with a changed key.
+     */
+    opencodeGoAccess?: 'yes' | 'no';
+    /**
+     * The OpenCode model the user promoted to this provider's default, stored
+     * prefixed (`opencode/<model>`) for the reason the LiteLLM field gives: it
+     * must be the same id the picker, the allow-list and modelAvailable() all
+     * compare against.
+     */
+    opencodePreferredModel?: string;
     jinaApiKey?: string;
     /** Voyage AI key, used for EMBEDDINGS (Voyage is embeddings-only here). */
     voyageApiKey?: string;
@@ -1522,6 +1567,82 @@ export class CredentialsManager {
         console.log(`[CredentialsManager] 9Router model cache updated (${models.length} model(s))`);
     }
 
+    // ── OpenCode ──────────────────────────────────────────────────────────
+
+    public getOpencodeApiKey(): string | undefined {
+        return this.credentials.opencodeApiKey;
+    }
+
+    /**
+     * Persist the OpenCode key.
+     *
+     * A CHANGED key clears the catalogue with it: metadata fetched with one
+     * workspace's key names models another workspace may not serve, so keeping
+     * it would offer ids that only 404. A same-key re-save keeps the catalogue
+     * (the common case is a user pasting the key again after a restart).
+     * Returns the real write result, per the convention on the STT key setters,
+     * so Settings can report a refused write instead of a false "Saved".
+     */
+    public setOpencodeApiKey(key: string): boolean {
+        if (this.refuseWriteWhileDegraded('set opencode api key')) return false;
+        const trimmed = (key || '').trim();
+        const previous = (this.credentials.opencodeApiKey || '').trim();
+        this.credentials.opencodeApiKey = trimmed || undefined;
+        if (!trimmed || trimmed !== previous) {
+            this.credentials.opencodeModelMeta = undefined;
+            this.credentials.opencodeVisionModels = undefined;
+            this.credentials.opencodeGoAccess = undefined;
+            // A default naming a model on the old workspace is worse than none.
+            this.credentials.opencodePreferredModel = undefined;
+        }
+        const persisted = this.saveCredentials();
+        console.log(
+            trimmed
+                ? `[CredentialsManager] OpenCode API key updated (persisted=${persisted})`
+                : `[CredentialsManager] OpenCode API key cleared (persisted=${persisted})`,
+        );
+        return persisted;
+    }
+
+    public getOpencodeModelMeta(): Record<string, OpencodeModelMeta> {
+        return this.credentials.opencodeModelMeta || {};
+    }
+
+    public setOpencodeModelMeta(meta: Record<string, OpencodeModelMeta>): boolean {
+        if (this.refuseWriteWhileDegraded('set opencode model meta')) return false;
+        this.credentials.opencodeModelMeta = meta;
+        return this.saveCredentials();
+    }
+
+    public getOpencodeGoAccess(): OpencodeGoAccess {
+        const v = this.credentials.opencodeGoAccess;
+        return v === 'yes' || v === 'no' ? v : 'unknown';
+    }
+
+    /**
+     * Store the usage endpoint's answer for `forKey`. Dropped when it is about
+     * another key: a read that outlived a key change must not hand the old
+     * key's Go status to the new one.
+     */
+    public setOpencodeGoAccess(access: OpencodeGoAccess, forKey: string): boolean {
+        if ((forKey || '').trim() !== (this.credentials.opencodeApiKey || '').trim()) return false;
+        if (this.refuseWriteWhileDegraded('set opencode go access')) return false;
+        const next = access === 'yes' || access === 'no' ? access : undefined;
+        if (this.credentials.opencodeGoAccess === next) return true;
+        this.credentials.opencodeGoAccess = next;
+        return this.saveCredentials();
+    }
+
+    public getOpencodeVisionModels(): string[] {
+        return this.credentials.opencodeVisionModels || [];
+    }
+
+    public setOpencodeVisionModels(ids: string[]): boolean {
+        if (this.refuseWriteWhileDegraded('set opencode vision models')) return false;
+        this.credentials.opencodeVisionModels = ids;
+        return this.saveCredentials();
+    }
+
     public getAllCredentials(): StoredCredentials {
         return { ...this.credentials };
     }
@@ -1540,6 +1661,10 @@ export class CredentialsManager {
         if (this.getClaudeApiKey()) return true;                 // Claude vision
         if (this.getGeminiApiKey()) return true;                 // Gemini vision
         if (this.getGroqApiKey()) return true;                   // Groq qwen3.8-27b vision
+        // OpenCode's catalogue says per model whether it reads images, and the
+        // screenshot chain gates on that. Presence here only says the provider
+        // is configured: a text-only model is refused at the seat.
+        if (this.getOpencodeApiKey()) return true;
         // Custom providers. TWO fixes over the previous `customProviders.some(
         // p => p.multimodal === true)`:
         //   • getAllCustomProviders() — the old read missed the store the

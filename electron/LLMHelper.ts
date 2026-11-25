@@ -31,6 +31,32 @@ import { parseOpenRouterVision } from "./llm/providerVisionData"
 import { trimUserContentToFit, userContentRoomChars } from "./llm/localContextTrim"
 import { getModelCapabilities, ollamaRequestContext, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, claudeAcceptsSamplingParams, claudeThinkingParam, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
+import {
+  OPENCODE_ANTHROPIC_BASE,
+  OPENCODE_GOOGLE_BASE,
+  OPENCODE_MAX_OUTPUT_TOKENS,
+  OPENCODE_MESSAGES_FALLBACK_TOKENS,
+  OPENCODE_OPENAI_BASE,
+} from './llm/opencode/constants'
+import {
+  opencodeFastReasoningEffort,
+  opencodeMetaForRoute,
+  opencodePresetMeta,
+  opencodeRoutes,
+  resolveOpencodeFamily,
+  type OpencodeRouteChoice,
+} from './llm/opencode/catalog'
+import { probeOpencodeGoAccess } from './llm/opencode/probe'
+import type { OpencodeApiFamily, OpencodeGoAccess, OpencodeModelMeta } from './llm/opencode/types'
+import {
+  OPENCODE_EMPTY_ANSWER,
+  opencodeError,
+  opencodeGoOnlyError,
+  opencodeGoRefused,
+  opencodePaygWantsGo,
+  opencodeRejectsOutputCap,
+  opencodeRejectsReasoning,
+} from './llm/opencode/errors'
 import { filterOllamaGenerationModels } from "./llm/ollamaGenerationModels"
 import {
   runStreamingVisionFallback,
@@ -265,10 +291,10 @@ const CODEX_FAST_MIN_BUDGET_MS = 3000
 // Background Model: resolveFastModelFamily() does not return it, so the picker
 // cannot offer it and callFastModel never sees it.
 type FastModelFamily = 'openai' | 'groq' | 'gemini' | 'deepseek' | 'claude' | 'codex' | 'natively'
-  | 'openrouter' | 'litellm' | 'nvidia_nim' | 'ninerouter' | 'fluxion' | 'agentrouter'
+  | 'openrouter' | 'litellm' | 'nvidia_nim' | 'ninerouter' | 'fluxion' | 'agentrouter' | 'opencode'
 // Background Model families on an endpoint the user supplies — the same set
 // activeModelIsUserEndpoint() names for an Active Model.
-const FAST_PICK_USER_ENDPOINT_FAMILIES: ReadonlySet<FastModelFamily> = new Set(['litellm', 'nvidia_nim', 'openrouter', 'fluxion', 'ninerouter', 'agentrouter'])
+const FAST_PICK_USER_ENDPOINT_FAMILIES: ReadonlySet<FastModelFamily> = new Set(['litellm', 'nvidia_nim', 'openrouter', 'fluxion', 'ninerouter', 'agentrouter', 'opencode'])
 /** Per-call overrides for streamWithAgentRouter (the fast-model seam's small cap and temperature 0). */
 type AgentRouterCallOptions = { maxTokens?: number; temperature?: number }
 const OPENAI_JUDGE_MODEL = "gpt-5.5"
@@ -722,6 +748,44 @@ export class LLMHelper {
   // separate client for the same reason: credentials, outbound scopes and
   // telemetry stay provider-specific.
   private _ninerouterClient: OpenAI | null = null
+  // OpenCode fronts FOUR wire protocols behind one key, so it needs one client
+  // per SDK surface: OpenAI (chat.completions AND responses) and Anthropic
+  // (messages). Gemini is a raw fetch — see streamOpencodeGenerateContent.
+  private _opencodeOpenAIClient: OpenAI | null = null
+  private _opencodeAnthropicClient: Anthropic | null = null
+  private opencodeApiKey: string | null = null
+  // Cold-start metadata: the presets, so a selected preset dispatches even
+  // before the first catalogue fetch lands. Replaced wholesale by setOpencodeConfig.
+  private opencodeModelMeta: Record<string, OpencodeModelMeta> = opencodePresetMeta()
+  /**
+   * Whether the saved key has OpenCode Go, as Go's usage endpoint answered it
+   * (probeOpencodeGoAccess) — never inferred from a chat error. Set by the
+   * catalogue fetch (ipcHandlers) and by a re-read when a route refusal says
+   * it may be stale; persisted through the listener; reset with the key. Read
+   * through opencodeGoAccessNow(): a bare-prototype harness never runs this.
+   */
+  private opencodeGoAccess: OpencodeGoAccess = 'unknown'
+  private opencodeGoAccessListener: ((access: OpencodeGoAccess, apiKey: string) => void) | null = null
+  /** Last usage-endpoint read, so a burst of refused turns asks once, not per turn. */
+  private opencodeGoProbe: { key: string; at: number; result: Promise<OpencodeGoAccess>; unknown?: boolean } | null = null
+  /**
+   * Stable per-process session id for OpenCode's Go tier.
+   *
+   * Go REQUIRES `x-opencode-session` on every request ("Request is missing
+   * x-opencode-session and cannot be routed efficiently", measured live
+   * 2026-11-19) and asks clients to identify themselves with their own user
+   * agent. One id per process is the documented contract — stable for routing
+   * and prompt caching, not per request.
+   *
+   * Lazy on purpose: a bare-prototype harness never runs field initializers,
+   * and an `undefined` header is exactly the 400 this exists to prevent.
+   */
+  private opencodeSession: string | null = null
+  // Per-baseUrl clients. A Go key serves the same model on a different base
+  // (`.../inference/go/...`); reusing the primary client would send a Go id to
+  // the pay-as-you-go endpoint and answer 402 "Insufficient balance".
+  private _opencodeOpenAIClients: Map<string, OpenAI> | undefined
+  private _opencodeAnthropicClients: Map<string, Anthropic> | undefined
 
   private get client(): GoogleGenAI | null { return this.isProviderDisabled('gemini') ? null : this._client }
   private set client(v: GoogleGenAI | null) { this._client = v }
@@ -760,6 +824,14 @@ export class LLMHelper {
   // returning null is what actually stops a switched-off 9Router being called.
   private get ninerouterClient(): OpenAI | null { return this.isProviderDisabled('ninerouter') ? null : this._ninerouterClient }
   private set ninerouterClient(v: OpenAI | null) { this._ninerouterClient = v }
+  // These two getters ARE the disabled-provider guard for OpenCode, for the
+  // reason the Fluxion pair above spells out: PROVIDER_LABEL_FAMILY's entry is
+  // only a backstop, and returning null here is what actually stops a
+  // switched-off OpenCode from being called.
+  private get opencodeOpenAIClient(): OpenAI | null { return this.isProviderDisabled('opencode') ? null : this._opencodeOpenAIClient }
+  private set opencodeOpenAIClient(v: OpenAI | null) { this._opencodeOpenAIClient = v }
+  private get opencodeAnthropicClient(): Anthropic | null { return this.isProviderDisabled('opencode') ? null : this._opencodeAnthropicClient }
+  private set opencodeAnthropicClient(v: Anthropic | null) { this._opencodeAnthropicClient = v }
 
   /**
    * The user's switched-off providers, read LIVE on every question.
@@ -997,7 +1069,7 @@ export class LLMHelper {
       const c: any = this.activeCurlProvider;
       return `curl:${c.id}:${c.curlCommand ? String(c.curlCommand).length : ''}`;
     }
-    if (this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId) || this.isAgentRouterModel(this.currentModelId)) {
+    if (this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId) || this.isAgentRouterModel(this.currentModelId) || this.isOpencodeModel(this.currentModelId)) {
       return `model:${this.currentModelId}`;
     }
     return null;
@@ -1424,6 +1496,7 @@ export class LLMHelper {
     // backstop for any path that reaches the provider without passing it.
     ninerouter: 'ninerouter',
     agentrouter: 'agentrouter',
+    opencode: 'opencode',
     antigravity: 'antigravity', custom_curl: 'custom', custom_provider: 'custom',
   };
 
@@ -2107,6 +2180,186 @@ export class LLMHelper {
     console.log(`[LLMHelper] 9Router client initialized with base URL: ${trimmedURL}, max_tokens: ${this.ninerouterMaxTokens ?? 'auto'}`);
   }
 
+  /** The stable per-process `x-opencode-session` (see the field's comment). */
+  private opencodeSessionHeader(): string {
+    if (!this.opencodeSession) this.opencodeSession = `natively-${randomUUID()}`;
+    return this.opencodeSession
+  }
+
+  /**
+   * `Natively/<version>`: the product user agent OpenCode's Go tier asks
+   * clients to send instead of the SDK's generic one. Read from the running
+   * app, so it cannot drift from the release; `dev` outside Electron (the
+   * smoke scripts run under plain Node).
+   */
+  private opencodeUserAgent(): string {
+    let version = '';
+    try { version = String(require('electron')?.app?.getVersion?.() || ''); } catch { /* not under Electron */ }
+    return `Natively/${version || 'dev'}`;
+  }
+
+  /**
+   * Point the app at OpenCode Console inference.
+   *
+   * Two clients, because one key serves four protocols: the OpenAI SDK speaks
+   * chat.completions and responses against `.../openai/v1`, and the Anthropic
+   * SDK speaks messages against `.../anthropic`. Gemini is a raw fetch, so it
+   * needs no client at all.
+   *
+   * `meta` replaces the whole routing map (see setOpencodeModelMeta).
+   */
+  public setOpencodeConfig(apiKey: string, meta?: Record<string, OpencodeModelMeta>, goAccess?: OpencodeGoAccess) {
+    const trimmed = (apiKey || '').trim();
+    // What the caller persisted for THIS key; a new key starts unknown.
+    this.opencodeGoAccess = trimmed && (goAccess === 'yes' || goAccess === 'no') ? goAccess : 'unknown';
+    // Fresh key → retry immediately; skip any auth cooldown opened for the old one.
+    this.textHealth.delete('opencode');
+    this.visionHealth.delete('opencode');
+    this.opencodeApiKey = trimmed || null;
+    // Headers Go requires, harmless everywhere else: the session id lets it
+    // route and cache, and the product user agent is what it asks clients to
+    // send instead of the SDK's generic one.
+    const opencodeHeaders = {
+      'x-opencode-session': this.opencodeSessionHeader(),
+      'User-Agent': this.opencodeUserAgent(),
+    };
+    this.opencodeOpenAIClient = trimmed
+      ? new OpenAI({ apiKey: trimmed, baseURL: OPENCODE_OPENAI_BASE, defaultHeaders: opencodeHeaders })
+      : null;
+    this.opencodeAnthropicClient = trimmed
+      ? new Anthropic({ apiKey: trimmed, baseURL: OPENCODE_ANTHROPIC_BASE, defaultHeaders: opencodeHeaders })
+      : null;
+    this._opencodeOpenAIClients = new Map();
+    this._opencodeAnthropicClients = new Map();
+    this.setOpencodeModelMeta(meta);
+    console.log(
+      trimmed
+        ? `[LLMHelper] OpenCode clients initialized (${Object.keys(this.opencodeModelMeta).length} model(s) in the routing map)`
+        : '[LLMHelper] OpenCode config cleared.',
+    );
+  }
+
+  /**
+   * The OpenAI-shaped client for a model's own base.
+   *
+   * The catalogue names the base per model, and for a Go key that base is
+   * `https://opencode.ai/inference/go/openai/v1` rather than the paid one.
+   * `withOptions` keeps the credential and the session headers and swaps only
+   * the URL; the result is cached because a meeting asks dozens of questions.
+   */
+  private opencodeOpenAIFor(baseUrl?: string): OpenAI | null {
+    const primary = this.opencodeOpenAIClient;
+    if (!primary) return null;
+    const base = (baseUrl || OPENCODE_OPENAI_BASE).replace(/\/+$/, '');
+    if (base === OPENCODE_OPENAI_BASE) return primary;
+    if (!this._opencodeOpenAIClients) this._opencodeOpenAIClients = new Map();
+    const cached = this._opencodeOpenAIClients.get(base);
+    if (cached) return cached;
+    const client = primary.withOptions({ baseURL: base });
+    this._opencodeOpenAIClients.set(base, client);
+    return client;
+  }
+
+  private opencodeAnthropicFor(baseUrl?: string): Anthropic | null {
+    const primary = this.opencodeAnthropicClient;
+    if (!primary) return null;
+    const base = (baseUrl || OPENCODE_ANTHROPIC_BASE).replace(/\/+$/, '');
+    if (base === OPENCODE_ANTHROPIC_BASE) return primary;
+    if (!this._opencodeAnthropicClients) this._opencodeAnthropicClients = new Map();
+    const cached = this._opencodeAnthropicClients.get(base);
+    if (cached) return cached;
+    const client = primary.withOptions({ baseURL: base });
+    this._opencodeAnthropicClients.set(base, client);
+    return client;
+  }
+
+  /**
+   * Replace the routing map — and only the map: no client is rebuilt and no
+   * health cooldown is cleared.
+   *
+   * The catalogue is the authority for which protocol serves a model, which
+   * base URL (pay-as-you-go or Go) it is sent to, whether it reads images and
+   * what its output ceiling is. Every path that re-reads the catalogue (key
+   * save, the card's Refresh, the cold-start fetch, the background refresh)
+   * calls this, so the next turn routes on what the catalogue says now — not on
+   * what it said at boot.
+   *
+   * An empty or absent map means "no catalogue yet" and falls back to the
+   * presets — never to a previous workspace's map, whose base URLs and model
+   * ids are exactly the stale data this provider cannot afford.
+   */
+  public setOpencodeModelMeta(meta?: Record<string, OpencodeModelMeta>): void {
+    this.opencodeModelMeta = meta && Object.keys(meta).length > 0 ? meta : opencodePresetMeta();
+  }
+
+  public getOpencodeModelMeta(): Record<string, OpencodeModelMeta> {
+    return this.opencodeModelMeta;
+  }
+
+  /** Persists a fresh usage-endpoint answer (CredentialsManager), tagged with the key it is about. */
+  public setOpencodeGoAccessListener(listener: ((access: OpencodeGoAccess, apiKey: string) => void) | null): void {
+    this.opencodeGoAccessListener = listener;
+  }
+
+  public getOpencodeGoAccess(): OpencodeGoAccess {
+    return this.opencodeGoAccessNow();
+  }
+
+  /**
+   * Adopt a usage-endpoint answer read with `apiKey`. Ignored when it is about
+   * another key (a fetch that outlived a key change) or when it is `unknown`
+   * (an unreadable endpoint is not news: keep what we knew).
+   */
+  public setOpencodeGoAccess(access: OpencodeGoAccess, apiKey: string): void {
+    if (access !== 'yes' && access !== 'no') return;
+    if (!apiKey || apiKey.trim() !== this.opencodeApiKey) return;
+    this.opencodeGoAccess = access;
+  }
+
+  private opencodeGoAccessNow(): OpencodeGoAccess {
+    const v = this.opencodeGoAccess;
+    return v === 'yes' || v === 'no' ? v : 'unknown';
+  }
+
+  /** The usage-endpoint read itself. A method so tests can replace it. */
+  private opencodeProbeGo(apiKey: string): Promise<OpencodeGoAccess> {
+    return probeOpencodeGoAccess(apiKey, { timeoutMs: 5000 });
+  }
+
+  /**
+   * Re-read the key's Go access because a route refusal suggests the stored
+   * answer is stale (a lapsed subscription, a new one, a first turn before any
+   * catalogue). At most one read per key per 30 s, shared by concurrent turns.
+   * A definite answer for the key still in use is adopted and persisted.
+   */
+  private async refreshOpencodeGoAccess(keyAtStart: string | null): Promise<OpencodeGoAccess> {
+    if (!keyAtStart) return this.opencodeGoAccessNow();
+    const now = Date.now();
+    const cached = this.opencodeGoProbe;
+    // Concurrent turns share one read. A definite answer is adopted below, so
+    // only a refusal brings us back here; an unreadable endpoint is not asked
+    // again for 5 minutes, so it cannot add its timeout to every turn.
+    const fresh0 = cached && cached.key === keyAtStart && now - cached.at < (cached.unknown ? 300_000 : 30_000);
+    const probe = fresh0
+      ? cached!.result
+      : this.opencodeProbeGo(keyAtStart).catch(() => 'unknown' as OpencodeGoAccess);
+    if (!fresh0) {
+      const entry: { key: string; at: number; result: Promise<OpencodeGoAccess>; unknown?: boolean } = { key: keyAtStart, at: now, result: probe };
+      this.opencodeGoProbe = entry;
+      void probe.then((r) => { if (r === 'unknown') entry.unknown = true; });
+    }
+    const fresh = await probe;
+    if (fresh === 'unknown' || keyAtStart !== this.opencodeApiKey) return fresh;
+    if (fresh !== this.opencodeGoAccessNow()) {
+      this.opencodeGoAccess = fresh;
+      console.log(`[OpenCode] Go access re-read for this key: ${fresh}`);
+      try { this.opencodeGoAccessListener?.(fresh, keyAtStart); } catch (e: any) {
+        console.warn('[OpenCode] could not persist Go access:', e?.message);
+      }
+    }
+    return fresh;
+  }
+
   /**
    * Refresh the per-model budget cache from 9Router's /v1/models.
    *
@@ -2383,7 +2636,7 @@ export class LLMHelper {
   // these named entry points so the surface stays auditable.
 
   public async runVisionRequest(
-    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'ninerouter' | 'agentrouter' | 'deepseek' | 'curl' | 'ollama' | 'oauth_model',
+    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'ninerouter' | 'agentrouter' | 'opencode' | 'deepseek' | 'curl' | 'ollama' | 'oauth_model',
     userPrompt: string,
     systemPrompt: string,
     imagePath: string,
@@ -2428,6 +2681,25 @@ export class LLMHelper {
         return this.generateWithNinerouter(userPrompt, systemPrompt, [imagePath]);
       case 'agentrouter':
         return this.generateWithAgentRouter(userPrompt, systemPrompt, [imagePath], undefined, opts?.signal);
+      case 'opencode': {
+        // VisionProviderRegistry seats this rung (only for a selected,
+        // image-reading OpenCode model) and hands off here; without this case
+        // every screen read through OpenCode threw "unknown providerId".
+        // streamWithOpencode returns quietly on abort, so a cancelled read must
+        // throw here, or an empty string is stored as the screen's contents.
+        // The rung is seated when the vision answer is merely UNKNOWN, while the
+        // adapter strips images from a model the catalogue marks text-only.
+        // Returning that model's blind answer as the screen's contents would be
+        // worse than failing over: refuse, so the chain tries the next rung.
+        const meta = this.opencodeMetaFor(this.currentModelId);
+        if (meta?.vision === false) {
+          throw new Error(`${this.opencodeWireModel(this.currentModelId)} cannot read images on OpenCode`);
+        }
+        let text = '';
+        for await (const piece of this.streamWithOpencode(userPrompt, systemPrompt, [imagePath], opts?.signal)) text += piece;
+        if (opts?.signal?.aborted) throw new Error('The OpenCode screen read was cancelled');
+        return text;
+      }
       // The two selected-only rungs (2026-10-01) reuse the streaming adapters
       // and collect the answer: no second request shape to keep in step, and
       // both adapters keep their own privacy gates (assertOutboundScopes).
@@ -2565,6 +2837,11 @@ export class LLMHelper {
     this.claudeClient = null;
     this.deepseekClient = null;
     this.litellmClient = null;
+    this.opencodeOpenAIClient = null;
+    this.opencodeAnthropicClient = null;
+    this.opencodeApiKey = null;
+    if (this._opencodeOpenAIClients) this._opencodeOpenAIClients.clear();
+    if (this._opencodeAnthropicClients) this._opencodeAnthropicClients.clear();
     // Destroy rate limiters
     if (this.rateLimiters) {
       Object.values(this.rateLimiters).forEach(rl => rl.destroy());
@@ -2624,6 +2901,10 @@ export class LLMHelper {
     // today, but includes("openai") would claim any id that ever carries the
     // word, so exclude it here like the others rather than rely on luck.
     if (this.isAgentRouterModel(modelId)) return false;
+    // Fifth gateway, and the most dangerous of the group: OpenCode's ids are
+    // the vendors' OWN (`opencode/gpt-6.1-sol`, `opencode/claude-sonnet-5-5`,
+    // `opencode/gemini-3.8-flash`), so every predicate below would claim one.
+    if (this.isOpencodeModel(modelId)) return false;
     // isOpenAiModelId covers bare o-series ids (`o3`, `o4-mini`) and `chatgpt-*`,
     // which the fetcher admits and the old `gpt- | o1- | o3-` list did not route.
     return isOpenAiModelId(modelId) || modelId.includes("openai");
@@ -2636,10 +2917,13 @@ export class LLMHelper {
     if (this.isFluxionModel(modelId)) return false;
     // Same for AgentRouter, which resells claude-opus-5 and claude-opus-4-8.
     if (this.isAgentRouterModel(modelId)) return false;
+    // Same for OpenCode, which resells the real Claude ids.
+    if (this.isOpencodeModel(modelId)) return false;
     return modelId.startsWith("claude-");
   }
 
   private isDeepseekModel(modelId: string): boolean {
+    if (this.isOpencodeModel(modelId)) return false;
     return isDeepseekModelId(modelId);
   }
 
@@ -2666,6 +2950,69 @@ export class LLMHelper {
    */
   private isNinerouterModel(modelId: string): boolean {
     return !!modelId && modelId.startsWith('ninerouter/');
+  }
+
+  /**
+   * OpenCode — the FOURTH id-collision gateway, and the one with the widest
+   * overlap: its paid catalogue contains `claude-sonnet-5-5`, `gpt-6.1-sol`,
+   * `gemini-3.8-flash`, `deepseek-v4.1-flash` and `grok-4.7`, which are the
+   * vendors' own ids (or close enough that the vendor predicates claim them).
+   *
+   * `opencode/` is the only thing separating them. Drop it and the request
+   * succeeds against the user's real Anthropic/OpenAI/Gemini/DeepSeek/xAI
+   * key, with a perfectly good answer and nothing in the logs to notice. Every
+   * vendor predicate below excludes it directly, so no dispatch site depends on
+   * branch order staying correct — but the branches themselves still test this
+   * FIRST, because the answer is cheap and the failure is silent.
+   */
+  private isOpencodeModel(modelId: string): boolean {
+    return !!modelId && modelId.startsWith('opencode/');
+  }
+
+  /** `opencode/claude-sonnet-5-5` → `claude-sonnet-5-5` (one segment: bare ids). */
+  private opencodeWireModel(modelId: string): string {
+    return this.isOpencodeModel(modelId) ? modelId.slice('opencode/'.length) : modelId;
+  }
+
+  /** The catalogue entry for a routed or bare id, or undefined before a fetch. */
+  private opencodeMetaFor(modelId: string): OpencodeModelMeta | undefined {
+    return this.opencodeModelMeta[this.opencodeWireModel(modelId)];
+  }
+
+  /**
+   * Presence gate: a key AND a live client.
+   *
+   * Reads the GETTERS, not the `_` fields: the getters are the live
+   * disabled-provider guard, so a provider switched off in Settings must fail
+   * this test at the dispatch branch rather than be constructed and then
+   * refused at the adapter.
+   */
+  private hasOpencodeCredential(): boolean {
+    return !!this.opencodeApiKey && (!!this.opencodeOpenAIClient || !!this.opencodeAnthropicClient);
+  }
+
+  /** The screenshot seat's per-model answer, from the catalogue or a saved test. */
+  private opencodeModelSupportsVision(modelId: string): boolean {
+    return gatewaySeatReadsImages('opencode', modelId, this.visionFacts({ provider: 'opencode', model: modelId }));
+  }
+
+  /**
+   * The base system prompt for an OpenCode model.
+   *
+   * This provider is not one vendor: the same key answers on the OpenAI, Claude
+   * and Gemini protocols. The prompt families differ in the formatting contract
+   * they assume, so the protocol — not the provider name — picks the default.
+   * A caller's explicit override always wins.
+   */
+  private opencodeDefaultSystemPrompt(modelId: string): string {
+    // The protocol of the route tried FIRST: on Go, minimax-m3 and qwen3.8-max
+    // are Messages models while their pay-as-you-go entries are Chat
+    // Completions, so the paid entry would pick the wrong prompt family.
+    const family = opencodeRoutes(this.opencodeWireModel(modelId), this.opencodeMetaFor(modelId), this.opencodeGoAccessNow())[0]?.api
+      ?? resolveOpencodeFamily(modelId, this.opencodeMetaFor(modelId));
+    if (family === 'messages') return CLAUDE_SYSTEM_PROMPT;
+    if (family === 'generate-content') return HARD_SYSTEM_PROMPT;
+    return OPENAI_SYSTEM_PROMPT;
   }
 
   private isNvidiaNimModel(modelId: string): boolean { return !!modelId && modelId.startsWith('nvidia_nim/'); }
@@ -2846,10 +3193,12 @@ export class LLMHelper {
     // Delegates to the ONE shared predicate (groqModels.ts) — the three
     // hand-synced copies had already drifted (code-review 2026-08-23).
     const { isGroqModelId } = require('./llm/groqModels') as typeof import('./llm/groqModels');
-    return isGroqModelId(modelId);
+    // OpenCode resells vendor ids behind its prefix; never let this claim one.
+    return !this.isOpencodeModel(modelId) && isGroqModelId(modelId);
   }
 
   private isGeminiModel(modelId: string): boolean {
+    if (this.isOpencodeModel(modelId)) return false;
     return modelId.startsWith("gemini-") || modelId.startsWith("models/");
   }
 
@@ -5431,6 +5780,17 @@ let isMultimodal = !!(imagePaths?.length);
         }
         // No key or call failed — fall through to default routing
       }
+      // OpenCode resolves its protocol internally, so this is ONE branch and
+      // not four. It must stay above the vendor branches: its ids are the
+      // vendors' own and every one below would claim them.
+      if (this.isOpencodeModel(this.currentModelId) && this.hasOpencodeCredential()) {
+        // Built like openaiSystemPrompt/claudeSystemPrompt above, but from the
+        // family that serves THIS model, as the streaming path does.
+        const opencodeSystemPrompt = skipSystemPrompt
+          ? undefined
+          : this.injectLanguageInstruction(systemPromptOverride || this.opencodeDefaultSystemPrompt(this.currentModelId));
+        return await this.generateWithOpencode(cloudUserContent, opencodeSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined);
+      }
       if (this.isOpenAiModel(this.currentModelId) && this.openaiClient) {
         return await this.generateWithOpenai(cloudUserContent, openaiSystemPrompt, cloudImagePaths);
       }
@@ -5695,6 +6055,11 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.isNinerouterModel(modelId)) return 'ninerouter';
     if (this.isFluxionModel(modelId)) return 'fluxion';
     if (this.isAgentRouterModel(modelId)) return 'agentrouter';
+    // OpenCode must be resolved before isOpenAiModel/isGeminiModel/isClaudeModel:
+    // its ids are the vendors' own, so every one of those predicates would claim
+    // a bare id — and here the consequence is a Background Model request sent to
+    // api.openai.com on the user's own key with a prefixed id OpenAI rejects.
+    if (this.isOpencodeModel(modelId)) return 'opencode';
     if (this.isOpenAiModel(modelId)) return 'openai';
     if (this.isGroqModel(modelId)) return 'groq';
     if (this.isGeminiModel(modelId)) return 'gemini';
@@ -5767,6 +6132,9 @@ let isMultimodal = !!(imagePaths?.length);
       case 'ninerouter': stream = this.streamWithNinerouter(userContent, openaiShaped, undefined, abortSignal, modelId); break;
       case 'fluxion': stream = this.streamWithFluxion(userContent, openaiShaped, undefined, abortSignal, modelId); break;
       case 'agentrouter': stream = this.streamWithAgentRouter(userContent, system(this.agentRouterDefaultSystemPrompt(modelId)), undefined, abortSignal, modelId); break;
+      // Per protocol, like AgentRouter: a Messages or Gemini model gets the
+      // prompt written for its family, not the OpenAI one.
+      case 'opencode': stream = this.streamWithOpencode(userContent, system(this.opencodeDefaultSystemPrompt(modelId)), undefined, abortSignal, modelId); break;
     }
     return { modelId, family, auto, stream };
   }
@@ -5789,6 +6157,7 @@ let isMultimodal = !!(imagePaths?.length);
       case 'ninerouter': return !!this.ninerouterClient;
       case 'fluxion': return this.hasFluxionCredential();
       case 'agentrouter': return this.hasAgentRouterCredential();
+      case 'opencode': return this.hasOpencodeCredential();
     }
   }
 
@@ -7988,6 +8357,613 @@ let isMultimodal = !!(imagePaths?.length);
     }
   }
 
+  // ── OpenCode ──────────────────────────────────────────────────────────────
+  //
+  // ONE key, FOUR protocols. `streamWithOpencode` resolves which one serves the
+  // selected model (the catalogue is the authority) and delegates to exactly one
+  // adapter. Everything below this point is provider-shaped, not protocol-shaped:
+  // each adapter yields plain text and never surfaces `reasoning_content`.
+
+  /** The output ceiling to ask for: the catalogue's per-model limit, held to the
+   *  app's shared cap. Unknown models get the shared cap and the adapters retry
+   *  without it if the server says the model's ceiling is lower. */
+  private opencodeOutputCap(meta?: OpencodeModelMeta): number {
+    const cap = Number(meta?.outputTokens);
+    if (!Number.isFinite(cap) || cap <= 0) return OPENCODE_MAX_OUTPUT_TOKENS;
+    return Math.max(256, Math.min(Math.floor(cap), OPENCODE_MAX_OUTPUT_TOKENS));
+  }
+
+  /** Usage + real dollar cost, when OpenCode reports it. Never logs the prompt. */
+  private recordOpencodeUsage(usage: any): void {
+    if (!usage || typeof usage !== 'object') return;
+    const oc = usage.opencode;
+    if (!oc && usage.cost === undefined) return;
+    console.log('[OpenCode] usage', {
+      cost: usage.cost,
+      billing: oc?.billing_source,
+      listCost: oc?.list_cost,
+      input: oc?.tokens?.input,
+      output: oc?.tokens?.output,
+      reasoning: oc?.tokens?.reasoning,
+      cacheRead: oc?.tokens?.cache_read,
+    });
+  }
+
+  /**
+   * Make the request, correcting ONE parameter per attempt when the model
+   * rejects it: the reasoning setting, then the output cap. Each correction is
+   * tried at most once; any other failure is real and is explained once.
+   *
+   * Classification reads the RAW error — the provider's own words — and only
+   * then is it turned into the sentence a user sees. Humanising first is how
+   * this used to fail: the friendly text no longer said `max_tokens`, so the
+   * cap correction could never fire.
+   *
+   * Why it exists at all: `capabilities.reasoning` and `limit.output` are
+   * per-model, and a stale catalogue (or a model added since the last fetch) is
+   * exactly when the app would send a parameter the model refuses. A hard 400
+   * on the interactive stream is far worse than one extra round-trip.
+   */
+  private async opencodeCreateWithFallback<T>(
+    label: string,
+    model: string,
+    opts: { reasoning: boolean; capCorrectable: boolean },
+    abortSignal: AbortSignal | undefined,
+    create: (shape: { reasoning: boolean; capped: boolean }) => Promise<T>,
+  ): Promise<T> {
+    let reasoning = opts.reasoning;
+    let capped = true;
+    for (;;) {
+      try {
+        return await create({ reasoning, capped });
+      } catch (e: any) {
+        if (abortSignal?.aborted) {
+          // A cancelled turn is neither a rejection to correct nor a failure to explain.
+          throw e;
+        }
+        if (reasoning && opencodeRejectsReasoning(e, model)) {
+          reasoning = false;
+          console.warn(`[OpenCode] ${label} rejected the reasoning setting; retrying without it`);
+          continue;
+        }
+        if (capped && opts.capCorrectable && opencodeRejectsOutputCap(e, model)) {
+          capped = false;
+          console.warn(`[OpenCode] ${label} rejected the output cap; retrying without it`);
+          continue;
+        }
+        throw opencodeError(e, model);
+      }
+    }
+  }
+
+  private async * streamWithOpencode(
+    userMessage: string,
+    systemPrompt?: string,
+    imagePaths?: string[],
+    abortSignal?: AbortSignal,
+    modelId?: string,
+  ): AsyncGenerator<string, void, unknown> {
+    if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
+    if (!this.hasOpencodeCredential()) throw new Error('OpenCode client not initialized');
+    this.assertOutboundScopes('opencode', userMessage, imagePaths);
+    await this.rateLimiters.opencode.acquire();
+
+    const routed = modelId || this.currentModelId;
+    const model = this.opencodeWireModel(routed);
+    const meta = this.opencodeMetaFor(model);
+
+    // Adapter-level backstop. The vision chain and Direct Assist already gate
+    // on the catalogue; if either ever forgets, a model the catalogue marks
+    // text-only must not receive pixels — it answers HTTP 200 without reading
+    // them, which is a confident blind answer rather than an error.
+    const usableImages = imagePaths?.length && meta && meta.vision === false
+      ? undefined
+      : imagePaths;
+
+    // Pay-as-you-go and Go are separate routes for the same id. Which one this
+    // key may use is the usage endpoint's answer (opencodeGoAccess), not a
+    // guess from a chat error. A refusal that suggests that answer went stale
+    // triggers ONE re-read, and only that answer decides whether to try the
+    // other route. Never after anything was shown: a half-streamed answer is
+    // never restarted elsewhere.
+    const keyAtStart = this.opencodeApiKey;
+    // Unknown Go access with a choice of routes (first turn before any
+    // catalogue fetch, or the endpoint was unreadable then): ask before
+    // sending, so the order never rests on how Go happens to refuse a key it
+    // does not cover. One GET, shared and cached by refreshOpencodeGoAccess.
+    let reread = false;
+    if (this.opencodeGoAccessNow() === 'unknown' && (meta?.goRoute || meta?.goOnly || /\/inference\/go\//.test(meta?.baseUrl || ''))) {
+      reread = true;
+      await this.refreshOpencodeGoAccess(keyAtStart);
+      if (abortSignal?.aborted) return;
+    }
+    const candidates = opencodeRoutes(model, meta, this.opencodeGoAccessNow());
+    let route: OpencodeRouteChoice | undefined = candidates[0];
+    const tried = new Set<'payg' | 'go'>();
+    let paygError: any = null;
+    while (route) {
+      tried.add(route.kind);
+      if (tried.size > 1) await this.rateLimiters.opencode.acquire();
+      const routeMeta = meta ? opencodeMetaForRoute(meta, route) : undefined;
+      const family: OpencodeApiFamily = meta ? route.api : resolveOpencodeFamily(model);
+      let yielded = false;
+      try {
+        for await (const chunk of this.openOpencodeAdapter(family, model, userMessage, systemPrompt, usableImages, abortSignal, routeMeta)) {
+          yielded = true;
+          yield chunk;
+        }
+        return;
+      } catch (e: any) {
+        if (yielded || abortSignal?.aborted) throw e;
+        if (route.kind === 'payg') paygError = e;
+        const otherKind: 'payg' | 'go' = route.kind === 'go' ? 'payg' : 'go';
+        const other: OpencodeRouteChoice | undefined = tried.has(otherKind) ? undefined : candidates.find((c) => c.kind === otherKind);
+        const suspicious = route.kind === 'go' ? opencodeGoRefused(e, model) : opencodePaygWantsGo(e, model);
+        if (!suspicious) throw e;
+
+        let access = this.opencodeGoAccessNow();
+        if (!reread) {
+          reread = true;
+          const fresh = await this.refreshOpencodeGoAccess(keyAtStart);
+          if (fresh !== 'unknown') access = fresh;
+          if (abortSignal?.aborted) return;
+        }
+
+        if (route.kind === 'go') {
+          // A key with Go is never moved onto pay-as-you-go credits by us: the
+          // refusal is about this model or a limit, and OpenCode's Extra Usage
+          // setting is what decides overflow billing.
+          if (access === 'yes') throw e;
+          if (other) {
+            console.warn(`[OpenCode] ${model}: Go refused this key (Go access: ${access}); using pay-as-you-go`);
+            route = other;
+            continue;
+          }
+          if (meta?.goOnly && access === 'no' && !paygError) throw opencodeGoOnlyError(e, model);
+          // Both routes refused: the pay-as-you-go reason (usually balance) is
+          // the one the user can act on.
+          throw paygError ?? e;
+        }
+
+        // Pay-as-you-go asked for Go. Only worth it when the key may have Go.
+        if (access === 'no' || !other) throw e;
+        console.warn(`[OpenCode] ${model}: pay-as-you-go refused a Go key (Go access: ${access}); using the Go route`);
+        route = other;
+      }
+    }
+  }
+
+  private openOpencodeAdapter(
+    family: OpencodeApiFamily,
+    model: string,
+    userMessage: string,
+    systemPrompt: string | undefined,
+    imagePaths: string[] | undefined,
+    abortSignal: AbortSignal | undefined,
+    meta: OpencodeModelMeta | undefined,
+  ): AsyncGenerator<string, void, unknown> {
+    switch (family) {
+      case 'messages': return this.streamOpencodeMessages(model, userMessage, systemPrompt, imagePaths, abortSignal, meta);
+      case 'responses': return this.streamOpencodeResponses(model, userMessage, systemPrompt, imagePaths, abortSignal, meta);
+      case 'generate-content': return this.streamOpencodeGenerateContent(model, userMessage, systemPrompt, imagePaths, abortSignal, meta);
+      default: return this.streamOpencodeChatCompletions(model, userMessage, systemPrompt, imagePaths, abortSignal, meta);
+    }
+  }
+
+  private async * streamOpencodeChatCompletions(
+    model: string,
+    userMessage: string,
+    systemPrompt: string | undefined,
+    imagePaths: string[] | undefined,
+    abortSignal: AbortSignal | undefined,
+    meta: OpencodeModelMeta | undefined,
+  ): AsyncGenerator<string, void, unknown> {
+    const client = this.opencodeOpenAIFor(meta?.baseUrl);
+    if (!client) throw new Error('OpenCode client not initialized');
+
+    const messages: any[] = [];
+    if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+    if (imagePaths?.length) {
+      const parts = await this.buildOpenAiImageParts(imagePaths);
+      const content: any[] = [{ type: 'text', text: userMessage }, ...parts];
+      messages.push({ role: 'user', content });
+    } else {
+      messages.push({ role: 'user', content: userMessage });
+    }
+
+    const effort = opencodeFastReasoningEffort(meta);
+    const cap = this.opencodeOutputCap(meta);
+    let stream: any;
+    try {
+      stream = await this.opencodeCreateWithFallback('chat-completions', model, { reasoning: !!effort, capCorrectable: true }, abortSignal, async ({ reasoning, capped }) => {
+        const request: any = {
+          model,
+          messages,
+          stream: true,
+          // The documented way to get the final usage/cost chunk.
+          stream_options: { include_usage: true },
+          ...(capped ? { max_tokens: cap } : {}),
+          ...(reasoning && effort ? { reasoning_effort: effort } : {}),
+        };
+        require('./llm/providerPayloadCapture').captureProviderPayload({
+          provider: 'opencode', classification: 'sdk_request_object_before_serialization', payload: request,
+        });
+        return await client.chat.completions.create(request, { signal: abortSignal, ...sdkRetryOptions(abortSignal) }) as any;
+      });
+    } catch (e: any) {
+      if (abortSignal?.aborted) return;
+      throw e;
+    }
+
+    let emitted = false;
+    try {
+      for await (const chunk of stream) {
+        if (abortSignal?.aborted) return;
+        if (!chunk) continue;
+        // Read `content` ONLY. Reasoning models put their hidden pass in
+        // `delta.reasoning_content` (the catalogue states the field), and
+        // yielding it would show the user the model thinking.
+        const content = chunk.choices?.[0]?.delta?.content;
+        if (typeof content === 'string' && content) {
+          emitted = true;
+          yield content;
+        }
+        this.recordOpencodeUsage(chunk?.usage);
+      }
+    } catch (e: any) {
+      if (abortSignal?.aborted) return;
+      throw opencodeError(e, model);
+    } finally {
+      if (abortSignal?.aborted && typeof (stream as any)?.abort === 'function') (stream as any).abort();
+    }
+
+    if (!emitted && !abortSignal?.aborted) {
+      throw opencodeError(new Error(OPENCODE_EMPTY_ANSWER), model);
+    }
+  }
+
+  private async * streamOpencodeResponses(
+    model: string,
+    userMessage: string,
+    systemPrompt: string | undefined,
+    imagePaths: string[] | undefined,
+    abortSignal: AbortSignal | undefined,
+    meta: OpencodeModelMeta | undefined,
+  ): AsyncGenerator<string, void, unknown> {
+    const client = this.opencodeOpenAIFor(meta?.baseUrl);
+    if (!client) throw new Error('OpenCode client not initialized');
+
+    const imageParts: Array<{ mimeType: string; data: string }> = [];
+    if (imagePaths?.length) {
+      for (const p of imagePaths) {
+        if (!fs.existsSync(p)) {
+          console.warn('[LLMHelper] image no longer on disk, sending the turn without it:', p);
+          continue;
+        }
+        imageParts.push(await this.processImage(p));
+      }
+    }
+    const content: any = imageParts.length
+      ? [
+        { type: 'input_text', text: userMessage },
+        ...imageParts.map((i) => ({ type: 'input_image', image_url: `data:${i.mimeType};base64,${i.data}`, detail: 'auto' })),
+      ]
+      : userMessage;
+
+    const effort = opencodeFastReasoningEffort(meta);
+    const cap = this.opencodeOutputCap(meta);
+    let stream: any;
+    try {
+      stream = await this.opencodeCreateWithFallback('responses', model, { reasoning: !!effort, capCorrectable: true }, abortSignal, async ({ reasoning, capped }) => {
+        const request: any = {
+          model,
+          stream: true,
+          // Keep the turn off OpenCode's response store, as the Codex backend and
+          // the AgentRouter Responses path already do.
+          store: false,
+          ...(systemPrompt ? { instructions: systemPrompt } : {}),
+          input: [{ role: 'user', content }],
+          ...(capped ? { max_output_tokens: cap } : {}),
+          ...(reasoning && effort ? { reasoning: { effort } } : {}),
+        };
+        require('./llm/providerPayloadCapture').captureProviderPayload({
+          provider: 'opencode', classification: 'sdk_request_object_before_serialization', payload: request,
+        });
+        return await client.responses.create(request, { signal: abortSignal, ...sdkRetryOptions(abortSignal) }) as any;
+      });
+    } catch (e: any) {
+      if (abortSignal?.aborted) return;
+      throw e;
+    }
+
+    let emitted = false;
+    try {
+      for await (const event of stream) {
+        if (abortSignal?.aborted) return;
+        if (!event) continue;
+        if (event.type === 'response.output_text.delta') {
+          if (typeof event.delta === 'string' && event.delta) {
+            emitted = true;
+            yield event.delta;
+          }
+          continue;
+        }
+        if (event.type === 'response.completed') {
+          this.recordOpencodeUsage(event.response?.usage);
+          continue;
+        }
+        if (event.type === 'response.failed' || event.type === 'error') {
+          const error = event.response?.error ?? event.error ?? event;
+          throw opencodeError(Object.assign(new Error(String(error?.message || 'OpenCode failed mid-stream')), { error }), model);
+        }
+      }
+    } catch (e: any) {
+      if (abortSignal?.aborted) return;
+      throw (e as any)?.provider === 'opencode' ? e : opencodeError(e, model);
+    } finally {
+      if (abortSignal?.aborted && typeof (stream as any)?.controller?.abort === 'function') {
+        (stream as any).controller.abort();
+      }
+    }
+
+    if (!emitted && !abortSignal?.aborted) {
+      throw opencodeError(new Error(OPENCODE_EMPTY_ANSWER), model);
+    }
+  }
+
+  private async * streamOpencodeMessages(
+    model: string,
+    userMessage: string,
+    systemPrompt: string | undefined,
+    imagePaths: string[] | undefined,
+    abortSignal: AbortSignal | undefined,
+    meta: OpencodeModelMeta | undefined,
+  ): AsyncGenerator<string, void, unknown> {
+    const client = this.opencodeAnthropicFor(meta?.baseUrl);
+    if (!client) throw new Error('OpenCode client not initialized');
+
+    const blocks: any[] = [];
+    if (imagePaths?.length) {
+      for (const p of imagePaths) {
+        if (!fs.existsSync(p)) {
+          console.warn('[LLMHelper] image no longer on disk, sending the turn without it:', p);
+          continue;
+        }
+        const { mimeType, data } = await this.processImage(p);
+        blocks.push({
+          type: 'image',
+          source: { type: 'base64', media_type: mimeType, data },
+        });
+      }
+    }
+    blocks.push({ type: 'text', text: userMessage });
+
+    // `max_tokens` is REQUIRED by the Messages API. The catalogue's ceiling is
+    // capped by the same per-model Claude table the direct Anthropic path uses,
+    // which falls back to a safe 8192 for an unknown id (e.g. OpenCode's Qwen
+    // models on the Messages protocol).
+    const cap = Math.min(this.getClaudeMaxOutput(model), this.opencodeOutputCap(meta));
+    // A rejected cap cannot be DROPPED here (the field is required), so the
+    // correction lowers it — and only when that actually changes the request.
+    const floor = Math.min(cap, OPENCODE_MESSAGES_FALLBACK_TOKENS);
+
+    let stream: any;
+    try {
+      stream = await this.opencodeCreateWithFallback('messages', model, { reasoning: false, capCorrectable: floor < cap }, abortSignal, async ({ capped }) => {
+        const request: any = {
+          model,
+          max_tokens: capped ? cap : floor,
+          stream: true,
+          ...(systemPrompt ? { system: systemPrompt } : {}),
+          messages: [{ role: 'user', content: blocks.length > 1 ? blocks : userMessage }],
+        };
+        require('./llm/providerPayloadCapture').captureProviderPayload({
+          provider: 'opencode', classification: 'sdk_request_object_before_serialization', payload: request,
+        });
+        return await client.messages.create(request, { signal: abortSignal, ...sdkRetryOptions(abortSignal) }) as any;
+      });
+    } catch (e: any) {
+      if (abortSignal?.aborted) return;
+      throw e;
+    }
+
+    let emitted = false;
+    try {
+      for await (const event of stream) {
+        if (abortSignal?.aborted) return;
+        if (!event) continue;
+        if (event.type === 'content_block_delta') {
+          const text = event.delta?.type === 'text_delta' ? event.delta.text : '';
+          if (typeof text === 'string' && text) {
+            emitted = true;
+            yield text;
+          }
+          continue;
+        }
+        if (event.type === 'message_delta') {
+          this.recordOpencodeUsage(event.usage);
+          continue;
+        }
+        if (event.type === 'error') {
+          throw opencodeError(Object.assign(new Error(String(event.error?.message || 'OpenCode failed mid-stream')), { error: event.error }), model);
+        }
+      }
+    } catch (e: any) {
+      if (abortSignal?.aborted) return;
+      throw (e as any)?.provider === 'opencode' ? e : opencodeError(e, model);
+    } finally {
+      if (abortSignal?.aborted && typeof (stream as any)?.abort === 'function') (stream as any).abort();
+    }
+
+    if (!emitted && !abortSignal?.aborted) {
+      throw opencodeError(new Error(OPENCODE_EMPTY_ANSWER), model);
+    }
+  }
+
+  /**
+   * Gemini's generateContent, called with raw fetch.
+   *
+   * The JS SDK's `httpOptions.baseUrl` + `apiVersion` combination is
+   * undocumented in the version pinned here, and guessing wrong produces a 404
+   * that reads exactly like a bad key. The payload this app needs is small (text
+   * + inline images, no tools, no schema), so a ~90-line SSE reader is cheaper
+   * than the ambiguity — and it is testable against a fake fetch.
+   */
+  private async * streamOpencodeGenerateContent(
+    model: string,
+    userMessage: string,
+    systemPrompt: string | undefined,
+    imagePaths: string[] | undefined,
+    abortSignal: AbortSignal | undefined,
+    meta: OpencodeModelMeta | undefined,
+  ): AsyncGenerator<string, void, unknown> {
+    if (!this.opencodeApiKey) throw new Error('OpenCode client not initialized');
+
+    const parts: any[] = [{ text: userMessage }];
+    if (imagePaths?.length) {
+      for (const p of imagePaths) {
+        if (!fs.existsSync(p)) {
+          console.warn('[LLMHelper] image no longer on disk, sending the turn without it:', p);
+          continue;
+        }
+        const { mimeType, data } = await this.processImage(p);
+        parts.push({ inlineData: { mimeType, data } });
+      }
+    }
+
+    const cap = this.opencodeOutputCap(meta);
+    const base = (meta?.baseUrl || OPENCODE_GOOGLE_BASE).replace(/\/+$/, '');
+    const url = `${base}/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`;
+
+    // One controller for the whole call, so the caller's abort reaches whichever
+    // attempt is in flight.
+    const controller = new AbortController();
+    const onCallerAbort = () => {
+      try { controller.abort(abortSignal?.reason); } catch { /* already aborted */ }
+    };
+    abortSignal?.addEventListener('abort', onCallerAbort, { once: true });
+
+    let resp: Response;
+    try {
+      resp = await this.opencodeCreateWithFallback('generate-content', model, { reasoning: false, capCorrectable: true }, abortSignal, async ({ capped }) => {
+        const body: any = {
+          contents: [{ role: 'user', parts }],
+          // Optional on this protocol, so the cap correction can drop it.
+          ...(capped ? { generationConfig: { maxOutputTokens: cap } } : {}),
+        };
+        if (systemPrompt) body.systemInstruction = { parts: [{ text: systemPrompt }] };
+        const serializedBody = JSON.stringify(body);
+        require('./llm/providerPayloadCapture').captureProviderPayload({
+          provider: 'opencode',
+          classification: 'exact_serialized_provider_payload',
+          payload: body,
+          serializedPayload: serializedBody,
+        });
+
+        // Connect-phase bound only. An AbortSignal.timeout would kill the WHOLE
+        // stream at that mark, which is the bug streamWithNatively documents.
+        const connectTimer = setTimeout(() => controller.abort(new Error('OpenCode connect timeout')), 15_000);
+        let attempt: Response;
+        try {
+          attempt = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${this.opencodeApiKey}`,
+              // Go refuses a request without this; paid ignores it.
+              'x-opencode-session': this.opencodeSessionHeader(),
+              'User-Agent': this.opencodeUserAgent(),
+            },
+            body: serializedBody,
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(connectTimer);
+        }
+        if (!attempt.ok) {
+          let text = '';
+          try { text = await attempt.text(); } catch { /* body may be empty */ }
+          // Raw, not humanised: the correction must read Gemini's own words
+          // (`maxOutputTokens`) before anything turns them into a sentence.
+          throw Object.assign(new Error(text || `OpenCode returned ${attempt.status}`), { status: attempt.status });
+        }
+        return attempt;
+      });
+    } catch (e: any) {
+      abortSignal?.removeEventListener('abort', onCallerAbort);
+      if (abortSignal?.aborted) return;
+      throw e;
+    }
+
+    const reader = resp.body?.getReader();
+    if (!reader) {
+      abortSignal?.removeEventListener('abort', onCallerAbort);
+      throw opencodeError(new Error('OpenCode returned no response body'), model);
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let emitted = false;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let newline: number;
+        while ((newline = buffer.indexOf('\n')) >= 0) {
+          const line = buffer.slice(0, newline).replace(/\r$/, '');
+          buffer = buffer.slice(newline + 1);
+          if (!line.startsWith('data:')) continue;
+          const payload = line.slice('data:'.length).trim();
+          if (!payload || payload === '[DONE]') continue;
+          let json: any;
+          try { json = JSON.parse(payload); } catch { continue; }
+          this.recordOpencodeUsage(json?.usageMetadata);
+          if (json?.promptFeedback?.blockReason) {
+            throw opencodeError(new Error(`OpenCode blocked the prompt (${json.promptFeedback.blockReason})`), model);
+          }
+          const candidate = json?.candidates?.[0];
+          for (const part of candidate?.content?.parts || []) {
+            if (typeof part?.text === 'string' && part.text) {
+              emitted = true;
+              yield part.text;
+            }
+          }
+        }
+      }
+    } catch (e: any) {
+      if (abortSignal?.aborted) return;
+      throw (e as any)?.provider === 'opencode' ? e : opencodeError(e, model);
+    } finally {
+      abortSignal?.removeEventListener('abort', onCallerAbort);
+      try { reader.cancel().catch(() => { /* already torn down */ }); } catch { }
+    }
+
+    if (!emitted && !abortSignal?.aborted) {
+      throw opencodeError(new Error(OPENCODE_EMPTY_ANSWER), model);
+    }
+  }
+
+  /**
+   * Blocking OpenCode generation.
+   *
+   * Drains the streaming adapter rather than implementing a second, non-streaming
+   * request shape for each of the four protocols. ONE code path cannot drift:
+   * the blocking callers (meeting notes, extraction, the judge) see exactly the
+   * request and error handling the live answers do.
+   */
+  private async generateWithOpencode(
+    userMessage: string,
+    systemPrompt?: string,
+    imagePaths?: string[],
+  ): Promise<string> {
+    let text = '';
+    for await (const chunk of this.streamWithOpencode(userMessage, systemPrompt, imagePaths)) {
+      text += chunk;
+    }
+    return text;
+  }
+
   // The handler for cURL requests
   public async chatWithCurl(userMessage: string, systemPrompt?: string, imagePath?: string): Promise<string> {
     if (!this.activeCurlProvider) throw new Error("No cURL provider active");
@@ -9503,6 +10479,16 @@ let isMultimodal = !!(imagePaths?.length);
       if (this.isNinerouterModel(this.currentModelId) && this.ninerouterClient && this.ninerouterModelSupportsVision(this.currentModelId)) {
         cloud.push({ id: 'ninerouter', name: `9Router (${this.ninerouterWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithNinerouter(userContent, systemPrompt, imagePaths, sig) });
+      }
+      // Same rule and the same per-model gate as 9Router: OpenCode's catalogue
+      // names the image modalities per model, and a text-only model that
+      // receives an image answers HTTP 200 without having read it. Seating it
+      // would therefore produce a confident blind answer, not an error the
+      // chain can fall over from.
+      if (this.isOpencodeModel(this.currentModelId) && this.hasOpencodeCredential()
+        && this.opencodeModelSupportsVision(this.currentModelId)) {
+        cloud.push({ id: 'opencode', name: `OpenCode (${this.opencodeWireModel(this.currentModelId)})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+          open: (sig) => this.streamWithOpencode(userContent, systemPrompt, imagePaths, sig) });
       }
       // Same rule as the two gateways above: only recruited when it is the model
       // the user actually picked. OpenRouter fronts hundreds of upstreams and we
@@ -11746,6 +12732,33 @@ let isMultimodal = !!(imagePaths?.length);
     }
 
     // 3. Cloud Provider Routing
+
+    // OpenCode — THE PRIMARY ANSWER PATH. Same lesson as Fluxion/AgentRouter:
+    // excluding a family from the vendor predicates fixes misrouting; it does
+    // nothing about a dispatch branch that was never written. Without this the
+    // turn falls through to the Gemini cascade and is answered on the user's own
+    // key, with a log line naming Gemini and nothing naming OpenCode.
+    //
+    // ONE branch, not four: streamWithOpencode resolves the protocol from the
+    // catalogue. Images are forwarded only to a model the catalogue marks
+    // vision-capable — a text-only model answers HTTP 200 without having read
+    // the screenshot, so "send it and see" is the silent choice, not the
+    // permissive one.
+    if (this.isOpencodeModel(this.currentModelId) && this.hasOpencodeCredential()) {
+      const ocSystem = this.injectLanguageInstruction(
+        systemPromptOverride || this.opencodeDefaultSystemPrompt(this.currentModelId),
+      );
+      const ocSendsImages = Boolean(isMultimodal && imagePaths?.length)
+        && this.opencodeModelSupportsVision(this.currentModelId);
+      yield* this.streamSelectedProviderWithFailover({
+        id: 'opencode',
+        name: `OpenCode (${this.opencodeWireModel(this.currentModelId)})`,
+        open: (sig) => this.streamWithOpencode(userContent, ocSystem, ocSendsImages ? imagePaths : undefined, sig),
+        userContent, finalSystemPrompt: ocSystem, thinkingBudget, abortSignal,
+        hasImages: ocSendsImages,
+      });
+      return;
+    }
 
     // OpenAI
     if (this.isOpenAiModel(this.currentModelId) && this.openaiClient) {
@@ -14313,7 +15326,10 @@ let isMultimodal = !!(imagePaths?.length);
     // AgentRouter joins for the reason Fluxion does: a reseller that picks its
     // upstream channel after accepting the request, whose Claude/GPT pool can
     // be cold or exhausted, so it takes the user-endpoint budget.
-    return this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId) || this.isAgentRouterModel(this.currentModelId);
+    // OpenCode is that reseller shape too (first tokens measured at 0.8–6 s
+    // across its four protocols, 2026-11-19), and answerLatencyKey() already
+    // measures it as a user endpoint — the two must agree.
+    return this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId) || this.isOpenRouterModel(this.currentModelId) || this.isFluxionModel(this.currentModelId) || this.isNinerouterModel(this.currentModelId) || this.isAgentRouterModel(this.currentModelId) || this.isOpencodeModel(this.currentModelId);
   }
 
   /**
@@ -14726,6 +15742,9 @@ let isMultimodal = !!(imagePaths?.length);
     // generic vendor predicates or the request escapes through the wrong
     // credential/client boundary.
     if (selected === 'natively') return { provider: 'natively', model: selected };
+    // OpenCode's ids are the resold vendors' own, so every predicate below
+    // would claim one. First, for the same reason as Fluxion.
+    if (this.isOpencodeModel(selected)) return { provider: 'opencode', model: selected };
     if (this.isAntigravityModel(selected)) return { provider: 'antigravity', model: selected };
     if (this.isCodexCliModel(selected)) return { provider: 'codex-cli', model: this.codexModelForFastPick(selected) };
     if (this.isNvidiaNimModel(selected)) return { provider: 'nvidia_nim', model: selected };
@@ -14884,6 +15903,22 @@ let isMultimodal = !!(imagePaths?.length);
       { provider: 'claude', model: CLAUDE_MODEL },
       { provider: 'groq', model: GROQ_MODEL },
       { provider: 'antigravity', model: this.antigravityFallbackModel() || '' },
+      // OpenCode has no default-model constant: the only sensible rung is the
+      // model the user promoted on the card. Absent → the rung is dropped,
+      // exactly as an unset Ollama model is. Read through CredentialsManager
+      // because this runs on a bare-prototype harness too, where an instance
+      // field would never have been initialised.
+      ...(() => {
+        try {
+          const { CredentialsManager } = require('./services/CredentialsManager');
+          const preferred = CredentialsManager.getInstance().getPreferredModel('opencode');
+          return preferred && preferred.startsWith('opencode/')
+            ? [{ provider: 'opencode' as const, model: preferred }]
+            : [];
+        } catch {
+          return [];
+        }
+      })(),
       // Instance field, empty when Ollama is on auto-detect — the filter below
       // then drops the rung rather than dispatching to a nameless model. Read
       // defensively: a bare-prototype caller (see the ladder test harness)
@@ -14907,6 +15942,7 @@ let isMultimodal = !!(imagePaths?.length);
       case 'agentrouter': return this.hasAgentRouterCredential();
       case 'litellm': return !!this.litellmClient;
       case 'ninerouter': return !!this.ninerouterClient;
+      case 'opencode': return this.hasOpencodeCredential();
       case 'ollama': return this.useOllama;
       case 'antigravity': return !!this.antigravityFallbackModel();
       default: return false;
@@ -14930,6 +15966,7 @@ let isMultimodal = !!(imagePaths?.length);
       this.openrouterClient ||
       this.litellmClient ||
       this.ninerouterClient ||
+      this.hasOpencodeCredential() ||
       this.hasFluxionCredential() ||
       this.hasAgentRouterCredential() ||
       this.hasNatively() ||
@@ -15000,6 +16037,12 @@ let isMultimodal = !!(imagePaths?.length);
     return {
       ollamaReportsVision: (m) => this.ollamaVisionCache.get(m),
       ninerouterVisionModels: selection.provider === 'ninerouter' ? [...this.ninerouterVisionModels] : undefined,
+      // The persisted catalogue subset, so a resolver call works even when the
+      // vision store was written by an older build or a failed write. Derived
+      // from the routing metadata, which is the same catalogue.
+      opencodeVisionModels: selection.provider === 'opencode'
+        ? Object.entries(this.opencodeModelMeta).filter(([, m]) => m.vision === true).map(([id]) => id)
+        : undefined,
       customProvider: selection.provider === 'curl' ? curl : custom,
       providerReportsVision: (provider, routed) => storedVisionAnswer(provider, routed, this.visionStoreBaseURL(provider)),
       testedVision: (provider, routed) => storedVisionTest(provider, routed, this.visionStoreBaseURL(provider))?.reads,
@@ -15127,7 +16170,7 @@ let isMultimodal = !!(imagePaths?.length);
 
   /** Providers the one-time test can ask. The rest are decided by their route, their own table, or /api/show. */
   private static readonly VISION_TESTABLE: ReadonlySet<string> = new Set(
-    ['openai', 'claude', 'gemini', 'deepseek', 'nvidia_nim', 'openrouter', 'fluxion', 'agentrouter', 'litellm', 'ninerouter'],
+    ['openai', 'claude', 'gemini', 'deepseek', 'nvidia_nim', 'openrouter', 'fluxion', 'agentrouter', 'litellm', 'ninerouter', 'opencode'],
   );
 
   public enableVisionProbing(): void { this.visionProbingEnabled = true; }
@@ -15297,6 +16340,11 @@ let isMultimodal = !!(imagePaths?.length);
         // forwards for these gateways EXCEPT AgentRouter, which needs evidence —
         // its deepseek-v4-pro answers HTTP 200 without seeing the image, and the
         // chat path and the pre-pass already refused what this forwarded.
+        //
+        // OpenCode belongs here for exactly 9Router's reason: its catalogue is
+        // the only trustworthy answer, and a known text-only model answers
+        // HTTP 200 without reading the image.
+      case 'opencode':
         return gatewaySeatReadsImages(selection.provider as Parameters<typeof gatewaySeatReadsImages>[0], selection.model, this.visionFacts(selection, custom, curl));
       default:
         // Everything else asks the resolver (2026-10-01). Unknown stays "no"
@@ -15593,6 +16641,11 @@ let isMultimodal = !!(imagePaths?.length);
         // `ninerouter/` segment to get the instance's own wire id.
         yield* this.streamWithNinerouter(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);
         return;
+      case 'opencode':
+        // `model` is still prefixed. The streamer strips one segment, resolves
+        // the protocol from the catalogue, and dispatches to the right adapter.
+        yield* this.streamWithOpencode(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);
+        return;
       case 'ollama':
         yield* this.streamWithOllama(directUserPrompt, undefined, request.systemPrompt, imagePaths, abortSignal, model, true);
         return;
@@ -15631,6 +16684,11 @@ let isMultimodal = !!(imagePaths?.length);
   public getCurrentModelDisplayName(): string {
     if (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId)) {
       return `${this.getAntigravityModelId(this.currentModelId)} (Antigravity)`;
+    }
+    // Gateways return their wire id rather than the routed one: a UI label that
+    // reads `opencode/claude-sonnet-5` is plumbing, not a model name.
+    if (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isOpencodeModel(this.currentModelId)) {
+      return this.opencodeWireModel(this.currentModelId);
     }
     if (this.customProvider) return this.customProvider.name;
     if (this.activeCurlProvider) return this.activeCurlProvider.id;

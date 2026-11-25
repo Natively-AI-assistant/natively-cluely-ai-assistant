@@ -3,7 +3,7 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
     ids: string[];
     names: string[];
     descs: string[];
-    pmKey: 'geminiPreferredModel' | 'openaiPreferredModel' | 'claudePreferredModel' | 'groqPreferredModel' | 'deepseekPreferredModel' | 'nvidia_nimPreferredModel' | 'openrouterPreferredModel' | 'fluxionPreferredModel' | 'agentrouterPreferredModel';
+    pmKey: 'geminiPreferredModel' | 'openaiPreferredModel' | 'claudePreferredModel' | 'groqPreferredModel' | 'deepseekPreferredModel' | 'nvidia_nimPreferredModel' | 'openrouterPreferredModel' | 'fluxionPreferredModel' | 'agentrouterPreferredModel' | 'opencodePreferredModel';
 }> = {
     gemini: {
         hasKeyCheck: (creds) => !!creds?.hasGeminiKey,
@@ -162,6 +162,43 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
         names: ['GPT-5.6 Sol (AgentRouter)', 'GPT-6 Astra (AgentRouter)', 'GPT-6.1 Sol (AgentRouter)'],
         descs: ['Fastest • Multimodal', 'Reasoning • Multimodal', 'Newest • Multimodal'],
         pmKey: 'agentrouterPreferredModel'
+    },
+    opencode: {
+        hasKeyCheck: (creds) => !!creds?.hasOpencodeKey,
+        // Six presets, one per wire protocol at minimum, so a fresh key can
+        // exercise every adapter from the overlay picker before the 89-model
+        // catalogue is fetched. NOT a LIVE_CATALOGUE_PROVIDERS entry: 89 rows in
+        // a 140px dropdown is the flooding the LiteLLM comment warns about.
+        // The full catalogue lives in Settings, exactly like NVIDIA NIM's.
+        //
+        // Free-tier ids (`-free`) are deliberately absent: OpenCode answers 403
+        // outside the OpenCode app for those, so a row would be a promise the
+        // provider cannot keep. The main-process catalogue drops them too.
+        ids: [
+            'opencode/deepseek-v4.1-flash',
+            'opencode/kimi-k3',
+            'opencode/claude-sonnet-5',
+            'opencode/gpt-6.1-sol',
+            'opencode/gemini-3.8-flash',
+            'opencode/glm-5.3',
+        ],
+        names: [
+            'DeepSeek V4.1 Flash (OpenCode)',
+            'Kimi K3 (OpenCode)',
+            'Claude Sonnet 5 (OpenCode)',
+            'GPT-6.1 Sol (OpenCode)',
+            'Gemini 3.8 Flash (OpenCode)',
+            'GLM 5.3 (OpenCode)',
+        ],
+        descs: [
+            'Fast • Multimodal',
+            'Long context • Multimodal',
+            'Balanced • Multimodal',
+            'Reasoning • Multimodal',
+            'Fastest • Multimodal',
+            'Coding • Text',
+        ],
+        pmKey: 'opencodePreferredModel'
     },
 };
 
@@ -534,6 +571,6 @@ export const NINEROUTER_THINKING_LEVELS = [
 
 export const gatewayModelLabel = (id: string): string => {
     if (!id) return '';
-    const segments = id.replace(/^(?:litellm|ninerouter|openrouter|nvidia_nim|fluxion|agentrouter)\//, '').split('/').filter(Boolean);
+    const segments = id.replace(/^(?:litellm|ninerouter|openrouter|nvidia_nim|fluxion|agentrouter|opencode)\//, '').split('/').filter(Boolean);
     return segments.length ? segments[segments.length - 1] : id;
 };

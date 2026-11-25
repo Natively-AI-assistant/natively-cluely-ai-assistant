@@ -701,6 +701,13 @@ export function initializeIpcHandlers(appState: AppState): void {
     LiveModelCatalogService.getInstance().setOnUpdated((provider: string, models: { id: string; label: string }[]) => {
       broadcastLiveCatalogUpdated(provider, models);
       if (provider === 'agentrouter') void followAgentRouterCatalogue(models);
+      // The service commits ids only. OpenCode's routing metadata (protocol,
+      // Go-or-paid base, vision) is applied here, AFTER the service's
+      // key-rotation and supersede guards have passed; the fetch behind it is
+      // a cache hit on the save path.
+      if (provider === 'opencode') {
+        void discoverOpencodeModels().catch((e: any) => console.warn('[IPC] OpenCode catalogue apply failed:', e?.message));
+      }
     });
   } catch (e: any) {
     console.warn('[IPC] Could not initialize LiveModelCatalogService update listener:', e?.message);
@@ -862,6 +869,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       // never disagree about what a given id is. The renderer's
       // isProviderEnabled() in AIProvidersSettings.tsx must use the same names.
       const providerFamily = (modelId: string): string => {
+        // OpenCode FIRST. Its ids are the vendors' OWN (`claude-sonnet-5-5`,
+        // `gpt-6.1-sol`, `gemini-3.8-flash`), so every gateway check and every
+        // vendor predicate below would claim one. Classified late, the request is
+        // gated by — and billed to — the user's real vendor key, and nothing
+        // about the answer looks wrong.
+        if (modelId.startsWith('opencode/')) return 'opencode';
         if (modelId === 'natively') return 'natively';
         if (modelId.startsWith('antigravity:')) return 'antigravity';
         if (modelId.startsWith('codex-cli')) return 'codex-cli';
@@ -944,6 +957,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           if (!enabledForFamily.includes(allowListId)) return false;
         } else if (enabledForFamily.length > 0 && !enabledForFamily.includes(allowListId)) return false;
 
+        if (modelId.startsWith('opencode/')) return has(cm.getOpencodeApiKey());
         if (modelId === 'natively') return has(cm.getNativelyApiKey());
         if (modelId.startsWith('codex-cli')) return codexConfig.enabled === true && codexSignedIn;
         if (modelId.startsWith('antigravity:')) return AntigravityService.getInstance().getStatus().signedIn
@@ -1003,6 +1017,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Same contract again: stored fully prefixed (`ninerouter/<alias>/<model>`),
       // the form modelAvailable() classifies. Do not re-prefix.
       const ninerouterFallbackModel: string | null = cm.getPreferredModel?.('ninerouter') || null;
+      // Same contract again: stored fully prefixed (`opencode/<model>`), the
+      // form modelAvailable() classifies. Do not re-prefix.
+      const opencodeFallbackModel: string | null = cm.getPreferredModel?.('opencode') || null;
       if (has(cm.getLitellmBaseURL())) {
         try {
           const baseURL = (cm.getLitellmBaseURL() || 'http://localhost:4000/v1').replace(/\/+$/, '');
@@ -1083,6 +1100,12 @@ export function initializeIpcHandlers(appState: AppState): void {
         // falls through to `allProviders.find(...)` -> null and is told "No AI
         // providers configured" while holding a working instance.
         : (ninerouterFallbackModel && modelAvailable(ninerouterFallbackModel)) ? ninerouterFallbackModel
+        // OpenCode earns the same cheap rung: its preferred model is stored
+        // prefixed, and modelAvailable() already enforces the key, the disabled
+        // switch and the allow-list. Without it an OpenCode-only user whose
+        // default went stale is told they have no provider while holding a
+        // working key.
+        : (opencodeFallbackModel && modelAvailable(opencodeFallbackModel)) ? opencodeFallbackModel
         : antigravityFallback ? antigravityFallback
         : allProviders.find((p: any) => modelAvailable(p?.id))?.id
           || null;
@@ -13011,6 +13034,148 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // ── OpenCode ────────────────────────────────────────────────────────────
+  //
+  // The catalogue is richer than a list of ids: each entry names the wire
+  // protocol that serves it, its base URL (pay-as-you-go or Go) and whether it
+  // reads images. applyOpencodeCatalogue() is the ONE writer of that metadata:
+  // to credentials, so the next launch routes correctly, AND to the live
+  // helper, so the next turn does. Every path that reads the catalogue ends
+  // here — key save, the card's Refresh, the cold-start fetch and the
+  // background refresh. `modelFetcher` stays free of Electron.
+  // Every list the fetcher returns (including the background live-catalogue
+  // refresh) hides Go-only models once the saved key is known to lack Go.
+  try {
+    const { setOpencodeGoAccessReader } = require('./utils/modelFetcher') as typeof import('./utils/modelFetcher');
+    setOpencodeGoAccessReader(() => {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      return CredentialsManager.getInstance().getOpencodeGoAccess();
+    });
+  } catch (e: any) {
+    console.warn('[IPC] Could not install the OpenCode Go access reader:', e?.message);
+  }
+
+  const applyOpencodeCatalogue = (catalogue: import('./utils/modelFetcher').OpencodeCatalogueResult, key: string): void => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const { carryForwardGoRoutes } = require('./llm/opencode/catalog') as typeof import('./llm/opencode/catalog');
+    const cm = CredentialsManager.getInstance();
+    // A fetch that could not read the Go list must not erase the Go routes a
+    // Go subscriber with no credit depends on: keep the last known ones.
+    const meta = catalogue.goListRead ? catalogue.meta : carryForwardGoRoutes(catalogue.meta, cm.getOpencodeModelMeta());
+    cm.setOpencodeModelMeta(meta);
+    cm.setOpencodeVisionModels(catalogue.vision);
+    const llmHelper = appState.processingHelper.getLLMHelper();
+    llmHelper.setOpencodeModelMeta(meta);
+    // The usage endpoint's answer for THIS key (never another's: both writes
+    // check the key). This is also what un-sticks a stored answer after the
+    // user subscribes to Go or lets it lapse.
+    if (catalogue.goAccess !== 'unknown') {
+      cm.setOpencodeGoAccess(catalogue.goAccess, key);
+      llmHelper.setOpencodeGoAccess(catalogue.goAccess, key);
+    }
+  };
+
+  const discoverOpencodeModels = async () => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const cm = CredentialsManager.getInstance();
+    const key = (cm.getOpencodeApiKey() || '').trim();
+    if (!key) return null;
+    const { fetchOpencodeCatalogue } = require('./utils/modelFetcher') as typeof import('./utils/modelFetcher');
+    const catalogue = await fetchOpencodeCatalogue(key);
+    // The key can change while the fetch is in flight. A catalogue read with
+    // the OLD key names another workspace's models and bases: drop it.
+    if ((cm.getOpencodeApiKey() || '').trim() !== key) return null;
+    applyOpencodeCatalogue(catalogue, key);
+    return catalogue;
+  };
+
+  /** Prefixed ids from the stored metadata, plus the promoted default. */
+  const storedOpencodeModelIds = (): string[] => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const cm = CredentialsManager.getInstance();
+    const { opencodeOfferedIds } = require('./llm/opencode/catalog') as typeof import('./llm/opencode/catalog');
+    const ids = opencodeOfferedIds(cm.getOpencodeModelMeta() || {}, cm.getOpencodeGoAccess());
+    const preferred = cm.getPreferredModel?.('opencode');
+    if (preferred?.startsWith('opencode/')) {
+      const bare = preferred.slice('opencode/'.length);
+      if (bare && !ids.includes(bare)) ids.push(bare);
+    }
+    return ids.map((id) => `opencode/${id}`);
+  };
+
+  safeHandle('set-opencode-api-key', async (_, apiKey: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      const normalizedKey = (apiKey || '').trim();
+      const keyChanged = (cm.getOpencodeApiKey() || '') !== normalizedKey;
+
+      // Same degraded-store rule as the OpenRouter handler: stop BEFORE the
+      // live clients are touched, or chat works this session against a key that
+      // is gone after the next restart while the card reads "Saved".
+      const saved = cm.setOpencodeApiKey(normalizedKey);
+      if (saved === false) {
+        return {
+          success: false,
+          error: 'credential_store_degraded',
+          message: 'Could not save the key. Your credential store is unavailable this session.',
+        };
+      }
+
+      let models: string[] = [];
+      let freeSkipped = 0;
+      let catalogueError: string | undefined;
+      if (normalizedKey) {
+        try {
+          const catalogue = await discoverOpencodeModels();
+          if (catalogue) {
+            models = catalogue.models.map((m) => m.id);
+            freeSkipped = catalogue.freeSkipped;
+          }
+        } catch (e: any) {
+          // The key is saved either way. A failed catalogue fetch is reported
+          // so the card can offer Refresh rather than silently showing presets.
+          // Redacted: an upstream message can quote the bearer token back.
+          const { redactOpencodeSecrets } = require('./llm/opencode/errors') as typeof import('./llm/opencode/errors');
+          catalogueError = redactOpencodeSecrets(e?.response?.data?.error?.message || e?.message || 'Model list unavailable');
+          console.warn('[IPC] OpenCode catalogue fetch failed:', catalogueError);
+        }
+      }
+
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      llmHelper.setOpencodeConfig(normalizedKey, cm.getOpencodeModelMeta(), cm.getOpencodeGoAccess());
+      appState.getIntelligenceManager().resetEngine();
+      appState.getIntelligenceManager().initializeLLMs();
+      if (keyChanged) {
+        await refreshRuntimeDefaultIfUnavailable();
+        broadcastCredentialsChanged();
+      }
+      triggerLiveCatalogRefresh('opencode', normalizedKey);
+      return { success: true, models, freeSkipped, catalogueError };
+    } catch (error: any) {
+      console.error('Error saving OpenCode API key:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('get-available-opencode-models', async () => {
+    try {
+      const stored = storedOpencodeModelIds();
+      if (stored.length > 0) return stored;
+      // Cold start: one fetch rather than an empty list until the user finds
+      // Refresh. A failure degrades to the renderer's presets.
+      const catalogue = await discoverOpencodeModels();
+      return catalogue ? catalogue.models.map((m) => m.id) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Refresh and Test Connection have no OpenCode-only channel on purpose: the
+  // card is the generic ProviderCard, so they arrive through
+  // 'fetch-provider-models' and 'test-llm-connection', which both have an
+  // OpenCode branch — the same shape as AgentRouter and Fluxion.
+
   safeHandle('get-disabled-providers', async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -14823,6 +14988,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasLitellmBaseURL: hasKey(creds.litellmBaseURL),
         hasNinerouterBaseURL: hasKey(creds.ninerouterBaseURL),
         hasNinerouterKey: hasKey(creds.ninerouterApiKey),
+        hasOpencodeKey: hasKey(creds.opencodeApiKey),
         // The base URL is config, not a secret — returned in full so Settings can
         // prefill it (unlike API keys, which are only reported as booleans).
         litellmBaseURL: creds.litellmBaseURL || null,
@@ -14894,6 +15060,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Stored prefixed (`litellm/<model>`) — see StoredCredentials.litellmPreferredModel.
         litellmPreferredModel: creds.litellmPreferredModel || undefined,
         ninerouterPreferredModel: creds.ninerouterPreferredModel || undefined,
+        opencodePreferredModel: creds.opencodePreferredModel || undefined,
         disabledProviders: creds.disabledProviders || [],
         cloudEnabledModels: creds.cloudEnabledModels || {},
       };
@@ -14915,6 +15082,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         litellmMaxTokens: null,
         hasNinerouterBaseURL: false,
         hasNinerouterKey: false,
+        hasOpencodeKey: false,
         ninerouterBaseURL: null,
         ninerouterMaxTokens: null,
         ninerouterThinking: null,
@@ -14954,7 +15122,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'fetch-provider-models',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter', apiKey: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter' | 'opencode', apiKey: string) => {
       try {
         // Fall back to stored key if no key was explicitly provided
         let key = apiKey?.trim();
@@ -14970,10 +15138,31 @@ export function initializeIpcHandlers(appState: AppState): void {
           else if (provider === 'openrouter') key = cm.getOpenrouterApiKey();
           else if (provider === 'fluxion') key = cm.getFluxionApiKey();
           else if (provider === 'agentrouter') key = cm.getAgentRouterApiKey();
+          else if (provider === 'opencode') key = cm.getOpencodeApiKey();
         }
 
         if (!key) {
           return { success: false, error: 'No API key available. Please save a key first.' };
+        }
+
+        // OpenCode replies with routing metadata beside each id, so it takes
+        // the richer fetch and persists what the adapters dispatch on.
+        if (provider === 'opencode') {
+          const { CredentialsManager } = require('./services/CredentialsManager');
+          const { fetchOpencodeCatalogue } = require('./utils/modelFetcher') as typeof import('./utils/modelFetcher');
+          const catalogue = await fetchOpencodeCatalogue(key);
+          const cm = CredentialsManager.getInstance();
+          // Routing metadata only for the SAVED key: the card can fetch with a
+          // typed-but-unsaved key, and that workspace's bases must not become
+          // the routing map for the key the app actually sends.
+          if (key.trim() === (cm.getOpencodeApiKey() || '').trim()) applyOpencodeCatalogue(catalogue, key.trim());
+          cm.setCloudFetchedModels(
+            provider,
+            catalogue.models.map((m) => ({ id: m.id, label: m.label || m.id })),
+            Date.now(),
+          );
+          broadcastLiveCatalogUpdated(provider, catalogue.models);
+          return { success: true, models: catalogue.models, freeSkipped: catalogue.freeSkipped };
         }
 
         const { fetchProviderModels } = require('./utils/modelFetcher');
@@ -15027,7 +15216,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'set-provider-preferred-model',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter' | 'litellm' | 'ninerouter', modelId: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter' | 'litellm' | 'ninerouter' | 'opencode', modelId: string) => {
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
         CredentialsManager.getInstance().setPreferredModel(provider, modelId);
@@ -16125,7 +16314,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'test-llm-connection',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter', apiKey?: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'openrouter' | 'fluxion' | 'agentrouter' | 'opencode', apiKey?: string) => {
       console.log(`[IPC] Received test-llm-connection request for provider: ${provider}`);
       try {
         if (!apiKey || !apiKey.trim()) {
@@ -16140,10 +16329,20 @@ export function initializeIpcHandlers(appState: AppState): void {
           else if (provider === 'openrouter') apiKey = creds.getOpenrouterApiKey();
           else if (provider === 'fluxion') apiKey = creds.getFluxionApiKey();
           else if (provider === 'agentrouter') apiKey = creds.getAgentRouterApiKey();
+          else if (provider === 'opencode') apiKey = creds.getOpencodeApiKey();
         }
 
         if (!apiKey || !apiKey.trim()) {
           return { success: false, error: 'No API key provided' };
+        }
+
+        // OpenCode answers `GET /v1/models` without a key, so a GET-only test
+        // would green-light an empty credential. probeOpencode stages a POST
+        // too — see llm/opencode/probe.ts.
+        if (provider === 'opencode') {
+          const { probeOpencode } = require('./llm/opencode/probe') as typeof import('./llm/opencode/probe');
+          const result = await probeOpencode(apiKey, { timeoutMs: 8000 });
+          return { success: result.ok, error: result.ok ? undefined : result.error };
         }
 
         const axios = require('axios');

@@ -219,5 +219,9 @@ export function createProviderRateLimiters() {
         // so this is the same conservative gateway default rather than a
         // documented figure.
         ninerouter: new RateLimiter(120, 2.0),
+        // OpenCode publishes no numeric ceiling (its docs cover balance and Go
+        // usage, not request rate), so this is the same conservative gateway
+        // default rather than a documented figure.
+        opencode: new RateLimiter(120, 2.0),
     };
 }

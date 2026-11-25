@@ -57,7 +57,7 @@ const SPEECH_PROVIDERS = {
 /** Every credential that lets Active Model answer without anything else. */
 const AI_KEY_FLAGS = [
   'hasNativelyKey', 'hasGeminiKey', 'hasGroqKey', 'hasOpenaiKey', 'hasClaudeKey', 'hasDeepseekKey',
-  'hasNvidiaNimKey', 'hasOpenrouterKey', 'hasFluxionKey', 'hasAgentRouterKey',
+  'hasNvidiaNimKey', 'hasOpenrouterKey', 'hasFluxionKey', 'hasAgentRouterKey', 'hasOpencodeKey',
 ];
 
 /**

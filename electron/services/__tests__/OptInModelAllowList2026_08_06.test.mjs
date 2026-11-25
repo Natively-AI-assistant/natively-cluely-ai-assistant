@@ -34,7 +34,10 @@ describe('allow-list contract', () => {
     // curated presets like the vendors do.
     assert.equal(isOptInModelProvider('litellm'), true);
     assert.equal(isOptInModelProvider('openrouter'), true);
-    ['gemini', 'openai', 'claude', 'groq', 'deepseek', 'nvidia_nim', 'ollama', 'custom', 'codex-cli'].forEach(p => {
+    // opencode (2026-11-19) is a gateway but NOT opt-in: its catalogue is
+    // bounded and every entry is callable by the same key, so "empty = all"
+    // keeps its presets visible until the user curates.
+    ['gemini', 'openai', 'claude', 'groq', 'deepseek', 'nvidia_nim', 'ollama', 'custom', 'codex-cli', 'opencode'].forEach(p => {
       assert.equal(isOptInModelProvider(p), false, `${p} must keep "empty = all"`);
     });
   });
