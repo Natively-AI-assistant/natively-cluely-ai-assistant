@@ -15,6 +15,16 @@ if (nativeFeatures.length > 0) {
   console.warn(`\n*** DEV-ONLY native features: ${nativeFeatures.join(', ')}. Do not package or ship this build. ***\n`);
 }
 
+// native-module/index.js and index.d.ts are kept by hand. napi only sees the
+// Rust compiled for this OS, so letting it write them dropped the other OS's
+// exports on every build (a Mac build lost deliverClicksWithoutActivation and
+// isImeKeyboardActive). NativeBindingsCoverBothPlatforms checks the committed
+// files against the Rust source. napi's own type file goes to target/, which
+// git and packaging both ignore, to copy from when adding an export. The app
+// loads the .node directly (electron/audio/nativeModuleLoader.ts).
+const GENERATED_DTS_DIR = path.join(nativeModulePath, 'target', 'napi');
+const bindingArgs = ' --no-js --dts target/napi/index.d.ts';
+
 // Ensure Cargo binary directory (~/.cargo/bin) is in PATH if cargo is installed there
 const cargoBinDir = path.join(os.homedir(), '.cargo', 'bin');
 if (fs.existsSync(cargoBinDir)) {
@@ -39,6 +49,8 @@ function verifyArtifacts(expectedArtifacts) {
 }
 
 function runCommand(command, extraEnv = {}) {
+  // napi only logs a failed type-file write, so make its folder first.
+  if (command.includes('napi build')) fs.mkdirSync(GENERATED_DTS_DIR, { recursive: true });
   console.log(`> ${command}`);
   execSync(command, { stdio: 'inherit', cwd: nativeModulePath, env: { ...process.env, ...extraEnv } });
 }
@@ -173,7 +185,7 @@ if (os.platform() === 'darwin') {
       MACOSX_DEPLOYMENT_TARGET: process.env.MACOSX_DEPLOYMENT_TARGET || MACOS_DEPLOYMENT_TARGET,
       ...(clangLibPath ? { LIBRARY_PATH: clangLibPath } : {}),
     };
-    runCommand(`npx napi build --platform --target ${target} --release${featureArgs}`, extraEnv);
+    runCommand(`npx napi build --platform --target ${target} --release${featureArgs}${bindingArgs}`, extraEnv);
   }
 
   // Fix hardcoded absolute paths in .node binaries, then pad the string table
@@ -270,7 +282,7 @@ if (os.platform() === 'darwin') {
   }
 
   try {
-    runCommand(`npx napi build --platform --release${featureArgs}`);
+    runCommand(`npx napi build --platform --release${featureArgs}${bindingArgs}`);
     // Verified INSIDE the try, before the stale copies are swept. napi can exit
     // 0 and still not leave the artifact this platform/arch expects — a
     // toolchain that silently falls back to ia32, or a target-triple rename,
