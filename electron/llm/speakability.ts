@@ -198,16 +198,28 @@ const CONTEXTUAL_PRESSURE_RE =
 /**
  * Facts about the turn that the answer type alone does not carry.
  * `documentOpenQuestion`: a reference-file mode typed an ordinary question
- * lecture_answer for its sources (AnswerPlan.documentOpenQuestion). The type
- * stays, the answer is spoken, so lecture_answer's structured tier does not apply.
+ * lecture_answer for its sources (AnswerPlan.documentOpenQuestion).
+ * `answerLength`: the Answer length this turn uses.
+ *
+ * Under Shorter or Longer such an answer is spoken and gets that setting's
+ * line (discussion #794: Shorter was ignored). Under Smart it keeps
+ * lecture_answer's structured tier, exactly as before: both Smart lines were
+ * measured live 2026-11-25 (82 document questions, blinded Opus judge) and
+ * neither beat no line. A 40-60-word target dropped needed facts (missing
+ * 8 -> 16); the 110-word cap made answers longer (median 68 -> 88 words).
  */
 export interface SpeakabilityTurnFacts {
   documentOpenQuestion?: boolean;
+  answerLength?: AnswerLength;
 }
+
+/** A reference-file open question answered under Shorter or Longer is spoken. */
+export const isSpokenDocumentQuestion = (facts?: SpeakabilityTurnFacts): boolean =>
+  facts?.documentOpenQuestion === true && (facts.answerLength === 'shorter' || facts.answerLength === 'longer');
 
 /** STRUCTURED_FULL by type: lecture_answer only when it is notes or an overview. */
 const isStructuredFullType = (answerType: AnswerType, facts?: SpeakabilityTurnFacts): boolean => {
-  if (answerType === 'lecture_answer' && facts?.documentOpenQuestion === true) return false;
+  if (answerType === 'lecture_answer' && isSpokenDocumentQuestion(facts)) return false;
   return STRUCTURED_FULL_TYPES.has(answerType);
 };
 
@@ -395,6 +407,8 @@ export function decideSpeakability(
 
   // A code-bearing answer is always STRUCTURED_FULL regardless of the classifier inputs.
   const codeBearing = isCoding || HAS_FENCE_RE.test(text || '');
+  // Measured against the same setting the prompt's length line came from.
+  facts = facts ? { ...facts, answerLength } : facts;
   const target: SpeakabilityTarget = codeBearing
     ? 'STRUCTURED_FULL'
     : classifyTargetSpeakability(answerType, answerStyle, question, facts);

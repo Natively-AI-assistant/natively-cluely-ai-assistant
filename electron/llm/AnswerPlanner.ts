@@ -215,10 +215,11 @@ export interface AnswerPlan {
   /**
    * A reference-file mode routed an ordinary question ("why did they choose a
    * qualitative approach?") to `lecture_answer` for its sources and validators,
-   * not because the user asked for notes or an overview. It is still a live
-   * spoken answer, so it takes the spoken length tiers (classifyTargetSpeakability)
-   * like every other document shape. A summary/overview ask leaves this unset and
-   * stays uncapped. Discussion #794 (2026-11-25).
+   * not because the user asked for notes or an overview. Under Shorter or Longer
+   * it is a spoken answer and gets that setting's length line; under Smart it
+   * keeps no line, as before (both Smart lines measured worse, see
+   * SpeakabilityTurnFacts). A summary/overview ask leaves this unset and stays
+   * uncapped at every setting. Discussion #794 (2026-11-25).
    */
   documentOpenQuestion?: boolean;
 }
@@ -2274,7 +2275,12 @@ export const renderLengthDirectiveForPlan = (
   if (plan.answerStyle && plan.answerStyle !== 'default') return '';
   // Coding output owns its own length (the contract's sections + code).
   if (isCodingAnswerType(plan.answerType)) return '';
-  const tier = classifyTargetSpeakability(plan.answerType, plan.answerStyle, plan.question, { documentOpenQuestion: plan.documentOpenQuestion });
+  // A reference-file open question is spoken only under Shorter / Longer, so
+  // its tier needs the setting (read here only for those turns).
+  const docLength = plan.documentOpenQuestion === true
+    ? (opts?.answerLength ?? answerLengthForTurn(opts?.pinnedModeId))
+    : undefined;
+  const tier = classifyTargetSpeakability(plan.answerType, plan.answerStyle, plan.question, { documentOpenQuestion: plan.documentOpenQuestion, answerLength: docLength });
   // STRUCTURED_FULL is INTENTIONALLY long (speakability.ts: "must never be
   // length-trimmed" — code, system design, lecture notes, evidence quotes,
   // explicit step-by-step asks). Code-review 2026-08-23: the first ceiling

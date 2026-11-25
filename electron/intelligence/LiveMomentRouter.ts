@@ -24,6 +24,7 @@ import {
   type SpeakabilityTarget,
 } from '../llm';
 import type { ExtractedQuestion } from '../llm/transcriptQuestionExtractor';
+import { getRegisteredAnswerLength } from '../llm/answerLength';
 import type { ActiveModeInfo } from '../llm/modeProfiles';
 
 export type LiveMomentAction =
@@ -122,7 +123,10 @@ export function routeLiveMoment(input: LiveMomentRouteInput): LiveMomentDecision
   const explicitCodingContract = detectExplicitCodingContract(question);
   const refinement = isRefinementFollowUp(question);
   const codingContinuation = isCodingContinuation(question);
-  const target = classifyTargetSpeakability(plan.answerType, plan.answerStyle, question, { documentOpenQuestion: plan.documentOpenQuestion });
+  const target = classifyTargetSpeakability(plan.answerType, plan.answerStyle, question, {
+    documentOpenQuestion: plan.documentOpenQuestion,
+    answerLength: plan.documentOpenQuestion ? getRegisteredAnswerLength() : undefined,
+  });
   const action = actionForAnswerType(plan.answerType, refinement);
 
   return {

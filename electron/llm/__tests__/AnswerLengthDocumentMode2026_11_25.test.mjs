@@ -7,8 +7,10 @@
 //   1. A reference-file mode routes an ordinary question to lecture_answer for
 //      its sources, and lecture_answer was STRUCTURED_FULL: no length line at
 //      any setting. Now only an overview/summary ask is; an open question is
-//      spoken (AnswerPlan.documentOpenQuestion) and gets the spoken tiers,
-//      Smart included. Lecture mode's own lecture_answer is unchanged.
+//      spoken under Shorter and Longer (AnswerPlan.documentOpenQuestion) and
+//      gets their length line. Smart keeps no line, as before: a 40-60
+//      target cut facts from multi-fact answers and a 110-word cap made them
+//      longer (both measured live 2026-11-25). Lecture mode's own lecture_answer is unchanged.
 //   2. "for most questions" read as a condition, so the length was thrown away
 //      while still silencing the Answer length setting. A "most"/"usually"
 //      scope now resolves as the user's default; real conditions still don't.
@@ -53,16 +55,22 @@ afterEach(() => {
 
 describe('cause 1: an open question in a reference-file mode is a spoken answer', () => {
   for (const q of OPEN_QUESTIONS) {
-    test(`"${q}" keeps lecture_answer for its sources and gets a length line at every setting`, () => {
+    test(`"${q}" keeps lecture_answer for its sources and gets a length line under Shorter and Longer`, () => {
       const plan = live(q, DOC_MODE);
       assert.equal(plan.answerType, 'lecture_answer');
       assert.equal(plan.documentOpenQuestion, true);
-      assert.notEqual(speak.classifyTargetSpeakability(plan.answerType, plan.answerStyle, q, { documentOpenQuestion: true }), 'STRUCTURED_FULL');
-      for (const answerLength of ['shorter', 'smart', 'longer']) {
-        const line = renderLengthDirectiveForPlan(plan, { answerLength });
-        assert.match(line, /LENGTH/, `${answerLength}: no length line`);
+      for (const answerLength of ['shorter', 'longer']) {
+        assert.notEqual(speak.classifyTargetSpeakability(plan.answerType, plan.answerStyle, q, { documentOpenQuestion: true, answerLength }), 'STRUCTURED_FULL', answerLength);
+        assert.match(renderLengthDirectiveForPlan(plan, { answerLength }), /LENGTH/, `${answerLength}: no length line`);
       }
       assert.match(renderLengthDirectiveForPlan(plan, { answerLength: 'shorter' }), /the user chose Shorter answers/);
+    });
+
+    test(`"${q}" under Smart is unchanged: no length line`, () => {
+      const plan = live(q, DOC_MODE);
+      assert.equal(renderLengthDirectiveForPlan(plan, { answerLength: 'smart' }), '');
+      assert.equal(speak.classifyTargetSpeakability(plan.answerType, plan.answerStyle, q, { documentOpenQuestion: true, answerLength: 'smart' }), 'STRUCTURED_FULL');
+      assert.equal(speak.classifyTargetSpeakability(plan.answerType, plan.answerStyle, q, { documentOpenQuestion: true }), 'STRUCTURED_FULL');
     });
   }
 
@@ -98,19 +106,29 @@ describe('cause 1: an open question in a reference-file mode is a spoken answer'
     assert.equal(speak.classifyTargetSpeakability('lecture_answer', 'default', 'Why did they choose it?'), 'STRUCTURED_FULL');
   });
 
-  test('telemetry measures the open question as spoken', () => {
+  test('telemetry measures it with the same setting the prompt used', () => {
     const words = Array.from({ length: 120 }, () => 'word').join(' ');
-    const d = speak.decideSpeakability(words, 'lecture_answer', 'default', OPEN_QUESTIONS[0], false, 'smart', { documentOpenQuestion: true });
-    assert.equal(d.target, 'SPOKEN_SHORT');
-    assert.equal(d.overBudget, true);
-    const old = speak.decideSpeakability(words, 'lecture_answer', 'default', OPEN_QUESTIONS[0]);
-    assert.equal(old.exceptionReason, 'target:STRUCTURED_FULL:answer_type:lecture_answer');
+    const shorter = speak.decideSpeakability(words, 'lecture_answer', 'default', OPEN_QUESTIONS[0], false, 'shorter', { documentOpenQuestion: true });
+    assert.equal(shorter.target, 'SPOKEN_SHORT');
+    assert.equal(shorter.overBudget, true);
+    // Smart sent no line, so it is not counted against a spoken budget.
+    const smart = speak.decideSpeakability(words, 'lecture_answer', 'default', OPEN_QUESTIONS[0], false, 'smart', { documentOpenQuestion: true });
+    assert.equal(smart.target, 'STRUCTURED_FULL');
+    assert.equal(smart.overBudget, false);
+    assert.equal(smart.exceptionReason, 'target:STRUCTURED_FULL:answer_type:lecture_answer');
   });
 
-  test('the live moment router reads the same tier', () => {
-    const d = routeLiveMoment({ question: OPEN_QUESTIONS[0], source: 'what_to_answer', speakerPerspective: 'interviewer', activeMode: DOC_MODE });
-    assert.notEqual(d.speakabilityTarget, 'STRUCTURED_FULL');
+  test('the live moment router reads the same tier from the registered setting', () => {
+    const route = () => routeLiveMoment({ question: OPEN_QUESTIONS[0], source: 'what_to_answer', speakerPerspective: 'interviewer', activeMode: DOC_MODE });
+    assert.equal(route().speakabilityTarget, 'STRUCTURED_FULL');
+    al.registerAnswerLengthProvider(() => 'shorter');
+    assert.notEqual(route().speakabilityTarget, 'STRUCTURED_FULL');
   });
+});
+
+test('Smart keeps the short band for a non-document question', () => {
+  const plan = { answerType: 'general_meeting_answer', answerStyle: 'default', question: 'What questions would you ask me?' };
+  assert.match(renderLengthDirectiveForPlan(plan, { answerLength: 'smart' }), /^LENGTH: aim for about/);
 });
 
 describe('cause 2: a length scoped to "most" questions is the user\'s default', () => {
