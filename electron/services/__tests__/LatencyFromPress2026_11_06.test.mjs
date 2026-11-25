@@ -25,7 +25,11 @@ test('no start given, or a start in the future: it starts now', () => {
 test('What to answer passes the press time to the engine, which starts its trace from it', () => {
   const ipc = read('electron/ipcHandlers.ts');
   const handler = ipc.split("'generate-what-to-say',")[1].split('safeHandle(')[0];
-  assert.ok(handler.indexOf('const pressedAt = tracerNow();') < handler.indexOf('return _tracked(async () => {'), 'taken before any work');
+  // The tracked work is `_tracked(async () => {` however its result is taken
+  // (`return ...`, or `pressResult = await ...` since the answer-press count).
+  const work = handler.indexOf('_tracked(async () => {');
+  assert.ok(work > 0, 'the handler runs its work through _tracked');
+  assert.ok(handler.indexOf('const pressedAt = tracerNow();') < work, 'taken before any work');
   assert.ok(handler.indexOf('const pressedAt = tracerNow();') < handler.indexOf('screen pre-pass'));
   assert.match(handler, /screenContext,\s*pressedAt,/);
   assert.match(read('electron/IntelligenceEngine.ts'), /\.\.\.\(typeof options\?\.pressedAt === 'number' \? \{ startedAt: options\.pressedAt \} : \{\}\),/);

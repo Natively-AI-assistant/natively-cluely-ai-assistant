@@ -26,6 +26,15 @@ function extractMethod(src, signaturePattern, label) {
   return src.slice(start, i - 1);
 }
 
+// The handler registered at `needle`, up to the next safeHandle registration:
+// the whole handler however long it grows, and nothing of its neighbours.
+function extractHandler(src, needle) {
+  const idx = src.indexOf(needle);
+  assert.ok(idx >= 0, `could not locate ${needle}`);
+  const next = src.indexOf('safeHandle(', idx + needle.length);
+  return src.slice(idx, next >= 0 ? next : src.length);
+}
+
 function extractRegion(src, needle, chars = 1_500) {
   const idx = src.indexOf(needle);
   assert.ok(idx >= 0, `could not locate ${needle}`);
@@ -52,10 +61,11 @@ test('model-changed call sites use the targeted helper', () => {
   // holds broadcastCredentialsChanged() (an intentional all-window send) and
   // the words 'model-changed', which read as a broadcast of model-changed.
   for (const needle of ["safeHandle('set-natively-api-key'", "safeHandle('set-model'", "safeHandle('set-default-model'"]) {
-    // 2,400: set-natively-api-key first decides whether a pasted pack key is
-    // held beside the plan's key (2026-11-17), which put its model sync just
-    // past the old 2,000-character window. The pin is unchanged.
-    const region = extractRegion(ipcSource, needle, 2_400);
+    // The whole handler, not a character window: set-natively-api-key kept
+    // growing (pack keys 2026-11-17, unreachable-model fallback) and pushed its
+    // model sync past each fixed window (2,000, then 2,400) with the dispatch
+    // itself unchanged. The pin is unchanged.
+    const region = extractHandler(ipcSource, needle);
     assert.ok(/appState\.sendModelChanged\s*\(/.test(region), `BUG: ${needle} must use targeted model-changed dispatch.`);
     assert.ok(!/BrowserWindow\.getAllWindows\s*\(\s*\)[\s\S]*model-changed/.test(region), `BUG: ${needle} must not broadcast model-changed to every BrowserWindow.`);
   }
