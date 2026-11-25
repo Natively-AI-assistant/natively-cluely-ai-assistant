@@ -53,6 +53,13 @@ const ROWS: Record<string, Row> = {
     'より詳しい回答、90〜200語',
     'Respuestas más completas, 90–200 palabras',
   ],
+  // "Real-time prompt" stays in English: the Modes editor's heading is not translated.
+  "Your mode's Real-time prompt sets the length": [
+    'Длину задаёт Real-time prompt вашего режима',
+    '长度由当前模式的 Real-time prompt 决定',
+    '長さはモードの Real-time prompt で設定されています',
+    'La longitud la fija el Real-time prompt de tu modo',
+  ],
   "Couldn't save the answer length. Please try again.": [
     'Не удалось сохранить длину ответа. Попробуйте ещё раз.',
     '无法保存回答长度，请重试。',
