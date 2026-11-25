@@ -196,7 +196,7 @@ export function OwnAnswersSection({ hasResume, hasAccess }: { hasResume: boolean
         if (saved) { setJustSaved(key); window.setTimeout(() => setJustSaved((k) => (k === key ? null : k)), 1200); }
     };
 
-    const useDrafts = async (keys?: string[]) => {
+    const useDrafts = async (keys: string[]) => {
         setError('');
         const res = await api()?.profileUseOwnAnswerDrafts?.(keys);
         if (!res?.success) { setError(failureText(res, 'The drafts could not be saved.')); return; }
@@ -223,11 +223,6 @@ export function OwnAnswersSection({ hasResume, hasAccess }: { hasResume: boolean
                     </p>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                    {draftKeys.length > 1 && (
-                        <button className="pi-pill-btn pi-pill-btn--primary pi-press" disabled={!hasAccess} onClick={() => void useDrafts()}>
-                            <Check size={12} /> Use all drafts
-                        </button>
-                    )}
                     {hasResume && (
                         <button className="pi-pill-btn pi-press" disabled={!hasAccess || drafting} onClick={() => void draftAgain()}>
                             <RefreshCw size={12} className={drafting ? 'pi-spinner' : ''} />
@@ -246,7 +241,7 @@ export function OwnAnswersSection({ hasResume, hasAccess }: { hasResume: boolean
             <AboutYouCard hasAccess={hasAccess} />
 
             {loaded && draftKeys.length > 0 && (
-                <p style={{ fontSize: 11, color: 'var(--pi-secondary)', margin: '0 0 14px', lineHeight: 1.5 }}>
+                <p style={{ fontSize: 11, color: 'var(--pi-secondary)', margin: '16px 0 10px', lineHeight: 1.5, textWrap: 'pretty' }}>
                     Natively drafted {draftKeys.length === 1 ? 'one answer' : `${draftKeys.length} answers`} from your résumé. A draft is not used in a meeting until you press Use or edit it.
                 </p>
             )}

@@ -61,6 +61,9 @@ const PI_CSS = `
         --pi-primary: rgba(255,255,255,0.85);
         --pi-secondary: rgba(255,255,255,0.55);
         --pi-tertiary: rgba(255,255,255,0.35);
+        /* Empty-state hint text. Resolved here, so Role Insight's own
+           --pi-secondary/--pi-tertiary overrides do not change it. */
+        --pi-empty-text: var(--pi-secondary);
         /*
           The sidebar nav has its own four ink tokens rather than borrowing the
           panel's --pi-secondary / --pi-primary directly. Those two are spent in
@@ -922,47 +925,31 @@ const PI_CSS = `
     /*
       The panel's primary actions (Open Identity, Analyse Role, Research Now,
       Generate Letter, and Role Insight's out-of-date Re-analyse) are the
-      onboarding's "Start using Natively" glass: variant="lavender" + .lg-sm
-      .lg-wide, fed the same per-theme colours. The values are a COPY of
-      WELCOME_BUTTON_TOKENS (src/components/onboarding/welcomeButtonTokens.ts),
-      written out here because this stylesheet is read as plain text by the
-      CSS checks and the Role Insight harness, and because Role Insight's
-      buttons live in the premium tree with no theme prop to pick a token set
-      by. Change one, change the other.
+      Upload file pill (.pi-upload-btn) in both themes: the same --pi-btn-*
+      fill, hover and border, the --pi-primary label at 500, and no sheen,
+      rim, cap shadow, glow or pointer lens. They stay LiquidGlassButton
+      (variant="lavender" + .lg-sm .lg-wide) for the box, label and press;
+      this rule flattens it. Only the gradient is dropped (background-image),
+      so the fill stays background-color and the hover tint still applies.
 
-      Dark is the toggle blue at full strength with a white label; light is a
-      pale tint of the same hue with a deep label (white on it runs ~1.3:1).
-
-      The box is the tinted pill these replaced: 32px tall, 20px side padding
-      plus the 1px border it had. The glow is the onboarding's, brought in for
-      a pill two thirds the height: at 14px/30px it reached past the bottom
-      edge of the notice card the Re-analyse button sits in.
+      The box is Upload file's: 30px tall, 18px side padding plus a 1px
+      border, drawn as an inset ring so the height holds.
     */
-    .lg-button.lg-sm.pi-action-lg {
-        --lg-pill-h: 32px;
-        padding: 0 21px;
-        --lg-lav-bg: #7C5CFF;
-        --lg-lav-hover: #8B6EFF;
-        --lg-lav-fg: #FFFFFF;
-        --lg-lav-rim: rgba(255,255,255,0.30);
-        --lg-lav-glow: rgba(124,92,255,0.55);
-        box-shadow:
-            inset 0 -1px 0 var(--lg-lav-under, rgba(90,43,176,0.14)),
-            0 1px 2px var(--lg-lav-drop, rgba(78,46,150,0.10)),
-            0 9px 20px -9px var(--lg-lav-glow);
+    .pi-root .lg-button.lg-sm.pi-action-lg {
+        --lg-pill-h: 30px;
+        padding: 0 19px;
+        --lg-lav-bg: var(--pi-btn-bg);
+        --lg-lav-hover: var(--pi-btn-bg-hover);
+        --lg-lav-fg: var(--pi-primary);
+        --lg-label-weight: 500;
+        background-image: none;
+        box-shadow: inset 0 0 0 1px var(--pi-btn-border);
+        -webkit-backdrop-filter: none;
+                backdrop-filter: none;
     }
-    .pi-root[data-theme='light'] .lg-button.lg-sm.pi-action-lg {
-        --lg-lav-bg: rgba(124,92,255,0.28);
-        --lg-lav-hover: rgba(124,92,255,0.40);
-        --lg-lav-fg: #3F2593;
-        --lg-lav-rim: rgba(255,255,255,0.78);
-        --lg-rim-2: rgba(124,92,255,0.32);
-        --lg-rim-3: rgba(124,92,255,0.14);
-        --lg-lens-rim-soft: rgba(124,92,255,0.28);
-        --lg-lav-glow: rgba(124,92,255,0.42);
-        --lg-lav-under: rgba(63,37,147,0.14);
-        --lg-lav-drop: rgba(63,37,147,0.10);
-    }
+    .pi-root .lg-button.lg-sm.pi-action-lg::before,
+    .pi-root .lg-button.lg-sm.pi-action-lg::after,
+    .pi-root .lg-button.lg-sm.pi-action-lg .lg-lens { display: none; }
 
     /*
       prefers-contrast: more — the whole premise of this material is a rim so
@@ -979,6 +966,18 @@ const PI_CSS = `
         .pi-cta::after { opacity: 0; }
         .pi-cta-lens { display: none; }
     }
+
+    /* Empty states are the Upload file card (.pi-file-empty): solid hairline
+       card, one hint line, the flat action pill under it. No icon, no title.
+       Same box as the Identity upload slot: 22/24 padding, 12px text
+       wrapping near 400px, 12px to the button.
+       Role Insight's .ri-empty copies these values. */
+    .pi-file-empty.pi-empty-card { gap: 12px; margin-bottom: 0; }
+    .pi-empty-text {
+        font-size: 12px; color: var(--pi-empty-text); margin: 0;
+        line-height: 1.6; max-width: 400px; text-wrap: pretty;
+    }
+    .pi-empty-text strong { color: var(--pi-primary); font-weight: 500; }
 
     /* ── Util buttons ── */
     .pi-close-btn {
@@ -2964,16 +2963,17 @@ export function ProfileIntelligenceSettings({
                     "Your profile" title still reads (Cover Letter parity) and
                     the user gets a clear next step. */}
                 {!hasProfile && (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-accent-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <FileText size={18} style={{ color: 'var(--pi-accent-icon)' }} />
-                        </div>
-                        <div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No resume yet</div>
-                            <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
-                                Add your resume in <strong style={{ color: 'var(--pi-primary)' }}>Identity</strong> and I'll summarize it here.
-                            </div>
-                        </div>
+                    <div className="pi-file-empty pi-empty-card">
+                        <p className="pi-empty-text">
+                            Add your resume in <strong>Identity</strong> and I'll summarize it here.
+                        </p>
+                        <LiquidGlassButton
+                            variant="lavender"
+                            className="lg-sm lg-wide pi-action-lg"
+                            onClick={() => goToSection('identity')}
+                        >
+                            Open Identity
+                        </LiquidGlassButton>
                     </div>
                 )}
 
@@ -3258,32 +3258,34 @@ export function ProfileIntelligenceSettings({
                 {/* No JD — surface this as its own card so the header still reads
                     (Cover Letter parity), but the user gets a clear next step. */}
                 {!hasJD && (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Building2 size={18} style={{ color: 'var(--pi-accent-icon)' }} />
-                        </div>
-                        <div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No job description yet</div>
-                            <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
-                                Upload a job description in <strong style={{ color: 'var(--pi-primary)' }}>Identity</strong> so I can research the target company.
-                            </div>
-                        </div>
+                    <div className="pi-file-empty pi-empty-card">
+                        <p className="pi-empty-text">
+                            Upload a job description in <strong>Identity</strong> so I can research the target company.
+                        </p>
+                        <LiquidGlassButton
+                            variant="lavender"
+                            className="lg-sm lg-wide pi-action-lg"
+                            onClick={() => goToSection('identity')}
+                        >
+                            Open Identity
+                        </LiquidGlassButton>
                     </div>
                 )}
 
                 {/* JD present but no company name extracted — same pattern: header
                     stays, the missing-name card explains the gap. */}
                 {hasJD && !companyName && (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Building2 size={18} style={{ color: 'var(--pi-accent-icon)' }} />
-                        </div>
-                        <div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>Company name not detected</div>
-                            <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
-                                Your JD didn't name a company clearly. Re-upload a JD with the company in the first few lines, or ask for company research directly.
-                            </div>
-                        </div>
+                    <div className="pi-file-empty pi-empty-card">
+                        <p className="pi-empty-text">
+                            Your JD didn't name a company clearly. Re-upload a JD with the company in the first few lines, or ask for company research directly.
+                        </p>
+                        <LiquidGlassButton
+                            variant="lavender"
+                            className="lg-sm lg-wide pi-action-lg"
+                            onClick={() => goToSection('identity')}
+                        >
+                            Open Identity
+                        </LiquidGlassButton>
                     </div>
                 )}
 
@@ -3294,16 +3296,10 @@ export function ProfileIntelligenceSettings({
                     </div>
                 )}
                 {!companyDossier && !companyResearching && !aotResearching && companyName && (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Building2 size={18} style={{ color: 'var(--pi-accent-icon)' }} />
-                        </div>
-                        <div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>Ready to research</div>
-                            <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
-                                Hiring strategy, interview focus, salary signals and culture for <strong style={{ color: 'var(--pi-primary)' }}>{companyName}</strong>.
-                            </div>
-                        </div>
+                    <div className="pi-file-empty pi-empty-card">
+                        <p className="pi-empty-text">
+                            Research hiring strategy, interview focus, salary signals and culture for <strong>{companyName}</strong>.
+                        </p>
                         <LiquidGlassButton
                             variant="lavender"
                             className="lg-sm lg-wide pi-action-lg"
@@ -3750,46 +3746,42 @@ export function ProfileIntelligenceSettings({
 
                 {/* Empty: no resume yet — always wins over any cached letter */}
                 {!hasResume && (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Mail size={18} style={{ color: 'var(--pi-accent-icon)' }} />
-                        </div>
-                        <div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No resume yet</div>
-                            <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
-                                Upload your resume in <strong style={{ color: 'var(--pi-primary)' }}>Identity</strong> first — cover letters are tailored from it.
-                            </div>
-                        </div>
+                    <div className="pi-file-empty pi-empty-card">
+                        <p className="pi-empty-text">
+                            Upload your resume in <strong>Identity</strong> first,<br />cover letters are tailored from it.
+                        </p>
+                        <LiquidGlassButton
+                            variant="lavender"
+                            className="lg-sm lg-wide pi-action-lg"
+                            onClick={() => goToSection('identity')}
+                        >
+                            Open Identity
+                        </LiquidGlassButton>
                     </div>
                 )}
 
                 {/* Empty: resume present, no active JD yet */}
                 {hasResume && !hasJD && (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Mail size={18} style={{ color: 'var(--pi-accent-icon)' }} />
-                        </div>
-                        <div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No job description yet</div>
-                            <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
-                                Upload a job description in <strong style={{ color: 'var(--pi-primary)' }}>Identity</strong> so the letter can be tailored to the role.
-                            </div>
-                        </div>
+                    <div className="pi-file-empty pi-empty-card">
+                        <p className="pi-empty-text">
+                            Upload a job description in <strong>Identity</strong> so the letter can be tailored to the role.
+                        </p>
+                        <LiquidGlassButton
+                            variant="lavender"
+                            className="lg-sm lg-wide pi-action-lg"
+                            onClick={() => goToSection('identity')}
+                        >
+                            Open Identity
+                        </LiquidGlassButton>
                     </div>
                 )}
 
                 {/* Empty: resume + JD present, no letter generated yet */}
                 {showGenerateCTA && (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Mail size={18} style={{ color: 'var(--pi-accent-icon)' }} />
-                        </div>
-                        <div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>Ready to write</div>
-                            <div style={{ fontSize: 12, color: 'var(--pi-secondary)', lineHeight: 1.6, maxWidth: 260 }}>
-                                Generate a personalised cover letter from your resume and this job description.
-                            </div>
-                        </div>
+                    <div className="pi-file-empty pi-empty-card">
+                        <p className="pi-empty-text">
+                            Generate a personalised cover letter from your resume and this job description.
+                        </p>
                         <LiquidGlassButton
                             variant="lavender"
                             className="lg-sm lg-wide pi-action-lg"
@@ -3865,12 +3857,22 @@ export function ProfileIntelligenceSettings({
     // whether the user has access and how to jump to the sections that supply
     // its sources. That keeps this already-large component from growing another
     // dozen useState hooks.
+    // The section header is the same title + one line as Company Intel and Cue
+    // Cards; the panel's own result title (the job) sits under it.
     const renderRoleInsight = () => (
-        <RoleInsightPanel
-            hasAccess={hasProfileAccess}
-            onNeedUpgrade={() => openPlans()}
-            onGoToProfile={() => goToSection('identity')}
-        />
+        <>
+            <div style={{ marginBottom: 20 }}>
+                <h3 className="pi-section-label" style={{ margin: 0 }}>Role Insight</h3>
+                <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '4px 0 0', lineHeight: 1.5 }}>
+                    How well your résumé matches the role, where the gaps are and what to be ready for.
+                </p>
+            </div>
+            <RoleInsightPanel
+                hasAccess={hasProfileAccess}
+                onNeedUpgrade={() => openPlans()}
+                onGoToProfile={() => goToSection('identity')}
+            />
+        </>
     );
 
     const SECTION_RENDERERS: Record<string, () => React.ReactNode> = {
