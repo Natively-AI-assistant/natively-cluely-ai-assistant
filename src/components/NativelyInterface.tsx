@@ -11352,7 +11352,11 @@ Provide only the answer, nothing else.`;
         return;
       }
       if (editLetter) {
-        const next = editCommand({ value: inputValueRef.current, allSelected: stealthAllSelectedRef.current }, editLetter);
+        // Issue #758: code selected in an answer. The overlay is never focused
+        // on Windows, but the selection is still there to read; Chromium leaves
+        // the code blocks' user-select:none line numbers out of the text.
+        const pageSelection = editLetter === 'c' ? window.getSelection()?.toString() ?? '' : '';
+        const next = editCommand({ value: inputValueRef.current, allSelected: stealthAllSelectedRef.current }, editLetter, pageSelection);
         if (next.copy !== undefined) window.electronAPI.stealthWriteClipboard?.(next.copy).catch(() => {});
         markStealthAllSelected(next.allSelected);
         if (next.value !== inputValueRef.current) setInputValue(next.value);
