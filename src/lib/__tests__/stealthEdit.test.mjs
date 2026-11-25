@@ -37,6 +37,23 @@ test('select all, then copy / cut act on the whole text', () => {
   assert.deepEqual(editCommand({ value: '', allSelected: false }, 'a'), { value: '', allSelected: false }, 'empty box selects nothing');
 });
 
+// Issue #758: on Windows the typing session stays on after Enter, so Ctrl+C
+// reaches editCommand while the user has code selected in the answer. Copy
+// must take that selection (the box is not selected); it used to do nothing.
+test('copy takes the text selected on the page when the box is not selected', () => {
+  const box = { value: '', allSelected: false };
+  const code = 'def f():\n    return 1';
+  assert.deepEqual(editCommand(box, 'c', code), { value: '', allSelected: false, copy: code });
+  assert.deepEqual(editCommand({ value: 'ask', allSelected: false }, 'c', code).copy, code, 'with text typed in the box');
+  // A selected box wins: Ctrl+A then Ctrl+C copies what was typed.
+  assert.deepEqual(editCommand({ value: 'ask', allSelected: true }, 'c', code).copy, 'ask');
+  // A collapsed or blank selection is no selection.
+  assert.deepEqual(editCommand(box, 'c', ''), box);
+  assert.deepEqual(editCommand(box, 'c', ' \n\t'), box);
+  // The answers are read-only: cut never takes page text.
+  assert.deepEqual(editCommand(box, 'x', code), box);
+});
+
 test('paste appends, or replaces a selection; line breaks become spaces', () => {
   assert.deepEqual(paste({ value: 'ask ', allSelected: false }, 'this'), { value: 'ask this', allSelected: false });
   assert.deepEqual(paste({ value: 'old', allSelected: true }, 'new'), { value: 'new', allSelected: false });

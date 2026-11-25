@@ -34,14 +34,24 @@ export function pastedText(raw) {
 
 /**
  * Applies a non-paste command. Paste needs the clipboard, so it is paste().
+ *
+ * `pageSelection` is the text selected elsewhere in the window (an answer, a
+ * code block). The hooks take Ctrl/Cmd+C for the whole typing session, and on
+ * Windows that session stays on after Enter, so copying a selected answer
+ * arrives here too (issue #758). A selected box still wins; cut never takes
+ * page text, since the answers are read-only.
  * @param {{ value: string, allSelected: boolean }} state
  * @param {'a' | 'c' | 'x'} letter
+ * @param {string} [pageSelection]
  * @returns {{ value: string, allSelected: boolean, copy?: string }}
  */
-export function editCommand(state, letter) {
+export function editCommand(state, letter, pageSelection = '') {
   const { value, allSelected } = state;
   if (letter === 'a') return { value, allSelected: value.length > 0 };
-  if (letter === 'c') return allSelected ? { value, allSelected, copy: value } : state;
+  if (letter === 'c') {
+    if (allSelected) return { value, allSelected, copy: value };
+    return pageSelection.trim() ? { value, allSelected, copy: pageSelection } : state;
+  }
   if (letter === 'x') return allSelected ? { value: '', allSelected: false, copy: value } : state;
   return state;
 }
