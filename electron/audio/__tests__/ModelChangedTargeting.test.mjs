@@ -26,6 +26,12 @@ function extractMethod(src, signaturePattern, label) {
   return src.slice(start, i - 1);
 }
 
+/** Body of the `safeHandle('<channel>', async (...) => { ... })` that `needle` starts. */
+function handlerBody(needle) {
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return extractMethod(ipcSource, new RegExp(`${escaped},\\s*async\\s*\\([^)]*\\)\\s*=>\\s*\\{`), needle);
+}
+
 function extractRegion(src, needle, chars = 1_500) {
   const idx = src.indexOf(needle);
   assert.ok(idx >= 0, `could not locate ${needle}`);
@@ -52,11 +58,24 @@ test('model-changed call sites use the targeted helper', () => {
   // holds broadcastCredentialsChanged() (an intentional all-window send) and
   // the words 'model-changed', which read as a broadcast of model-changed.
   for (const needle of ["safeHandle('set-natively-api-key'", "safeHandle('set-model'", "safeHandle('set-default-model'"]) {
-    // 2,400: set-natively-api-key first decides whether a pasted pack key is
-    // held beside the plan's key (2026-11-17), which put its model sync just
-    // past the old 2,000-character window. The pin is unchanged.
-    const region = extractRegion(ipcSource, needle, 2_400);
+    // The whole handler, not a fixed window after it: set-natively-api-key kept
+    // growing (pack keys, 2026-11-17 to 11-19) and pushed its model sync past
+    // a 2,000- and then a 2,400-character window.
+    const region = handlerBody(needle);
     assert.ok(/appState\.sendModelChanged\s*\(/.test(region), `BUG: ${needle} must use targeted model-changed dispatch.`);
+    // Each model change in the handler tells the UI with that same model, before
+    // the next change. A pass over the whole body alone would let one sync stand
+    // in for another (set-natively-api-key also syncs on its revert path).
+    const changes = [...region.matchAll(/llmHelper\.setModel\(\s*([\w.]+)/g)];
+    assert.ok(changes.length > 0, `${needle}: no llmHelper.setModel( found`);
+    changes.forEach((change, n) => {
+      const until = changes[n + 1]?.index ?? region.length;
+      const after = region.slice(change.index, until);
+      assert.ok(
+        after.includes(`appState.sendModelChanged(${change[1]})`),
+        `BUG: ${needle} changes the model to ${change[1]} without appState.sendModelChanged(${change[1]}).`,
+      );
+    });
     assert.ok(!/BrowserWindow\.getAllWindows\s*\(\s*\)[\s\S]*model-changed/.test(region), `BUG: ${needle} must not broadcast model-changed to every BrowserWindow.`);
   }
 
