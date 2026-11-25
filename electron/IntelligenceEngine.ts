@@ -1034,6 +1034,49 @@ export class IntelligenceEngine extends EventEmitter {
         } catch { return false; }
     }
 
+    /**
+     * What was said recently, for a prompt that has no composer of its own
+     * (Recap, Brainstorm, Code hint, and the legacy answer fallbacks). Read
+     * from the DURABLE transcript, like the composer's "Conversation so far":
+     * getFormattedContext reads the rolling window, which is evicted 180 s
+     * back whatever is asked for, so a problem stated four minutes before a
+     * Brainstorm press reached the model without its statement (PR #793).
+     * Speech plus the user's typed lines (labelled as typed), without the
+     * assistant's own suggestions; newest lines kept within
+     * SPEECH_WINDOW_MAX_CHARS, since these prompts have no budget of their own.
+     * Typed lines stay because the rolling window carried them, and with Chat
+     * history off nothing else does: a typed-only chat got "nothing to recap".
+     */
+    private recentSpeechForPrompt(): string {
+        return speechWindowForPrompt(this.session.getFormattedSpeech(SPEECH_WINDOW_SECONDS, { includeTyped: true }));
+    }
+
+    /**
+     * The earlier chat for the manual-answer fallback (the V3 composer built
+     * nothing). That fallback used to read the rolling window, which held the
+     * last answer, so "make it shorter" could see what to shorten; the speech
+     * window does not hold answers. Mirrors what V3 sends: the ring when Chat
+     * history is on, else the one previous question and answer, as a referent.
+     * '' when there is none or the transcript may not be sent.
+     */
+    private earlierChatForManualFallback(transcript: string, question: string): string {
+        const ring = this.conversationHistoryText(transcript);
+        if (ring) return ring;
+        try {
+            const { isScopeDenied, readProviderScopePolicy } = require('./context-intelligence/policies/provider-scope-policy') as
+                typeof import('./context-intelligence/policies/provider-scope-policy');
+            if (isScopeDenied('transcript', readProviderScopePolicy())) return '';
+            const { getConversationState } = require('./context-intelligence/question/conversation-state-store') as
+                typeof import('./context-intelligence/question/conversation-state-store');
+            const cs = getConversationState(this.conversationSessionId());
+            const prevQ = cs?.previousQuestion?.trim();
+            // A bridge that advanced the state before failing left THIS question there.
+            if (!prevQ || prevQ === question.trim()) return '';
+            return `Previous question: ${prevQ}`
+                + (cs?.previousAnswerSummary ? `\nPrevious answer (referent only, NOT evidence): ${cs.previousAnswerSummary}` : '');
+        } catch { return ''; }
+    }
+
     /** A transcript window and the conversation history, as one context string. */
     private withConversationHistory(transcript: string | null | undefined): string {
         const text = String(transcript ?? '');
@@ -2722,7 +2765,7 @@ export class IntelligenceEngine extends EventEmitter {
                     if (!isSpeculative) this.emit('suggested_answer', noKeyMsg, question || 'inferred', confidence, generationId);
                     return noKeyMsg;
                 }
-                const context = this.session.getFormattedContext(180);
+                const context = this.recentSpeechForPrompt();
                 const answer = await this.answerLLM.generate(question || '', context);
                 if (isWtaSuperseded()) {
                     recordWtaCancellation();
@@ -8465,7 +8508,7 @@ export class IntelligenceEngine extends EventEmitter {
 
             // The conversation so far too: in Ambient AI Chat, or outside a
             // meeting, the typed chat and hotkey answers ARE the conversation.
-            const context = this.withConversationHistory(this.session.getFormattedContext(120));
+            const context = this.withConversationHistory(this.recentSpeechForPrompt());
             if (!context) {
                 console.warn('[IntelligenceEngine] No context available for recap');
                 this.setMode('idle');
@@ -9061,9 +9104,12 @@ export class IntelligenceEngine extends EventEmitter {
                 const _docEnforced = (activeModeInfo as any)?.strictDocumentGroundedActive === true
                     || (activeModeInfo?.documentGroundedCustomModeActive === true
                         && Boolean((activeModeInfo as any)?.hasReferenceFiles));
-                const transcriptContext = _docEnforced || isCodingAnswerType(answerPlan.answerType)
+                const speech = _docEnforced || isCodingAnswerType(answerPlan.answerType)
                     ? undefined
-                    : this.session.getFormattedContext(120);
+                    : this.recentSpeechForPrompt();
+                const transcriptContext = speech === undefined
+                    ? undefined
+                    : [this.earlierChatForManualFallback(speech, question), speech].filter((part) => part.trim()).join('\n\n');
                 // About you, the mode's Real-time prompt facts and "Use in every
                 // answer" skills, which the V3 branch above carries (2026-11-09).
                 // Scoped by this turn's answer type, so a coding turn gets the
@@ -9179,7 +9225,7 @@ export class IntelligenceEngine extends EventEmitter {
             // still goes, in its own block (buildCodeHintMessage drops the
             // transcript beside a question): the constraints screenshot shared
             // two turns before the problem was detected belongs to the same problem.
-            const recentTranscript = questionContext === null ? this.session.getFormattedContext(180) : null;
+            const recentTranscript = questionContext === null ? this.recentSpeechForPrompt() : null;
             const transcriptContext = codeHintV3 || questionContext !== null
                 ? recentTranscript
                 : this.withConversationHistory(recentTranscript) || recentTranscript;
@@ -9271,7 +9317,7 @@ export class IntelligenceEngine extends EventEmitter {
 
             // With the conversation so far: a problem shared on a screenshot a
             // few turns ago is what a later Brainstorm press is about.
-            const context = this.withConversationHistory(this.session.getFormattedContext(180));
+            const context = this.withConversationHistory(this.recentSpeechForPrompt());
             // The problem statement goes with it so the LLM knows exactly what to brainstorm
             const resolvedProblem = problemStatement?.trim() ||
                 this.session.getDetectedCodingQuestion().question?.trim();
