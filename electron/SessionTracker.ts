@@ -954,9 +954,12 @@ export class SessionTracker {
      * is asked for: "draw what we discussed" was handed at most three minutes
      * of a meeting however long the window it asked for. Speech only — the
      * assistant's own suggestions are not something anyone described.
+     * `includeTyped` keeps the user's typed lines, labelled as typed: Recap,
+     * Brainstorm and Code hint got them from the rolling window, and with
+     * Chat history off nothing else carries them (PR #809 review).
      */
-    getFormattedSpeech(lastSeconds: number = 600): string {
-        return this.formatContextItems(this.getDurableContext(lastSeconds).filter((item) => item.role !== 'assistant' && !item.typed));
+    getFormattedSpeech(lastSeconds: number = 600, opts: { includeTyped?: boolean } = {}): string {
+        return this.formatContextItems(this.getDurableContext(lastSeconds).filter((item) => item.role !== 'assistant' && (opts.includeTyped || !item.typed)));
     }
 
     /**

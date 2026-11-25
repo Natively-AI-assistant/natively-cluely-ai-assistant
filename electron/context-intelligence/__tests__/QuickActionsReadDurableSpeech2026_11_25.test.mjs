@@ -102,6 +102,26 @@ describe('quick actions are handed the setup said more than 180 s ago', () => {
     assert.doesNotMatch(String(seen), /ASSISTANT \(PREVIOUS SUGGESTION\)/);
   });
 
+  test('typed chat lines are kept (Chat history off): a typed-only chat still has something to recap', async () => {
+    const prev = process.env.NATIVELY_CHAT_HISTORY_MULTI_TURN;
+    process.env.NATIVELY_CHAT_HISTORY_MULTI_TURN = '0';
+    try {
+      const s = new SessionTracker();
+      s.addTranscript({ speaker: 'user', text: 'Typed setup: the queue is called ID-TYPED.', timestamp: Date.now() - 30_000, final: true, confidence: 1, origin: 'manual_chat' });
+      s.addAssistantMessage('Use a dead-letter queue.', undefined, 'what_to_answer');
+      let seen = null;
+      const e = engine({
+        session: s,
+        recapLLM: { generateStream: async function* (context) { seen = context; yield 'Recap.'; } },
+      });
+      await e.runRecap();
+      assert.match(String(seen), /\[ME TYPED\]: Typed setup: the queue is called ID-TYPED\./);
+      assert.doesNotMatch(String(seen), /ASSISTANT \(PREVIOUS SUGGESTION\)/);
+    } finally {
+      if (prev === undefined) delete process.env.NATIVELY_CHAT_HISTORY_MULTI_TURN; else process.env.NATIVELY_CHAT_HISTORY_MULTI_TURN = prev;
+    }
+  });
+
   test('the window is bounded like the composer\'s: a long meeting keeps its newest lines', async () => {
     const s = new SessionTracker();
     const now = Date.now();

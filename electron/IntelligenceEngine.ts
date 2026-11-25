@@ -1041,11 +1041,14 @@ export class IntelligenceEngine extends EventEmitter {
      * getFormattedContext reads the rolling window, which is evicted 180 s
      * back whatever is asked for, so a problem stated four minutes before a
      * Brainstorm press reached the model without its statement (PR #793).
-     * Speech only, newest lines kept within SPEECH_WINDOW_MAX_CHARS, since
-     * these prompts have no budget of their own.
+     * Speech plus the user's typed lines (labelled as typed), without the
+     * assistant's own suggestions; newest lines kept within
+     * SPEECH_WINDOW_MAX_CHARS, since these prompts have no budget of their own.
+     * Typed lines stay because the rolling window carried them, and with Chat
+     * history off nothing else does: a typed-only chat got "nothing to recap".
      */
     private recentSpeechForPrompt(): string {
-        return speechWindowForPrompt(this.session.getFormattedSpeech(SPEECH_WINDOW_SECONDS));
+        return speechWindowForPrompt(this.session.getFormattedSpeech(SPEECH_WINDOW_SECONDS, { includeTyped: true }));
     }
 
     /** A transcript window and the conversation history, as one context string. */
