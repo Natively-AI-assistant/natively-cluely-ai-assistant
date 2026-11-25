@@ -784,8 +784,8 @@ const SHARED_BUDGET_ATTEMPTS = 7;
 /**
  * Build the sole provider prompt. When bounded, optional context is reduced
  * oldest-priority-first: the legacy `transcript` field always goes first, then
- * a source-dependent order between `meetingTranscript` (last 180s of the live
- * session) and `referenceContext` (full raw text of every mode reference
+ * a source-dependent order between `meetingTranscript` (the live session's
+ * recent speech) and `referenceContext` (full raw text of every mode reference
  * file) — see the drop-order comment above.
  *
  * A field is only DROPPED once it cannot be usefully SHRUNK. Reference files

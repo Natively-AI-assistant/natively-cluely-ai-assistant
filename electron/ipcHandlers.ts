@@ -128,7 +128,7 @@ function repairFirstUsefulMs(llmHelper: any, minMs: number = 7000, turnKey?: obj
     minMs,
   });
 }
-import { stripPriorAssistantTurns } from './llm/conversationHistoryPolicy';
+import { stripPriorAssistantTurns, SPEECH_WINDOW_SECONDS } from './llm/conversationHistoryPolicy';
 import { performanceHooks, applyAdaptiveTtft, secondaryStreamObserver } from './llm/performance/wiring';
 import { estimateTokens as _estimatePerfTokens } from './llm/modelCapabilities';
 import { DEEPSEEK_DEFAULT_MODEL, isDeepseekModelId } from './llm/deepseekModels';
@@ -9072,8 +9072,8 @@ export function initializeIpcHandlers(appState: AppState): void {
     // referenceFiles and meetingTranscript are always server-computed, not
     // taken from the renderer (which never sends either): raw, unchunked,
     // unranked — every attached reference file's full text, and the live
-    // session's last 180s of transcript (the same window the legacy live
-    // auto-answer path already reads via getFormattedContext). Direct Assist
+    // session's recent speech (the durable SPEECH_WINDOW_SECONDS window the
+    // other answer surfaces read). Direct Assist
     // has no retrieval step of its own; this is the entire "evidence", left
     // for the model to read itself. Sizing happens once, downstream, against
     // the real prompt budget.
@@ -9119,7 +9119,11 @@ export function initializeIpcHandlers(appState: AppState): void {
 
     let meetingTranscript = '';
     try {
-      meetingTranscript = appState.getIntelligenceManager()?.getFormattedContext?.(180) ?? '';
+      // The durable speech, as the other answer surfaces read it: the rolling
+      // context is evicted 180 s back, so a question set up earlier arrived
+      // without its setup (PR #793). Unbounded here: the request builder
+      // tails it to the prompt budget (tailTranscriptToFit).
+      meetingTranscript = appState.getIntelligenceManager()?.getFormattedSpeech?.(SPEECH_WINDOW_SECONDS) ?? '';
     } catch (error) {
       console.warn('[direct-assist] live session transcript unavailable, proceeding without it:', (error as Error)?.message);
     }
