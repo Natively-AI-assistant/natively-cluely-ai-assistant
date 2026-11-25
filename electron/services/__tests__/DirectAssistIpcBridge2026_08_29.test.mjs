@@ -273,7 +273,11 @@ test('referenceContext and meetingTranscript are always server-populated, ignori
   // main slices each file before handing it over, so it has to carry the size
   // it sliced FROM — otherwise the TRUNCATED notice understates what is missing.
   assert.match(streamBlock, /totalChars: content\.length/);
-  assert.match(streamBlock, /getFormattedContext\??\.?\(180\)/);
+  assert.match(
+    streamBlock,
+    /meetingTranscript = appState\.getIntelligenceManager\(\)\?\.getFormattedSpeech\?\.\(SPEECH_WINDOW_SECONDS\)/,
+    'the server must populate the transcript from the shared durable speech window',
+  );
   assert.match(streamBlock, /\n\s*meetingTranscript,\n/);
 });
 
