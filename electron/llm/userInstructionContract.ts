@@ -375,6 +375,17 @@ const lengthIsConditional = (sentence: string, usual: boolean): boolean => {
   return CONDITIONAL_RE.test(rest);
 };
 
+// The scope must belong to the length itself: in its own clause ("25-40 words
+// for most questions") or as a bare lead-in ("Usually, keep it under 50 words").
+// A "usually" elsewhere in the sentence is about something else, and a hard cap
+// is never a default: "Never go over 50 words, since interviewers usually lose
+// interest" softened to "usually up to 50 words" (review, 2026-11-25).
+const LEAD_IN_SCOPE_RE = new RegExp(`^(?:${USUAL_SCOPE_SRC})$`, 'i');
+const HARD_CAP_RE = /\b(?:never|strictly|at\s+most|no\s+(?:more|longer)\s+than|not\s+(?:more|longer)\s+than|must\s+not|mustn['’]t|(?:do\s+not|don['’]t)\s+(?:ever\s+)?(?:go\s+(?:over|past|beyond)|exceed)|hard\s+(?:cap|limit|ceiling)|under\s+no\s+circumstances|always)\b/i;
+const lengthIsUsual = (clause: string, lead: string): boolean =>
+  !HARD_CAP_RE.test(clause)
+  && (USUAL_SCOPE_RE.test(clause) || LEAD_IN_SCOPE_RE.test(lead.replace(/[.,:;!]+$/, '').trim()));
+
 // "Keep answers short (25-40 words for most questions)": the length sits in an
 // aside, and the clause around it is too long to read as a bare setting.
 const PARENTHETICAL_RE = /\(([^()]*)\)/;
@@ -393,16 +404,17 @@ const lengthAside = (clause: string): string => {
 const scanLength = (lines: InstructionLine[]): LengthScan => {
   // Whole-answer clauses only: a step of a format contract ("2. Approach in 3
   // bullets") scopes that step and must not make the answer's own length ambiguous.
-  const candidates: { clause: string; sentence: string }[] = [];
+  const candidates: { clause: string; sentence: string; lead: string }[] = [];
   for (const l of lines) {
     if (l.isListItem) continue;
     for (const s of l.sentences) {
-      for (const rawClause of splitInstructionClauses(s)) {
+      const clauses = splitInstructionClauses(s);
+      for (const [index, rawClause] of clauses.entries()) {
         const c = normalizeLengthPhrasing(lengthAside(rawClause));
         if (isFirstPersonFact(c) || PART_SCOPED_RE.test(c) || !acceptsInstructionClause(c)) continue;
         if (SEQUENCER_RE.test(c) && !WHOLE_ANSWER_RE.test(c.replace(LEAD_IN_RE, ''))) continue;
         if (isNotAnAnswerLength(c)) continue;
-        if ((c.match(LENGTH_EXPR_RE) || []).length > 0) candidates.push({ clause: c, sentence: s });
+        if ((c.match(LENGTH_EXPR_RE) || []).length > 0) candidates.push({ clause: c, sentence: s, lead: index > 0 ? clauses[index - 1] : '' });
       }
     }
   }
@@ -410,8 +422,8 @@ const scanLength = (lines: InstructionLine[]): LengthScan => {
   const mentioned = expressions > 0 || lines.some(l => PART_SCOPED_RE.test(l.body) && LENGTH_EXPR_RE.test(l.body) && /\b(?:each|every|per)\b/i.test(l.body));
   LENGTH_EXPR_RE.lastIndex = 0;
   if (candidates.length !== 1) return { target: null, mentioned };
-  const { clause: c, sentence } = candidates[0];
-  const usual = USUAL_SCOPE_RE.test(sentence);
+  const { clause: c, sentence, lead } = candidates[0];
+  const usual = lengthIsUsual(c, lead);
   if (lengthIsConditional(sentence, usual)) return { target: null, mentioned };
   const scope = usual ? { usually: true } : {};
 

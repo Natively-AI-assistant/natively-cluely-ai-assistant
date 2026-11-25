@@ -874,7 +874,11 @@ const LOCAL_ABSENT_PROBES: ReadonlyArray<{ property: string; question: RegExp; e
   },
   {
     property: 'ranking',
-    question: /\bleaderboards?\b|\bwhat\s+(?:rank|place|position)\b|\b(?:rank|place)(?:ed)?\s+(?:on|in|at)\b/i,
+    // "place" is only a ranking word beside a result: "put in place at the start"
+    // and "what place does the survey have in the design" asked about content
+    // that was in the document and were refused (review, 2026-11-25). "placed"
+    // counts only with an ordinal, so "where was the sensor placed in" stays out.
+    question: /\bleaderboards?\b|\bwhat\s+(?:rank|place|position)\b(?!\s+(?:does|do|did|will|would|should|can|could)\b[^?]*\b(?:have|hold|play|occupy|take)\b)|\branked?\s+(?:on|in|at)\b|\bplaced\s+(?:#?\d+(?:st|nd|rd|th)?|first|second|third|last|top)\b/i,
     evidence: /\bleaderboards?\b|\branked\b|\branking\b|\brank\s+(?:#?\d|first|second|third|top)\b|\bplaced\b|\b\d+(?:st|nd|rd|th)\s+place\b|\btop[- ]\d+\b/i,
   },
 ];
@@ -1098,17 +1102,58 @@ export function isAssistantRefusal(answer: string): boolean {
  * out" and then gives the grounded context is not a bare decline, and the
  * false-refusal retry must not regenerate it (measured live 2026-11-25).
  */
-export function isMaterialAbsenceReport(answer: string): boolean {
+export function isMaterialAbsenceReport(answer: string, context?: { question: string; evidence: string; property?: string }): boolean {
   const trimmed = (answer || '').trim();
   if (!trimmed) return false;
   if (isAssistantRefusal(trimmed)) return true;
   const firstSentenceMatch = trimmed.match(/^[^.!?]*[.!?]?/);
   const leadSentence = (firstSentenceMatch ? firstSentenceMatch[0] : trimmed).trim();
-  if (MATERIAL_SUBJECT_ABSENCE_RE.test(leadSentence)) return true;
   // "<the fact> is not mentioned / isn't stated in the uploaded material",
   // unless the subject itself reports something ("the manual states ...").
   const absence = leadSentence.match(MATERIAL_ABSENCE_RE);
-  return Boolean(absence) && !REPORTING_VERB_RE.test(leadSentence.slice(0, absence!.index));
+  const opensWithAbsence = MATERIAL_SUBJECT_ABSENCE_RE.test(leadSentence)
+    || (Boolean(absence) && !REPORTING_VERB_RE.test(leadSentence.slice(0, absence!.index)));
+  if (!opensWithAbsence) return false;
+  // An honest opening followed by the missing fact anyway ("The excerpts do not
+  // state the vendor. It was Siemens.") is an invention, not a report (review,
+  // 2026-11-25). Only text presented as the document's is checked.
+  return !context || !statesUnsupportedProperty(trimmed, context);
+}
+
+// Where the answer stops speaking for the document. Live answers that label
+// general knowledge keep that framing to the end, often across sentences or in
+// brackets ("From general knowledge, a rig like this usually costs ...",
+// "(As general knowledge: ...)"), so everything from the first marker on is
+// the model's own and may name a vendor or a figure.
+const GENERAL_KNOWLEDGE_MARKER_RE = /\b(?:general\s+knowledge|generally|in\s+general|typically|usually|commonly|as\s+a\s+rule|not\s+(?:from|in)\s+(?:the|your)\s+(?:documents?|excerpts?|material|files?|passages?)|outside\s+(?:the|your)\s+(?:documents?|material|files?)|can(?:not|['’]t)\s+confirm|would\s+need\s+to\s+(?:check|confirm|verify))\b/i;
+const NUMBER_TOKEN_RE = /(?:[$€£¥]\s?)?\b\d+(?:[.,]\d+)*(?:st|nd|rd|th)?\b/g;
+const ORDINAL_WORD_RE = /\b(?:first|second|third|fourth|fifth|top|last)\b/gi;
+// A name mid-sentence: a capitalised word not at a sentence start.
+const NAME_TOKEN_RE = /(?<![.!?]\s|^|\n|["“(]\s?)\b[A-Z][\w&.-]*[A-Za-z\d]/g;
+
+// "$5,000" and "5000", "3rd" and "3" are the same value. Whole tokens only: a
+// substring test let an invented "$20" or "3rd" through on evidence that says
+// "200 episodes" and "30 hours".
+const numberKey = (token: string): string =>
+  token.replace(/^[$€£¥]\s?/, '').replace(/(?<=\d),(?=\d{3}\b)/g, '').replace(/(?:st|nd|rd|th)$/i, '').toLowerCase();
+const wordsOf = (text: string): string[] => text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+
+/** Does the document-voiced part of the answer state the requested fact with a value the evidence and question never give? */
+function statesUnsupportedProperty(answer: string, context: { question: string; evidence: string; property?: string }): boolean {
+  const marker = answer.search(GENERAL_KNOWLEDGE_MARKER_RE);
+  const voiced = marker === -1 ? answer : answer.slice(0, marker);
+  const known = `${context.question}\n${context.evidence}`;
+  const knownNumbers = new Set((known.match(NUMBER_TOKEN_RE) ?? []).map(numberKey));
+  const knownWords = new Set(wordsOf(known));
+  const property = context.property ?? detectRequestedProperty(context.question);
+  const unseenNumber = (t: string) => !knownNumbers.has(numberKey(t));
+  const unseenWords = (t: string) => wordsOf(t).some((w) => !knownWords.has(w));
+  if ((property === 'cost_or_price' || property === 'human_participants' || property === 'ranking')
+    && (voiced.match(NUMBER_TOKEN_RE) ?? []).some(unseenNumber)) return true;
+  if (property === 'ranking' && (voiced.match(ORDINAL_WORD_RE) ?? []).some(unseenWords)) return true;
+  if ((property === 'vendor_or_supplier' || property === 'cloud_provider')
+    && (voiced.match(NAME_TOKEN_RE) ?? []).some(unseenWords)) return true;
+  return false;
 }
 
 export function validateDocumentGroundedAnswer(params: {
@@ -1125,7 +1170,7 @@ export function validateDocumentGroundedAnswer(params: {
   if (!answer.trim() || /^\s*(hey|hello|hi)\b/i.test(answer)) return { ok: false, action: 'retry', reason: 'empty_or_greeting', coverage, missing: [] };
   if (coverage.shouldRefuse) {
     // The evidence says the fact is absent; an answer that says so stands.
-    const declines = isRefusal || isMaterialAbsenceReport(answer);
+    const declines = isRefusal || isMaterialAbsenceReport(answer, { question: params.question, evidence: params.retrievedBlock, property: coverage.requestedProperty });
     return { ok: declines, action: declines ? 'ship' : 'refuse', reason: coverage.reason, coverage, missing: [] };
   }
   if (isRefusal && (coverage.hasExactEntity || coverage.hasNumericEvidence || coverage.hasListEvidence || coverage.hasDefinitionEvidence || coverage.hasOkfEvidence)) {
