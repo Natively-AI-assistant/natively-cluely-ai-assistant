@@ -37,7 +37,7 @@ const engine = (over = {}) => Object.assign(Object.create(IntelligenceEngine.pro
 });
 const session = (over = {}) => ({
   getDetectedCodingQuestion: () => ({ question: null, source: null }),
-  getFormattedContext: () => '',
+  getFormattedSpeech: () => '',
   addAssistantMessage: () => {}, pushUsage: () => {},
   ...over,
 });
@@ -198,7 +198,7 @@ describe('Code hint (Cmd+6) and Brainstorm (Cmd+7) are recorded', () => {
     let seen = null;
     const e = engine({
       codeHintLLM: { generateStream: async function* (_imgs, _q, _src, transcript) { seen = transcript; yield 'Check the complement.'; } },
-      session: session({ getFormattedContext: () => '[INTERVIEWER]: go ahead' }),
+      session: session({ getFormattedSpeech: () => '[INTERVIEWER]: go ahead' }),
       buildV3ForTranscriptSurface: async () => ({ system: 's', user: 'u', evidenceBlock: '' }),
     });
     await e.runCodeHint(undefined);
