@@ -215,6 +215,15 @@ import { nativelyApiBase } from './services/nativelyApiBase';
 import { startPhonePress, PHONE_LABELS, liveHelperLabel } from './services/phoneMirrorLiveAnswers';
 import { proRefusal } from './services/proGate';
 
+/**
+ * The one export of the private premium licenseVerifyPolicy that this file
+ * calls, typed here rather than with `typeof import('../premium/…')`. A
+ * type-level import makes `typecheck:electron` open the private file, and fork
+ * pull requests do not have it: since 2026-11-21 every fork PR failed Build
+ * Smoke on this line alone. ForkSafePremiumTypeImports2026_11_25 guards it.
+ */
+type LicenseVerifyPolicyModule = { normalizePastedKey(raw: unknown): string };
+
 type DirectAssistSource = 'typed' | 'stt' | 'screenshot';
 
 interface DirectAssistRendererRequest {
@@ -1481,7 +1490,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         try { details = lm.getLicenseDetails(); } catch { /* not a pack, as far as we can tell */ }
         const { isPackLicence } = require('./services/packs/packProRule') as typeof import('./services/packs/packProRule');
         if (isPackLicence(details?.provider, details?.plan)) {
-          const { normalizePastedKey } = require('../premium/electron/services/licenseVerifyPolicy') as typeof import('../premium/electron/services/licenseVerifyPolicy');
+          const { normalizePastedKey } = require('../premium/electron/services/licenseVerifyPolicy') as LicenseVerifyPolicyModule;
           const pasted = normalizePastedKey(key);
           const { CredentialsManager } = require('./services/CredentialsManager');
           const cm = CredentialsManager.getInstance();
@@ -13305,7 +13314,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // A key pasted with a quote, a "> " or a zero-width character in front of
       // it is stored as the key itself, not as that text.
       if (typeof apiKey === 'string' && /natively_sk_/i.test(apiKey)) {
-        const { normalizePastedKey } = require('../premium/electron/services/licenseVerifyPolicy') as typeof import('../premium/electron/services/licenseVerifyPolicy');
+        const { normalizePastedKey } = require('../premium/electron/services/licenseVerifyPolicy') as LicenseVerifyPolicyModule;
         apiKey = normalizePastedKey(apiKey);
       }
       const routed = await routePastedNativelyKey(cm, apiKey); // a pack key may be held
