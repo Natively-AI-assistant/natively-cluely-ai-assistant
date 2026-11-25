@@ -122,7 +122,7 @@ export function routeLiveMoment(input: LiveMomentRouteInput): LiveMomentDecision
   const explicitCodingContract = detectExplicitCodingContract(question);
   const refinement = isRefinementFollowUp(question);
   const codingContinuation = isCodingContinuation(question);
-  const target = classifyTargetSpeakability(plan.answerType, plan.answerStyle, question);
+  const target = classifyTargetSpeakability(plan.answerType, plan.answerStyle, question, { documentOpenQuestion: plan.documentOpenQuestion });
   const action = actionForAnswerType(plan.answerType, refinement);
 
   return {

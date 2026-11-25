@@ -27,7 +27,10 @@ test('every Answer length string is translated, and the table has no leftover ro
   const options = [...block.matchAll(/\b(?:label|description): '([^']+)'/g)].map((m) => m[1]);
   assert.match(block, /t\(o\.label\)/, 'option labels go through t()');
   assert.match(block, /t\(ANSWER_LENGTHS\[index\]\.description\)/, 'option descriptions go through t()');
-  const used = [...new Set([...literals, ...options])];
+  // Lines held in a constant and passed to t() by name (#794: set by the Real-time prompt).
+  const constants = [...block.matchAll(/^const ([A-Z_]+_LINE) = "([^"]+)";/gm)];
+  for (const [, name] of constants) assert.match(block, new RegExp(`t\\(${name}\\)`), `${name} goes through t()`);
+  const used = [...new Set([...literals, ...options, ...constants.map((m) => m[2])])];
   assert.ok(used.length >= 8, `found ${used.length} strings`);
 
   const table = await import(pathToFileURL(path.join(SRC, 'i18n.answerLength.ts')).href);

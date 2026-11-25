@@ -212,6 +212,15 @@ export interface AnswerPlan {
    *  with `documentGroundedStrict` so the prompt can distinguish "bounded
    *  universe exists" from "authority says documents, but there are none". */
   documentGroundedFilesPresent?: boolean;
+  /**
+   * A reference-file mode routed an ordinary question ("why did they choose a
+   * qualitative approach?") to `lecture_answer` for its sources and validators,
+   * not because the user asked for notes or an overview. It is still a live
+   * spoken answer, so it takes the spoken length tiers (classifyTargetSpeakability)
+   * like every other document shape. A summary/overview ask leaves this unset and
+   * stays uncapped. Discussion #794 (2026-11-25).
+   */
+  documentOpenQuestion?: boolean;
 }
 
 export interface PlanAnswerInput {
@@ -1462,6 +1471,7 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
   const explicitDocumentModeProfileAsk = /\b(resume|cv|profile|job description|\bjd\b|career|work experience|candidate profile|my background|your background|my projects?|your projects?|my skills?|your skills?)\b/i.test(text);
 
   let answerType: AnswerType = 'general_meeting_answer';
+  let documentOpenQuestion = false;
 
   // Skill-experience framing ("have you used X?", "do you know X?") is about the
   // USER, so it must win BEFORE coding/DSA/technical patterns — otherwise
@@ -1956,6 +1966,9 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     // and follow-up referents instead of collapsing every turn to lecture_answer.
     const docShape = classifyDocumentQuestionShape(question, input.extractedQuestion?.isFollowUp ? input.extractedQuestion?.followUpTarget || 'prior' : undefined);
     answerType = docShape === 'broad_overview' ? 'lecture_answer' : docShape;
+    // Both an overview ask and the open-question fall-through land on
+    // lecture_answer; only the overview is a notes-style answer.
+    documentOpenQuestion = docShape === 'lecture_answer';
   }
 
   // RECRUITING LIVE TURN (2026-09-30): the user runs the interview, so a heard
@@ -2105,6 +2118,8 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     // even though its retrieval was never forced.
     documentGroundedStrict: input.activeMode?.strictDocumentGroundedActive === true,
     documentGroundedFilesPresent: input.activeMode?.hasReferenceFiles === true,
+    // A later rule may have re-typed the turn; the flag describes lecture_answer only.
+    documentOpenQuestion: documentOpenQuestion && answerType === 'lecture_answer',
   };
 };
 
@@ -2259,7 +2274,7 @@ export const renderLengthDirectiveForPlan = (
   if (plan.answerStyle && plan.answerStyle !== 'default') return '';
   // Coding output owns its own length (the contract's sections + code).
   if (isCodingAnswerType(plan.answerType)) return '';
-  const tier = classifyTargetSpeakability(plan.answerType, plan.answerStyle, plan.question);
+  const tier = classifyTargetSpeakability(plan.answerType, plan.answerStyle, plan.question, { documentOpenQuestion: plan.documentOpenQuestion });
   // STRUCTURED_FULL is INTENTIONALLY long (speakability.ts: "must never be
   // length-trimmed" — code, system design, lecture notes, evidence quotes,
   // explicit step-by-step asks). Code-review 2026-08-23: the first ceiling
