@@ -136,14 +136,19 @@ describe('absence is read from the evidence', () => {
   });
 });
 
-describe('"<the fact> is not mentioned in the uploaded material" is the assistant declining', () => {
-  for (const a of [
+describe('an answer that reports the material lacks the fact stands when the evidence agrees', () => {
+  const DECLINES = [
     'The total cost is not mentioned in the uploaded material.',
     'The vendor is not mentioned in the uploaded material.',
     "The vendor isn't stated in the document.",
     "It isn't mentioned in the paper.",
-  ]) {
-    test(`refusal: ${a}`, () => assert.equal(d.isAssistantRefusal(a), true));
+    // How the production model words it (live, Natively API, 2026-11-25).
+    'The retrieved excerpts do not state a total cost. From general knowledge, a rig like this usually costs more.',
+    "The retrieved excerpts don't mention any dropouts or attrition.",
+    'The document does not name a vendor for the robot arm.',
+  ];
+  for (const a of DECLINES) {
+    test(`report: ${a}`, () => assert.equal(d.isMaterialAbsenceReport(a), true));
   }
   for (const a of [
     // A reporting subject: the clause is about what the manual says.
@@ -152,12 +157,32 @@ describe('"<the fact> is not mentioned in the uploaded material" is the assistan
     'The Reasoning Tool is not mentioned in the confirmed set.',
     'The vendor is mentioned in the uploaded material: Elephant Robotics.',
     "The study isn't focused on cost, it covers latency.",
+    // The material reporting a fact is an answer, not a decline.
+    'The retrieved excerpts state the total cost was $12,400.',
+    'The document does show the vendor: Elephant Robotics.',
   ]) {
-    test(`not a refusal: ${a}`, () => assert.equal(d.isAssistantRefusal(a), false));
+    test(`not a report: ${a}`, () => assert.equal(d.isMaterialAbsenceReport(a), false));
   }
 
-  test('an honest "X is not mentioned" over absent evidence now ships as is', () => {
-    const v = d.validateDocumentGroundedAnswer({ question: 'What was the total cost of building the teleoperation system?', answer: 'The total cost is not mentioned in the uploaded material.', retrievedBlock: ROBOT });
-    assert.equal(v.action, 'ship');
+  test('isAssistantRefusal is unchanged for every other caller', () => {
+    assert.equal(d.isAssistantRefusal('The retrieved excerpts do not state a total cost.'), false);
+    assert.equal(d.isAssistantRefusal('The total cost is not mentioned in the uploaded material.'), false);
+    assert.equal(d.isAssistantRefusal('I could not find that in the retrieved sections of the document.'), true);
+  });
+
+  test('the model\'s honest absent answer over absent evidence ships as written', () => {
+    for (const answer of [DECLINES[0], DECLINES[4]]) {
+      const v = d.validateDocumentGroundedAnswer({ question: 'What was the total cost of building the teleoperation system?', answer, retrievedBlock: ROBOT });
+      assert.equal(v.action, 'ship', answer);
+    }
+  });
+
+  test('"the excerpts don\'t state whether anyone dropped out" plus context is not retried as a false refusal', () => {
+    const v = d.validateDocumentGroundedAnswer({
+      question: 'Did any participants drop out of the study?',
+      answer: "The retrieved excerpts don't state whether any participants dropped out. They only report that 24 participants were recruited.",
+      retrievedBlock: STUDY,
+    });
+    assert.equal(v.action, 'ship', v.reason);
   });
 });

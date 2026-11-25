@@ -1058,6 +1058,13 @@ const SELF_REFERENTIAL_SUBJECT_RE = /^(?:this|it|that|these|those)(?:\s+(?:is|ar
 // still about that third party, so a reporting verb before the phrase keeps the
 // subject rule (2026-11-25).
 const MATERIAL_ABSENCE_RE = /\b(?:(?:is|are|was|were)\s+not|isn['’]t|aren['’]t|wasn['’]t|weren['’]t)\s+(?:directly\s+|explicitly\s+|clearly\s+)?(?:mentioned|specified|stated|provided|included|given|listed|found|covered|described|reported)\s+(?:anywhere\s+)?in\s+(?:the|your|this)\s+(?:uploaded\s+|provided\s+|retrieved\s+|reference\s+)?(?:material|materials|documents?|files?|sections?|excerpts?|paper|thesis)\b/i;
+// The same report with the MATERIAL as subject, the way the production model
+// actually words it: "The retrieved excerpts do not state a total cost",
+// "The document doesn't mention any dropouts". Measured live on the Natively
+// API 2026-11-25 (12 questions x 3): every honest absent answer opened this
+// way, and each one was replaced by the app's flat refusal, dropping the
+// general-knowledge answer the evidence rule asks for.
+const MATERIAL_SUBJECT_ABSENCE_RE = /^(?:the|these|this|your)\s+(?:retrieved\s+|uploaded\s+|provided\s+|reference\s+)?(?:excerpts?|passages?|sections?|snippets?|documents?|material|materials|files?|paper|thesis|sources?)\s+(?:do|does|did)\s*(?:not|n['’]t)\s+(?:directly\s+|explicitly\s+|clearly\s+)?(?:state|mention|name|say|specify|include|give|provide|list|report|cover|identify|contain|describe)\b/i;
 const REPORTING_VERB_RE = /\b(?:states?|stated|says?|said|notes?|noted|reports?|reported|shows?|showed|explains?|explained|describes?|described|mentions?|mentioned|claims?|claimed|indicates?|indicated|specifies|specified|confirms?|confirmed)\b/i;
 
 export function isAssistantRefusal(answer: string): boolean {
@@ -1066,21 +1073,42 @@ export function isAssistantRefusal(answer: string): boolean {
   if (SYSTEM_REFUSAL_RE.test(trimmed)) return true;
   const firstSentenceMatch = trimmed.match(/^[^.!?]*[.!?]?/);
   const leadSentence = (firstSentenceMatch ? firstSentenceMatch[0] : trimmed).trim();
-  // The contracted form ("isn't stated in the document") has no bare "not".
-  const phraseMatch = leadSentence.match(REFUSAL_PHRASE_RE) ?? leadSentence.match(MATERIAL_ABSENCE_RE);
+  const phraseMatch = leadSentence.match(REFUSAL_PHRASE_RE);
   if (!phraseMatch) return false;
   const subjectText = leadSentence.slice(0, phraseMatch.index).trim();
   // Empty subject ("Not mentioned..."), explicit first-person ("I could not
   // find...", "I don't have..."), or a bare self-referential demonstrative
   // ("This is not mentioned...") is the assistant's own voice.
   if (!subjectText || /^i\b/i.test(subjectText) || SELF_REFERENTIAL_SUBJECT_RE.test(subjectText)) return true;
-  // "<the fact> is not mentioned in the uploaded material": the assistant's
-  // report on the material, unless the subject itself reports something.
-  const absence = leadSentence.match(MATERIAL_ABSENCE_RE);
-  if (absence && !REPORTING_VERB_RE.test(leadSentence.slice(0, absence.index))) return true;
   // Any other named/described subject (a third party) means the clause is
   // ABOUT that subject, not the assistant declining to answer.
   return false;
+}
+
+/**
+ * Does the answer OPEN by saying the uploaded material does not hold the fact?
+ * "The retrieved excerpts do not state a total cost. From general knowledge
+ * ...", "The vendor is not mentioned in the uploaded material." That is the
+ * honest answer the evidence rule asks for when a fact is absent, so the
+ * validator lets it stand instead of swapping in the flat canonical refusal.
+ *
+ * Used ONLY where the evidence check already agrees the fact is absent
+ * (coverage.shouldRefuse). isAssistantRefusal stays as it was for every other
+ * caller: an answer that says "the excerpts don't state whether anyone dropped
+ * out" and then gives the grounded context is not a bare decline, and the
+ * false-refusal retry must not regenerate it (measured live 2026-11-25).
+ */
+export function isMaterialAbsenceReport(answer: string): boolean {
+  const trimmed = (answer || '').trim();
+  if (!trimmed) return false;
+  if (isAssistantRefusal(trimmed)) return true;
+  const firstSentenceMatch = trimmed.match(/^[^.!?]*[.!?]?/);
+  const leadSentence = (firstSentenceMatch ? firstSentenceMatch[0] : trimmed).trim();
+  if (MATERIAL_SUBJECT_ABSENCE_RE.test(leadSentence)) return true;
+  // "<the fact> is not mentioned / isn't stated in the uploaded material",
+  // unless the subject itself reports something ("the manual states ...").
+  const absence = leadSentence.match(MATERIAL_ABSENCE_RE);
+  return Boolean(absence) && !REPORTING_VERB_RE.test(leadSentence.slice(0, absence!.index));
 }
 
 export function validateDocumentGroundedAnswer(params: {
@@ -1095,7 +1123,11 @@ export function validateDocumentGroundedAnswer(params: {
   const queryShape = (params.answerType as DocumentQuestionShape) || classifyDocumentQuestionShape(params.question);
   const coverage = computeEvidenceCoverage({ question: params.question, retrievedBlock: params.retrievedBlock, queryShape, hasOkfEvidence: params.hasOkfEvidence });
   if (!answer.trim() || /^\s*(hey|hello|hi)\b/i.test(answer)) return { ok: false, action: 'retry', reason: 'empty_or_greeting', coverage, missing: [] };
-  if (coverage.shouldRefuse) return { ok: isRefusal, action: isRefusal ? 'ship' : 'refuse', reason: coverage.reason, coverage, missing: [] };
+  if (coverage.shouldRefuse) {
+    // The evidence says the fact is absent; an answer that says so stands.
+    const declines = isRefusal || isMaterialAbsenceReport(answer);
+    return { ok: declines, action: declines ? 'ship' : 'refuse', reason: coverage.reason, coverage, missing: [] };
+  }
   if (isRefusal && (coverage.hasExactEntity || coverage.hasNumericEvidence || coverage.hasListEvidence || coverage.hasDefinitionEvidence || coverage.hasOkfEvidence)) {
     return { ok: false, action: 'retry', reason: 'false_refusal_evidence_exists', coverage, missing: [] };
   }
