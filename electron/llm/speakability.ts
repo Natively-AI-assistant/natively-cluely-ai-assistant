@@ -195,14 +195,43 @@ const CONTEXTUAL_PRESSURE_RE =
  *     multi-part, or "expand/justify/defend" follow-ups. ~100-180 (prompt-only ceiling).
  *   - SPOKEN_SHORT: the default. <=100 words.
  */
+/**
+ * Facts about the turn that the answer type alone does not carry.
+ * `documentOpenQuestion`: a reference-file mode typed an ordinary question
+ * lecture_answer for its sources (AnswerPlan.documentOpenQuestion).
+ * `answerLength`: the Answer length this turn uses.
+ *
+ * Under Shorter or Longer such an answer is spoken and gets that setting's
+ * line (discussion #794: Shorter was ignored). Under Smart it keeps
+ * lecture_answer's structured tier, exactly as before: both Smart lines were
+ * measured live 2026-11-25 (82 document questions, blinded Opus judge) and
+ * neither beat no line. A 40-60-word target dropped needed facts (missing
+ * 8 -> 16); the 110-word cap made answers longer (median 68 -> 88 words).
+ */
+export interface SpeakabilityTurnFacts {
+  documentOpenQuestion?: boolean;
+  answerLength?: AnswerLength;
+}
+
+/** A reference-file open question answered under Shorter or Longer is spoken. */
+export const isSpokenDocumentQuestion = (facts?: SpeakabilityTurnFacts): boolean =>
+  facts?.documentOpenQuestion === true && (facts.answerLength === 'shorter' || facts.answerLength === 'longer');
+
+/** STRUCTURED_FULL by type: lecture_answer only when it is notes or an overview. */
+const isStructuredFullType = (answerType: AnswerType, facts?: SpeakabilityTurnFacts): boolean => {
+  if (answerType === 'lecture_answer' && isSpokenDocumentQuestion(facts)) return false;
+  return STRUCTURED_FULL_TYPES.has(answerType);
+};
+
 export function classifyTargetSpeakability(
   answerType: AnswerType,
   answerStyle: AnswerStyle | undefined,
   question: string,
+  facts?: SpeakabilityTurnFacts,
 ): SpeakabilityTarget {
   const q = question || '';
   // Structured output (not a spoken paragraph) → uncapped.
-  if (STRUCTURED_FULL_TYPES.has(answerType)) return 'STRUCTURED_FULL';
+  if (isStructuredFullType(answerType, facts)) return 'STRUCTURED_FULL';
   if (answerStyle && STRUCTURED_FULL_STYLES.has(answerStyle)) return 'STRUCTURED_FULL';
   if (DETAIL_REQUEST_RE.test(q)) return 'STRUCTURED_FULL';
 
@@ -371,15 +400,18 @@ export function decideSpeakability(
   question: string,
   isCoding = false,
   answerLength: AnswerLength = 'smart',
+  facts?: SpeakabilityTurnFacts,
 ): SpeakabilityDecision {
   const wordCount = countSpokenWordsExcludingCode(text);
   const seconds = estimateSpeakSeconds(text);
 
   // A code-bearing answer is always STRUCTURED_FULL regardless of the classifier inputs.
   const codeBearing = isCoding || HAS_FENCE_RE.test(text || '');
+  // Measured against the same setting the prompt's length line came from.
+  facts = facts ? { ...facts, answerLength } : facts;
   const target: SpeakabilityTarget = codeBearing
     ? 'STRUCTURED_FULL'
-    : classifyTargetSpeakability(answerType, answerStyle, question);
+    : classifyTargetSpeakability(answerType, answerStyle, question, facts);
 
   // SPOKEN_FULL and STRUCTURED_FULL are both "never trim". Only SPOKEN_SHORT is enforced.
   const exception = target !== 'SPOKEN_SHORT';
@@ -391,7 +423,7 @@ export function decideSpeakability(
     let cause = '';
     if (isCoding) cause = ':is_coding';
     else if (HAS_FENCE_RE.test(text || '')) cause = ':contains_code_block';
-    else if (STRUCTURED_FULL_TYPES.has(answerType)) cause = `:answer_type:${answerType}`;
+    else if (isStructuredFullType(answerType, facts)) cause = `:answer_type:${answerType}`;
     else if (answerStyle && STRUCTURED_FULL_STYLES.has(answerStyle)) cause = `:answer_style:${answerStyle}`;
     else if (DETAIL_REQUEST_RE.test(question || '')) cause = ':detail_requested';
     exceptionReason = `target:${target}${cause}`;
@@ -536,6 +568,7 @@ export function applySpeakabilityBudget(
   question: string,
   isCoding = false,
   answerLength: AnswerLength = 'smart',
+  facts?: SpeakabilityTurnFacts,
 ): {
   text: string;
   changed: boolean;
@@ -547,7 +580,7 @@ export function applySpeakabilityBudget(
   /** Coarse marker for telemetry (spec's speakability_class). No raw content. */
   speakability_class: SpeakabilityClass;
 } {
-  const decision = decideSpeakability(text, answerType, answerStyle, question, isCoding, answerLength);
+  const decision = decideSpeakability(text, answerType, answerStyle, question, isCoding, answerLength, facts);
   return {
     text,                                  // verbatim — never trimmed
     changed: false,
